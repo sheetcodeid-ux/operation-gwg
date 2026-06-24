@@ -1,0 +1,258 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+
+@custom-variant dark (&:is(.dark *));
+
+/*
+  Operation GWG — Executive Command Center
+  Premium SaaS design system on shadcn/ui (Base UI) tokens.
+  Light + dark, violet brand, solid overlays. Reference: Linear / Stripe / Vercel.
+*/
+
+/* ---- shadcn token → utility mapping (theme-reactive) ---- */
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-success: var(--success);
+  --color-warning: var(--warning);
+  --color-info: var(--info);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-chart-1: var(--chart-1);
+  --color-chart-2: var(--chart-2);
+  --color-chart-3: var(--chart-3);
+  --color-chart-4: var(--chart-4);
+  --color-chart-5: var(--chart-5);
+  --color-sidebar: var(--sidebar);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-ring: var(--sidebar-ring);
+
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+  --radius-2xl: calc(var(--radius) + 8px);
+}
+
+/* ---- static brand palette + fonts + motion (fixed across themes) ---- */
+@theme {
+  --color-brand-50: #f5f3ff;
+  --color-brand-100: #ede9fe;
+  --color-brand-200: #ddd6fe;
+  --color-brand-300: #c4b5fd;
+  --color-brand-400: #a78bfa;
+  --color-brand-500: #8b5cf6;
+  --color-brand-600: #7c3aed;
+  --color-brand-700: #6d28d9;
+  --color-brand-800: #5b21b6;
+  --color-brand-900: #4c1d95;
+
+  --color-cyan-accent: #06b6d4;
+  --color-amber-accent: #f59e0b;
+
+  --font-sans: var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif;
+  --font-mono: var(--font-geist-mono), ui-monospace, monospace;
+
+  --animate-shimmer: shimmer 2s linear infinite;
+  --animate-float: float 6s ease-in-out infinite;
+}
+
+@keyframes shimmer {
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+@keyframes float {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-6px); }
+}
+
+/* ---- LIGHT ---- */
+:root {
+  --radius: 0.75rem;
+  color-scheme: light;
+
+  --background: oklch(0.985 0.002 265);
+  --foreground: oklch(0.21 0.02 265);
+  --card: oklch(1 0 0);
+  --card-foreground: oklch(0.21 0.02 265);
+  --popover: oklch(1 0 0);
+  --popover-foreground: oklch(0.21 0.02 265);
+  --primary: oklch(0.54 0.245 293);
+  --primary-foreground: oklch(0.985 0 0);
+  --secondary: oklch(0.965 0.006 265);
+  --secondary-foreground: oklch(0.27 0.02 265);
+  --muted: oklch(0.965 0.004 265);
+  --muted-foreground: oklch(0.52 0.02 265);
+  --accent: oklch(0.95 0.03 293);
+  --accent-foreground: oklch(0.34 0.12 293);
+  --destructive: oklch(0.58 0.23 27);
+  --destructive-foreground: oklch(0.985 0 0);
+  --success: oklch(0.62 0.16 162);
+  --warning: oklch(0.74 0.16 70);
+  --info: oklch(0.68 0.13 210);
+  --border: oklch(0.905 0.008 265);
+  --input: oklch(0.92 0.008 265);
+  --ring: oklch(0.54 0.245 293);
+
+  --chart-1: oklch(0.55 0.24 293);
+  --chart-2: oklch(0.7 0.13 210);
+  --chart-3: oklch(0.77 0.16 70);
+  --chart-4: oklch(0.72 0.17 162);
+  --chart-5: oklch(0.65 0.2 350);
+
+  --sidebar: oklch(0.99 0.003 265);
+  --sidebar-foreground: oklch(0.21 0.02 265);
+  --sidebar-primary: oklch(0.54 0.245 293);
+  --sidebar-primary-foreground: oklch(0.985 0 0);
+  --sidebar-accent: oklch(0.95 0.03 293);
+  --sidebar-accent-foreground: oklch(0.34 0.12 293);
+  --sidebar-border: oklch(0.905 0.008 265);
+  --sidebar-ring: oklch(0.54 0.245 293);
+}
+
+/* ---- DARK (default experience) ---- */
+.dark {
+  color-scheme: dark;
+
+  --background: oklch(0.145 0.01 265);
+  --foreground: oklch(0.97 0.004 265);
+  --card: oklch(0.185 0.013 265);
+  --card-foreground: oklch(0.97 0.004 265);
+  --popover: oklch(0.205 0.016 265);
+  --popover-foreground: oklch(0.97 0.004 265);
+  --primary: oklch(0.62 0.22 293);
+  --primary-foreground: oklch(0.99 0.005 293);
+  --secondary: oklch(0.255 0.015 265);
+  --secondary-foreground: oklch(0.97 0.004 265);
+  --muted: oklch(0.25 0.015 265);
+  --muted-foreground: oklch(0.7 0.02 265);
+  --accent: oklch(0.28 0.05 293);
+  --accent-foreground: oklch(0.92 0.04 293);
+  --destructive: oklch(0.63 0.21 25);
+  --destructive-foreground: oklch(0.99 0 0);
+  --success: oklch(0.72 0.16 162);
+  --warning: oklch(0.78 0.15 70);
+  --info: oklch(0.72 0.13 210);
+  --border: oklch(1 0 0 / 9%);
+  --input: oklch(1 0 0 / 13%);
+  --ring: oklch(0.62 0.22 293);
+
+  --chart-1: oklch(0.65 0.22 293);
+  --chart-2: oklch(0.72 0.14 210);
+  --chart-3: oklch(0.79 0.16 70);
+  --chart-4: oklch(0.74 0.17 162);
+  --chart-5: oklch(0.68 0.2 350);
+
+  --sidebar: oklch(0.17 0.013 265);
+  --sidebar-foreground: oklch(0.97 0.004 265);
+  --sidebar-primary: oklch(0.62 0.22 293);
+  --sidebar-primary-foreground: oklch(0.99 0 0);
+  --sidebar-accent: oklch(0.28 0.05 293);
+  --sidebar-accent-foreground: oklch(0.92 0.04 293);
+  --sidebar-border: oklch(1 0 0 / 9%);
+  --sidebar-ring: oklch(0.62 0.22 293);
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+
+  html {
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+  }
+
+  body {
+    @apply bg-background text-foreground;
+    font-family: var(--font-sans);
+    min-height: 100dvh;
+  }
+
+  /* Ambient command-center backdrop — dark only */
+  .dark body {
+    background-image:
+      radial-gradient(55rem 55rem at 110% -10%, color-mix(in oklch, var(--primary) 18%, transparent), transparent 60%),
+      radial-gradient(45rem 45rem at -10% 8%, color-mix(in oklch, var(--info) 14%, transparent), transparent 55%),
+      radial-gradient(40rem 40rem at 50% 120%, color-mix(in oklch, var(--warning) 8%, transparent), transparent 60%);
+    background-attachment: fixed;
+  }
+  /* Subtle light backdrop */
+  :root:not(.dark) body {
+    background-image:
+      radial-gradient(50rem 50rem at 100% -10%, color-mix(in oklch, var(--primary) 7%, transparent), transparent 60%),
+      radial-gradient(45rem 45rem at -10% 10%, color-mix(in oklch, var(--info) 6%, transparent), transparent 55%);
+    background-attachment: fixed;
+  }
+
+  ::selection {
+    background-color: color-mix(in oklch, var(--primary) 35%, transparent);
+  }
+
+  ::-webkit-scrollbar { width: 10px; height: 10px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb {
+    background: color-mix(in oklch, var(--foreground) 14%, transparent);
+    border-radius: 999px;
+    border: 2px solid transparent;
+    background-clip: padding-box;
+  }
+  ::-webkit-scrollbar-thumb:hover { background: color-mix(in oklch, var(--foreground) 26%, transparent); background-clip: padding-box; }
+}
+
+@layer components {
+  /* Translucent panel — for cards over the ambient backdrop */
+  .glass {
+    background: color-mix(in oklch, var(--card) 82%, transparent);
+    backdrop-filter: blur(14px) saturate(140%);
+    -webkit-backdrop-filter: blur(14px) saturate(140%);
+    border: 1px solid var(--border);
+    box-shadow: 0 1px 0 0 color-mix(in oklch, var(--foreground) 4%, transparent) inset,
+      0 10px 30px -16px rgba(0, 0, 0, 0.5);
+  }
+
+  /* SOLID surface — for every clickable overlay (menus, dialogs, popovers, command). */
+  .surface-solid {
+    background: var(--popover);
+    border: 1px solid var(--border);
+    box-shadow: 0 24px 70px -20px rgba(0, 0, 0, 0.55), 0 2px 8px -2px rgba(0, 0, 0, 0.3);
+  }
+
+  .text-gradient-brand {
+    background: linear-gradient(90deg, var(--color-brand-400), var(--color-cyan-accent));
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+  }
+
+  .shimmer {
+    background: linear-gradient(
+      90deg,
+      color-mix(in oklch, var(--foreground) 4%, transparent) 25%,
+      color-mix(in oklch, var(--foreground) 9%, transparent) 37%,
+      color-mix(in oklch, var(--foreground) 4%, transparent) 63%
+    );
+    background-size: 200% 100%;
+    animation: var(--animate-shimmer);
+  }
+}

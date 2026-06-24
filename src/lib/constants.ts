@@ -1,0 +1,251 @@
+import type {
+  ComplaintCategory,
+  ComplaintSource,
+  ComplaintStatus,
+  EventMilestone,
+  EventStatus,
+  HospitalityCategory,
+  HygieneRating,
+  HygieneSection,
+  Priority,
+  Role,
+  RootCauseCategory,
+  TaskStatus,
+} from "./types";
+
+/* ------------------------------------------------------------------ */
+/* Roles                                                               */
+/* ------------------------------------------------------------------ */
+
+export const ROLE_LABEL: Record<Role, string> = {
+  super_admin: "Super Admin",
+  director: "Director",
+  head_operation: "Head Operation",
+  area_coordinator: "Area Coordinator",
+  supervisor: "Supervisor",
+  pic_outlet: "PIC Outlet",
+};
+
+/* ------------------------------------------------------------------ */
+/* Tone system — drives badge/label coloring across the app           */
+/* ------------------------------------------------------------------ */
+
+export type Tone = "brand" | "cyan" | "amber" | "success" | "warning" | "danger" | "neutral";
+
+export const PRIORITY_META: Record<Priority, { label: string; tone: Tone }> = {
+  critical: { label: "Critical", tone: "danger" },
+  high: { label: "High", tone: "warning" },
+  medium: { label: "Medium", tone: "cyan" },
+  low: { label: "Low", tone: "neutral" },
+};
+
+export const TASK_STATUS_META: Record<TaskStatus, { label: string; tone: Tone }> = {
+  open: { label: "Open", tone: "neutral" },
+  ongoing: { label: "Ongoing", tone: "cyan" },
+  pending: { label: "Pending", tone: "warning" },
+  done: { label: "Done", tone: "success" },
+  cancelled: { label: "Cancelled", tone: "danger" },
+};
+
+export const EVENT_STATUS_META: Record<EventStatus, { label: string; tone: Tone }> = {
+  upcoming: { label: "Upcoming", tone: "cyan" },
+  running: { label: "Running", tone: "brand" },
+  finished: { label: "Finished", tone: "success" },
+  cancelled: { label: "Cancelled", tone: "danger" },
+};
+
+export const EVENT_MILESTONES: { value: EventMilestone; label: string; progress: number }[] = [
+  { value: "planning", label: "Planning", progress: 25 },
+  { value: "preparation", label: "Preparation", progress: 50 },
+  { value: "execution", label: "Execution", progress: 75 },
+  { value: "evaluation", label: "Evaluation", progress: 100 },
+];
+
+export const HYGIENE_RATING_META: Record<HygieneRating, { label: string; tone: Tone; score: number }> = {
+  excellent: { label: "Excellent", tone: "success", score: 100 },
+  good: { label: "Good", tone: "cyan", score: 80 },
+  fair: { label: "Fair", tone: "warning", score: 55 },
+  poor: { label: "Poor", tone: "danger", score: 25 },
+};
+
+export const COMPLAINT_SOURCE_META: Record<ComplaintSource, { label: string; tone: Tone }> = {
+  google_review: { label: "Google Review", tone: "amber" },
+  instagram: { label: "Instagram", tone: "brand" },
+  whatsapp: { label: "WhatsApp", tone: "success" },
+  email: { label: "Email", tone: "cyan" },
+  walk_in: { label: "Walk-In", tone: "neutral" },
+};
+
+export const COMPLAINT_CATEGORY_META: Record<ComplaintCategory, { label: string }> = {
+  cleanliness: { label: "Cleanliness" },
+  service: { label: "Service" },
+  product_quality: { label: "Product Quality" },
+  price: { label: "Price" },
+  facilities: { label: "Facilities" },
+  staff_attitude: { label: "Staff Attitude" },
+  waiting_time: { label: "Waiting Time" },
+  others: { label: "Others" },
+};
+
+export const COMPLAINT_STATUS_META: Record<ComplaintStatus, { label: string; tone: Tone }> = {
+  open: { label: "Open", tone: "neutral" },
+  ongoing: { label: "Ongoing", tone: "cyan" },
+  pending: { label: "Pending", tone: "warning" },
+  done: { label: "Done", tone: "brand" },
+  closed: { label: "Closed", tone: "success" },
+};
+
+export const ROOT_CAUSE_META: Record<RootCauseCategory, { label: string }> = {
+  man: { label: "Man" },
+  method: { label: "Method" },
+  material: { label: "Material" },
+  machine: { label: "Machine" },
+  environment: { label: "Environment" },
+};
+
+/* ------------------------------------------------------------------ */
+/* Module 2 — Hospitality checklists                                   */
+/* ------------------------------------------------------------------ */
+
+export const HOSPITALITY_CHECKLISTS: Record<
+  HospitalityCategory,
+  { label: string; items: { key: string; label: string }[] }
+> = {
+  cashier: {
+    label: "Cashier Service",
+    items: [
+      { key: "greeting", label: "Greeting customer" },
+      { key: "eye_contact", label: "Eye contact" },
+      { key: "smile", label: "Smile" },
+      { key: "offer_menu", label: "Offer menu" },
+      { key: "offer_promotion", label: "Offer promotion" },
+      { key: "product_knowledge", label: "Product knowledge" },
+      { key: "thank_customer", label: "Thank customer" },
+    ],
+  },
+  fnb: {
+    label: "F&B Service",
+    items: [
+      { key: "presentation", label: "Product presentation" },
+      { key: "serving_speed", label: "Serving speed" },
+      { key: "order_accuracy", label: "Order accuracy" },
+      { key: "communication", label: "Communication" },
+      { key: "professionalism", label: "Professionalism" },
+    ],
+  },
+  dining_area: {
+    label: "Dining Area",
+    items: [
+      { key: "table_cleanliness", label: "Table cleanliness" },
+      { key: "chair_cleanliness", label: "Chair cleanliness" },
+      { key: "customer_comfort", label: "Customer comfort" },
+      { key: "ambience", label: "Ambience" },
+      { key: "customer_interaction", label: "Customer interaction" },
+    ],
+  },
+};
+
+/* ------------------------------------------------------------------ */
+/* Module 5 — Hygiene sections                                         */
+/* ------------------------------------------------------------------ */
+
+export const HYGIENE_SECTIONS: Record<
+  HygieneSection,
+  { label: string; subtitle: string; items: { key: string; label: string }[] }
+> = {
+  front: {
+    label: "Area Depan Outlet",
+    subtitle: "Section A",
+    items: [
+      { key: "kaca_depan", label: "Kaca depan" },
+      { key: "pintu_masuk", label: "Pintu masuk" },
+      { key: "handle_pintu", label: "Handle pintu" },
+      { key: "area_parkir", label: "Area parkir" },
+      { key: "signage", label: "Signage" },
+      { key: "tempat_sampah", label: "Tempat sampah" },
+      { key: "lantai_depan", label: "Lantai area depan" },
+      { key: "kondisi_tanaman", label: "Kondisi tanaman" },
+      { key: "rumput_liar", label: "Rumput liar" },
+    ],
+  },
+  customer: {
+    label: "Customer Area",
+    subtitle: "Section B",
+    items: [
+      { key: "meja_customer", label: "Meja customer" },
+      { key: "kursi_customer", label: "Kursi customer" },
+      { key: "sofa", label: "Sofa" },
+      { key: "lantai", label: "Lantai" },
+      { key: "ac_kipas", label: "AC/Kipas" },
+      { key: "dekorasi", label: "Dekorasi" },
+      { key: "musik_ambience", label: "Musik/Ambience" },
+      { key: "tempat_sampah", label: "Tempat sampah" },
+      { key: "debu_plafon", label: "Debu plafon" },
+    ],
+  },
+  cashier: {
+    label: "Kasir",
+    subtitle: "Section C",
+    items: [
+      { key: "meja_kasir", label: "Meja kasir" },
+      { key: "pos", label: "POS" },
+      { key: "laci_uang", label: "Laci uang" },
+      { key: "kabel", label: "Kabel" },
+      { key: "peralatan_kerja", label: "Peralatan kerja" },
+      { key: "hand_sanitizer", label: "Hand sanitizer" },
+    ],
+  },
+  kitchen: {
+    label: "Kitchen",
+    subtitle: "Section D",
+    items: [
+      { key: "meja_kerja", label: "Meja kerja" },
+      { key: "peralatan_masak", label: "Peralatan masak" },
+      { key: "sink", label: "Sink" },
+      { key: "lantai_kitchen", label: "Lantai kitchen" },
+      { key: "lemari_penyimpanan", label: "Lemari penyimpanan" },
+      { key: "freezer", label: "Freezer" },
+      { key: "tempat_sampah", label: "Tempat sampah" },
+      { key: "sarung_tangan", label: "Sarung tangan" },
+      { key: "penutup_kepala", label: "Penutup kepala" },
+      { key: "penutup_mulut", label: "Penutup mulut" },
+    ],
+  },
+  toilet: {
+    label: "Toilet",
+    subtitle: "Section E",
+    items: [
+      { key: "closet", label: "Closet" },
+      { key: "wastafel", label: "Wastafel" },
+      { key: "cermin", label: "Cermin" },
+      { key: "lantai", label: "Lantai" },
+      { key: "sabun_tangan", label: "Sabun tangan" },
+      { key: "tissue", label: "Tissue" },
+      { key: "tempat_sampah", label: "Tempat sampah" },
+      { key: "aroma_ruangan", label: "Aroma ruangan" },
+    ],
+  },
+  warehouse: {
+    label: "Gudang",
+    subtitle: "Section F",
+    items: [
+      { key: "rak_penyimpanan", label: "Rak penyimpanan" },
+      { key: "kardus_tertata", label: "Kardus tertata" },
+      { key: "area_lantai", label: "Area lantai" },
+      { key: "overall_cleanliness", label: "Overall cleanliness" },
+    ],
+  },
+};
+
+export const HYGIENE_PHOTO_GROUPS = ["Front Area", "Customer Area", "Kitchen", "Toilet"] as const;
+
+export const WORK_CATEGORIES = [
+  "Maintenance",
+  "Renovation",
+  "Procurement",
+  "Marketing",
+  "Operations",
+  "HR / Staffing",
+  "Finance",
+  "IT / Systems",
+] as const;

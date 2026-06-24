@@ -1,0 +1,29 @@
+import {
+  CalendarRange,
+  ChartSpline,
+  ConciergeBell,
+  LayoutDashboard,
+  ListChecks,
+  MessageSquareWarning,
+  Network,
+  ScrollText,
+  SprayCan,
+  Store,
+  Users,
+  type LucideIcon,
+} from "lucide-react";
+
+/** Maps nav icon names (strings in nav.ts) to Lucide components. */
+export const NAV_ICONS: Record<string, LucideIcon> = {
+  LayoutDashboard,
+  ChartSpline,
+  ListChecks,
+  CalendarRange,
+  ConciergeBell,
+  SprayCan,
+  MessageSquareWarning,
+  Store,
+  Users,
+  Network,
+  ScrollText,
+};
