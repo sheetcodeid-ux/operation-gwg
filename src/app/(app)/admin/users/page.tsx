@@ -46,7 +46,7 @@ export default async function UsersPage() {
   }));
 
   return (
-    <div className="mx-auto max-w-7xl">
+    <div className="w-full">
       <PageHeader icon={Users} title="User Management" description="Provision accounts, assign access scope, and manage passwords" />
 
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">

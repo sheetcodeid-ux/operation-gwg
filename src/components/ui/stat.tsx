@@ -19,7 +19,7 @@ export function StatTile({
 }) {
   const color = TONE_HEX[tone];
   return (
-    <div className="glass flex items-center gap-3 rounded-xl p-3.5 transition-colors hover:bg-card/90">
+    <div className="card-gradient flex items-center gap-3 rounded-xl p-3.5">
       <div className="grid size-10 shrink-0 place-items-center rounded-xl ring-1 ring-border" style={{ background: `${color}22` }}>
         <Icon className="size-5" style={{ color }} />
       </div>

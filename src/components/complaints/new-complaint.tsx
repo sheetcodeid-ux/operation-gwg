@@ -9,7 +9,8 @@ import type { ComplaintCategory, ComplaintSource, Priority } from "@/lib/types";
 import { createComplaintAction } from "@/lib/actions/complaints";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogTrigger, useDialogControl } from "@/components/ui/dialog";
-import { Field, Input, Select, Textarea } from "@/components/ui/input";
+import { Field, Input, Textarea } from "@/components/ui/input";
+import { Combobox } from "@/components/ui/combobox";
 
 const SOURCES = Object.keys(COMPLAINT_SOURCE_META) as ComplaintSource[];
 const CATEGORIES = Object.keys(COMPLAINT_CATEGORY_META) as ComplaintCategory[];
@@ -74,13 +75,11 @@ function ComplaintForm({ outlets }: { outlets: { id: string; name: string }[] })
     <div className="max-h-[70vh] space-y-4 overflow-y-auto p-5">
       <div className="grid grid-cols-2 gap-3">
         <Field label="Source">
-          <Select value={form.source} onChange={(e) => set("source", e.target.value as ComplaintSource)}>
-            {SOURCES.map((s) => (
-              <option key={s} value={s}>
-                {COMPLAINT_SOURCE_META[s].label}
-              </option>
-            ))}
-          </Select>
+          <Combobox
+            value={form.source}
+            onChange={(v) => set("source", v as ComplaintSource)}
+            options={SOURCES.map((s) => ({ value: s, label: COMPLAINT_SOURCE_META[s].label }))}
+          />
         </Field>
         <Field label="Customer Name">
           <Input value={form.customerName} onChange={(e) => set("customerName", e.target.value)} placeholder="Anonymous" />
@@ -98,31 +97,27 @@ function ComplaintForm({ outlets }: { outlets: { id: string; name: string }[] })
           </Field>
         )}
         <Field label="Outlet">
-          <Select value={form.outletId} onChange={(e) => set("outletId", e.target.value)}>
-            {outlets.map((o) => (
-              <option key={o.id} value={o.id}>
-                {o.name}
-              </option>
-            ))}
-          </Select>
+          <Combobox
+            value={form.outletId}
+            onChange={(v) => set("outletId", v)}
+            options={outlets.map((o) => ({ value: o.id, label: o.name }))}
+            placeholder="Select outlet"
+            searchPlaceholder="Search outlets…"
+          />
         </Field>
         <Field label="Category">
-          <Select value={form.category} onChange={(e) => set("category", e.target.value as ComplaintCategory)}>
-            {CATEGORIES.map((c) => (
-              <option key={c} value={c}>
-                {COMPLAINT_CATEGORY_META[c].label}
-              </option>
-            ))}
-          </Select>
+          <Combobox
+            value={form.category}
+            onChange={(v) => set("category", v as ComplaintCategory)}
+            options={CATEGORIES.map((c) => ({ value: c, label: COMPLAINT_CATEGORY_META[c].label }))}
+          />
         </Field>
         <Field label="Priority">
-          <Select value={form.priority} onChange={(e) => set("priority", e.target.value as Priority)}>
-            {PRIORITIES.map((p) => (
-              <option key={p} value={p}>
-                {PRIORITY_META[p].label}
-              </option>
-            ))}
-          </Select>
+          <Combobox
+            value={form.priority}
+            onChange={(v) => set("priority", v as Priority)}
+            options={PRIORITIES.map((p) => ({ value: p, label: PRIORITY_META[p].label }))}
+          />
         </Field>
       </div>
       <Field label="Complaint Content">

@@ -1,12 +1,13 @@
-import { Search } from "lucide-react";
+import Link from "next/link";
+import { Search, Sparkles } from "lucide-react";
 import type { AppNotification, UserProfile } from "@/lib/types";
 import type { NavItem } from "@/lib/nav";
-import { ROLE_LABEL } from "@/lib/constants";
 import { MobileNav } from "./mobile-nav";
+import { TopbarBrand } from "./topbar-brand";
 import { NotificationCenter } from "./notifications";
 import { UserMenu } from "./user-menu";
 import { ThemeToggle } from "./theme-toggle";
-import { Badge } from "@/components/ui/badge";
+import { LanguageToggle } from "./language-toggle";
 
 export function Topbar({
   user,
@@ -18,36 +19,44 @@ export function Topbar({
   navItems: NavItem[];
 }) {
   return (
-    <header className="sticky top-0 z-40 flex h-16 items-center gap-3 border-b border-border bg-background/80 px-4 backdrop-blur-xl sm:px-6">
-      <MobileNav items={navItems} />
+    <header className="no-print sticky top-0 z-50 flex h-16 items-center border-b border-border bg-background/80 backdrop-blur-xl">
+      {/* Left: desktop brand column (aligns with sidebar) */}
+      <TopbarBrand />
 
-      <div className="flex items-center gap-2">
-        <span className="relative flex size-2">
-          <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-60" />
-          <span className="relative inline-flex size-2 rounded-full bg-emerald-400" />
-        </span>
-        <span className="hidden text-xs text-muted-foreground sm:inline">Live</span>
+      {/* Mobile brand */}
+      <div className="flex items-center gap-2 px-4 lg:hidden">
+        <MobileNav items={navItems} />
+        <Link href="/dashboard" className="flex items-center gap-2">
+          <div className="grid size-8 place-items-center rounded-lg bg-primary">
+            <Sparkles className="size-4 text-primary-foreground" />
+          </div>
+          <span className="hidden text-sm font-semibold text-foreground sm:inline">Operation GWG</span>
+        </Link>
       </div>
 
-      <button
-        type="button"
-        data-command-trigger
-        className="ml-1 hidden max-w-md flex-1 items-center gap-2 rounded-lg border border-border bg-muted/40 px-3 py-1.5 text-sm text-muted-foreground transition-colors hover:bg-muted/70 md:flex"
-      >
-        <Search className="size-4" />
-        <span>Search outlets, tasks, complaints…</span>
-        <kbd className="ml-auto rounded border border-border bg-background px-1.5 py-0.5 text-[10px] text-muted-foreground">
-          ⌘K
-        </kbd>
-      </button>
+      {/* Controls */}
+      <div className="ml-auto flex items-center gap-2 px-4 sm:px-6">
+        <button
+          type="button"
+          data-command-trigger
+          className="hidden h-9 w-56 items-center gap-2 rounded-lg border border-border bg-card px-3 text-sm text-muted-foreground transition-colors hover:bg-muted md:flex lg:w-72"
+        >
+          <Search className="size-4" />
+          <span>Search...</span>
+          <kbd className="ml-auto rounded bg-muted px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground">Ctrl+K</kbd>
+        </button>
+        <button
+          type="button"
+          data-command-trigger
+          aria-label="Search"
+          className="grid size-9 place-items-center rounded-lg border border-border bg-card text-muted-foreground hover:bg-muted hover:text-foreground md:hidden"
+        >
+          <Search className="size-[18px]" />
+        </button>
 
-      <div className="ml-auto flex items-center gap-2">
-        <Badge tone="brand" className="hidden sm:inline-flex">
-          {ROLE_LABEL[user.role]}
-        </Badge>
+        <LanguageToggle />
         <ThemeToggle />
         <NotificationCenter notifications={notifications} />
-        <div className="mx-1 hidden h-6 w-px bg-border sm:block" />
         <UserMenu name={user.name} email={user.email} role={user.role} />
       </div>
     </header>

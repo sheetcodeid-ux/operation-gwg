@@ -23,7 +23,7 @@ export default async function EventsPage() {
   const totalBudget = events.reduce((a, b) => a + b.budget, 0);
 
   return (
-    <div className="mx-auto max-w-7xl">
+    <div className="w-full">
       <PageHeader
         icon={CalendarRange}
         title="Event Tracker"

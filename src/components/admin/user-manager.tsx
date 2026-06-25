@@ -17,7 +17,8 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { Popover } from "@/components/ui/popover";
-import { Field, Input, Select } from "@/components/ui/input";
+import { Field, Input } from "@/components/ui/input";
+import { Combobox } from "@/components/ui/combobox";
 import type { Tone } from "@/lib/constants";
 
 export interface UserRow {
@@ -206,19 +207,14 @@ function NewUserDialog({ outlets, onClose }: { outlets: OutletLite[]; onClose: (
               <Input value={form.email} onChange={(e) => setForm((f) => ({ ...f, email: e.target.value }))} placeholder="name@gwg.co" />
             </Field>
             <Field label="Role">
-              <Select
+              <Combobox
                 value={form.role}
-                onChange={(e) => {
-                  setForm((f) => ({ ...f, role: e.target.value as Role }));
+                onChange={(v) => {
+                  setForm((f) => ({ ...f, role: v as Role }));
                   setSelected([]);
                 }}
-              >
-                {ROLES.map((r) => (
-                  <option key={r} value={r}>
-                    {ROLE_LABEL[r]}
-                  </option>
-                ))}
-              </Select>
+                options={ROLES.map((r) => ({ value: r, label: ROLE_LABEL[r] }))}
+              />
             </Field>
             <Field label="Initial Password">
               <Input type="text" value={form.password} onChange={(e) => setForm((f) => ({ ...f, password: e.target.value }))} placeholder="min. 6 chars" />

@@ -2,6 +2,7 @@ import {
   CalendarRange,
   ChartSpline,
   ConciergeBell,
+  FileText,
   LayoutDashboard,
   ListChecks,
   MessageSquareWarning,
@@ -26,4 +27,5 @@ export const NAV_ICONS: Record<string, LucideIcon> = {
   Users,
   Network,
   ScrollText,
+  FileText,
 };

@@ -18,16 +18,15 @@ import {
   YAxis,
 } from "recharts";
 
-const AXIS = { stroke: "#475569", fontSize: 11 } as const;
-const GRID = "rgba(255,255,255,0.06)";
+const AXIS = { stroke: "#94a3b8", fontSize: 11 } as const;
+const GRID = "rgba(148,163,184,0.18)";
 
 const tooltipStyle = {
-  background: "rgba(17,24,39,0.95)",
-  border: "1px solid rgba(255,255,255,0.1)",
+  background: "var(--popover)",
+  border: "1px solid var(--border)",
   borderRadius: 12,
   fontSize: 12,
-  color: "#e2e8f0",
-  backdropFilter: "blur(8px)",
+  color: "var(--popover-foreground)",
 } as const;
 
 /* ---- Complaint trend (received vs resolved) ---- */
@@ -67,19 +66,27 @@ export function CategoryBarChart({
   data,
   color = "#7c3aed",
   height = 260,
+  max,
+  radius = 6,
+  maxBarSize = 42,
+  angle = -12,
 }: {
   data: { label: string; value: number }[];
   color?: string;
   height?: number;
+  max?: number;
+  radius?: number;
+  maxBarSize?: number;
+  angle?: number;
 }) {
   return (
     <ResponsiveContainer width="100%" height={height}>
       <BarChart data={data} margin={{ top: 8, right: 8, left: -16, bottom: 0 }}>
         <CartesianGrid strokeDasharray="3 3" stroke={GRID} vertical={false} />
-        <XAxis dataKey="label" tick={AXIS} tickLine={false} axisLine={false} interval={0} angle={-12} dy={8} height={44} />
-        <YAxis tick={AXIS} tickLine={false} axisLine={false} allowDecimals={false} width={32} />
+        <XAxis dataKey="label" tick={AXIS} tickLine={false} axisLine={false} interval={0} angle={angle} dy={8} height={angle ? 44 : 28} />
+        <YAxis tick={AXIS} tickLine={false} axisLine={false} allowDecimals={false} width={32} domain={max ? [0, max] : undefined} />
         <Tooltip contentStyle={tooltipStyle} cursor={{ fill: "rgba(255,255,255,0.04)" }} />
-        <Bar dataKey="value" radius={[6, 6, 0, 0]} fill={color} maxBarSize={42} />
+        <Bar dataKey="value" radius={[radius, radius, radius, radius]} fill={color} maxBarSize={maxBarSize} />
       </BarChart>
     </ResponsiveContainer>
   );

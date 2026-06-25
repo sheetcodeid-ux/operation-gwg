@@ -12,11 +12,13 @@ import {
 } from "@/lib/data/store";
 import { listComplaints } from "@/lib/data/store";
 import { can } from "@/lib/rbac";
+import { KPI_TARGETS } from "@/lib/constants";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { PageHeader } from "@/components/ui/page-header";
 import { StatTile } from "@/components/ui/stat";
 import { ScoreRing } from "@/components/ui/score-ring";
-import { TONE_HEX } from "@/components/ui/tone";
+import { Progress } from "@/components/ui/progress";
+import { TONE_HEX, scoreTone } from "@/components/ui/tone";
 import { CategoryBarChart, MultiLineChart } from "@/components/charts/charts";
 import { Heatmap } from "@/components/charts/heatmap";
 
@@ -39,6 +41,17 @@ export default async function AnalyticsPage() {
     .map(([areaId, value]) => ({ label: areaName(areaId), value }))
     .sort((a, b) => b.value - a.value);
 
+  const resolution =
+    kpis.complaintsOpen + kpis.complaintsClosed
+      ? Math.round((kpis.complaintsClosed / (kpis.complaintsOpen + kpis.complaintsClosed)) * 100)
+      : 0;
+  const targets = [
+    { label: "Hospitality", actual: kpis.hospitalityScore, target: KPI_TARGETS.hospitality },
+    { label: "Hygiene", actual: kpis.hygieneScore, target: KPI_TARGETS.hygiene },
+    { label: "Task Completion", actual: kpis.taskCompletionRate, target: KPI_TARGETS.taskCompletion },
+    { label: "Resolution", actual: resolution, target: KPI_TARGETS.resolution },
+  ];
+
   const heatColumns = ["Hospitality", "Hygiene", "Task %", "Resolution %"];
   const heatRows = matrix.map((m) => ({
     label: m.area.name,
@@ -46,7 +59,7 @@ export default async function AnalyticsPage() {
   }));
 
   return (
-    <div className="mx-auto max-w-7xl">
+    <div className="w-full">
       <PageHeader
         icon={ChartSpline}
         title="Analytics & Reporting"
@@ -59,6 +72,35 @@ export default async function AnalyticsPage() {
         <StatTile icon={MessageSquareWarning} label="Open Complaints" value={kpis.complaintsOpen} tone="warning" />
         <StatTile icon={Trophy} label="Outlets Tracked" value={visibleOutlets(user).length} tone="cyan" />
       </div>
+
+      <Card className="mt-4">
+        <CardHeader>
+          <CardTitle>Targets vs Actual</CardTitle>
+          <CardDescription>Organization KPI targets</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+            {targets.map((t) => {
+              const onTarget = t.actual >= t.target;
+              return (
+                <div key={t.label}>
+                  <div className="flex items-baseline justify-between">
+                    <span className="text-xs text-muted-foreground">{t.label}</span>
+                    <span className="text-sm font-semibold tabular-nums text-foreground">{t.actual.toFixed(0)}</span>
+                  </div>
+                  <Progress value={t.actual} tone={onTarget ? "success" : scoreTone(t.actual)} className="mt-1.5" />
+                  <p className="mt-1 text-[11px] text-muted-foreground">
+                    Target {t.target} ·{" "}
+                    <span className={onTarget ? "text-emerald-500" : "text-amber-500"}>
+                      {onTarget ? "On target" : `${(t.target - t.actual).toFixed(0)} below`}
+                    </span>
+                  </p>
+                </div>
+              );
+            })}
+          </div>
+        </CardContent>
+      </Card>
 
       <div className="mt-4 grid gap-4 lg:grid-cols-3">
         <Card className="lg:col-span-2">

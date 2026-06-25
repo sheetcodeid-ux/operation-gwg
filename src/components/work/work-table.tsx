@@ -8,7 +8,7 @@ import type { Priority, TaskStatus } from "@/lib/types";
 import { Badge } from "@/components/ui/badge";
 import { DataTable } from "@/components/ui/data-table";
 import { Progress } from "@/components/ui/progress";
-import { Select } from "@/components/ui/input";
+import { Combobox } from "@/components/ui/combobox";
 import { formatDate, isOverdue } from "@/lib/utils";
 
 export interface WorkRow {
@@ -91,27 +91,24 @@ export function WorkTable({ rows }: { rows: WorkRow[] }) {
 
   return (
     <DataTable
+      tableId="work-tracker"
       columns={columns}
       data={filtered}
       searchPlaceholder="Search tasks…"
       toolbar={
         <div className="flex gap-2">
-          <Select value={priority} onChange={(e) => setPriority(e.target.value)} className="w-32">
-            <option value="all">All priority</option>
-            {(Object.keys(PRIORITY_META) as Priority[]).map((p) => (
-              <option key={p} value={p}>
-                {PRIORITY_META[p].label}
-              </option>
-            ))}
-          </Select>
-          <Select value={status} onChange={(e) => setStatus(e.target.value)} className="w-32">
-            <option value="all">All status</option>
-            {(Object.keys(TASK_STATUS_META) as TaskStatus[]).map((s) => (
-              <option key={s} value={s}>
-                {TASK_STATUS_META[s].label}
-              </option>
-            ))}
-          </Select>
+          <Combobox
+            value={priority}
+            onChange={setPriority}
+            className="w-36"
+            options={[{ value: "all", label: "All priority" }, ...(Object.keys(PRIORITY_META) as Priority[]).map((p) => ({ value: p, label: PRIORITY_META[p].label }))]}
+          />
+          <Combobox
+            value={status}
+            onChange={setStatus}
+            className="w-36"
+            options={[{ value: "all", label: "All status" }, ...(Object.keys(TASK_STATUS_META) as TaskStatus[]).map((s) => ({ value: s, label: TASK_STATUS_META[s].label }))]}
+          />
         </div>
       }
     />

@@ -28,8 +28,8 @@ export function MobileNav({ items }: { items: NavItem[] }) {
           <div className="surface-solid absolute left-0 top-0 h-full w-72 overflow-y-auto p-4">
             <div className="mb-4 flex items-center justify-between">
               <div className="flex items-center gap-2">
-                <div className="grid size-8 place-items-center rounded-lg bg-gradient-to-br from-brand-500 to-cyan-500">
-                  <Sparkles className="size-4 text-white" />
+                <div className="grid size-8 place-items-center rounded-lg bg-primary">
+                  <Sparkles className="size-4 text-primary-foreground" />
                 </div>
                 <span className="text-sm font-semibold text-foreground">Operation GWG</span>
               </div>

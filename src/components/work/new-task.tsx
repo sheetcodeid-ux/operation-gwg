@@ -9,7 +9,8 @@ import type { Priority, TaskStatus } from "@/lib/types";
 import { createTaskAction } from "@/lib/actions/work";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogTrigger, useDialogControl } from "@/components/ui/dialog";
-import { Field, Input, Select, Textarea } from "@/components/ui/input";
+import { Field, Input, Textarea } from "@/components/ui/input";
+import { Combobox } from "@/components/ui/combobox";
 
 const PRIORITIES = Object.keys(PRIORITY_META) as Priority[];
 const STATUSES = Object.keys(TASK_STATUS_META) as TaskStatus[];
@@ -87,40 +88,34 @@ function TaskForm({ outlets }: { outlets: { id: string; name: string }[] }) {
       </Field>
       <div className="grid grid-cols-2 gap-3">
         <Field label="Outlet">
-          <Select value={form.outletId} onChange={(e) => set("outletId", e.target.value)}>
-            {outlets.map((o) => (
-              <option key={o.id} value={o.id}>
-                {o.name}
-              </option>
-            ))}
-          </Select>
+          <Combobox
+            value={form.outletId}
+            onChange={(v) => set("outletId", v)}
+            options={outlets.map((o) => ({ value: o.id, label: o.name }))}
+            placeholder="Select outlet"
+            searchPlaceholder="Search outlets…"
+          />
         </Field>
         <Field label="Category">
-          <Select value={form.category} onChange={(e) => set("category", e.target.value)}>
-            {WORK_CATEGORIES.map((c) => (
-              <option key={c} value={c}>
-                {c}
-              </option>
-            ))}
-          </Select>
+          <Combobox
+            value={form.category}
+            onChange={(v) => set("category", v)}
+            options={WORK_CATEGORIES.map((c) => ({ value: c, label: c }))}
+          />
         </Field>
         <Field label="Priority">
-          <Select value={form.priority} onChange={(e) => set("priority", e.target.value as Priority)}>
-            {PRIORITIES.map((p) => (
-              <option key={p} value={p}>
-                {PRIORITY_META[p].label}
-              </option>
-            ))}
-          </Select>
+          <Combobox
+            value={form.priority}
+            onChange={(v) => set("priority", v as Priority)}
+            options={PRIORITIES.map((p) => ({ value: p, label: PRIORITY_META[p].label }))}
+          />
         </Field>
         <Field label="Status">
-          <Select value={form.status} onChange={(e) => set("status", e.target.value as TaskStatus)}>
-            {STATUSES.map((s) => (
-              <option key={s} value={s}>
-                {TASK_STATUS_META[s].label}
-              </option>
-            ))}
-          </Select>
+          <Combobox
+            value={form.status}
+            onChange={(v) => set("status", v as TaskStatus)}
+            options={STATUSES.map((s) => ({ value: s, label: TASK_STATUS_META[s].label }))}
+          />
         </Field>
         <Field label="Start Date">
           <Input type="date" value={form.startDate} onChange={(e) => set("startDate", e.target.value)} />

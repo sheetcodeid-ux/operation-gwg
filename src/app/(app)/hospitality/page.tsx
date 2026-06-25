@@ -27,7 +27,7 @@ export default async function HospitalityPage() {
   const best = [...assessments].sort((a, b) => b.overallScore - a.overallScore)[0];
 
   return (
-    <div className="mx-auto max-w-7xl">
+    <div className="w-full">
       <PageHeader
         icon={ConciergeBell}
         title="Hospitality Assessment"

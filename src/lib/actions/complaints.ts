@@ -53,6 +53,16 @@ export interface ResolveInput {
   followUpDate?: string;
 }
 
+export async function bulkCloseComplaintsAction(ids: string[]) {
+  const user = await getSessionUser();
+  if (!user) return { error: "Not authenticated" };
+  if (!can(user, "manage_complaint")) return { error: "No permission" };
+  for (const id of ids) resolveComplaint({ id, status: "closed" });
+  revalidatePath("/complaints");
+  revalidatePath("/dashboard");
+  return { ok: true, count: ids.length };
+}
+
 export async function resolveComplaintAction(input: ResolveInput) {
   const user = await getSessionUser();
   if (!user) return { error: "Not authenticated" };

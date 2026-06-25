@@ -22,6 +22,7 @@ export const NAV_ITEMS: NavItem[] = [
   { label: "Complaints", href: "/complaints", icon: "MessageSquareWarning", section: "Quality" },
 
   { label: "Outlets", href: "/outlets", icon: "Store", section: "Insights" },
+  { label: "Reports", href: "/reports", icon: "FileText", section: "Insights", permission: "view_reports" },
 
   { label: "User Management", href: "/admin/users", icon: "Users", section: "Admin", permission: "manage_users" },
   { label: "Organization", href: "/admin/organization", icon: "Network", section: "Admin", permission: "manage_org" },

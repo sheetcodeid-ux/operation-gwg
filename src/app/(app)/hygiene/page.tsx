@@ -26,7 +26,7 @@ export default async function HygienePage() {
   const openFindings = audits.reduce((a, b) => a + b.findings.length, 0);
 
   return (
-    <div className="mx-auto max-w-7xl">
+    <div className="w-full">
       <PageHeader
         icon={SprayCan}
         title="Hygiene Monitoring"

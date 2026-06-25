@@ -2,8 +2,9 @@ import type { Tone } from "@/lib/constants";
 
 /** Soft "pill" styling per tone — light + dark aware (light bg/dark text vs. translucent/bright text). */
 export const TONE_PILL: Record<Tone, string> = {
-  brand: "bg-brand-100 text-brand-700 ring-1 ring-inset ring-brand-200 dark:bg-brand-500/15 dark:text-brand-300 dark:ring-brand-500/25",
-  cyan: "bg-cyan-100 text-cyan-700 ring-1 ring-inset ring-cyan-200 dark:bg-cyan-500/15 dark:text-cyan-300 dark:ring-cyan-500/25",
+  // "brand" is neutral (Aniq-ui style); green is reserved for success.
+  brand: "bg-slate-100 text-slate-700 ring-1 ring-inset ring-slate-200 dark:bg-slate-500/15 dark:text-slate-300 dark:ring-slate-500/25",
+  cyan: "bg-blue-100 text-blue-700 ring-1 ring-inset ring-blue-200 dark:bg-blue-500/15 dark:text-blue-300 dark:ring-blue-500/25",
   amber: "bg-amber-100 text-amber-700 ring-1 ring-inset ring-amber-200 dark:bg-amber-500/15 dark:text-amber-300 dark:ring-amber-500/25",
   success: "bg-emerald-100 text-emerald-700 ring-1 ring-inset ring-emerald-200 dark:bg-emerald-500/15 dark:text-emerald-300 dark:ring-emerald-500/25",
   warning: "bg-amber-100 text-amber-700 ring-1 ring-inset ring-amber-200 dark:bg-amber-500/15 dark:text-amber-300 dark:ring-amber-500/25",
@@ -13,12 +14,12 @@ export const TONE_PILL: Record<Tone, string> = {
 
 /** Solid accent color (hex) per tone — for charts / rings. */
 export const TONE_HEX: Record<Tone, string> = {
-  brand: "#a78bfa",
-  cyan: "#22d3ee",
-  amber: "#fbbf24",
-  success: "#34d399",
-  warning: "#fbbf24",
-  danger: "#f87171",
+  brand: "#64748b",
+  cyan: "#3b82f6",
+  amber: "#f59e0b",
+  success: "#16a34a",
+  warning: "#f59e0b",
+  danger: "#ef4444",
   neutral: "#94a3b8",
 };
 

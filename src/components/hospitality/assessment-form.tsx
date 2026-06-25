@@ -9,7 +9,8 @@ import type { HospitalityCategory } from "@/lib/types";
 import { createHospitalityAction } from "@/lib/actions/hospitality";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogTrigger, useDialogControl } from "@/components/ui/dialog";
-import { Field, Input, Select, Textarea } from "@/components/ui/input";
+import { Field, Input, Textarea } from "@/components/ui/input";
+import { Combobox } from "@/components/ui/combobox";
 import { ScoreRing } from "@/components/ui/score-ring";
 import { cn } from "@/lib/utils";
 
@@ -92,13 +93,13 @@ function AssessmentForm({ outlets }: { outlets: { id: string; name: string }[] }
     <div className="max-h-[70vh] overflow-y-auto p-5">
       <div className="grid gap-4 sm:grid-cols-2">
         <Field label="Outlet">
-          <Select value={outletId} onChange={(e) => setOutletId(e.target.value)}>
-            {outlets.map((o) => (
-              <option key={o.id} value={o.id}>
-                {o.name}
-              </option>
-            ))}
-          </Select>
+          <Combobox
+            value={outletId}
+            onChange={setOutletId}
+            options={outlets.map((o) => ({ value: o.id, label: o.name }))}
+            placeholder="Select outlet"
+            searchPlaceholder="Search outlets…"
+          />
         </Field>
         <div className="grid grid-cols-2 gap-3">
           <Field label="Staff Name">
@@ -122,7 +123,7 @@ function AssessmentForm({ outlets }: { outlets: { id: string; name: string }[] }
         {CATS.map((cat) => (
           <div key={cat} className="rounded-xl border border-border bg-muted/20 p-3">
             <div className="mb-2 flex items-center gap-2">
-              <ConciergeBell className="size-4 text-brand-300" />
+              <ConciergeBell className="size-4 text-muted-foreground" />
               <p className="text-sm font-medium text-foreground">{HOSPITALITY_CHECKLISTS[cat].label}</p>
             </div>
             <div className="space-y-1.5">
@@ -164,7 +165,7 @@ function ScoreSelect({ value, onChange }: { value: number; onChange: (v: number)
           className={cn(
             "size-7 rounded-md text-xs font-medium tabular-nums transition-all",
             value === n
-              ? "bg-gradient-to-b from-brand-500 to-brand-600 text-white shadow-[0_2px_10px_-2px_rgba(124,58,237,0.6)]"
+              ? "bg-primary text-primary-foreground shadow-sm"
               : "bg-muted/50 text-muted-foreground hover:bg-muted hover:text-foreground",
           )}
         >

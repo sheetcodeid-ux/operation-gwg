@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { Store } from "lucide-react";
 import type { Metadata } from "next";
 import { getSessionUser } from "@/lib/auth";
@@ -15,7 +16,7 @@ export default async function OutletsPage() {
   const rows = outletRanking(user);
 
   return (
-    <div className="mx-auto max-w-7xl">
+    <div className="w-full">
       <PageHeader icon={Store} title="Outlets" description={`${rows.length} outlets within your scope`} />
 
       <Card>
@@ -42,7 +43,9 @@ export default async function OutletsPage() {
                   return (
                     <tr key={r.outlet.id} className="border-b border-border/60 last:border-0 hover:bg-muted/30">
                       <td className="px-3 py-2.5">
-                        <p className="font-medium text-foreground">{r.outlet.name}</p>
+                        <Link href={`/outlets/${r.outlet.id}`} className="font-medium text-foreground hover:text-primary hover:underline">
+                          {r.outlet.name}
+                        </Link>
                         <p className="text-[11px] text-muted-foreground">{r.outlet.code} · {r.outlet.city}</p>
                       </td>
                       <td className="px-3 py-2.5 text-muted-foreground">{areaName(r.outlet.areaId)}</td>

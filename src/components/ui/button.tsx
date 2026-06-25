@@ -8,10 +8,8 @@ const buttonVariants = cva(
   {
     variants: {
       variant: {
-        default:
-          "bg-gradient-to-b from-brand-500 to-brand-600 text-white shadow-[0_4px_20px_-6px_var(--tw-shadow-color)] shadow-brand-600/60 hover:from-brand-400 hover:to-brand-500 hover:shadow-brand-600/70",
-        primary:
-          "bg-gradient-to-b from-brand-500 to-brand-600 text-white shadow-[0_4px_20px_-6px_var(--tw-shadow-color)] shadow-brand-600/60 hover:from-brand-400 hover:to-brand-500 hover:shadow-brand-600/70",
+        default: "bg-primary text-primary-foreground shadow-sm hover:bg-primary/90",
+        primary: "bg-primary text-primary-foreground shadow-sm hover:bg-primary/90",
         secondary:
           "border border-border bg-secondary text-secondary-foreground hover:bg-secondary/70",
         outline: "border border-border bg-transparent text-foreground hover:bg-muted",

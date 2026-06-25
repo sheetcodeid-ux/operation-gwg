@@ -9,7 +9,8 @@ import type { HygieneRating, HygieneSection } from "@/lib/types";
 import { createHygieneAction } from "@/lib/actions/hygiene";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogTrigger, useDialogControl } from "@/components/ui/dialog";
-import { Field, Input, Select } from "@/components/ui/input";
+import { Field, Input } from "@/components/ui/input";
+import { Combobox } from "@/components/ui/combobox";
 import { ScoreRing } from "@/components/ui/score-ring";
 import { TONE_PILL } from "@/components/ui/tone";
 import { cn } from "@/lib/utils";
@@ -54,6 +55,7 @@ function HygieneForm({ outlets }: { outlets: { id: string; name: string }[] }) {
   const [findings, setFindings] = useState<string[]>([]);
   const [findingDraft, setFindingDraft] = useState("");
   const [openSection, setOpenSection] = useState<HygieneSection>("front");
+  const [photos, setPhotos] = useState<Record<string, string[]>>({});
 
   const score = useMemo(() => {
     let sum = 0;
@@ -96,22 +98,20 @@ function HygieneForm({ outlets }: { outlets: { id: string; name: string }[] }) {
     <div className="max-h-[72vh] overflow-y-auto p-5">
       <div className="grid gap-3 sm:grid-cols-3">
         <Field label="Outlet">
-          <Select value={outletId} onChange={(e) => setOutletId(e.target.value)}>
-            {outlets.map((o) => (
-              <option key={o.id} value={o.id}>
-                {o.name}
-              </option>
-            ))}
-          </Select>
+          <Combobox
+            value={outletId}
+            onChange={setOutletId}
+            options={outlets.map((o) => ({ value: o.id, label: o.name }))}
+            placeholder="Select outlet"
+            searchPlaceholder="Search outlets…"
+          />
         </Field>
         <Field label="Shift">
-          <Select value={shift} onChange={(e) => setShift(e.target.value)}>
-            {["Morning", "Afternoon", "Evening"].map((s) => (
-              <option key={s} value={s}>
-                {s}
-              </option>
-            ))}
-          </Select>
+          <Combobox
+            value={shift}
+            onChange={setShift}
+            options={["Morning", "Afternoon", "Evening"].map((s) => ({ value: s, label: s }))}
+          />
         </Field>
         <Field label="Inspector">
           <Input value={inspectorName} onChange={(e) => setInspectorName(e.target.value)} placeholder="Your name" />
@@ -141,7 +141,7 @@ function HygieneForm({ outlets }: { outlets: { id: string; name: string }[] }) {
                 className="flex w-full items-center justify-between gap-2 bg-muted/30 px-3 py-2.5 text-left hover:bg-muted/50"
               >
                 <div className="flex items-center gap-2">
-                  <SprayCan className="size-4 text-brand-300" />
+                  <SprayCan className="size-4 text-muted-foreground" />
                   <div>
                     <p className="text-sm font-medium text-foreground">{meta.label}</p>
                     <p className="text-[10px] uppercase tracking-wide text-muted-foreground">{meta.subtitle}</p>
@@ -180,17 +180,11 @@ function HygieneForm({ outlets }: { outlets: { id: string; name: string }[] }) {
         })}
       </div>
 
-      {/* Photo documentation (upload wired in Phase 11 via Supabase Storage) */}
+      {/* Photo documentation — local preview now, Supabase Storage in Phase 11 */}
       <Field label="Documentation" className="mt-4">
         <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
           {HYGIENE_PHOTO_GROUPS.map((g) => (
-            <div
-              key={g}
-              className="flex flex-col items-center gap-1 rounded-lg border border-dashed border-border bg-muted/30 p-3 text-center text-muted-foreground"
-            >
-              <ImagePlus className="size-5" />
-              <span className="text-[11px]">{g}</span>
-            </div>
+            <PhotoGroup key={g} label={g} urls={photos[g] ?? []} onChange={(urls) => setPhotos((p) => ({ ...p, [g]: urls }))} />
           ))}
         </div>
       </Field>
@@ -229,6 +223,49 @@ function HygieneForm({ outlets }: { outlets: { id: string; name: string }[] }) {
           {pending && <Loader2 className="animate-spin" />} Save Audit
         </Button>
       </div>
+    </div>
+  );
+}
+
+function PhotoGroup({
+  label,
+  urls,
+  onChange,
+}: {
+  label: string;
+  urls: string[];
+  onChange: (urls: string[]) => void;
+}) {
+  function onFiles(e: React.ChangeEvent<HTMLInputElement>) {
+    const files = Array.from(e.target.files ?? []);
+    if (!files.length) return;
+    onChange([...urls, ...files.map((f) => URL.createObjectURL(f))]);
+    e.target.value = "";
+  }
+  return (
+    <div className="rounded-lg border border-dashed border-border bg-muted/30 p-2">
+      <label className="flex cursor-pointer flex-col items-center gap-1 py-1.5 text-center text-muted-foreground hover:text-foreground">
+        <ImagePlus className="size-5" />
+        <span className="text-[11px]">{label}</span>
+        <input type="file" accept="image/*" multiple className="hidden" onChange={onFiles} />
+      </label>
+      {urls.length > 0 && (
+        <div className="mt-1.5 grid grid-cols-3 gap-1">
+          {urls.map((u, i) => (
+            <div key={i} className="group relative aspect-square overflow-hidden rounded-md ring-1 ring-border">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src={u} alt="" className="size-full object-cover" />
+              <button
+                type="button"
+                onClick={() => onChange(urls.filter((_, j) => j !== i))}
+                className="absolute right-0.5 top-0.5 grid size-4 place-items-center rounded bg-black/60 text-white opacity-0 transition-opacity group-hover:opacity-100"
+              >
+                <X className="size-2.5" />
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }

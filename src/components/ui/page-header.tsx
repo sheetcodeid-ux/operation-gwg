@@ -18,8 +18,8 @@ export function PageHeader({
     <div className={cn("mb-6 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between", className)}>
       <div className="flex items-center gap-3">
         {Icon && (
-          <div className="grid size-10 place-items-center rounded-xl bg-gradient-to-br from-brand-500/20 to-cyan-500/10 ring-1 ring-border">
-            <Icon className="size-5 text-brand-300" />
+          <div className="grid size-10 place-items-center rounded-xl bg-muted ring-1 ring-border">
+            <Icon className="size-5 text-foreground/70" />
           </div>
         )}
         <div>

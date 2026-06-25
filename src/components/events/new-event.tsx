@@ -9,7 +9,8 @@ import type { EventMilestone, EventStatus } from "@/lib/types";
 import { createEventAction } from "@/lib/actions/events";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogTrigger, useDialogControl } from "@/components/ui/dialog";
-import { Field, Input, Select, Textarea } from "@/components/ui/input";
+import { Field, Input, Textarea } from "@/components/ui/input";
+import { Combobox } from "@/components/ui/combobox";
 
 const STATUSES = Object.keys(EVENT_STATUS_META) as EventStatus[];
 
@@ -82,13 +83,13 @@ function EventForm({ outlets }: { outlets: { id: string; name: string }[] }) {
       </Field>
       <div className="grid grid-cols-2 gap-3">
         <Field label="Outlet">
-          <Select value={form.outletId} onChange={(e) => set("outletId", e.target.value)}>
-            {outlets.map((o) => (
-              <option key={o.id} value={o.id}>
-                {o.name}
-              </option>
-            ))}
-          </Select>
+          <Combobox
+            value={form.outletId}
+            onChange={(v) => set("outletId", v)}
+            options={outlets.map((o) => ({ value: o.id, label: o.name }))}
+            placeholder="Select outlet"
+            searchPlaceholder="Search outlets…"
+          />
         </Field>
         <Field label="Budget (IDR)">
           <Input type="number" value={form.budget} onChange={(e) => set("budget", Number(e.target.value) as never)} min={0} step={1_000_000} />
@@ -100,22 +101,18 @@ function EventForm({ outlets }: { outlets: { id: string; name: string }[] }) {
           <Input type="date" value={form.endDate} onChange={(e) => set("endDate", e.target.value)} />
         </Field>
         <Field label="Milestone">
-          <Select value={form.milestone} onChange={(e) => set("milestone", e.target.value as EventMilestone)}>
-            {EVENT_MILESTONES.map((m) => (
-              <option key={m.value} value={m.value}>
-                {m.label}
-              </option>
-            ))}
-          </Select>
+          <Combobox
+            value={form.milestone}
+            onChange={(v) => set("milestone", v as EventMilestone)}
+            options={EVENT_MILESTONES.map((m) => ({ value: m.value, label: m.label }))}
+          />
         </Field>
         <Field label="Status">
-          <Select value={form.status} onChange={(e) => set("status", e.target.value as EventStatus)}>
-            {STATUSES.map((s) => (
-              <option key={s} value={s}>
-                {EVENT_STATUS_META[s].label}
-              </option>
-            ))}
-          </Select>
+          <Combobox
+            value={form.status}
+            onChange={(v) => set("status", v as EventStatus)}
+            options={STATUSES.map((s) => ({ value: s, label: EVENT_STATUS_META[s].label }))}
+          />
         </Field>
       </div>
 

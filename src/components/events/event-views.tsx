@@ -21,19 +21,19 @@ export function MilestoneStepper({ current }: { current: OpsEvent["milestone"] }
               <div
                 className={cn(
                   "grid size-6 place-items-center rounded-full text-[10px] font-semibold ring-1 transition-colors",
-                  done && "bg-brand-500/80 text-white ring-brand-400/40",
-                  active && "bg-cyan-500/20 text-cyan-200 ring-cyan-400/50",
+                  done && "bg-primary text-primary-foreground ring-border",
+                  active && "bg-blue-500/20 text-blue-600 ring-blue-400/50 dark:text-blue-300",
                   !done && !active && "bg-muted/50 text-muted-foreground ring-border",
                 )}
               >
                 {i + 1}
               </div>
-              <span className={cn("text-[10px]", active ? "text-cyan-200" : done ? "text-foreground/80" : "text-muted-foreground")}>
+              <span className={cn("text-[10px]", active ? "text-blue-600 dark:text-blue-300" : done ? "text-foreground/80" : "text-muted-foreground")}>
                 {m.label}
               </span>
             </div>
             {i < EVENT_MILESTONES.length - 1 && (
-              <div className={cn("mx-1 h-0.5 flex-1 rounded-full", i < idx ? "bg-brand-500/60" : "bg-muted")} />
+              <div className={cn("mx-1 h-0.5 flex-1 rounded-full", i < idx ? "bg-primary/50" : "bg-muted")} />
             )}
           </div>
         );

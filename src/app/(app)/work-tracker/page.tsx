@@ -38,7 +38,7 @@ export default async function WorkTrackerPage() {
   }));
 
   return (
-    <div className="mx-auto max-w-7xl">
+    <div className="w-full">
       <PageHeader
         icon={ListChecks}
         title="Work Tracker"

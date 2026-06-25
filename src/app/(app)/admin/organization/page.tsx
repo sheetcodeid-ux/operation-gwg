@@ -19,7 +19,7 @@ export default async function OrganizationPage() {
   const outlets = getOutlets();
 
   return (
-    <div className="mx-auto max-w-7xl">
+    <div className="w-full">
       <PageHeader icon={Network} title="Organization" description="Areas, coordinators and outlet assignments" />
 
       <div className="grid gap-4 lg:grid-cols-2">

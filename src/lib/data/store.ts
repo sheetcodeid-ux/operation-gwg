@@ -146,6 +146,78 @@ export function getDashboardKpis(user: UserProfile): DashboardKpis {
   };
 }
 
+/* ---------------- period-aware KPIs (real deltas vs previous window) ---------------- */
+export type PeriodKey = "week" | "month" | "quarter";
+const PERIOD_DAYS: Record<PeriodKey, number> = { week: 7, month: 30, quarter: 90 };
+const NOW = +new Date("2026-06-23T23:59:59Z");
+
+export interface PeriodKpis extends DashboardKpis {
+  complaintsReceived: number;
+  complaintsResolved: number;
+  tasksCompleted: number;
+  deltas: {
+    hospitality: number;
+    hygiene: number;
+    complaintsReceived: number;
+    complaintsResolved: number;
+    tasksCompleted: number;
+  };
+}
+
+function pctDelta(cur: number, prev: number): number {
+  if (prev === 0) return cur === 0 ? 0 : 100;
+  return Math.round(((cur - prev) / prev) * 100);
+}
+
+export function getDashboardKpisWithPeriod(user: UserProfile, period: PeriodKey): PeriodKpis {
+  const base = getDashboardKpis(user);
+  const ids = new Set(visibleOutlets(user).map((o) => o.id));
+  const days = PERIOD_DAYS[period];
+  const win = days * 86_400_000;
+  const curStart = NOW - win;
+  const prevStart = NOW - 2 * win;
+
+  const inWin = (t: number, start: number, end: number) => t >= start && t < end;
+
+  const avgIn = (records: { date: string; v: number }[], start: number, end: number) => {
+    const xs = records.filter((r) => inWin(+new Date(r.date), start, end)).map((r) => r.v);
+    return xs.length ? round1(xs.reduce((a, b) => a + b, 0) / xs.length) : 0;
+  };
+
+  const hosp = SEED.hospitality.filter((h) => ids.has(h.outletId)).map((h) => ({ date: h.date, v: h.overallScore }));
+  const hyg = SEED.hygiene.filter((h) => ids.has(h.outletId)).map((h) => ({ date: h.date, v: h.hygieneScore }));
+  const comp = SEED.complaints.filter((c) => ids.has(c.outletId));
+  const tasks = SEED.tasks.filter((t) => ids.has(t.outletId));
+
+  const hospCur = avgIn(hosp, curStart, NOW) || base.hospitalityScore;
+  const hospPrev = avgIn(hosp, prevStart, curStart);
+  const hygCur = avgIn(hyg, curStart, NOW) || base.hygieneScore;
+  const hygPrev = avgIn(hyg, prevStart, curStart);
+
+  const recCur = comp.filter((c) => inWin(+new Date(c.createdAt), curStart, NOW)).length;
+  const recPrev = comp.filter((c) => inWin(+new Date(c.createdAt), prevStart, curStart)).length;
+  const resCur = comp.filter((c) => c.closedAt && inWin(+new Date(c.closedAt), curStart, NOW)).length;
+  const resPrev = comp.filter((c) => c.closedAt && inWin(+new Date(c.closedAt), prevStart, curStart)).length;
+  const tcCur = tasks.filter((t) => t.completionDate && inWin(+new Date(t.completionDate), curStart, NOW)).length;
+  const tcPrev = tasks.filter((t) => t.completionDate && inWin(+new Date(t.completionDate), prevStart, curStart)).length;
+
+  return {
+    ...base,
+    hospitalityScore: hospCur,
+    hygieneScore: hygCur,
+    complaintsReceived: recCur,
+    complaintsResolved: resCur,
+    tasksCompleted: tcCur,
+    deltas: {
+      hospitality: pctDelta(hospCur, hospPrev),
+      hygiene: pctDelta(hygCur, hygPrev),
+      complaintsReceived: pctDelta(recCur, recPrev),
+      complaintsResolved: pctDelta(resCur, resPrev),
+      tasksCompleted: pctDelta(tcCur, tcPrev),
+    },
+  };
+}
+
 /* ---------------- rankings ---------------- */
 export interface OutletRankRow {
   outlet: Outlet;
@@ -298,6 +370,284 @@ export function scoreTrend(user: UserProfile, weeks = 8) {
     if (g.length) lastHyg = round1(avg(g));
     return { label: `W${i + 1}`, hospitality: lastHosp, hygiene: lastHyg };
   });
+}
+
+/* ---------------- Outlet 360° ---------------- */
+export interface OutletDetail {
+  outlet: Outlet;
+  areaName: string;
+  supervisorName: string;
+  picName: string;
+  coordinatorName: string;
+  hospitality: number;
+  hygiene: number;
+  tasksOpen: number;
+  tasksDone: number;
+  taskCompletion: number;
+  complaintsOpen: number;
+  eventsRunning: number;
+  tasks: WorkTask[];
+  events: OpsEvent[];
+  hygieneAudits: HygieneAudit[];
+  complaints: Complaint[];
+  hospitalityAssessments: HospitalityAssessment[];
+}
+
+export function getOutletDetail(outletId: string): OutletDetail | null {
+  const outlet = getOutlet(outletId);
+  if (!outlet) return null;
+  const tasks = SEED.tasks.filter((t) => t.outletId === outletId).sort(byDateDesc("createdAt"));
+  const events = SEED.events.filter((e) => e.outletId === outletId).sort(byDateDesc("startDate"));
+  const hygieneAudits = SEED.hygiene.filter((h) => h.outletId === outletId).sort(byDateDesc("date"));
+  const complaints = SEED.complaints.filter((c) => c.outletId === outletId).sort(byDateDesc("createdAt"));
+  const hospitalityAssessments = SEED.hospitality.filter((h) => h.outletId === outletId).sort(byDateDesc("date"));
+  const done = tasks.filter((t) => t.status === "done").length;
+  const area = getArea(outlet.areaId);
+  return {
+    outlet,
+    areaName: area?.name ?? "—",
+    supervisorName: userName(outlet.supervisorId),
+    picName: userName(outlet.picId),
+    coordinatorName: area ? userName(area.coordinatorId) : "—",
+    hospitality: hospitalityScoreFor(outletId),
+    hygiene: hygieneScoreFor(outletId),
+    tasksOpen: tasks.filter((t) => t.status !== "done" && t.status !== "cancelled").length,
+    tasksDone: done,
+    taskCompletion: tasks.length ? Math.round((done / tasks.length) * 100) : 0,
+    complaintsOpen: complaints.filter((c) => c.status !== "closed" && c.status !== "done").length,
+    eventsRunning: events.filter((e) => e.status === "running").length,
+    tasks,
+    events,
+    hygieneAudits,
+    complaints,
+    hospitalityAssessments,
+  };
+}
+
+/* ---------------- Reports: month-over-month comparison ---------------- */
+export interface MetricCompare {
+  cur: number;
+  prev: number;
+  delta: number;
+}
+export interface ReportData {
+  hospitality: MetricCompare;
+  hygiene: MetricCompare;
+  complaintsReceived: MetricCompare;
+  complaintsResolved: MetricCompare;
+  tasksCompleted: MetricCompare;
+  perOutlet: { name: string; code: string; hospCur: number; hospPrev: number; hygCur: number; hygPrev: number }[];
+}
+
+/** Current window vs previous equal window across a set of outlets (default 30 days, ending NOW). */
+export function reportPeriodCompare(outletIds: string[], days = 30, endMs = NOW): ReportData {
+  const ids = new Set(outletIds);
+  const win = days * 86_400_000;
+  const end = endMs;
+  const curStart = end - win;
+  const prevStart = end - 2 * win;
+  const inW = (t: number, s: number, e: number) => t >= s && t < e;
+  const avg2 = (xs: number[]) => (xs.length ? Math.round((xs.reduce((a, b) => a + b, 0) / xs.length) * 10) / 10 : 0);
+
+  const hosp = SEED.hospitality.filter((h) => ids.has(h.outletId));
+  const hyg = SEED.hygiene.filter((h) => ids.has(h.outletId));
+  const comp = SEED.complaints.filter((c) => ids.has(c.outletId));
+  const tasks = SEED.tasks.filter((t) => ids.has(t.outletId));
+
+  const mc = (cur: number, prev: number): MetricCompare => ({ cur, prev, delta: pctDelta(cur, prev) });
+  const avgWin = (recs: { date: string; v: number }[], s: number, e: number) =>
+    avg2(recs.filter((r) => inW(+new Date(r.date), s, e)).map((r) => r.v));
+
+  const hospRecs = hosp.map((h) => ({ date: h.date, v: h.overallScore }));
+  const hygRecs = hyg.map((h) => ({ date: h.date, v: h.hygieneScore }));
+
+  const perOutlet = outletIds
+    .map((id) => getOutlet(id))
+    .filter((o): o is NonNullable<typeof o> => !!o)
+    .map((o) => {
+      const h = hosp.filter((x) => x.outletId === o.id).map((x) => ({ date: x.date, v: x.overallScore }));
+      const g = hyg.filter((x) => x.outletId === o.id).map((x) => ({ date: x.date, v: x.hygieneScore }));
+      return {
+        name: o.name,
+        code: o.code,
+        hospCur: avgWin(h, curStart, end) || hospitalityScoreFor(o.id),
+        hospPrev: avgWin(h, prevStart, curStart),
+        hygCur: avgWin(g, curStart, end) || hygieneScoreFor(o.id),
+        hygPrev: avgWin(g, prevStart, curStart),
+      };
+    });
+
+  return {
+    hospitality: mc(avgWin(hospRecs, curStart, end) || avg2(hospRecs.map((r) => r.v)), avgWin(hospRecs, prevStart, curStart)),
+    hygiene: mc(avgWin(hygRecs, curStart, end) || avg2(hygRecs.map((r) => r.v)), avgWin(hygRecs, prevStart, curStart)),
+    complaintsReceived: mc(
+      comp.filter((c) => inW(+new Date(c.createdAt), curStart, end)).length,
+      comp.filter((c) => inW(+new Date(c.createdAt), prevStart, curStart)).length,
+    ),
+    complaintsResolved: mc(
+      comp.filter((c) => c.closedAt && inW(+new Date(c.closedAt), curStart, end)).length,
+      comp.filter((c) => c.closedAt && inW(+new Date(c.closedAt), prevStart, curStart)).length,
+    ),
+    tasksCompleted: mc(
+      tasks.filter((t) => t.completionDate && inW(+new Date(t.completionDate), curStart, end)).length,
+      tasks.filter((t) => t.completionDate && inW(+new Date(t.completionDate), prevStart, curStart)).length,
+    ),
+    perOutlet,
+  };
+}
+
+/* ---------------- Reports: aggregation over a set of outlets ---------------- */
+export interface OutletsAggregate {
+  outlets: number;
+  hospitality: number;
+  hygiene: number;
+  tasksTotal: number;
+  tasksDone: number;
+  taskCompletion: number;
+  complaintsTotal: number;
+  complaintsOpen: number;
+  complaintsClosed: number;
+  resolution: number;
+  eventsTotal: number;
+  eventsRunning: number;
+  totalBudget: number;
+}
+
+export function aggregateOutlets(outletIds: string[]): OutletsAggregate {
+  const ids = new Set(outletIds);
+  const hosp = SEED.hospitality.filter((h) => ids.has(h.outletId)).map((h) => h.overallScore);
+  const hyg = SEED.hygiene.filter((h) => ids.has(h.outletId)).map((h) => h.hygieneScore);
+  const tasks = SEED.tasks.filter((t) => ids.has(t.outletId));
+  const tasksDone = tasks.filter((t) => t.status === "done").length;
+  const comp = SEED.complaints.filter((c) => ids.has(c.outletId));
+  const closed = comp.filter((c) => c.status === "closed" || c.status === "done").length;
+  const events = SEED.events.filter((e) => ids.has(e.outletId));
+  return {
+    outlets: ids.size,
+    hospitality: round1(avg(hosp)),
+    hygiene: round1(avg(hyg)),
+    tasksTotal: tasks.length,
+    tasksDone,
+    taskCompletion: tasks.length ? Math.round((tasksDone / tasks.length) * 100) : 0,
+    complaintsTotal: comp.length,
+    complaintsOpen: comp.length - closed,
+    complaintsClosed: closed,
+    resolution: comp.length ? Math.round((closed / comp.length) * 100) : 0,
+    eventsTotal: events.length,
+    eventsRunning: events.filter((e) => e.status === "running").length,
+    totalBudget: events.reduce((a, b) => a + b.budget, 0),
+  };
+}
+
+/** Per-outlet rows (scoped) for report listings. */
+export function outletReportRows(user: UserProfile) {
+  return visibleOutlets(user).map((o) => ({
+    outlet: o,
+    areaName: areaName(o.areaId),
+    hospitality: hospitalityScoreFor(o.id),
+    hygiene: hygieneScoreFor(o.id),
+  }));
+}
+
+/** Area coordinators visible to the user, with their assigned-outlet aggregate. */
+export function coordinatorReportRows(user: UserProfile) {
+  const visibleIds = new Set(visibleOutlets(user).map((o) => o.id));
+  return SEED.users
+    .filter((u) => u.role === "area_coordinator")
+    .map((c) => {
+      const outletIds = (c.outletIds ?? []).filter((id) => visibleIds.has(id));
+      return { coordinator: c, outletIds, agg: aggregateOutlets(outletIds) };
+    })
+    .filter((r) => r.outletIds.length > 0);
+}
+
+/** Areas visible to the user, with aggregate. */
+export function areaReportRows(user: UserProfile) {
+  const visible = visibleOutlets(user);
+  const byArea = new Map<string, string[]>();
+  for (const o of visible) byArea.set(o.areaId, [...(byArea.get(o.areaId) ?? []), o.id]);
+  return [...byArea.entries()].map(([areaId, outletIds]) => ({
+    area: getArea(areaId)!,
+    outletIds,
+    agg: aggregateOutlets(outletIds),
+  }));
+}
+
+/* ---------------- Performance Metrics (monthly completion tracking) ---------------- */
+export interface MonthPoint {
+  label: string;
+  value: number;
+}
+export function monthlyPerformance(outletIds: string[]): {
+  points: MonthPoint[];
+  avg: number;
+  aboveTarget: number;
+  best: string;
+  target: number;
+} {
+  const ids = new Set(outletIds);
+  const hosp = SEED.hospitality.filter((h) => ids.has(h.outletId));
+  const hyg = SEED.hygiene.filter((h) => ids.has(h.outletId));
+  const overall = round1(avg([...hosp.map((h) => h.overallScore), ...hyg.map((h) => h.hygieneScore)])) || 80;
+
+  // Last 5 months ending the seed "now" (June 2026 = month index 5).
+  let last = overall;
+  const points: MonthPoint[] = [];
+  for (let i = 4; i >= 0; i--) {
+    const start = +new Date(2026, 5 - i, 1);
+    const end = +new Date(2026, 5 - i + 1, 1);
+    const inM = (d: string) => {
+      const t = +new Date(d);
+      return t >= start && t < end;
+    };
+    const vals = [
+      ...hosp.filter((h) => inM(h.date)).map((h) => h.overallScore),
+      ...hyg.filter((h) => inM(h.date)).map((h) => h.hygieneScore),
+    ];
+    if (vals.length) last = round1(avg(vals));
+    points.push({ label: new Date(2026, 5 - i, 1).toLocaleDateString("en-US", { month: "short" }), value: last });
+  }
+
+  const target = 80;
+  return {
+    points,
+    avg: round1(avg(points.map((p) => p.value))),
+    aboveTarget: points.filter((p) => p.value >= target).length,
+    best: points.reduce((a, b) => (b.value > a.value ? b : a), points[0]).label,
+    target,
+  };
+}
+
+/* ---------------- Performance by coordinator area ---------------- */
+export interface CoordinatorPerf {
+  id: string;
+  name: string;
+  hospitality: number;
+  hygiene: number;
+  complaints: number;
+}
+
+/** One row per area coordinator (scoped to the given outlet ids). */
+export function coordinatorPerformance(outletIds: string[]): CoordinatorPerf[] {
+  const scope = new Set(outletIds);
+  return SEED.users
+    .filter((u) => u.role === "area_coordinator")
+    .map((c) => ({ c, ids: new Set((c.outletIds ?? []).filter((id) => scope.has(id))) }))
+    .filter(({ ids }) => ids.size > 0)
+    .map(({ c, ids }) => {
+      const hosp = SEED.hospitality.filter((h) => ids.has(h.outletId)).map((h) => h.overallScore);
+      const hyg = SEED.hygiene.filter((h) => ids.has(h.outletId)).map((h) => h.hygieneScore);
+      const complaints = SEED.complaints.filter(
+        (c2) => ids.has(c2.outletId) && c2.status !== "closed" && c2.status !== "done",
+      ).length;
+      return {
+        id: c.id,
+        name: c.name,
+        hospitality: round1(avg(hosp)),
+        hygiene: round1(avg(hyg)),
+        complaints,
+      };
+    });
 }
 
 /* current identity placeholder (replaced by real session in Phase 2 wiring) */

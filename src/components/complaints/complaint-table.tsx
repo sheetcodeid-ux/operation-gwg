@@ -3,7 +3,7 @@
 import * as React from "react";
 import { type ColumnDef } from "@tanstack/react-table";
 import { useRouter } from "next/navigation";
-import { Loader2, Settings2, Star } from "lucide-react";
+import { CircleCheckBig, Loader2, Settings2, Star } from "lucide-react";
 import { toast } from "sonner";
 import {
   COMPLAINT_CATEGORY_META,
@@ -19,12 +19,13 @@ import type {
   Priority,
   RootCauseCategory,
 } from "@/lib/types";
-import { resolveComplaintAction } from "@/lib/actions/complaints";
+import { bulkCloseComplaintsAction, resolveComplaintAction } from "@/lib/actions/complaints";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { DataTable } from "@/components/ui/data-table";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
-import { Field, Input, Select, Textarea } from "@/components/ui/input";
+import { Field, Input, Textarea } from "@/components/ui/input";
+import { Combobox } from "@/components/ui/combobox";
 import { formatDate } from "@/lib/utils";
 
 export interface ComplaintRow {
@@ -45,16 +46,58 @@ const STATUSES = Object.keys(COMPLAINT_STATUS_META) as ComplaintStatus[];
 const CAUSES = Object.keys(ROOT_CAUSE_META) as RootCauseCategory[];
 
 export function ComplaintTable({ rows, canManage }: { rows: ComplaintRow[]; canManage: boolean }) {
+  const router = useRouter();
   const [status, setStatus] = React.useState("all");
   const [selected, setSelected] = React.useState<ComplaintRow | null>(null);
+  const [picked, setPicked] = React.useState<Set<string>>(new Set());
+  const [bulkPending, startBulk] = React.useTransition();
 
   const filtered = React.useMemo(
     () => rows.filter((r) => status === "all" || r.status === status),
     [rows, status],
   );
 
+  const togglePick = React.useCallback((id: string) => {
+    setPicked((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }, []);
+
+  function bulkClose() {
+    const ids = [...picked];
+    startBulk(async () => {
+      const res = await bulkCloseComplaintsAction(ids);
+      if (res?.error) {
+        toast.error(res.error);
+        return;
+      }
+      toast.success(`Closed ${res?.count ?? ids.length} complaints`);
+      setPicked(new Set());
+      router.refresh();
+    });
+  }
+
   const columns = React.useMemo<ColumnDef<ComplaintRow>[]>(() => {
-    const cols: ColumnDef<ComplaintRow>[] = [
+    const cols: ColumnDef<ComplaintRow>[] = [];
+    if (canManage) {
+      cols.push({
+        id: "select",
+        header: "",
+        cell: ({ row }) => (
+          <input
+            type="checkbox"
+            checked={picked.has(row.original.id)}
+            onChange={() => togglePick(row.original.id)}
+            className="size-4 accent-primary"
+            aria-label="Select complaint"
+          />
+        ),
+      });
+    }
+    cols.push(
       {
         accessorKey: "content",
         header: "Complaint",
@@ -107,7 +150,7 @@ export function ComplaintTable({ rows, canManage }: { rows: ComplaintRow[]; canM
         header: "Date",
         cell: ({ getValue }) => <span className="text-muted-foreground">{formatDate(getValue<string>())}</span>,
       },
-    ];
+    );
     if (canManage) {
       cols.push({
         id: "actions",
@@ -120,23 +163,29 @@ export function ComplaintTable({ rows, canManage }: { rows: ComplaintRow[]; canM
       });
     }
     return cols;
-  }, [canManage]);
+  }, [canManage, picked, togglePick]);
 
   return (
     <>
       <DataTable
+        tableId="complaints"
         columns={columns}
         data={filtered}
         searchPlaceholder="Search complaints…"
         toolbar={
-          <Select value={status} onChange={(e) => setStatus(e.target.value)} className="w-36">
-            <option value="all">All status</option>
-            {STATUSES.map((s) => (
-              <option key={s} value={s}>
-                {COMPLAINT_STATUS_META[s].label}
-              </option>
-            ))}
-          </Select>
+          <div className="flex items-center gap-2">
+            {canManage && picked.size > 0 && (
+              <Button size="sm" variant="subtle" onClick={bulkClose} disabled={bulkPending}>
+                {bulkPending ? <Loader2 className="animate-spin" /> : <CircleCheckBig />} Close {picked.size}
+              </Button>
+            )}
+            <Combobox
+              value={status}
+              onChange={setStatus}
+              className="w-40"
+              options={[{ value: "all", label: "All status" }, ...STATUSES.map((s) => ({ value: s, label: COMPLAINT_STATUS_META[s].label }))]}
+            />
+          </div>
         }
       />
       {selected && <ResolveDialog key={selected.id} complaint={selected} onClose={() => setSelected(null)} />}
@@ -182,22 +231,18 @@ function ResolveDialog({ complaint, onClose }: { complaint: ComplaintRow; onClos
           </p>
           <div className="grid grid-cols-2 gap-3">
             <Field label="Status">
-              <Select value={status} onChange={(e) => setStatus(e.target.value as ComplaintStatus)}>
-                {STATUSES.map((s) => (
-                  <option key={s} value={s}>
-                    {COMPLAINT_STATUS_META[s].label}
-                  </option>
-                ))}
-              </Select>
+              <Combobox
+                value={status}
+                onChange={(v) => setStatus(v as ComplaintStatus)}
+                options={STATUSES.map((s) => ({ value: s, label: COMPLAINT_STATUS_META[s].label }))}
+              />
             </Field>
             <Field label="Root Cause (5M)">
-              <Select value={rootCause} onChange={(e) => setRootCause(e.target.value as RootCauseCategory)}>
-                {CAUSES.map((c) => (
-                  <option key={c} value={c}>
-                    {ROOT_CAUSE_META[c].label}
-                  </option>
-                ))}
-              </Select>
+              <Combobox
+                value={rootCause}
+                onChange={(v) => setRootCause(v as RootCauseCategory)}
+                options={CAUSES.map((c) => ({ value: c, label: ROOT_CAUSE_META[c].label }))}
+              />
             </Field>
           </div>
           <Field label="Corrective Action">
