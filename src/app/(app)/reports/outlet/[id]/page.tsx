@@ -44,7 +44,7 @@ export default async function OutletReportPage({ params }: { params: Promise<{ i
         </CardHeader>
         <CardContent>
           <ReportTable
-            head={["Task", "Priority", "Status", "Progress", "Due"]}
+            head={["Task", "Priority", "Status", "Progress", "Due Date"]}
             rows={d.tasks.slice(0, 15).map((t) => [
               t.title,
               t.priority,

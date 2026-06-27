@@ -29,7 +29,6 @@ interface Item {
 
 const NAV_DESC: Record<string, string> = {
   "/dashboard": "Real-time operational overview",
-  "/analytics": "Cross-module performance insights",
   "/work-tracker": "Operational tasks and progress",
   "/events": "Branch events and milestones",
   "/hospitality": "Service quality assessments",

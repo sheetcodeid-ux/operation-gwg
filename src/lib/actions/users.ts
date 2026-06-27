@@ -12,7 +12,8 @@ function normalizeAssignment(role: Role, outletIds: string[]): { areaId: string 
     const areaId = outletIds.length ? getOutlet(outletIds[0])?.areaId ?? null : null;
     return { areaId, outletIds };
   }
-  if (role === "supervisor" || role === "pic_outlet") {
+  // Branch is optional (single) for these; HQ roles get none.
+  if (role === "head_operation" || role === "pos_operation") {
     return { areaId: null, outletIds: outletIds.slice(0, 1) };
   }
   return { areaId: null, outletIds: [] };
@@ -35,8 +36,6 @@ export async function createUserAction(input: CreateUserInput) {
   if (input.password.length < 6) return { error: "Password must be at least 6 characters." };
   if (input.role === "area_coordinator" && input.outletIds.length === 0)
     return { error: "Assign at least one outlet to the coordinator." };
-  if ((input.role === "supervisor" || input.role === "pic_outlet") && input.outletIds.length !== 1)
-    return { error: "Assign exactly one outlet." };
 
   const { areaId, outletIds } = normalizeAssignment(input.role, input.outletIds);
   createUser({ name: input.name, email: input.email, role: input.role, areaId, outletIds, password: input.password });

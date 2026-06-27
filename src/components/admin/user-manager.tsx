@@ -41,14 +41,14 @@ export interface OutletLite {
 
 const ROLE_TONE: Record<Role, Tone> = {
   super_admin: "brand",
-  director: "amber",
   head_operation: "cyan",
   area_coordinator: "success",
-  supervisor: "neutral",
-  pic_outlet: "neutral",
+  data_operation: "amber",
+  pos_operation: "neutral",
+  admin_operation: "danger",
 };
 const ROLES = Object.keys(ROLE_LABEL) as Role[];
-const needsOutlets = (r: Role) => r === "area_coordinator" || r === "supervisor" || r === "pic_outlet";
+const needsOutlets = (r: Role) => r === "area_coordinator" || r === "head_operation" || r === "pos_operation";
 const isMulti = (r: Role) => r === "area_coordinator";
 
 export function UserManager({ users, outlets }: { users: UserRow[]; outlets: OutletLite[] }) {
@@ -179,7 +179,7 @@ function RowMenu({ user, onReset, onAssign }: { user: UserRow; onReset: () => vo
 function NewUserDialog({ outlets, onClose }: { outlets: OutletLite[]; onClose: () => void }) {
   const router = useRouter();
   const [pending, start] = React.useTransition();
-  const [form, setForm] = React.useState({ name: "", email: "", role: "pic_outlet" as Role, password: "" });
+  const [form, setForm] = React.useState({ name: "", email: "", role: "pos_operation" as Role, password: "" });
   const [selected, setSelected] = React.useState<string[]>([]);
 
   function submit() {

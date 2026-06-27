@@ -17,7 +17,7 @@ export default async function ProfilePage() {
   const scope =
     user.role === "area_coordinator" && user.areaId
       ? `${outlets.length} outlets · ${areaName(user.areaId)}`
-      : user.role === "supervisor" || user.role === "pic_outlet"
+      : (user.role === "head_operation" || user.role === "pos_operation") && (user.outletIds?.length ?? 0) > 0
         ? `${outlets.length} outlet`
         : "All outlets";
 

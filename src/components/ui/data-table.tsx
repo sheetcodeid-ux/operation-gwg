@@ -12,7 +12,7 @@ import {
   getSortedRowModel,
   useReactTable,
 } from "@tanstack/react-table";
-import { ArrowUpDown, ChevronLeft, ChevronRight, Rows2, Rows3, Search, SlidersHorizontal } from "lucide-react";
+import { ArrowUpDown, Rows2, Rows3, Search, SlidersHorizontal } from "lucide-react";
 import { Input } from "./input";
 import { Popover } from "./popover";
 import { cn } from "@/lib/utils";
@@ -77,8 +77,15 @@ export function DataTable<TData, TValue>({
     initialState: { pagination: { pageSize } },
   });
 
-  const cellPad = dense ? "px-3 py-1.5" : "px-3 py-2.5";
+  const cellPad = dense ? "px-3 py-2" : "px-4 py-3";
   const hideableColumns = table.getAllLeafColumns().filter((c) => typeof c.columnDef.header === "string" && c.columnDef.header !== "");
+
+  const total = table.getFilteredRowModel().rows.length;
+  const pageIndex = table.getState().pagination.pageIndex;
+  const curPageSize = table.getState().pagination.pageSize;
+  const pageCount = table.getPageCount() || 1;
+  const from = total ? pageIndex * curPageSize + 1 : 0;
+  const to = pageIndex * curPageSize + table.getRowModel().rows.length;
 
   return (
     <div className="space-y-3">
@@ -137,7 +144,7 @@ export function DataTable<TData, TValue>({
         <table className="w-full text-sm">
           <thead className={cn(stickyHeader && "sticky top-0 z-10")}>
             {table.getHeaderGroups().map((hg) => (
-              <tr key={hg.id} className="border-b border-border bg-muted/80 backdrop-blur supports-[backdrop-filter]:bg-muted/60">
+              <tr key={hg.id} className="border-b border-border bg-muted/70 backdrop-blur supports-[backdrop-filter]:bg-muted/60">
                 {hg.headers.map((header) => {
                   const canSort = header.column.getCanSort();
                   return (
@@ -168,7 +175,7 @@ export function DataTable<TData, TValue>({
               </tr>
             ) : (
               table.getRowModel().rows.map((row) => (
-                <tr key={row.id} className="border-b border-border/60 last:border-0 transition-colors hover:bg-muted/40">
+                <tr key={row.id} className="border-b border-border/60 last:border-0 transition-colors hover:bg-foreground/20">
                   {row.getVisibleCells().map((cell) => (
                     <td key={cell.id} className={cn("text-foreground/90", cellPad)}>
                       {flexRender(cell.column.columnDef.cell, cell.getContext())}
@@ -181,27 +188,44 @@ export function DataTable<TData, TValue>({
         </table>
       </div>
 
-      <div className="flex items-center justify-between text-xs text-muted-foreground">
-        <span>
-          {table.getFilteredRowModel().rows.length} record{table.getFilteredRowModel().rows.length === 1 ? "" : "s"}
-        </span>
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <p className="text-sm text-muted-foreground">
+          Showing {from} to {to} of {total} results
+        </p>
         <div className="flex items-center gap-1">
           <button
+            type="button"
             onClick={() => table.previousPage()}
             disabled={!table.getCanPreviousPage()}
-            className="grid size-7 place-items-center rounded-md hover:bg-muted disabled:opacity-40"
+            className="rounded-lg border border-border px-3 py-1.5 text-sm text-muted-foreground transition-colors hover:bg-muted/60 hover:text-foreground disabled:pointer-events-none disabled:opacity-40"
           >
-            <ChevronLeft className="size-4" />
+            Previous
           </button>
-          <span className="tabular-nums">
-            {table.getState().pagination.pageIndex + 1} / {table.getPageCount() || 1}
-          </span>
+          <div className="no-scrollbar flex max-w-[50vw] items-center gap-1 overflow-x-auto sm:max-w-none">
+            {Array.from({ length: pageCount }, (_, idx) => idx).map((n) => (
+              <button
+                key={n}
+                type="button"
+                onClick={() => table.setPageIndex(n)}
+                aria-current={n === pageIndex}
+                className={cn(
+                  "grid size-9 shrink-0 place-items-center rounded-lg text-sm font-medium tabular-nums transition-colors",
+                  n === pageIndex
+                    ? "bg-primary text-primary-foreground"
+                    : "text-muted-foreground hover:bg-muted/60 hover:text-foreground",
+                )}
+              >
+                {n + 1}
+              </button>
+            ))}
+          </div>
           <button
+            type="button"
             onClick={() => table.nextPage()}
             disabled={!table.getCanNextPage()}
-            className="grid size-7 place-items-center rounded-md hover:bg-muted disabled:opacity-40"
+            className="rounded-lg border border-border px-3 py-1.5 text-sm text-muted-foreground transition-colors hover:bg-muted/60 hover:text-foreground disabled:pointer-events-none disabled:opacity-40"
           >
-            <ChevronRight className="size-4" />
+            Next
           </button>
         </div>
       </div>

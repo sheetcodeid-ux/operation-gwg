@@ -1,29 +1,49 @@
-"use client";
+﻿"use client";
 
 import * as React from "react";
 import { type ColumnDef } from "@tanstack/react-table";
-import { AlertTriangle } from "lucide-react";
+import { AlertTriangle, Eye } from "lucide-react";
 import { PRIORITY_META, TASK_STATUS_META } from "@/lib/constants";
-import type { Priority, TaskStatus } from "@/lib/types";
+import type { Priority, Role, TaskStatus } from "@/lib/types";
 import { Badge } from "@/components/ui/badge";
 import { DataTable } from "@/components/ui/data-table";
 import { Progress } from "@/components/ui/progress";
 import { Combobox } from "@/components/ui/combobox";
 import { formatDate, isOverdue } from "@/lib/utils";
+import { TaskDetailDialog } from "./task-detail";
+import type { DivisionMembers, TaskOutlet } from "./task-sheet";
 
 export interface WorkRow {
   id: string;
   title: string;
+  description: string;
   category: string;
   priority: Priority;
   status: TaskStatus;
+  division: Role;
+  outletId: string;
   outlet: string;
+  area: string;
+  picIds: string[];
   pic: string;
+  startDate: string;
   dueDate: string;
   progress: number;
 }
 
-export function WorkTable({ rows }: { rows: WorkRow[] }) {
+export function WorkTable({
+  rows,
+  outlets,
+  coordinators,
+  members,
+  canEdit,
+}: {
+  rows: WorkRow[];
+  outlets?: TaskOutlet[];
+  coordinators?: { id: string; name: string }[];
+  members?: DivisionMembers;
+  canEdit?: boolean;
+}) {
   const [priority, setPriority] = React.useState<string>("all");
   const [status, setStatus] = React.useState<string>("all");
 
@@ -73,7 +93,7 @@ export function WorkTable({ rows }: { rows: WorkRow[] }) {
       },
       {
         accessorKey: "dueDate",
-        header: "Due",
+        header: "Due Date",
         cell: ({ row }) => {
           const overdue = isOverdue(row.original.dueDate) && row.original.status !== "done" && row.original.status !== "cancelled";
           return (
@@ -84,9 +104,33 @@ export function WorkTable({ rows }: { rows: WorkRow[] }) {
           );
         },
       },
-      { accessorKey: "pic", header: "PIC", cell: ({ getValue }) => <span className="text-foreground/80">{getValue<string>()}</span> },
+      { accessorKey: "pic", header: "Person in Charge", cell: ({ getValue }) => <span className="text-foreground/80">{getValue<string>()}</span> },
+      {
+        id: "actions",
+        header: "Actions",
+        enableSorting: false,
+        cell: ({ row }) => (
+          <div className="flex justify-end">
+            <TaskDetailDialog
+              task={row.original}
+              outlets={outlets}
+              coordinators={coordinators}
+              members={members}
+              canEdit={canEdit}
+              trigger={
+                <button
+                  type="button"
+                  className="inline-flex items-center gap-1.5 rounded-lg px-2 py-1 text-xs font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+                >
+                  <Eye className="size-3.5" /> View
+                </button>
+              }
+            />
+          </div>
+        ),
+      },
     ],
-    [],
+    [outlets, coordinators, members, canEdit],
   );
 
   return (
@@ -94,7 +138,7 @@ export function WorkTable({ rows }: { rows: WorkRow[] }) {
       tableId="work-tracker"
       columns={columns}
       data={filtered}
-      searchPlaceholder="Search tasks…"
+      searchPlaceholder="Search tasksâ€¦"
       toolbar={
         <div className="flex gap-2">
           <Combobox

@@ -38,8 +38,15 @@ const ALL: Permission[] = [
 
 export const ROLE_PERMISSIONS: Record<Role, Permission[]> = {
   super_admin: ALL,
-  director: ["view_all_outlets", "view_dashboard", "view_reports"],
-  head_operation: ["view_all_outlets", "view_dashboard", "view_reports", "view_audit_logs"],
+  head_operation: [
+    "view_all_outlets",
+    "view_dashboard",
+    "view_reports",
+    "view_audit_logs",
+    "manage_complaint",
+    "create_work_task",
+    "create_event",
+  ],
   area_coordinator: [
     "create_hospitality",
     "create_hygiene",
@@ -49,39 +56,34 @@ export const ROLE_PERMISSIONS: Record<Role, Permission[]> = {
     "view_dashboard",
     "view_reports",
   ],
-  supervisor: ["create_work_task", "view_dashboard", "view_reports"],
-  pic_outlet: ["view_dashboard"],
+  data_operation: ["create_hospitality", "create_hygiene", "create_work_task", "view_dashboard", "view_reports"],
+  pos_operation: ["create_work_task", "view_dashboard", "view_reports"],
+  admin_operation: ["manage_users", "manage_org", "view_audit_logs", "view_all_outlets", "view_dashboard", "view_reports"],
 };
 
 export function can(user: Pick<UserProfile, "role">, permission: Permission): boolean {
   return ROLE_PERMISSIONS[user.role]?.includes(permission) ?? false;
 }
 
-/** Roles that can see every outlet regardless of assignment. */
+/** HQ roles that see every outlet regardless of assignment (no branch). */
 export function hasGlobalScope(role: Role): boolean {
-  return role === "super_admin" || role === "director" || role === "head_operation";
+  return role === "super_admin" || role === "data_operation" || role === "admin_operation";
 }
 
 /**
  * Restrict a list of outlets to the ones a user is allowed to see.
- * - global roles: everything
- * - area_coordinator: outlets in their area
- * - supervisor / pic_outlet: explicitly assigned outlets
+ * - HQ roles (super_admin / data_operation / admin_operation): everything
+ * - branch roles (head_operation / area_coordinator / pos_operation): their assigned
+ *   outlet(s). Branch is optional — if none assigned, the user sees everything (HQ-like).
  */
 export function scopeOutlets(user: UserProfile, outlets: Outlet[]): Outlet[] {
   if (hasGlobalScope(user.role)) return outlets;
-  // Area Coordinators are assigned to several specific outlets (multi-select).
-  if (user.role === "area_coordinator") {
-    if (user.outletIds && user.outletIds.length) {
-      const ids = new Set(user.outletIds);
-      return outlets.filter((o) => ids.has(o.id));
-    }
-    if (user.areaId) return outlets.filter((o) => o.areaId === user.areaId);
-    return [];
-  }
-  // Supervisor / PIC: explicitly assigned outlets (supervisor = exactly 1).
   const ids = new Set(user.outletIds ?? []);
-  return outlets.filter((o) => ids.has(o.id));
+  if (ids.size) return outlets.filter((o) => ids.has(o.id));
+  // Legacy area-based fallback for coordinators.
+  if (user.role === "area_coordinator" && user.areaId) return outlets.filter((o) => o.areaId === user.areaId);
+  // Branch role without any assignment → no restriction (e.g. a head_operation covering all).
+  return outlets;
 }
 
 /** Whether `user` may act on data for `outletId`. */

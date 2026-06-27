@@ -15,7 +15,6 @@ export const DICT: Record<Lang, Record<string, string>> = {
     "section.Admin": "Admin",
 
     "nav.Dashboard": "Dashboard",
-    "nav.Analytics": "Analytics",
     "nav.Work Tracker": "Work Tracker",
     "nav.Event Tracker": "Event Tracker",
     "nav.Hospitality": "Hospitality",
@@ -47,7 +46,6 @@ export const DICT: Record<Lang, Record<string, string>> = {
     "section.Admin": "Admin",
 
     "nav.Dashboard": "Dasbor",
-    "nav.Analytics": "Analitik",
     "nav.Work Tracker": "Pelacak Kerja",
     "nav.Event Tracker": "Pelacak Event",
     "nav.Hospitality": "Hospitality",

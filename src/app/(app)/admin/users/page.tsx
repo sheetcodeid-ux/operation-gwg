@@ -20,9 +20,9 @@ export default async function UsersPage() {
   const byRole = (r: Role) => users.filter((u) => u.role === r).length;
 
   function scopeOf(u: (typeof users)[number]) {
-    if (u.role === "area_coordinator") return `${u.outletIds?.length ?? 0} outlets`;
-    if (u.role === "supervisor") return `${u.outletIds?.length ?? 0} outlet`;
-    if (u.role === "pic_outlet") return `${u.outletIds?.length ?? 0} outlet`;
+    const n = u.outletIds?.length ?? 0;
+    if (u.role === "area_coordinator") return `${n} outlets`;
+    if (u.role === "head_operation" || u.role === "pos_operation") return n ? `${n} outlet` : "Global";
     return "Global";
   }
 
@@ -51,9 +51,9 @@ export default async function UsersPage() {
 
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         <StatTile icon={Users} label="Total Users" value={users.length} tone="brand" />
-        <StatTile icon={Users} label="Area Coordinators" value={byRole("area_coordinator")} tone="success" />
-        <StatTile icon={Users} label="Supervisors" value={byRole("supervisor")} tone="cyan" />
-        <StatTile icon={Users} label="PIC Outlet" value={byRole("pic_outlet")} tone="amber" />
+        <StatTile icon={Users} label="Coordinator Area" value={byRole("area_coordinator")} tone="success" />
+        <StatTile icon={Users} label="POS Operation" value={byRole("pos_operation")} tone="cyan" />
+        <StatTile icon={Users} label="Head Operation" value={byRole("head_operation")} tone="amber" />
       </div>
 
       <Card className="mt-4">

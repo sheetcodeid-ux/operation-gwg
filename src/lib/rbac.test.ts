@@ -15,11 +15,11 @@ describe("RBAC capabilities", () => {
     expect(can(admin, "manage_complaint")).toBe(true);
   });
 
-  it("makes director read-only (no operational writes)", () => {
-    const director = byRole("director");
-    expect(can(director, "view_dashboard")).toBe(true);
-    expect(can(director, "create_work_task")).toBe(false);
-    expect(can(director, "manage_users")).toBe(false);
+  it("lets admin_operation manage users + org but not enter operational data", () => {
+    const adminOps = byRole("admin_operation");
+    expect(can(adminOps, "manage_users")).toBe(true);
+    expect(can(adminOps, "manage_org")).toBe(true);
+    expect(can(adminOps, "create_hospitality")).toBe(false);
   });
 
   it("lets area_coordinator create operational data but not manage users", () => {
@@ -29,20 +29,21 @@ describe("RBAC capabilities", () => {
     expect(can(ac, "manage_users")).toBe(false);
   });
 
-  it("limits pic_outlet to viewing the dashboard", () => {
-    const pic = byRole("pic_outlet");
-    expect(can(pic, "view_dashboard")).toBe(true);
-    expect(can(pic, "create_work_task")).toBe(false);
+  it("limits pos_operation to tasks + viewing (no user management)", () => {
+    const pos = byRole("pos_operation");
+    expect(can(pos, "view_dashboard")).toBe(true);
+    expect(can(pos, "create_work_task")).toBe(true);
+    expect(can(pos, "manage_users")).toBe(false);
   });
 });
 
 describe("hasGlobalScope", () => {
-  it("is true for executives and false for field roles", () => {
+  it("is true for HQ roles and false for branch roles", () => {
     expect(hasGlobalScope("super_admin")).toBe(true);
-    expect(hasGlobalScope("director")).toBe(true);
-    expect(hasGlobalScope("head_operation")).toBe(true);
+    expect(hasGlobalScope("data_operation")).toBe(true);
+    expect(hasGlobalScope("admin_operation")).toBe(true);
     expect(hasGlobalScope("area_coordinator")).toBe(false);
-    expect(hasGlobalScope("pic_outlet")).toBe(false);
+    expect(hasGlobalScope("pos_operation")).toBe(false);
   });
 });
 
@@ -58,9 +59,9 @@ describe("scopeOutlets row-level scoping", () => {
     expect(scoped.every((o) => o.areaId === ac.areaId)).toBe(true);
   });
 
-  it("restricts pic_outlet to assigned outlets only", () => {
-    const pic = byRole("pic_outlet");
-    const scoped = scopeOutlets(pic, outlets);
-    expect(scoped.map((o) => o.id)).toEqual(pic.outletIds);
+  it("restricts pos_operation to its assigned outlet only", () => {
+    const pos = byRole("pos_operation");
+    const scoped = scopeOutlets(pos, outlets);
+    expect(scoped.map((o) => o.id)).toEqual(pos.outletIds);
   });
 });

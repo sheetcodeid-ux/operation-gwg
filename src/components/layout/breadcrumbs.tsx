@@ -7,7 +7,6 @@ import { ChevronRight, Home } from "lucide-react";
 
 const LABELS: Record<string, string> = {
   dashboard: "Dashboard",
-  analytics: "Analytics",
   outlets: "Outlets",
   reports: "Reports",
   hospitality: "Hospitality",
@@ -15,6 +14,8 @@ const LABELS: Record<string, string> = {
   complaints: "Complaints",
   events: "Events",
   "work-tracker": "Work Tracker",
+  kanban: "Kanban",
+  calendar: "Calendar",
   profile: "Profile",
   admin: "Admin",
   users: "Users",

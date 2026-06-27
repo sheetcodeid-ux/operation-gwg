@@ -9,6 +9,7 @@ import type { Lang } from "@/lib/i18n/dict";
 import { Sidebar } from "@/components/layout/sidebar";
 import { Topbar } from "@/components/layout/topbar";
 import { Breadcrumbs } from "@/components/layout/breadcrumbs";
+import { Footer } from "@/components/layout/footer";
 import { SidebarProvider } from "@/components/layout/sidebar-context";
 import { CommandPalette } from "@/components/command/command-palette";
 
@@ -40,6 +41,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
                 <Breadcrumbs />
                 {children}
               </main>
+              <Footer />
             </div>
           </div>
           <CommandPalette

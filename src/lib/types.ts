@@ -11,20 +11,20 @@
 
 export type Role =
   | "super_admin"
-  | "director"
   | "head_operation"
   | "area_coordinator"
-  | "supervisor"
-  | "pic_outlet";
+  | "data_operation"
+  | "pos_operation"
+  | "admin_operation";
 
 export interface UserProfile {
   id: string;
   name: string;
   email: string;
   role: Role;
-  /** Area this user is responsible for (area_coordinator). */
+  /** Area this user coordinates (area_coordinator). */
   areaId?: string | null;
-  /** Outlets this user is responsible for (supervisor / pic_outlet). */
+  /** Assigned outlets/branches. Optional — HQ roles (super_admin, data_operation, admin_operation) have none. */
   outletIds?: string[];
   avatarUrl?: string | null;
   active: boolean;
@@ -143,9 +143,15 @@ export interface WorkTask {
   category: string;
   priority: Priority;
   status: TaskStatus;
-  outletId: string;
-  areaId: string;
-  picId: string;
+  /** Operation division the task belongs to. */
+  division: Role;
+  /** Branch is optional — null = division/HQ-level task (no branch). */
+  outletId: string | null;
+  areaId: string | null;
+  /** Assigned people (PIC) — manually picked from the division's members; can be 1 or many. */
+  picIds: string[];
+  /** Legacy single PIC = picIds[0] (kept for back-compat). */
+  picId: string | null;
   startDate: string;
   dueDate: string;
   completionDate?: string | null;

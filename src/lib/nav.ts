@@ -12,7 +12,6 @@ export interface NavItem {
 
 export const NAV_ITEMS: NavItem[] = [
   { label: "Dashboard", href: "/dashboard", icon: "LayoutDashboard", section: "Overview" },
-  { label: "Analytics", href: "/analytics", icon: "ChartSpline", section: "Overview", permission: "view_reports" },
 
   { label: "Work Tracker", href: "/work-tracker", icon: "ListChecks", section: "Operations" },
   { label: "Event Tracker", href: "/events", icon: "CalendarRange", section: "Operations" },

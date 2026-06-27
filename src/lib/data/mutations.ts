@@ -70,8 +70,10 @@ export function createTask(input: {
   category: string;
   priority: WorkTask["priority"];
   status: WorkTask["status"];
-  outletId: string;
-  picId: string;
+  division: WorkTask["division"];
+  outletId: string | null;
+  picIds: string[];
+  picId: string | null;
   startDate: string;
   dueDate: string;
   progress: number;
@@ -83,9 +85,11 @@ export function createTask(input: {
     category: input.category,
     priority: input.priority,
     status: input.status,
+    division: input.division,
     outletId: input.outletId,
-    areaId: areaForOutlet(input.outletId),
-    picId: input.picId,
+    areaId: input.outletId ? areaForOutlet(input.outletId) : null,
+    picIds: input.picIds,
+    picId: input.picIds[0] ?? input.picId,
     startDate: input.startDate,
     dueDate: input.dueDate,
     completionDate: input.status === "done" ? nowIso() : null,
@@ -95,6 +99,49 @@ export function createTask(input: {
   };
   SEED.tasks.unshift(record);
   return record;
+}
+
+export function updateTask(
+  id: string,
+  input: {
+    title: string;
+    description: string;
+    category: string;
+    priority: WorkTask["priority"];
+    status: WorkTask["status"];
+    division: WorkTask["division"];
+    outletId: string | null;
+    picIds: string[];
+    picId: string | null;
+    startDate: string;
+    dueDate: string;
+    progress: number;
+  },
+): WorkTask | undefined {
+  const task = SEED.tasks.find((t) => t.id === id);
+  if (!task) return;
+  task.title = input.title;
+  task.description = input.description;
+  task.category = input.category;
+  task.priority = input.priority;
+  task.status = input.status;
+  task.division = input.division;
+  task.outletId = input.outletId;
+  task.areaId = input.outletId ? areaForOutlet(input.outletId) : null;
+  task.picIds = input.picIds;
+  task.picId = input.picIds[0] ?? input.picId;
+  task.startDate = input.startDate;
+  task.dueDate = input.dueDate;
+  task.progress = input.status === "done" ? 100 : input.progress;
+  task.completionDate = input.status === "done" ? task.completionDate ?? nowIso() : null;
+  return task;
+}
+
+export function deleteTask(id: string): boolean {
+  const i = SEED.tasks.findIndex((t) => t.id === id);
+  if (i === -1) return false;
+  SEED.tasks.splice(i, 1);
+  return true;
 }
 
 export function updateTaskStatus(id: string, status: WorkTask["status"], progress?: number) {

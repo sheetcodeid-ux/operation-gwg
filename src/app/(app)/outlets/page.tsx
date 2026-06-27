@@ -33,8 +33,8 @@ export default async function OutletsPage() {
                   <th className="px-3 py-2.5">Supervisor</th>
                   <th className="px-3 py-2.5 text-center">Hospitality</th>
                   <th className="px-3 py-2.5 text-center">Hygiene</th>
-                  <th className="px-3 py-2.5 text-center">Open</th>
-                  <th className="px-3 py-2.5 text-center">Score</th>
+                  <th className="px-3 py-2.5 text-center">Open Complaints</th>
+                  <th className="px-3 py-2.5 text-center">Composite Score</th>
                 </tr>
               </thead>
               <tbody>

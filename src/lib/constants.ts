@@ -19,11 +19,11 @@ import type {
 
 export const ROLE_LABEL: Record<Role, string> = {
   super_admin: "Super Admin",
-  director: "Director",
   head_operation: "Head Operation",
-  area_coordinator: "Area Coordinator",
-  supervisor: "Supervisor",
-  pic_outlet: "PIC Outlet",
+  area_coordinator: "Coordinator Area",
+  data_operation: "Data Operation",
+  pos_operation: "POS Operation",
+  admin_operation: "Admin Operation",
 };
 
 /* ------------------------------------------------------------------ */

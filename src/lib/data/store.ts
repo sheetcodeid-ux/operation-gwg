@@ -66,7 +66,7 @@ export function listHospitality(user: UserProfile): HospitalityAssessment[] {
 }
 export function listTasks(user: UserProfile): WorkTask[] {
   const ids = visibleOutletIdSet(user);
-  return SEED.tasks.filter((t) => ids.has(t.outletId)).sort(byDateDesc("createdAt"));
+  return SEED.tasks.filter((t) => t.outletId === null || ids.has(t.outletId)).sort(byDateDesc("createdAt"));
 }
 export function listEvents(user: UserProfile): OpsEvent[] {
   const ids = visibleOutletIdSet(user);
@@ -127,7 +127,7 @@ export function getDashboardKpis(user: UserProfile): DashboardKpis {
   const hosp = SEED.hospitality.filter((h) => ids.has(h.outletId));
   const hyg = SEED.hygiene.filter((h) => ids.has(h.outletId));
   const comp = SEED.complaints.filter((c) => ids.has(c.outletId));
-  const tsk = SEED.tasks.filter((t) => ids.has(t.outletId));
+  const tsk = SEED.tasks.filter((t) => t.outletId === null || ids.has(t.outletId));
   const evt = SEED.events.filter((e) => ids.has(e.outletId));
 
   const done = tsk.filter((t) => t.status === "done").length;
@@ -149,7 +149,7 @@ export function getDashboardKpis(user: UserProfile): DashboardKpis {
 /* ---------------- period-aware KPIs (real deltas vs previous window) ---------------- */
 export type PeriodKey = "week" | "month" | "quarter";
 const PERIOD_DAYS: Record<PeriodKey, number> = { week: 7, month: 30, quarter: 90 };
-const NOW = +new Date("2026-06-23T23:59:59Z");
+export const NOW = +new Date("2026-06-23T23:59:59Z");
 
 export interface PeriodKpis extends DashboardKpis {
   complaintsReceived: number;
@@ -187,7 +187,7 @@ export function getDashboardKpisWithPeriod(user: UserProfile, period: PeriodKey)
   const hosp = SEED.hospitality.filter((h) => ids.has(h.outletId)).map((h) => ({ date: h.date, v: h.overallScore }));
   const hyg = SEED.hygiene.filter((h) => ids.has(h.outletId)).map((h) => ({ date: h.date, v: h.hygieneScore }));
   const comp = SEED.complaints.filter((c) => ids.has(c.outletId));
-  const tasks = SEED.tasks.filter((t) => ids.has(t.outletId));
+  const tasks = SEED.tasks.filter((t) => t.outletId !== null && ids.has(t.outletId));
 
   const hospCur = avgIn(hosp, curStart, NOW) || base.hospitalityScore;
   const hospPrev = avgIn(hosp, prevStart, curStart);
@@ -244,6 +244,56 @@ export function outletRanking(user: UserProfile): OutletRankRow[] {
       const complaints = complaintsByOutlet.get(outlet.id) ?? 0;
       const composite = round1(hospitality * 0.45 + hygiene * 0.45 - complaints * 2);
       return { outlet, hospitality, hygiene, complaints, composite };
+    })
+    .sort((a, b) => b.composite - a.composite);
+}
+
+/** Ranked outlet with scores computed inside a date window (fallback to latest), plus area + coordinator name. */
+export interface RankedOutletRow {
+  outlet: Outlet;
+  area: string;
+  coordinator: string;
+  hospitality: number;
+  hygiene: number;
+  complaints: number;
+  composite: number;
+}
+
+export function outletRankingInRange(outletIds: string[], endMs: number, days: number): RankedOutletRow[] {
+  const idSet = new Set(outletIds);
+  const outlets = SEED.outlets.filter((o) => idSet.has(o.id));
+  const startMs = endMs - days * 86_400_000;
+  const inWin = (t: number) => t >= startMs && t <= endMs;
+
+  const hospLatest = latestByOutlet(SEED.hospitality);
+  const hygLatest = latestByOutlet(SEED.hygiene);
+
+  const coordOf = new Map<string, string>();
+  for (const u of SEED.users) {
+    if (u.role === "area_coordinator") for (const oid of u.outletIds ?? []) coordOf.set(oid, u.name);
+  }
+
+  return outlets
+    .map((outlet) => {
+      const hosp = SEED.hospitality
+        .filter((h) => h.outletId === outlet.id && inWin(+new Date(h.date)))
+        .map((h) => h.overallScore);
+      const hyg = SEED.hygiene
+        .filter((h) => h.outletId === outlet.id && inWin(+new Date(h.date)))
+        .map((h) => h.hygieneScore);
+      const hospitality = round1(hosp.length ? avg(hosp) : hospLatest.get(outlet.id)?.overallScore ?? 0);
+      const hygiene = round1(hyg.length ? avg(hyg) : hygLatest.get(outlet.id)?.hygieneScore ?? 0);
+      const complaints = SEED.complaints.filter((c) => c.outletId === outlet.id && inWin(+new Date(c.createdAt))).length;
+      const composite = round1(hospitality * 0.45 + hygiene * 0.45 - complaints * 2);
+      return {
+        outlet,
+        area: getArea(outlet.areaId)?.name ?? "—",
+        coordinator: coordOf.get(outlet.id) ?? "—",
+        hospitality,
+        hygiene,
+        complaints,
+        composite,
+      };
     })
     .sort((a, b) => b.composite - a.composite);
 }
@@ -313,6 +363,69 @@ export function complaintsByCategory(user: UserProfile) {
   return counts;
 }
 
+/* ---------------- Complaint comparison (this period vs previous) ---------------- */
+export interface DayComparePoint {
+  label: string; // day-of-month "1".."31"
+  current: number; // received in selected month on this day
+  previous: number; // received on same day-of-month, previous month
+  weekend: boolean; // Sat/Sun in the selected month
+}
+export interface MonthComparePoint {
+  label: string; // "Jan".."Dec"
+  current: number; // received in this month
+  previous: number; // received in the preceding month (rolling)
+}
+export interface ComplaintCompareData {
+  year: number;
+  defaultMonth: number; // 0-11
+  months: { month: number; label: string; days: DayComparePoint[] }[];
+  yearly: MonthComparePoint[];
+}
+
+/** Combo-chart data for the Complaint Trend card (scoped to outletIds). "Received" = complaint createdAt. */
+export function complaintCompareData(outletIds: string[]): ComplaintCompareData {
+  const ids = new Set(outletIds);
+  const comp = SEED.complaints.filter((c) => ids.has(c.outletId));
+  const created = comp.map((c) => +new Date(c.createdAt));
+  const countIn = (start: number, end: number) => created.filter((t) => t >= start && t < end).length;
+
+  const year = new Date(NOW).getUTCFullYear();
+  const defaultMonth = new Date(NOW).getUTCMonth();
+
+  const dayCount = (y: number, m: number, d: number) => countIn(Date.UTC(y, m, d), Date.UTC(y, m, d + 1));
+  const monthCount = (y: number, m: number) => countIn(Date.UTC(y, m, 1), Date.UTC(y, m + 1, 1));
+
+  const months = Array.from({ length: 12 }, (_, m) => {
+    const daysInMonth = new Date(Date.UTC(year, m + 1, 0)).getUTCDate();
+    const prevY = m === 0 ? year - 1 : year;
+    const prevM = m === 0 ? 11 : m - 1;
+    const prevDays = new Date(Date.UTC(prevY, prevM + 1, 0)).getUTCDate();
+    const days: DayComparePoint[] = [];
+    for (let d = 1; d <= daysInMonth; d++) {
+      const dow = new Date(Date.UTC(year, m, d)).getUTCDay();
+      days.push({
+        label: String(d),
+        current: dayCount(year, m, d),
+        previous: d <= prevDays ? dayCount(prevY, prevM, d) : 0,
+        weekend: dow === 0 || dow === 6,
+      });
+    }
+    return { month: m, label: new Date(Date.UTC(year, m, 1)).toLocaleDateString("en-US", { month: "long", timeZone: "UTC" }), days };
+  });
+
+  const yearly: MonthComparePoint[] = Array.from({ length: 12 }, (_, m) => {
+    const prevY = m === 0 ? year - 1 : year;
+    const prevM = m === 0 ? 11 : m - 1;
+    return {
+      label: new Date(Date.UTC(year, m, 1)).toLocaleDateString("en-US", { month: "short", timeZone: "UTC" }),
+      current: monthCount(year, m),
+      previous: monthCount(prevY, prevM),
+    };
+  });
+
+  return { year, defaultMonth, months, yearly };
+}
+
 /* ---------------- analytics aggregations ---------------- */
 export interface AreaMetricRow {
   area: Area;
@@ -333,7 +446,7 @@ export function areaMetricMatrix(user: UserProfile): AreaMetricRow[] {
       const ids = new Set(areaOutlets.map((o) => o.id));
       const hosp = SEED.hospitality.filter((h) => ids.has(h.outletId)).map((h) => h.overallScore);
       const hyg = SEED.hygiene.filter((h) => ids.has(h.outletId)).map((h) => h.hygieneScore);
-      const tasks = SEED.tasks.filter((t) => ids.has(t.outletId));
+      const tasks = SEED.tasks.filter((t) => t.outletId !== null && ids.has(t.outletId));
       const done = tasks.filter((t) => t.status === "done").length;
       const comp = SEED.complaints.filter((c) => ids.has(c.outletId));
       const closed = comp.filter((c) => c.status === "closed" || c.status === "done").length;
@@ -452,7 +565,7 @@ export function reportPeriodCompare(outletIds: string[], days = 30, endMs = NOW)
   const hosp = SEED.hospitality.filter((h) => ids.has(h.outletId));
   const hyg = SEED.hygiene.filter((h) => ids.has(h.outletId));
   const comp = SEED.complaints.filter((c) => ids.has(c.outletId));
-  const tasks = SEED.tasks.filter((t) => ids.has(t.outletId));
+  const tasks = SEED.tasks.filter((t) => t.outletId !== null && ids.has(t.outletId));
 
   const mc = (cur: number, prev: number): MetricCompare => ({ cur, prev, delta: pctDelta(cur, prev) });
   const avgWin = (recs: { date: string; v: number }[], s: number, e: number) =>
@@ -517,7 +630,7 @@ export function aggregateOutlets(outletIds: string[]): OutletsAggregate {
   const ids = new Set(outletIds);
   const hosp = SEED.hospitality.filter((h) => ids.has(h.outletId)).map((h) => h.overallScore);
   const hyg = SEED.hygiene.filter((h) => ids.has(h.outletId)).map((h) => h.hygieneScore);
-  const tasks = SEED.tasks.filter((t) => ids.has(t.outletId));
+  const tasks = SEED.tasks.filter((t) => t.outletId !== null && ids.has(t.outletId));
   const tasksDone = tasks.filter((t) => t.status === "done").length;
   const comp = SEED.complaints.filter((c) => ids.has(c.outletId));
   const closed = comp.filter((c) => c.status === "closed" || c.status === "done").length;
@@ -648,6 +761,110 @@ export function coordinatorPerformance(outletIds: string[]): CoordinatorPerf[] {
         complaints,
       };
     });
+}
+
+/* ---------------- Quality trend (hospitality vs hygiene over time) ---------------- */
+export interface QualityPoint {
+  label: string;
+  hospitality: number;
+  hygiene: number;
+}
+export interface QualitySeries {
+  daily: QualityPoint[];
+  weekly: QualityPoint[];
+  monthly: QualityPoint[];
+  yearly: QualityPoint[];
+}
+
+export function qualitySeries(outletIds: string[]): QualitySeries {
+  const ids = new Set(outletIds);
+  const hosp = SEED.hospitality.filter((h) => ids.has(h.outletId)).map((h) => ({ t: +new Date(h.date), v: h.overallScore }));
+  const hyg = SEED.hygiene.filter((h) => ids.has(h.outletId)).map((h) => ({ t: +new Date(h.date), v: h.hygieneScore }));
+  const baseH = round1(avg(hosp.map((x) => x.v))) || 80;
+  const baseG = round1(avg(hyg.map((x) => x.v))) || 80;
+  const avgIn = (arr: { t: number; v: number }[], s: number, e: number) => {
+    const xs = arr.filter((x) => x.t >= s && x.t < e).map((x) => x.v);
+    return xs.length ? round1(avg(xs)) : null;
+  };
+  const build = (buckets: { label: string; start: number; end: number }[]): QualityPoint[] => {
+    let lh = baseH;
+    let lg = baseG;
+    return buckets.map((b) => {
+      const h = avgIn(hosp, b.start, b.end);
+      if (h != null) lh = h;
+      const g = avgIn(hyg, b.start, b.end);
+      if (g != null) lg = g;
+      return { label: b.label, hospitality: lh, hygiene: lg };
+    });
+  };
+
+  const DAY = 86_400_000;
+  const ny = new Date(NOW).getUTCFullYear();
+  const nm = new Date(NOW).getUTCMonth();
+
+  const daily = build(
+    Array.from({ length: 14 }, (_, i) => {
+      const end = NOW - (13 - i) * DAY;
+      return { label: new Date(end).toLocaleDateString("en-US", { day: "numeric", month: "short", timeZone: "UTC" }), start: end - DAY, end };
+    }),
+  );
+  const weekly = build(
+    Array.from({ length: 8 }, (_, i) => {
+      const end = NOW - (7 - i) * 7 * DAY;
+      return { label: `W${i + 1}`, start: end - 7 * DAY, end };
+    }),
+  );
+  const monthly = build(
+    Array.from({ length: 12 }, (_, i) => {
+      const m = new Date(Date.UTC(ny, nm - (11 - i), 1));
+      return {
+        label: m.toLocaleDateString("en-US", { month: "short", timeZone: "UTC" }),
+        start: +m,
+        end: +new Date(Date.UTC(m.getUTCFullYear(), m.getUTCMonth() + 1, 1)),
+      };
+    }),
+  );
+  const yearly = build(
+    Array.from({ length: 3 }, (_, i) => {
+      const y = ny - 2 + i;
+      return { label: String(y), start: Date.UTC(y, 0, 1), end: Date.UTC(y + 1, 0, 1) };
+    }),
+  );
+
+  return { daily, weekly, monthly, yearly };
+}
+
+/** GitHub-style heatmap: per-area weekly average quality score (hospitality + hygiene), carry-forward. */
+export function areaWeeklyQuality(outletIds: string[], weeks = 52): { labels: string[]; rows: { label: string; values: number[] }[] } {
+  const ids = new Set(outletIds);
+  const byArea = new Map<string, Set<string>>();
+  for (const o of SEED.outlets) {
+    if (!ids.has(o.id)) continue;
+    if (!byArea.has(o.areaId)) byArea.set(o.areaId, new Set());
+    byArea.get(o.areaId)!.add(o.id);
+  }
+  const WK = 7 * 86_400_000;
+  const wins = Array.from({ length: weeks }, (_, i) => {
+    const end = NOW - (weeks - 1 - i) * WK;
+    return { start: end - WK, end };
+  });
+  const labels = wins.map((w) => new Date(w.end).toLocaleDateString("en-US", { day: "numeric", month: "short", timeZone: "UTC" }));
+
+  const rows = [...byArea.entries()].map(([areaId, set]) => {
+    const pts = [
+      ...SEED.hospitality.filter((h) => set.has(h.outletId)).map((h) => ({ t: +new Date(h.date), v: h.overallScore })),
+      ...SEED.hygiene.filter((h) => set.has(h.outletId)).map((h) => ({ t: +new Date(h.date), v: h.hygieneScore })),
+    ];
+    let last = round1(avg(pts.map((p) => p.v))) || 0;
+    const values = wins.map((w) => {
+      const xs = pts.filter((p) => p.t >= w.start && p.t < w.end).map((p) => p.v);
+      if (xs.length) last = round1(avg(xs));
+      return last;
+    });
+    return { label: getArea(areaId)?.name ?? "—", values };
+  });
+
+  return { labels, rows };
 }
 
 /* current identity placeholder (replaced by real session in Phase 2 wiring) */

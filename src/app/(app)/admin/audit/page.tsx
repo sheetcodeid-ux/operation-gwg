@@ -38,7 +38,7 @@ export default async function AuditPage() {
       at: t.createdAt,
       icon: ListChecks,
       text: `Task "${t.title}" set to ${t.status}`,
-      outlet: outletName(t.outletId),
+      outlet: t.outletId ? outletName(t.outletId) : "No branch",
     })),
     ...listComplaints(user).map((c) => ({
       at: c.createdAt,

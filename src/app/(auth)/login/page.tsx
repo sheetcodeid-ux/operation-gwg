@@ -11,11 +11,11 @@ export const metadata: Metadata = { title: "Sign in" };
 
 const ROLE_ORDER: Role[] = [
   "super_admin",
-  "director",
   "head_operation",
   "area_coordinator",
-  "supervisor",
-  "pic_outlet",
+  "data_operation",
+  "pos_operation",
+  "admin_operation",
 ];
 
 function buildDemoAccounts(): DemoAccount[] {
@@ -24,8 +24,7 @@ function buildDemoAccounts(): DemoAccount[] {
     const u = users.find((x) => x.role === role)!;
     let scope = "All outlets";
     if (role === "area_coordinator" && u.areaId) scope = areaName(u.areaId);
-    else if (role === "supervisor") scope = `${u.outletIds?.length ?? 0} outlet`;
-    else if (role === "pic_outlet") scope = "1 outlet";
+    else if (role === "pos_operation") scope = `${u.outletIds?.length ?? 0} outlet`;
     return { username: u.email, role: ROLE_LABEL[role], scope };
   });
 }

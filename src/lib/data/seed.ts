@@ -86,14 +86,14 @@ function addUser(role: Role, partial: Partial<UserProfile> = {}): UserProfile {
   return u;
 }
 
-// Platform users
+// Platform / HQ users (no branch)
 const superAdmin = addUser("super_admin", { name: "GWG Admin", email: "admin@gwg.co" });
-addUser("director", { name: "Direktur Utama", email: "director@gwg.co" });
 addUser("head_operation", { name: "Head of Operations", email: "head.ops@gwg.co" });
+addUser("data_operation", { name: "Data Operation", email: "data.ops@gwg.co" });
+addUser("admin_operation", { name: "Admin Operation", email: "admin.ops@gwg.co" });
 
 const areas: Area[] = [];
 const outlets: Outlet[] = [];
-const supervisors: UserProfile[] = [];
 
 for (let a = 0; a < 5; a++) {
   const coordinator = addUser("area_coordinator", { name: fullName() });
@@ -106,25 +106,22 @@ for (let a = 0; a < 5; a++) {
   coordinator.areaId = area.id;
   areas.push(area);
 
-  // 10 outlets per area — one supervisor per outlet (supervisor = exactly 1 outlet)
+  // 10 outlets per area — one POS Operation (on-site) per outlet, scoped to that branch.
   const areaOutletIds: string[] = [];
   for (let o = 0; o < 10; o++) {
     const outletNum = a * 10 + o + 1;
-    const sup = addUser("supervisor");
-    const pic = addUser("pic_outlet");
+    const pos = addUser("pos_operation", { name: fullName() });
     const outlet: Outlet = {
       id: id("out", outletNum),
       name: `GWG ${pick(CITIES)} ${String.fromCharCode(65 + (o % 26))}${outletNum}`,
       code: `${area.code}-${String(outletNum).padStart(2, "0")}`,
       city: pick(CITIES),
       areaId: area.id,
-      supervisorId: sup.id,
-      picId: pic.id,
+      supervisorId: pos.id,
+      picId: pos.id,
       active: chance(0.96),
     };
-    pic.outletIds = [outlet.id];
-    sup.outletIds = [outlet.id];
-    supervisors.push(sup);
+    pos.outletIds = [outlet.id];
     areaOutletIds.push(outlet.id);
     outlets.push(outlet);
   }
@@ -141,7 +138,7 @@ const coordinatorForArea = (areaId: string) => areaCoordinators.find((c) => c.ar
 const hospitality: HospitalityAssessment[] = [];
 let hN = 0;
 for (const outlet of outlets) {
-  const count = intBetween(1, 3);
+  const count = intBetween(12, 16);
   for (let i = 0; i < count; i++) {
     hN += 1;
     const scores = {} as HospitalityAssessment["scores"];
@@ -163,7 +160,7 @@ for (const outlet of outlets) {
       assessorId: coordinatorForArea(outlet.areaId).id,
       staffName: fullName(),
       staffPosition: pick(POSITIONS),
-      date: daysAgo(intBetween(1, 60)),
+      date: i === 0 ? daysAgo(intBetween(1, 20)) : daysAgo(intBetween(1, 365)),
       scores,
       overallScore: Math.round((sum / (items * 5)) * 1000) / 10,
     });
@@ -174,6 +171,7 @@ for (const outlet of outlets) {
 const TASK_TITLES = ["AC service & cleaning", "Repaint front signage", "Restock kitchen supplies", "Fix leaking sink", "Staff hospitality training", "POS system update", "Grease trap cleaning", "New menu rollout", "CCTV maintenance", "Pest control treatment", "Inventory audit", "Generator inspection"];
 const PRIORITIES: Priority[] = ["critical", "high", "medium", "low"];
 const TASK_STATES: TaskStatus[] = ["open", "ongoing", "pending", "done", "cancelled"];
+const TASK_DIVISIONS: Role[] = ["head_operation", "area_coordinator", "data_operation", "pos_operation", "admin_operation"];
 const tasks: WorkTask[] = [];
 let tN = 0;
 for (const outlet of outlets) {
@@ -184,6 +182,8 @@ for (const outlet of outlets) {
     const start = intBetween(2, 50);
     const due = start - intBetween(2, 20);
     const progress = status === "done" ? 100 : status === "cancelled" ? intBetween(0, 60) : status === "ongoing" ? intBetween(20, 90) : status === "pending" ? intBetween(10, 70) : intBetween(0, 20);
+    // ~1 in 5 tasks is a division-level task with no branch.
+    const noBranch = chance(0.2);
     tasks.push({
       id: id("tsk", tN),
       title: pick(TASK_TITLES),
@@ -191,9 +191,11 @@ for (const outlet of outlets) {
       category: pick(["Maintenance", "Operations", "Procurement", "Marketing", "IT / Systems"]),
       priority: pick(PRIORITIES),
       status,
-      outletId: outlet.id,
-      areaId: outlet.areaId,
-      picId: outlet.picId,
+      division: noBranch ? pick(["data_operation", "admin_operation", "head_operation"] as Role[]) : pick(TASK_DIVISIONS),
+      outletId: noBranch ? null : outlet.id,
+      areaId: noBranch ? null : outlet.areaId,
+      picIds: noBranch ? [] : [outlet.picId],
+      picId: noBranch ? null : outlet.picId,
       startDate: daysAgo(start),
       dueDate: due >= 0 ? daysAgo(due) : daysAhead(-due),
       completionDate: status === "done" ? daysAgo(Math.max(0, due + 1)) : null,
@@ -240,7 +242,7 @@ const FINDINGS_POOL = ["Lampu mati di area toilet", "Kebocoran kecil pada sink k
 const hygiene: HygieneAudit[] = [];
 let gN = 0;
 for (const outlet of outlets) {
-  const count = intBetween(1, 2);
+  const count = intBetween(12, 16);
   for (let i = 0; i < count; i++) {
     gN += 1;
     const ratings = {} as HygieneAudit["ratings"];
@@ -261,7 +263,7 @@ for (const outlet of outlets) {
       id: id("hyg", gN),
       outletId: outlet.id,
       areaId: outlet.areaId,
-      date: daysAgo(intBetween(1, 45)),
+      date: i === 0 ? daysAgo(intBetween(1, 20)) : daysAgo(intBetween(1, 365)),
       shift: pick(["Morning", "Afternoon", "Evening"]),
       inspectorName: coordinatorForArea(outlet.areaId).name,
       supervisorName: users.find((u) => u.id === outlet.supervisorId)!.name,
@@ -284,12 +286,13 @@ const COMPLAINT_TEXT = ["Pelayanan lambat saat jam sibuk.", "Meja kurang bersih 
 const complaints: Complaint[] = [];
 let cN = 0;
 for (const outlet of outlets) {
-  const count = intBetween(0, 4);
+  const count = intBetween(3, 9);
   for (let i = 0; i < count; i++) {
     cN += 1;
     const source = pick(SOURCES);
     const status = pick(CSTATES);
-    const created = intBetween(1, 70);
+    // Spread across the past ~12 months so every month has complaints (daily & yearly views).
+    const created = intBetween(1, 365);
     const resolved = status === "closed" || status === "done";
     complaints.push({
       id: id("cmp", cN),
@@ -326,10 +329,10 @@ function addNotif(n: Omit<AppNotification, "id">) {
   notifications.push({ id: id("ntf", nN), ...n });
 }
 tasks
-  .filter((t) => t.status !== "done" && t.status !== "cancelled" && new Date(t.dueDate) < new Date(daysAgo(0)))
+  .filter((t) => t.outletId != null && t.status !== "done" && t.status !== "cancelled" && new Date(t.dueDate) < new Date(daysAgo(0)))
   .slice(0, 6)
   .forEach((t) => {
-    const o = outletById.get(t.outletId)!;
+    const o = outletById.get(t.outletId!)!;
     addNotif({ kind: "task_overdue", title: "Task overdue", message: `"${t.title}" at ${o.name} is past due.`, outletId: o.id, areaId: o.areaId, severity: "warning", read: false, createdAt: t.dueDate });
   });
 complaints

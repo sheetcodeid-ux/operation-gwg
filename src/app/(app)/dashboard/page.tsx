@@ -4,14 +4,18 @@ import { getSessionUser } from "@/lib/auth";
 import {
   aggregateOutlets,
   areaName,
-  complaintTrend,
+  complaintCompareData,
   coordinatorPerformance,
   getUser,
   getUsers,
-  outletRanking,
+  listTasks,
+  outletName,
+  outletRankingInRange,
   reportPeriodCompare,
+  userName,
   visibleOutlets,
 } from "@/lib/data/store";
+import { can } from "@/lib/rbac";
 import { resolveRange } from "@/lib/date-range";
 import { ROLE_LABEL } from "@/lib/constants";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -20,9 +24,10 @@ import { KpiCarousel, type Kpi } from "@/components/dashboard/kpi-card";
 import { HeroCard } from "@/components/dashboard/hero-card";
 import { InsightsPanel } from "@/components/dashboard/insights-panel";
 import { GlobalFilterBar } from "@/components/dashboard/filter-bar";
-import { OutletRanking } from "@/components/dashboard/rankings";
+import { OutletRankingTable } from "@/components/dashboard/outlet-ranking-table";
 import { PerformanceMetrics } from "@/components/dashboard/performance-metrics";
-import { TrendAreaChart } from "@/components/charts/charts";
+import { ComplaintTrendCard } from "@/components/dashboard/complaint-trend-card";
+import { QuickTasks } from "@/components/dashboard/quick-tasks";
 import { formatNumber } from "@/lib/utils";
 
 export const metadata: Metadata = { title: "Executive Dashboard" };
@@ -56,7 +61,6 @@ export default async function DashboardPage({
     scoped = all.filter((o) => allowed.has(o.id));
   }
   const ids = scoped.map((o) => o.id);
-  const idSet = new Set(ids);
 
   const agg = aggregateOutlets(ids);
   const cmp = reportPeriodCompare(ids, range.days, range.endMs);
@@ -73,14 +77,55 @@ export default async function DashboardPage({
     { label: "Hygiene", value: cmp.hygiene.cur, delta: cmp.hygiene.delta, color: "#94a3b8", sub: "Average score" },
   ];
 
-  const outlets = outletRanking(user).filter((r) => idSet.has(r.outlet.id));
+  const rankedOutlets = outletRankingInRange(ids, range.endMs, range.days);
   const coordPerf = coordinatorPerformance(ids);
-  const trend = complaintTrend(user);
+
+  const complaintCompare = complaintCompareData(ids);
 
   const visibleAreas = [...new Map(all.map((o) => [o.areaId, areaName(o.areaId)])).entries()];
   const coordinators = getUsers().filter(
     (u) => u.role === "area_coordinator" && (u.outletIds ?? []).some((id) => allIdSet.has(id)),
   );
+
+  // Quick Tasks — scoped Work Tracker tasks (Active/Completed) + a Work-Tracker-style create form scoped by coordinator area.
+  const scopedIdSet = new Set(ids);
+  const outletCoordName = new Map<string, string>();
+  const outletCoordId = new Map<string, string>();
+  for (const c of coordinators) {
+    for (const oid of c.outletIds ?? []) {
+      if (scopedIdSet.has(oid)) {
+        outletCoordName.set(oid, c.name);
+        outletCoordId.set(oid, c.id);
+      }
+    }
+  }
+  const quickTasks = listTasks(user)
+    .filter((t) => (t.outletId === null || scopedIdSet.has(t.outletId)) && t.status !== "cancelled")
+    .map((t) => ({
+      id: t.id,
+      title: t.title,
+      description: t.description,
+      division: t.division,
+      outletId: t.outletId ?? "",
+      outlet: t.outletId ? outletName(t.outletId) : "No branch",
+      coordinator: (t.outletId ? outletCoordName.get(t.outletId) : null) ?? "—",
+      category: t.category,
+      priority: t.priority,
+      status: t.status,
+      start: t.startDate,
+      due: t.dueDate,
+      progress: t.progress,
+      pic: t.picId ? userName(t.picId) : "—",
+      done: t.status === "done",
+    }));
+  const taskOutlets = scoped.map((o) => ({ id: o.id, name: o.name, coordinatorId: outletCoordId.get(o.id) ?? null }));
+  const coordList = coordinators.map((c) => ({ id: c.id, name: c.name }));
+  const divisionMembers: Record<string, { id: string; name: string }[]> = {};
+  for (const r of ["head_operation", "area_coordinator", "data_operation", "pos_operation", "admin_operation"] as const) {
+    divisionMembers[r] = getUsers()
+      .filter((u) => u.role === r && u.active)
+      .map((u) => ({ id: u.id, name: u.name }));
+  }
   const scopeOptions = [
     ...visibleAreas.map(([id, name]) => ({ value: `area:${id}`, label: name, group: "Wilayah" })),
     ...coordinators.map((c) => ({ value: `ca:${c.id}`, label: c.name, group: "Coordinator Area" })),
@@ -125,29 +170,33 @@ export default async function DashboardPage({
       </div>
 
       <div className="mt-4 grid gap-4 lg:grid-cols-3">
-        <Card className="lg:col-span-2">
-          <CardHeader>
-            <CardTitle>Complaint Trend</CardTitle>
-            <CardDescription>Received vs. resolved · last 8 weeks</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <TrendAreaChart data={trend} />
-          </CardContent>
-        </Card>
+        <ComplaintTrendCard data={complaintCompare} className="lg:col-span-2" />
 
         <PerformanceMetrics data={coordPerf} />
       </div>
 
-      <div className="mt-4">
-        <Card>
+      <div className="mt-4 grid items-stretch gap-4 lg:grid-cols-3">
+        <Card className="flex flex-col lg:col-span-2">
           <CardHeader>
             <CardTitle>Outlet Ranking</CardTitle>
-            <CardDescription>Top performers by composite score (hospitality + hygiene − open complaints)</CardDescription>
+            <CardDescription>Composite score (hospitality + hygiene − complaints) · {range.label.toLowerCase()}</CardDescription>
           </CardHeader>
-          <CardContent>
-            {outlets.length > 0 ? <OutletRanking rows={outlets} /> : <p className="py-8 text-center text-sm text-muted-foreground">No outlets in scope</p>}
+          <CardContent className="flex-1">
+            {rankedOutlets.length > 0 ? (
+              <OutletRankingTable rows={rankedOutlets} />
+            ) : (
+              <p className="py-8 text-center text-sm text-muted-foreground">No outlets in scope</p>
+            )}
           </CardContent>
         </Card>
+
+        <QuickTasks
+          tasks={quickTasks}
+          canAdd={can(user, "create_work_task")}
+          outlets={taskOutlets}
+          coordinators={coordList}
+          members={divisionMembers}
+        />
       </div>
     </div>
   );

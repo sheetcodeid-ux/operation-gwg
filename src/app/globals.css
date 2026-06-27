@@ -76,6 +76,8 @@
 
   --animate-shimmer: shimmer 2s linear infinite;
   --animate-float: float 6s ease-in-out infinite;
+  --animate-sheet-in: sheet-in-right 0.34s cubic-bezier(0.32, 0.72, 0, 1);
+  --animate-overlay-in: overlay-fade 0.2s ease-out;
 }
 
 @keyframes shimmer {
@@ -89,6 +91,18 @@
 @keyframes clock-pop {
   from { opacity: 0; transform: translateY(8px) scale(0.96); }
   to { opacity: 1; transform: translateY(0) scale(1); }
+}
+@keyframes shine-sweep {
+  0% { transform: translateX(-160%) skewX(-12deg); }
+  55%, 100% { transform: translateX(260%) skewX(-12deg); }
+}
+@keyframes sheet-in-right {
+  from { transform: translateX(100%); }
+  to { transform: translateX(0); }
+}
+@keyframes overlay-fade {
+  from { opacity: 0; }
+  to { opacity: 1; }
 }
 
 /* ---- LIGHT ---- */
@@ -250,6 +264,11 @@
       0 10px 28px -18px rgba(0, 0, 0, 0.55);
   }
 
+  /* Blue glow for the highlighted line in the Complaint Trend combo chart. */
+  .chart-glow-blue {
+    filter: drop-shadow(0 0 5px rgba(59, 130, 246, 0.55));
+  }
+
   /* SOLID surface — for every clickable overlay (menus, dialogs, popovers, command). */
   .surface-solid {
     background: var(--popover);
@@ -289,6 +308,26 @@
     );
     background-size: 200% 100%;
     animation: var(--animate-shimmer);
+  }
+
+  /* Glossy badge with a looping light sweep (footer "by" credit). */
+  .shine-badge {
+    position: relative;
+    overflow: hidden;
+  }
+  .shine-badge::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(
+      90deg,
+      transparent 0%,
+      color-mix(in oklch, white 60%, transparent) 50%,
+      transparent 100%
+    );
+    width: 40%;
+    transform: translateX(-160%) skewX(-12deg);
+    animation: shine-sweep 3.2s ease-in-out infinite;
   }
 }
 
