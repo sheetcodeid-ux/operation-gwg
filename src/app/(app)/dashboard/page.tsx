@@ -115,7 +115,8 @@ export default async function DashboardPage({
       start: t.startDate,
       due: t.dueDate,
       progress: t.progress,
-      pic: t.picId ? userName(t.picId) : "—",
+      picIds: t.picIds,
+      pic: t.picIds.length ? t.picIds.map(userName).join(", ") : "—",
       done: t.status === "done",
     }));
   const taskOutlets = scoped.map((o) => ({ id: o.id, name: o.name, coordinatorId: outletCoordId.get(o.id) ?? null }));

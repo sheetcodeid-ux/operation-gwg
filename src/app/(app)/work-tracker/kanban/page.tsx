@@ -22,7 +22,7 @@ export default async function WorkKanbanPage() {
       <PageHeader
         icon={ListChecks}
         title="Work Tracker"
-        description="Drag tasks between columns to update their status — synced with the table and calendar"
+        description="Drag tasks between columns to update their status — synced with the table"
         actions={
           canCreate && sheet.outlets.length > 0 ? (
             <NewTaskButton outlets={sheet.outlets} coordinators={sheet.coordinators} members={sheet.members} />

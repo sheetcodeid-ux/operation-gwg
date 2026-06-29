@@ -18,6 +18,7 @@ import type {
   WorkTask,
 } from "../types";
 import { SEED } from "./seed";
+import { DEMO_NOW } from "../now";
 
 const avg = (xs: number[]) => (xs.length ? xs.reduce((a, b) => a + b, 0) / xs.length : 0);
 const round1 = (n: number) => Math.round(n * 10) / 10;
@@ -149,7 +150,7 @@ export function getDashboardKpis(user: UserProfile): DashboardKpis {
 /* ---------------- period-aware KPIs (real deltas vs previous window) ---------------- */
 export type PeriodKey = "week" | "month" | "quarter";
 const PERIOD_DAYS: Record<PeriodKey, number> = { week: 7, month: 30, quarter: 90 };
-export const NOW = +new Date("2026-06-23T23:59:59Z");
+export const NOW = DEMO_NOW;
 
 export interface PeriodKpis extends DashboardKpis {
   complaintsReceived: number;

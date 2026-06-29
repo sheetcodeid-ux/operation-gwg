@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { TASK_STATUS_META, PRIORITY_META } from "@/lib/constants";
+import { ROLE_LABEL, TASK_STATUS_META, PRIORITY_META } from "@/lib/constants";
 import type { TaskStatus } from "@/lib/types";
 import { updateTaskStatusAction } from "@/lib/actions/work";
 import { cn, formatDate, isOverdue } from "@/lib/utils";
@@ -11,6 +11,7 @@ import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { TONE_HEX } from "@/components/ui/tone";
 import { Avatar } from "@/components/ui/avatar";
 import { TaskDetail } from "./task-detail";
+import { DivisionFilter, PicFilter, MonthFilter, membersForDivision, monthKey, monthOptions } from "./division-filter";
 import type { DivisionMembers, TaskOutlet } from "./task-sheet";
 import type { WorkRow } from "./work-table";
 
@@ -30,11 +31,25 @@ export function KanbanBoard({
   canEdit?: boolean;
 }) {
   const [tasks, setTasks] = React.useState(rows);
+  // Re-sync when the server data changes (after create/edit/delete + router.refresh).
+  // eslint-disable-next-line react-hooks/set-state-in-effect
+  React.useEffect(() => setTasks(rows), [rows]);
   const [, startTransition] = React.useTransition();
   const [drag, setDrag] = React.useState<{ id: string; x: number; y: number } | null>(null);
   const [overCol, setOverCol] = React.useState<TaskStatus | null>(null);
-  const [openTask, setOpenTask] = React.useState<WorkRow | null>(null);
+  const [division, setDivision] = React.useState<string>("all");
+  const [pic, setPic] = React.useState<string>("all");
+  const [month, setMonth] = React.useState<string>("all");
+  const people = React.useMemo(() => membersForDivision(members, division), [members, division]);
+  const months = React.useMemo(() => monthOptions(rows.map((r) => r.startDate)), [rows]);
+  function pickDivision(v: string) {
+    setDivision(v);
+    setPic("all");
+  }
+  const [openTaskId, setOpenTaskId] = React.useState<string | null>(null);
   const startRef = React.useRef<{ id: string; x: number; y: number; moved: boolean } | null>(null);
+  // Live task for the detail dialog (re-derived from synced `tasks`, so edits reflect without reopening).
+  const openTask = openTaskId !== null ? tasks.find((t) => t.id === openTaskId) ?? null : null;
 
   function move(id: string, status: TaskStatus) {
     setTasks((ts) => ts.map((t) => (t.id === id ? { ...t, status, progress: status === "done" ? 100 : t.progress } : t)));
@@ -65,21 +80,33 @@ export function KanbanBoard({
     if (s?.moved) {
       if (overCol && overCol !== task.status) move(s.id, overCol);
     } else {
-      setOpenTask(task);
+      setOpenTaskId(task.id);
     }
     setDrag(null);
     setOverCol(null);
   }
 
   const ghost = drag ? tasks.find((t) => t.id === drag.id) : null;
+  const visible = tasks.filter(
+    (t) =>
+      (division === "all" || t.division === division) &&
+      (pic === "all" || t.picIds.includes(pic)) &&
+      (month === "all" || monthKey(t.startDate) === month),
+  );
 
   return (
     <>
+      <div className="mb-3 flex flex-wrap items-center gap-2">
+        <span className="text-xs font-medium text-muted-foreground">Filter</span>
+        <MonthFilter options={months} value={month} onChange={setMonth} className="w-40" />
+        <DivisionFilter value={division} onChange={pickDivision} className="w-44" />
+        <PicFilter people={people} value={pic} onChange={setPic} className="w-40" />
+      </div>
       <div className="flex gap-4 overflow-x-auto pb-2">
         {COLUMNS.map((status) => {
           const meta = TASK_STATUS_META[status];
           const color = TONE_HEX[meta.tone];
-          const items = tasks.filter((t) => t.status === status);
+          const items = visible.filter((t) => t.status === status);
           const isOver = overCol === status;
           return (
             <div
@@ -100,7 +127,7 @@ export function KanbanBoard({
                   {items.length}
                 </span>
               </div>
-              <div className="flex min-h-28 flex-1 flex-col gap-2.5 p-3 pt-0">
+              <div className="no-scrollbar flex max-h-[32rem] min-h-28 flex-1 flex-col gap-2.5 overflow-y-auto p-3 pt-0">
                 {items.map((t) => (
                   <KanbanCard
                     key={t.id}
@@ -142,7 +169,7 @@ export function KanbanBoard({
 
       {/* Tap → detail (with Edit/Delete) */}
       {openTask && (
-        <Dialog open onOpenChange={(o) => !o && setOpenTask(null)}>
+        <Dialog open onOpenChange={(o) => !o && setOpenTaskId(null)}>
           <DialogContent title={openTask.title} description={`${openTask.outlet} · ${openTask.area}`} align="center" className="max-w-md">
             <TaskDetail task={openTask} outlets={outlets} coordinators={coordinators} members={members} canEdit={canEdit} />
           </DialogContent>
@@ -169,6 +196,9 @@ function KanbanCard({
       <div className="flex items-start justify-between gap-2">
         <p className="line-clamp-2 text-sm font-medium text-foreground">{task.title}</p>
         <Badge tone={PRIORITY_META[task.priority].tone}>{PRIORITY_META[task.priority].label}</Badge>
+      </div>
+      <div className="mt-1.5 flex items-center gap-1.5">
+        <Badge tone="brand">{ROLE_LABEL[task.division]}</Badge>
       </div>
       <p className="mt-1 truncate text-[11px] text-muted-foreground">
         {task.outlet} · {task.area}

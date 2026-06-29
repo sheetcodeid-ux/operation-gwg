@@ -7,11 +7,13 @@ import { toast } from "sonner";
 import { PRIORITY_META, ROLE_LABEL, TASK_STATUS_META, WORK_CATEGORIES } from "@/lib/constants";
 import type { Priority, Role, TaskStatus } from "@/lib/types";
 import { createTaskAction, updateTaskAction } from "@/lib/actions/work";
+import { DEMO_NOW } from "@/lib/now";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetTrigger, useSheetControl } from "@/components/ui/sheet";
 import { Field, Input, Textarea } from "@/components/ui/input";
 import { Combobox } from "@/components/ui/combobox";
+import { DatePicker } from "@/components/ui/date-picker";
 import { MultiCombobox, SelectionChips } from "@/components/ui/multi-combobox";
 import { SegmentedTabs } from "@/components/ui/segmented-tabs";
 
@@ -40,15 +42,17 @@ const PRIORITIES = Object.keys(PRIORITY_META) as Priority[];
 const STATUSES = Object.keys(TASK_STATUS_META) as TaskStatus[];
 const DIVISIONS: Role[] = ["head_operation", "area_coordinator", "data_operation", "pos_operation", "admin_operation"];
 
-function todayISO(offsetDays = 0) {
-  const d = new Date();
-  d.setDate(d.getDate() + offsetDays);
+/** Default date for the form, anchored to the demo "now" (not the wall clock),
+ *  so new tasks land in the same period the dashboard/calendar display. */
+function defaultDateISO(offsetDays = 0) {
+  const d = new Date(DEMO_NOW);
+  d.setUTCDate(d.getUTCDate() + offsetDays);
   return d.toISOString().slice(0, 10);
 }
 
 function toDateInput(iso: string) {
   const d = new Date(iso);
-  return Number.isNaN(+d) ? todayISO() : d.toISOString().slice(0, 10);
+  return Number.isNaN(+d) ? defaultDateISO() : d.toISOString().slice(0, 10);
 }
 
 /** Slide-in (Sheet) task form — create or edit, by division, with optional branch. Shared by Dashboard + Work Tracker. */
@@ -95,8 +99,8 @@ function TaskForm({ task, outlets, members }: { task?: EditableTask; outlets: Ta
     division: task?.division ?? ("pos_operation" as Role),
     outletId: task?.outletId ?? outlets[0]?.id ?? "",
     picIds: task?.picIds ?? [],
-    startDate: task ? toDateInput(task.start) : todayISO(),
-    dueDate: task ? toDateInput(task.due) : todayISO(7),
+    startDate: task ? toDateInput(task.start) : defaultDateISO(),
+    dueDate: task ? toDateInput(task.due) : defaultDateISO(7),
     progress: task?.progress ?? 0,
   });
 
@@ -231,10 +235,10 @@ function TaskForm({ task, outlets, members }: { task?: EditableTask; outlets: Ta
 
         <div className="grid grid-cols-2 gap-3">
           <Field label="Tanggal Mulai">
-            <Input type="date" value={form.startDate} onChange={(e) => set("startDate", e.target.value)} />
+            <DatePicker value={form.startDate} onChange={(v) => set("startDate", v)} />
           </Field>
           <Field label="Tanggal Selesai">
-            <Input type="date" value={form.dueDate} onChange={(e) => set("dueDate", e.target.value)} />
+            <DatePicker value={form.dueDate} onChange={(v) => set("dueDate", v)} />
           </Field>
         </div>
 

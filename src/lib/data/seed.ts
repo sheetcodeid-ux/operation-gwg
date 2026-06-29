@@ -359,7 +359,7 @@ hygiene
 
 notifications.sort((a, b) => +new Date(b.createdAt) - +new Date(a.createdAt));
 
-export const SEED = {
+const freshSeed = {
   users,
   areas,
   outlets,
@@ -372,3 +372,16 @@ export const SEED = {
   /** Default identity used before auth is wired (Phase 2 uses real session). */
   currentUser: superAdmin,
 };
+
+/**
+ * Pin the in-memory store to a single per-process instance.
+ *
+ * In dev, Next.js re-evaluates modules on HMR and may load this module into
+ * more than one server module graph (the Server Action layer vs. the RSC render
+ * layer). Without this, a write (e.g. `createTask` pushing to `SEED.tasks`) and
+ * the subsequent read could touch *different* freshly-rebuilt copies, so newly
+ * created tasks would silently vanish on the next render. Caching on
+ * `globalThis` guarantees every importer shares the same object.
+ */
+const globalStore = globalThis as typeof globalThis & { __GWG_SEED__?: typeof freshSeed };
+export const SEED = (globalStore.__GWG_SEED__ ??= freshSeed);

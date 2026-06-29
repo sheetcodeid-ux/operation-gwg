@@ -3,7 +3,7 @@
 import * as React from "react";
 import { type ColumnDef } from "@tanstack/react-table";
 import { AlertTriangle, Eye } from "lucide-react";
-import { PRIORITY_META, TASK_STATUS_META } from "@/lib/constants";
+import { PRIORITY_META, ROLE_LABEL, TASK_STATUS_META } from "@/lib/constants";
 import type { Priority, Role, TaskStatus } from "@/lib/types";
 import { Badge } from "@/components/ui/badge";
 import { DataTable } from "@/components/ui/data-table";
@@ -11,6 +11,7 @@ import { Progress } from "@/components/ui/progress";
 import { Combobox } from "@/components/ui/combobox";
 import { formatDate, isOverdue } from "@/lib/utils";
 import { TaskDetailDialog } from "./task-detail";
+import { DivisionFilter, PicFilter, MonthFilter, membersForDivision, monthKey, monthOptions } from "./division-filter";
 import type { DivisionMembers, TaskOutlet } from "./task-sheet";
 
 export interface WorkRow {
@@ -46,10 +47,28 @@ export function WorkTable({
 }) {
   const [priority, setPriority] = React.useState<string>("all");
   const [status, setStatus] = React.useState<string>("all");
+  const [division, setDivision] = React.useState<string>("all");
+  const [pic, setPic] = React.useState<string>("all");
+  const [month, setMonth] = React.useState<string>("all");
+  const people = React.useMemo(() => membersForDivision(members, division), [members, division]);
+  const months = React.useMemo(() => monthOptions(rows.map((r) => r.startDate)), [rows]);
+  // When the division changes, reset the PIC filter so it can't point to someone outside it.
+  function pickDivision(v: string) {
+    setDivision(v);
+    setPic("all");
+  }
 
   const filtered = React.useMemo(
-    () => rows.filter((r) => (priority === "all" || r.priority === priority) && (status === "all" || r.status === status)),
-    [rows, priority, status],
+    () =>
+      rows.filter(
+        (r) =>
+          (priority === "all" || r.priority === priority) &&
+          (status === "all" || r.status === status) &&
+          (division === "all" || r.division === division) &&
+          (pic === "all" || r.picIds.includes(pic)) &&
+          (month === "all" || monthKey(r.startDate) === month),
+      ),
+    [rows, priority, status, division, pic, month],
   );
 
   const columns = React.useMemo<ColumnDef<WorkRow>[]>(
@@ -63,6 +82,11 @@ export function WorkTable({
             <p className="truncate text-[11px] text-muted-foreground">{row.original.outlet}</p>
           </div>
         ),
+      },
+      {
+        accessorKey: "division",
+        header: "Division",
+        cell: ({ getValue }) => <Badge tone="brand">{ROLE_LABEL[getValue<Role>()]}</Badge>,
       },
       { accessorKey: "category", header: "Category", cell: ({ getValue }) => <span className="text-muted-foreground">{getValue<string>()}</span> },
       {
@@ -140,7 +164,10 @@ export function WorkTable({
       data={filtered}
       searchPlaceholder="Search tasksâ€¦"
       toolbar={
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2">
+          <MonthFilter options={months} value={month} onChange={setMonth} className="w-40" />
+          <DivisionFilter value={division} onChange={pickDivision} className="w-44" />
+          <PicFilter people={people} value={pic} onChange={setPic} className="w-40" />
           <Combobox
             value={priority}
             onChange={setPriority}

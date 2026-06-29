@@ -5,6 +5,7 @@ import { getSessionUser } from "@/lib/auth";
 import { can, canAccessOutlet } from "@/lib/rbac";
 import { getOutlet, getOutlets } from "@/lib/data/store";
 import { createTask, deleteTask, updateTask, updateTaskStatus } from "@/lib/data/mutations";
+import { DEMO_NOW_ISO } from "@/lib/now";
 import type { Priority, Role, TaskStatus } from "@/lib/types";
 
 export interface TaskInput {
@@ -41,12 +42,13 @@ export async function createTaskAction(input: TaskInput) {
     outletId: input.outletId,
     picIds: input.picIds,
     picId: input.picIds[0] ?? outlet?.picId ?? user.id,
-    startDate: input.startDate || new Date().toISOString(),
-    dueDate: input.dueDate || new Date().toISOString(),
+    startDate: input.startDate || DEMO_NOW_ISO,
+    dueDate: input.dueDate || DEMO_NOW_ISO,
     progress: Math.max(0, Math.min(100, input.progress)),
   });
 
   revalidatePath("/work-tracker");
+  revalidatePath("/work-tracker/kanban");
   revalidatePath("/dashboard");
   return { ok: true, id: record.id };
 }
@@ -69,12 +71,13 @@ export async function updateTaskAction(id: string, input: TaskInput) {
     outletId: input.outletId,
     picIds: input.picIds,
     picId: input.picIds[0] ?? outlet?.picId ?? user.id,
-    startDate: input.startDate || new Date().toISOString(),
-    dueDate: input.dueDate || new Date().toISOString(),
+    startDate: input.startDate || DEMO_NOW_ISO,
+    dueDate: input.dueDate || DEMO_NOW_ISO,
     progress: Math.max(0, Math.min(100, input.progress)),
   });
 
   revalidatePath("/work-tracker");
+  revalidatePath("/work-tracker/kanban");
   revalidatePath("/dashboard");
   return { ok: true };
 }
@@ -85,6 +88,7 @@ export async function deleteTaskAction(id: string) {
   if (!can(user, "create_work_task")) return { error: "You don't have permission to delete tasks." };
   deleteTask(id);
   revalidatePath("/work-tracker");
+  revalidatePath("/work-tracker/kanban");
   revalidatePath("/dashboard");
   return { ok: true };
 }
@@ -95,6 +99,7 @@ export async function updateTaskStatusAction(id: string, status: TaskStatus, pro
   if (!can(user, "create_work_task")) return { error: "No permission" };
   updateTaskStatus(id, status, progress);
   revalidatePath("/work-tracker");
+  revalidatePath("/work-tracker/kanban");
   revalidatePath("/dashboard");
   return { ok: true };
 }
