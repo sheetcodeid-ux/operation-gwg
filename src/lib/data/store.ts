@@ -19,6 +19,7 @@ import type {
 } from "../types";
 import { SEED } from "./seed";
 import { DEMO_NOW } from "../now";
+import { buildCompareData, type CompareData } from "../compare-data";
 
 const avg = (xs: number[]) => (xs.length ? xs.reduce((a, b) => a + b, 0) / xs.length : 0);
 const round1 = (n: number) => Math.round(n * 10) / 10;
@@ -365,66 +366,14 @@ export function complaintsByCategory(user: UserProfile) {
 }
 
 /* ---------------- Complaint comparison (this period vs previous) ---------------- */
-export interface DayComparePoint {
-  label: string; // day-of-month "1".."31"
-  current: number; // received in selected month on this day
-  previous: number; // received on same day-of-month, previous month
-  weekend: boolean; // Sat/Sun in the selected month
-}
-export interface MonthComparePoint {
-  label: string; // "Jan".."Dec"
-  current: number; // received in this month
-  previous: number; // received in the preceding month (rolling)
-}
-export interface ComplaintCompareData {
-  year: number;
-  defaultMonth: number; // 0-11
-  months: { month: number; label: string; days: DayComparePoint[] }[];
-  yearly: MonthComparePoint[];
-}
+export type { DayComparePoint, MonthComparePoint } from "../compare-data";
+export type ComplaintCompareData = CompareData;
 
 /** Combo-chart data for the Complaint Trend card (scoped to outletIds). "Received" = complaint createdAt. */
 export function complaintCompareData(outletIds: string[]): ComplaintCompareData {
   const ids = new Set(outletIds);
   const comp = SEED.complaints.filter((c) => ids.has(c.outletId));
-  const created = comp.map((c) => +new Date(c.createdAt));
-  const countIn = (start: number, end: number) => created.filter((t) => t >= start && t < end).length;
-
-  const year = new Date(NOW).getUTCFullYear();
-  const defaultMonth = new Date(NOW).getUTCMonth();
-
-  const dayCount = (y: number, m: number, d: number) => countIn(Date.UTC(y, m, d), Date.UTC(y, m, d + 1));
-  const monthCount = (y: number, m: number) => countIn(Date.UTC(y, m, 1), Date.UTC(y, m + 1, 1));
-
-  const months = Array.from({ length: 12 }, (_, m) => {
-    const daysInMonth = new Date(Date.UTC(year, m + 1, 0)).getUTCDate();
-    const prevY = m === 0 ? year - 1 : year;
-    const prevM = m === 0 ? 11 : m - 1;
-    const prevDays = new Date(Date.UTC(prevY, prevM + 1, 0)).getUTCDate();
-    const days: DayComparePoint[] = [];
-    for (let d = 1; d <= daysInMonth; d++) {
-      const dow = new Date(Date.UTC(year, m, d)).getUTCDay();
-      days.push({
-        label: String(d),
-        current: dayCount(year, m, d),
-        previous: d <= prevDays ? dayCount(prevY, prevM, d) : 0,
-        weekend: dow === 0 || dow === 6,
-      });
-    }
-    return { month: m, label: new Date(Date.UTC(year, m, 1)).toLocaleDateString("en-US", { month: "long", timeZone: "UTC" }), days };
-  });
-
-  const yearly: MonthComparePoint[] = Array.from({ length: 12 }, (_, m) => {
-    const prevY = m === 0 ? year - 1 : year;
-    const prevM = m === 0 ? 11 : m - 1;
-    return {
-      label: new Date(Date.UTC(year, m, 1)).toLocaleDateString("en-US", { month: "short", timeZone: "UTC" }),
-      current: monthCount(year, m),
-      previous: monthCount(prevY, prevM),
-    };
-  });
-
-  return { year, defaultMonth, months, yearly };
+  return buildCompareData(comp.map((c) => c.createdAt), NOW);
 }
 
 /* ---------------- analytics aggregations ---------------- */

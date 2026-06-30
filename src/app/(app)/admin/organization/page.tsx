@@ -1,5 +1,5 @@
 import { redirect } from "next/navigation";
-import { Network, Store, UserCog } from "lucide-react";
+import { MapPinned, Network, Store, UserCog } from "lucide-react";
 import type { Metadata } from "next";
 import { getSessionUser } from "@/lib/auth";
 import { getAreas, getOutlets, userName } from "@/lib/data/store";
@@ -8,6 +8,7 @@ import { Avatar } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { PageHeader } from "@/components/ui/page-header";
+import { StatTile } from "@/components/ui/stat";
 
 export const metadata: Metadata = { title: "Organization" };
 
@@ -17,12 +18,21 @@ export default async function OrganizationPage() {
 
   const areas = getAreas();
   const outlets = getOutlets();
+  const coordinators = new Set(areas.map((a) => a.coordinatorId)).size;
+  const activeOutlets = outlets.filter((o) => o.active).length;
 
   return (
     <div className="w-full">
       <PageHeader icon={Network} title="Organization" description="Areas, coordinators and outlet assignments" />
 
-      <div className="grid gap-4 lg:grid-cols-2">
+      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+        <StatTile icon={MapPinned} label="Areas" value={areas.length} tone="brand" />
+        <StatTile icon={Store} label="Outlets" value={outlets.length} tone="cyan" />
+        <StatTile icon={Store} label="Active Outlets" value={activeOutlets} tone="success" />
+        <StatTile icon={UserCog} label="Coordinators" value={coordinators} tone="amber" />
+      </div>
+
+      <div className="mt-4 grid gap-4 lg:grid-cols-2">
         {areas.map((area) => {
           const areaOutlets = outlets.filter((o) => o.areaId === area.id);
           return (

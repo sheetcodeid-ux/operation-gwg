@@ -12,7 +12,7 @@ import {
   getSortedRowModel,
   useReactTable,
 } from "@tanstack/react-table";
-import { ArrowUpDown, Rows2, Rows3, Search, SlidersHorizontal } from "lucide-react";
+import { ArrowUpDown, Search, SlidersHorizontal } from "lucide-react";
 import { Input } from "./input";
 import { Popover } from "./popover";
 import { cn } from "@/lib/utils";
@@ -43,7 +43,6 @@ export function DataTable<TData, TValue>({
   const [sorting, setSorting] = React.useState<SortingState>([]);
   const [globalFilter, setGlobalFilter] = React.useState("");
   const [columnVisibility, setColumnVisibility] = React.useState<VisibilityState>({});
-  const [dense, setDense] = React.useState(false);
 
   // Restore persisted preferences (post-hydration to avoid SSR mismatch).
   React.useEffect(() => {
@@ -53,15 +52,14 @@ export function DataTable<TData, TValue>({
       if (raw) {
         const saved = JSON.parse(raw);
         if (saved.visibility) setColumnVisibility(saved.visibility);
-        if (typeof saved.dense === "boolean") setDense(saved.dense);
       }
     } catch {}
   }, [tableId]);
 
   React.useEffect(() => {
     if (!tableId || typeof window === "undefined") return;
-    localStorage.setItem(`tbl:${tableId}`, JSON.stringify({ visibility: columnVisibility, dense }));
-  }, [tableId, columnVisibility, dense]);
+    localStorage.setItem(`tbl:${tableId}`, JSON.stringify({ visibility: columnVisibility }));
+  }, [tableId, columnVisibility]);
 
   const table = useReactTable({
     data,
@@ -77,7 +75,7 @@ export function DataTable<TData, TValue>({
     initialState: { pagination: { pageSize } },
   });
 
-  const cellPad = dense ? "px-3 py-2" : "px-4 py-3";
+  const cellPad = "px-3 py-2"; // always compact
   const hideableColumns = table.getAllLeafColumns().filter((c) => typeof c.columnDef.header === "string" && c.columnDef.header !== "");
 
   const total = table.getFilteredRowModel().rows.length;
@@ -86,6 +84,12 @@ export function DataTable<TData, TValue>({
   const pageCount = table.getPageCount() || 1;
   const from = total ? pageIndex * curPageSize + 1 : 0;
   const to = pageIndex * curPageSize + table.getRowModel().rows.length;
+
+  // Keep the active page button in view within the scrollable (≈5-wide) strip.
+  const pagerRef = React.useRef<HTMLDivElement>(null);
+  React.useEffect(() => {
+    pagerRef.current?.querySelector('[aria-current="true"]')?.scrollIntoView({ block: "nearest", inline: "center" });
+  }, [pageIndex]);
 
   return (
     <div className="space-y-3">
@@ -101,13 +105,6 @@ export function DataTable<TData, TValue>({
         </div>
         <div className="flex items-center gap-2">
           {toolbar}
-          <button
-            onClick={() => setDense((d) => !d)}
-            title={dense ? "Comfortable" : "Compact"}
-            className="grid size-9 place-items-center rounded-lg border border-border text-muted-foreground hover:bg-muted hover:text-foreground"
-          >
-            {dense ? <Rows3 className="size-4" /> : <Rows2 className="size-4" />}
-          </button>
           {hideableColumns.length > 0 && (
             <Popover
               contentClassName="w-52"
@@ -201,7 +198,7 @@ export function DataTable<TData, TValue>({
           >
             Previous
           </button>
-          <div className="no-scrollbar flex max-w-[50vw] items-center gap-1 overflow-x-auto sm:max-w-none">
+          <div ref={pagerRef} className="no-scrollbar flex max-w-[13.5rem] items-center gap-1 overflow-x-auto scroll-smooth">
             {Array.from({ length: pageCount }, (_, idx) => idx).map((n) => (
               <button
                 key={n}

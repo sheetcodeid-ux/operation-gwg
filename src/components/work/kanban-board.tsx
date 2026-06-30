@@ -12,6 +12,7 @@ import { TONE_HEX } from "@/components/ui/tone";
 import { Avatar } from "@/components/ui/avatar";
 import { TaskDetail } from "./task-detail";
 import { DivisionFilter, PicFilter, MonthFilter, membersForDivision, monthKey, monthOptions } from "./division-filter";
+import { useWorkFilters } from "./use-work-filters";
 import type { DivisionMembers, TaskOutlet } from "./task-sheet";
 import type { WorkRow } from "./work-table";
 
@@ -37,15 +38,10 @@ export function KanbanBoard({
   const [, startTransition] = React.useTransition();
   const [drag, setDrag] = React.useState<{ id: string; x: number; y: number } | null>(null);
   const [overCol, setOverCol] = React.useState<TaskStatus | null>(null);
-  const [division, setDivision] = React.useState<string>("all");
-  const [pic, setPic] = React.useState<string>("all");
-  const [month, setMonth] = React.useState<string>("all");
+  // month / division / pic are shared with the Table view via the URL query.
+  const { month, division, pic, setMonth, setDivision, setPic } = useWorkFilters();
   const people = React.useMemo(() => membersForDivision(members, division), [members, division]);
   const months = React.useMemo(() => monthOptions(rows.map((r) => r.startDate)), [rows]);
-  function pickDivision(v: string) {
-    setDivision(v);
-    setPic("all");
-  }
   const [openTaskId, setOpenTaskId] = React.useState<string | null>(null);
   const startRef = React.useRef<{ id: string; x: number; y: number; moved: boolean } | null>(null);
   // Live task for the detail dialog (re-derived from synced `tasks`, so edits reflect without reopening).
@@ -99,7 +95,7 @@ export function KanbanBoard({
       <div className="mb-3 flex flex-wrap items-center gap-2">
         <span className="text-xs font-medium text-muted-foreground">Filter</span>
         <MonthFilter options={months} value={month} onChange={setMonth} className="w-40" />
-        <DivisionFilter value={division} onChange={pickDivision} className="w-44" />
+        <DivisionFilter value={division} onChange={setDivision} className="w-44" />
         <PicFilter people={people} value={pic} onChange={setPic} className="w-40" />
       </div>
       <div className="flex gap-4 overflow-x-auto pb-2">

@@ -2,7 +2,7 @@
 
 import { useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { ConciergeBell, Loader2, Plus } from "lucide-react";
+import { ChevronDown, ConciergeBell, Loader2, Plus } from "lucide-react";
 import { toast } from "sonner";
 import { HOSPITALITY_CHECKLISTS } from "@/lib/constants";
 import type { HospitalityCategory } from "@/lib/types";
@@ -17,6 +17,7 @@ import { cn } from "@/lib/utils";
 type Scores = Record<HospitalityCategory, Record<string, number>>;
 
 const CATS = Object.keys(HOSPITALITY_CHECKLISTS) as HospitalityCategory[];
+const POSITIONS = ["Bar", "Kitchen", "Kasir", "Supervisor", "Staff"];
 
 function emptyScores(): Scores {
   const s = {} as Scores;
@@ -27,7 +28,13 @@ function emptyScores(): Scores {
   return s;
 }
 
-export function NewAssessmentButton({ outlets }: { outlets: { id: string; name: string }[] }) {
+export function NewAssessmentButton({
+  outlets,
+  coordinators,
+}: {
+  outlets: { id: string; name: string }[];
+  coordinators: { id: string; name: string }[];
+}) {
   return (
     <Dialog>
       <DialogTrigger>
@@ -37,24 +44,33 @@ export function NewAssessmentButton({ outlets }: { outlets: { id: string; name: 
       </DialogTrigger>
       <DialogContent
         title="Hospitality Assessment"
-        description="Score service quality across cashier, F&B and dining area."
+        description="Kunjungan Coordinator Area — skor layanan cashier, F&B & dining."
+        align="center"
         className="max-w-2xl"
       >
-        <AssessmentForm outlets={outlets} />
+        <AssessmentForm outlets={outlets} coordinators={coordinators} />
       </DialogContent>
     </Dialog>
   );
 }
 
-function AssessmentForm({ outlets }: { outlets: { id: string; name: string }[] }) {
+function AssessmentForm({
+  outlets,
+  coordinators,
+}: {
+  outlets: { id: string; name: string }[];
+  coordinators: { id: string; name: string }[];
+}) {
   const router = useRouter();
   const { setOpen } = useDialogControl();
   const [pending, startTransition] = useTransition();
   const [outletId, setOutletId] = useState(outlets[0]?.id ?? "");
+  const [coordinatorId, setCoordinatorId] = useState(coordinators[0]?.id ?? "");
   const [staffName, setStaffName] = useState("");
-  const [staffPosition, setStaffPosition] = useState("");
+  const [staffPosition, setStaffPosition] = useState(POSITIONS[0]);
   const [notes, setNotes] = useState("");
   const [scores, setScores] = useState<Scores>(emptyScores);
+  const [openCat, setOpenCat] = useState<HospitalityCategory>(CATS[0]);
 
   const overall = useMemo(() => {
     let sum = 0;
@@ -78,7 +94,7 @@ function AssessmentForm({ outlets }: { outlets: { id: string; name: string }[] }
       return;
     }
     startTransition(async () => {
-      const res = await createHospitalityAction({ outletId, staffName, staffPosition, scores, notes });
+      const res = await createHospitalityAction({ outletId, coordinatorId, staffName, staffPosition, scores, notes });
       if (res?.error) {
         toast.error(res.error);
         return;
@@ -90,25 +106,32 @@ function AssessmentForm({ outlets }: { outlets: { id: string; name: string }[] }
   }
 
   return (
-    <div className="max-h-[70vh] overflow-y-auto p-5">
-      <div className="grid gap-4 sm:grid-cols-2">
+    <div className="max-h-[72vh] overflow-y-auto p-5">
+      <div className="grid gap-3 sm:grid-cols-2">
         <Field label="Outlet">
           <Combobox
             value={outletId}
             onChange={setOutletId}
             options={outlets.map((o) => ({ value: o.id, label: o.name }))}
-            placeholder="Select outlet"
-            searchPlaceholder="Search outlets…"
+            placeholder="Pilih outlet"
+            searchPlaceholder="Cari outlet…"
           />
         </Field>
-        <div className="grid grid-cols-2 gap-3">
-          <Field label="Staff Name">
-            <Input value={staffName} onChange={(e) => setStaffName(e.target.value)} placeholder="e.g. Andi" />
-          </Field>
-          <Field label="Position">
-            <Input value={staffPosition} onChange={(e) => setStaffPosition(e.target.value)} placeholder="e.g. Cashier" />
-          </Field>
-        </div>
+        <Field label="Coordinator Area">
+          <Combobox
+            value={coordinatorId}
+            onChange={setCoordinatorId}
+            options={coordinators.map((c) => ({ value: c.id, label: c.name }))}
+            placeholder="Pilih coordinator"
+            searchPlaceholder="Cari coordinator…"
+          />
+        </Field>
+        <Field label="Staff Name">
+          <Input value={staffName} onChange={(e) => setStaffName(e.target.value)} placeholder="e.g. Andi" />
+        </Field>
+        <Field label="Position">
+          <Combobox value={staffPosition} onChange={setStaffPosition} options={POSITIONS.map((p) => ({ value: p, label: p }))} />
+        </Field>
       </div>
 
       <div className="my-4 flex items-center gap-3 rounded-xl border border-border bg-muted/30 p-3">
@@ -119,23 +142,36 @@ function AssessmentForm({ outlets }: { outlets: { id: string; name: string }[] }
         </div>
       </div>
 
-      <div className="space-y-4">
-        {CATS.map((cat) => (
-          <div key={cat} className="rounded-xl border border-border bg-muted/20 p-3">
-            <div className="mb-2 flex items-center gap-2">
-              <ConciergeBell className="size-4 text-muted-foreground" />
-              <p className="text-sm font-medium text-foreground">{HOSPITALITY_CHECKLISTS[cat].label}</p>
-            </div>
-            <div className="space-y-1.5">
-              {HOSPITALITY_CHECKLISTS[cat].items.map((item) => (
-                <div key={item.key} className="flex items-center justify-between gap-3">
-                  <span className="text-sm text-foreground/80">{item.label}</span>
-                  <ScoreSelect value={scores[cat][item.key]} onChange={(v) => setScore(cat, item.key, v)} />
+      <div className="space-y-2">
+        {CATS.map((cat) => {
+          const open = openCat === cat;
+          const meta = HOSPITALITY_CHECKLISTS[cat];
+          return (
+            <div key={cat} className="overflow-hidden rounded-xl border border-border">
+              <button
+                type="button"
+                onClick={() => setOpenCat(open ? ("" as HospitalityCategory) : cat)}
+                className="flex w-full items-center justify-between gap-2 bg-muted/30 px-3 py-2.5 text-left hover:bg-muted/50"
+              >
+                <div className="flex items-center gap-2">
+                  <ConciergeBell className="size-4 text-muted-foreground" />
+                  <p className="text-sm font-medium text-foreground">{meta.label}</p>
                 </div>
-              ))}
+                <ChevronDown className={cn("size-4 text-muted-foreground transition-transform", open && "rotate-180")} />
+              </button>
+              {open && (
+                <div className="space-y-1.5 p-3">
+                  {meta.items.map((item) => (
+                    <div key={item.key} className="flex items-center justify-between gap-3">
+                      <span className="text-sm text-foreground/80">{item.label}</span>
+                      <ScoreSelect value={scores[cat][item.key]} onChange={(v) => setScore(cat, item.key, v)} />
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
-          </div>
-        ))}
+          );
+        })}
       </div>
 
       <Field label="Notes (optional)" className="mt-4">

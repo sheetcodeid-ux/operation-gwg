@@ -133,6 +133,15 @@ for (let a = 0; a < 5; a++) {
 const areaCoordinators = users.filter((u) => u.role === "area_coordinator");
 const outletById = new Map(outlets.map((o) => [o.id, o]));
 const coordinatorForArea = (areaId: string) => areaCoordinators.find((c) => c.areaId === areaId)!;
+const hqUserId = (role: Role) => users.find((u) => u.role === role)!.id;
+
+/** PIC for a branch task, matching its division so the assignee is a real
+ *  member of that division (and therefore appears in the division's PIC list). */
+function picForDivision(division: Role, outlet: Outlet): string {
+  if (division === "pos_operation") return outlet.picId;
+  if (division === "area_coordinator") return coordinatorForArea(outlet.areaId).id;
+  return hqUserId(division); // head_operation / data_operation / admin_operation
+}
 
 /* ---------------- Module 2: Hospitality ---------------- */
 const hospitality: HospitalityAssessment[] = [];
@@ -184,6 +193,10 @@ for (const outlet of outlets) {
     const progress = status === "done" ? 100 : status === "cancelled" ? intBetween(0, 60) : status === "ongoing" ? intBetween(20, 90) : status === "pending" ? intBetween(10, 70) : intBetween(0, 20);
     // ~1 in 5 tasks is a division-level task with no branch.
     const noBranch = chance(0.2);
+    const division: Role = noBranch ? pick(["data_operation", "admin_operation", "head_operation"] as Role[]) : pick(TASK_DIVISIONS);
+    // PIC matches the division so the assignee shown in the table is a real
+    // member of that division (no-branch division tasks stay unassigned).
+    const picIds = noBranch ? [] : [picForDivision(division, outlet)];
     tasks.push({
       id: id("tsk", tN),
       title: pick(TASK_TITLES),
@@ -191,11 +204,11 @@ for (const outlet of outlets) {
       category: pick(["Maintenance", "Operations", "Procurement", "Marketing", "IT / Systems"]),
       priority: pick(PRIORITIES),
       status,
-      division: noBranch ? pick(["data_operation", "admin_operation", "head_operation"] as Role[]) : pick(TASK_DIVISIONS),
+      division,
       outletId: noBranch ? null : outlet.id,
       areaId: noBranch ? null : outlet.areaId,
-      picIds: noBranch ? [] : [outlet.picId],
-      picId: noBranch ? null : outlet.picId,
+      picIds,
+      picId: picIds[0] ?? null,
       startDate: daysAgo(start),
       dueDate: due >= 0 ? daysAgo(due) : daysAhead(-due),
       completionDate: status === "done" ? daysAgo(Math.max(0, due + 1)) : null,

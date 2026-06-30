@@ -9,6 +9,8 @@ import type { HospitalityCategory } from "@/lib/types";
 
 export interface HospitalityInput {
   outletId: string;
+  /** Coordinator Area performing the visit (assessor). */
+  coordinatorId?: string;
   staffName: string;
   staffPosition: string;
   scores: Record<HospitalityCategory, Record<string, number>>;
@@ -25,7 +27,7 @@ export async function createHospitalityAction(input: HospitalityInput) {
 
   const record = createHospitality({
     outletId: input.outletId,
-    assessorId: user.id,
+    assessorId: input.coordinatorId || user.id,
     staffName: input.staffName.trim(),
     staffPosition: input.staffPosition.trim() || "Staff",
     scores: input.scores,

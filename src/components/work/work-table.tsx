@@ -2,16 +2,19 @@
 
 import * as React from "react";
 import { type ColumnDef } from "@tanstack/react-table";
-import { AlertTriangle, Eye } from "lucide-react";
+import { AlertTriangle, CircleCheck, CircleDot, Eye, ListChecks, TriangleAlert } from "lucide-react";
 import { PRIORITY_META, ROLE_LABEL, TASK_STATUS_META } from "@/lib/constants";
 import type { Priority, Role, TaskStatus } from "@/lib/types";
 import { Badge } from "@/components/ui/badge";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { DataTable } from "@/components/ui/data-table";
 import { Progress } from "@/components/ui/progress";
+import { StatTile } from "@/components/ui/stat";
 import { Combobox } from "@/components/ui/combobox";
 import { formatDate, isOverdue } from "@/lib/utils";
 import { TaskDetailDialog } from "./task-detail";
 import { DivisionFilter, PicFilter, MonthFilter, membersForDivision, monthKey, monthOptions } from "./division-filter";
+import { useWorkFilters } from "./use-work-filters";
 import type { DivisionMembers, TaskOutlet } from "./task-sheet";
 
 export interface WorkRow {
@@ -47,29 +50,37 @@ export function WorkTable({
 }) {
   const [priority, setPriority] = React.useState<string>("all");
   const [status, setStatus] = React.useState<string>("all");
-  const [division, setDivision] = React.useState<string>("all");
-  const [pic, setPic] = React.useState<string>("all");
-  const [month, setMonth] = React.useState<string>("all");
+  // month / division / pic are shared with the Kanban view via the URL query.
+  const { month, division, pic, setMonth, setDivision, setPic } = useWorkFilters();
   const people = React.useMemo(() => membersForDivision(members, division), [members, division]);
   const months = React.useMemo(() => monthOptions(rows.map((r) => r.startDate)), [rows]);
-  // When the division changes, reset the PIC filter so it can't point to someone outside it.
-  function pickDivision(v: string) {
-    setDivision(v);
-    setPic("all");
-  }
 
-  const filtered = React.useMemo(
+  // Scope = month + division + PIC. Drives the KPI cards so they follow the
+  // selected month (and division/PIC), independent of the priority/status
+  // drill-down filters which only narrow the table rows below.
+  const scoped = React.useMemo(
     () =>
       rows.filter(
         (r) =>
-          (priority === "all" || r.priority === priority) &&
-          (status === "all" || r.status === status) &&
           (division === "all" || r.division === division) &&
           (pic === "all" || r.picIds.includes(pic)) &&
           (month === "all" || monthKey(r.startDate) === month),
       ),
-    [rows, priority, status, division, pic, month],
+    [rows, division, pic, month],
   );
+
+  const filtered = React.useMemo(
+    () => scoped.filter((r) => (priority === "all" || r.priority === priority) && (status === "all" || r.status === status)),
+    [scoped, priority, status],
+  );
+
+  const stats = React.useMemo(() => {
+    const total = scoped.length;
+    const done = scoped.filter((r) => r.status === "done").length;
+    const ongoing = scoped.filter((r) => r.status === "ongoing").length;
+    const overdue = scoped.filter((r) => isOverdue(r.dueDate) && r.status !== "done" && r.status !== "cancelled").length;
+    return { total, ongoing, overdue, completion: total ? Math.round((done / total) * 100) : 0 };
+  }, [scoped]);
 
   const columns = React.useMemo<ColumnDef<WorkRow>[]>(
     () => [
@@ -158,30 +169,46 @@ export function WorkTable({
   );
 
   return (
-    <DataTable
-      tableId="work-tracker"
-      columns={columns}
-      data={filtered}
-      searchPlaceholder="Search tasksâ€¦"
-      toolbar={
-        <div className="flex flex-wrap gap-2">
-          <MonthFilter options={months} value={month} onChange={setMonth} className="w-40" />
-          <DivisionFilter value={division} onChange={pickDivision} className="w-44" />
-          <PicFilter people={people} value={pic} onChange={setPic} className="w-40" />
-          <Combobox
-            value={priority}
-            onChange={setPriority}
-            className="w-36"
-            options={[{ value: "all", label: "All priority" }, ...(Object.keys(PRIORITY_META) as Priority[]).map((p) => ({ value: p, label: PRIORITY_META[p].label }))]}
+    <div>
+      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+        <StatTile icon={ListChecks} label="Total Tasks" value={stats.total} tone="brand" />
+        <StatTile icon={CircleDot} label="Ongoing" value={stats.ongoing} tone="cyan" />
+        <StatTile icon={CircleCheck} label="Completion Rate" value={`${stats.completion}%`} tone="success" />
+        <StatTile icon={TriangleAlert} label="Overdue" value={stats.overdue} tone="danger" />
+      </div>
+
+      <Card className="mt-4">
+        <CardHeader>
+          <CardTitle>All Tasks</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <DataTable
+            tableId="work-tracker"
+            columns={columns}
+            data={filtered}
+            searchPlaceholder="Search tasks…"
+            toolbar={
+              <div className="flex flex-wrap gap-2">
+                <MonthFilter options={months} value={month} onChange={setMonth} className="w-40" />
+                <DivisionFilter value={division} onChange={setDivision} className="w-44" />
+                <PicFilter people={people} value={pic} onChange={setPic} className="w-40" />
+                <Combobox
+                  value={priority}
+                  onChange={setPriority}
+                  className="w-36"
+                  options={[{ value: "all", label: "All priority" }, ...(Object.keys(PRIORITY_META) as Priority[]).map((p) => ({ value: p, label: PRIORITY_META[p].label }))]}
+                />
+                <Combobox
+                  value={status}
+                  onChange={setStatus}
+                  className="w-36"
+                  options={[{ value: "all", label: "All status" }, ...(Object.keys(TASK_STATUS_META) as TaskStatus[]).map((s) => ({ value: s, label: TASK_STATUS_META[s].label }))]}
+                />
+              </div>
+            }
           />
-          <Combobox
-            value={status}
-            onChange={setStatus}
-            className="w-36"
-            options={[{ value: "all", label: "All status" }, ...(Object.keys(TASK_STATUS_META) as TaskStatus[]).map((s) => ({ value: s, label: TASK_STATUS_META[s].label }))]}
-          />
-        </div>
-      }
-    />
+        </CardContent>
+      </Card>
+    </div>
   );
 }

@@ -6,10 +6,11 @@ import { getSessionUser } from "@/lib/auth";
 import { areaReportRows, coordinatorReportRows, outletReportRows } from "@/lib/data/store";
 import { can } from "@/lib/rbac";
 import { ROLE_LABEL } from "@/lib/constants";
-import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { PageHeader } from "@/components/ui/page-header";
 import { ScoreRing } from "@/components/ui/score-ring";
+import { StatTile } from "@/components/ui/stat";
+import { ReportsOutletTable, type ReportOutletRow } from "@/components/reports/reports-outlet-table";
 
 export const metadata: Metadata = { title: "Reports" };
 
@@ -21,6 +22,18 @@ export default async function ReportsPage() {
   const coordinators = coordinatorReportRows(user);
   const areas = areaReportRows(user);
 
+  const outletRows: ReportOutletRow[] = outlets.map((o) => ({
+    id: o.outlet.id,
+    name: o.outlet.name,
+    code: o.outlet.code,
+    areaId: o.outlet.areaId,
+    area: o.areaName,
+    hospitality: o.hospitality,
+    hygiene: o.hygiene,
+  }));
+  const areaOptions = areas.map((a) => ({ id: a.area.id, name: a.area.name }));
+  const avg = (xs: number[]) => (xs.length ? Math.round(xs.reduce((a, b) => a + b, 0) / xs.length) : 0);
+
   return (
     <div className="w-full">
       <PageHeader
@@ -29,8 +42,15 @@ export default async function ReportsPage() {
         description="Summary reports per outlet, area coordinator, and region — printable to PDF"
       />
 
+      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+        <StatTile icon={Store} label="Outlets" value={outlets.length} tone="brand" />
+        <StatTile icon={MapPinned} label="Regions" value={areas.length} tone="cyan" />
+        <StatTile icon={UserCog} label="Coordinators" value={coordinators.length} tone="amber" />
+        <StatTile icon={FileText} label="Avg Quality" value={avg(outlets.map((o) => (o.hospitality + o.hygiene) / 2))} tone="success" />
+      </div>
+
       {/* Areas (Wilayah) */}
-      <Card>
+      <Card className="mt-4">
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <MapPinned className="size-4 text-muted-foreground" /> By Region (Wilayah)
@@ -94,39 +114,7 @@ export default async function ReportsPage() {
           <CardDescription>{outlets.length} outlets</CardDescription>
         </CardHeader>
         <CardContent>
-          <div className="overflow-x-auto rounded-xl border border-border">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b border-border bg-muted/30 text-left text-xs text-muted-foreground">
-                  <th className="px-3 py-2.5">Outlet</th>
-                  <th className="px-3 py-2.5">Region</th>
-                  <th className="px-3 py-2.5 text-center">Hospitality</th>
-                  <th className="px-3 py-2.5 text-center">Hygiene</th>
-                  <th className="px-3 py-2.5"></th>
-                </tr>
-              </thead>
-              <tbody>
-                {outlets.map((o) => (
-                  <tr key={o.outlet.id} className="border-b border-border/60 last:border-0 hover:bg-muted/30">
-                    <td className="px-3 py-2.5">
-                      <Link href={`/reports/outlet/${o.outlet.id}`} className="font-medium text-foreground hover:text-primary hover:underline">
-                        {o.outlet.name}
-                      </Link>
-                      <p className="text-[11px] text-muted-foreground">{o.outlet.code}</p>
-                    </td>
-                    <td className="px-3 py-2.5 text-muted-foreground">{o.areaName}</td>
-                    <td className="px-3 py-2.5 text-center tabular-nums text-foreground">{o.hospitality.toFixed(0)}</td>
-                    <td className="px-3 py-2.5 text-center tabular-nums text-foreground">{o.hygiene.toFixed(0)}</td>
-                    <td className="px-3 py-2.5 text-right">
-                      <Link href={`/reports/outlet/${o.outlet.id}`}>
-                        <Badge tone="brand">Report</Badge>
-                      </Link>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+          <ReportsOutletTable rows={outletRows} areas={areaOptions} />
         </CardContent>
       </Card>
     </div>

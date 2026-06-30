@@ -188,6 +188,50 @@ export function createEvent(input: {
   return record;
 }
 
+export function updateEvent(
+  id: string,
+  input: {
+    name: string;
+    outletId: string;
+    picId: string;
+    description: string;
+    budget: number;
+    startDate: string;
+    endDate: string;
+    milestone: OpsEvent["milestone"];
+    status: OpsEvent["status"];
+  },
+): OpsEvent | undefined {
+  const ev = SEED.events.find((e) => e.id === id);
+  if (!ev) return;
+  ev.name = input.name;
+  ev.outletId = input.outletId;
+  ev.areaId = areaForOutlet(input.outletId);
+  ev.picId = input.picId;
+  ev.description = input.description;
+  ev.budget = input.budget;
+  ev.startDate = input.startDate;
+  ev.endDate = input.endDate;
+  ev.milestone = input.milestone;
+  ev.status = input.status;
+  ev.progress = EVENT_MILESTONES.find((m) => m.value === input.milestone)?.progress ?? ev.progress;
+  return ev;
+}
+
+export function deleteEvent(id: string): boolean {
+  const i = SEED.events.findIndex((e) => e.id === id);
+  if (i === -1) return false;
+  SEED.events.splice(i, 1);
+  return true;
+}
+
+export function updateEventMilestone(id: string, milestone: OpsEvent["milestone"]) {
+  const ev = SEED.events.find((e) => e.id === id);
+  if (!ev) return;
+  ev.milestone = milestone;
+  ev.progress = EVENT_MILESTONES.find((m) => m.value === milestone)?.progress ?? ev.progress;
+}
+
 /* ---------------- Hygiene ---------------- */
 export function createHygiene(input: {
   outletId: string;

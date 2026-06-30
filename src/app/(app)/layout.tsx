@@ -11,6 +11,7 @@ import { Topbar } from "@/components/layout/topbar";
 import { Breadcrumbs } from "@/components/layout/breadcrumbs";
 import { Footer } from "@/components/layout/footer";
 import { SidebarProvider } from "@/components/layout/sidebar-context";
+import { ScrollReset } from "@/components/layout/scroll-reset";
 import { CommandPalette } from "@/components/command/command-palette";
 
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
@@ -32,6 +33,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   return (
     <I18nProvider initialLang={lang}>
       <SidebarProvider>
+        <ScrollReset />
         <div className="min-h-dvh">
           <Topbar user={user} notifications={notifications} navItems={navItems} />
           <div className="flex">

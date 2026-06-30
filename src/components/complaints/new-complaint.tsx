@@ -24,7 +24,7 @@ export function NewComplaintButton({ outlets }: { outlets: { id: string; name: s
           <Plus /> Log Complaint
         </Button>
       </DialogTrigger>
-      <DialogContent title="Log Complaint" description="Capture a customer complaint from any channel." className="max-w-xl">
+      <DialogContent title="Log Complaint" description="Capture a customer complaint from any channel." align="center" className="max-w-xl">
         <ComplaintForm outlets={outlets} />
       </DialogContent>
     </Dialog>

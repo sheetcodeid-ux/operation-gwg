@@ -37,7 +37,7 @@ export function NewAuditButton({ outlets }: { outlets: { id: string; name: strin
           <Plus /> New Audit
         </Button>
       </DialogTrigger>
-      <DialogContent title="Hygiene Audit" description="Inspect cleanliness across all six outlet sections." className="max-w-2xl">
+      <DialogContent title="Hygiene Audit" description="Inspect cleanliness across all six outlet sections." align="center" className="max-w-2xl">
         <HygieneForm outlets={outlets} />
       </DialogContent>
     </Dialog>
