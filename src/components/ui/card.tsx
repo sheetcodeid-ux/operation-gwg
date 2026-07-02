@@ -2,7 +2,10 @@ import * as React from "react";
 import { cn } from "@/lib/utils";
 
 export function Card({ className, ...props }: React.HTMLAttributes<HTMLDivElement>) {
-  return <div data-slot="card" className={cn("glass rounded-2xl", className)} {...props} />;
+  // min-w-0: cards live in grid/flex tracks — without this, wide inner content
+  // (carousels, charts, tables) inflates the track's min-content size and the
+  // card overflows the viewport on small screens instead of shrinking.
+  return <div data-slot="card" className={cn("glass min-w-0 rounded-2xl", className)} {...props} />;
 }
 
 export function CardHeader({ className, ...props }: React.HTMLAttributes<HTMLDivElement>) {

@@ -20,11 +20,13 @@ export function GlobalFilterBar({ scopeOptions }: { scopeOptions: MultiOption[] 
   }
 
   return (
-    <div className="mb-4 flex flex-col gap-2 rounded-xl border border-border bg-card/60 p-2.5 sm:flex-row sm:items-center">
-      <span className="flex items-center gap-1.5 px-1 text-xs font-medium text-muted-foreground">
+    // One row that shrinks: the scope picker compresses while the label and
+    // date-range trigger keep their size.
+    <div className="mb-4 flex items-center gap-2 rounded-xl border border-border bg-card/60 p-2.5">
+      <span className="flex shrink-0 items-center gap-1.5 px-1 text-xs font-medium text-muted-foreground">
         <Filter className="size-3.5" /> Filter
       </span>
-      <div className="flex-1 sm:max-w-sm">
+      <div className="min-w-0 max-w-sm flex-1">
         <MultiCombobox
           options={scopeOptions}
           value={selected}
@@ -34,7 +36,7 @@ export function GlobalFilterBar({ scopeOptions }: { scopeOptions: MultiOption[] 
           allLabel="all"
         />
       </div>
-      <div className="sm:ml-auto">
+      <div className="ml-auto shrink-0">
         <DateRangePicker />
       </div>
     </div>

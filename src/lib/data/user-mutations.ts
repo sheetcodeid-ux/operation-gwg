@@ -3,6 +3,7 @@ import "server-only";
 import { SEED } from "./seed";
 import { registerCredential, setPassword } from "./credentials";
 import { getUser } from "./store";
+import { saveUser } from "./persist";
 import type { Role, UserProfile } from "../types";
 
 /** Admin user-management writes (demo). Phase 11: Supabase Auth admin API + profiles table. */
@@ -30,13 +31,16 @@ export function createUser(input: {
     createdAt: new Date().toISOString(),
   };
   SEED.users.push(user);
+  saveUser(user);
   registerCredential(user.id, user.email, input.password);
   return user;
 }
 
 export function setUserActive(id: string, active: boolean) {
   const user = getUser(id);
-  if (user) user.active = active;
+  if (!user) return;
+  user.active = active;
+  saveUser(user);
 }
 
 export function setUserAssignment(id: string, patch: { areaId?: string | null; outletIds?: string[] }) {
@@ -44,6 +48,7 @@ export function setUserAssignment(id: string, patch: { areaId?: string | null; o
   if (!user) return;
   if (patch.areaId !== undefined) user.areaId = patch.areaId;
   if (patch.outletIds !== undefined) user.outletIds = patch.outletIds;
+  saveUser(user);
 }
 
 export function resetUserPassword(id: string, password: string) {

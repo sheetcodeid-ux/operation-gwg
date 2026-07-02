@@ -66,9 +66,9 @@ export function UserManager({ users, outlets }: { users: UserRow[]; outlets: Out
       </div>
 
       <div className="overflow-x-auto rounded-xl border border-border">
-        <table className="w-full text-sm">
+        <table className="w-full min-w-[40rem] text-sm">
           <thead>
-            <tr className="border-b border-border bg-muted/30 text-left text-xs text-muted-foreground">
+            <tr className="whitespace-nowrap border-b border-border bg-muted/30 text-left text-xs text-muted-foreground">
               <th className="px-3 py-2.5">User</th>
               <th className="px-3 py-2.5">Role</th>
               <th className="px-3 py-2.5">Scope</th>

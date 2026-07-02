@@ -34,8 +34,10 @@ export function Combobox({
   return (
     <Popover
       className={cn("w-full", className)}
-      contentClassName="left-0 right-0 w-full min-w-0 p-0"
-      align="start"
+      // Menu keeps a readable width even when the trigger has shrunk (mobile):
+      // at least 13rem (or the trigger width if larger), capped to the viewport.
+      contentClassName="w-max min-w-[max(100%,13rem)] max-w-[min(20rem,calc(100vw-2rem))] p-0"
+      align="end"
       trigger={({ open, toggle }) => (
         <button
           type="button"

@@ -12,9 +12,10 @@ import {
   getSortedRowModel,
   useReactTable,
 } from "@tanstack/react-table";
-import { ArrowUpDown, Search, SlidersHorizontal } from "lucide-react";
+import { ArrowUpDown, Download, Search, SlidersHorizontal } from "lucide-react";
 import { Input } from "./input";
 import { Popover } from "./popover";
+import { downloadCsv, toCsv } from "@/lib/csv";
 import { cn } from "@/lib/utils";
 
 interface DataTableProps<TData, TValue> {
@@ -78,6 +79,26 @@ export function DataTable<TData, TValue>({
   const cellPad = "px-3 py-2"; // always compact
   const hideableColumns = table.getAllLeafColumns().filter((c) => typeof c.columnDef.header === "string" && c.columnDef.header !== "");
 
+  // Export the CURRENT view (all filtered+sorted rows across every page),
+  // visible data columns only (string headers with an accessor).
+  function exportCsv() {
+    const cols = table
+      .getVisibleLeafColumns()
+      .filter((c) => typeof c.columnDef.header === "string" && c.columnDef.header !== "" && c.accessorFn);
+    const headers = cols.map((c) => c.columnDef.header as string);
+    const rows = table.getSortedRowModel().rows.map((row) =>
+      cols.map((c) => {
+        const v = row.getValue(c.id);
+        if (v == null) return "";
+        if (Array.isArray(v)) return v.join("; ");
+        if (typeof v === "object") return JSON.stringify(v);
+        return v as string | number | boolean;
+      }),
+    );
+    const stamp = new Date().toISOString().slice(0, 10);
+    downloadCsv(`${tableId ?? "export"}-${stamp}`, toCsv(headers, rows));
+  }
+
   const total = table.getFilteredRowModel().rows.length;
   const pageIndex = table.getState().pagination.pageIndex;
   const curPageSize = table.getState().pagination.pageSize;
@@ -93,8 +114,10 @@ export function DataTable<TData, TValue>({
 
   return (
     <div className="space-y-3">
-      <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-        <div className="relative max-w-xs flex-1">
+      {/* One row: search + filters stay side-by-side and SHRINK together as the
+          screen narrows (each filter uses min-w-0 shrink basis-*). */}
+      <div className="flex items-center gap-2">
+        <div className="relative min-w-24 max-w-xs flex-1">
           <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
           <Input
             value={globalFilter}
@@ -103,8 +126,15 @@ export function DataTable<TData, TValue>({
             className="pl-9"
           />
         </div>
-        <div className="flex items-center gap-2">
+        <div className="ml-auto flex min-w-0 items-center gap-2">
           {toolbar}
+          <button
+            onClick={exportCsv}
+            title="Export to Excel (CSV)"
+            className="grid size-9 shrink-0 place-items-center rounded-lg border border-border text-muted-foreground hover:bg-muted hover:text-foreground"
+          >
+            <Download className="size-4" />
+          </button>
           {hideableColumns.length > 0 && (
             <Popover
               contentClassName="w-52"
@@ -112,7 +142,7 @@ export function DataTable<TData, TValue>({
                 <button
                   onClick={toggle}
                   title="Columns"
-                  className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-border px-3 text-sm text-muted-foreground hover:bg-muted hover:text-foreground"
+                  className="inline-flex h-9 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-lg border border-border px-3 text-sm text-muted-foreground hover:bg-muted hover:text-foreground"
                 >
                   <SlidersHorizontal className="size-4" /> Columns
                 </button>
@@ -138,10 +168,12 @@ export function DataTable<TData, TValue>({
       </div>
 
       <div className="overflow-auto rounded-xl border border-border" style={stickyHeader ? { maxHeight } : undefined}>
-        <table className="w-full text-sm">
+        {/* min-w: on phones the table overflows and swipes horizontally instead
+            of crushing every column to fit. */}
+        <table className="w-full min-w-[44rem] text-sm">
           <thead className={cn(stickyHeader && "sticky top-0 z-10")}>
             {table.getHeaderGroups().map((hg) => (
-              <tr key={hg.id} className="border-b border-border bg-muted/70 backdrop-blur supports-[backdrop-filter]:bg-muted/60">
+              <tr key={hg.id} className="whitespace-nowrap border-b border-border bg-muted/70 backdrop-blur supports-[backdrop-filter]:bg-muted/60">
                 {hg.headers.map((header) => {
                   const canSort = header.column.getCanSort();
                   return (

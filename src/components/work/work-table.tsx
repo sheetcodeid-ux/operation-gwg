@@ -188,20 +188,20 @@ export function WorkTable({
             data={filtered}
             searchPlaceholder="Search tasks…"
             toolbar={
-              <div className="flex flex-wrap gap-2">
-                <MonthFilter options={months} value={month} onChange={setMonth} className="w-40" />
-                <DivisionFilter value={division} onChange={setDivision} className="w-44" />
-                <PicFilter people={people} value={pic} onChange={setPic} className="w-40" />
+              <div className="contents">
+                <MonthFilter options={months} value={month} onChange={setMonth} className="min-w-0 shrink basis-40" />
+                <DivisionFilter value={division} onChange={setDivision} className="min-w-0 shrink basis-44" />
+                <PicFilter people={people} value={pic} onChange={setPic} className="min-w-0 shrink basis-40" />
                 <Combobox
                   value={priority}
                   onChange={setPriority}
-                  className="w-36"
+                  className="min-w-0 shrink basis-36"
                   options={[{ value: "all", label: "All priority" }, ...(Object.keys(PRIORITY_META) as Priority[]).map((p) => ({ value: p, label: PRIORITY_META[p].label }))]}
                 />
                 <Combobox
                   value={status}
                   onChange={setStatus}
-                  className="w-36"
+                  className="min-w-0 shrink basis-36"
                   options={[{ value: "all", label: "All status" }, ...(Object.keys(TASK_STATUS_META) as TaskStatus[]).map((s) => ({ value: s, label: TASK_STATUS_META[s].label }))]}
                 />
               </div>

@@ -5,8 +5,8 @@ import { useRouter } from "next/navigation";
 import { ChevronDown, ImagePlus, Loader2, Plus, SprayCan, X } from "lucide-react";
 import { toast } from "sonner";
 import { HYGIENE_PHOTO_GROUPS, HYGIENE_RATING_META, HYGIENE_SECTIONS } from "@/lib/constants";
-import type { HygieneRating, HygieneSection } from "@/lib/types";
-import { createHygieneAction } from "@/lib/actions/hygiene";
+import type { Attachment, HygieneRating, HygieneSection } from "@/lib/types";
+import { createHygieneAction, uploadHygienePhotosAction } from "@/lib/actions/hygiene";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogTrigger, useDialogControl } from "@/components/ui/dialog";
 import { Field, Input } from "@/components/ui/input";
@@ -55,7 +55,7 @@ function HygieneForm({ outlets }: { outlets: { id: string; name: string }[] }) {
   const [findings, setFindings] = useState<string[]>([]);
   const [findingDraft, setFindingDraft] = useState("");
   const [openSection, setOpenSection] = useState<HygieneSection>("front");
-  const [photos, setPhotos] = useState<Record<string, string[]>>({});
+  const [photos, setPhotos] = useState<Record<string, PhotoItem[]>>({});
 
   const score = useMemo(() => {
     let sum = 0;
@@ -83,7 +83,30 @@ function HygieneForm({ outlets }: { outlets: { id: string; name: string }[] }) {
 
   function submit() {
     startTransition(async () => {
-      const res = await createHygieneAction({ outletId, shift, inspectorName, ratings, findings, isClean });
+      // Upload attached photos to Supabase Storage first (permanent URLs).
+      let uploaded: Attachment[] = [];
+      const entries = Object.entries(photos).flatMap(([label, items]) => items.map((it) => ({ label, file: it.file })));
+      if (entries.length > 0) {
+        const fd = new FormData();
+        for (const e of entries) {
+          fd.append("file", e.file);
+          fd.append("label", e.label);
+        }
+        const up = await uploadHygienePhotosAction(fd);
+        if (up.error) {
+          // Demo mode without storage: save the audit anyway, photos skipped.
+          if (up.error.includes("Storage belum aktif")) {
+            toast.info("Storage belum aktif — audit disimpan tanpa foto.");
+          } else {
+            toast.error(up.error);
+            return;
+          }
+        } else {
+          uploaded = up.photos ?? [];
+        }
+      }
+
+      const res = await createHygieneAction({ outletId, shift, inspectorName, ratings, findings, isClean, photos: uploaded });
       if (res?.error) {
         toast.error(res.error);
         return;
@@ -184,7 +207,7 @@ function HygieneForm({ outlets }: { outlets: { id: string; name: string }[] }) {
       <Field label="Documentation" className="mt-4">
         <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
           {HYGIENE_PHOTO_GROUPS.map((g) => (
-            <PhotoGroup key={g} label={g} urls={photos[g] ?? []} onChange={(urls) => setPhotos((p) => ({ ...p, [g]: urls }))} />
+            <PhotoGroup key={g} label={g} items={photos[g] ?? []} onChange={(items) => setPhotos((p) => ({ ...p, [g]: items }))} />
           ))}
         </div>
       </Field>
@@ -227,19 +250,24 @@ function HygieneForm({ outlets }: { outlets: { id: string; name: string }[] }) {
   );
 }
 
+interface PhotoItem {
+  file: File;
+  url: string; // local preview object URL
+}
+
 function PhotoGroup({
   label,
-  urls,
+  items,
   onChange,
 }: {
   label: string;
-  urls: string[];
-  onChange: (urls: string[]) => void;
+  items: PhotoItem[];
+  onChange: (items: PhotoItem[]) => void;
 }) {
   function onFiles(e: React.ChangeEvent<HTMLInputElement>) {
     const files = Array.from(e.target.files ?? []);
     if (!files.length) return;
-    onChange([...urls, ...files.map((f) => URL.createObjectURL(f))]);
+    onChange([...items, ...files.map((f) => ({ file: f, url: URL.createObjectURL(f) }))]);
     e.target.value = "";
   }
   return (
@@ -249,15 +277,15 @@ function PhotoGroup({
         <span className="text-[11px]">{label}</span>
         <input type="file" accept="image/*" multiple className="hidden" onChange={onFiles} />
       </label>
-      {urls.length > 0 && (
+      {items.length > 0 && (
         <div className="mt-1.5 grid grid-cols-3 gap-1">
-          {urls.map((u, i) => (
+          {items.map((it, i) => (
             <div key={i} className="group relative aspect-square overflow-hidden rounded-md ring-1 ring-border">
               {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src={u} alt="" className="size-full object-cover" />
+              <img src={it.url} alt="" className="size-full object-cover" />
               <button
                 type="button"
-                onClick={() => onChange(urls.filter((_, j) => j !== i))}
+                onClick={() => onChange(items.filter((_, j) => j !== i))}
                 className="absolute right-0.5 top-0.5 grid size-4 place-items-center rounded bg-black/60 text-white opacity-0 transition-opacity group-hover:opacity-100"
               >
                 <X className="size-2.5" />

@@ -173,7 +173,7 @@ export function ComplaintTable({ rows, canManage }: { rows: ComplaintRow[]; canM
         data={filtered}
         searchPlaceholder="Search complaints…"
         toolbar={
-          <div className="flex items-center gap-2">
+          <div className="contents">
             {canManage && picked.size > 0 && (
               <Button size="sm" variant="subtle" onClick={bulkClose} disabled={bulkPending}>
                 {bulkPending ? <Loader2 className="animate-spin" /> : <CircleCheckBig />} Close {picked.size}
@@ -182,7 +182,7 @@ export function ComplaintTable({ rows, canManage }: { rows: ComplaintRow[]; canM
             <Combobox
               value={status}
               onChange={setStatus}
-              className="w-40"
+              className="min-w-0 shrink basis-40"
               options={[{ value: "all", label: "All status" }, ...STATUSES.map((s) => ({ value: s, label: COMPLAINT_STATUS_META[s].label }))]}
             />
           </div>

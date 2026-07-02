@@ -32,7 +32,7 @@ export function AuditFeed({ items }: { items: AuditItem[] }) {
       <CardHeader className="flex-row items-center justify-between gap-2">
         <CardTitle>Activity Feed</CardTitle>
         <Combobox
-          className="w-44"
+          className="min-w-0 shrink basis-44"
           value={type}
           onChange={setType}
           options={[

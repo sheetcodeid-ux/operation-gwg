@@ -14,6 +14,17 @@ import type {
 } from "../types";
 import { SEED } from "./seed";
 import { getOutlet } from "./store";
+import {
+  deleteEventRow,
+  deleteTaskRow,
+  saveComplaint,
+  saveEvent,
+  saveHospitality,
+  saveHygiene,
+  saveTask,
+  saveArea,
+  saveOutlet,
+} from "./persist";
 
 /**
  * Demo-mode write layer. Mutates the in-memory seed (persists for the life of
@@ -60,6 +71,7 @@ export function createHospitality(input: {
     overallScore: count ? round1((sum / (count * 5)) * 100) : 0,
   };
   SEED.hospitality.unshift(record);
+  saveHospitality(record);
   return record;
 }
 
@@ -98,6 +110,7 @@ export function createTask(input: {
     createdAt: nowIso(),
   };
   SEED.tasks.unshift(record);
+  saveTask(record);
   return record;
 }
 
@@ -134,6 +147,7 @@ export function updateTask(
   task.dueDate = input.dueDate;
   task.progress = input.status === "done" ? 100 : input.progress;
   task.completionDate = input.status === "done" ? task.completionDate ?? nowIso() : null;
+  saveTask(task);
   return task;
 }
 
@@ -141,6 +155,7 @@ export function deleteTask(id: string): boolean {
   const i = SEED.tasks.findIndex((t) => t.id === id);
   if (i === -1) return false;
   SEED.tasks.splice(i, 1);
+  deleteTaskRow(id);
   return true;
 }
 
@@ -154,6 +169,7 @@ export function updateTaskStatus(id: string, status: WorkTask["status"], progres
   } else if (progress !== undefined) {
     task.progress = progress;
   }
+  saveTask(task);
 }
 
 /* ---------------- Event Tracker ---------------- */
@@ -185,6 +201,7 @@ export function createEvent(input: {
     createdAt: nowIso(),
   };
   SEED.events.unshift(record);
+  saveEvent(record);
   return record;
 }
 
@@ -215,6 +232,7 @@ export function updateEvent(
   ev.milestone = input.milestone;
   ev.status = input.status;
   ev.progress = EVENT_MILESTONES.find((m) => m.value === input.milestone)?.progress ?? ev.progress;
+  saveEvent(ev);
   return ev;
 }
 
@@ -222,6 +240,7 @@ export function deleteEvent(id: string): boolean {
   const i = SEED.events.findIndex((e) => e.id === id);
   if (i === -1) return false;
   SEED.events.splice(i, 1);
+  deleteEventRow(id);
   return true;
 }
 
@@ -230,6 +249,7 @@ export function updateEventMilestone(id: string, milestone: OpsEvent["milestone"
   if (!ev) return;
   ev.milestone = milestone;
   ev.progress = EVENT_MILESTONES.find((m) => m.value === milestone)?.progress ?? ev.progress;
+  saveEvent(ev);
 }
 
 /* ---------------- Hygiene ---------------- */
@@ -240,6 +260,7 @@ export function createHygiene(input: {
   supervisorName: string;
   ratings: Record<HygieneSection, Record<string, HygieneRating>>;
   findings: string[];
+  photos?: import("../types").Attachment[];
   isClean: boolean;
 }): HygieneAudit {
   let sum = 0;
@@ -264,12 +285,13 @@ export function createHygiene(input: {
     supervisorName: input.supervisorName,
     ratings: input.ratings,
     findings: input.findings,
-    photos: [],
+    photos: input.photos ?? [],
     isClean: input.isClean,
     hygieneScore: score,
     createdAt: nowIso(),
   };
   SEED.hygiene.unshift(record);
+  saveHygiene(record);
   return record;
 }
 
@@ -301,6 +323,7 @@ export function createComplaint(input: {
     closedAt: null,
   };
   SEED.complaints.unshift(record);
+  saveComplaint(record);
   return record;
 }
 
@@ -316,4 +339,29 @@ export function resolveComplaint(input: {
   if (input.rootCause) c.rootCause = input.rootCause;
   if (input.correctiveAction) c.correctiveAction = input.correctiveAction;
   if (input.status === "closed" || input.status === "done") c.closedAt = nowIso();
+  saveComplaint(c);
+}
+
+/* ---------------- Organization (areas & outlets) ---------------- */
+export function createArea(input: { name: string; code: string; coordinatorId: string }) {
+  const record = { id: `area_${Date.now()}`, name: input.name, code: input.code, coordinatorId: input.coordinatorId };
+  SEED.areas.push(record);
+  saveArea(record);
+  return record;
+}
+
+export function createOutlet(input: { name: string; code: string; city: string; areaId: string; picId: string }) {
+  const record = {
+    id: `out_${Date.now()}`,
+    name: input.name,
+    code: input.code,
+    city: input.city,
+    areaId: input.areaId,
+    supervisorId: input.picId,
+    picId: input.picId,
+    active: true,
+  };
+  SEED.outlets.push(record);
+  saveOutlet(record);
+  return record;
 }

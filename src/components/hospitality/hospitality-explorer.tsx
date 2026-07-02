@@ -89,12 +89,12 @@ export function HospitalityExplorer({ rows, outlets }: { rows: HospitalityRow[];
           data={scoped}
           searchPlaceholder="Cari staff / coordinator…"
           toolbar={
-            <div className="flex flex-wrap gap-2">
-              <MonthFilter options={months} value={month} onChange={setMonth} className="w-40" />
+            <div className="contents">
+              <MonthFilter options={months} value={month} onChange={setMonth} className="min-w-0 shrink basis-40" />
               <Combobox
                 value={outlet}
                 onChange={setOutlet}
-                className="w-48"
+                className="min-w-0 shrink basis-48"
                 options={[{ value: "all", label: "All outlets" }, ...outlets.map((o) => ({ value: o.id, label: o.name }))]}
                 searchPlaceholder="Outlet…"
               />

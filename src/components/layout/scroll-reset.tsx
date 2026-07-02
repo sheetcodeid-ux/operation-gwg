@@ -5,11 +5,14 @@ import * as React from "react";
 
 /** Forces every route change to open at the top.
  *
- *  Two problems are handled: (1) the browser/Next restore the previous scroll
- *  position when you navigate back to an already-visited route — we disable
- *  that with `scrollRestoration = "manual"`; (2) that restoration can run a
- *  beat *after* our reset, so we re-assert top now, next frame, and after a
- *  short delay to reliably win the race. */
+ *  Next/browser scroll restoration can re-apply a previously-visited route's
+ *  scroll position asynchronously — sometimes well after navigation (once the
+ *  page's data finishes streaming). A one-shot reset loses that race, so we:
+ *  1. set `history.scrollRestoration = "manual"`, and
+ *  2. PIN the scroll to the top on every animation frame for ~400ms after each
+ *     pathname change, releasing early the moment the user starts scrolling
+ *     themselves (wheel / touch / keyboard).
+ */
 export function ScrollReset() {
   const pathname = usePathname();
 
@@ -18,17 +21,37 @@ export function ScrollReset() {
   }, []);
 
   React.useEffect(() => {
+    let cancelled = false;
+    const stop = () => {
+      cancelled = true;
+    };
     const reset = () => {
       window.scrollTo(0, 0);
       document.documentElement.scrollTop = 0;
       if (document.body) document.body.scrollTop = 0;
     };
+
     reset();
-    const raf = requestAnimationFrame(reset);
-    const t = setTimeout(reset, 90);
+    const started = performance.now();
+    let raf = requestAnimationFrame(function tick() {
+      if (cancelled) return;
+      reset();
+      if (performance.now() - started < 600) raf = requestAnimationFrame(tick);
+    });
+
+    // Let the user take over immediately (wheel, touch, keys, scrollbar drag).
+    window.addEventListener("wheel", stop, { passive: true });
+    window.addEventListener("touchstart", stop, { passive: true });
+    window.addEventListener("keydown", stop);
+    window.addEventListener("pointerdown", stop, { passive: true });
+
     return () => {
+      cancelled = true;
       cancelAnimationFrame(raf);
-      clearTimeout(t);
+      window.removeEventListener("wheel", stop);
+      window.removeEventListener("touchstart", stop);
+      window.removeEventListener("keydown", stop);
+      window.removeEventListener("pointerdown", stop);
     };
   }, [pathname]);
 

@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import type { Metadata } from "next";
 import { getSessionUser } from "@/lib/auth";
 import { coordinatorReportRows } from "@/lib/data/store";
+import { DEMO_NOW } from "@/lib/now";
 import { can } from "@/lib/rbac";
 import { ROLE_LABEL } from "@/lib/constants";
 import { ReportBand } from "@/components/reports/report-band";
@@ -25,7 +26,7 @@ export default async function CoordinatorReportPage({ params }: { params: Promis
         meta={[
           { label: "Role", value: ROLE_LABEL.area_coordinator },
           { label: "Outlets", value: String(row.outletIds.length) },
-          { label: "Tanggal", value: formatDate(new Date()) },
+          { label: "Tanggal", value: formatDate(new Date(DEMO_NOW)) },
         ]}
       />
       <ReportDocument outletIds={row.outletIds} />

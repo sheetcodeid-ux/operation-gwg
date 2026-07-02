@@ -62,9 +62,11 @@ export function InsightsPanel({
       />
 
       {tab === "performance" ? (
-        <div className="flex flex-1 items-center justify-center gap-5">
+        // Wraps: when the card is too narrow for ring + legend side-by-side,
+        // the legend drops below the ring instead of overflowing the card.
+        <div className="flex flex-1 flex-wrap content-center items-center justify-center gap-5">
           <ConcentricRings rings={rings} centerValue={centerValue} />
-          <ul className="flex-1 space-y-3.5">
+          <ul className="min-w-52 max-w-full flex-1 space-y-3.5">
             {rings.map((r) => {
               const Icon = LEGEND_ICONS[r.icon] ?? CircleCheckBig;
               return (

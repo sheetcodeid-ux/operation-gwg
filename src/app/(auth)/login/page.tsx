@@ -1,36 +1,12 @@
 import { LogIn, Sparkles } from "lucide-react";
 import type { Metadata } from "next";
-import { getAreas, getOutlets, getUsers, areaName } from "@/lib/data/store";
-import { ROLE_LABEL } from "@/lib/constants";
-import { DEMO_PASSWORD } from "@/lib/data/credentials";
-import type { Role } from "@/lib/types";
-import { LoginForm, type DemoAccount } from "@/components/auth/login-form";
+import { getAreas, getOutlets } from "@/lib/data/store";
+import { LoginForm } from "@/components/auth/login-form";
 import { ThemeToggle } from "@/components/layout/theme-toggle";
 
 export const metadata: Metadata = { title: "Sign in" };
 
-const ROLE_ORDER: Role[] = [
-  "super_admin",
-  "head_operation",
-  "area_coordinator",
-  "data_operation",
-  "pos_operation",
-  "admin_operation",
-];
-
-function buildDemoAccounts(): DemoAccount[] {
-  const users = getUsers();
-  return ROLE_ORDER.map((role) => {
-    const u = users.find((x) => x.role === role)!;
-    let scope = "All outlets";
-    if (role === "area_coordinator" && u.areaId) scope = areaName(u.areaId);
-    else if (role === "pos_operation") scope = `${u.outletIds?.length ?? 0} outlet`;
-    return { username: u.email, role: ROLE_LABEL[role], scope };
-  });
-}
-
 export default function LoginPage() {
-  const accounts = buildDemoAccounts();
   const outlets = getOutlets().length;
   const areas = getAreas().length;
 
@@ -61,7 +37,7 @@ export default function LoginPage() {
           <p className="mt-1 text-sm text-muted-foreground">Please sign in to continue</p>
         </div>
 
-        <LoginForm demoAccounts={accounts} demoPassword={DEMO_PASSWORD} />
+        <LoginForm demoAccounts={[]} demoPassword="" />
       </div>
 
       <p className="relative mt-6 max-w-md text-center text-xs text-muted-foreground">

@@ -2,6 +2,7 @@ import { notFound, redirect } from "next/navigation";
 import type { Metadata } from "next";
 import { getSessionUser } from "@/lib/auth";
 import { getOutletDetail, getOutlets } from "@/lib/data/store";
+import { DEMO_NOW } from "@/lib/now";
 import { canAccessOutlet } from "@/lib/rbac";
 import { COMPLAINT_STATUS_META, TASK_STATUS_META } from "@/lib/constants";
 import { Badge } from "@/components/ui/badge";
@@ -32,7 +33,7 @@ export default async function OutletReportPage({ params }: { params: Promise<{ i
           { label: "Kode", value: d.outlet.code },
           { label: "Wilayah", value: d.areaName },
           { label: "Coordinator", value: d.coordinatorName },
-          { label: "Tanggal", value: formatDate(new Date()) },
+          { label: "Tanggal", value: formatDate(new Date(DEMO_NOW)) },
         ]}
       />
 
@@ -90,9 +91,9 @@ function ReportTable({
   if (rows.length === 0) return <p className="py-6 text-center text-sm text-muted-foreground">{empty}</p>;
   return (
     <div className="overflow-x-auto rounded-xl border border-border">
-      <table className="w-full text-sm">
+      <table className="w-full min-w-[36rem] text-sm">
         <thead>
-          <tr className="border-b border-border bg-muted/40 text-left text-xs text-muted-foreground">
+          <tr className="whitespace-nowrap border-b border-border bg-muted/40 text-left text-xs text-muted-foreground">
             {head.map((h) => (
               <th key={h} className="px-3 py-2.5">{h}</th>
             ))}

@@ -154,7 +154,7 @@ export default async function DashboardPage({
       <GlobalFilterBar scopeOptions={scopeOptions} />
 
       <div className="grid items-stretch gap-4 lg:grid-cols-3">
-        <div className="space-y-4 lg:col-span-2">
+        <div className="min-w-0 space-y-4 lg:col-span-2">
           <HeroCard name={user.name} />
           <KpiCarousel items={cards} />
         </div>

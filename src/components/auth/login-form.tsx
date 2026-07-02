@@ -97,7 +97,7 @@ export function LoginForm({
         </Button>
       </form>
 
-      <div className="rounded-xl border border-border bg-muted/30 p-3">
+      {demoAccounts.length > 0 && (<div className="rounded-xl border border-border bg-muted/30 p-3">
         <button
           type="button"
           onClick={() => setShowDemo((v) => !v)}
@@ -131,7 +131,7 @@ export function LoginForm({
             </div>
           </div>
         )}
-      </div>
+      </div>)}
     </div>
   );
 }

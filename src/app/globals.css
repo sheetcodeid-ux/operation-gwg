@@ -207,6 +207,9 @@
     @apply bg-background text-foreground;
     font-family: var(--font-sans);
     min-height: 100dvh;
+    /* Never allow page-level horizontal scroll on any device — wide content
+       (tables, kanban) scrolls inside its own overflow-x-auto wrapper. */
+    overflow-x: clip;
   }
 
   /* Ambient command-center backdrop — dark only */

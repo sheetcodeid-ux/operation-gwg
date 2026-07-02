@@ -25,14 +25,15 @@ export function ComplaintTrendCard({ data, className }: { data: ComplaintCompare
   return (
     <Card className={cn("flex flex-col", className)}>
       <CardHeader className="flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-        <div>
-          <CardTitle>Complaint Trend</CardTitle>
-          <CardDescription>{desc}</CardDescription>
+        <div className="min-w-0">
+          <CardTitle className="truncate">Complaint Trend</CardTitle>
+          <CardDescription className="truncate">{desc}</CardDescription>
         </div>
-        <div className="flex flex-wrap items-center gap-2">
+        {/* One row: month picker shrinks, tabs keep their size — never stacked. */}
+        <div className="flex min-w-0 shrink-0 items-center gap-2">
           {mode === "monthly" && (
             <Combobox
-              className="w-40 shrink-0"
+              className="min-w-0 shrink basis-40"
               options={data.months.map((m) => ({ value: String(m.month), label: m.label }))}
               value={String(month)}
               onChange={(v) => setMonth(Number(v))}
@@ -40,6 +41,7 @@ export function ComplaintTrendCard({ data, className }: { data: ComplaintCompare
             />
           )}
           <SegmentedTabs
+            className="shrink-0"
             items={[
               { value: "monthly", label: "Monthly" },
               { value: "yearly", label: "Yearly" },

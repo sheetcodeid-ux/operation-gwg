@@ -10,6 +10,7 @@ import { Progress } from "@/components/ui/progress";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { TONE_HEX } from "@/components/ui/tone";
 import { Avatar } from "@/components/ui/avatar";
+import { bodyZoom } from "@/components/layout/fit-scale";
 import { TaskDetail } from "./task-detail";
 import { DivisionFilter, PicFilter, MonthFilter, membersForDivision, monthKey, monthOptions } from "./division-filter";
 import { useWorkFilters } from "./use-work-filters";
@@ -94,9 +95,9 @@ export function KanbanBoard({
     <>
       <div className="mb-3 flex flex-wrap items-center gap-2">
         <span className="text-xs font-medium text-muted-foreground">Filter</span>
-        <MonthFilter options={months} value={month} onChange={setMonth} className="w-40" />
-        <DivisionFilter value={division} onChange={setDivision} className="w-44" />
-        <PicFilter people={people} value={pic} onChange={setPic} className="w-40" />
+        <MonthFilter options={months} value={month} onChange={setMonth} className="min-w-0 shrink basis-40" />
+        <DivisionFilter value={division} onChange={setDivision} className="min-w-0 shrink basis-44" />
+        <PicFilter people={people} value={pic} onChange={setPic} className="min-w-0 shrink basis-40" />
       </div>
       <div className="flex gap-4 overflow-x-auto pb-2">
         {COLUMNS.map((status) => {
@@ -150,9 +151,12 @@ export function KanbanBoard({
         })}
       </div>
 
-      {/* Floating drag ghost */}
+      {/* Floating drag ghost (pointer coords are visual px — undo body zoom) */}
       {ghost && drag && (
-        <div className="pointer-events-none fixed z-[60] w-64 -translate-x-1/2 -translate-y-1/2" style={{ left: drag.x, top: drag.y }}>
+        <div
+          className="pointer-events-none fixed z-[60] w-64 -translate-x-1/2 -translate-y-1/2"
+          style={{ left: drag.x / bodyZoom(), top: drag.y / bodyZoom() }}
+        >
           <div className="card-gradient rounded-xl p-3 opacity-95 shadow-2xl ring-1 ring-border">
             <div className="flex items-start justify-between gap-2">
               <p className="line-clamp-2 text-sm font-medium text-foreground">{ghost.title}</p>

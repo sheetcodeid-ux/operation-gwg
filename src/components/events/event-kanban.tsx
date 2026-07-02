@@ -10,6 +10,7 @@ import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { Avatar } from "@/components/ui/avatar";
+import { bodyZoom } from "@/components/layout/fit-scale";
 import { monthOptions } from "@/components/work/division-filter";
 import { EventDetail } from "./event-detail";
 import { EventFilters, filterEvents } from "./event-filters";
@@ -143,7 +144,10 @@ export function EventKanban({
       </div>
 
       {ghost && drag && (
-        <div className="pointer-events-none fixed z-[60] w-64 -translate-x-1/2 -translate-y-1/2" style={{ left: drag.x, top: drag.y }}>
+        <div
+          className="pointer-events-none fixed z-[60] w-64 -translate-x-1/2 -translate-y-1/2"
+          style={{ left: drag.x / bodyZoom(), top: drag.y / bodyZoom() }}
+        >
           <div className="card-gradient rounded-xl p-3 opacity-95 shadow-2xl ring-1 ring-border">
             <p className="line-clamp-2 text-sm font-medium text-foreground">{ghost.name}</p>
             <p className="mt-1 truncate text-[11px] text-muted-foreground">{ghost.outlet}</p>

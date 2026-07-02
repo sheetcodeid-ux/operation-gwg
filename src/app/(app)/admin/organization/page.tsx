@@ -2,13 +2,14 @@ import { redirect } from "next/navigation";
 import { MapPinned, Network, Store, UserCog } from "lucide-react";
 import type { Metadata } from "next";
 import { getSessionUser } from "@/lib/auth";
-import { getAreas, getOutlets, userName } from "@/lib/data/store";
+import { getAreas, getOutlets, getUsers, userName } from "@/lib/data/store";
 import { can } from "@/lib/rbac";
 import { Avatar } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { PageHeader } from "@/components/ui/page-header";
 import { StatTile } from "@/components/ui/stat";
+import { OrgActions } from "@/components/admin/org-forms";
 
 export const metadata: Metadata = { title: "Organization" };
 
@@ -23,7 +24,12 @@ export default async function OrganizationPage() {
 
   return (
     <div className="w-full">
-      <PageHeader icon={Network} title="Organization" description="Areas, coordinators and outlet assignments" />
+      <PageHeader
+        icon={Network}
+        title="Organization"
+        description="Areas, coordinators and outlet assignments"
+        actions={<OrgActions users={getUsers().filter((u) => u.active).map((u) => ({ id: u.id, name: u.name }))} areas={areas.map((a) => ({ id: a.id, name: a.name }))} />}
+      />
 
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         <StatTile icon={MapPinned} label="Areas" value={areas.length} tone="brand" />

@@ -128,7 +128,7 @@ export function ComboCompareChart({
           </linearGradient>
         </defs>
         <CartesianGrid strokeDasharray="3 3" stroke={GRID} vertical={false} />
-        <XAxis dataKey="label" tickLine={false} axisLine={false} interval={0} height={28} tick={<CompareTick weekendLabels={weekendLabels} />} />
+        <XAxis dataKey="label" tickLine={false} axisLine={false} minTickGap={4} height={28} tick={<CompareTick weekendLabels={weekendLabels} />} />
         <YAxis tick={AXIS} tickLine={false} axisLine={false} allowDecimals={false} width={32} />
         <Tooltip contentStyle={tooltipStyle} cursor={{ fill: "rgba(255,255,255,0.04)" }} />
         <Area type="monotone" dataKey="current" stroke="none" fill="url(#cmpArea)" />

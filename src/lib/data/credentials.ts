@@ -2,6 +2,7 @@ import "server-only";
 import { createHash } from "node:crypto";
 import { SEED } from "./seed";
 import { getUser } from "./store";
+import { saveCredential, syncAuthUser } from "./persist";
 
 /**
  * Demo credential store (in-memory). Username = email. Passwords are hashed.
@@ -46,16 +47,29 @@ export function verifyCredentials(usernameRaw: string, password: string): SignIn
 export function setPassword(userId: string, password: string) {
   const user = getUser(userId);
   if (!user) return;
-  byUsername.set(user.email.toLowerCase(), {
-    userId,
-    username: user.email.toLowerCase(),
-    passwordHash: hash(password),
-  });
+  const cred = { userId, username: user.email.toLowerCase(), passwordHash: hash(password) };
+  byUsername.set(cred.username, cred);
+  saveCredential(cred);
+  syncAuthUser(cred.username, password);
 }
 
 /** Admin: register credentials for a newly created user. */
 export function registerCredential(userId: string, email: string, password: string) {
-  byUsername.set(email.toLowerCase(), { userId, username: email.toLowerCase(), passwordHash: hash(password) });
+  const cred = { userId, username: email.toLowerCase(), passwordHash: hash(password) };
+  byUsername.set(cred.username, cred);
+  saveCredential(cred);
+  syncAuthUser(cred.username, password);
+}
+
+/** Hydration: snapshot all credentials (for the first push to Supabase). */
+export function snapshotCredentials(): Credential[] {
+  return [...byUsername.values()];
+}
+
+/** Hydration: replace the in-memory credential store with DB rows. */
+export function loadCredentials(rows: Credential[]) {
+  byUsername.clear();
+  for (const c of rows) byUsername.set(c.username, c);
 }
 
 export const DEMO_PASSWORD = DEFAULT_PASSWORD;

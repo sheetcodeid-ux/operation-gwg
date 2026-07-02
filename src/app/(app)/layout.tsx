@@ -16,7 +16,8 @@ import { CommandPalette } from "@/components/command/command-palette";
 
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
   const user = await getSessionUser();
-  if (!user) redirect("/login");
+  // Cookie present (proxy let us through) but signature/user invalid — clear it.
+  if (!user) redirect("/clear-session");
 
   const lang = ((await cookies()).get("gwg_lang")?.value as Lang) || "en";
 
@@ -38,7 +39,9 @@ export default async function AppLayout({ children }: { children: React.ReactNod
           <Topbar user={user} notifications={notifications} navItems={navItems} />
           <div className="flex">
             <Sidebar items={navItems} />
-            <div className="min-w-0 flex-1">
+            {/* overflow-x-clip: no child may widen the page — wide content must
+                scroll inside its own overflow-x-auto wrapper (tables, kanban). */}
+            <div className="min-w-0 flex-1 overflow-x-clip">
               <main className="px-4 py-6 sm:px-6 lg:px-8">
                 <Breadcrumbs />
                 {children}

@@ -1,8 +1,11 @@
 import { describe, expect, it } from "vitest";
 import {
+  NOW,
   areaRanking,
   getDashboardKpis,
   getUsers,
+  listEvents,
+  listTasks,
   outletRanking,
 } from "./store";
 import type { UserProfile } from "../types";
@@ -29,6 +32,26 @@ describe("dashboard KPIs (global scope)", () => {
     expect(kpis.taskCompletionRate).toBeLessThanOrEqual(100);
     expect(kpis.eventProgress).toBeGreaterThanOrEqual(0);
     expect(kpis.eventProgress).toBeLessThanOrEqual(100);
+  });
+});
+
+describe("seed coherence", () => {
+  it("every event ends on or after it starts", () => {
+    for (const e of listEvents(admin)) {
+      expect(+new Date(e.endDate)).toBeGreaterThanOrEqual(+new Date(e.startDate));
+    }
+  });
+
+  it("events that haven't started yet are 'upcoming'", () => {
+    for (const e of listEvents(admin)) {
+      if (+new Date(e.startDate) > NOW) expect(e.status).toBe("upcoming");
+    }
+  });
+
+  it("every task is due on or after it starts", () => {
+    for (const t of listTasks(admin)) {
+      expect(+new Date(t.dueDate)).toBeGreaterThanOrEqual(+new Date(t.startDate));
+    }
   });
 });
 

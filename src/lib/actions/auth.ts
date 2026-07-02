@@ -2,8 +2,9 @@
 
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
-import { SESSION_COOKIE } from "@/lib/auth";
+import { SESSION_COOKIE, signSession } from "@/lib/auth";
 import { getUser } from "@/lib/data/store";
+import { ensureHydrated } from "@/lib/data/hydrate";
 import { verifyCredentials } from "@/lib/data/credentials";
 import { isSupabaseConfigured } from "@/lib/supabase/env";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
@@ -19,7 +20,7 @@ const COOKIE_OPTS = {
 export async function signInAsDemo(userId: string) {
   if (!getUser(userId)) return { error: "Unknown user" };
   const store = await cookies();
-  store.set(SESSION_COOKIE, userId, COOKIE_OPTS);
+  store.set(SESSION_COOKIE, signSession(userId), COOKIE_OPTS);
   redirect("/dashboard");
 }
 
@@ -30,13 +31,27 @@ export async function signInWithPassword(_prev: { error?: string } | null, formD
 
   if (!username || !password) return { error: "Enter your username and password." };
 
+  // Make sure users + credentials reflect the persisted database before verifying.
+  await ensureHydrated();
+
   if (isSupabaseConfigured) {
     const supabase = await createSupabaseServerClient();
-    const { error } = (await supabase?.auth.signInWithPassword({ email: username, password })) ?? {
-      error: { message: "Auth unavailable" },
-    };
-    if (error) return { error: error.message };
-    redirect("/dashboard");
+    const res = await supabase?.auth.signInWithPassword({ email: username, password });
+    if (res && !res.error) {
+      // Real GoTrue authentication succeeded. Also mint the signed session
+      // cookie (hybrid): the app session survives access-token expiry.
+      const { getUsers } = await import("@/lib/data/store");
+      const profile = getUsers().find((u) => u.email.toLowerCase() === username.toLowerCase());
+      if (!profile) return { error: "Akun terautentikasi tapi profil tidak ditemukan. Hubungi admin." };
+      if (!profile.active) return { error: "This account is inactive. Contact your administrator." };
+      const store = await cookies();
+      store.set(SESSION_COOKIE, signSession(profile.id), COOKIE_OPTS);
+      redirect("/dashboard");
+    }
+    if (res?.error && res.error.message.toLowerCase().includes("invalid")) {
+      return { error: "Invalid username or password." };
+    }
+    // GoTrue unreachable/unknown error — fall back to the local credential store.
   }
 
   const result = verifyCredentials(username, password);
@@ -46,7 +61,7 @@ export async function signInWithPassword(_prev: { error?: string } | null, formD
     };
   }
   const store = await cookies();
-  store.set(SESSION_COOKIE, result.userId, COOKIE_OPTS);
+  store.set(SESSION_COOKIE, signSession(result.userId), COOKIE_OPTS);
   redirect("/dashboard");
 }
 

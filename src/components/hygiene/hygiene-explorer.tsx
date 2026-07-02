@@ -2,10 +2,13 @@
 
 import * as React from "react";
 import { type ColumnDef } from "@tanstack/react-table";
+import { Camera } from "lucide-react";
+import type { Attachment } from "@/lib/types";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Combobox } from "@/components/ui/combobox";
 import { DataTable } from "@/components/ui/data-table";
+import { Dialog, DialogContent, DialogTrigger } from "@/components/ui/dialog";
 import { MonthFilter, monthKey, monthOptions } from "@/components/work/division-filter";
 import { formatDate } from "@/lib/utils";
 
@@ -21,6 +24,7 @@ export interface HygieneRow {
   score: number;
   isClean: boolean;
   findings: number;
+  photos: Attachment[];
 }
 
 function scoreColor(s: number) {
@@ -65,6 +69,38 @@ export function HygieneExplorer({ rows, outlets }: { rows: HygieneRow[]; outlets
         },
       },
       {
+        id: "photos",
+        header: "Photos",
+        enableSorting: false,
+        cell: ({ row }) => {
+          const photos = row.original.photos;
+          if (!photos?.length) return <span className="text-muted-foreground/60">—</span>;
+          return (
+            <Dialog>
+              <DialogTrigger>
+                <button
+                  type="button"
+                  className="inline-flex items-center gap-1.5 rounded-lg px-2 py-1 text-xs font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+                >
+                  <Camera className="size-3.5" /> {photos.length}
+                </button>
+              </DialogTrigger>
+              <DialogContent title="Dokumentasi Audit" description={`${row.original.outlet} · ${formatDate(row.original.date)}`} align="center" className="max-w-2xl">
+                <div className="grid max-h-[70vh] grid-cols-2 gap-2 overflow-y-auto p-5 sm:grid-cols-3">
+                  {photos.map((p) => (
+                    <a key={p.id} href={p.url} target="_blank" rel="noreferrer" className="group">
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img src={p.url} alt={p.name} className="aspect-square w-full rounded-lg object-cover ring-1 ring-border transition-opacity group-hover:opacity-90" />
+                      <p className="mt-1 truncate text-[11px] text-muted-foreground">{p.name}</p>
+                    </a>
+                  ))}
+                </div>
+              </DialogContent>
+            </Dialog>
+          );
+        },
+      },
+      {
         accessorKey: "isClean",
         header: "Status",
         cell: ({ getValue }) => {
@@ -106,12 +142,12 @@ export function HygieneExplorer({ rows, outlets }: { rows: HygieneRow[]; outlets
           data={scoped}
           searchPlaceholder="Cari outlet / inspector…"
           toolbar={
-            <div className="flex flex-wrap gap-2">
-              <MonthFilter options={months} value={month} onChange={setMonth} className="w-40" />
+            <div className="contents">
+              <MonthFilter options={months} value={month} onChange={setMonth} className="min-w-0 shrink basis-40" />
               <Combobox
                 value={outlet}
                 onChange={setOutlet}
-                className="w-48"
+                className="min-w-0 shrink basis-48"
                 options={[{ value: "all", label: "All outlets" }, ...outlets.map((o) => ({ value: o.id, label: o.name }))]}
                 searchPlaceholder="Outlet…"
               />

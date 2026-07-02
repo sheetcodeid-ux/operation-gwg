@@ -28,6 +28,7 @@ export default async function HygienePage() {
     score: a.hygieneScore,
     isClean: a.isClean,
     findings: a.findings.length,
+    photos: a.photos,
   }));
 
   const avg = audits.length

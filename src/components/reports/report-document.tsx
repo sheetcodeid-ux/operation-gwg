@@ -67,9 +67,9 @@ export function ReportDocument({ outletIds }: { outletIds: string[] }) {
           Performa per Outlet — Bulan Ini vs Bulan Lalu
         </h3>
         <div className="overflow-x-auto rounded-xl border border-border">
-          <table className="w-full text-sm">
+          <table className="w-full min-w-[36rem] text-sm">
             <thead>
-              <tr className="border-b border-border bg-muted/40 text-left text-xs text-muted-foreground">
+              <tr className="whitespace-nowrap border-b border-border bg-muted/40 text-left text-xs text-muted-foreground">
                 <th className="px-3 py-2.5">Outlet</th>
                 <th className="px-3 py-2.5 text-center">Hosp. Ini</th>
                 <th className="px-3 py-2.5 text-center">Hosp. Lalu</th>

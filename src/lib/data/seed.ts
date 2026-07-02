@@ -66,14 +66,19 @@ const fullName = () => `${pick(FIRST)} ${pick(LAST)}`;
 
 /* ---------------- build org ---------------- */
 const users: UserProfile[] = [];
+const usedEmails = new Set<string>();
 let userN = 0;
 function addUser(role: Role, partial: Partial<UserProfile> = {}): UserProfile {
   userN += 1;
   const name = partial.name ?? fullName();
+  // Random names can collide — emails must stay unique (DB unique constraint).
+  let email = partial.email ?? `${name.toLowerCase().replace(/\s+/g, ".")}@gwg.co`;
+  if (usedEmails.has(email)) email = email.replace("@", `${userN}@`);
+  usedEmails.add(email);
   const u: UserProfile = {
     id: id("usr", userN),
     name,
-    email: partial.email ?? `${name.toLowerCase().replace(/\s+/g, ".")}@gwg.co`,
+    email,
     role,
     areaId: partial.areaId ?? null,
     outletIds: partial.outletIds ?? [],
@@ -228,10 +233,28 @@ for (const outlet of outlets) {
   const count = intBetween(1, 2);
   for (let i = 0; i < count; i++) {
     eN += 1;
-    const milestone = pick(EVENT_MILESTONES).value;
+    // Coherent schedule: end is always AFTER start (start ± offset + duration),
+    // and milestone/status follow where "now" falls in that window.
+    const start = intBetween(-20, 40); // days ago (negative = starts in the future)
+    const duration = intBetween(3, 30);
+    const endAhead = duration - start; // days from now until the event ends
+    const notStarted = start < 0;
+    const ended = endAhead < 0;
+    const milestone: OpsEvent["milestone"] = notStarted
+      ? pick(["planning", "preparation"] as const)
+      : ended
+        ? "evaluation"
+        : pick(["preparation", "execution", "execution"] as const);
     const progress = EVENT_MILESTONES.find((m) => m.value === milestone)!.progress;
-    const status = milestone === "evaluation" ? (chance(0.8) ? "finished" : "running") : chance(0.3) ? "upcoming" : "running";
-    const start = intBetween(-20, 40);
+    const status: OpsEvent["status"] = notStarted
+      ? "upcoming"
+      : ended
+        ? chance(0.85)
+          ? "finished"
+          : "running"
+        : chance(0.06)
+          ? "cancelled"
+          : "running";
     events.push({
       id: id("evt", eN),
       name: pick(EVENT_NAMES),
@@ -241,7 +264,7 @@ for (const outlet of outlets) {
       description: "Branch-level event tracked end to end across milestones.",
       budget: intBetween(5, 80) * 1_000_000,
       startDate: start >= 0 ? daysAgo(start) : daysAhead(-start),
-      endDate: daysAhead(intBetween(1, 30)),
+      endDate: daysAhead(endAhead),
       milestone,
       status,
       progress,

@@ -69,8 +69,8 @@ export function OutletRankingTable({ rows }: { rows: RankedOutletRow[] }) {
 
   return (
     <div className="space-y-4">
-      <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-        <div className="relative max-w-xs flex-1">
+      <div className="flex items-center justify-between gap-2">
+        <div className="relative min-w-24 max-w-xs flex-1">
           <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
           <Input
             value={query}
@@ -83,7 +83,7 @@ export function OutletRankingTable({ rows }: { rows: RankedOutletRow[] }) {
           />
         </div>
         <Combobox
-          className="w-40 shrink-0"
+          className="min-w-0 shrink basis-40"
           options={[
             { value: "high", label: "Tertinggi" },
             { value: "low", label: "Terendah" },
@@ -95,13 +95,13 @@ export function OutletRankingTable({ rows }: { rows: RankedOutletRow[] }) {
       </div>
 
       <div className="overflow-x-auto rounded-xl border border-border">
-        <table className="w-full table-fixed border-collapse text-sm">
+        <table className="w-full min-w-[56rem] table-fixed border-collapse text-sm">
           <thead>
-            <tr className="bg-muted/60 text-xs text-muted-foreground">
+            <tr className="whitespace-nowrap bg-muted/60 text-xs text-muted-foreground">
               <SortableTh label="Outlet" sortKey="outlet" sort={sort} onSort={toggleSort} className="w-[24%] text-left" />
-              <SortableTh label="Coordinator Area" sortKey="coordinator" sort={sort} onSort={toggleSort} className="hidden w-[16%] text-left md:table-cell" />
-              <SortableTh label="Hospitality" sortKey="hospitality" sort={sort} onSort={toggleSort} className="hidden w-[11%] text-center lg:table-cell" align="center" />
-              <SortableTh label="Hygiene" sortKey="hygiene" sort={sort} onSort={toggleSort} className="hidden w-[11%] text-center lg:table-cell" align="center" />
+              <SortableTh label="Coordinator Area" sortKey="coordinator" sort={sort} onSort={toggleSort} className="w-[16%] text-left" />
+              <SortableTh label="Hospitality" sortKey="hospitality" sort={sort} onSort={toggleSort} className="w-[11%] text-center" align="center" />
+              <SortableTh label="Hygiene" sortKey="hygiene" sort={sort} onSort={toggleSort} className="w-[11%] text-center" align="center" />
               <SortableTh label="Complaints" sortKey="complaints" sort={sort} onSort={toggleSort} className="w-[12%] text-center" align="center" />
               <SortableTh label="Composite Score" sortKey="composite" sort={sort} onSort={toggleSort} className="w-[14%] text-center" align="center" />
               <th className="w-[12%] px-4 py-3 text-center font-medium">Actions</th>
@@ -130,11 +130,11 @@ export function OutletRankingTable({ rows }: { rows: RankedOutletRow[] }) {
                       </div>
                     </div>
                   </td>
-                  <td className="hidden truncate px-4 py-3 text-muted-foreground md:table-cell">{row.coordinator}</td>
-                  <td className="hidden px-4 py-3 text-center tabular-nums text-foreground/90 lg:table-cell">
+                  <td className="truncate px-4 py-3 text-muted-foreground">{row.coordinator}</td>
+                  <td className="px-4 py-3 text-center tabular-nums text-foreground/90">
                     {row.hospitality.toFixed(1)}
                   </td>
-                  <td className="hidden px-4 py-3 text-center tabular-nums text-foreground/90 lg:table-cell">
+                  <td className="px-4 py-3 text-center tabular-nums text-foreground/90">
                     {row.hygiene.toFixed(1)}
                   </td>
                   <td className="px-4 py-3 text-center">
@@ -174,7 +174,7 @@ export function OutletRankingTable({ rows }: { rows: RankedOutletRow[] }) {
           >
             Previous
           </button>
-          <div className="no-scrollbar flex max-w-[50vw] items-center gap-1 overflow-x-auto sm:max-w-none">
+          <div className="no-scrollbar flex max-w-[13.5rem] items-center gap-1 overflow-x-auto scroll-smooth">
             {Array.from({ length: pageCount }, (_, idx) => idx + 1).map((n) => (
               <button
                 key={n}

@@ -84,9 +84,9 @@ export function QuickTasks({
   return (
     <Card className="flex h-full flex-col">
       <CardHeader className="flex-row items-start justify-between gap-2">
-        <div>
-          <CardTitle>Quick Tasks</CardTitle>
-          <CardDescription>Manage your daily tasks</CardDescription>
+        <div className="min-w-0">
+          <CardTitle className="truncate">Quick Tasks</CardTitle>
+          <CardDescription className="truncate">Manage your daily tasks</CardDescription>
         </div>
         {canAdd && outlets.length > 0 && (
           <TaskSheet

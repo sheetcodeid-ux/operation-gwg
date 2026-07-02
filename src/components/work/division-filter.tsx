@@ -60,7 +60,7 @@ export function MonthFilter({
 }) {
   return (
     <Combobox
-      className={className ?? "w-40"}
+      className={className ?? "min-w-0 shrink basis-40"}
       value={value}
       onChange={onChange}
       options={[{ value: "all", label: "All months" }, ...options]}
@@ -73,7 +73,7 @@ export function MonthFilter({
 export function DivisionFilter({ value, onChange, className }: { value: string; onChange: (v: string) => void; className?: string }) {
   return (
     <Combobox
-      className={className ?? "w-44"}
+      className={className ?? "min-w-0 shrink basis-44"}
       value={value}
       onChange={onChange}
       options={[{ value: "all", label: "All divisions" }, ...DIVISIONS.map((r) => ({ value: r, label: ROLE_LABEL[r] }))]}
@@ -96,7 +96,7 @@ export function PicFilter({
 }) {
   return (
     <Combobox
-      className={className ?? "w-44"}
+      className={className ?? "min-w-0 shrink basis-44"}
       value={value}
       onChange={onChange}
       options={[{ value: "all", label: "All PIC" }, ...people.map((p) => ({ value: p.id, label: p.name }))]}

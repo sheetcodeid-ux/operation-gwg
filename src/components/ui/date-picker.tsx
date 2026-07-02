@@ -35,10 +35,16 @@ export function DatePicker({ value, onChange, className }: { value: string; onCh
   const place = React.useCallback(() => {
     const r = btnRef.current?.getBoundingClientRect();
     if (!r) return;
-    const left = Math.min(Math.max(8, r.left), window.innerWidth - PANEL_W - 8);
+    // FitScale may zoom the body on small screens; getBoundingClientRect
+    // returns visual px while fixed positions inside the zoomed body are
+    // laid out in logical px — divide to compensate.
+    const z = parseFloat(document.body.style.zoom || "1") || 1;
+    const panelW = PANEL_W * z;
+    const panelH = PANEL_H * z;
+    const left = Math.min(Math.max(8, r.left), window.innerWidth - panelW - 8);
     const below = r.bottom + 4;
-    const top = below + PANEL_H > window.innerHeight ? Math.max(8, r.top - PANEL_H - 4) : below;
-    setPos({ top, left });
+    const top = below + panelH > window.innerHeight ? Math.max(8, r.top - panelH - 4) : below;
+    setPos({ top: top / z, left: left / z });
   }, []);
 
   React.useEffect(() => {

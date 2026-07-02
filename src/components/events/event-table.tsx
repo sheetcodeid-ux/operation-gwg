@@ -160,7 +160,7 @@ export function EventTable({
             columns={columns}
             data={scoped}
             searchPlaceholder="Search events…"
-            toolbar={<EventFilters months={months} outlets={outlets} />}
+            toolbar={<EventFilters months={months} outlets={outlets} className="contents" />}
           />
         </CardContent>
       </Card>

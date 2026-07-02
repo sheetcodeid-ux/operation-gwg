@@ -64,7 +64,7 @@ export function ReportsOutletTable({ rows, areas }: { rows: ReportOutletRow[]; a
         <Combobox
           value={area}
           onChange={setArea}
-          className="w-44"
+          className="min-w-0 shrink basis-44"
           options={[{ value: "all", label: "All regions" }, ...areas.map((a) => ({ value: a.id, label: a.name }))]}
           searchPlaceholder="Region…"
         />

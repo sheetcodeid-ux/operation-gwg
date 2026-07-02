@@ -37,12 +37,12 @@ export function PerformanceMetrics({ data }: { data: CoordinatorPerf[] }) {
   return (
     <Card className="flex h-full flex-col">
       <CardHeader className="flex-row items-start justify-between gap-2">
-        <div>
-          <CardTitle>Performance Metrics</CardTitle>
-          <CardDescription>By coordinator area</CardDescription>
+        <div className="min-w-0">
+          <CardTitle className="truncate">Performance Metrics</CardTitle>
+          <CardDescription className="truncate">By coordinator area</CardDescription>
         </div>
         <Combobox
-          className="w-36 shrink-0"
+          className="min-w-0 shrink basis-36"
           options={METRICS.map((m) => ({ value: m.value, label: m.label }))}
           value={metric}
           onChange={(v) => setMetric(v as Metric)}

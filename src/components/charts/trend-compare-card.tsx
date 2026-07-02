@@ -42,10 +42,10 @@ export function TrendCompareCard({
           <CardTitle>{title}</CardTitle>
           <CardDescription>{desc}</CardDescription>
         </div>
-        <div className="flex flex-wrap items-center gap-2">
+        <div className="flex min-w-0 shrink-0 items-center gap-2">
           {mode === "monthly" && (
             <Combobox
-              className="w-40 shrink-0"
+              className="min-w-0 shrink basis-40"
               options={data.months.map((m) => ({ value: String(m.month), label: m.label }))}
               value={String(month)}
               onChange={(v) => setMonth(Number(v))}

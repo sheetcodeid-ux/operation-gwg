@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import type { Metadata } from "next";
 import { getSessionUser } from "@/lib/auth";
 import { areaReportRows, userName } from "@/lib/data/store";
+import { DEMO_NOW } from "@/lib/now";
 import { can } from "@/lib/rbac";
 import { ReportBand } from "@/components/reports/report-band";
 import { ReportDocument } from "@/components/reports/report-document";
@@ -25,7 +26,7 @@ export default async function AreaReportPage({ params }: { params: Promise<{ id:
           { label: "Kode", value: row.area.code },
           { label: "Coordinator", value: userName(row.area.coordinatorId) },
           { label: "Outlets", value: String(row.outletIds.length) },
-          { label: "Tanggal", value: formatDate(new Date()) },
+          { label: "Tanggal", value: formatDate(new Date(DEMO_NOW)) },
         ]}
       />
       <ReportDocument outletIds={row.outletIds} />
