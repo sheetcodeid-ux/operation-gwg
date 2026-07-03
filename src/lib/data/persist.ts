@@ -1,6 +1,7 @@
 import "server-only";
 
 import { db, dbEnabled } from "./db";
+import { markLocalWrite } from "./hydrate";
 import {
   areaToRow,
   outletToRow,
@@ -29,6 +30,8 @@ import type {
  */
 
 function fire(table: string, p: PromiseLike<{ error: { message: string } | null }>) {
+  // Defer the next DB re-read so this write has time to land before we reload.
+  markLocalWrite();
   void Promise.resolve(p).then(({ error }) => {
     if (error) console.error(`[persist] ${table}: ${error.message}`);
   });
