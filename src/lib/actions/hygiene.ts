@@ -5,6 +5,7 @@ import { getSessionUser } from "@/lib/auth";
 import { can, canAccessOutlet } from "@/lib/rbac";
 import { getOutlet, getOutlets, userName } from "@/lib/data/store";
 import { createHygiene } from "@/lib/data/mutations";
+import { persistMessage } from "@/lib/data/persist";
 import { db, dbEnabled } from "@/lib/data/db";
 import { hygieneInputSchema, parseInput } from "@/lib/validation";
 import type { Attachment, HygieneRating, HygieneSection } from "@/lib/types";
@@ -65,16 +66,21 @@ export async function createHygieneAction(input: HygieneInput) {
   if (!canAccessOutlet(user, clean.outletId, getOutlets())) return { error: "Outlet is outside your scope." };
 
   const outlet = getOutlet(clean.outletId)!;
-  const record = createHygiene({
-    outletId: clean.outletId,
-    shift: clean.shift,
-    inspectorName: clean.inspectorName || user.name,
-    supervisorName: userName(outlet.supervisorId),
-    ratings: input.ratings,
-    findings: clean.findings.filter((f) => f.trim()),
-    isClean: clean.isClean,
-    photos: input.photos ?? [],
-  });
+  let record;
+  try {
+    record = await createHygiene({
+      outletId: clean.outletId,
+      shift: clean.shift,
+      inspectorName: clean.inspectorName || user.name,
+      supervisorName: userName(outlet.supervisorId),
+      ratings: input.ratings,
+      findings: clean.findings.filter((f) => f.trim()),
+      isClean: clean.isClean,
+      photos: input.photos ?? [],
+    });
+  } catch (e) {
+    return { error: persistMessage(e) };
+  }
 
   revalidatePath("/hygiene");
   revalidatePath("/dashboard");

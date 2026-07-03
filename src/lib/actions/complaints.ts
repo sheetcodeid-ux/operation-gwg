@@ -5,6 +5,7 @@ import { getSessionUser } from "@/lib/auth";
 import { can, canAccessOutlet } from "@/lib/rbac";
 import { getOutlets } from "@/lib/data/store";
 import { createComplaint, resolveComplaint } from "@/lib/data/mutations";
+import { persistMessage } from "@/lib/data/persist";
 import { complaintInputSchema, parseInput, resolveComplaintSchema } from "@/lib/validation";
 import type {
   ComplaintCategory,
@@ -33,15 +34,20 @@ export async function createComplaintAction(input: ComplaintInput) {
   const clean = parsed.data;
   if (!canAccessOutlet(user, clean.outletId, getOutlets())) return { error: "Outlet is outside your scope." };
 
-  const record = createComplaint({
-    source: clean.source,
-    customerName: clean.customerName || "Anonymous",
-    rating: clean.source === "google_review" ? clean.rating ?? null : null,
-    content: clean.content,
-    outletId: clean.outletId,
-    category: clean.category,
-    priority: clean.priority,
-  });
+  let record;
+  try {
+    record = await createComplaint({
+      source: clean.source,
+      customerName: clean.customerName || "Anonymous",
+      rating: clean.source === "google_review" ? clean.rating ?? null : null,
+      content: clean.content,
+      outletId: clean.outletId,
+      category: clean.category,
+      priority: clean.priority,
+    });
+  } catch (e) {
+    return { error: persistMessage(e) };
+  }
 
   revalidatePath("/complaints");
   revalidatePath("/dashboard");

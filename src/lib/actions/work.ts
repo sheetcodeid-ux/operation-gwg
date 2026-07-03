@@ -5,6 +5,7 @@ import { getSessionUser } from "@/lib/auth";
 import { can, canAccessOutlet } from "@/lib/rbac";
 import { getOutlet, getOutlets } from "@/lib/data/store";
 import { createTask, deleteTask, updateTask, updateTaskStatus } from "@/lib/data/mutations";
+import { persistMessage } from "@/lib/data/persist";
 import { DEMO_NOW_ISO } from "@/lib/now";
 import { parseInput, taskInputSchema, taskStatusSchema } from "@/lib/validation";
 import type { Priority, Role, TaskStatus } from "@/lib/types";
@@ -35,20 +36,25 @@ export async function createTaskAction(input: TaskInput) {
   if (clean.outletId && !canAccessOutlet(user, clean.outletId, getOutlets())) return { error: "Outlet is outside your scope." };
 
   const outlet = clean.outletId ? getOutlet(clean.outletId) : null;
-  const record = createTask({
-    title: clean.title,
-    description: clean.description,
-    category: clean.category,
-    priority: clean.priority,
-    status: clean.status,
-    division: clean.division,
-    outletId: clean.outletId,
-    picIds: clean.picIds,
-    picId: clean.picIds[0] ?? outlet?.picId ?? user.id,
-    startDate: clean.startDate || DEMO_NOW_ISO,
-    dueDate: clean.dueDate || DEMO_NOW_ISO,
-    progress: clean.progress,
-  });
+  let record;
+  try {
+    record = await createTask({
+      title: clean.title,
+      description: clean.description,
+      category: clean.category,
+      priority: clean.priority,
+      status: clean.status,
+      division: clean.division,
+      outletId: clean.outletId,
+      picIds: clean.picIds,
+      picId: clean.picIds[0] ?? outlet?.picId ?? user.id,
+      startDate: clean.startDate || DEMO_NOW_ISO,
+      dueDate: clean.dueDate || DEMO_NOW_ISO,
+      progress: clean.progress,
+    });
+  } catch (e) {
+    return { error: persistMessage(e) };
+  }
 
   revalidatePath("/work-tracker");
   revalidatePath("/work-tracker/kanban");
