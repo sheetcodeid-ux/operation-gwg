@@ -5,6 +5,7 @@ import { getSessionUser } from "@/lib/auth";
 import { can, canAccessOutlet } from "@/lib/rbac";
 import { getOutlet, getOutlets } from "@/lib/data/store";
 import { createEvent, deleteEvent, updateEvent, updateEventMilestone } from "@/lib/data/mutations";
+import { persistMessage } from "@/lib/data/persist";
 import { DEMO_NOW_ISO } from "@/lib/now";
 import { eventInputSchema, eventMilestoneSchema, parseInput } from "@/lib/validation";
 import type { EventMilestone, EventStatus } from "@/lib/types";
@@ -39,17 +40,22 @@ export async function createEventAction(input: EventInput) {
   if (!canAccessOutlet(user, clean.outletId, getOutlets())) return { error: "Outlet is outside your scope." };
 
   const outlet = getOutlet(clean.outletId)!;
-  const record = createEvent({
-    name: clean.name,
-    outletId: clean.outletId,
-    picId: clean.picId || outlet.picId,
-    description: clean.description,
-    budget: clean.budget,
-    startDate: clean.startDate || DEMO_NOW_ISO,
-    endDate: clean.endDate || DEMO_NOW_ISO,
-    milestone: clean.milestone,
-    status: clean.status,
-  });
+  let record;
+  try {
+    record = await createEvent({
+      name: clean.name,
+      outletId: clean.outletId,
+      picId: clean.picId || outlet.picId,
+      description: clean.description,
+      budget: clean.budget,
+      startDate: clean.startDate || DEMO_NOW_ISO,
+      endDate: clean.endDate || DEMO_NOW_ISO,
+      milestone: clean.milestone,
+      status: clean.status,
+    });
+  } catch (e) {
+    return { error: persistMessage(e) };
+  }
 
   revalidateAll();
   return { ok: true, id: record.id };

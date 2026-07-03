@@ -5,6 +5,7 @@ import { getSessionUser } from "@/lib/auth";
 import { can, canAccessOutlet } from "@/lib/rbac";
 import { getOutlets } from "@/lib/data/store";
 import { createHospitality } from "@/lib/data/mutations";
+import { persistMessage } from "@/lib/data/persist";
 import type { HospitalityCategory } from "@/lib/types";
 
 export interface HospitalityInput {
@@ -25,14 +26,19 @@ export async function createHospitalityAction(input: HospitalityInput) {
   if (!canAccessOutlet(user, input.outletId, getOutlets())) return { error: "Outlet is outside your scope." };
   if (!input.staffName.trim()) return { error: "Staff name is required." };
 
-  const record = createHospitality({
-    outletId: input.outletId,
-    assessorId: input.coordinatorId || user.id,
-    staffName: input.staffName.trim(),
-    staffPosition: input.staffPosition.trim() || "Staff",
-    scores: input.scores,
-    notes: input.notes,
-  });
+  let record;
+  try {
+    record = await createHospitality({
+      outletId: input.outletId,
+      assessorId: input.coordinatorId || user.id,
+      staffName: input.staffName.trim(),
+      staffPosition: input.staffPosition.trim() || "Staff",
+      scores: input.scores,
+      notes: input.notes,
+    });
+  } catch (e) {
+    return { error: persistMessage(e) };
+  }
 
   revalidatePath("/hospitality");
   revalidatePath("/dashboard");

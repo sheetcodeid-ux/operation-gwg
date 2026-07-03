@@ -5,6 +5,7 @@ import { getSessionUser } from "@/lib/auth";
 import { can } from "@/lib/rbac";
 import { getOutlet } from "@/lib/data/store";
 import { createUser, emailExists, resetUserPassword, setUserActive, setUserAssignment } from "@/lib/data/user-mutations";
+import { persistMessage } from "@/lib/data/persist";
 import { createUserSchema, parseInput } from "@/lib/validation";
 import type { Role } from "@/lib/types";
 
@@ -41,7 +42,11 @@ export async function createUserAction(input: CreateUserInput) {
     return { error: "Assign at least one outlet to the coordinator." };
 
   const { areaId, outletIds } = normalizeAssignment(clean.role, clean.outletIds);
-  createUser({ name: clean.name, email: clean.email, role: clean.role, areaId, outletIds, password: clean.password });
+  try {
+    await createUser({ name: clean.name, email: clean.email, role: clean.role, areaId, outletIds, password: clean.password });
+  } catch (e) {
+    return { error: persistMessage(e) };
+  }
   revalidatePath("/admin/users");
   return { ok: true };
 }

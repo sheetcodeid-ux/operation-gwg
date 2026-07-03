@@ -4,21 +4,21 @@ import { randomUUID } from "node:crypto";
 import { SEED } from "./seed";
 import { registerCredential, setPassword } from "./credentials";
 import { getUser } from "./store";
-import { saveUser } from "./persist";
+import { saveUser, PersistError } from "./persist";
 import type { Role, UserProfile } from "../types";
 
 /** Admin user-management writes (demo). Phase 11: Supabase Auth admin API + profiles table. */
 
 const nextId = () => `usr_${randomUUID()}`;
 
-export function createUser(input: {
+export async function createUser(input: {
   name: string;
   email: string;
   role: Role;
   areaId?: string | null;
   outletIds?: string[];
   password: string;
-}): UserProfile {
+}): Promise<UserProfile> {
   const user: UserProfile = {
     id: nextId(),
     name: input.name.trim(),
@@ -31,7 +31,12 @@ export function createUser(input: {
     createdAt: new Date().toISOString(),
   };
   SEED.users.push(user);
-  saveUser(user);
+  const { error } = await saveUser(user);
+  if (error) {
+    const i = SEED.users.indexOf(user);
+    if (i >= 0) SEED.users.splice(i, 1);
+    throw new PersistError(error);
+  }
   registerCredential(user.id, user.email, input.password);
   return user;
 }
@@ -40,7 +45,7 @@ export function setUserActive(id: string, active: boolean) {
   const user = getUser(id);
   if (!user) return;
   user.active = active;
-  saveUser(user);
+  void saveUser(user);
 }
 
 export function setUserAssignment(id: string, patch: { areaId?: string | null; outletIds?: string[] }) {
@@ -48,7 +53,7 @@ export function setUserAssignment(id: string, patch: { areaId?: string | null; o
   if (!user) return;
   if (patch.areaId !== undefined) user.areaId = patch.areaId;
   if (patch.outletIds !== undefined) user.outletIds = patch.outletIds;
-  saveUser(user);
+  void saveUser(user);
 }
 
 export function resetUserPassword(id: string, password: string) {

@@ -25,12 +25,17 @@ import {
   saveTask,
   saveArea,
   saveOutlet,
+  PersistError,
+  type PersistResult,
 } from "./persist";
 
 /**
- * Demo-mode write layer. Mutates the in-memory seed (persists for the life of
- * the server process). Phase 11 replaces each function body with a Supabase
- * insert/update; signatures and derived-score logic stay identical.
+ * Write layer over the in-memory store, mirrored to Supabase.
+ *
+ * Create paths `await` the write and, on failure, roll the optimistic in-memory
+ * insert back out and throw `PersistError` so the server action reports it.
+ * Update/delete paths stay fire-and-forget: the TTL re-hydration reconciles the
+ * in-memory copy back to the database within one window if the write fails.
  */
 
 /** Collision-free ids (UUID) — process counters reset on serverless cold start
@@ -39,19 +44,35 @@ const nextId = (prefix: string) => `${prefix}_${randomUUID()}`;
 const nowIso = () => new Date().toISOString();
 const round1 = (n: number) => Math.round(n * 10) / 10;
 
+/** Remove an item from an array by identity (used to undo an optimistic insert). */
+function removeFrom<T>(arr: T[], item: T) {
+  const i = arr.indexOf(item);
+  if (i >= 0) arr.splice(i, 1);
+}
+
+/** Await a create's persistence; on failure undo the insert and throw. */
+async function commitInsert<T>(arr: T[], record: T, result: Promise<PersistResult>): Promise<T> {
+  const { error } = await result;
+  if (error) {
+    removeFrom(arr, record);
+    throw new PersistError(error);
+  }
+  return record;
+}
+
 function areaForOutlet(outletId: string): string {
   return getOutlet(outletId)?.areaId ?? "area_001";
 }
 
 /* ---------------- Hospitality ---------------- */
-export function createHospitality(input: {
+export async function createHospitality(input: {
   outletId: string;
   assessorId: string;
   staffName: string;
   staffPosition: string;
   scores: Record<HospitalityCategory, Record<string, number>>;
   notes?: string;
-}): HospitalityAssessment {
+}): Promise<HospitalityAssessment> {
   let sum = 0;
   let count = 0;
   (Object.keys(HOSPITALITY_CHECKLISTS) as HospitalityCategory[]).forEach((cat) => {
@@ -73,12 +94,11 @@ export function createHospitality(input: {
     overallScore: count ? round1((sum / (count * 5)) * 100) : 0,
   };
   SEED.hospitality.unshift(record);
-  saveHospitality(record);
-  return record;
+  return commitInsert(SEED.hospitality, record, saveHospitality(record));
 }
 
 /* ---------------- Work Tracker ---------------- */
-export function createTask(input: {
+export async function createTask(input: {
   title: string;
   description: string;
   category: string;
@@ -91,7 +111,7 @@ export function createTask(input: {
   startDate: string;
   dueDate: string;
   progress: number;
-}): WorkTask {
+}): Promise<WorkTask> {
   const record: WorkTask = {
     id: nextId("tsk"),
     title: input.title,
@@ -112,8 +132,7 @@ export function createTask(input: {
     createdAt: nowIso(),
   };
   SEED.tasks.unshift(record);
-  saveTask(record);
-  return record;
+  return commitInsert(SEED.tasks, record, saveTask(record));
 }
 
 export function updateTask(
@@ -149,7 +168,7 @@ export function updateTask(
   task.dueDate = input.dueDate;
   task.progress = input.status === "done" ? 100 : input.progress;
   task.completionDate = input.status === "done" ? task.completionDate ?? nowIso() : null;
-  saveTask(task);
+  void saveTask(task);
   return task;
 }
 
@@ -157,7 +176,7 @@ export function deleteTask(id: string): boolean {
   const i = SEED.tasks.findIndex((t) => t.id === id);
   if (i === -1) return false;
   SEED.tasks.splice(i, 1);
-  deleteTaskRow(id);
+  void deleteTaskRow(id);
   return true;
 }
 
@@ -171,11 +190,11 @@ export function updateTaskStatus(id: string, status: WorkTask["status"], progres
   } else if (progress !== undefined) {
     task.progress = progress;
   }
-  saveTask(task);
+  void saveTask(task);
 }
 
 /* ---------------- Event Tracker ---------------- */
-export function createEvent(input: {
+export async function createEvent(input: {
   name: string;
   outletId: string;
   picId: string;
@@ -185,7 +204,7 @@ export function createEvent(input: {
   endDate: string;
   milestone: OpsEvent["milestone"];
   status: OpsEvent["status"];
-}): OpsEvent {
+}): Promise<OpsEvent> {
   const progress = EVENT_MILESTONES.find((m) => m.value === input.milestone)?.progress ?? 0;
   const record: OpsEvent = {
     id: nextId("evt"),
@@ -203,8 +222,7 @@ export function createEvent(input: {
     createdAt: nowIso(),
   };
   SEED.events.unshift(record);
-  saveEvent(record);
-  return record;
+  return commitInsert(SEED.events, record, saveEvent(record));
 }
 
 export function updateEvent(
@@ -234,7 +252,7 @@ export function updateEvent(
   ev.milestone = input.milestone;
   ev.status = input.status;
   ev.progress = EVENT_MILESTONES.find((m) => m.value === input.milestone)?.progress ?? ev.progress;
-  saveEvent(ev);
+  void saveEvent(ev);
   return ev;
 }
 
@@ -242,7 +260,7 @@ export function deleteEvent(id: string): boolean {
   const i = SEED.events.findIndex((e) => e.id === id);
   if (i === -1) return false;
   SEED.events.splice(i, 1);
-  deleteEventRow(id);
+  void deleteEventRow(id);
   return true;
 }
 
@@ -251,11 +269,11 @@ export function updateEventMilestone(id: string, milestone: OpsEvent["milestone"
   if (!ev) return;
   ev.milestone = milestone;
   ev.progress = EVENT_MILESTONES.find((m) => m.value === milestone)?.progress ?? ev.progress;
-  saveEvent(ev);
+  void saveEvent(ev);
 }
 
 /* ---------------- Hygiene ---------------- */
-export function createHygiene(input: {
+export async function createHygiene(input: {
   outletId: string;
   shift: string;
   inspectorName: string;
@@ -264,7 +282,7 @@ export function createHygiene(input: {
   findings: string[];
   photos?: import("../types").Attachment[];
   isClean: boolean;
-}): HygieneAudit {
+}): Promise<HygieneAudit> {
   let sum = 0;
   let count = 0;
   (Object.keys(HYGIENE_SECTIONS) as HygieneSection[]).forEach((sec) => {
@@ -293,12 +311,11 @@ export function createHygiene(input: {
     createdAt: nowIso(),
   };
   SEED.hygiene.unshift(record);
-  saveHygiene(record);
-  return record;
+  return commitInsert(SEED.hygiene, record, saveHygiene(record));
 }
 
 /* ---------------- Complaints ---------------- */
-export function createComplaint(input: {
+export async function createComplaint(input: {
   source: Complaint["source"];
   customerName: string;
   rating?: number | null;
@@ -306,7 +323,7 @@ export function createComplaint(input: {
   outletId: string;
   category: Complaint["category"];
   priority: Complaint["priority"];
-}): Complaint {
+}): Promise<Complaint> {
   const record: Complaint = {
     id: nextId("cmp"),
     source: input.source,
@@ -325,8 +342,7 @@ export function createComplaint(input: {
     closedAt: null,
   };
   SEED.complaints.unshift(record);
-  saveComplaint(record);
-  return record;
+  return commitInsert(SEED.complaints, record, saveComplaint(record));
 }
 
 export function resolveComplaint(input: {
@@ -341,18 +357,17 @@ export function resolveComplaint(input: {
   if (input.rootCause) c.rootCause = input.rootCause;
   if (input.correctiveAction) c.correctiveAction = input.correctiveAction;
   if (input.status === "closed" || input.status === "done") c.closedAt = nowIso();
-  saveComplaint(c);
+  void saveComplaint(c);
 }
 
 /* ---------------- Organization (areas & outlets) ---------------- */
-export function createArea(input: { name: string; code: string; coordinatorId: string }) {
+export async function createArea(input: { name: string; code: string; coordinatorId: string }) {
   const record = { id: nextId("area"), name: input.name, code: input.code, coordinatorId: input.coordinatorId };
   SEED.areas.push(record);
-  saveArea(record);
-  return record;
+  return commitInsert(SEED.areas, record, saveArea(record));
 }
 
-export function createOutlet(input: { name: string; code: string; city: string; areaId: string; picId: string }) {
+export async function createOutlet(input: { name: string; code: string; city: string; areaId: string; picId: string }) {
   const record = {
     id: nextId("out"),
     name: input.name,
@@ -364,6 +379,5 @@ export function createOutlet(input: { name: string; code: string; city: string; 
     active: true,
   };
   SEED.outlets.push(record);
-  saveOutlet(record);
-  return record;
+  return commitInsert(SEED.outlets, record, saveOutlet(record));
 }
