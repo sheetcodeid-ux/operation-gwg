@@ -1,19 +1,44 @@
 import "server-only";
-import { createHash } from "node:crypto";
+import { createHash, randomBytes, scryptSync, timingSafeEqual } from "node:crypto";
 import { SEED } from "./seed";
 import { getUser } from "./store";
 import { saveCredential, syncAuthUser } from "./persist";
 
 /**
- * Demo credential store (in-memory). Username = email. Passwords are hashed.
+ * Demo credential store (in-memory). Username = email. Passwords are hashed
+ * with salted scrypt (`scrypt$<saltHex>$<hashHex>`). Legacy unsalted SHA-256
+ * hashes are still accepted at sign-in and transparently re-hashed on success.
  * Admin provisions/resets passwords; status (active) is enforced at sign-in.
  * Phase 11 (live): replace with Supabase Auth admin API.
  */
 
 const DEFAULT_PASSWORD = "gwg2026!";
+const SCRYPT_KEYLEN = 64;
 
+/** Salted scrypt hash, self-describing so verification needs no external salt. */
 function hash(password: string) {
-  return createHash("sha256").update(password).digest("hex");
+  const salt = randomBytes(16);
+  const derived = scryptSync(password, salt, SCRYPT_KEYLEN);
+  return `scrypt$${salt.toString("hex")}$${derived.toString("hex")}`;
+}
+
+/** Constant-time verify against either the new scrypt format or a legacy sha256. */
+function verifyHash(password: string, stored: string): boolean {
+  if (stored.startsWith("scrypt$")) {
+    const [, saltHex, hashHex] = stored.split("$");
+    if (!saltHex || !hashHex) return false;
+    const derived = scryptSync(password, Buffer.from(saltHex, "hex"), SCRYPT_KEYLEN);
+    const expected = Buffer.from(hashHex, "hex");
+    return derived.length === expected.length && timingSafeEqual(derived, expected);
+  }
+  // Legacy unsalted sha256 — compared in constant time.
+  const legacy = createHash("sha256").update(password).digest();
+  const expected = Buffer.from(stored, "hex");
+  return legacy.length === expected.length && timingSafeEqual(legacy, expected);
+}
+
+function isLegacy(stored: string) {
+  return !stored.startsWith("scrypt$");
 }
 
 interface Credential {
@@ -37,9 +62,15 @@ export type SignInResult =
 export function verifyCredentials(usernameRaw: string, password: string): SignInResult {
   const username = usernameRaw.trim().toLowerCase();
   const cred = byUsername.get(username);
-  if (!cred || cred.passwordHash !== hash(password)) return { ok: false, reason: "invalid" };
+  if (!cred || !verifyHash(password, cred.passwordHash)) return { ok: false, reason: "invalid" };
   const user = getUser(cred.userId);
   if (!user || !user.active) return { ok: false, reason: "inactive" };
+  // Transparently upgrade a legacy unsalted hash to salted scrypt on success.
+  if (isLegacy(cred.passwordHash)) {
+    const upgraded = { ...cred, passwordHash: hash(password) };
+    byUsername.set(username, upgraded);
+    saveCredential(upgraded);
+  }
   return { ok: true, userId: cred.userId };
 }
 

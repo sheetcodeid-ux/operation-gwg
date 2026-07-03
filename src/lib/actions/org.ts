@@ -4,13 +4,16 @@ import { revalidatePath } from "next/cache";
 import { getSessionUser } from "@/lib/auth";
 import { can } from "@/lib/rbac";
 import { createArea, createOutlet } from "@/lib/data/mutations";
+import { createAreaSchema, createOutletSchema, parseInput } from "@/lib/validation";
 
 export async function createAreaAction(input: { name: string; code: string; coordinatorId: string }) {
   const user = await getSessionUser();
   if (!user) return { error: "Not authenticated" };
   if (!can(user, "manage_org")) return { error: "No permission" };
-  if (!input.name.trim() || !input.code.trim()) return { error: "Nama dan kode wilayah wajib diisi." };
-  createArea({ name: input.name.trim(), code: input.code.trim().toUpperCase(), coordinatorId: input.coordinatorId || user.id });
+  const parsed = parseInput(createAreaSchema, input);
+  if ("error" in parsed) return { error: parsed.error };
+  const clean = parsed.data;
+  createArea({ name: clean.name, code: clean.code.toUpperCase(), coordinatorId: clean.coordinatorId || user.id });
   revalidatePath("/", "layout");
   return { ok: true };
 }
@@ -19,13 +22,15 @@ export async function createOutletAction(input: { name: string; code: string; ci
   const user = await getSessionUser();
   if (!user) return { error: "Not authenticated" };
   if (!can(user, "manage_org")) return { error: "No permission" };
-  if (!input.name.trim() || !input.areaId) return { error: "Nama outlet dan wilayah wajib diisi." };
+  const parsed = parseInput(createOutletSchema, input);
+  if ("error" in parsed) return { error: parsed.error };
+  const clean = parsed.data;
   createOutlet({
-    name: input.name.trim(),
-    code: input.code.trim().toUpperCase() || input.name.trim().slice(0, 6).toUpperCase(),
-    city: input.city.trim() || "-",
-    areaId: input.areaId,
-    picId: input.picId || user.id,
+    name: clean.name,
+    code: clean.code.toUpperCase() || clean.name.slice(0, 6).toUpperCase(),
+    city: clean.city || "-",
+    areaId: clean.areaId,
+    picId: clean.picId || user.id,
   });
   revalidatePath("/", "layout");
   return { ok: true };

@@ -4,7 +4,12 @@
  * Every read the UI performs goes through these functions. In Phase 11 the
  * bodies are reimplemented against Supabase while signatures stay stable, so
  * pages and server actions never change.
+ *
+ * `server-only`: this module holds the full dataset (incl. every user's email
+ * and role). The guard makes any accidental *value* import from a client
+ * component a build-time error. Type-only imports remain fine (elided).
  */
+import "server-only";
 
 import { scopeOutlets } from "../rbac";
 import type {
@@ -815,9 +820,4 @@ export function areaWeeklyQuality(outletIds: string[], weeks = 52): { labels: st
   });
 
   return { labels, rows };
-}
-
-/* current identity placeholder (replaced by real session in Phase 2 wiring) */
-export function getCurrentUser(): UserProfile {
-  return SEED.currentUser;
 }

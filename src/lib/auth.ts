@@ -9,28 +9,61 @@ import type { UserProfile } from "./types";
 
 export const SESSION_COOKIE = "gwg_uid";
 
-/** HMAC-signed session value: `uid.signature`. An unsigned/forged uid cookie
- *  is rejected, so sessions can only be minted by the server after sign-in. */
-const SESSION_SECRET = process.env.GWG_SESSION_SECRET ?? "gwg-dev-secret-change-me";
+/** Session lifetime — the signed token self-expires after this window even if
+ *  the cookie lingers, so a captured token value cannot be replayed forever. */
+export const SESSION_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 
-function sig(uid: string) {
-  return createHmac("sha256", SESSION_SECRET).update(uid).digest("base64url");
+/**
+ * HMAC-signing secret, resolved lazily on first use (not at module load, so a
+ * missing env var doesn't break `next build`). There is NO insecure fallback in
+ * production: signing/verifying a session without a real secret throws, because
+ * a known default secret would let anyone forge a super-admin session.
+ */
+let cachedSecret: string | null = null;
+function sessionSecret(): string {
+  if (cachedSecret) return cachedSecret;
+  const s = process.env.GWG_SESSION_SECRET;
+  if (s && s.length >= 16) return (cachedSecret = s);
+  if (process.env.NODE_ENV === "production") {
+    throw new Error("GWG_SESSION_SECRET is required (>=16 chars) in production.");
+  }
+  return (cachedSecret = "gwg-dev-secret-change-me-please");
 }
 
+function sig(payload: string) {
+  return createHmac("sha256", sessionSecret()).update(payload).digest("base64url");
+}
+
+/** Signed session token: `<base64url(uid.issuedAtMs)>.<hmac>`. */
 export function signSession(uid: string): string {
-  return `${uid}.${sig(uid)}`;
+  const payload = Buffer.from(`${uid}.${Date.now()}`).toString("base64url");
+  return `${payload}.${sig(payload)}`;
 }
 
+/** Verify signature AND freshness. Returns the uid or null. */
 export function verifySession(value: string | undefined): string | null {
   if (!value) return null;
   const dot = value.lastIndexOf(".");
   if (dot <= 0) return null;
-  const uid = value.slice(0, dot);
+  const payload = value.slice(0, dot);
   const given = value.slice(dot + 1);
-  const expected = sig(uid);
+  const expected = sig(payload);
   const a = Buffer.from(given);
   const b = Buffer.from(expected);
-  return a.length === b.length && timingSafeEqual(a, b) ? uid : null;
+  if (a.length !== b.length || !timingSafeEqual(a, b)) return null;
+
+  let decoded: string;
+  try {
+    decoded = Buffer.from(payload, "base64url").toString();
+  } catch {
+    return null;
+  }
+  const sep = decoded.lastIndexOf(".");
+  if (sep <= 0) return null;
+  const uid = decoded.slice(0, sep);
+  const iat = Number(decoded.slice(sep + 1));
+  if (!Number.isFinite(iat) || Date.now() - iat > SESSION_TTL_MS) return null;
+  return uid;
 }
 
 /**
@@ -60,9 +93,4 @@ export async function getSessionUser(): Promise<UserProfile | null> {
   if (!uid) return null;
   const user = getUser(uid);
   return user && user.active ? user : null;
-}
-
-/** Like getSessionUser but throws/redirects responsibility to caller. */
-export async function requireUser(): Promise<UserProfile | null> {
-  return getSessionUser();
 }
