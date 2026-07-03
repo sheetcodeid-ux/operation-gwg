@@ -7,6 +7,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Combobox } from "@/components/ui/combobox";
 import { DataTable } from "@/components/ui/data-table";
 import { MonthFilter, monthKey, monthOptions } from "@/components/work/division-filter";
+import { scoreColor } from "@/components/ui/tone";
 import { formatDate } from "@/lib/utils";
 
 export interface HospitalityRow {
@@ -20,10 +21,6 @@ export interface HospitalityRow {
   assessor: string;
   date: string;
   score: number;
-}
-
-function scoreColor(s: number) {
-  return s >= 85 ? "#22c55e" : s >= 70 ? "#f59e0b" : "#ef4444";
 }
 
 export function HospitalityExplorer({ rows, outlets }: { rows: HospitalityRow[]; outlets: { id: string; name: string }[] }) {

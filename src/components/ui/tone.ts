@@ -30,3 +30,8 @@ export function scoreTone(score: number): Tone {
   if (score >= 50) return "warning";
   return "danger";
 }
+
+/** Traffic-light hex for a 0-100 score — inline score dots/labels in tables. */
+export function scoreColor(score: number): string {
+  return score >= 85 ? "#22c55e" : score >= 70 ? "#f59e0b" : "#ef4444";
+}

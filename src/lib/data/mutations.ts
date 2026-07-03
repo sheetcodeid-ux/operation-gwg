@@ -1,5 +1,6 @@
 import "server-only";
 
+import { randomUUID } from "node:crypto";
 import { HOSPITALITY_CHECKLISTS, HYGIENE_RATING_META, HYGIENE_SECTIONS, EVENT_MILESTONES } from "../constants";
 import type {
   Complaint,
@@ -32,8 +33,9 @@ import {
  * insert/update; signatures and derived-score logic stay identical.
  */
 
-let counter = 9000;
-const nextId = (prefix: string) => `${prefix}_${++counter}`;
+/** Collision-free ids (UUID) — process counters reset on serverless cold start
+ *  and Date.now() collides under concurrency, so neither is safe for ids. */
+const nextId = (prefix: string) => `${prefix}_${randomUUID()}`;
 const nowIso = () => new Date().toISOString();
 const round1 = (n: number) => Math.round(n * 10) / 10;
 
@@ -344,7 +346,7 @@ export function resolveComplaint(input: {
 
 /* ---------------- Organization (areas & outlets) ---------------- */
 export function createArea(input: { name: string; code: string; coordinatorId: string }) {
-  const record = { id: `area_${Date.now()}`, name: input.name, code: input.code, coordinatorId: input.coordinatorId };
+  const record = { id: nextId("area"), name: input.name, code: input.code, coordinatorId: input.coordinatorId };
   SEED.areas.push(record);
   saveArea(record);
   return record;
@@ -352,7 +354,7 @@ export function createArea(input: { name: string; code: string; coordinatorId: s
 
 export function createOutlet(input: { name: string; code: string; city: string; areaId: string; picId: string }) {
   const record = {
-    id: `out_${Date.now()}`,
+    id: nextId("out"),
     name: input.name,
     code: input.code,
     city: input.city,
