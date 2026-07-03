@@ -55,7 +55,6 @@ export function KpiCarousel({ items }: { items: Kpi[] }) {
 
   React.useEffect(() => {
     update();
-    const el = ref.current;
     window.addEventListener("resize", update);
     return () => window.removeEventListener("resize", update);
   }, [update]);

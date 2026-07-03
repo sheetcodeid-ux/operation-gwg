@@ -8,6 +8,10 @@ import { ensureHydrated } from "@/lib/data/hydrate";
 import { verifyCredentials } from "@/lib/data/credentials";
 import { isSupabaseConfigured } from "@/lib/supabase/env";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { rateLimit, rateLimitReset } from "@/lib/rate-limit";
+
+const LOGIN_LIMIT = 8;
+const LOGIN_WINDOW_MS = 5 * 60 * 1000;
 
 const COOKIE_OPTS = {
   httpOnly: true,
@@ -31,6 +35,14 @@ export async function signInWithPassword(_prev: { error?: string } | null, formD
 
   if (!username || !password) return { error: "Enter your username and password." };
 
+  // Throttle brute-force attempts per username.
+  const rlKey = `login:${username.toLowerCase()}`;
+  const rl = rateLimit(rlKey, LOGIN_LIMIT, LOGIN_WINDOW_MS);
+  if (!rl.ok) {
+    const mins = Math.ceil(rl.retryAfterMs / 60000);
+    return { error: `Terlalu banyak percobaan. Coba lagi dalam ${mins} menit.` };
+  }
+
   // Make sure users + credentials reflect the persisted database before verifying.
   await ensureHydrated();
 
@@ -46,6 +58,7 @@ export async function signInWithPassword(_prev: { error?: string } | null, formD
       if (!profile.active) return { error: "This account is inactive. Contact your administrator." };
       const store = await cookies();
       store.set(SESSION_COOKIE, signSession(profile.id), COOKIE_OPTS);
+      rateLimitReset(rlKey);
       redirect("/dashboard");
     }
     if (res?.error && res.error.message.toLowerCase().includes("invalid")) {
@@ -62,6 +75,7 @@ export async function signInWithPassword(_prev: { error?: string } | null, formD
   }
   const store = await cookies();
   store.set(SESSION_COOKIE, signSession(result.userId), COOKIE_OPTS);
+  rateLimitReset(rlKey);
   redirect("/dashboard");
 }
 

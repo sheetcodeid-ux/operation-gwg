@@ -5,6 +5,7 @@ import { getSessionUser } from "@/lib/auth";
 import { can } from "@/lib/rbac";
 import { getOutlet } from "@/lib/data/store";
 import { createUser, emailExists, resetUserPassword, setUserActive, setUserAssignment } from "@/lib/data/user-mutations";
+import { createUserSchema, parseInput } from "@/lib/validation";
 import type { Role } from "@/lib/types";
 
 function normalizeAssignment(role: Role, outletIds: string[]): { areaId: string | null; outletIds: string[] } {
@@ -30,15 +31,17 @@ export interface CreateUserInput {
 export async function createUserAction(input: CreateUserInput) {
   const admin = await getSessionUser();
   if (!admin || !can(admin, "manage_users")) return { error: "Not authorized" };
-  if (!input.name.trim()) return { error: "Name is required." };
-  if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(input.email)) return { error: "Enter a valid email." };
-  if (emailExists(input.email)) return { error: "Email already exists." };
-  if (input.password.length < 6) return { error: "Password must be at least 6 characters." };
-  if (input.role === "area_coordinator" && input.outletIds.length === 0)
+
+  const parsed = parseInput(createUserSchema, input);
+  if ("error" in parsed) return { error: parsed.error };
+  const clean = parsed.data;
+
+  if (emailExists(clean.email)) return { error: "Email already exists." };
+  if (clean.role === "area_coordinator" && clean.outletIds.length === 0)
     return { error: "Assign at least one outlet to the coordinator." };
 
-  const { areaId, outletIds } = normalizeAssignment(input.role, input.outletIds);
-  createUser({ name: input.name, email: input.email, role: input.role, areaId, outletIds, password: input.password });
+  const { areaId, outletIds } = normalizeAssignment(clean.role, clean.outletIds);
+  createUser({ name: clean.name, email: clean.email, role: clean.role, areaId, outletIds, password: clean.password });
   revalidatePath("/admin/users");
   return { ok: true };
 }

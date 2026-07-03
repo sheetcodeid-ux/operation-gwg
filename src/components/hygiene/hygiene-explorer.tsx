@@ -1,9 +1,11 @@
 "use client";
 
 import * as React from "react";
+import Image from "next/image";
 import { type ColumnDef } from "@tanstack/react-table";
 import { Camera } from "lucide-react";
 import type { Attachment } from "@/lib/types";
+import { scoreColor } from "@/components/ui/tone";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Combobox } from "@/components/ui/combobox";
@@ -27,9 +29,6 @@ export interface HygieneRow {
   photos: Attachment[];
 }
 
-function scoreColor(s: number) {
-  return s >= 85 ? "#22c55e" : s >= 70 ? "#f59e0b" : "#ef4444";
-}
 
 export function HygieneExplorer({ rows, outlets }: { rows: HygieneRow[]; outlets: { id: string; name: string }[] }) {
   const [month, setMonth] = React.useState("all");
@@ -88,9 +87,16 @@ export function HygieneExplorer({ rows, outlets }: { rows: HygieneRow[]; outlets
               <DialogContent title="Dokumentasi Audit" description={`${row.original.outlet} · ${formatDate(row.original.date)}`} align="center" className="max-w-2xl">
                 <div className="grid max-h-[70vh] grid-cols-2 gap-2 overflow-y-auto p-5 sm:grid-cols-3">
                   {photos.map((p) => (
-                    <a key={p.id} href={p.url} target="_blank" rel="noreferrer" className="group">
-                      {/* eslint-disable-next-line @next/next/no-img-element */}
-                      <img src={p.url} alt={p.name} className="aspect-square w-full rounded-lg object-cover ring-1 ring-border transition-opacity group-hover:opacity-90" />
+                    <a key={p.id} href={p.url} target="_blank" rel="noreferrer" className="group block">
+                      <div className="relative aspect-square w-full overflow-hidden rounded-lg ring-1 ring-border transition-opacity group-hover:opacity-90">
+                        <Image
+                          src={p.url}
+                          alt={p.name}
+                          fill
+                          sizes="(max-width: 640px) 33vw, 200px"
+                          className="object-cover"
+                        />
+                      </div>
                       <p className="mt-1 truncate text-[11px] text-muted-foreground">{p.name}</p>
                     </a>
                   ))}

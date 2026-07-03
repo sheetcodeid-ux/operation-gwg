@@ -1,7 +1,6 @@
 "use client";
 
 import { useTransition } from "react";
-import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Bell, CircleAlert, CalendarClock, ListTodo, MessageSquareWarning, TrendingDown } from "lucide-react";
 import type { AppNotification, NotificationKind } from "@/lib/types";

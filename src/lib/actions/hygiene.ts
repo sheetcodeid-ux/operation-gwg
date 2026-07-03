@@ -6,6 +6,7 @@ import { can, canAccessOutlet } from "@/lib/rbac";
 import { getOutlet, getOutlets, userName } from "@/lib/data/store";
 import { createHygiene } from "@/lib/data/mutations";
 import { db, dbEnabled } from "@/lib/data/db";
+import { hygieneInputSchema, parseInput } from "@/lib/validation";
 import type { Attachment, HygieneRating, HygieneSection } from "@/lib/types";
 
 export interface HygieneInput {
@@ -43,8 +44,13 @@ export async function uploadHygienePhotosAction(formData: FormData) {
     const path = `${user.id}/${Date.now()}-${i}-${safe}`;
     const { error } = await db().storage.from("hygiene-photos").upload(path, file, { contentType: file.type });
     if (error) return { error: `Upload gagal: ${error.message}` };
-    const { data } = db().storage.from("hygiene-photos").getPublicUrl(path);
-    photos.push({ id: path, name: labels[i] || file.name, url: data.publicUrl, kind: "photo", size: file.size });
+    // Bucket is private — a public URL would 400. Sign for ~1 year; `id` keeps
+    // the object path so the URL can be re-signed on read when it expires.
+    const { data, error: signError } = await db()
+      .storage.from("hygiene-photos")
+      .createSignedUrl(path, 60 * 60 * 24 * 365);
+    if (signError || !data) return { error: `Gagal membuat URL foto: ${signError?.message ?? "unknown"}` };
+    photos.push({ id: path, name: labels[i] || file.name, url: data.signedUrl, kind: "photo", size: file.size });
   }
   return { photos };
 }
@@ -53,17 +59,20 @@ export async function createHygieneAction(input: HygieneInput) {
   const user = await getSessionUser();
   if (!user) return { error: "Not authenticated" };
   if (!can(user, "create_hygiene")) return { error: "You don't have permission to create audits." };
-  if (!canAccessOutlet(user, input.outletId, getOutlets())) return { error: "Outlet is outside your scope." };
+  const parsed = parseInput(hygieneInputSchema, input);
+  if ("error" in parsed) return { error: parsed.error };
+  const clean = parsed.data;
+  if (!canAccessOutlet(user, clean.outletId, getOutlets())) return { error: "Outlet is outside your scope." };
 
-  const outlet = getOutlet(input.outletId)!;
+  const outlet = getOutlet(clean.outletId)!;
   const record = createHygiene({
-    outletId: input.outletId,
-    shift: input.shift,
-    inspectorName: input.inspectorName.trim() || user.name,
+    outletId: clean.outletId,
+    shift: clean.shift,
+    inspectorName: clean.inspectorName || user.name,
     supervisorName: userName(outlet.supervisorId),
     ratings: input.ratings,
-    findings: input.findings.filter((f) => f.trim()),
-    isClean: input.isClean,
+    findings: clean.findings.filter((f) => f.trim()),
+    isClean: clean.isClean,
     photos: input.photos ?? [],
   });
 

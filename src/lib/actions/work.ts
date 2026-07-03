@@ -6,6 +6,7 @@ import { can, canAccessOutlet } from "@/lib/rbac";
 import { getOutlet, getOutlets } from "@/lib/data/store";
 import { createTask, deleteTask, updateTask, updateTaskStatus } from "@/lib/data/mutations";
 import { DEMO_NOW_ISO } from "@/lib/now";
+import { parseInput, taskInputSchema, taskStatusSchema } from "@/lib/validation";
 import type { Priority, Role, TaskStatus } from "@/lib/types";
 
 export interface TaskInput {
@@ -28,23 +29,25 @@ export async function createTaskAction(input: TaskInput) {
   const user = await getSessionUser();
   if (!user) return { error: "Not authenticated" };
   if (!can(user, "create_work_task")) return { error: "You don't have permission to create tasks." };
-  if (!input.title.trim()) return { error: "Task title is required." };
-  if (input.outletId && !canAccessOutlet(user, input.outletId, getOutlets())) return { error: "Outlet is outside your scope." };
+  const parsed = parseInput(taskInputSchema, input);
+  if ("error" in parsed) return { error: parsed.error };
+  const clean = parsed.data;
+  if (clean.outletId && !canAccessOutlet(user, clean.outletId, getOutlets())) return { error: "Outlet is outside your scope." };
 
-  const outlet = input.outletId ? getOutlet(input.outletId) : null;
+  const outlet = clean.outletId ? getOutlet(clean.outletId) : null;
   const record = createTask({
-    title: input.title.trim(),
-    description: input.description.trim(),
-    category: input.category,
-    priority: input.priority,
-    status: input.status,
-    division: input.division,
-    outletId: input.outletId,
-    picIds: input.picIds,
-    picId: input.picIds[0] ?? outlet?.picId ?? user.id,
-    startDate: input.startDate || DEMO_NOW_ISO,
-    dueDate: input.dueDate || DEMO_NOW_ISO,
-    progress: Math.max(0, Math.min(100, input.progress)),
+    title: clean.title,
+    description: clean.description,
+    category: clean.category,
+    priority: clean.priority,
+    status: clean.status,
+    division: clean.division,
+    outletId: clean.outletId,
+    picIds: clean.picIds,
+    picId: clean.picIds[0] ?? outlet?.picId ?? user.id,
+    startDate: clean.startDate || DEMO_NOW_ISO,
+    dueDate: clean.dueDate || DEMO_NOW_ISO,
+    progress: clean.progress,
   });
 
   revalidatePath("/work-tracker");
@@ -57,23 +60,25 @@ export async function updateTaskAction(id: string, input: TaskInput) {
   const user = await getSessionUser();
   if (!user) return { error: "Not authenticated" };
   if (!can(user, "create_work_task")) return { error: "You don't have permission to edit tasks." };
-  if (!input.title.trim()) return { error: "Task title is required." };
-  if (input.outletId && !canAccessOutlet(user, input.outletId, getOutlets())) return { error: "Outlet is outside your scope." };
+  const parsed = parseInput(taskInputSchema, input);
+  if ("error" in parsed) return { error: parsed.error };
+  const clean = parsed.data;
+  if (clean.outletId && !canAccessOutlet(user, clean.outletId, getOutlets())) return { error: "Outlet is outside your scope." };
 
-  const outlet = input.outletId ? getOutlet(input.outletId) : null;
+  const outlet = clean.outletId ? getOutlet(clean.outletId) : null;
   updateTask(id, {
-    title: input.title.trim(),
-    description: input.description.trim(),
-    category: input.category,
-    priority: input.priority,
-    status: input.status,
-    division: input.division,
-    outletId: input.outletId,
-    picIds: input.picIds,
-    picId: input.picIds[0] ?? outlet?.picId ?? user.id,
-    startDate: input.startDate || DEMO_NOW_ISO,
-    dueDate: input.dueDate || DEMO_NOW_ISO,
-    progress: Math.max(0, Math.min(100, input.progress)),
+    title: clean.title,
+    description: clean.description,
+    category: clean.category,
+    priority: clean.priority,
+    status: clean.status,
+    division: clean.division,
+    outletId: clean.outletId,
+    picIds: clean.picIds,
+    picId: clean.picIds[0] ?? outlet?.picId ?? user.id,
+    startDate: clean.startDate || DEMO_NOW_ISO,
+    dueDate: clean.dueDate || DEMO_NOW_ISO,
+    progress: clean.progress,
   });
 
   revalidatePath("/work-tracker");
@@ -97,7 +102,8 @@ export async function updateTaskStatusAction(id: string, status: TaskStatus, pro
   const user = await getSessionUser();
   if (!user) return { error: "Not authenticated" };
   if (!can(user, "create_work_task")) return { error: "No permission" };
-  updateTaskStatus(id, status, progress);
+  if (!taskStatusSchema.safeParse(status).success) return { error: "Invalid status." };
+  updateTaskStatus(id, status, progress === undefined ? undefined : Math.max(0, Math.min(100, progress)));
   revalidatePath("/work-tracker");
   revalidatePath("/work-tracker/kanban");
   revalidatePath("/dashboard");

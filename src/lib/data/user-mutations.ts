@@ -1,5 +1,6 @@
 import "server-only";
 
+import { randomUUID } from "node:crypto";
 import { SEED } from "./seed";
 import { registerCredential, setPassword } from "./credentials";
 import { getUser } from "./store";
@@ -8,8 +9,7 @@ import type { Role, UserProfile } from "../types";
 
 /** Admin user-management writes (demo). Phase 11: Supabase Auth admin API + profiles table. */
 
-let counter = 7000;
-const nextId = () => `usr_${++counter}`;
+const nextId = () => `usr_${randomUUID()}`;
 
 export function createUser(input: {
   name: string;

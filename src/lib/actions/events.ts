@@ -6,6 +6,7 @@ import { can, canAccessOutlet } from "@/lib/rbac";
 import { getOutlet, getOutlets } from "@/lib/data/store";
 import { createEvent, deleteEvent, updateEvent, updateEventMilestone } from "@/lib/data/mutations";
 import { DEMO_NOW_ISO } from "@/lib/now";
+import { eventInputSchema, eventMilestoneSchema, parseInput } from "@/lib/validation";
 import type { EventMilestone, EventStatus } from "@/lib/types";
 
 export interface EventInput {
@@ -32,20 +33,22 @@ export async function createEventAction(input: EventInput) {
   const user = await getSessionUser();
   if (!user) return { error: "Not authenticated" };
   if (!can(user, "create_event")) return { error: "You don't have permission to create events." };
-  if (!input.name.trim()) return { error: "Event name is required." };
-  if (!canAccessOutlet(user, input.outletId, getOutlets())) return { error: "Outlet is outside your scope." };
+  const parsed = parseInput(eventInputSchema, input);
+  if ("error" in parsed) return { error: parsed.error };
+  const clean = parsed.data;
+  if (!canAccessOutlet(user, clean.outletId, getOutlets())) return { error: "Outlet is outside your scope." };
 
-  const outlet = getOutlet(input.outletId)!;
+  const outlet = getOutlet(clean.outletId)!;
   const record = createEvent({
-    name: input.name.trim(),
-    outletId: input.outletId,
-    picId: input.picId || outlet.picId,
-    description: input.description.trim(),
-    budget: Math.max(0, input.budget),
-    startDate: input.startDate || DEMO_NOW_ISO,
-    endDate: input.endDate || DEMO_NOW_ISO,
-    milestone: input.milestone,
-    status: input.status,
+    name: clean.name,
+    outletId: clean.outletId,
+    picId: clean.picId || outlet.picId,
+    description: clean.description,
+    budget: clean.budget,
+    startDate: clean.startDate || DEMO_NOW_ISO,
+    endDate: clean.endDate || DEMO_NOW_ISO,
+    milestone: clean.milestone,
+    status: clean.status,
   });
 
   revalidateAll();
@@ -56,20 +59,22 @@ export async function updateEventAction(id: string, input: EventInput) {
   const user = await getSessionUser();
   if (!user) return { error: "Not authenticated" };
   if (!can(user, "create_event")) return { error: "You don't have permission to edit events." };
-  if (!input.name.trim()) return { error: "Event name is required." };
-  if (!canAccessOutlet(user, input.outletId, getOutlets())) return { error: "Outlet is outside your scope." };
+  const parsed = parseInput(eventInputSchema, input);
+  if ("error" in parsed) return { error: parsed.error };
+  const clean = parsed.data;
+  if (!canAccessOutlet(user, clean.outletId, getOutlets())) return { error: "Outlet is outside your scope." };
 
-  const outlet = getOutlet(input.outletId)!;
+  const outlet = getOutlet(clean.outletId)!;
   updateEvent(id, {
-    name: input.name.trim(),
-    outletId: input.outletId,
-    picId: input.picId || outlet.picId,
-    description: input.description.trim(),
-    budget: Math.max(0, input.budget),
-    startDate: input.startDate || DEMO_NOW_ISO,
-    endDate: input.endDate || DEMO_NOW_ISO,
-    milestone: input.milestone,
-    status: input.status,
+    name: clean.name,
+    outletId: clean.outletId,
+    picId: clean.picId || outlet.picId,
+    description: clean.description,
+    budget: clean.budget,
+    startDate: clean.startDate || DEMO_NOW_ISO,
+    endDate: clean.endDate || DEMO_NOW_ISO,
+    milestone: clean.milestone,
+    status: clean.status,
   });
 
   revalidateAll();
@@ -89,6 +94,7 @@ export async function updateEventMilestoneAction(id: string, milestone: EventMil
   const user = await getSessionUser();
   if (!user) return { error: "Not authenticated" };
   if (!can(user, "create_event")) return { error: "No permission" };
+  if (!eventMilestoneSchema.safeParse(milestone).success) return { error: "Invalid milestone." };
   updateEventMilestone(id, milestone);
   revalidateAll();
   return { ok: true };
