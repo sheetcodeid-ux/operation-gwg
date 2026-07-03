@@ -36,15 +36,47 @@ import {
  * and action goes through — so reads never observe a pre-hydration store.
  */
 
-const g = globalThis as typeof globalThis & { __GWG_HYDRATION__?: Promise<void> };
+const g = globalThis as typeof globalThis & {
+  __GWG_HYDRATION__?: { at: number; inflight: Promise<void> | null };
+};
+
+/**
+ * Re-read from the database at most once per window. Previously hydration ran
+ * exactly once per process, so a serverless instance served a boot-time
+ * snapshot and never saw writes made by other instances. With a short TTL the
+ * in-memory arrays become a fresh cache and the database is the source of
+ * truth: every instance converges within TTL of any write.
+ */
+const HYDRATION_TTL_MS = 3000;
 
 export function ensureHydrated(): Promise<void> {
   if (!dbEnabled) return Promise.resolve();
-  return (g.__GWG_HYDRATION__ ??= hydrate().catch((err) => {
-    // Allow a retry on the next request instead of caching the failure forever.
-    g.__GWG_HYDRATION__ = undefined;
-    console.error("[hydrate] failed — serving in-memory demo data:", err);
-  }));
+  const state = (g.__GWG_HYDRATION__ ??= { at: 0, inflight: null });
+  if (state.inflight) return state.inflight; // dedupe concurrent requests
+  if (Date.now() - state.at < HYDRATION_TTL_MS) return Promise.resolve(); // fresh enough
+  state.inflight = hydrate()
+    .then(() => {
+      state.at = Date.now();
+    })
+    .catch((err) => {
+      // Leave `at` unchanged so the next request retries; serve last-known data.
+      console.error("[hydrate] failed — serving last-known data:", err);
+    })
+    .finally(() => {
+      state.inflight = null;
+    });
+  return state.inflight;
+}
+
+/**
+ * Called by the persistence layer right after a local write. It marks the cache
+ * fresh so the next re-hydration is deferred by one TTL — giving the async DB
+ * write time to land before we reload, which prevents a just-created row from
+ * momentarily flickering out of view on the instance that created it.
+ */
+export function markLocalWrite() {
+  const state = (g.__GWG_HYDRATION__ ??= { at: 0, inflight: null });
+  state.at = Date.now();
 }
 
 function replaceInPlace<T>(target: T[], next: T[]) {
