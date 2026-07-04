@@ -41,6 +41,15 @@ export const NAV_MENUS: Omit<NavItem, "section">[] = [
   { key: "audit", label: "Audit Logs", href: "/admin/audit", icon: "ScrollText" },
 ];
 
+/** Icon (lucide name) shown next to each division's collapsible header. */
+export const DIVISION_ICON: Record<Division, string> = {
+  Operation: "Briefcase",
+  Supervisor: "ShieldCheck",
+  "R&D": "FlaskConical",
+  HRD: "Scale",
+  Administrator: "Settings2",
+};
+
 /** Which division each role sits in (drives the sidebar group header). */
 export const ROLE_DIVISION: Record<Role, Division> = {
   super_admin: "Administrator",
