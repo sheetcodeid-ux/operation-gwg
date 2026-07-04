@@ -2,8 +2,7 @@ import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { getSessionUser } from "@/lib/auth";
 import { areaName, listNotifications, visibleOutlets } from "@/lib/data/store";
-import { can } from "@/lib/rbac";
-import { NAV_ITEMS } from "@/lib/nav";
+import { navFor } from "@/lib/nav";
 import { I18nProvider } from "@/lib/i18n/provider";
 import type { Lang } from "@/lib/i18n/dict";
 import { Sidebar } from "@/components/layout/sidebar";
@@ -21,8 +20,8 @@ export default async function AppLayout({ children }: { children: React.ReactNod
 
   const lang = ((await cookies()).get("gwg_lang")?.value as Lang) || "en";
 
-  // Role-aware navigation
-  const navItems = NAV_ITEMS.filter((item) => !item.permission || can(user, item.permission));
+  // Role-aware navigation: only the menus this role's division exposes.
+  const navItems = navFor(user.role);
   const notifications = listNotifications(user);
   const outletItems = visibleOutlets(user).map((o) => ({
     id: o.id,

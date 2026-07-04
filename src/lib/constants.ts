@@ -24,6 +24,12 @@ export const ROLE_LABEL: Record<Role, string> = {
   data_operation: "Data Operation",
   pos_operation: "POS Operation",
   admin_operation: "Admin Operation",
+  supervisor: "Supervisor",
+  head_bar_rnd: "Head Bar R&D",
+  bar_rnd: "Bar R&D",
+  kitchen_rnd: "Kitchen R&D",
+  coordinator_rnd: "Coordinator R&D",
+  legal: "Legal",
 };
 
 /* ------------------------------------------------------------------ */

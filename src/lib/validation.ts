@@ -13,6 +13,12 @@ export const roleSchema = z.enum([
   "data_operation",
   "pos_operation",
   "admin_operation",
+  "supervisor",
+  "head_bar_rnd",
+  "bar_rnd",
+  "kitchen_rnd",
+  "coordinator_rnd",
+  "legal",
 ]);
 
 export const prioritySchema = z.enum(["critical", "high", "medium", "low"]);

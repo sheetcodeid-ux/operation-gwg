@@ -56,9 +56,19 @@ export const ROLE_PERMISSIONS: Record<Role, Permission[]> = {
     "view_dashboard",
     "view_reports",
   ],
-  data_operation: ["create_hospitality", "create_hygiene", "create_work_task", "view_dashboard", "view_reports"],
-  pos_operation: ["create_work_task", "view_dashboard", "view_reports"],
-  admin_operation: ["manage_users", "manage_org", "view_audit_logs", "view_all_outlets", "view_dashboard", "view_reports"],
+  data_operation: ["create_work_task"],
+  pos_operation: ["create_work_task"],
+  // Admin Operation now only handles Work Tracker + Complaints (no org/user admin).
+  admin_operation: ["create_work_task", "manage_complaint"],
+  // Supervisor division — fills Hygiene + Complaints for their own branch.
+  supervisor: ["create_hygiene", "manage_complaint"],
+  // R&D division — Work Tracker only.
+  head_bar_rnd: ["create_work_task"],
+  bar_rnd: ["create_work_task"],
+  kitchen_rnd: ["create_work_task"],
+  coordinator_rnd: ["create_work_task"],
+  // HRD — Work Tracker only.
+  legal: ["create_work_task"],
 };
 
 export function can(user: Pick<UserProfile, "role">, permission: Permission): boolean {
@@ -80,6 +90,8 @@ export function scopeOutlets(user: UserProfile, outlets: Outlet[]): Outlet[] {
   if (hasGlobalScope(user.role)) return outlets;
   const ids = new Set(user.outletIds ?? []);
   if (ids.size) return outlets.filter((o) => ids.has(o.id));
+  // Supervisor: only the outlet(s) they supervise (their own branch).
+  if (user.role === "supervisor") return outlets.filter((o) => o.supervisorId === user.id);
   // Legacy area-based fallback for coordinators.
   if (user.role === "area_coordinator" && user.areaId) return outlets.filter((o) => o.areaId === user.areaId);
   // Branch role without any assignment → no restriction (e.g. a head_operation covering all).

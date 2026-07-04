@@ -10,12 +10,22 @@
 /* ------------------------------------------------------------------ */
 
 export type Role =
+  // Operation division
   | "super_admin"
   | "head_operation"
   | "area_coordinator"
   | "data_operation"
   | "pos_operation"
-  | "admin_operation";
+  | "admin_operation"
+  // Supervisor division
+  | "supervisor"
+  // R&D division
+  | "head_bar_rnd"
+  | "bar_rnd"
+  | "kitchen_rnd"
+  | "coordinator_rnd"
+  // HRD division
+  | "legal";
 
 export interface UserProfile {
   id: string;

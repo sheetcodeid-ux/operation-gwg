@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { can, hasGlobalScope, scopeOutlets } from "./rbac";
+import { canSeeMenu, ROLE_MENUS } from "./nav";
 import { getOutlets, getUsers } from "./data/store";
 import type { UserProfile } from "./types";
 
@@ -15,10 +16,12 @@ describe("RBAC capabilities", () => {
     expect(can(admin, "manage_complaint")).toBe(true);
   });
 
-  it("lets admin_operation manage users + org but not enter operational data", () => {
+  it("limits admin_operation to Work Tracker + Complaints (no user/org admin)", () => {
     const adminOps = byRole("admin_operation");
-    expect(can(adminOps, "manage_users")).toBe(true);
-    expect(can(adminOps, "manage_org")).toBe(true);
+    expect(can(adminOps, "create_work_task")).toBe(true);
+    expect(can(adminOps, "manage_complaint")).toBe(true);
+    expect(can(adminOps, "manage_users")).toBe(false);
+    expect(can(adminOps, "manage_org")).toBe(false);
     expect(can(adminOps, "create_hospitality")).toBe(false);
   });
 
@@ -29,11 +32,31 @@ describe("RBAC capabilities", () => {
     expect(can(ac, "manage_users")).toBe(false);
   });
 
-  it("limits pos_operation to tasks + viewing (no user management)", () => {
+  it("limits pos_operation to Work Tracker only", () => {
     const pos = byRole("pos_operation");
-    expect(can(pos, "view_dashboard")).toBe(true);
     expect(can(pos, "create_work_task")).toBe(true);
+    expect(can(pos, "view_dashboard")).toBe(false);
     expect(can(pos, "manage_users")).toBe(false);
+  });
+});
+
+describe("menu access matrix", () => {
+  it("gives R&D and HRD roles only Work Tracker", () => {
+    for (const r of ["legal", "bar_rnd", "kitchen_rnd", "head_bar_rnd", "coordinator_rnd"] as const) {
+      expect(ROLE_MENUS[r]).toEqual(["work"]);
+    }
+  });
+
+  it("gives supervisor only Hygiene + Complaints", () => {
+    expect(ROLE_MENUS.supervisor).toEqual(["hygiene", "complaints"]);
+    expect(canSeeMenu("supervisor", "hygiene")).toBe(true);
+    expect(canSeeMenu("supervisor", "dashboard")).toBe(false);
+  });
+
+  it("restricts admin menus to super_admin", () => {
+    expect(canSeeMenu("super_admin", "users")).toBe(true);
+    expect(canSeeMenu("admin_operation", "users")).toBe(false);
+    expect(canSeeMenu("head_operation", "users")).toBe(false);
   });
 });
 
