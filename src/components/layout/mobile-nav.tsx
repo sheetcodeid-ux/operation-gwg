@@ -4,13 +4,14 @@ import { useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { Menu, Sparkles, X } from "lucide-react";
-import { NAV_SECTIONS, type NavItem } from "@/lib/nav";
+import { type NavItem } from "@/lib/nav";
 import { NAV_ICONS } from "./icons";
 import { cn } from "@/lib/utils";
 
 export function MobileNav({ items }: { items: NavItem[] }) {
   const [open, setOpen] = useState(false);
   const pathname = usePathname();
+  const sections = [...new Set(items.map((i) => i.section))];
 
   return (
     <>
@@ -38,7 +39,7 @@ export function MobileNav({ items }: { items: NavItem[] }) {
               </button>
             </div>
 
-            {NAV_SECTIONS.map((section) => {
+            {sections.map((section) => {
               const sectionItems = items.filter((i) => i.section === section);
               if (!sectionItems.length) return null;
               return (
