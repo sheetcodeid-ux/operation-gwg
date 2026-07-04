@@ -41,6 +41,15 @@ export const NAV_MENUS: Omit<NavItem, "section">[] = [
   { key: "audit", label: "Audit Logs", href: "/admin/audit", icon: "ScrollText" },
 ];
 
+/** Icon (lucide name) shown next to each division's collapsible header. */
+export const DIVISION_ICON: Record<Division, string> = {
+  Operation: "Briefcase",
+  Supervisor: "ShieldCheck",
+  "R&D": "FlaskConical",
+  HRD: "Scale",
+  Administrator: "Settings2",
+};
+
 /** Which division each role sits in (drives the sidebar group header). */
 export const ROLE_DIVISION: Record<Role, Division> = {
   super_admin: "Administrator",
@@ -84,8 +93,25 @@ export const ROLE_MENUS: Record<Role, MenuKey[]> = {
   legal: ["work"],
 };
 
-/** Build the ordered, division-tagged nav items visible to a role. */
+/** Menus shown per division in the Super Admin sidebar (all divisions listed). */
+const DIVISION_MENUS: { division: Division; menus: MenuKey[] }[] = [
+  { division: "Operation", menus: OPERATION_FULL },
+  { division: "Supervisor", menus: ["hygiene", "complaints"] },
+  { division: "R&D", menus: ["work"] },
+  { division: "HRD", menus: ["work"] },
+  { division: "Administrator", menus: ["users", "organization", "audit"] },
+];
+
+/** Build the ordered, division-tagged nav items visible to a role.
+ *  Super Admin sees every division as its own group; everyone else sees only
+ *  their own division's menus. */
 export function navFor(role: Role): NavItem[] {
+  if (role === "super_admin") {
+    return DIVISION_MENUS.flatMap(({ division, menus }) => {
+      const allowed = new Set(menus);
+      return NAV_MENUS.filter((m) => allowed.has(m.key)).map((m) => ({ ...m, section: division }));
+    });
+  }
   const allowed = new Set(ROLE_MENUS[role]);
   const division = ROLE_DIVISION[role];
   return NAV_MENUS.filter((m) => allowed.has(m.key)).map((m) => ({ ...m, section: division }));
