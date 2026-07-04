@@ -52,7 +52,7 @@ export function MobileNav({ items }: { items: NavItem[] }) {
                     const active = pathname === item.href || pathname.startsWith(item.href + "/");
                     return (
                       <Link
-                        key={item.href}
+                        key={`${section}:${item.href}`}
                         href={item.href}
                         onClick={() => setOpen(false)}
                         className={cn(

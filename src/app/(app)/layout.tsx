@@ -49,7 +49,12 @@ export default async function AppLayout({ children }: { children: React.ReactNod
             </div>
           </div>
           <CommandPalette
-            navItems={navItems.map((n) => ({ label: n.label, href: n.href, icon: n.icon, section: n.section }))}
+            navItems={[...new Map(navItems.map((n) => [n.href, n])).values()].map((n) => ({
+              label: n.label,
+              href: n.href,
+              icon: n.icon,
+              section: n.section,
+            }))}
             outlets={outletItems}
           />
         </div>

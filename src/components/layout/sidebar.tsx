@@ -46,7 +46,7 @@ export function Sidebar({ items }: { items: NavItem[] }) {
                   const active = isActive(item.href);
                   return (
                     <Link
-                      key={item.href}
+                      key={`${section}:${item.href}`}
                       href={item.href}
                       title={t(`nav.${item.label}`)}
                       className={cn(
