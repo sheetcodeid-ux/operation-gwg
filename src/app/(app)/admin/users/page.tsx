@@ -21,9 +21,10 @@ export default async function UsersPage() {
 
   function scopeOf(u: (typeof users)[number]) {
     const n = u.outletIds?.length ?? 0;
+    // No region and no outlet assignment → belongs to Head Office (HQ).
+    if (n === 0 && !u.areaId) return "Head Office";
     if (u.role === "area_coordinator") return `${n} outlets`;
-    if (u.role === "head_operation" || u.role === "pos_operation") return n ? `${n} outlet` : "Global";
-    return "Global";
+    return n ? `${n} outlet` : "Head Office";
   }
 
   const userRows: UserRow[] = users.map((u) => ({
