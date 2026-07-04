@@ -7,6 +7,7 @@ import { toast } from "sonner";
 import { PRIORITY_META, ROLE_LABEL, TASK_STATUS_META, WORK_CATEGORIES } from "@/lib/constants";
 import type { Priority, Role, TaskStatus } from "@/lib/types";
 import { createTaskAction, updateTaskAction } from "@/lib/actions/work";
+import { WORK_DIVISIONS } from "@/lib/nav";
 import { DEMO_NOW } from "@/lib/now";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -40,7 +41,7 @@ export interface EditableTask {
 
 const PRIORITIES = Object.keys(PRIORITY_META) as Priority[];
 const STATUSES = Object.keys(TASK_STATUS_META) as TaskStatus[];
-const DIVISIONS: Role[] = ["head_operation", "area_coordinator", "data_operation", "pos_operation", "admin_operation"];
+const DIVISIONS: Role[] = WORK_DIVISIONS;
 
 /** Default date for the form, anchored to the demo "now" (not the wall clock),
  *  so new tasks land in the same period the dashboard/calendar display. */
