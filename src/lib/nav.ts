@@ -102,6 +102,21 @@ const DIVISION_MENUS: { division: Division; menus: MenuKey[] }[] = [
   { division: "Administrator", menus: ["users", "organization", "audit"] },
 ];
 
+/** Roles that own Work-Tracker tasks — used as the "division" options when
+ *  creating a task (every division that does Work Tracker, incl. R&D & HRD). */
+export const WORK_DIVISIONS: Role[] = [
+  "head_operation",
+  "area_coordinator",
+  "data_operation",
+  "pos_operation",
+  "admin_operation",
+  "head_bar_rnd",
+  "bar_rnd",
+  "kitchen_rnd",
+  "coordinator_rnd",
+  "legal",
+];
+
 /** Build the ordered, division-tagged nav items visible to a role.
  *  Super Admin sees every division as its own group; everyone else sees only
  *  their own division's menus. */

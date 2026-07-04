@@ -2,10 +2,11 @@
 
 import { ROLE_LABEL } from "@/lib/constants";
 import type { Role } from "@/lib/types";
+import { WORK_DIVISIONS } from "@/lib/nav";
 import { Combobox } from "@/components/ui/combobox";
 import type { DivisionMembers } from "./task-sheet";
 
-export const DIVISIONS: Role[] = ["head_operation", "area_coordinator", "data_operation", "pos_operation", "admin_operation"];
+export const DIVISIONS: Role[] = WORK_DIVISIONS;
 
 export function divisionLabel(r: Role) {
   return ROLE_LABEL[r];

@@ -1,8 +1,9 @@
 import { areaName, getUsers, listTasks, outletName, userName, visibleOutlets } from "@/lib/data/store";
-import type { Role, UserProfile } from "@/lib/types";
+import { WORK_DIVISIONS } from "@/lib/nav";
+import type { UserProfile } from "@/lib/types";
 import type { WorkRow } from "./work-table";
 
-const DIVISIONS: Role[] = ["head_operation", "area_coordinator", "data_operation", "pos_operation", "admin_operation"];
+const DIVISIONS = WORK_DIVISIONS;
 export type DivisionMembers = Record<string, { id: string; name: string }[]>;
 
 /** Enriched task rows shared by the Work Tracker table, Kanban and Calendar views. */
