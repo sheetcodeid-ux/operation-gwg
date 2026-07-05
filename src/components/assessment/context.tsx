@@ -3,7 +3,7 @@
 import * as React from "react";
 import {
   emptyEvaluatorScores,
-  MOCK_CANDIDATE,
+  PARAMETERS,
   type DimensionKey,
   type DimensionScores,
   type EvaluatorKey,
@@ -12,20 +12,53 @@ import {
   type ParamKey,
   type ParamScores,
 } from "@/lib/assessment/config";
+import { getDepartment, getEmployee, getPosition } from "@/lib/assessment/org";
+import type { AssessmentRole, TabKey } from "@/lib/assessment/access";
+import { canSeeTab, TAB_ACCESS } from "@/lib/assessment/access";
 
+/** Cascading identity: department → position → employee, plus the manual fields. */
 export interface Candidate {
-  nama: string;
+  departmentId: string;
+  positionId: string;
+  employeeId: string;
   nik: string;
-  jabatan: string;
   golongan: string;
   golonganTujuan: string;
+  batch: string;
+}
+
+const EMPTY_CANDIDATE: Candidate = {
+  departmentId: "",
+  positionId: "",
+  employeeId: "",
+  nik: "",
+  golongan: "",
+  golonganTujuan: "",
+  batch: "",
+};
+
+export interface ResolvedCandidate {
+  nama: string;
+  jabatan: string;
   departemen: string;
-  masaKerja: number;
+  isHead: boolean;
 }
 
 interface AssessmentState {
+  role: AssessmentRole;
+  setRole: (r: AssessmentRole) => void;
+
+  tab: TabKey;
+  setTab: (t: TabKey) => void;
+  visited: Set<TabKey>;
+
   candidate: Candidate;
-  setCandidate: (patch: Partial<Candidate>) => void;
+  resolved: ResolvedCandidate;
+  setDepartment: (id: string) => void;
+  setPosition: (id: string) => void;
+  setEmployee: (id: string) => void;
+  patchCandidate: (patch: Partial<Candidate>) => void;
+  identityComplete: boolean;
 
   syarat: Record<number, boolean>;
   toggleSyarat: (id: number, v: boolean) => void;
@@ -33,6 +66,12 @@ interface AssessmentState {
 
   self: ParamScores;
   pickSelf: (key: ParamKey, value: number) => void;
+  selfComplete: boolean;
+
+  /** All prerequisites (spec §2) met → show "Simpan & Lanjut ke Penilaian". */
+  readyForPenilaian: boolean;
+  saved: boolean;
+  saveAndContinue: () => void;
 
   scores: EvaluatorScores;
   pickScore: (evaluator: EvaluatorKey, key: ParamKey, value: number) => void;
@@ -57,16 +96,43 @@ export function useAssessment(): AssessmentState {
 }
 
 export function AssessmentProvider({ children }: { children: React.ReactNode }) {
-  const [candidate, setCandidateState] = React.useState<Candidate>({ ...MOCK_CANDIDATE });
+  const [role, setRoleState] = React.useState<AssessmentRole>("director");
+  const [tab, setTabState] = React.useState<TabKey>("panduan");
+  const [visited, setVisited] = React.useState<Set<TabKey>>(new Set<TabKey>(["panduan"]));
+
+  const [candidate, setCandidate] = React.useState<Candidate>({ ...EMPTY_CANDIDATE });
   const [syarat, setSyarat] = React.useState<Record<number, boolean>>({ 1: false, 2: false, 3: false });
   const [self, setSelf] = React.useState<ParamScores>({});
+  const [saved, setSaved] = React.useState(false);
   const [scores, setScores] = React.useState<EvaluatorScores>(emptyEvaluatorScores());
   const [interview, setInterview] = React.useState<DimensionScores>({});
   const [ivNote, setIvNote] = React.useState("");
   const [ivRecommendation, setIvRecommendation] = React.useState<IvRecommendation["value"] | null>(null);
   const [financialImpact, setFinancialImpact] = React.useState(false);
 
-  const setCandidate = React.useCallback((patch: Partial<Candidate>) => setCandidateState((c) => ({ ...c, ...patch })), []);
+  const setTab = React.useCallback((t: TabKey) => {
+    setTabState(t);
+    setVisited((v) => (v.has(t) ? v : new Set(v).add(t)));
+  }, []);
+
+  const setRole = React.useCallback((r: AssessmentRole) => {
+    setRoleState(r);
+    // Keep the current tab only if the new role may see it; else jump to its first tab.
+    setTabState((cur) => (canSeeTab(r, cur) ? cur : TAB_ACCESS[r][0]));
+  }, []);
+
+  // Cascading resets: changing a parent clears its descendants (spec §8).
+  const setDepartment = React.useCallback(
+    (id: string) => setCandidate((c) => ({ ...c, departmentId: id, positionId: "", employeeId: "" })),
+    [],
+  );
+  const setPosition = React.useCallback(
+    (id: string) => setCandidate((c) => ({ ...c, positionId: id, employeeId: "" })),
+    [],
+  );
+  const setEmployee = React.useCallback((id: string) => setCandidate((c) => ({ ...c, employeeId: id })), []);
+  const patchCandidate = React.useCallback((patch: Partial<Candidate>) => setCandidate((c) => ({ ...c, ...patch })), []);
+
   const toggleSyarat = React.useCallback((id: number, v: boolean) => setSyarat((s) => ({ ...s, [id]: v })), []);
   const pickSelf = React.useCallback((key: ParamKey, value: number) => setSelf((s) => ({ ...s, [key]: value })), []);
   const pickScore = React.useCallback(
@@ -76,16 +142,58 @@ export function AssessmentProvider({ children }: { children: React.ReactNode }) 
   );
   const pickDimension = React.useCallback((key: DimensionKey, value: number) => setInterview((s) => ({ ...s, [key]: value })), []);
 
+  const resolved: ResolvedCandidate = React.useMemo(() => {
+    const pos = getPosition(candidate.positionId);
+    return {
+      nama: getEmployee(candidate.employeeId)?.name ?? "",
+      jabatan: pos?.title ?? "",
+      departemen: getDepartment(candidate.departmentId)?.name ?? "",
+      isHead: pos?.isHead ?? false,
+    };
+  }, [candidate.departmentId, candidate.positionId, candidate.employeeId]);
+
+  const identityComplete =
+    !!candidate.departmentId &&
+    !!candidate.positionId &&
+    !!candidate.employeeId &&
+    candidate.nik.trim().length > 0 &&
+    !!candidate.golongan &&
+    !!candidate.golonganTujuan &&
+    !!candidate.batch;
+
   const syaratPassed = syarat[1] && syarat[2] && syarat[3];
+  const selfComplete = PARAMETERS.every((p) => !!self[p.key]);
+  const readyForPenilaian =
+    syaratPassed && identityComplete && selfComplete && visited.has("panduan") && visited.has("referensi");
+
+  const saveAndContinue = React.useCallback(() => {
+    setSaved(true);
+    // Karyawan may not access Penilaian (spec §3) — only advance when allowed.
+    if (canSeeTab(role, "penilaian")) setTab("penilaian");
+  }, [role, setTab]);
 
   const value: AssessmentState = {
+    role,
+    setRole,
+    tab,
+    setTab,
+    visited,
     candidate,
-    setCandidate,
+    resolved,
+    setDepartment,
+    setPosition,
+    setEmployee,
+    patchCandidate,
+    identityComplete,
     syarat,
     toggleSyarat,
     syaratPassed,
     self,
     pickSelf,
+    selfComplete,
+    readyForPenilaian,
+    saved,
+    saveAndContinue,
     scores,
     pickScore,
     interview,

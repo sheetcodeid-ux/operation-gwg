@@ -4,6 +4,7 @@ import { DIMENSIONS, IV_RECOMMENDATIONS, interviewScore } from "@/lib/assessment
 import { cn } from "@/lib/utils";
 import { Textarea } from "@/components/ui/input";
 import { useAssessment } from "./context";
+import { CascadingPicker } from "./cascading-picker";
 import { Banner, Card, ScoreOptions, SectionLabel } from "./parts";
 
 /** Tab ④: final interview — 4 weighted dimensions + narrative + recommendation. */
@@ -17,6 +18,17 @@ export function InterviewTab() {
         <strong>Interview Akhir</strong> dilakukan setelah semua penilaian selesai. Interviewer membaca Self Assessment
         karyawan lebih dulu. Durasi ideal 30–45 menit. Hasil interview memverifikasi & memperkuat bukti — bukan pengganti skor.
       </Banner>
+
+      <SectionLabel>Pilih Karyawan yang Diinterview</SectionLabel>
+      <Card>
+        <CascadingPicker />
+        {a.resolved.nama && (
+          <p className="mt-3 text-xs text-muted-foreground">
+            Interview: <span className="font-medium text-foreground">{a.resolved.nama}</span> · {a.resolved.jabatan} ·{" "}
+            {a.resolved.departemen}
+          </p>
+        )}
+      </Card>
 
       <Card className="flex items-center justify-between gap-4">
         <div>

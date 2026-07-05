@@ -1,10 +1,13 @@
 "use client";
 
-import { Check, X } from "lucide-react";
+import { ArrowRight, Check, X } from "lucide-react";
 import { PARAMETERS, SYARAT_UTAMA } from "@/lib/assessment/config";
+import { BATCHES, GOLONGAN } from "@/lib/assessment/org";
 import { cn } from "@/lib/utils";
+import { Button } from "@/components/ui/button";
 import { Field, Input, Select } from "@/components/ui/input";
 import { useAssessment } from "./context";
+import { CascadingPicker } from "./cascading-picker";
 import { Banner, Card, ScoreOptions, SectionLabel } from "./parts";
 
 /** Tab ②: verify the 3 hard requirements, capture identity, and self-assessment. */
@@ -63,42 +66,54 @@ export function SyaratTab() {
 
       <SectionLabel>② Identitas Karyawan</SectionLabel>
       <Card>
-        <div className="grid gap-3 sm:grid-cols-2">
-          <Field label="Nama lengkap karyawan">
-            <Input value={a.candidate.nama} onChange={(e) => a.setCandidate({ nama: e.target.value })} placeholder="Contoh: Budi Santoso" />
-          </Field>
+        {/* Departemen → Jabatan → Nama (cascading). */}
+        <CascadingPicker />
+
+        <div className="mt-3 grid gap-3 sm:grid-cols-2">
           <Field label="NIK / ID Karyawan">
-            <Input value={a.candidate.nik} onChange={(e) => a.setCandidate({ nik: e.target.value })} placeholder="Contoh: EMP-2019-0123" />
+            <Input
+              value={a.candidate.nik}
+              onChange={(e) => a.patchCandidate({ nik: e.target.value })}
+              placeholder="Contoh: EMP-2019-0123"
+            />
           </Field>
-          <Field label="Jabatan saat ini">
-            <Input value={a.candidate.jabatan} onChange={(e) => a.setCandidate({ jabatan: e.target.value })} placeholder="Contoh: Staff Senior" />
+          <Field label="Batch">
+            <Select value={a.candidate.batch} onChange={(e) => a.patchCandidate({ batch: e.target.value })}>
+              <option value="">Pilih batch…</option>
+              {BATCHES.map((b) => (
+                <option key={b} value={b}>
+                  {b}
+                </option>
+              ))}
+            </Select>
           </Field>
-          <Field label="Departemen">
-            <Input value={a.candidate.departemen} onChange={(e) => a.setCandidate({ departemen: e.target.value })} placeholder="Contoh: Operations" />
+          <Field label="Golongan Saat Ini">
+            <Select value={a.candidate.golongan} onChange={(e) => a.patchCandidate({ golongan: e.target.value })}>
+              <option value="">Pilih golongan…</option>
+              {GOLONGAN.map((g) => (
+                <option key={g} value={g}>
+                  {g}
+                </option>
+              ))}
+            </Select>
           </Field>
-          <Field label="Golongan saat ini">
-            <Input value={a.candidate.golongan} onChange={(e) => a.setCandidate({ golongan: e.target.value })} placeholder="Contoh: II-B" />
-          </Field>
-          <Field label="Golongan tujuan">
-            <Input value={a.candidate.golonganTujuan} onChange={(e) => a.setCandidate({ golonganTujuan: e.target.value })} placeholder="Contoh: III-A" />
-          </Field>
-          <Field label="Masa kerja (untuk parameter Masa Kerja)" className="sm:col-span-2">
-            <Select
-              value={String(a.candidate.masaKerja)}
-              onChange={(e) => {
-                const v = Number(e.target.value);
-                a.setCandidate({ masaKerja: v });
-                a.pickScore("hc", "msk", v); // masa kerja is auto-scored from HR
-              }}
-            >
-              <option value="1">Kurang dari 1 tahun</option>
-              <option value="2">1 – 2 tahun</option>
-              <option value="3">2 – 3 tahun</option>
-              <option value="4">3 – 5 tahun</option>
-              <option value="5">Lebih dari 5 tahun</option>
+          <Field label="Golongan Tujuan">
+            <Select value={a.candidate.golonganTujuan} onChange={(e) => a.patchCandidate({ golonganTujuan: e.target.value })}>
+              <option value="">Pilih golongan tujuan…</option>
+              {GOLONGAN.map((g) => (
+                <option key={g} value={g}>
+                  {g}
+                </option>
+              ))}
             </Select>
           </Field>
         </div>
+
+        {a.resolved.isHead && (
+          <Banner tone="violet" icon="★">
+            Jabatan <strong>Head</strong> — dinilai langsung oleh <strong>Director &amp; Human Resource</strong>.
+          </Banner>
+        )}
       </Card>
 
       <SectionLabel>③ Self Assessment — Penilaian Mandiri Karyawan</SectionLabel>
@@ -120,6 +135,43 @@ export function SyaratTab() {
           </Card>
         ))}
       </div>
+
+      {/* Spec §2: continue button once Panduan, Syarat & SA, and Referensi are done. */}
+      <ContinueGate />
+    </div>
+  );
+}
+
+function ContinueGate() {
+  const a = useAssessment();
+  const canProceed = a.role !== "karyawan";
+  if (a.readyForPenilaian) {
+    return (
+      <div className="space-y-2">
+        {a.saved && (
+          <Banner tone="success" icon={<Check className="size-4" />}>
+            <strong>Data assessment tersimpan.</strong>{" "}
+            {canProceed ? "Melanjutkan ke halaman Penilaian." : "Penilaian dilakukan oleh Atasan Langsung, HR, atau Director."}
+          </Banner>
+        )}
+        <Button className="h-12 w-full text-base" onClick={a.saveAndContinue}>
+          {canProceed ? "Simpan & Lanjut ke Penilaian" : "Simpan Assessment"}
+          <ArrowRight className="size-5" />
+        </Button>
+      </div>
+    );
+  }
+
+  const missing: string[] = [];
+  if (!a.syaratPassed) missing.push("centang 3 syarat utama");
+  if (!a.identityComplete) missing.push("lengkapi identitas karyawan");
+  if (!a.selfComplete) missing.push("isi seluruh Self Assessment");
+  if (!a.visited.has("panduan")) missing.push("buka tab Panduan");
+  if (!a.visited.has("referensi")) missing.push("buka tab Referensi");
+
+  return (
+    <div className="rounded-xl border border-dashed border-border bg-muted/20 p-4 text-center text-sm text-muted-foreground">
+      Untuk melanjutkan ke Penilaian: {missing.join(" · ")}.
     </div>
   );
 }

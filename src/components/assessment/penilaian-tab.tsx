@@ -11,6 +11,7 @@ import {
 } from "@/lib/assessment/config";
 import { cn } from "@/lib/utils";
 import { useAssessment } from "./context";
+import { CascadingPicker } from "./cascading-picker";
 import { Banner, Card, ScoreOptions, SectionLabel } from "./parts";
 
 const ACCENT: Record<EvaluatorKey, "sky" | "emerald" | "violet"> = { al: "sky", hc: "emerald", dir: "violet" };
@@ -35,6 +36,17 @@ export function PenilaianTab() {
         Isi penilaian dari 3 penilai resmi. Setiap parameter menampilkan kontribusi skor secara langsung agar transparan.
         Skor penilai dihitung otomatis di kartu ringkasan.
       </Banner>
+
+      <SectionLabel>Pilih Karyawan yang Dinilai</SectionLabel>
+      <Card>
+        <CascadingPicker />
+        {a.resolved.nama && (
+          <p className="mt-3 text-xs text-muted-foreground">
+            Menilai: <span className="font-medium text-foreground">{a.resolved.nama}</span> · {a.resolved.jabatan} ·{" "}
+            {a.resolved.departemen}
+          </p>
+        )}
+      </Card>
 
       <SectionLabel>Pilih Penilai Resmi</SectionLabel>
       <div className="grid gap-2 sm:grid-cols-3">

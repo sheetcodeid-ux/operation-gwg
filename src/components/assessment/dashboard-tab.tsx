@@ -1,5 +1,7 @@
 "use client";
 
+import * as React from "react";
+import type { ColumnDef } from "@tanstack/react-table";
 import {
   EVALUATORS,
   IV_RECOMMENDATIONS,
@@ -11,11 +13,25 @@ import {
   gradeTier,
   interviewScore,
 } from "@/lib/assessment/config";
+import { departmentOptions } from "@/lib/assessment/org";
+import {
+  HASIL_META,
+  HASIL_OPTIONS,
+  MOCK_ASSESSMENTS,
+  type AssessmentRecord,
+  type HasilStatus,
+} from "@/lib/assessment/records";
 import { cn } from "@/lib/utils";
+import { DataTable } from "@/components/ui/data-table";
+import { Select } from "@/components/ui/input";
 import { useAssessment } from "./context";
+import { ReportButton } from "./report";
 import { Banner, Card, ScoreRing, SectionLabel, TierPill } from "./parts";
 
-/** Tab ⑤: aggregated results, gap analysis, interview integration & decision. */
+/** Map a computed grade-tier tone to the dashboard's Hasil status. */
+const TONE_TO_HASIL: Record<string, HasilStatus> = { no: "tidak_layak", wait: "ditunda", ok: "layak", fast: "fast_track" };
+
+/** Tab ⑤: live result of the current assessment + table of all assessments. */
 export function DashboardTab() {
   const a = useAssessment();
   const final = finalScore(a.scores);
@@ -25,24 +41,45 @@ export function DashboardTab() {
   const fastTrack = fastTrackEligible(a.scores, a.financialImpact);
   const allFilled = EVALUATORS.every((e) => evaluatorFilled(a.scores[e.key]) === PARAMETERS.length);
 
-  // Final decision: an interview "tidak_layak" overrides an otherwise-eligible score.
   const overridden = a.ivRecommendation === "tidak_layak" && final >= 85;
   const decisionLabel = overridden ? "Tidak Direkomendasikan (Override Interview)" : tier.label;
   const decisionTone = overridden ? "no" : tier.tone;
 
-  // Gap analysis: spread between the highest and lowest evaluator scores.
   const evalScores = EVALUATORS.map((e) => evaluatorScore(a.scores[e.key]));
   const gap = allFilled ? Math.max(...evalScores) - Math.min(...evalScores) : 0;
+
+  // The live assessment as a table row (prepended when a candidate is chosen).
+  const liveRecord: AssessmentRecord | null = a.resolved.nama
+    ? {
+        id: "live",
+        tanggal: new Date().toISOString().slice(0, 10),
+        batch: a.candidate.batch || "—",
+        nik: a.candidate.nik || "—",
+        name: a.resolved.nama,
+        departmentId: a.candidate.departmentId,
+        departmentName: a.resolved.departemen,
+        jabatan: a.resolved.jabatan,
+        golongan: a.candidate.golongan || "—",
+        golonganTujuan: a.candidate.golonganTujuan || "—",
+        penilai: a.resolved.isHead ? "Director, HR" : "Atasan, HC, Director",
+        status: allFilled ? "Menunggu Interview" : "Proses Penilaian",
+        hasil: TONE_TO_HASIL[decisionTone],
+        finalScore: final,
+        interviewResult: ivRek?.label ?? "—",
+        decision: decisionLabel,
+      }
+    : null;
 
   return (
     <div className="space-y-4">
       {!allFilled && (
         <Banner tone="amber" icon="⚠">
-          Belum semua penilai mengisi lengkap. Skor final di bawah dihitung dari data yang sudah masuk dan akan berubah saat
+          Belum semua penilai mengisi lengkap. Ringkasan di bawah dihitung dari data yang sudah masuk dan akan berubah saat
           penilaian dilengkapi.
         </Banner>
       )}
 
+      <SectionLabel>Hasil Assessment Berjalan</SectionLabel>
       <div className="grid gap-3 lg:grid-cols-[auto_1fr]">
         <Card className="flex flex-col items-center justify-center gap-3 text-center">
           <ScoreRing value={final} sub="Skor Final" />
@@ -62,9 +99,9 @@ export function DashboardTab() {
           <Card className="sm:col-span-3">
             <div className="flex flex-wrap items-center justify-between gap-3">
               <div>
-                <p className="text-sm font-semibold text-foreground">{a.candidate.nama || "—"}</p>
+                <p className="text-sm font-semibold text-foreground">{a.resolved.nama || "Belum dipilih"}</p>
                 <p className="text-xs text-muted-foreground">
-                  {a.candidate.jabatan || "—"} · Golongan {a.candidate.golongan || "—"} → {a.candidate.golonganTujuan || "—"}
+                  {a.resolved.jabatan || "—"} · Golongan {a.candidate.golongan || "—"} → {a.candidate.golonganTujuan || "—"}
                 </p>
               </div>
               <div className="text-right">
@@ -80,7 +117,6 @@ export function DashboardTab() {
       <Card className="p-0">
         <div className="divide-y divide-border">
           {PARAMETERS.map((p) => {
-            // Weighted average of this parameter across evaluators (by evaluator weight).
             let sum = 0;
             let wsum = 0;
             for (const e of EVALUATORS) {
@@ -143,23 +179,79 @@ export function DashboardTab() {
         </Card>
       </div>
 
-      <SectionLabel>Keputusan & Tindak Lanjut</SectionLabel>
-      <Card className={cn("border", decisionTone === "no" && "border-red-500/30", decisionTone === "ok" && "border-brand-500/30")}>
-        <div className="flex items-center gap-2">
-          <TierPill tone={decisionTone}>{decisionLabel}</TierPill>
-          <span className="text-sm font-semibold tabular-nums text-foreground">Skor {final.toFixed(1)}</span>
-        </div>
-        <p className="mt-2 text-xs leading-relaxed text-muted-foreground">
-          {overridden
-            ? "Meskipun skor penilaian memenuhi syarat, sesi interview mengungkap concern serius sehingga kenaikan golongan tidak direkomendasikan pada periode ini."
-            : tier.action}
-        </p>
-        {ivRek && (
-          <p className="mt-2 text-xs text-muted-foreground">
-            Rekomendasi interview: <span className="font-medium text-foreground">{ivRek.label}</span>
-          </p>
-        )}
-      </Card>
+      <SectionLabel>Seluruh Data Assessment</SectionLabel>
+      <AllAssessmentsTable live={liveRecord} />
     </div>
+  );
+}
+
+/** Data table of every assessment, with combinable Departemen + Status Hasil filters (spec §6). */
+function AllAssessmentsTable({ live }: { live: AssessmentRecord | null }) {
+  const [dept, setDept] = React.useState("");
+  const [hasil, setHasil] = React.useState("");
+
+  const all = React.useMemo(() => (live ? [live, ...MOCK_ASSESSMENTS] : MOCK_ASSESSMENTS), [live]);
+  const rows = React.useMemo(
+    () => all.filter((r) => (!dept || r.departmentId === dept) && (!hasil || r.hasil === hasil)),
+    [all, dept, hasil],
+  );
+
+  const columns = React.useMemo<ColumnDef<AssessmentRecord>[]>(
+    () => [
+      { accessorKey: "tanggal", header: "Tanggal", cell: ({ getValue }) => <span className="whitespace-nowrap tabular-nums">{getValue<string>()}</span> },
+      { accessorKey: "batch", header: "Batch" },
+      { accessorKey: "nik", header: "NIK", cell: ({ getValue }) => <span className="whitespace-nowrap font-mono text-xs">{getValue<string>()}</span> },
+      { accessorKey: "name", header: "Nama", cell: ({ getValue }) => <span className="whitespace-nowrap font-medium text-foreground">{getValue<string>()}</span> },
+      { accessorKey: "departmentName", header: "Departemen", cell: ({ getValue }) => <span className="whitespace-nowrap">{getValue<string>()}</span> },
+      { accessorKey: "jabatan", header: "Jabatan", cell: ({ getValue }) => <span className="whitespace-nowrap">{getValue<string>()}</span> },
+      { accessorKey: "golongan", header: "Gol. Saat Ini", cell: ({ getValue }) => <span className="whitespace-nowrap">{getValue<string>()}</span> },
+      { accessorKey: "golonganTujuan", header: "Gol. Tujuan", cell: ({ getValue }) => <span className="whitespace-nowrap">{getValue<string>()}</span> },
+      { accessorKey: "penilai", header: "Penilai", cell: ({ getValue }) => <span className="whitespace-nowrap text-muted-foreground">{getValue<string>()}</span> },
+      { accessorKey: "status", header: "Status", cell: ({ getValue }) => <span className="whitespace-nowrap text-muted-foreground">{getValue<string>()}</span> },
+      {
+        accessorKey: "hasil",
+        header: "Hasil",
+        cell: ({ getValue }) => {
+          const h = getValue<HasilStatus>();
+          return <TierPill tone={HASIL_META[h].tone}>{HASIL_META[h].label}</TierPill>;
+        },
+      },
+      {
+        id: "actions",
+        header: "",
+        cell: ({ row }) => <ReportButton record={row.original} />,
+      },
+    ],
+    [],
+  );
+
+  return (
+    <DataTable
+      columns={columns}
+      data={rows}
+      tableId="assessment-records"
+      searchPlaceholder="Cari nama / NIK…"
+      pageSize={8}
+      toolbar={
+        <div className="flex flex-wrap items-center gap-2">
+          <Select value={dept} onChange={(e) => setDept(e.target.value)} className="h-9 w-auto min-w-40">
+            <option value="">Semua Departemen</option>
+            {departmentOptions().map((o) => (
+              <option key={o.value} value={o.value}>
+                {o.label}
+              </option>
+            ))}
+          </Select>
+          <Select value={hasil} onChange={(e) => setHasil(e.target.value)} className="h-9 w-auto min-w-36">
+            <option value="">Semua Status Hasil</option>
+            {HASIL_OPTIONS.map((o) => (
+              <option key={o.value} value={o.value}>
+                {o.label}
+              </option>
+            ))}
+          </Select>
+        </div>
+      }
+    />
   );
 }
