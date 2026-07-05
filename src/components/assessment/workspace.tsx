@@ -1,5 +1,6 @@
 "use client";
 
+import * as React from "react";
 import { BookOpen, ClipboardList, GaugeCircle, Mic, ScrollText, Sparkles } from "lucide-react";
 import { ASSESSMENT_ROLES, canSeeTab, type TabKey } from "@/lib/assessment/access";
 import { cn } from "@/lib/utils";
@@ -35,6 +36,12 @@ function WorkspaceInner() {
   const roleDef = ASSESSMENT_ROLES.find((r) => r.value === a.role)!;
   // Content is rendered from the access-checked tab, never a raw drifted value.
   const activeTab: TabKey = canSeeTab(a.role, a.tab) ? a.tab : tabs[0].key;
+
+  // On tab change (incl. "Selesai"/"Lanjut" navigation) jump back to the top so
+  // the new page starts at its header, not wherever the previous one scrolled.
+  React.useEffect(() => {
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  }, [activeTab]);
 
   return (
     <>

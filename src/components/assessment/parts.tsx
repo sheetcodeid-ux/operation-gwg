@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { Check, ChevronLeft, ChevronRight } from "lucide-react";
+import { Check, ChevronDown, ChevronLeft, ChevronRight } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Combobox, type ComboOption } from "@/components/ui/combobox";
 import { Label } from "@/components/ui/input";
@@ -92,6 +92,50 @@ export function ScrollRow({ children, cols = 3, className }: { children: React.R
       >
         {children}
       </div>
+    </div>
+  );
+}
+
+/** Compact metric tile for dashboard tracking rows. */
+export function MiniStat({ label, value, tone, hint }: { label: string; value: React.ReactNode; tone?: string; hint?: string }) {
+  const bar =
+    tone === "no" ? "text-red-500" : tone === "wait" ? "text-amber-500" : tone === "ok" ? "text-brand-500" : tone === "fast" ? "text-violet-500" : "text-foreground";
+  return (
+    <div className="card-gradient rounded-2xl p-4">
+      <p className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">{label}</p>
+      <p className={cn("mt-1.5 text-2xl font-semibold tabular-nums", bar)}>{value}</p>
+      {hint && <p className="mt-0.5 text-[11px] text-muted-foreground">{hint}</p>}
+    </div>
+  );
+}
+
+/** Collapsible row — a professional "dropdown" for a parameter's detail. */
+export function ExpandRow({
+  title,
+  right,
+  defaultOpen = false,
+  flagged = false,
+  children,
+}: {
+  title: React.ReactNode;
+  right?: React.ReactNode;
+  defaultOpen?: boolean;
+  flagged?: boolean;
+  children: React.ReactNode;
+}) {
+  const [open, setOpen] = React.useState(defaultOpen);
+  return (
+    <div className={cn("overflow-hidden rounded-xl border", flagged ? "border-amber-500/40" : "border-border")}>
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        className="flex w-full items-center gap-3 bg-muted/20 px-4 py-3 text-left transition-colors hover:bg-muted/40"
+      >
+        <ChevronDown className={cn("size-4 shrink-0 text-muted-foreground transition-transform", open && "rotate-180")} />
+        <span className="min-w-0 flex-1 text-sm font-medium text-foreground">{title}</span>
+        {right}
+      </button>
+      {open && <div className="border-t border-border p-4">{children}</div>}
     </div>
   );
 }

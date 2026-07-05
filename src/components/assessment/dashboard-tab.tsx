@@ -2,58 +2,44 @@
 
 import * as React from "react";
 import type { ColumnDef } from "@tanstack/react-table";
-import {
-  IV_RECOMMENDATIONS,
-  PARAMETERS,
-  evaluatorFilled,
-  evaluatorScore,
-  fastTrackEligible,
-  finalScore,
-  gradeTier,
-  interviewScore,
-} from "@/lib/assessment/config";
-import {
-  departmentOptions,
-  employeesForPosition,
-  formatGolongan,
-  positionsForDepartment,
-} from "@/lib/assessment/org";
-import {
-  HASIL_META,
-  HASIL_OPTIONS,
-  MOCK_ASSESSMENTS,
-  type AssessmentRecord,
-  type HasilStatus,
-} from "@/lib/assessment/records";
+import { UserSearch } from "lucide-react";
+import { departmentOptions, employeesForPosition, formatGolongan, positionsForDepartment } from "@/lib/assessment/org";
+import { ASSESSMENTS, computeResult, type EnrichedRecord, type ResultBundle } from "@/lib/assessment/result";
+import { HASIL_META, HASIL_OPTIONS, type AssessmentRecord, type HasilStatus } from "@/lib/assessment/records";
 import { cn } from "@/lib/utils";
 import { DataTable } from "@/components/ui/data-table";
+import { EmptyState } from "@/components/ui/page-header";
 import { useAssessment } from "./context";
 import { ReportButton } from "./report";
-import { Banner, Card, Dropdown, ScoreRing, ScrollRow, SectionLabel, TierPill } from "./parts";
+import { Banner, Card, Dropdown, ExpandRow, MiniStat, ScoreRing, ScrollRow, SectionLabel, TierPill } from "./parts";
 
 const TONE_TO_HASIL: Record<string, HasilStatus> = { no: "tidak_layak", wait: "ditunda", ok: "layak", fast: "fast_track" };
 
-/** Tab ⑤: live result of the current assessment + table of all assessments. */
+interface Subject {
+  name: string;
+  jabatan: string;
+  departemen: string;
+  golongan: string;
+  golonganTujuan: string;
+  batch: string;
+  tanggal: string;
+  source: "live" | "record";
+}
+
+/** Tab ⑤: batch tracking + per-employee result + full data table. */
 export function DashboardTab() {
   const a = useAssessment();
-  const evaluators = a.activeEvaluators;
-  const single = evaluators.length === 1;
-  const final = finalScore(a.scores, evaluators);
-  const tier = gradeTier(final);
-  const ivScore = interviewScore(a.interview);
-  const ivRek = IV_RECOMMENDATIONS.find((r) => r.value === a.ivRecommendation) ?? null;
-  const fastTrack = fastTrackEligible(a.scores, a.financialImpact, evaluators);
-  const allFilled = evaluators.every((e) => evaluatorFilled(a.scores[e.key]) === PARAMETERS.length);
+  const golNow = formatGolongan(a.candidate.golongan, a.candidate.golonganLevel);
+  const golNext = formatGolongan(a.candidate.golonganTujuan, a.candidate.golonganTujuanLevel);
 
-  const overridden = a.ivRecommendation === "tidak_layak" && final >= 85;
-  const decisionLabel = overridden ? "Tidak Direkomendasikan (Override Interview)" : tier.label;
-  const decisionTone = overridden ? "no" : tier.tone;
-
-  const evalScores = evaluators.map((e) => evaluatorScore(a.scores[e.key]));
-  const gap = allFilled && !single ? Math.max(...evalScores) - Math.min(...evalScores) : 0;
-
-  const golonganNow = formatGolongan(a.candidate.golongan, a.candidate.golonganLevel);
-  const golonganNext = formatGolongan(a.candidate.golonganTujuan, a.candidate.golonganTujuanLevel);
+  const liveBundle = computeResult({
+    scores: a.scores,
+    self: a.self,
+    interview: a.interview,
+    ivRecValue: a.ivRecommendation,
+    evaluators: a.activeEvaluators,
+    financialImpact: a.financialImpact,
+  });
 
   const liveRecord: AssessmentRecord | null = a.resolved.nama
     ? {
@@ -65,118 +51,128 @@ export function DashboardTab() {
         departmentId: a.candidate.departmentId,
         departmentName: a.resolved.departemen,
         jabatan: a.resolved.jabatan,
-        golongan: golonganNow || "—",
-        golonganTujuan: golonganNext || "—",
-        penilai: single ? "Director" : "Atasan, HC, Director",
-        status: allFilled ? "Menunggu Interview" : "Proses Penilaian",
-        hasil: TONE_TO_HASIL[decisionTone],
-        finalScore: final,
-        interviewResult: ivRek?.label ?? "—",
-        decision: decisionLabel,
-        evaluators: evaluators.map((e, i) => ({ name: e.name, weight: e.weight, score: evalScores[i] })),
+        golongan: golNow || "—",
+        golonganTujuan: golNext || "—",
+        penilai: liveBundle.single ? "Director" : "Atasan, HC, Director",
+        status: liveBundle.allFilled ? "Menunggu Interview" : "Proses Penilaian",
+        hasil: TONE_TO_HASIL[liveBundle.decisionTone],
+        finalScore: liveBundle.final,
+        interviewResult: liveBundle.ivRek?.label ?? "—",
+        decision: liveBundle.decisionLabel,
+        evaluators: liveBundle.evalScores.map((e) => ({ name: e.name, weight: e.weight, score: e.score })),
       }
     : null;
 
+  // ── per-employee selector (local; does not touch the shared candidate) ──
+  const [dDept, setDDept] = React.useState("");
+  const [dJab, setDJab] = React.useState("");
+  const [dNama, setDNama] = React.useState("");
+  const jabOpts = React.useMemo(() => positionsForDepartment(dDept).map((p) => ({ value: p.title, label: p.title })), [dDept]);
+  const namaOpts = React.useMemo(() => {
+    const pos = positionsForDepartment(dDept).find((p) => p.title === dJab);
+    return employeesForPosition(pos?.id).map((e) => ({ value: e.name, label: e.name }));
+  }, [dDept, dJab]);
+
+  const selectedRecord: EnrichedRecord | null = dNama ? ASSESSMENTS.find((r) => r.name === dNama) ?? null : null;
+  const liveIsSelected = !!dNama && liveRecord?.name === dNama;
+  const emptyEmployee = !!dNama && !selectedRecord && !liveIsSelected;
+
+  let bundle: ResultBundle | null = null;
+  let subject: Subject | null = null;
+  let editable = false;
+  if (selectedRecord) {
+    bundle = selectedRecord.bundle;
+    subject = {
+      name: selectedRecord.name,
+      jabatan: selectedRecord.jabatan,
+      departemen: selectedRecord.departmentName,
+      golongan: selectedRecord.golongan,
+      golonganTujuan: selectedRecord.golonganTujuan,
+      batch: selectedRecord.batch,
+      tanggal: selectedRecord.tanggal,
+      source: "record",
+    };
+  } else if (!emptyEmployee && a.resolved.nama) {
+    bundle = liveBundle;
+    editable = true;
+    subject = {
+      name: a.resolved.nama,
+      jabatan: a.resolved.jabatan,
+      departemen: a.resolved.departemen,
+      golongan: golNow || "—",
+      golonganTujuan: golNext || "—",
+      batch: a.candidate.batch || "—",
+      tanggal: new Date().toISOString().slice(0, 10),
+      source: "live",
+    };
+  }
+
+  const resetView = () => {
+    setDDept("");
+    setDJab("");
+    setDNama("");
+  };
+
   return (
     <div className="space-y-4">
-      {!allFilled && (
-        <Banner tone="amber" icon="⚠">
-          Belum semua penilai mengisi lengkap. Ringkasan di bawah dihitung dari data yang sudah masuk dan akan berubah saat
-          penilaian dilengkapi.
-        </Banner>
-      )}
+      <SectionLabel>Ringkasan Batch (Tracking)</SectionLabel>
+      <BatchTracking live={liveRecord} />
 
-      <SectionLabel>Hasil Assessment Berjalan</SectionLabel>
-      <div className="grid gap-3 lg:grid-cols-[auto_1fr]">
-        <Card className="flex flex-col items-center justify-center gap-3 text-center">
-          <ScoreRing value={final} sub="Skor Final" />
-          <TierPill tone={decisionTone}>{decisionLabel}</TierPill>
-        </Card>
-
-        <div className="grid gap-3">
-          <ScrollRow cols={single ? 1 : 3}>
-            {evaluators.map((e, i) => (
-              <Card key={e.key}>
-                <p className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">{e.name} · {e.weight}%</p>
-                <p className="mt-1 text-2xl font-semibold tabular-nums text-foreground">{evalScores[i].toFixed(1)}</p>
-                <p className="mt-0.5 text-[11px] text-muted-foreground">
-                  Kontribusi ke final: <span className="tabular-nums">{(evalScores[i] * (e.weight / 100)).toFixed(1)}</span>
-                </p>
-              </Card>
-            ))}
-          </ScrollRow>
-          <Card>
-            <div className="flex flex-wrap items-center justify-between gap-3">
-              <div>
-                <p className="text-sm font-semibold text-foreground">{a.resolved.nama || "Belum dipilih"}</p>
-                <p className="text-xs text-muted-foreground">
-                  {a.resolved.jabatan || "—"} · Golongan {golonganNow || "—"} → {golonganNext || "—"}
-                </p>
-              </div>
-              <div className="text-right">
-                <p className="text-[11px] uppercase tracking-wide text-muted-foreground">Skor Interview</p>
-                <p className="text-lg font-semibold tabular-nums text-foreground">{ivScore.toFixed(1)}</p>
-              </div>
-            </div>
-          </Card>
-        </div>
-      </div>
-
-      <SectionLabel>Rincian per Parameter (rata-rata tertimbang penilai)</SectionLabel>
-      <Card className="p-0">
-        <div className="divide-y divide-border">
-          {PARAMETERS.map((p) => {
-            let sum = 0;
-            let wsum = 0;
-            for (const e of evaluators) {
-              const v = a.scores[e.key][p.key];
-              if (v) {
-                sum += (v / p.scale) * 100 * (e.weight / 100);
-                wsum += e.weight / 100;
-              }
-            }
-            const pct = wsum ? sum / wsum : 0;
-            return (
-              <div key={p.key} className="flex items-center gap-3 px-4 py-3">
-                <span className="w-40 shrink-0 truncate text-sm text-foreground">{p.title}</span>
-                <div className="h-2 flex-1 overflow-hidden rounded-full bg-muted">
-                  <div
-                    className={cn("h-full rounded-full", pct >= 85 ? "bg-brand-500" : pct >= 70 ? "bg-amber-500" : "bg-red-500")}
-                    style={{ width: `${Math.max(0, Math.min(100, pct))}%` }}
-                  />
-                </div>
-                <span className="w-12 shrink-0 text-right text-sm font-semibold tabular-nums text-foreground">{pct.toFixed(0)}</span>
-              </div>
-            );
-          })}
-        </div>
+      <SectionLabel>Lihat Hasil per Karyawan</SectionLabel>
+      <Card>
+        <ScrollRow cols={3}>
+          <Dropdown
+            label="Departemen"
+            value={dDept}
+            onChange={(v) => {
+              setDDept(v);
+              setDJab("");
+              setDNama("");
+            }}
+            options={[{ value: "", label: "— Assessment Berjalan —" }, ...departmentOptions()]}
+            placeholder="Assessment Berjalan"
+          />
+          <Dropdown
+            label="Jabatan"
+            value={dJab}
+            onChange={(v) => {
+              setDJab(v);
+              setDNama("");
+            }}
+            options={jabOpts}
+            placeholder={dDept ? "Pilih jabatan…" : "Pilih departemen dulu"}
+            disabled={!dDept}
+          />
+          <Dropdown
+            label="Nama Karyawan"
+            value={dNama}
+            onChange={setDNama}
+            options={namaOpts}
+            placeholder={dJab ? "Pilih nama…" : "Pilih jabatan dulu"}
+            disabled={!dJab}
+          />
+        </ScrollRow>
+        {dNama && (
+          <button type="button" onClick={resetView} className="mt-3 text-xs font-medium text-brand-600 hover:underline dark:text-brand-400">
+            ← Kembali ke assessment berjalan
+          </button>
+        )}
       </Card>
 
-      {!single && (
-        <div className="grid gap-3 sm:grid-cols-2">
-          <Card>
-            <p className="text-sm font-semibold text-foreground">Analisis Gap Antar Penilai</p>
-            {allFilled ? (
-              <p className="mt-1.5 text-xs leading-relaxed text-muted-foreground">
-                Selisih skor tertinggi–terendah: <span className="font-semibold tabular-nums text-foreground">{gap.toFixed(1)} poin</span>.{" "}
-                {gap > 15
-                  ? "Gap cukup besar — disarankan sesi kalibrasi untuk menyamakan persepsi antar penilai."
-                  : "Gap dalam batas wajar — persepsi penilai relatif selaras."}
-              </p>
-            ) : (
-              <p className="mt-1.5 text-xs text-muted-foreground">Menunggu seluruh penilai mengisi lengkap.</p>
-            )}
-          </Card>
-
-          <Card className={cn(fastTrack && "ring-1 ring-violet-500/30")}>
-            <FastTrackControl />
-          </Card>
-        </div>
-      )}
-      {single && (
-        <Card className={cn(fastTrack && "ring-1 ring-violet-500/30")}>
-          <FastTrackControl />
-        </Card>
+      {emptyEmployee ? (
+        <EmptyState
+          icon={UserSearch}
+          title={`${dNama} belum memiliki assessment`}
+          description="Karyawan ini belum masuk periode penilaian atau prosesnya belum dimulai. Mulai dari tab Syarat & SA lalu Penilaian."
+        />
+      ) : bundle && subject ? (
+        <IndividualResult bundle={bundle} subject={subject} editable={editable} />
+      ) : (
+        <EmptyState
+          icon={UserSearch}
+          title="Belum ada karyawan dipilih"
+          description="Pilih karyawan di atas untuk melihat hasil, atau pilih karyawan yang dinilai di tab Penilaian."
+        />
       )}
 
       <SectionLabel>Seluruh Data Assessment</SectionLabel>
@@ -185,50 +181,230 @@ export function DashboardTab() {
   );
 }
 
-function FastTrackControl() {
-  const a = useAssessment();
-  const fastTrack = fastTrackEligible(a.scores, a.financialImpact, a.activeEvaluators);
+/** Batch-wide tracking tiles — precise, automatic counts across all assessments. */
+function BatchTracking({ live }: { live: AssessmentRecord | null }) {
+  const all = live ? [live, ...ASSESSMENTS] : ASSESSMENTS;
+  const total = all.length;
+  const selesai = all.filter((r) => r.status === "Selesai" || r.status === "Menunggu Interview").length;
+  const berjalan = total - selesai;
+  const count = (h: HasilStatus) => all.filter((r) => r.status !== "Proses Penilaian" && r.status !== "Draft" && r.hasil === h).length;
+  const avg = total ? Math.round((all.reduce((s, r) => s + r.finalScore, 0) / total) * 10) / 10 : 0;
+
   return (
-    <>
-      <p className="text-sm font-semibold text-foreground">Fast Track (Opsional)</p>
-      <label className="mt-2 flex cursor-pointer items-start gap-2 text-xs text-foreground">
-        <input
-          type="checkbox"
-          checked={a.financialImpact}
-          onChange={(e) => a.setFinancialImpact(e.target.checked)}
-          className="mt-0.5 size-4 accent-violet-500"
-        />
-        <span>Terdapat bukti dampak finansial terukur (efisiensi / revenue / penghematan).</span>
-      </label>
-      <p className="mt-2 text-xs text-muted-foreground">
-        {fastTrack ? (
-          <span className="font-semibold text-violet-600 dark:text-violet-400">✓ Memenuhi syarat fast track — diskusikan promosi jabatan dengan manajemen senior.</span>
-        ) : (
-          "Butuh skor > 95, dampak finansial terukur, dan Attitude nilai 3 dari penilai."
-        )}
-      </p>
-    </>
+    <ScrollRow cols={4}>
+      <MiniStat label="Total Assessment" value={total} hint={`Rata-rata skor ${avg}`} />
+      <MiniStat label="Selesai / Berjalan" value={`${selesai} / ${berjalan}`} tone="ok" hint="status proses" />
+      <MiniStat label="Layak + Fast Track" value={count("layak") + count("fast_track")} tone="ok" hint={`Fast track ${count("fast_track")}`} />
+      <MiniStat label="Ditunda / Tidak Layak" value={`${count("ditunda")} / ${count("tidak_layak")}`} tone="wait" hint="perlu tindak lanjut" />
+    </ScrollRow>
   );
 }
 
-/** Data table of every assessment, with cascading Departemen → Jabatan → Nama + Status filters (spec revisi §6). */
+/** Full per-employee result — mirrors the HTML dashboard layout, all measured. */
+function IndividualResult({ bundle, subject, editable }: { bundle: ResultBundle; subject: Subject; editable: boolean }) {
+  const a = useAssessment();
+  const b = bundle;
+
+  return (
+    <div className="space-y-4">
+      {/* Header */}
+      <Card>
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div className="min-w-0">
+            <div className="flex items-center gap-2">
+              <span className="inline-flex items-center gap-1.5 rounded-full bg-brand-500/10 px-2.5 py-1 text-[11px] font-semibold text-brand-700 ring-1 ring-brand-500/25 dark:text-brand-400">
+                {subject.source === "live" ? "Assessment Berjalan" : "Riwayat Assessment"}
+              </span>
+              <span className="text-[11px] text-muted-foreground">{subject.batch} · {subject.tanggal}</span>
+            </div>
+            <p className="mt-1.5 text-lg font-semibold text-foreground">{subject.name || "Belum dipilih"}</p>
+            <p className="text-xs text-muted-foreground">
+              {subject.jabatan || "—"} · {subject.departemen || "—"} · Golongan {subject.golongan || "—"} → {subject.golonganTujuan || "—"}
+            </p>
+          </div>
+          {subject.source === "record" && (
+            <ReportButton
+              record={ASSESSMENTS.find((r) => r.name === subject.name)!}
+            />
+          )}
+        </div>
+      </Card>
+
+      {/* Tracking / completion for the running assessment */}
+      {!b.allFilled && (
+        <Card>
+          <div className="mb-2 flex items-center justify-between">
+            <p className="text-sm font-semibold text-foreground">Progres Penilaian</p>
+            <span className="text-sm font-semibold tabular-nums text-foreground">{b.completionPct}%</span>
+          </div>
+          <div className="h-2 overflow-hidden rounded-full bg-muted">
+            <div className="h-full rounded-full bg-brand-500 transition-all" style={{ width: `${b.completionPct}%` }} />
+          </div>
+          <div className="mt-3 flex flex-wrap gap-2">
+            {b.evalScores.map((e) => (
+              <span
+                key={e.key}
+                className={cn(
+                  "inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-medium ring-1",
+                  e.done ? "bg-brand-500/10 text-brand-700 ring-brand-500/25 dark:text-brand-400" : "bg-muted text-muted-foreground ring-border",
+                )}
+              >
+                {e.done ? "✓" : "○"} {e.name} · {e.filled}/6
+              </span>
+            ))}
+          </div>
+        </Card>
+      )}
+
+      {/* Final result hero */}
+      <div className="grid gap-3 lg:grid-cols-[auto_1fr]">
+        <Card className="flex flex-col items-center justify-center gap-3 text-center">
+          <ScoreRing value={b.final} sub="Skor Final" />
+          <TierPill tone={b.decisionTone}>{b.decisionLabel}</TierPill>
+        </Card>
+        <Card className="flex flex-col justify-center">
+          <p className="text-sm font-semibold text-foreground">{b.tier.label}</p>
+          <p className="mt-1.5 text-xs leading-relaxed text-muted-foreground">
+            {b.overridden
+              ? "Meskipun skor memenuhi syarat, interview mengungkap concern serius sehingga kenaikan golongan tidak direkomendasikan periode ini."
+              : b.tier.action}
+          </p>
+          {b.ivRek && <p className="mt-2 text-xs text-muted-foreground">Rekomendasi interview: <span className="font-medium text-foreground">{b.ivRek.label}</span></p>}
+        </Card>
+      </div>
+
+      {/* Per-evaluator cards */}
+      <SectionLabel>Skor per Penilai (Resmi)</SectionLabel>
+      <ScrollRow cols={b.single ? 1 : 3}>
+        {b.evalScores.map((e) => (
+          <Card key={e.key} className={cn(!e.done && "opacity-70")}>
+            <p className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">{e.name} · {e.weight}%</p>
+            <p className="mt-1 text-2xl font-semibold tabular-nums text-foreground">{e.done ? e.score.toFixed(1) : "—"}</p>
+            <p className="mt-0.5 text-[11px] text-muted-foreground">
+              {e.done ? <>Kontribusi ke final: <span className="tabular-nums">{e.contribution.toFixed(1)}</span></> : "Belum diisi"}
+            </p>
+          </Card>
+        ))}
+      </ScrollRow>
+
+      {/* SA & interview summary */}
+      <SectionLabel>Self Assessment & Interview (Referensi)</SectionLabel>
+      <ScrollRow cols={2}>
+        <Card className="text-center">
+          <p className="text-[11px] font-semibold uppercase tracking-wide text-violet-600 dark:text-violet-400">Self Assessment</p>
+          <p className="mt-1 text-3xl font-semibold tabular-nums text-foreground">{b.selfScore != null ? b.selfScore.toFixed(1) : "—"}</p>
+          <p className="mt-0.5 text-[11px] text-muted-foreground">Tidak dihitung ke skor final</p>
+        </Card>
+        <Card className="text-center">
+          <p className="text-[11px] font-semibold uppercase tracking-wide text-amber-600 dark:text-amber-400">Interview Akhir</p>
+          <p className="mt-1 text-3xl font-semibold tabular-nums text-foreground">{b.ivScore > 0 ? b.ivScore.toFixed(1) : "—"}</p>
+          <p className="mt-0.5 text-[11px] text-muted-foreground">{b.ivRek?.label ?? "Belum dilaksanakan"}</p>
+        </Card>
+      </ScrollRow>
+
+      {/* Gap warning */}
+      {b.gapDetail && (
+        <Banner tone={b.gapWajib ? "danger" : "amber"} icon="⚡">
+          <strong>Gap {b.gapWajib ? "kritis" : "signifikan"} antar penilai.</strong> {b.gapDetail}
+        </Banner>
+      )}
+
+      {/* Parameter comparison — professional expandable dropdowns */}
+      <SectionLabel>Perbandingan Nilai per Parameter</SectionLabel>
+      <div className="space-y-2">
+        {b.params.map((p) => (
+          <ExpandRow
+            key={p.key}
+            flagged={p.gapFlag}
+            title={
+              <span className="flex items-center gap-2">
+                {p.title}
+                <span className="text-[11px] text-muted-foreground">· bobot {p.weight}%</span>
+                {p.gapFlag && <span className="text-amber-500">⚠</span>}
+              </span>
+            }
+            right={<span className="shrink-0 text-sm font-semibold tabular-nums text-foreground">{p.avgPct}%</span>}
+          >
+            <div className="space-y-2.5">
+              {b.evaluators.map((ev) => {
+                const pct = p.perEvalPct[ev.key];
+                const raw = p.perEvalRaw[ev.key];
+                return (
+                  <div key={ev.key} className="flex items-center gap-3">
+                    <span className="w-40 shrink-0 truncate text-xs text-muted-foreground">{ev.name} <span className="text-muted-foreground/60">({ev.weight}%)</span></span>
+                    <div className="h-2 flex-1 overflow-hidden rounded-full bg-muted">
+                      <div className={cn("h-full rounded-full", pct == null ? "" : pct >= 85 ? "bg-brand-500" : pct >= 60 ? "bg-amber-500" : "bg-red-500")} style={{ width: `${pct ?? 0}%` }} />
+                    </div>
+                    <span className="w-20 shrink-0 text-right text-xs tabular-nums text-foreground">
+                      {pct == null ? "—" : <>{raw}/{p.scale} · {pct}%</>}
+                    </span>
+                  </div>
+                );
+              })}
+              {p.selfPct != null && (
+                <div className="flex items-center gap-3 border-t border-border pt-2.5">
+                  <span className="w-40 shrink-0 text-xs text-violet-600 dark:text-violet-400">Self Assessment (ref)</span>
+                  <div className="h-2 flex-1 overflow-hidden rounded-full bg-muted">
+                    <div className="h-full rounded-full bg-violet-500" style={{ width: `${p.selfPct}%` }} />
+                  </div>
+                  <span className="w-20 shrink-0 text-right text-xs tabular-nums text-muted-foreground">{p.selfPct}%</span>
+                </div>
+              )}
+            </div>
+          </ExpandRow>
+        ))}
+      </div>
+
+      {/* Recommendations */}
+      <SectionLabel>Rekomendasi Tindak Lanjut</SectionLabel>
+      <Card>
+        <ul className="space-y-2.5">
+          {b.recommendations.map((r, i) => (
+            <li key={i} className="flex gap-3 text-sm leading-relaxed text-foreground">
+              <span className="shrink-0 text-base leading-none">{r.icon}</span>
+              <span className="text-muted-foreground">{r.text}</span>
+            </li>
+          ))}
+        </ul>
+      </Card>
+
+      {/* Fast track */}
+      {b.final > 95 && (
+        <Card className="ring-1 ring-violet-500/30">
+          <p className="text-sm font-semibold text-foreground">Syarat Fast Track Promotion</p>
+          <p className="mt-1 text-xs text-muted-foreground">
+            Skor &gt; 95 terpenuhi. Fast track berlaku bila dampak finansial terukur + Attitude nilai 3 dari penilai.
+          </p>
+          <label className="mt-2.5 flex items-start gap-2 text-xs text-foreground">
+            <input
+              type="checkbox"
+              checked={editable ? a.financialImpact : subject.source === "record"}
+              onChange={(e) => editable && a.setFinancialImpact(e.target.checked)}
+              disabled={!editable}
+              className="mt-0.5 size-4 accent-violet-500"
+            />
+            <span>Terdapat bukti dampak finansial terukur (efisiensi / revenue / penghematan).</span>
+          </label>
+        </Card>
+      )}
+    </div>
+  );
+}
+
+/** Data table of every assessment, with cascading Departemen → Jabatan → Nama + Status filters. */
 function AllAssessmentsTable({ live }: { live: AssessmentRecord | null }) {
   const [dept, setDept] = React.useState("");
   const [jabatan, setJabatan] = React.useState("");
   const [nama, setNama] = React.useState("");
   const [hasil, setHasil] = React.useState("");
 
-  // Cascading option lists (by title/name, matching the record fields).
-  const jabatanOptions = React.useMemo(
-    () => positionsForDepartment(dept).map((p) => ({ value: p.title, label: p.title })),
-    [dept],
-  );
+  const jabatanOptions = React.useMemo(() => positionsForDepartment(dept).map((p) => ({ value: p.title, label: p.title })), [dept]);
   const namaOptions = React.useMemo(() => {
     const pos = positionsForDepartment(dept).find((p) => p.title === jabatan);
     return employeesForPosition(pos?.id).map((e) => ({ value: e.name, label: e.name }));
   }, [dept, jabatan]);
 
-  const all = React.useMemo(() => (live ? [live, ...MOCK_ASSESSMENTS] : MOCK_ASSESSMENTS), [live]);
+  const all = React.useMemo(() => (live ? [live, ...ASSESSMENTS] : ASSESSMENTS), [live]);
   const rows = React.useMemo(
     () =>
       all.filter(
