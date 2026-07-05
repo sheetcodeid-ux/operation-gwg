@@ -41,10 +41,16 @@ describe("RBAC capabilities", () => {
 });
 
 describe("menu access matrix", () => {
-  it("gives R&D and HRD roles only Work Tracker", () => {
-    for (const r of ["legal", "bar_rnd", "kitchen_rnd", "head_bar_rnd", "coordinator_rnd"] as const) {
+  it("gives R&D roles only Work Tracker", () => {
+    for (const r of ["bar_rnd", "kitchen_rnd", "head_bar_rnd", "coordinator_rnd"] as const) {
       expect(ROLE_MENUS[r]).toEqual(["work"]);
     }
+  });
+
+  it("gives HRD (legal) Work Tracker + Assessment Golongan", () => {
+    expect(ROLE_MENUS.legal).toEqual(["work", "assessment"]);
+    expect(canSeeMenu("legal", "assessment")).toBe(true);
+    expect(canSeeMenu("legal", "dashboard")).toBe(false);
   });
 
   it("gives supervisor only Hygiene + Complaints", () => {

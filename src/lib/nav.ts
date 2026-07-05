@@ -10,6 +10,7 @@ export type MenuKey =
   | "complaints"
   | "outlets"
   | "reports"
+  | "assessment"
   | "users"
   | "organization"
   | "audit";
@@ -36,6 +37,7 @@ export const NAV_MENUS: Omit<NavItem, "section">[] = [
   { key: "complaints", label: "Complaints", href: "/complaints", icon: "MessageSquareWarning" },
   { key: "outlets", label: "Outlets", href: "/outlets", icon: "Store" },
   { key: "reports", label: "Reports", href: "/reports", icon: "FileText" },
+  { key: "assessment", label: "Assessment Golongan", href: "/assessment", icon: "Award" },
   { key: "users", label: "User Management", href: "/admin/users", icon: "Users" },
   { key: "organization", label: "Organization", href: "/admin/organization", icon: "Network" },
   { key: "audit", label: "Audit Logs", href: "/admin/audit", icon: "ScrollText" },
@@ -90,7 +92,7 @@ export const ROLE_MENUS: Record<Role, MenuKey[]> = {
   bar_rnd: ["work"],
   kitchen_rnd: ["work"],
   coordinator_rnd: ["work"],
-  legal: ["work"],
+  legal: ["work", "assessment"], // HRD — grade-promotion assessment
 };
 
 /** Menus shown per division in the Super Admin sidebar (all divisions listed). */
@@ -98,7 +100,7 @@ const DIVISION_MENUS: { division: Division; menus: MenuKey[] }[] = [
   { division: "Operation", menus: OPERATION_FULL },
   { division: "Supervisor", menus: ["hygiene", "complaints"] },
   { division: "R&D", menus: ["work"] },
-  { division: "HRD", menus: ["work"] },
+  { division: "HRD", menus: ["work", "assessment"] },
   { division: "Administrator", menus: ["users", "organization", "audit"] },
 ];
 

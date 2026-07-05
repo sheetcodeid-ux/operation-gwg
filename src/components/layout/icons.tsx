@@ -1,4 +1,5 @@
 import {
+  Award,
   Briefcase,
   CalendarRange,
   ChartSpline,
@@ -33,6 +34,7 @@ export const NAV_ICONS: Record<string, LucideIcon> = {
   Network,
   ScrollText,
   FileText,
+  Award,
   // Division (group) icons
   Briefcase,
   ShieldCheck,
