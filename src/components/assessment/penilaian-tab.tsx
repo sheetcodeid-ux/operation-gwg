@@ -63,7 +63,7 @@ export function PenilaianTab() {
       ) : null}
 
       <SectionLabel>{single ? "Penilai Resmi" : "Pilih Penilai Resmi"}</SectionLabel>
-      <ScrollRow cols={single ? 2 : 3}>
+      <ScrollRow cols={single ? 1 : 3}>
         {evaluators.map((e) => {
           const isActive = e.key === active;
           const eFilled = evaluatorFilled(a.scores[e.key]);

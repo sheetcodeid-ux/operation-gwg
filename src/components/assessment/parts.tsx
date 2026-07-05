@@ -58,6 +58,9 @@ export function Dropdown({
 export function ScrollRow({ children, cols = 3, className }: { children: React.ReactNode; cols?: number; className?: string }) {
   const ref = React.useRef<HTMLDivElement>(null);
   const nudge = (dir: number) => ref.current?.scrollBy({ left: dir * 240, behavior: "smooth" });
+  // A single column needs no scroller — keep the child full-width so it aligns
+  // with the full-width cards around it (no big/small mismatch).
+  if (cols === 1) return <div className={cn("grid gap-3", className)}>{children}</div>;
   return (
     <div className={className}>
       <div className="mb-1.5 flex items-center justify-end gap-1 sm:hidden">

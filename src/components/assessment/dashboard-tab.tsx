@@ -94,7 +94,7 @@ export function DashboardTab() {
         </Card>
 
         <div className="grid gap-3">
-          <ScrollRow cols={single ? 2 : 3}>
+          <ScrollRow cols={single ? 1 : 3}>
             {evaluators.map((e, i) => (
               <Card key={e.key}>
                 <p className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">{e.name} · {e.weight}%</p>
