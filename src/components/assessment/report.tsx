@@ -2,7 +2,8 @@
 
 import * as React from "react";
 import { FileText, Moon, Printer, Sun } from "lucide-react";
-import { HASIL_META, type AssessmentRecord } from "@/lib/assessment/records";
+import { HASIL_META, type AssessmentRecord, type EvaluatorBreakdown } from "@/lib/assessment/records";
+import { DIRECTOR_ONLY_POSITIONS } from "@/lib/assessment/config";
 import { DIRECTOR_NAME, HR_NAME } from "@/lib/assessment/access";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
@@ -46,6 +47,18 @@ function fmtDate(iso: string): string {
   return d.toLocaleDateString("id-ID", { day: "numeric", month: "long", year: "numeric" });
 }
 
+/** Evaluator cards for the report — Director-only positions carry a single card. */
+function reportEvaluators(r: AssessmentRecord): EvaluatorBreakdown[] {
+  if (r.evaluators?.length) return r.evaluators;
+  const directorOnly = /^head/i.test(r.jabatan) || DIRECTOR_ONLY_POSITIONS.includes(r.jabatan);
+  if (directorOnly) return [{ name: "Director", weight: 100, score: r.finalScore }];
+  return [
+    { name: "Atasan Langsung", weight: 40, score: r.finalScore },
+    { name: "HC / Human Capital", weight: 35, score: r.finalScore },
+    { name: "Director", weight: 25, score: r.finalScore },
+  ];
+}
+
 /** Build a fully self-contained, print-ready HTML document for a report. */
 function buildReportHtml(r: AssessmentRecord, mode: ReportMode): string {
   const t = THEME[mode];
@@ -58,6 +71,18 @@ function buildReportHtml(r: AssessmentRecord, mode: ReportMode): string {
       <span style="color:${t.sub};font-size:12.5px">${label}</span>
       <span style="color:${t.text};font-size:12.5px;font-weight:600;text-align:right">${value || "—"}</span>
     </div>`;
+
+  const evals = reportEvaluators(r);
+  const evalCards = evals
+    .map(
+      (e) => `
+    <div style="flex:1;min-width:130px;background:${mode === "gelap" ? "#12151a" : "#f9fafb"};border:1px solid ${t.border};border-radius:10px;padding:12px 14px">
+      <div style="color:${t.sub};font-size:11px">${e.name} · ${e.weight}%</div>
+      <div style="color:${t.text};font-size:22px;font-weight:800;margin-top:4px">${e.score.toFixed(1)}</div>
+      <div style="color:${t.sub};font-size:10.5px;margin-top:2px">Kontribusi: ${((e.score * e.weight) / 100).toFixed(1)} poin</div>
+    </div>`,
+    )
+    .join("");
 
   const sign = (title: string, name: string) => `
     <div style="text-align:center;flex:1">
@@ -106,6 +131,9 @@ function buildReportHtml(r: AssessmentRecord, mode: ReportMode): string {
         </div>
         <span class="badge">${hasil.label}</span>
       </div>
+
+      <div class="sec-title">Rincian Penilai (Bobot)</div>
+      <div style="display:flex;gap:10px;flex-wrap:wrap">${evalCards}</div>
 
       <div class="sec-title">Hasil Interview</div>
       <div style="color:${t.text};font-size:13px;padding:4px 0">${r.interviewResult}</div>

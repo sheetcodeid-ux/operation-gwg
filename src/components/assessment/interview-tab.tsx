@@ -1,7 +1,9 @@
 "use client";
 
+import { CheckCircle2 } from "lucide-react";
 import { DIMENSIONS, IV_RECOMMENDATIONS, interviewScore } from "@/lib/assessment/config";
 import { cn } from "@/lib/utils";
+import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/input";
 import { useAssessment } from "./context";
 import { CascadingPicker } from "./cascading-picker";
@@ -97,6 +99,26 @@ export function InterviewTab() {
           })}
         </div>
       </Card>
+
+      <FinishGate />
+    </div>
+  );
+}
+
+function FinishGate() {
+  const a = useAssessment();
+  const dimsDone = DIMENSIONS.every((d) => !!a.interview[d.key]);
+  const ready = dimsDone && !!a.ivRecommendation;
+  if (ready) {
+    return (
+      <Button className="h-12 w-full text-base" onClick={a.finishInterview}>
+        <CheckCircle2 className="size-5" /> Selesai — Lihat Hasil di Dashboard
+      </Button>
+    );
+  }
+  return (
+    <div className="rounded-xl border border-dashed border-border bg-muted/20 p-4 text-center text-sm text-muted-foreground">
+      Lengkapi 4 dimensi interview dan pilih rekomendasi untuk menyelesaikan interview.
     </div>
   );
 }

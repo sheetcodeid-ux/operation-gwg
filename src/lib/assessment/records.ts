@@ -19,6 +19,12 @@ export const HASIL_OPTIONS: { value: HasilStatus; label: string }[] = (
   Object.keys(HASIL_META) as HasilStatus[]
 ).map((k) => ({ value: k, label: HASIL_META[k].label }));
 
+export interface EvaluatorBreakdown {
+  name: string;
+  weight: number;
+  score: number;
+}
+
 export interface AssessmentRecord {
   id: string;
   tanggal: string; // ISO date
@@ -36,6 +42,8 @@ export interface AssessmentRecord {
   finalScore: number;
   interviewResult: string;
   decision: string;
+  /** Per-evaluator score cards for the PDF (Director-only positions carry one). */
+  evaluators?: EvaluatorBreakdown[];
 }
 
 export const MOCK_ASSESSMENTS: AssessmentRecord[] = [

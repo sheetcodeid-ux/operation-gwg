@@ -1,8 +1,10 @@
 "use client";
 
 import * as React from "react";
-import { Check } from "lucide-react";
+import { Check, ChevronLeft, ChevronRight } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { Combobox, type ComboOption } from "@/components/ui/combobox";
+import { Label } from "@/components/ui/input";
 import type { ScoreOption } from "@/lib/assessment/config";
 
 /** Gray uppercase mini-heading — the ".sl" section label used across the app. */
@@ -11,6 +13,83 @@ export function SectionLabel({ children, className }: { children: React.ReactNod
     <p className={cn("mb-2 mt-6 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground/70", className)}>
       {children}
     </p>
+  );
+}
+
+/** Labeled custom dropdown (app Combobox) — replaces native selects. */
+export function Dropdown({
+  label,
+  value,
+  onChange,
+  options,
+  placeholder,
+  disabled,
+  className,
+}: {
+  label?: string;
+  value: string;
+  onChange: (v: string) => void;
+  options: ComboOption[];
+  placeholder?: string;
+  disabled?: boolean;
+  className?: string;
+}) {
+  return (
+    <div className={cn("flex flex-col gap-1.5", className)}>
+      {label && <Label>{label}</Label>}
+      <Combobox
+        portal
+        value={value}
+        onChange={onChange}
+        options={options}
+        placeholder={placeholder ?? "Pilih…"}
+        searchPlaceholder="Cari…"
+        disabled={disabled}
+      />
+    </div>
+  );
+}
+
+/**
+ * A row of controls that stacks into a horizontal, swipeable scroller on
+ * mobile (with left/right chevrons) and becomes a grid on ≥sm. Fixes the
+ * "tumpang tindih" cramping on phones (spec revisi §9).
+ */
+export function ScrollRow({ children, cols = 3, className }: { children: React.ReactNode; cols?: number; className?: string }) {
+  const ref = React.useRef<HTMLDivElement>(null);
+  const nudge = (dir: number) => ref.current?.scrollBy({ left: dir * 240, behavior: "smooth" });
+  return (
+    <div className={className}>
+      <div className="mb-1.5 flex items-center justify-end gap-1 sm:hidden">
+        <span className="mr-auto text-[11px] text-muted-foreground">Geser untuk melihat semua</span>
+        <button
+          type="button"
+          onClick={() => nudge(-1)}
+          className="grid size-7 place-items-center rounded-lg border border-border bg-muted/40 text-muted-foreground active:translate-y-px"
+          aria-label="Geser kiri"
+        >
+          <ChevronLeft className="size-4" />
+        </button>
+        <button
+          type="button"
+          onClick={() => nudge(1)}
+          className="grid size-7 place-items-center rounded-lg border border-border bg-muted/40 text-muted-foreground active:translate-y-px"
+          aria-label="Geser kanan"
+        >
+          <ChevronRight className="size-4" />
+        </button>
+      </div>
+      <div
+        ref={ref}
+        className={cn(
+          "flex gap-3 overflow-x-auto pb-1 sm:overflow-visible sm:pb-0 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden",
+          "[&>*]:min-w-[14rem] [&>*]:shrink-0 sm:[&>*]:min-w-0",
+          cols === 2 ? "sm:grid sm:grid-cols-2" : cols === 4 ? "sm:grid sm:grid-cols-2 lg:grid-cols-4" : "sm:grid sm:grid-cols-3",
+        )}
+      >
+        {children}
+      </div>
+    </div>
   );
 }
 

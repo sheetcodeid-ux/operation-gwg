@@ -36,6 +36,12 @@ export interface Evaluator {
   note: string;
 }
 
+/**
+ * Positions assessed by a single official evaluator — the Director (100%).
+ * Heads of every division fall here too (see `evaluatorsFor`).
+ */
+export const DIRECTOR_ONLY_POSITIONS = ["Legal", "Business Development", "Sekretaris"];
+
 /** The three official evaluators and their weight toward the final score. */
 export const EVALUATORS: Evaluator[] = [
   {
@@ -304,6 +310,24 @@ export type DimensionScores = Partial<Record<DimensionKey, number>>;
 
 const PARAM_BY_KEY = new Map(PARAMETERS.map((p) => [p.key, p]));
 
+/**
+ * Which official evaluators score a given position. Heads and the
+ * DIRECTOR_ONLY_POSITIONS are assessed by the Director alone (weight 100%);
+ * everyone else by the standard trio (40/35/25).
+ */
+export function evaluatorsFor(pos: { isHead: boolean; title: string } | null | undefined): Evaluator[] {
+  if (pos && (pos.isHead || DIRECTOR_ONLY_POSITIONS.includes(pos.title))) {
+    const dir = EVALUATORS.find((e) => e.key === "dir")!;
+    return [{ ...dir, weight: 100 }];
+  }
+  return EVALUATORS;
+}
+
+/** True when a position is scored by the Director only. */
+export function isDirectorOnly(pos: { isHead: boolean; title: string } | null | undefined): boolean {
+  return !!pos && (pos.isHead || DIRECTOR_ONLY_POSITIONS.includes(pos.title));
+}
+
 /** An evaluator's 0–100 score from their six parameter picks (blank = 0). */
 export function evaluatorScore(scores: ParamScores): number {
   let total = 0;
@@ -320,10 +344,10 @@ export function evaluatorFilled(scores: ParamScores): number {
   return PARAMETERS.filter((p) => !!scores[p.key]).length;
 }
 
-/** Weighted final score across the three evaluators (0–100). */
-export function finalScore(all: EvaluatorScores): number {
+/** Weighted final score across the active evaluators (0–100). */
+export function finalScore(all: EvaluatorScores, evaluators: Evaluator[] = EVALUATORS): number {
   let total = 0;
-  for (const e of EVALUATORS) {
+  for (const e of evaluators) {
     total += evaluatorScore(all[e.key]) * (e.weight / 100);
   }
   return Math.round(total * 100) / 100;
@@ -344,11 +368,19 @@ export function gradeTier(score: number): GradeTier {
   return GRADE_TIERS.find((t) => score >= t.min && score <= t.max) ?? GRADE_TIERS[0];
 }
 
-/** Fast-track needs score > 95, a measurable financial impact, and Attitude=3 from ≥2 evaluators. */
-export function fastTrackEligible(all: EvaluatorScores, financialImpact: boolean): boolean {
-  const score = finalScore(all);
-  const attTop = EVALUATORS.filter((e) => all[e.key].att === 3).length;
-  return score > 95 && financialImpact && attTop >= 2;
+/**
+ * Fast-track needs score > 95, a measurable financial impact, and Attitude=3
+ * from ≥2 evaluators (or the sole evaluator when a position is Director-only).
+ */
+export function fastTrackEligible(
+  all: EvaluatorScores,
+  financialImpact: boolean,
+  evaluators: Evaluator[] = EVALUATORS,
+): boolean {
+  const score = finalScore(all, evaluators);
+  const attTop = evaluators.filter((e) => all[e.key].att === 3).length;
+  const need = evaluators.length >= 2 ? 2 : 1;
+  return score > 95 && financialImpact && attTop >= need;
 }
 
 /** A single parameter's contribution (poin) for the given pick. */

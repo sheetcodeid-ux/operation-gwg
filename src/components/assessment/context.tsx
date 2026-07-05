@@ -3,9 +3,12 @@
 import * as React from "react";
 import {
   emptyEvaluatorScores,
+  evaluatorFilled,
+  evaluatorsFor,
   PARAMETERS,
   type DimensionKey,
   type DimensionScores,
+  type Evaluator,
   type EvaluatorKey,
   type EvaluatorScores,
   type IvRecommendation,
@@ -23,7 +26,9 @@ export interface Candidate {
   employeeId: string;
   nik: string;
   golongan: string;
+  golonganLevel: string;
   golonganTujuan: string;
+  golonganTujuanLevel: string;
   batch: string;
 }
 
@@ -33,7 +38,9 @@ const EMPTY_CANDIDATE: Candidate = {
   employeeId: "",
   nik: "",
   golongan: "",
+  golonganLevel: "",
   golonganTujuan: "",
+  golonganTujuanLevel: "",
   batch: "",
 };
 
@@ -59,6 +66,13 @@ interface AssessmentState {
   setEmployee: (id: string) => void;
   patchCandidate: (patch: Partial<Candidate>) => void;
   identityComplete: boolean;
+
+  /** Official evaluators for the selected position (3, or Director-only). */
+  activeEvaluators: Evaluator[];
+  /** Every active evaluator has scored all six parameters. */
+  penilaianComplete: boolean;
+  continueToInterview: () => void;
+  finishInterview: () => void;
 
   syarat: Record<number, boolean>;
   toggleSyarat: (id: number, v: boolean) => void;
@@ -152,6 +166,14 @@ export function AssessmentProvider({ children }: { children: React.ReactNode }) 
     };
   }, [candidate.departmentId, candidate.positionId, candidate.employeeId]);
 
+  const activeEvaluators = React.useMemo(
+    () => evaluatorsFor(resolved.jabatan ? { isHead: resolved.isHead, title: resolved.jabatan } : null),
+    [resolved.jabatan, resolved.isHead],
+  );
+  const penilaianComplete = activeEvaluators.every((e) => evaluatorFilled(scores[e.key]) === PARAMETERS.length);
+  const continueToInterview = React.useCallback(() => setTab("interview"), [setTab]);
+  const finishInterview = React.useCallback(() => setTab("dashboard"), [setTab]);
+
   const identityComplete =
     !!candidate.departmentId &&
     !!candidate.positionId &&
@@ -185,6 +207,10 @@ export function AssessmentProvider({ children }: { children: React.ReactNode }) 
     setEmployee,
     patchCandidate,
     identityComplete,
+    activeEvaluators,
+    penilaianComplete,
+    continueToInterview,
+    finishInterview,
     syarat,
     toggleSyarat,
     syaratPassed,

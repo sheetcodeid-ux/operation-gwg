@@ -40,14 +40,15 @@ export const ASSESSMENT_ROLES: AssessmentRoleDef[] = [
   },
 ];
 
-const ALL_TABS: TabKey[] = ["panduan", "syarat", "penilaian", "interview", "dashboard", "referensi"];
+/** Evaluators don't fill Syarat & SA — that's the employee's step (spec revisi §3). */
+const EVALUATOR_TABS: TabKey[] = ["panduan", "penilaian", "interview", "dashboard", "referensi"];
 
 /** Tabs each role may open. */
 export const TAB_ACCESS: Record<AssessmentRole, TabKey[]> = {
   karyawan: ["panduan", "syarat", "referensi"],
-  atasan: ALL_TABS,
-  hr: ALL_TABS,
-  director: ALL_TABS,
+  atasan: EVALUATOR_TABS,
+  hr: EVALUATOR_TABS,
+  director: EVALUATOR_TABS,
 };
 
 /** Roles that may run interviews, approvals, and generate reports. */

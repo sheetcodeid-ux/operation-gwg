@@ -29,6 +29,19 @@ export const GOLONGAN: string[] = [
   "Chief",
 ];
 
+/** Grades that carry a sub-level 1–5 (Supervisor, Staff, Manager). */
+export const LEVELED_GOLONGAN = ["Staff", "Supervisor", "Manager"];
+export const GOLONGAN_LEVELS = ["1", "2", "3", "4", "5"];
+
+/** Whether a grade needs a level dropdown. */
+export const golonganHasLevel = (g: string): boolean => LEVELED_GOLONGAN.includes(g);
+
+/** Human label, e.g. "Staff Level 3" or plain "Senior Staff". */
+export function formatGolongan(golongan: string, level?: string): string {
+  if (!golongan) return "";
+  return golonganHasLevel(golongan) && level ? `${golongan} Level ${level}` : golongan;
+}
+
 /** Assessment batches (spec §1.2). Append "Batch 3", … to extend. */
 export const BATCHES: string[] = ["Batch 1", "Batch 2"];
 

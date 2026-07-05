@@ -2,13 +2,17 @@
 
 import { ArrowRight, Check, X } from "lucide-react";
 import { PARAMETERS, SYARAT_UTAMA } from "@/lib/assessment/config";
-import { BATCHES, GOLONGAN } from "@/lib/assessment/org";
+import { BATCHES, GOLONGAN, GOLONGAN_LEVELS, golonganHasLevel } from "@/lib/assessment/org";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
-import { Field, Input, Select } from "@/components/ui/input";
+import { Field, Input } from "@/components/ui/input";
 import { useAssessment } from "./context";
 import { CascadingPicker } from "./cascading-picker";
-import { Banner, Card, ScoreOptions, SectionLabel } from "./parts";
+import { Banner, Card, Dropdown, ScoreOptions, ScrollRow, SectionLabel } from "./parts";
+
+const golonganOptions = GOLONGAN.map((g) => ({ value: g, label: g }));
+const levelOptions = GOLONGAN_LEVELS.map((l) => ({ value: l, label: `Level ${l}` }));
+const batchOptions = BATCHES.map((b) => ({ value: b, label: b }));
 
 /** Tab ②: verify the 3 hard requirements, capture identity, and self-assessment. */
 export function SyaratTab() {
@@ -69,50 +73,48 @@ export function SyaratTab() {
         {/* Departemen → Jabatan → Nama (cascading). */}
         <CascadingPicker />
 
-        <div className="mt-3 grid gap-3 sm:grid-cols-2">
-          <Field label="NIK / ID Karyawan">
-            <Input
-              value={a.candidate.nik}
-              onChange={(e) => a.patchCandidate({ nik: e.target.value })}
-              placeholder="Contoh: EMP-2019-0123"
+        <div className="mt-3">
+          <ScrollRow cols={2}>
+            <Field label="NIK / ID Karyawan">
+              <Input
+                value={a.candidate.nik}
+                onChange={(e) => a.patchCandidate({ nik: e.target.value })}
+                placeholder="Contoh: EMP-2019-0123"
+              />
+            </Field>
+            <Dropdown
+              label="Batch"
+              value={a.candidate.batch}
+              onChange={(v) => a.patchCandidate({ batch: v })}
+              options={batchOptions}
+              placeholder="Pilih batch…"
             />
-          </Field>
-          <Field label="Batch">
-            <Select value={a.candidate.batch} onChange={(e) => a.patchCandidate({ batch: e.target.value })}>
-              <option value="">Pilih batch…</option>
-              {BATCHES.map((b) => (
-                <option key={b} value={b}>
-                  {b}
-                </option>
-              ))}
-            </Select>
-          </Field>
-          <Field label="Golongan Saat Ini">
-            <Select value={a.candidate.golongan} onChange={(e) => a.patchCandidate({ golongan: e.target.value })}>
-              <option value="">Pilih golongan…</option>
-              {GOLONGAN.map((g) => (
-                <option key={g} value={g}>
-                  {g}
-                </option>
-              ))}
-            </Select>
-          </Field>
-          <Field label="Golongan Tujuan">
-            <Select value={a.candidate.golonganTujuan} onChange={(e) => a.patchCandidate({ golonganTujuan: e.target.value })}>
-              <option value="">Pilih golongan tujuan…</option>
-              {GOLONGAN.map((g) => (
-                <option key={g} value={g}>
-                  {g}
-                </option>
-              ))}
-            </Select>
-          </Field>
+          </ScrollRow>
+        </div>
+
+        <div className="mt-3 grid gap-3 sm:grid-cols-2">
+          <GolonganField
+            label="Golongan Saat Ini"
+            value={a.candidate.golongan}
+            level={a.candidate.golonganLevel}
+            onValue={(v) => a.patchCandidate({ golongan: v, golonganLevel: "" })}
+            onLevel={(v) => a.patchCandidate({ golonganLevel: v })}
+          />
+          <GolonganField
+            label="Golongan Tujuan"
+            value={a.candidate.golonganTujuan}
+            level={a.candidate.golonganTujuanLevel}
+            onValue={(v) => a.patchCandidate({ golonganTujuan: v, golonganTujuanLevel: "" })}
+            onLevel={(v) => a.patchCandidate({ golonganTujuanLevel: v })}
+          />
         </div>
 
         {a.resolved.isHead && (
-          <Banner tone="violet" icon="★">
-            Jabatan <strong>Head</strong> — dinilai langsung oleh <strong>Director &amp; Human Resource</strong>.
-          </Banner>
+          <div className="mt-4">
+            <Banner tone="violet" icon="★">
+              Jabatan <strong>Head</strong> — dinilai langsung oleh <strong>Director</strong> (1 penilai resmi).
+            </Banner>
+          </div>
         )}
       </Card>
 
@@ -138,6 +140,29 @@ export function SyaratTab() {
 
       {/* Spec §2: continue button once Panduan, Syarat & SA, and Referensi are done. */}
       <ContinueGate />
+    </div>
+  );
+}
+
+/** Grade dropdown that reveals a Level 1–5 selector for Staff/Supervisor/Manager. */
+function GolonganField({
+  label,
+  value,
+  level,
+  onValue,
+  onLevel,
+}: {
+  label: string;
+  value: string;
+  level: string;
+  onValue: (v: string) => void;
+  onLevel: (v: string) => void;
+}) {
+  const leveled = golonganHasLevel(value);
+  return (
+    <div className={cn("grid gap-3", leveled ? "grid-cols-[1fr_9rem]" : "grid-cols-1")}>
+      <Dropdown label={label} value={value} onChange={onValue} options={golonganOptions} placeholder="Pilih golongan…" />
+      {leveled && <Dropdown label="Level" value={level} onChange={onLevel} options={levelOptions} placeholder="Level…" />}
     </div>
   );
 }

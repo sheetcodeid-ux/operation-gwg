@@ -3,7 +3,7 @@
 import { BookOpen, ClipboardList, GaugeCircle, Mic, ScrollText, Sparkles } from "lucide-react";
 import { ASSESSMENT_ROLES, canSeeTab, type TabKey } from "@/lib/assessment/access";
 import { cn } from "@/lib/utils";
-import { Select } from "@/components/ui/input";
+import { Combobox } from "@/components/ui/combobox";
 import { AssessmentProvider, useAssessment } from "./context";
 import { PanduanTab } from "./panduan-tab";
 import { SyaratTab } from "./syarat-tab";
@@ -44,17 +44,14 @@ function WorkspaceInner() {
           <p className="text-xs font-medium text-foreground">Akses sebagai</p>
           <p className="truncate text-[11px] text-muted-foreground">{roleDef.description}</p>
         </div>
-        <Select
+        <Combobox
+          portal
           value={a.role}
-          onChange={(e) => a.setRole(e.target.value as typeof a.role)}
-          className="h-9 w-full sm:w-72"
-        >
-          {ASSESSMENT_ROLES.map((r) => (
-            <option key={r.value} value={r.value}>
-              {r.label}
-            </option>
-          ))}
-        </Select>
+          onChange={(v) => a.setRole(v as typeof a.role)}
+          options={ASSESSMENT_ROLES.map((r) => ({ value: r.value, label: r.label }))}
+          className="w-full sm:w-72"
+          searchPlaceholder="Cari peran…"
+        />
       </div>
 
       {/* Tab strip — active tab is an elevated pill (Aniq-ui idiom). */}

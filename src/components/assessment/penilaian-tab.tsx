@@ -1,8 +1,8 @@
 "use client";
 
 import * as React from "react";
+import { ArrowRight } from "lucide-react";
 import {
-  EVALUATORS,
   PARAMETERS,
   evaluatorFilled,
   evaluatorScore,
@@ -10,9 +10,10 @@ import {
   type EvaluatorKey,
 } from "@/lib/assessment/config";
 import { cn } from "@/lib/utils";
+import { Button } from "@/components/ui/button";
 import { useAssessment } from "./context";
 import { CascadingPicker } from "./cascading-picker";
-import { Banner, Card, ScoreOptions, SectionLabel } from "./parts";
+import { Banner, Card, ScoreOptions, ScrollRow, SectionLabel } from "./parts";
 
 const ACCENT: Record<EvaluatorKey, "sky" | "emerald" | "violet"> = { al: "sky", hc: "emerald", dir: "violet" };
 const TAB_ACTIVE: Record<EvaluatorKey, string> = {
@@ -21,11 +22,17 @@ const TAB_ACTIVE: Record<EvaluatorKey, string> = {
   dir: "border-violet-500/60 bg-violet-500/10",
 };
 
-/** Tab ③: fill scores for each of the 3 official evaluators. */
+/** Tab ③: fill scores for each active evaluator (3 standard, or Director-only). */
 export function PenilaianTab() {
   const a = useAssessment();
-  const [active, setActive] = React.useState<EvaluatorKey>("al");
-  const evaluator = EVALUATORS.find((e) => e.key === active)!;
+  const evaluators = a.activeEvaluators;
+  const single = evaluators.length === 1;
+
+  const [activeKey, setActiveKey] = React.useState<EvaluatorKey>(evaluators[0].key);
+  // Keep the selected evaluator valid when the active set changes (e.g. Head → Director-only).
+  const active = evaluators.some((e) => e.key === activeKey) ? activeKey : evaluators[0].key;
+  const evaluator = evaluators.find((e) => e.key === active)!;
+
   const scores = a.scores[active];
   const score = evaluatorScore(scores);
   const filled = evaluatorFilled(scores);
@@ -33,7 +40,7 @@ export function PenilaianTab() {
   return (
     <div className="space-y-4">
       <Banner tone="info" icon="⚙">
-        Isi penilaian dari 3 penilai resmi. Setiap parameter menampilkan kontribusi skor secara langsung agar transparan.
+        Isi penilaian dari penilai resmi. Setiap parameter menampilkan kontribusi skor secara langsung agar transparan.
         Skor penilai dihitung otomatis di kartu ringkasan.
       </Banner>
 
@@ -48,22 +55,31 @@ export function PenilaianTab() {
         )}
       </Card>
 
-      <SectionLabel>Pilih Penilai Resmi</SectionLabel>
-      <div className="grid gap-2 sm:grid-cols-3">
-        {EVALUATORS.map((e) => {
+      {single ? (
+        <Banner tone="violet" icon="★">
+          Jabatan <strong>{a.resolved.jabatan || "ini"}</strong> dinilai langsung oleh <strong>Director</strong> — hanya 1
+          penilai resmi (bobot 100%).
+        </Banner>
+      ) : null}
+
+      <SectionLabel>{single ? "Penilai Resmi" : "Pilih Penilai Resmi"}</SectionLabel>
+      <ScrollRow cols={single ? 2 : 3}>
+        {evaluators.map((e) => {
           const isActive = e.key === active;
           const eFilled = evaluatorFilled(a.scores[e.key]);
           return (
             <button
               key={e.key}
               type="button"
-              onClick={() => setActive(e.key)}
+              onClick={() => setActiveKey(e.key)}
               className={cn(
                 "rounded-xl border p-3 text-left transition-colors",
                 isActive ? TAB_ACTIVE[e.key] : "border-border bg-muted/20 hover:bg-muted/40",
               )}
             >
-              <p className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">Penilai {e.no} · Bobot {e.weight}%</p>
+              <p className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+                {single ? "Penilai Tunggal" : `Penilai ${e.no}`} · Bobot {e.weight}%
+              </p>
               <p className="mt-0.5 text-sm font-semibold text-foreground">{e.name}</p>
               <p className="mt-1 text-xs text-muted-foreground">
                 {eFilled === PARAMETERS.length ? (
@@ -75,7 +91,7 @@ export function PenilaianTab() {
             </button>
           );
         })}
-      </div>
+      </ScrollRow>
 
       <Card className={cn("flex items-center justify-between gap-4", TAB_ACTIVE[active], "border")}>
         <div>
@@ -111,6 +127,17 @@ export function PenilaianTab() {
           );
         })}
       </div>
+
+      {a.penilaianComplete ? (
+        <Button className="h-12 w-full text-base" onClick={a.continueToInterview}>
+          Simpan &amp; Lanjut ke Interview
+          <ArrowRight className="size-5" />
+        </Button>
+      ) : (
+        <div className="rounded-xl border border-dashed border-border bg-muted/20 p-4 text-center text-sm text-muted-foreground">
+          Lengkapi seluruh parameter {single ? "penilai Director" : "dari ketiga penilai"} untuk lanjut ke Interview.
+        </div>
+      )}
     </div>
   );
 }

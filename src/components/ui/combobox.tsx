@@ -20,6 +20,7 @@ export function Combobox({
   searchPlaceholder = "Search…",
   className,
   disabled,
+  portal,
 }: {
   options: ComboOption[];
   value: string;
@@ -28,11 +29,14 @@ export function Combobox({
   searchPlaceholder?: string;
   className?: string;
   disabled?: boolean;
+  /** Render the menu in a portal so it escapes overflow-clipping ancestors. */
+  portal?: boolean;
 }) {
   const selected = options.find((o) => o.value === value);
 
   return (
     <Popover
+      portal={portal}
       className={cn("w-full", className)}
       // Menu keeps a readable width even when the trigger has shrunk (mobile):
       // at least 13rem (or the trigger width if larger), capped to the viewport.

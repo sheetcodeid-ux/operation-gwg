@@ -1,30 +1,45 @@
 "use client";
 
 import * as React from "react";
+import { createPortal } from "react-dom";
 import { cn } from "@/lib/utils";
 
-/** Minimal anchored popover with click-outside + escape handling. */
+/** Minimal anchored popover with click-outside + escape handling.
+ *  Pass `portal` to render the menu into <body> (fixed-positioned) so it is
+ *  never clipped by an `overflow` ancestor — needed inside horizontal scrollers. */
 export function Popover({
   trigger,
   children,
   align = "end",
   className,
   contentClassName,
+  portal = false,
 }: {
   trigger: (props: { open: boolean; toggle: () => void }) => React.ReactNode;
   children: React.ReactNode | ((close: () => void) => React.ReactNode);
   align?: "start" | "end";
   className?: string;
   contentClassName?: string;
+  portal?: boolean;
 }) {
   const [open, setOpen] = React.useState(false);
   const ref = React.useRef<HTMLDivElement>(null);
+  const menuRef = React.useRef<HTMLDivElement>(null);
+  const [pos, setPos] = React.useState<{ top: number; left: number; width: number } | null>(null);
   const close = React.useCallback(() => setOpen(false), []);
+
+  const place = React.useCallback(() => {
+    if (!ref.current) return;
+    const r = ref.current.getBoundingClientRect();
+    setPos({ top: r.bottom + 8, left: r.left, width: r.width });
+  }, []);
 
   React.useEffect(() => {
     if (!open) return;
     function onDown(e: MouseEvent) {
-      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+      const t = e.target as Node;
+      if (ref.current?.contains(t) || menuRef.current?.contains(t)) return;
+      setOpen(false);
     }
     function onKey(e: KeyboardEvent) {
       if (e.key === "Escape") setOpen(false);
@@ -37,20 +52,36 @@ export function Popover({
     };
   }, [open]);
 
+  React.useEffect(() => {
+    if (!open || !portal) return;
+    place();
+    const on = () => place();
+    window.addEventListener("scroll", on, true);
+    window.addEventListener("resize", on);
+    return () => {
+      window.removeEventListener("scroll", on, true);
+      window.removeEventListener("resize", on);
+    };
+  }, [open, portal, place]);
+
+  const content = open ? (
+    <div
+      ref={menuRef}
+      className={cn(
+        "surface-solid z-50 origin-top rounded-xl p-1.5",
+        portal ? "fixed" : cn("absolute mt-2 min-w-56", align === "end" ? "right-0" : "left-0"),
+        contentClassName,
+      )}
+      style={portal && pos ? { top: pos.top, left: pos.left, minWidth: pos.width } : undefined}
+    >
+      {typeof children === "function" ? children(close) : children}
+    </div>
+  ) : null;
+
   return (
     <div ref={ref} className={cn("relative", className)}>
       {trigger({ open, toggle: () => setOpen((v) => !v) })}
-      {open && (
-        <div
-          className={cn(
-            "surface-solid absolute z-50 mt-2 min-w-56 origin-top rounded-xl p-1.5",
-            align === "end" ? "right-0" : "left-0",
-            contentClassName,
-          )}
-        >
-          {typeof children === "function" ? children(close) : children}
-        </div>
-      )}
+      {portal ? open && typeof document !== "undefined" && createPortal(content, document.body) : content}
     </div>
   );
 }
