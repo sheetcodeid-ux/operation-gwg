@@ -5,8 +5,8 @@ import type { ColumnDef } from "@tanstack/react-table";
 import {
   CalendarClock,
   CheckCircle2,
+  Circle,
   ClipboardList,
-  Mic,
   PenLine,
   RotateCcw,
   TriangleAlert,
@@ -15,29 +15,29 @@ import {
   Zap,
   type LucideIcon,
 } from "lucide-react";
-import { BATCHES, departmentOptions, employeesForPosition, formatGolongan, positionsForDepartment } from "@/lib/assessment/org";
+import { departmentOptions, employeesForPosition, formatGolongan, positionsForDepartment } from "@/lib/assessment/org";
 import { ASSESSMENTS, LATEST_ASSESSMENTS, computeResult, historyFor, type RecoKind, type ResultBundle } from "@/lib/assessment/result";
 import { HASIL_META, HASIL_OPTIONS, type AssessmentRecord, type HasilStatus } from "@/lib/assessment/records";
-import type { EvaluatorKey } from "@/lib/assessment/config";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Combobox } from "@/components/ui/combobox";
-import { ColoredBarChart } from "@/components/charts/charts";
 import { DataTable } from "@/components/ui/data-table";
 import { EmptyState } from "@/components/ui/page-header";
 import { useAssessment } from "./context";
 import { DashboardReportButton, ReportButton } from "./report";
 import { CompetencyRadar } from "./radar";
-import { Banner, Dropdown, ExpandRow, MeterBar, MiniStat, ScoreRing, ScrollRow, TierPill } from "./parts";
+import { Banner, Card, Dropdown, ExpandRow, MeterBar, MiniStat, ScoreRing, ScrollRow, SectionLabel, TierPill } from "./parts";
 
-const PARAM_SHORT: Record<string, string> = { kpi: "KPI", att: "Attitude", loy: "Loyalitas", skl: "Skill", kon: "Kontrib.", msk: "Masa" };
+const PARAM_SHORT: Record<string, string> = {
+  kpi: "KPI",
+  att: "Attitude",
+  loy: "Loyalitas",
+  skl: "Skill",
+  kon: "Kontrib.",
+  msk: "Masa",
+};
+
 const TONE_TO_HASIL: Record<string, HasilStatus> = { no: "tidak_layak", wait: "ditunda", ok: "layak", fast: "fast_track" };
-const DIST_ORDER: HasilStatus[] = ["fast_track", "layak", "ditunda", "tidak_layak"];
-const EVAL_SHORT: Record<EvaluatorKey, string> = { al: "Atasan", hc: "HC", dir: "Director" };
-const EVAL_HEX: Record<EvaluatorKey, string> = { al: "#38bdf8", hc: "#22c55e", dir: "#8b5cf6" };
-const TONE_HEX: Record<string, string> = { fast: "#8b5cf6", ok: "#22c55e", wait: "#f59e0b", no: "#ef4444" };
-const DIST_SHORT: Record<HasilStatus, string> = { fast_track: "Fast", layak: "Layak", ditunda: "Tunda", tidak_layak: "Tidak" };
+
 const RECO: Record<RecoKind, { icon: LucideIcon; cls: string }> = {
   success: { icon: CheckCircle2, cls: "text-brand-500" },
   info: { icon: ClipboardList, cls: "text-sky-500" },
@@ -47,8 +47,6 @@ const RECO: Record<RecoKind, { icon: LucideIcon; cls: string }> = {
   fast: { icon: Zap, cls: "text-violet-500" },
   schedule: { icon: CalendarClock, cls: "text-muted-foreground" },
 };
-
-const initials = (n: string) => n.split(" ").slice(0, 2).map((w) => w[0]).join("").toUpperCase();
 
 interface Subject {
   name: string;
@@ -142,7 +140,7 @@ export function DashboardTab() {
     };
   }
 
-  const reset = () => {
+  const resetView = () => {
     setDDept("");
     setDJab("");
     setDNama("");
@@ -150,48 +148,48 @@ export function DashboardTab() {
 
   return (
     <div className="space-y-4">
-      <BatchTiles live={liveRecord} />
+      <SectionLabel>Ringkasan Batch (Tracking)</SectionLabel>
+      <BatchTracking live={liveRecord} />
 
-      {/* per-employee selector */}
+      <SectionLabel>Lihat Hasil per Karyawan</SectionLabel>
       <Card>
-        <CardHeader className="flex-row items-center justify-between gap-2">
-          <div className="min-w-0">
-            <CardTitle>Lihat Hasil per Karyawan</CardTitle>
-            <CardDescription>Pilih karyawan, atau lihat assessment yang sedang berjalan</CardDescription>
-          </div>
-          {dNama && (
-            <button type="button" onClick={reset} className="shrink-0 text-xs font-medium text-brand-600 hover:underline dark:text-brand-400">
-              ← Assessment berjalan
-            </button>
-          )}
-        </CardHeader>
-        <CardContent>
-          <ScrollRow cols={3}>
-            <Dropdown
-              label="Departemen"
-              value={dDept}
-              onChange={(v) => { setDDept(v); setDJab(""); setDNama(""); }}
-              options={[{ value: "", label: "— Assessment Berjalan —" }, ...departmentOptions()]}
-              placeholder="Assessment Berjalan"
-            />
-            <Dropdown
-              label="Jabatan"
-              value={dJab}
-              onChange={(v) => { setDJab(v); setDNama(""); }}
-              options={jabOpts}
-              placeholder={dDept ? "Pilih jabatan…" : "Pilih departemen dulu"}
-              disabled={!dDept}
-            />
-            <Dropdown
-              label="Nama Karyawan"
-              value={dNama}
-              onChange={setDNama}
-              options={namaOpts}
-              placeholder={dJab ? "Pilih nama…" : "Pilih jabatan dulu"}
-              disabled={!dJab}
-            />
-          </ScrollRow>
-        </CardContent>
+        <ScrollRow cols={3}>
+          <Dropdown
+            label="Departemen"
+            value={dDept}
+            onChange={(v) => {
+              setDDept(v);
+              setDJab("");
+              setDNama("");
+            }}
+            options={[{ value: "", label: "— Assessment Berjalan —" }, ...departmentOptions()]}
+            placeholder="Assessment Berjalan"
+          />
+          <Dropdown
+            label="Jabatan"
+            value={dJab}
+            onChange={(v) => {
+              setDJab(v);
+              setDNama("");
+            }}
+            options={jabOpts}
+            placeholder={dDept ? "Pilih jabatan…" : "Pilih departemen dulu"}
+            disabled={!dDept}
+          />
+          <Dropdown
+            label="Nama Karyawan"
+            value={dNama}
+            onChange={setDNama}
+            options={namaOpts}
+            placeholder={dJab ? "Pilih nama…" : "Pilih jabatan dulu"}
+            disabled={!dJab}
+          />
+        </ScrollRow>
+        {dNama && (
+          <button type="button" onClick={resetView} className="mt-3 text-xs font-medium text-brand-600 hover:underline dark:text-brand-400">
+            ← Kembali ke assessment berjalan
+          </button>
+        )}
       </Card>
 
       {emptyEmployee ? (
@@ -201,262 +199,332 @@ export function DashboardTab() {
           description="Karyawan ini belum masuk periode penilaian atau prosesnya belum dimulai. Mulai dari tab Syarat & SA lalu Penilaian."
         />
       ) : bundle && subject ? (
-        <IndividualView bundle={bundle} subject={subject} editable={editable} reportRecord={selectedRecord ?? liveRecord!} />
+        <IndividualResult bundle={bundle} subject={subject} editable={editable} reportRecord={selectedRecord ?? liveRecord!} />
       ) : (
         <EmptyState
           icon={UserSearch}
           title="Belum ada karyawan dipilih"
-          description="Pilih karyawan di atas, atau pilih karyawan yang dinilai di tab Penilaian."
+          description="Pilih karyawan di atas untuk melihat hasil, atau pilih karyawan yang dinilai di tab Penilaian."
         />
       )}
 
+      <SectionLabel>Seluruh Data Assessment</SectionLabel>
+      <AllAssessmentsTable live={liveRecord} />
+    </div>
+  );
+}
+
+const BAR_BG: Record<string, string> = { fast: "bg-violet-500", ok: "bg-brand-500", wait: "bg-amber-500", no: "bg-red-500" };
+const DIST_ORDER: HasilStatus[] = ["fast_track", "layak", "ditunda", "tidak_layak"];
+
+/** Batch-wide tracking tiles + outcome distribution — automatic, precise counts. */
+function BatchTracking({ live }: { live: AssessmentRecord | null }) {
+  const all = live ? [live, ...LATEST_ASSESSMENTS] : LATEST_ASSESSMENTS;
+  const total = all.length;
+  const selesai = all.filter((r) => r.status === "Selesai" || r.status === "Menunggu Interview").length;
+  const berjalan = total - selesai;
+  const count = (h: HasilStatus) => all.filter((r) => r.status !== "Proses Penilaian" && r.status !== "Draft" && r.hasil === h).length;
+  const avg = total ? Math.round((all.reduce((s, r) => s + r.finalScore, 0) / total) * 10) / 10 : 0;
+
+  // Distribution over decided assessments (a result is only meaningful once assessed).
+  const decided = all.filter((r) => r.status !== "Proses Penilaian" && r.status !== "Draft");
+  const dTotal = decided.length || 1;
+  const dist = DIST_ORDER.map((h) => ({ h, n: decided.filter((r) => r.hasil === h).length }));
+  const dMax = Math.max(...dist.map((d) => d.n), 1);
+
+  return (
+    <div className="space-y-3">
+      <ScrollRow cols={4}>
+        <MiniStat label="Total Assessment" value={total} hint={`Rata-rata skor ${avg}`} />
+        <MiniStat label="Selesai / Berjalan" value={`${selesai} / ${berjalan}`} tone="ok" hint="status proses" />
+        <MiniStat label="Layak + Fast Track" value={count("layak") + count("fast_track")} tone="ok" hint={`Fast track ${count("fast_track")}`} />
+        <MiniStat label="Ditunda / Tidak Layak" value={`${count("ditunda")} / ${count("tidak_layak")}`} tone="wait" hint="perlu tindak lanjut" />
+      </ScrollRow>
+
       <Card>
-        <CardHeader>
-          <CardTitle>Seluruh Data Assessment</CardTitle>
-          <CardDescription>Riwayat lengkap seluruh periode & karyawan</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <AllAssessmentsTable live={liveRecord} />
-        </CardContent>
+        <div className="mb-3 flex items-center justify-between">
+          <p className="text-sm font-semibold text-foreground">Distribusi Hasil</p>
+          <span className="text-[11px] text-muted-foreground">{decided.length} assessment sudah diputuskan</span>
+        </div>
+        <div className="space-y-2.5">
+          {dist.map(({ h, n }) => {
+            const meta = HASIL_META[h];
+            const pct = Math.round((n / dTotal) * 100);
+            return (
+              <div key={h} className="flex items-center gap-3">
+                <span className="flex w-32 shrink-0 items-center gap-1.5">
+                  <span className={cn("size-2.5 shrink-0 rounded-full", BAR_BG[meta.tone])} />
+                  <span className="truncate text-xs text-foreground">{meta.label}</span>
+                </span>
+                <MeterBar
+                  className="flex-1"
+                  pct={(n / dMax) * 100}
+                  colorClass={BAR_BG[meta.tone]}
+                  tooltip={
+                    <span>
+                      {meta.label}: <span className="tabular-nums">{n}</span> karyawan · {pct}% dari total
+                    </span>
+                  }
+                />
+                <span className="w-16 shrink-0 text-right text-xs tabular-nums text-muted-foreground">
+                  <span className="font-semibold text-foreground">{n}</span> · {pct}%
+                </span>
+              </div>
+            );
+          })}
+        </div>
       </Card>
     </div>
   );
 }
 
-/** Batch KPI tiles (unique-employee standing). */
-function BatchTiles({ live }: { live: AssessmentRecord | null }) {
-  const all = live ? [live, ...LATEST_ASSESSMENTS] : LATEST_ASSESSMENTS;
-  const total = all.length;
-  const selesai = all.filter((r) => r.status === "Selesai" || r.status === "Menunggu Interview").length;
-  const count = (h: HasilStatus) => all.filter((r) => r.status !== "Proses Penilaian" && r.status !== "Draft" && r.hasil === h).length;
-  const avg = total ? Math.round((all.reduce((s, r) => s + r.finalScore, 0) / total) * 10) / 10 : 0;
-  return (
-    <ScrollRow cols={4}>
-      <MiniStat label="Total Assessment" value={total} hint={`Rata-rata skor ${avg}`} />
-      <MiniStat label="Selesai / Berjalan" value={`${selesai} / ${total - selesai}`} tone="ok" hint="status proses" />
-      <MiniStat label="Layak + Fast Track" value={count("layak") + count("fast_track")} tone="ok" hint={`Fast track ${count("fast_track")}`} />
-      <MiniStat label="Ditunda / Tidak Layak" value={`${count("ditunda")} / ${count("tidak_layak")}`} tone="wait" hint="butuh review" />
-    </ScrollRow>
-  );
-}
-
-function Stat({ label, value }: { label: string; value: string }) {
-  return (
-    <div>
-      <p className="text-lg font-semibold tabular-nums text-foreground">{value}</p>
-      <p className="text-[11px] text-muted-foreground">{label}</p>
-    </div>
-  );
-}
-
-/** Balanced per-employee view — paired 2/3 + 1/3 rows like the Operation dashboard. */
-function IndividualView({ bundle, subject, editable, reportRecord }: { bundle: ResultBundle; subject: Subject; editable: boolean; reportRecord: AssessmentRecord }) {
+/** Full per-employee result — mirrors the HTML dashboard layout, all measured. */
+function IndividualResult({
+  bundle,
+  subject,
+  editable,
+  reportRecord,
+}: {
+  bundle: ResultBundle;
+  subject: Subject;
+  editable: boolean;
+  reportRecord: AssessmentRecord;
+}) {
   const a = useAssessment();
   const b = bundle;
-  const notes = b.evaluators.map((e) => ({ name: e.name, note: (a.evaluatorNotes[e.key] ?? "").trim() })).filter((n) => n.note);
-  const hasIvNote = subject.source === "live" && a.ivNote.trim().length > 0;
+  const radarData = b.params.map((p) => ({ label: p.title, short: PARAM_SHORT[p.key] ?? p.title, value: p.avgPct }));
 
   return (
     <div className="space-y-4">
-      {/* Row 1: hero + insight rings */}
-      <div className="grid items-stretch gap-4 lg:grid-cols-3">
-        <Card className="lg:col-span-2">
-          <CardContent className="p-5">
-            <div className="flex items-start justify-between gap-3">
-              <div className="flex flex-wrap items-center gap-2">
-                <span className="rounded-full bg-brand-500/10 px-2.5 py-1 text-[11px] font-semibold text-brand-700 ring-1 ring-brand-500/25 dark:text-brand-400">
-                  {subject.source === "live" ? "Assessment Berjalan" : "Riwayat Assessment"}
-                </span>
-                <span className="text-[11px] text-muted-foreground">{subject.batch} · {subject.tanggal}</span>
-              </div>
-              <div className="flex shrink-0 items-center gap-2">
-                <ReportButton record={reportRecord} />
-                <DashboardReportButton record={reportRecord} bundle={b} />
-              </div>
+      {/* Header */}
+      <Card>
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div className="min-w-0">
+            <div className="flex items-center gap-2">
+              <span className="inline-flex items-center gap-1.5 rounded-full bg-brand-500/10 px-2.5 py-1 text-[11px] font-semibold text-brand-700 ring-1 ring-brand-500/25 dark:text-brand-400">
+                {subject.source === "live" ? "Assessment Berjalan" : "Riwayat Assessment"}
+              </span>
+              <span className="text-[11px] text-muted-foreground">{subject.batch} · {subject.tanggal}</span>
             </div>
-            <div className="mt-3 flex flex-wrap items-center gap-x-5 gap-y-3">
-              <ScoreRing value={b.final} sub="Skor Final" />
-              <div className="min-w-48 flex-1">
-                <p className="text-lg font-semibold text-foreground">{subject.name || "Belum dipilih"}</p>
-                <p className="text-xs text-muted-foreground">{subject.jabatan || "—"} · {subject.departemen || "—"}</p>
-                <p className="text-xs text-muted-foreground">Golongan {subject.golongan || "—"} → {subject.golonganTujuan || "—"}</p>
-                <div className="mt-2"><TierPill tone={b.decisionTone}>{b.decisionLabel}</TierPill></div>
-                <p className="mt-2 text-xs leading-relaxed text-muted-foreground">
-                  {b.overridden
-                    ? "Meskipun skor memenuhi syarat, interview mengungkap concern serius sehingga kenaikan golongan tidak direkomendasikan periode ini."
-                    : b.tier.action}
-                </p>
-              </div>
-            </div>
-            {!b.allFilled && (
-              <div className="mt-4 border-t border-border pt-3">
-                <div className="mb-2 flex items-center justify-between text-xs">
-                  <span className="font-medium text-foreground">Progres Penilaian</span>
-                  <span className="font-semibold tabular-nums text-foreground">{b.completionPct}%</span>
-                </div>
-                <MeterBar pct={b.completionPct} colorClass="bg-brand-500" tooltip={`${b.filledEvaluators}/${b.totalEvaluators} penilai lengkap`} />
-                <div className="mt-2.5 flex flex-wrap gap-2">
-                  {b.evalScores.map((e) => (
-                    <span
-                      key={e.key}
-                      className={cn(
-                        "inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-medium ring-1",
-                        e.done ? "bg-brand-500/10 text-brand-700 ring-brand-500/25 dark:text-brand-400" : "bg-muted text-muted-foreground ring-border",
-                      )}
-                    >
-                      {EVAL_SHORT[e.key]} · {e.filled}/6
-                    </span>
-                  ))}
-                </div>
-              </div>
-            )}
-          </CardContent>
-        </Card>
+            <p className="mt-1.5 text-lg font-semibold text-foreground">{subject.name || "Belum dipilih"}</p>
+            <p className="text-xs text-muted-foreground">
+              {subject.jabatan || "—"} · {subject.departemen || "—"} · Golongan {subject.golongan || "—"} → {subject.golonganTujuan || "—"}
+            </p>
+          </div>
+          <div className="flex shrink-0 items-center gap-2">
+            <ReportButton record={reportRecord} />
+            <DashboardReportButton record={reportRecord} bundle={b} />
+          </div>
+        </div>
+      </Card>
 
-        <InsightRingsCard bundle={b} />
+      {/* Tracking / completion for the running assessment */}
+      {!b.allFilled && (
+        <Card>
+          <div className="mb-2 flex items-center justify-between">
+            <p className="text-sm font-semibold text-foreground">Progres Penilaian</p>
+            <span className="text-sm font-semibold tabular-nums text-foreground">{b.completionPct}%</span>
+          </div>
+          <MeterBar pct={b.completionPct} colorClass="bg-brand-500" tooltip={`${b.filledEvaluators}/${b.totalEvaluators} penilai lengkap`} />
+
+          <div className="mt-3 flex flex-wrap gap-2">
+            {b.evalScores.map((e) => (
+              <span
+                key={e.key}
+                className={cn(
+                  "inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-medium ring-1",
+                  e.done ? "bg-brand-500/10 text-brand-700 ring-brand-500/25 dark:text-brand-400" : "bg-muted text-muted-foreground ring-border",
+                )}
+              >
+                {e.done ? <CheckCircle2 className="size-3" /> : <Circle className="size-3" />} {e.name} · {e.filled}/6
+              </span>
+            ))}
+          </div>
+        </Card>
+      )}
+
+      {/* Final result hero */}
+      <div className="grid gap-3 lg:grid-cols-[auto_1fr]">
+        <Card className="flex flex-col items-center justify-center gap-3 text-center">
+          <ScoreRing value={b.final} sub="Skor Final" />
+          <TierPill tone={b.decisionTone}>{b.decisionLabel}</TierPill>
+        </Card>
+        <Card className="flex flex-col justify-center">
+          <p className="text-sm font-semibold text-foreground">{b.tier.label}</p>
+          <p className="mt-1.5 text-xs leading-relaxed text-muted-foreground">
+            {b.overridden
+              ? "Meskipun skor memenuhi syarat, interview mengungkap concern serius sehingga kenaikan golongan tidak direkomendasikan periode ini."
+              : b.tier.action}
+          </p>
+          {b.ivRek && <p className="mt-2 text-xs text-muted-foreground">Rekomendasi interview: <span className="font-medium text-foreground">{b.ivRek.label}</span></p>}
+        </Card>
       </div>
 
+      {/* Per-evaluator cards */}
+      <SectionLabel>Skor per Penilai (Resmi)</SectionLabel>
+      <ScrollRow cols={b.single ? 1 : 3}>
+        {b.evalScores.map((e) => (
+          <Card key={e.key} className={cn(!e.done && "opacity-70")}>
+            <p className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">{e.name} · {e.weight}%</p>
+            <p className="mt-1 text-2xl font-semibold tabular-nums text-foreground">{e.done ? e.score.toFixed(1) : "—"}</p>
+            <p className="mt-0.5 text-[11px] text-muted-foreground">
+              {e.done ? <>Kontribusi ke final: <span className="tabular-nums">{e.contribution.toFixed(1)}</span></> : "Belum diisi"}
+            </p>
+          </Card>
+        ))}
+      </ScrollRow>
+
+      {/* SA & interview summary */}
+      <SectionLabel>Self Assessment & Interview (Referensi)</SectionLabel>
+      <ScrollRow cols={2}>
+        <Card className="text-center">
+          <p className="text-[11px] font-semibold uppercase tracking-wide text-violet-600 dark:text-violet-400">Self Assessment</p>
+          <p className="mt-1 text-3xl font-semibold tabular-nums text-foreground">{b.selfScore != null ? b.selfScore.toFixed(1) : "—"}</p>
+          <p className="mt-0.5 text-[11px] text-muted-foreground">Tidak dihitung ke skor final</p>
+        </Card>
+        <Card className="text-center">
+          <p className="text-[11px] font-semibold uppercase tracking-wide text-amber-600 dark:text-amber-400">Interview Akhir</p>
+          <p className="mt-1 text-3xl font-semibold tabular-nums text-foreground">{b.ivScore > 0 ? b.ivScore.toFixed(1) : "—"}</p>
+          <p className="mt-0.5 text-[11px] text-muted-foreground">{b.ivRek?.label ?? "Belum dilaksanakan"}</p>
+        </Card>
+      </ScrollRow>
+
+      {/* Gap warning */}
       {b.gapDetail && (
         <Banner tone={b.gapWajib ? "danger" : "amber"} icon={<Zap className="size-4" />}>
           <strong>Gap {b.gapWajib ? "kritis" : "signifikan"} antar penilai.</strong> {b.gapDetail}
         </Banner>
       )}
 
-      {/* Row 2: parameter comparison + distribution */}
-      <div className="grid items-stretch gap-4 lg:grid-cols-3">
-        <Card className="lg:col-span-2">
-          <CardHeader>
-            <CardTitle>Perbandingan Nilai per Parameter</CardTitle>
-            <CardDescription>Per penilai + self assessment · klik untuk detail</CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-2">
-            {b.params.map((p) => (
-              <ExpandRow
-                key={p.key}
-                flagged={p.gapFlag}
-                title={
-                  <span className="flex items-center gap-2">
-                    {p.title}
-                    <span className="text-[11px] text-muted-foreground">· bobot {p.weight}%</span>
-                    {p.gapFlag && <TriangleAlert className="size-3.5 text-amber-500" />}
-                  </span>
-                }
-                right={<span className="shrink-0 text-sm font-semibold tabular-nums text-foreground">{p.avgPct}%</span>}
-              >
-                <div className="space-y-2.5">
-                  {b.evaluators.map((ev) => {
-                    const pct = p.perEvalPct[ev.key];
-                    const raw = p.perEvalRaw[ev.key];
-                    return (
-                      <div key={ev.key} className="flex items-center gap-3">
-                        <span className="w-36 shrink-0 truncate text-xs text-muted-foreground">{EVAL_SHORT[ev.key]} <span className="text-muted-foreground/60">({ev.weight}%)</span></span>
-                        <MeterBar
-                          className="flex-1"
-                          pct={pct ?? 0}
-                          colorClass={pct == null ? "bg-transparent" : pct >= 85 ? "bg-brand-500" : pct >= 60 ? "bg-amber-500" : "bg-red-500"}
-                        />
-                        <span className="w-20 shrink-0 text-right text-xs tabular-nums text-foreground">{pct == null ? "—" : <>{raw}/{p.scale} · {pct}%</>}</span>
-                      </div>
-                    );
-                  })}
-                  {p.selfPct != null && (
-                    <div className="flex items-center gap-3 border-t border-border pt-2.5">
-                      <span className="w-36 shrink-0 text-xs text-violet-600 dark:text-violet-400">Self Assessment</span>
-                      <MeterBar className="flex-1" pct={p.selfPct} colorClass="bg-violet-500" />
-                      <span className="w-20 shrink-0 text-right text-xs tabular-nums text-muted-foreground">{p.selfPct}%</span>
-                    </div>
-                  )}
-                </div>
-              </ExpandRow>
-            ))}
-          </CardContent>
-        </Card>
-
-        <DistribusiCard />
-      </div>
-
-      {/* Row 3: perception + recommendations, with the radar */}
-      <div className="grid items-stretch gap-4 lg:grid-cols-3">
-        <div className="space-y-4 lg:col-span-2">
-          <PerceptionCard bundle={b} />
+      {/* Competency radar (single brand hue) */}
+      {b.anyFilled && (
+        <>
+          <SectionLabel>Profil Kompetensi</SectionLabel>
           <Card>
-            <CardHeader>
-              <CardTitle>Rekomendasi Tindak Lanjut</CardTitle>
-              <CardDescription>Langkah berikutnya berdasarkan hasil</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <ul className="space-y-2.5">
-                {b.recommendations.map((r, i) => {
-                  const { icon: Icon, cls } = RECO[r.kind];
-                  return (
-                    <li key={i} className="flex gap-3 text-sm leading-relaxed">
-                      <Icon className={cn("mt-0.5 size-4 shrink-0", cls)} />
-                      <span className="text-muted-foreground">{r.text}</span>
-                    </li>
-                  );
-                })}
-              </ul>
-            </CardContent>
+            <CompetencyRadar data={radarData} />
+            <p className="mt-2 text-center text-[11px] text-muted-foreground">Rata-rata tertimbang normalisasi tiap parameter (0–100).</p>
           </Card>
-        </div>
+        </>
+      )}
 
-        <RadarCard bundle={b} />
+      {/* Parameter comparison — professional expandable dropdowns */}
+      <SectionLabel>Perbandingan Nilai per Parameter</SectionLabel>
+      <div className="space-y-2">
+        {b.params.map((p) => (
+          <ExpandRow
+            key={p.key}
+            flagged={p.gapFlag}
+            title={
+              <span className="flex items-center gap-2">
+                {p.title}
+                <span className="text-[11px] text-muted-foreground">· bobot {p.weight}%</span>
+                {p.gapFlag && <TriangleAlert className="size-3.5 text-amber-500" />}
+              </span>
+            }
+            right={<span className="shrink-0 text-sm font-semibold tabular-nums text-foreground">{p.avgPct}%</span>}
+          >
+            <div className="space-y-2.5">
+              {b.evaluators.map((ev) => {
+                const pct = p.perEvalPct[ev.key];
+                const raw = p.perEvalRaw[ev.key];
+                return (
+                  <div key={ev.key} className="flex items-center gap-3">
+                    <span className="w-40 shrink-0 truncate text-xs text-muted-foreground">{ev.name} <span className="text-muted-foreground/60">({ev.weight}%)</span></span>
+                    <MeterBar
+                      className="flex-1"
+                      pct={pct ?? 0}
+                      colorClass={pct == null ? "bg-transparent" : pct >= 85 ? "bg-brand-500" : pct >= 60 ? "bg-amber-500" : "bg-red-500"}
+                    />
+                    <span className="w-20 shrink-0 text-right text-xs tabular-nums text-foreground">
+                      {pct == null ? "—" : <>{raw}/{p.scale} · {pct}%</>}
+                    </span>
+                  </div>
+                );
+              })}
+              {p.selfPct != null && (
+                <div className="flex items-center gap-3 border-t border-border pt-2.5">
+                  <span className="w-40 shrink-0 text-xs text-violet-600 dark:text-violet-400">Self Assessment (ref)</span>
+                  <div className="h-2 flex-1 overflow-hidden rounded-full bg-muted">
+                    <div className="h-full rounded-full bg-violet-500" style={{ width: `${p.selfPct}%` }} />
+                  </div>
+                  <span className="w-20 shrink-0 text-right text-xs tabular-nums text-muted-foreground">{p.selfPct}%</span>
+                </div>
+              )}
+            </div>
+          </ExpandRow>
+        ))}
       </div>
+
+      {/* Perception analysis: self-assessment vs evaluators */}
+      <PerceptionInsight bundle={b} />
+
+      {/* Recommendations */}
+      <SectionLabel>Rekomendasi Tindak Lanjut</SectionLabel>
+      <Card>
+        <ul className="space-y-2.5">
+          {b.recommendations.map((r, i) => {
+            const { icon: Icon, cls } = RECO[r.kind];
+            return (
+              <li key={i} className="flex gap-3 text-sm leading-relaxed">
+                <Icon className={cn("mt-0.5 size-4 shrink-0", cls)} />
+                <span className="text-muted-foreground">{r.text}</span>
+              </li>
+            );
+          })}
+        </ul>
+      </Card>
 
       {/* Fast track */}
       {b.final > 95 && (
         <Card className="ring-1 ring-violet-500/30">
-          <CardHeader>
-            <CardTitle>Syarat Fast Track Promotion</CardTitle>
-            <CardDescription>Skor &gt; 95 terpenuhi — verifikasi syarat</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <label className="flex items-start gap-2 text-xs text-foreground">
-              <input
-                type="checkbox"
-                checked={editable ? a.financialImpact : subject.source === "record"}
-                onChange={(e) => editable && a.setFinancialImpact(e.target.checked)}
-                disabled={!editable}
-                className="mt-0.5 size-4 accent-violet-500"
-              />
-              <span>Terdapat bukti dampak finansial terukur (efisiensi / revenue / penghematan) + Attitude nilai 3 dari penilai.</span>
-            </label>
-          </CardContent>
+          <p className="text-sm font-semibold text-foreground">Syarat Fast Track Promotion</p>
+          <p className="mt-1 text-xs text-muted-foreground">
+            Skor &gt; 95 terpenuhi. Fast track berlaku bila dampak finansial terukur + Attitude nilai 3 dari penilai.
+          </p>
+          <label className="mt-2.5 flex items-start gap-2 text-xs text-foreground">
+            <input
+              type="checkbox"
+              checked={editable ? a.financialImpact : subject.source === "record"}
+              onChange={(e) => editable && a.setFinancialImpact(e.target.checked)}
+              disabled={!editable}
+              className="mt-0.5 size-4 accent-violet-500"
+            />
+            <span>Terdapat bukti dampak finansial terukur (efisiensi / revenue / penghematan).</span>
+          </label>
         </Card>
       )}
 
-      {/* Notes */}
-      {(notes.length > 0 || hasIvNote) && (
-        <Card>
-          <CardHeader>
-            <CardTitle>Catatan Penilai & Interview</CardTitle>
-            <CardDescription>Bukti kualitatif pendukung</CardDescription>
-          </CardHeader>
-          <CardContent className="grid gap-2.5 sm:grid-cols-2">
-            {notes.map((nt) => (
-              <div key={nt.name} className="flex gap-3 rounded-xl border border-border bg-muted/20 p-3">
-                <span className="grid size-8 shrink-0 place-items-center rounded-full bg-muted text-[11px] font-semibold text-foreground ring-1 ring-border">{initials(nt.name)}</span>
-                <div className="min-w-0">
-                  <p className="text-xs font-semibold text-foreground">{nt.name}</p>
-                  <p className="mt-0.5 text-sm leading-relaxed text-muted-foreground">“{nt.note}”</p>
-                </div>
-              </div>
-            ))}
-            {hasIvNote && (
-              <div className="flex gap-3 rounded-xl border border-amber-500/30 bg-amber-500/5 p-3 sm:col-span-2">
-                <span className="grid size-8 shrink-0 place-items-center rounded-full bg-amber-500/15 text-amber-600 dark:text-amber-400"><Mic className="size-4" /></span>
-                <div className="min-w-0">
-                  <p className="text-xs font-semibold text-amber-700 dark:text-amber-400">Catatan Interview</p>
-                  <p className="mt-0.5 whitespace-pre-line text-sm leading-relaxed text-muted-foreground">{a.ivNote}</p>
-                </div>
-              </div>
-            )}
-          </CardContent>
-        </Card>
-      )}
+      {/* Evaluator & interview notes (running assessment only) */}
+      {subject.source === "live" && (() => {
+        const notes = b.evaluators
+          .map((e) => ({ name: e.name, note: (a.evaluatorNotes[e.key] ?? "").trim() }))
+          .filter((n) => n.note);
+        const hasIv = a.ivNote.trim().length > 0;
+        if (!notes.length && !hasIv) return null;
+        return (
+          <>
+            <SectionLabel>Catatan Penilai & Interview</SectionLabel>
+            <div className="space-y-2">
+              {notes.map((n) => (
+                <Card key={n.name}>
+                  <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">{n.name}</p>
+                  <p className="mt-1 text-sm leading-relaxed text-foreground">“{n.note}”</p>
+                </Card>
+              ))}
+              {hasIv && (
+                <Card>
+                  <p className="text-[11px] font-semibold uppercase tracking-wide text-amber-600 dark:text-amber-400">Catatan Interview</p>
+                  <p className="mt-1 whitespace-pre-line text-sm leading-relaxed text-foreground">{a.ivNote}</p>
+                </Card>
+              )}
+            </div>
+          </>
+        );
+      })()}
 
+      {/* Reset — running assessment only */}
       {subject.source === "live" && (
-        <div className="flex justify-end">
+        <div className="flex justify-end pt-2">
           <Button
             variant="outline"
             onClick={() => {
@@ -471,100 +539,8 @@ function IndividualView({ bundle, subject, editable, reportRecord }: { bundle: R
   );
 }
 
-/** Simple, tidy score summary — evaluators + self assessment + interview. */
-function InsightRingsCard({ bundle }: { bundle: ResultBundle }) {
-  const b = bundle;
-  return (
-    <Card className="flex flex-col">
-      <CardHeader>
-        <CardTitle>Ringkasan Skor</CardTitle>
-        <CardDescription>Penilai resmi & self assessment</CardDescription>
-      </CardHeader>
-      <CardContent className="flex flex-1 flex-col justify-center gap-2">
-        {b.evalScores.map((e) => (
-          <div key={e.key} className="flex items-center gap-3 rounded-xl border border-border bg-muted/20 p-3">
-            <span className="size-2.5 shrink-0 rounded-full" style={{ background: EVAL_HEX[e.key] }} />
-            <div className="min-w-0 flex-1">
-              <p className="text-sm font-medium text-foreground">{EVAL_SHORT[e.key]}</p>
-              <p className="text-[11px] text-muted-foreground">Bobot {e.weight}%{e.done ? ` · +${e.contribution.toFixed(1)} poin` : ""}</p>
-            </div>
-            <span className="shrink-0 text-sm font-semibold tabular-nums text-foreground">{e.done ? e.score.toFixed(1) : "—"}</span>
-          </div>
-        ))}
-        <div className="mt-1 grid grid-cols-2 gap-2 border-t border-border pt-3">
-          <div className="rounded-xl border border-border bg-muted/20 p-3 text-center">
-            <p className="text-[11px] font-semibold uppercase tracking-wide text-violet-600 dark:text-violet-400">Self Assessment</p>
-            <p className="mt-0.5 text-lg font-semibold tabular-nums text-foreground">{b.selfScore != null ? b.selfScore.toFixed(1) : "—"}</p>
-          </div>
-          <div className="rounded-xl border border-border bg-muted/20 p-3 text-center">
-            <p className="text-[11px] font-semibold uppercase tracking-wide text-amber-600 dark:text-amber-400">Interview</p>
-            <p className="mt-0.5 text-lg font-semibold tabular-nums text-foreground">{b.ivScore > 0 ? b.ivScore.toFixed(1) : "—"}</p>
-          </div>
-        </div>
-        {b.ivRek && <p className="text-center text-[11px] text-muted-foreground">Rekomendasi interview: <span className="font-medium text-foreground">{b.ivRek.short}</span></p>}
-      </CardContent>
-    </Card>
-  );
-}
-
-/** Distribusi Hasil — vertical bar chart + stat footer, like Operation Performance Metrics. */
-function DistribusiCard() {
-  const [batch, setBatch] = React.useState("");
-  const decided = LATEST_ASSESSMENTS.filter(
-    (r) => (!batch || r.batch === batch) && r.status !== "Proses Penilaian" && r.status !== "Draft",
-  );
-  const dTotal = decided.length || 1;
-  const dist = DIST_ORDER.map((h) => ({ h, n: decided.filter((r) => r.hasil === h).length }));
-  const n = (h: HasilStatus) => dist.find((d) => d.h === h)?.n ?? 0;
-  const layakPct = Math.round(((n("layak") + n("fast_track")) / dTotal) * 100);
-  const perluTL = n("ditunda") + n("tidak_layak");
-  const chartData = dist.map(({ h, n: cnt }) => ({ label: DIST_SHORT[h], value: Math.round((cnt / dTotal) * 100), color: TONE_HEX[HASIL_META[h].tone] }));
-
-  return (
-    <Card className="flex flex-col">
-      <CardHeader className="flex-row items-start justify-between gap-2">
-        <div className="min-w-0">
-          <CardTitle className="truncate">Distribusi Hasil</CardTitle>
-          <CardDescription className="truncate">Persentase per hasil</CardDescription>
-        </div>
-        <Combobox
-          className="min-w-0 shrink basis-32"
-          value={batch}
-          onChange={setBatch}
-          options={[{ value: "", label: "Semua Batch" }, ...BATCHES.map((bt) => ({ value: bt, label: bt }))]}
-          searchPlaceholder="Batch…"
-        />
-      </CardHeader>
-      <CardContent className="flex flex-1 flex-col justify-center">
-        <ColoredBarChart data={chartData} height={190} max={100} unit="%" />
-        <div className="mt-3 grid grid-cols-3 gap-2 border-t border-border pt-3 text-center">
-          <Stat label="Diputuskan" value={String(decided.length)} />
-          <Stat label="Layak" value={`${layakPct}%`} />
-          <Stat label="Perlu TL" value={String(perluTL)} />
-        </div>
-      </CardContent>
-    </Card>
-  );
-}
-
-/** Competency radar — kept narrow (sidebar column). */
-function RadarCard({ bundle }: { bundle: ResultBundle }) {
-  const data = bundle.params.map((p) => ({ label: p.title, short: PARAM_SHORT[p.key] ?? p.title, value: p.avgPct }));
-  return (
-    <Card className="flex flex-col">
-      <CardHeader>
-        <CardTitle>Profil Kompetensi</CardTitle>
-        <CardDescription>Rata-rata tertimbang tiap parameter (0–100)</CardDescription>
-      </CardHeader>
-      <CardContent className="flex flex-1 items-center justify-center">
-        <CompetencyRadar data={data} size={240} />
-      </CardContent>
-    </Card>
-  );
-}
-
-/** Auto insight: where self-assessment diverges from the evaluators. */
-function PerceptionCard({ bundle }: { bundle: ResultBundle }) {
+/** Auto insight: where the employee's self-assessment diverges from the evaluators. */
+function PerceptionInsight({ bundle }: { bundle: ResultBundle }) {
   if (bundle.selfScore == null || !bundle.anyFilled) return null;
   const rows = bundle.params
     .filter((p) => p.selfPct != null && Object.keys(p.perEvalPct).length > 0)
@@ -577,12 +553,9 @@ function PerceptionCard({ bundle }: { bundle: ResultBundle }) {
   const tone = Math.abs(overall) >= 8 ? "wait" : "ok";
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>Analisis Persepsi</CardTitle>
-        <CardDescription>Self Assessment vs Penilai</CardDescription>
-      </CardHeader>
-      <CardContent>
+    <>
+      <SectionLabel>Analisis Persepsi — Self Assessment vs Penilai</SectionLabel>
+      <Card>
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div className="flex items-center gap-4">
             <div>
@@ -618,8 +591,8 @@ function PerceptionCard({ bundle }: { bundle: ResultBundle }) {
             Persepsi karyawan selaras dengan penilai di semua parameter (tidak ada gap ≥ 20 poin).
           </p>
         )}
-      </CardContent>
-    </Card>
+      </Card>
+    </>
   );
 }
 
@@ -638,7 +611,14 @@ function AllAssessmentsTable({ live }: { live: AssessmentRecord | null }) {
 
   const all = React.useMemo(() => (live ? [live, ...ASSESSMENTS] : ASSESSMENTS), [live]);
   const rows = React.useMemo(
-    () => all.filter((r) => (!dept || r.departmentId === dept) && (!jabatan || r.jabatan === jabatan) && (!nama || r.name === nama) && (!hasil || r.hasil === hasil)),
+    () =>
+      all.filter(
+        (r) =>
+          (!dept || r.departmentId === dept) &&
+          (!jabatan || r.jabatan === jabatan) &&
+          (!nama || r.name === nama) &&
+          (!hasil || r.hasil === hasil),
+      ),
     [all, dept, jabatan, nama, hasil],
   );
 
@@ -670,11 +650,45 @@ function AllAssessmentsTable({ live }: { live: AssessmentRecord | null }) {
   return (
     <div className="space-y-3">
       <ScrollRow cols={4}>
-        <Dropdown label="Departemen" value={dept} onChange={(v) => { setDept(v); setJabatan(""); setNama(""); }} options={[{ value: "", label: "Semua Departemen" }, ...departmentOptions()]} placeholder="Semua Departemen" />
-        <Dropdown label="Jabatan" value={jabatan} onChange={(v) => { setJabatan(v); setNama(""); }} options={[{ value: "", label: "Semua Jabatan" }, ...jabatanOptions]} placeholder="Semua Jabatan" disabled={!dept} />
-        <Dropdown label="Nama" value={nama} onChange={setNama} options={[{ value: "", label: "Semua Nama" }, ...namaOptions]} placeholder="Semua Nama" disabled={!jabatan} />
-        <Dropdown label="Status Hasil" value={hasil} onChange={setHasil} options={[{ value: "", label: "Semua Status Hasil" }, ...HASIL_OPTIONS]} placeholder="Semua Status Hasil" />
+        <Dropdown
+          label="Departemen"
+          value={dept}
+          onChange={(v) => {
+            setDept(v);
+            setJabatan("");
+            setNama("");
+          }}
+          options={[{ value: "", label: "Semua Departemen" }, ...departmentOptions()]}
+          placeholder="Semua Departemen"
+        />
+        <Dropdown
+          label="Jabatan"
+          value={jabatan}
+          onChange={(v) => {
+            setJabatan(v);
+            setNama("");
+          }}
+          options={[{ value: "", label: "Semua Jabatan" }, ...jabatanOptions]}
+          placeholder="Semua Jabatan"
+          disabled={!dept}
+        />
+        <Dropdown
+          label="Nama"
+          value={nama}
+          onChange={setNama}
+          options={[{ value: "", label: "Semua Nama" }, ...namaOptions]}
+          placeholder="Semua Nama"
+          disabled={!jabatan}
+        />
+        <Dropdown
+          label="Status Hasil"
+          value={hasil}
+          onChange={setHasil}
+          options={[{ value: "", label: "Semua Status Hasil" }, ...HASIL_OPTIONS]}
+          placeholder="Semua Status Hasil"
+        />
       </ScrollRow>
+
       <DataTable columns={columns} data={rows} tableId="assessment-records" searchPlaceholder="Cari nama / NIK…" pageSize={8} />
     </div>
   );
