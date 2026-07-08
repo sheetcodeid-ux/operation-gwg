@@ -68,3 +68,10 @@ export function canSeeTab(role: AssessmentRole, tab: TabKey): boolean {
 /** Named people fixed by the spec. */
 export const DIRECTOR_NAME = "Agustio";
 export const HR_NAME = "MT Adrianto";
+
+/** Map a logged-in evaluator's column (al/hc/dir) to their assessment viewpoint. */
+export const EVALUATOR_TO_ROLE: Record<"al" | "hc" | "dir", AssessmentRole> = {
+  al: "atasan",
+  hc: "hr",
+  dir: "director",
+};

@@ -19,6 +19,7 @@ import {
 import { getDepartment, getEmployee, getPosition } from "@/lib/assessment/org";
 import type { AssessmentRole, TabKey } from "@/lib/assessment/access";
 import { canSeeTab, TAB_ACCESS } from "@/lib/assessment/access";
+import type { EvaluatorIdentity } from "@/lib/assessment/session";
 
 /** Cascading identity: department → position → employee, plus the manual fields. */
 export interface Candidate {
@@ -55,6 +56,10 @@ export interface ResolvedCandidate {
 interface AssessmentState {
   role: AssessmentRole;
   setRole: (r: AssessmentRole) => void;
+  /** True only for Super Admin — controls whether the viewpoint switcher shows. */
+  canSwitchRole: boolean;
+  /** The signed-in user's evaluator identity (al/hc/dir), or null if not an evaluator. */
+  evaluator: EvaluatorIdentity | null;
 
   tab: TabKey;
   setTab: (t: TabKey) => void;
@@ -124,8 +129,18 @@ export function useAssessment(): AssessmentState {
   return ctx;
 }
 
-export function AssessmentProvider({ children }: { children: React.ReactNode }) {
-  const [role, setRoleState] = React.useState<AssessmentRole>("director");
+export function AssessmentProvider({
+  children,
+  initialRole = "director",
+  canSwitchRole = true,
+  evaluator = null,
+}: {
+  children: React.ReactNode;
+  initialRole?: AssessmentRole;
+  canSwitchRole?: boolean;
+  evaluator?: EvaluatorIdentity | null;
+}) {
+  const [role, setRoleState] = React.useState<AssessmentRole>(initialRole);
   const [tab, setTabState] = React.useState<TabKey>("panduan");
   const [visited, setVisited] = React.useState<Set<TabKey>>(new Set<TabKey>(["panduan"]));
   const [entrance, setEntrance] = React.useState(false); // true only for button-driven navigation
@@ -205,11 +220,15 @@ export function AssessmentProvider({ children }: { children: React.ReactNode }) 
     setVisited((v) => (v.has(t) ? v : new Set(v).add(t)));
   }, []);
 
-  const setRole = React.useCallback((r: AssessmentRole) => {
-    setRoleState(r);
-    // Keep the current tab only if the new role may see it; else jump to its first tab.
-    setTabState((cur) => (canSeeTab(r, cur) ? cur : TAB_ACCESS[r][0]));
-  }, []);
+  const setRole = React.useCallback(
+    (r: AssessmentRole) => {
+      if (!canSwitchRole) return; // non-admin viewpoints are fixed to the login identity
+      setRoleState(r);
+      // Keep the current tab only if the new role may see it; else jump to its first tab.
+      setTabState((cur) => (canSeeTab(r, cur) ? cur : TAB_ACCESS[r][0]));
+    },
+    [canSwitchRole],
+  );
 
   // Cascading resets: changing a parent clears its descendants (spec §8).
   const setDepartment = React.useCallback(
@@ -278,6 +297,8 @@ export function AssessmentProvider({ children }: { children: React.ReactNode }) 
   const value: AssessmentState = {
     role,
     setRole,
+    canSwitchRole,
+    evaluator,
     tab,
     setTab,
     visited,
