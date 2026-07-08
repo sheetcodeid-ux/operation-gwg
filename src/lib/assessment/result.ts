@@ -73,7 +73,14 @@ export interface ResultBundle {
   allFilled: boolean;
   anyFilled: boolean;
   completionPct: number;
-  recommendations: { icon: string; text: string }[];
+  recommendations: Reco[];
+}
+
+/** Follow-up recommendation with a semantic kind (mapped to a lucide icon in UI). */
+export type RecoKind = "success" | "info" | "action" | "warning" | "danger" | "fast" | "schedule";
+export interface Reco {
+  kind: RecoKind;
+  text: string;
 }
 
 export interface ResultInput {
@@ -186,41 +193,41 @@ function buildRecommendations(
   ivRec: IvRecommendation["value"] | null,
   weakTitle: string | null,
   financial: boolean,
-): { icon: string; text: string }[] {
+): Reco[] {
   if (ivRec === "tidak_layak") {
     return [
-      { icon: "✗", text: "Interview akhir memberikan rekomendasi Tidak Layak. Diskusikan hasil interview secara mendalam sebelum keputusan final." },
-      { icon: "📋", text: "Lakukan sesi feedback dengan karyawan — komunikasikan concern secara konstruktif." },
-      { icon: "📅", text: "Jadwalkan review ulang dalam 6 bulan dengan fokus pada area concern interviewer." },
+      { kind: "danger", text: "Interview akhir memberikan rekomendasi Tidak Layak. Diskusikan hasil interview secara mendalam sebelum keputusan final." },
+      { kind: "info", text: "Lakukan sesi feedback dengan karyawan — komunikasikan concern secara konstruktif." },
+      { kind: "schedule", text: "Jadwalkan review ulang dalam 6 bulan dengan fokus pada area concern interviewer." },
     ];
   }
   if (final > 95) {
     return [
-      { icon: "⚡", text: `Skor melebihi 95${ivRec === "sangat_layak" ? " dan interview sangat positif" : ""} — ajukan ke manajemen senior untuk pertimbangan fast track promotion.` },
-      { icon: "📋", text: `Verifikasi syarat fast track${financial ? " (dampak finansial sudah dicentang)" : ""} sebelum pengajuan resmi.` },
-      { icon: "📄", text: "Dokumentasikan seluruh pencapaian luar biasa sebagai bukti pengajuan." },
+      { kind: "fast", text: `Skor melebihi 95${ivRec === "sangat_layak" ? " dan interview sangat positif" : ""} — ajukan ke manajemen senior untuk pertimbangan fast track promotion.` },
+      { kind: "info", text: `Verifikasi syarat fast track${financial ? " (dampak finansial sudah dicentang)" : ""} sebelum pengajuan resmi.` },
+      { kind: "action", text: "Dokumentasikan seluruh pencapaian luar biasa sebagai bukti pengajuan." },
     ];
   }
   if (final >= 85) {
-    const base = [
-      { icon: "✅", text: "Ajukan dokumen penilaian ini ke HC untuk diproses kenaikan golongan." },
-      { icon: "📝", text: "Atasan menyiapkan surat rekomendasi → HC memproses administrasi → Director/GM tanda tangan." },
-      { icon: "💬", text: "Informasikan karyawan bahwa proses kenaikan golongan sedang berjalan." },
+    const base: Reco[] = [
+      { kind: "success", text: "Ajukan dokumen penilaian ini ke HC untuk diproses kenaikan golongan." },
+      { kind: "action", text: "Atasan menyiapkan surat rekomendasi → HC memproses administrasi → Director/GM tanda tangan." },
+      { kind: "info", text: "Informasikan karyawan bahwa proses kenaikan golongan sedang berjalan." },
     ];
-    if (ivRec === "tunda") base.push({ icon: "⚠", text: "Hasil interview menimbulkan kekhawatiran. Lakukan diskusi kalibrasi HC + Director sebelum keputusan final." });
+    if (ivRec === "tunda") base.push({ kind: "warning", text: "Hasil interview menimbulkan kekhawatiran. Lakukan diskusi kalibrasi HC + Director sebelum keputusan final." });
     return base;
   }
   if (final >= 70) {
     return [
-      { icon: "⏸", text: `Ditunda. Fokus perbaikan pada: ${weakTitle ?? "parameter terlemah"} (nilai rata-rata terendah).` },
-      { icon: "📋", text: "Buat rencana perbaikan tertulis (IDP) yang SMART bersama karyawan." },
-      { icon: "📅", text: "Jadwalkan review ulang dengan penilai yang sama dalam 6 bulan." },
+      { kind: "warning", text: `Ditunda. Fokus perbaikan pada: ${weakTitle ?? "parameter terlemah"} (nilai rata-rata terendah).` },
+      { kind: "action", text: "Buat rencana perbaikan tertulis (IDP) yang SMART bersama karyawan." },
+      { kind: "schedule", text: "Jadwalkan review ulang dengan penilai yang sama dalam 6 bulan." },
     ];
   }
   return [
-    { icon: "✗", text: "Tidak layak. Lakukan evaluasi menyeluruh + program pengembangan intensif minimum 6 bulan." },
-    { icon: "📋", text: `HC wajib menyusun IDP dengan prioritas pada: ${weakTitle ?? "parameter terlemah"}.` },
-    { icon: "📅", text: "Review ulang setelah ada perbaikan signifikan yang terukur." },
+    { kind: "danger", text: "Tidak layak. Lakukan evaluasi menyeluruh + program pengembangan intensif minimum 6 bulan." },
+    { kind: "action", text: `HC wajib menyusun IDP dengan prioritas pada: ${weakTitle ?? "parameter terlemah"}.` },
+    { kind: "schedule", text: "Review ulang setelah ada perbaikan signifikan yang terukur." },
   ];
 }
 

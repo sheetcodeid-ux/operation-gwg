@@ -3,7 +3,6 @@
 import * as React from "react";
 import { BookOpen, ClipboardList, GaugeCircle, Mic, ScrollText, Sparkles } from "lucide-react";
 import { ASSESSMENT_ROLES, canSeeTab, type TabKey } from "@/lib/assessment/access";
-import { FOLLOW_UP_RECORDS } from "@/lib/assessment/result";
 import { cn } from "@/lib/utils";
 import { Combobox } from "@/components/ui/combobox";
 import { AssessmentProvider, useAssessment } from "./context";
@@ -91,11 +90,6 @@ function WorkspaceInner() {
                 <Icon className="size-4" />
                 <span className="hidden sm:inline">{t.label}</span>
                 <span className="sm:hidden">{t.short}</span>
-                {t.key === "dashboard" && FOLLOW_UP_RECORDS.length > 0 && (
-                  <span className="ml-0.5 grid min-w-4 place-items-center rounded-full bg-amber-500 px-1 text-[10px] font-bold leading-4 text-white">
-                    {FOLLOW_UP_RECORDS.length}
-                  </span>
-                )}
               </button>
             );
           })}

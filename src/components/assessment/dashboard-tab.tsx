@@ -2,9 +2,24 @@
 
 import * as React from "react";
 import type { ColumnDef } from "@tanstack/react-table";
-import { AlertTriangle, RotateCcw, UserSearch } from "lucide-react";
+import {
+  CalendarClock,
+  CheckCircle2,
+  ClipboardCheck,
+  ClipboardList,
+  Crown,
+  Mic,
+  PenLine,
+  RotateCcw,
+  TriangleAlert,
+  Users,
+  UserSearch,
+  XCircle,
+  Zap,
+  type LucideIcon,
+} from "lucide-react";
 import { BATCHES, departmentOptions, employeesForPosition, formatGolongan, positionsForDepartment } from "@/lib/assessment/org";
-import { ASSESSMENTS, FOLLOW_UP_RECORDS, LATEST_ASSESSMENTS, computeResult, historyFor, type EnrichedRecord, type ResultBundle } from "@/lib/assessment/result";
+import { ASSESSMENTS, LATEST_ASSESSMENTS, computeResult, historyFor, type RecoKind, type ResultBundle } from "@/lib/assessment/result";
 import { HASIL_META, HASIL_OPTIONS, type AssessmentRecord, type HasilStatus } from "@/lib/assessment/records";
 import type { EvaluatorKey } from "@/lib/assessment/config";
 import { cn } from "@/lib/utils";
@@ -13,6 +28,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Combobox } from "@/components/ui/combobox";
 import { SegmentedTabs } from "@/components/ui/segmented-tabs";
 import { ColoredBarChart } from "@/components/charts/charts";
+import { ConcentricRings } from "@/components/dashboard/concentric-rings";
 import { DataTable } from "@/components/ui/data-table";
 import { EmptyState } from "@/components/ui/page-header";
 import { useAssessment } from "./context";
@@ -22,12 +38,21 @@ import { Banner, Dropdown, ExpandRow, MeterBar, MiniStat, ScoreRing, ScrollRow, 
 
 const PARAM_SHORT: Record<string, string> = { kpi: "KPI", att: "Attitude", loy: "Loyalitas", skl: "Skill", kon: "Kontrib.", msk: "Masa" };
 const TONE_TO_HASIL: Record<string, HasilStatus> = { no: "tidak_layak", wait: "ditunda", ok: "layak", fast: "fast_track" };
-const BAR_BG: Record<string, string> = { fast: "bg-violet-500", ok: "bg-brand-500", wait: "bg-amber-500", no: "bg-red-500" };
 const DIST_ORDER: HasilStatus[] = ["fast_track", "layak", "ditunda", "tidak_layak"];
-const EVAL_DOT: Record<EvaluatorKey, string> = { al: "bg-sky-500", hc: "bg-brand-500", dir: "bg-violet-500" };
 const EVAL_SHORT: Record<EvaluatorKey, string> = { al: "Atasan", hc: "HC", dir: "Director" };
+const EVAL_HEX: Record<EvaluatorKey, string> = { al: "#38bdf8", hc: "#22c55e", dir: "#8b5cf6" };
+const EVAL_ICON: Record<EvaluatorKey, LucideIcon> = { al: ClipboardCheck, hc: Users, dir: Crown };
 const TONE_HEX: Record<string, string> = { fast: "#8b5cf6", ok: "#22c55e", wait: "#f59e0b", no: "#ef4444" };
 const DIST_SHORT: Record<HasilStatus, string> = { fast_track: "Fast", layak: "Layak", ditunda: "Tunda", tidak_layak: "Tidak" };
+const RECO: Record<RecoKind, { icon: LucideIcon; cls: string }> = {
+  success: { icon: CheckCircle2, cls: "text-brand-500" },
+  info: { icon: ClipboardList, cls: "text-sky-500" },
+  action: { icon: PenLine, cls: "text-foreground/70" },
+  warning: { icon: TriangleAlert, cls: "text-amber-500" },
+  danger: { icon: XCircle, cls: "text-red-500" },
+  fast: { icon: Zap, cls: "text-violet-500" },
+  schedule: { icon: CalendarClock, cls: "text-muted-foreground" },
+};
 
 const initials = (n: string) => n.split(" ").slice(0, 2).map((w) => w[0]).join("").toUpperCase();
 
@@ -83,15 +108,13 @@ export function DashboardTab() {
   const [dDept, setDDept] = React.useState("");
   const [dJab, setDJab] = React.useState("");
   const [dNama, setDNama] = React.useState("");
-  const [viewId, setViewId] = React.useState<string | null>(null);
   const jabOpts = React.useMemo(() => positionsForDepartment(dDept).map((p) => ({ value: p.title, label: p.title })), [dDept]);
   const namaOpts = React.useMemo(() => {
     const pos = positionsForDepartment(dDept).find((p) => p.title === dJab);
     return employeesForPosition(pos?.id).map((e) => ({ value: e.name, label: e.name }));
   }, [dDept, dJab]);
 
-  const nameHistory = React.useMemo(() => (dNama ? historyFor(dNama) : []), [dNama]);
-  const selectedRecord: EnrichedRecord | null = nameHistory.length ? nameHistory.find((r) => r.id === viewId) ?? nameHistory[0] : null;
+  const selectedRecord = React.useMemo(() => (dNama ? historyFor(dNama)[0] ?? null : null), [dNama]);
   const liveIsSelected = !!dNama && liveRecord?.name === dNama;
   const emptyEmployee = !!dNama && !selectedRecord && !liveIsSelected;
 
@@ -129,15 +152,6 @@ export function DashboardTab() {
     setDDept("");
     setDJab("");
     setDNama("");
-    setViewId(null);
-  };
-  const individualRef = React.useRef<HTMLDivElement>(null);
-  const selectEmployee = (r: AssessmentRecord) => {
-    setDDept(r.departmentId);
-    setDJab(r.jabatan);
-    setDNama(r.name);
-    setViewId(null);
-    setTimeout(() => individualRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }), 60);
   };
 
   return (
@@ -162,14 +176,14 @@ export function DashboardTab() {
             <Dropdown
               label="Departemen"
               value={dDept}
-              onChange={(v) => { setDDept(v); setDJab(""); setDNama(""); setViewId(null); }}
+              onChange={(v) => { setDDept(v); setDJab(""); setDNama(""); }}
               options={[{ value: "", label: "— Assessment Berjalan —" }, ...departmentOptions()]}
               placeholder="Assessment Berjalan"
             />
             <Dropdown
               label="Jabatan"
               value={dJab}
-              onChange={(v) => { setDJab(v); setDNama(""); setViewId(null); }}
+              onChange={(v) => { setDJab(v); setDNama(""); }}
               options={jabOpts}
               placeholder={dDept ? "Pilih jabatan…" : "Pilih departemen dulu"}
               disabled={!dDept}
@@ -177,7 +191,7 @@ export function DashboardTab() {
             <Dropdown
               label="Nama Karyawan"
               value={dNama}
-              onChange={(v) => { setDNama(v); setViewId(null); }}
+              onChange={setDNama}
               options={namaOpts}
               placeholder={dJab ? "Pilih nama…" : "Pilih jabatan dulu"}
               disabled={!dJab}
@@ -186,40 +200,21 @@ export function DashboardTab() {
         </CardContent>
       </Card>
 
-      {/* tidy 2/3 (detail) + 1/3 (sidebar: distribution, radar, follow-up) grid */}
-      <div ref={individualRef} className="grid scroll-mt-24 items-start gap-4 lg:grid-cols-3">
-        <div className="min-w-0 space-y-4 lg:col-span-2">
-          {emptyEmployee ? (
-            <EmptyState
-              icon={UserSearch}
-              title={`${dNama} belum memiliki assessment`}
-              description="Karyawan ini belum masuk periode penilaian atau prosesnya belum dimulai. Mulai dari tab Syarat & SA lalu Penilaian."
-            />
-          ) : bundle && subject ? (
-            <IndividualMain
-              bundle={bundle}
-              subject={subject}
-              editable={editable}
-              reportRecord={selectedRecord ?? liveRecord!}
-              history={subject.source === "record" ? nameHistory : []}
-              currentId={selectedRecord?.id ?? null}
-              onSelectPeriod={setViewId}
-            />
-          ) : (
-            <EmptyState
-              icon={UserSearch}
-              title="Belum ada karyawan dipilih"
-              description="Pilih karyawan di atas, atau pilih karyawan yang dinilai di tab Penilaian."
-            />
-          )}
-        </div>
-
-        <div className="min-w-0 space-y-4">
-          <DistribusiCard />
-          {bundle && bundle.anyFilled && <RadarCard bundle={bundle} />}
-          <FollowUpCard onSelect={selectEmployee} />
-        </div>
-      </div>
+      {emptyEmployee ? (
+        <EmptyState
+          icon={UserSearch}
+          title={`${dNama} belum memiliki assessment`}
+          description="Karyawan ini belum masuk periode penilaian atau prosesnya belum dimulai. Mulai dari tab Syarat & SA lalu Penilaian."
+        />
+      ) : bundle && subject ? (
+        <IndividualView bundle={bundle} subject={subject} editable={editable} reportRecord={selectedRecord ?? liveRecord!} />
+      ) : (
+        <EmptyState
+          icon={UserSearch}
+          title="Belum ada karyawan dipilih"
+          description="Pilih karyawan di atas, atau pilih karyawan yang dinilai di tab Penilaian."
+        />
+      )}
 
       <Card>
         <CardHeader>
@@ -246,7 +241,7 @@ function BatchTiles({ live }: { live: AssessmentRecord | null }) {
       <MiniStat label="Total Assessment" value={total} hint={`Rata-rata skor ${avg}`} />
       <MiniStat label="Selesai / Berjalan" value={`${selesai} / ${total - selesai}`} tone="ok" hint="status proses" />
       <MiniStat label="Layak + Fast Track" value={count("layak") + count("fast_track")} tone="ok" hint={`Fast track ${count("fast_track")}`} />
-      <MiniStat label="Ditunda / Tidak Layak" value={`${count("ditunda")} / ${count("tidak_layak")}`} tone="wait" hint="perlu tindak lanjut" />
+      <MiniStat label="Ditunda / Tidak Layak" value={`${count("ditunda")} / ${count("tidak_layak")}`} tone="wait" hint="butuh review" />
     </ScrollRow>
   );
 }
@@ -260,8 +255,285 @@ function Stat({ label, value }: { label: string; value: string }) {
   );
 }
 
-/** Distribusi Hasil — vertical bar chart + stat footer, exactly like the
- *  Operation "Performance Metrics" card (header title + selector, chart, stats). */
+/** Balanced per-employee view — paired 2/3 + 1/3 rows like the Operation dashboard. */
+function IndividualView({ bundle, subject, editable, reportRecord }: { bundle: ResultBundle; subject: Subject; editable: boolean; reportRecord: AssessmentRecord }) {
+  const a = useAssessment();
+  const b = bundle;
+  const notes = b.evaluators.map((e) => ({ name: e.name, note: (a.evaluatorNotes[e.key] ?? "").trim() })).filter((n) => n.note);
+  const hasIvNote = subject.source === "live" && a.ivNote.trim().length > 0;
+
+  return (
+    <div className="space-y-4">
+      {/* Row 1: hero + insight rings */}
+      <div className="grid items-stretch gap-4 lg:grid-cols-3">
+        <Card className="lg:col-span-2">
+          <CardContent className="p-5">
+            <div className="flex items-start justify-between gap-3">
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="rounded-full bg-brand-500/10 px-2.5 py-1 text-[11px] font-semibold text-brand-700 ring-1 ring-brand-500/25 dark:text-brand-400">
+                  {subject.source === "live" ? "Assessment Berjalan" : "Riwayat Assessment"}
+                </span>
+                <span className="text-[11px] text-muted-foreground">{subject.batch} · {subject.tanggal}</span>
+              </div>
+              <div className="flex shrink-0 items-center gap-2">
+                <ReportButton record={reportRecord} />
+                <DashboardReportButton record={reportRecord} bundle={b} />
+              </div>
+            </div>
+            <div className="mt-3 flex flex-wrap items-center gap-x-5 gap-y-3">
+              <ScoreRing value={b.final} sub="Skor Final" />
+              <div className="min-w-48 flex-1">
+                <p className="text-lg font-semibold text-foreground">{subject.name || "Belum dipilih"}</p>
+                <p className="text-xs text-muted-foreground">{subject.jabatan || "—"} · {subject.departemen || "—"}</p>
+                <p className="text-xs text-muted-foreground">Golongan {subject.golongan || "—"} → {subject.golonganTujuan || "—"}</p>
+                <div className="mt-2"><TierPill tone={b.decisionTone}>{b.decisionLabel}</TierPill></div>
+                <p className="mt-2 text-xs leading-relaxed text-muted-foreground">
+                  {b.overridden
+                    ? "Meskipun skor memenuhi syarat, interview mengungkap concern serius sehingga kenaikan golongan tidak direkomendasikan periode ini."
+                    : b.tier.action}
+                </p>
+              </div>
+            </div>
+            {!b.allFilled && (
+              <div className="mt-4 border-t border-border pt-3">
+                <div className="mb-2 flex items-center justify-between text-xs">
+                  <span className="font-medium text-foreground">Progres Penilaian</span>
+                  <span className="font-semibold tabular-nums text-foreground">{b.completionPct}%</span>
+                </div>
+                <MeterBar pct={b.completionPct} colorClass="bg-brand-500" tooltip={`${b.filledEvaluators}/${b.totalEvaluators} penilai lengkap`} />
+                <div className="mt-2.5 flex flex-wrap gap-2">
+                  {b.evalScores.map((e) => (
+                    <span
+                      key={e.key}
+                      className={cn(
+                        "inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-medium ring-1",
+                        e.done ? "bg-brand-500/10 text-brand-700 ring-brand-500/25 dark:text-brand-400" : "bg-muted text-muted-foreground ring-border",
+                      )}
+                    >
+                      {EVAL_SHORT[e.key]} · {e.filled}/6
+                    </span>
+                  ))}
+                </div>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
+        <InsightRingsCard bundle={b} />
+      </div>
+
+      {b.gapDetail && (
+        <Banner tone={b.gapWajib ? "danger" : "amber"} icon={<Zap className="size-4" />}>
+          <strong>Gap {b.gapWajib ? "kritis" : "signifikan"} antar penilai.</strong> {b.gapDetail}
+        </Banner>
+      )}
+
+      {/* Row 2: parameter comparison + distribution */}
+      <div className="grid items-stretch gap-4 lg:grid-cols-3">
+        <Card className="lg:col-span-2">
+          <CardHeader>
+            <CardTitle>Perbandingan Nilai per Parameter</CardTitle>
+            <CardDescription>Per penilai + self assessment · klik untuk detail</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-2">
+            {b.params.map((p) => (
+              <ExpandRow
+                key={p.key}
+                flagged={p.gapFlag}
+                title={
+                  <span className="flex items-center gap-2">
+                    {p.title}
+                    <span className="text-[11px] text-muted-foreground">· bobot {p.weight}%</span>
+                    {p.gapFlag && <TriangleAlert className="size-3.5 text-amber-500" />}
+                  </span>
+                }
+                right={<span className="shrink-0 text-sm font-semibold tabular-nums text-foreground">{p.avgPct}%</span>}
+              >
+                <div className="space-y-2.5">
+                  {b.evaluators.map((ev) => {
+                    const pct = p.perEvalPct[ev.key];
+                    const raw = p.perEvalRaw[ev.key];
+                    return (
+                      <div key={ev.key} className="flex items-center gap-3">
+                        <span className="w-36 shrink-0 truncate text-xs text-muted-foreground">{EVAL_SHORT[ev.key]} <span className="text-muted-foreground/60">({ev.weight}%)</span></span>
+                        <MeterBar
+                          className="flex-1"
+                          pct={pct ?? 0}
+                          colorClass={pct == null ? "bg-transparent" : pct >= 85 ? "bg-brand-500" : pct >= 60 ? "bg-amber-500" : "bg-red-500"}
+                        />
+                        <span className="w-20 shrink-0 text-right text-xs tabular-nums text-foreground">{pct == null ? "—" : <>{raw}/{p.scale} · {pct}%</>}</span>
+                      </div>
+                    );
+                  })}
+                  {p.selfPct != null && (
+                    <div className="flex items-center gap-3 border-t border-border pt-2.5">
+                      <span className="w-36 shrink-0 text-xs text-violet-600 dark:text-violet-400">Self Assessment</span>
+                      <MeterBar className="flex-1" pct={p.selfPct} colorClass="bg-violet-500" />
+                      <span className="w-20 shrink-0 text-right text-xs tabular-nums text-muted-foreground">{p.selfPct}%</span>
+                    </div>
+                  )}
+                </div>
+              </ExpandRow>
+            ))}
+          </CardContent>
+        </Card>
+
+        <DistribusiCard />
+      </div>
+
+      {/* Row 3: perception + recommendations, with the radar */}
+      <div className="grid items-stretch gap-4 lg:grid-cols-3">
+        <div className="space-y-4 lg:col-span-2">
+          <PerceptionCard bundle={b} />
+          <Card>
+            <CardHeader>
+              <CardTitle>Rekomendasi Tindak Lanjut</CardTitle>
+              <CardDescription>Langkah berikutnya berdasarkan hasil</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <ul className="space-y-2.5">
+                {b.recommendations.map((r, i) => {
+                  const { icon: Icon, cls } = RECO[r.kind];
+                  return (
+                    <li key={i} className="flex gap-3 text-sm leading-relaxed">
+                      <Icon className={cn("mt-0.5 size-4 shrink-0", cls)} />
+                      <span className="text-muted-foreground">{r.text}</span>
+                    </li>
+                  );
+                })}
+              </ul>
+            </CardContent>
+          </Card>
+        </div>
+
+        <RadarCard bundle={b} />
+      </div>
+
+      {/* Fast track */}
+      {b.final > 95 && (
+        <Card className="ring-1 ring-violet-500/30">
+          <CardHeader>
+            <CardTitle>Syarat Fast Track Promotion</CardTitle>
+            <CardDescription>Skor &gt; 95 terpenuhi — verifikasi syarat</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <label className="flex items-start gap-2 text-xs text-foreground">
+              <input
+                type="checkbox"
+                checked={editable ? a.financialImpact : subject.source === "record"}
+                onChange={(e) => editable && a.setFinancialImpact(e.target.checked)}
+                disabled={!editable}
+                className="mt-0.5 size-4 accent-violet-500"
+              />
+              <span>Terdapat bukti dampak finansial terukur (efisiensi / revenue / penghematan) + Attitude nilai 3 dari penilai.</span>
+            </label>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Notes */}
+      {(notes.length > 0 || hasIvNote) && (
+        <Card>
+          <CardHeader>
+            <CardTitle>Catatan Penilai & Interview</CardTitle>
+            <CardDescription>Bukti kualitatif pendukung</CardDescription>
+          </CardHeader>
+          <CardContent className="grid gap-2.5 sm:grid-cols-2">
+            {notes.map((nt) => (
+              <div key={nt.name} className="flex gap-3 rounded-xl border border-border bg-muted/20 p-3">
+                <span className="grid size-8 shrink-0 place-items-center rounded-full bg-muted text-[11px] font-semibold text-foreground ring-1 ring-border">{initials(nt.name)}</span>
+                <div className="min-w-0">
+                  <p className="text-xs font-semibold text-foreground">{nt.name}</p>
+                  <p className="mt-0.5 text-sm leading-relaxed text-muted-foreground">“{nt.note}”</p>
+                </div>
+              </div>
+            ))}
+            {hasIvNote && (
+              <div className="flex gap-3 rounded-xl border border-amber-500/30 bg-amber-500/5 p-3 sm:col-span-2">
+                <span className="grid size-8 shrink-0 place-items-center rounded-full bg-amber-500/15 text-amber-600 dark:text-amber-400"><Mic className="size-4" /></span>
+                <div className="min-w-0">
+                  <p className="text-xs font-semibold text-amber-700 dark:text-amber-400">Catatan Interview</p>
+                  <p className="mt-0.5 whitespace-pre-line text-sm leading-relaxed text-muted-foreground">{a.ivNote}</p>
+                </div>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      )}
+
+      {subject.source === "live" && (
+        <div className="flex justify-end">
+          <Button
+            variant="outline"
+            onClick={() => {
+              if (typeof window !== "undefined" && window.confirm("Reset seluruh data assessment yang sedang berjalan?")) a.resetAssessment();
+            }}
+          >
+            <RotateCcw className="size-4" /> Reset &amp; Mulai Ulang
+          </Button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/** Insight — evaluator (or SA/Interview) scores as concentric rings + legend. */
+function InsightRingsCard({ bundle }: { bundle: ResultBundle }) {
+  const [tab, setTab] = React.useState<"penilai" | "sa">("penilai");
+  const b = bundle;
+
+  const penilai = b.evalScores.map((e) => ({
+    label: EVAL_SHORT[e.key],
+    value: e.score,
+    color: EVAL_HEX[e.key],
+    icon: EVAL_ICON[e.key],
+    sub: `Bobot ${e.weight}%`,
+    num: e.done ? e.score.toFixed(1) : "—",
+  }));
+  const sa = [
+    { label: "Self Assessment", value: b.selfScore ?? 0, color: "#a78bfa", icon: ClipboardCheck, sub: "Referensi", num: b.selfScore != null ? b.selfScore.toFixed(1) : "—" },
+    { label: "Interview", value: b.ivScore, color: "#f59e0b", icon: Mic, sub: b.ivRek?.label ?? "Belum dilaksanakan", num: b.ivScore > 0 ? b.ivScore.toFixed(1) : "—" },
+  ];
+  const rows = tab === "penilai" ? penilai : sa;
+
+  return (
+    <Card className="flex flex-col">
+      <CardHeader>
+        <CardTitle>Insight Skor</CardTitle>
+        <CardDescription>Penilai resmi & self assessment</CardDescription>
+      </CardHeader>
+      <CardContent className="flex flex-1 flex-col gap-4">
+        <SegmentedTabs
+          value={tab}
+          onChange={(v) => setTab(v as "penilai" | "sa")}
+          items={[{ value: "penilai", label: "Penilai" }, { value: "sa", label: "SA & IV" }]}
+        />
+        <div className="flex flex-1 flex-wrap content-center items-center justify-center gap-5">
+          <ConcentricRings rings={rows.map((r) => ({ label: r.label, value: r.value, color: r.color }))} centerValue={b.final} centerLabel="Skor Final" size={150} />
+          <ul className="min-w-40 flex-1 space-y-3">
+            {rows.map((r) => {
+              const Icon = r.icon;
+              return (
+                <li key={r.label} className="flex items-center gap-3">
+                  <span className="grid size-9 shrink-0 place-items-center rounded-full" style={{ background: `${r.color}22` }}>
+                    <Icon className="size-4" style={{ color: r.color }} />
+                  </span>
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-sm font-semibold text-foreground">{r.label}</p>
+                    <p className="truncate text-[11px] text-muted-foreground">{r.sub}</p>
+                  </div>
+                  <span className="shrink-0 text-sm font-semibold tabular-nums" style={{ color: r.color }}>{r.num}</span>
+                </li>
+              );
+            })}
+          </ul>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+/** Distribusi Hasil — vertical bar chart + stat footer, like Operation Performance Metrics. */
 function DistribusiCard() {
   const [batch, setBatch] = React.useState("");
   const decided = LATEST_ASSESSMENTS.filter(
@@ -285,11 +557,11 @@ function DistribusiCard() {
           className="min-w-0 shrink basis-32"
           value={batch}
           onChange={setBatch}
-          options={[{ value: "", label: "Semua Batch" }, ...BATCHES.map((b) => ({ value: b, label: b }))]}
+          options={[{ value: "", label: "Semua Batch" }, ...BATCHES.map((bt) => ({ value: bt, label: bt }))]}
           searchPlaceholder="Batch…"
         />
       </CardHeader>
-      <CardContent className="flex flex-1 flex-col">
+      <CardContent className="flex flex-1 flex-col justify-center">
         <ColoredBarChart data={chartData} height={190} max={100} unit="%" />
         <div className="mt-3 grid grid-cols-3 gap-2 border-t border-border pt-3 text-center">
           <Stat label="Diputuskan" value={String(decided.length)} />
@@ -301,312 +573,19 @@ function DistribusiCard() {
   );
 }
 
-/** Competency radar — kept narrow (sidebar), directly under the distribution. */
+/** Competency radar — kept narrow (sidebar column). */
 function RadarCard({ bundle }: { bundle: ResultBundle }) {
   const data = bundle.params.map((p) => ({ label: p.title, short: PARAM_SHORT[p.key] ?? p.title, value: p.avgPct }));
   return (
-    <Card>
+    <Card className="flex flex-col">
       <CardHeader>
         <CardTitle>Profil Kompetensi</CardTitle>
         <CardDescription>Rata-rata tertimbang tiap parameter (0–100)</CardDescription>
       </CardHeader>
-      <CardContent>
-        <CompetencyRadar data={data} size={230} />
+      <CardContent className="flex flex-1 items-center justify-center">
+        <CompetencyRadar data={data} size={240} />
       </CardContent>
     </Card>
-  );
-}
-
-/** Insight card — Penilai resmi & Self Assessment/Interview behind a selector. */
-function InsightsCard({ bundle }: { bundle: ResultBundle }) {
-  const [tab, setTab] = React.useState<"penilai" | "sa">("penilai");
-  const b = bundle;
-  return (
-    <Card className="flex flex-col">
-      <CardHeader>
-        <CardTitle>Insight Skor</CardTitle>
-        <CardDescription>Penilai resmi & self assessment</CardDescription>
-      </CardHeader>
-      <CardContent className="space-y-3">
-        <SegmentedTabs
-          value={tab}
-          onChange={(v) => setTab(v as "penilai" | "sa")}
-          items={[{ value: "penilai", label: "Penilai" }, { value: "sa", label: "SA & IV" }]}
-        />
-        {tab === "penilai" ? (
-          <ul className="space-y-2">
-            {b.evalScores.map((e) => (
-              <li key={e.key} className="flex items-center gap-3 rounded-xl border border-border bg-muted/20 p-3">
-                <span className={cn("size-2.5 shrink-0 rounded-full", EVAL_DOT[e.key])} />
-                <div className="min-w-0 flex-1">
-                  <p className="truncate text-sm font-medium text-foreground">{EVAL_SHORT[e.key]}</p>
-                  <p className="text-[11px] text-muted-foreground">Bobot {e.weight}%{e.done ? ` · +${e.contribution.toFixed(1)} poin` : ""}</p>
-                </div>
-                <span className="shrink-0 text-sm font-semibold tabular-nums text-foreground">{e.done ? e.score.toFixed(1) : "—"}</span>
-              </li>
-            ))}
-          </ul>
-        ) : (
-          <ul className="space-y-2">
-            <li className="flex items-center gap-3 rounded-xl border border-border bg-muted/20 p-3">
-              <span className="size-2.5 shrink-0 rounded-full bg-violet-500" />
-              <div className="min-w-0 flex-1">
-                <p className="truncate text-sm font-medium text-foreground">Self Assessment</p>
-                <p className="text-[11px] text-muted-foreground">Referensi · tidak dihitung ke final</p>
-              </div>
-              <span className="shrink-0 text-sm font-semibold tabular-nums text-foreground">{b.selfScore != null ? b.selfScore.toFixed(1) : "—"}</span>
-            </li>
-            <li className="flex items-center gap-3 rounded-xl border border-border bg-muted/20 p-3">
-              <span className="size-2.5 shrink-0 rounded-full bg-amber-500" />
-              <div className="min-w-0 flex-1">
-                <p className="truncate text-sm font-medium text-foreground">Interview</p>
-                <p className="truncate text-[11px] text-muted-foreground">{b.ivRek?.label ?? "Belum dilaksanakan"}</p>
-              </div>
-              <span className="shrink-0 text-sm font-semibold tabular-nums text-foreground">{b.ivScore > 0 ? b.ivScore.toFixed(1) : "—"}</span>
-            </li>
-          </ul>
-        )}
-      </CardContent>
-    </Card>
-  );
-}
-
-/** Main detail column for the selected employee. */
-function IndividualMain({
-  bundle,
-  subject,
-  editable,
-  reportRecord,
-  history,
-  currentId,
-  onSelectPeriod,
-}: {
-  bundle: ResultBundle;
-  subject: Subject;
-  editable: boolean;
-  reportRecord: AssessmentRecord;
-  history: EnrichedRecord[];
-  currentId: string | null;
-  onSelectPeriod: (id: string) => void;
-}) {
-  const a = useAssessment();
-  const b = bundle;
-  const notes = b.evaluators.map((e) => ({ name: e.name, note: (a.evaluatorNotes[e.key] ?? "").trim() })).filter((n) => n.note);
-  const hasIvNote = subject.source === "live" && a.ivNote.trim().length > 0;
-
-  return (
-    <>
-      {/* Hero: identity + final score + decision */}
-      <Card>
-        <CardContent className="p-5">
-          <div className="flex items-start justify-between gap-3">
-            <div className="flex flex-wrap items-center gap-2">
-              <span className="rounded-full bg-brand-500/10 px-2.5 py-1 text-[11px] font-semibold text-brand-700 ring-1 ring-brand-500/25 dark:text-brand-400">
-                {subject.source === "live" ? "Assessment Berjalan" : "Riwayat Assessment"}
-              </span>
-              <span className="text-[11px] text-muted-foreground">{subject.batch} · {subject.tanggal}</span>
-            </div>
-            <div className="flex shrink-0 items-center gap-2">
-              <ReportButton record={reportRecord} />
-              <DashboardReportButton record={reportRecord} bundle={b} />
-            </div>
-          </div>
-          <div className="mt-3 flex flex-wrap items-center gap-x-5 gap-y-3">
-            <ScoreRing value={b.final} sub="Skor Final" />
-            <div className="min-w-48 flex-1">
-              <p className="text-lg font-semibold text-foreground">{subject.name || "Belum dipilih"}</p>
-              <p className="text-xs text-muted-foreground">{subject.jabatan || "—"} · {subject.departemen || "—"}</p>
-              <p className="text-xs text-muted-foreground">Golongan {subject.golongan || "—"} → {subject.golonganTujuan || "—"}</p>
-              <div className="mt-2"><TierPill tone={b.decisionTone}>{b.decisionLabel}</TierPill></div>
-              <p className="mt-2 text-xs leading-relaxed text-muted-foreground">
-                {b.overridden
-                  ? "Meskipun skor memenuhi syarat, interview mengungkap concern serius sehingga kenaikan golongan tidak direkomendasikan periode ini."
-                  : b.tier.action}
-              </p>
-            </div>
-          </div>
-
-          {/* completion tracking (running only) */}
-          {!b.allFilled && (
-            <div className="mt-4 border-t border-border pt-3">
-              <div className="mb-2 flex items-center justify-between text-xs">
-                <span className="font-medium text-foreground">Progres Penilaian</span>
-                <span className="font-semibold tabular-nums text-foreground">{b.completionPct}%</span>
-              </div>
-              <MeterBar pct={b.completionPct} colorClass="bg-brand-500" tooltip={`${b.filledEvaluators}/${b.totalEvaluators} penilai lengkap`} />
-              <div className="mt-2.5 flex flex-wrap gap-2">
-                {b.evalScores.map((e) => (
-                  <span
-                    key={e.key}
-                    className={cn(
-                      "inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-medium ring-1",
-                      e.done ? "bg-brand-500/10 text-brand-700 ring-brand-500/25 dark:text-brand-400" : "bg-muted text-muted-foreground ring-border",
-                    )}
-                  >
-                    {e.done ? "✓" : "○"} {EVAL_SHORT[e.key]} · {e.filled}/6
-                  </span>
-                ))}
-              </div>
-            </div>
-          )}
-        </CardContent>
-      </Card>
-
-      <InsightsCard bundle={b} />
-
-      {b.gapDetail && (
-        <Banner tone={b.gapWajib ? "danger" : "amber"} icon="⚡">
-          <strong>Gap {b.gapWajib ? "kritis" : "signifikan"} antar penilai.</strong> {b.gapDetail}
-        </Banner>
-      )}
-
-      {history.length > 1 && (
-        <Card>
-          <CardHeader>
-            <CardTitle>Riwayat Assessment</CardTitle>
-            <CardDescription>{history.length} periode · klik untuk melihat</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <HistoryTimeline history={history} currentId={currentId} onSelect={onSelectPeriod} />
-          </CardContent>
-        </Card>
-      )}
-
-      {/* parameter comparison */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Perbandingan Nilai per Parameter</CardTitle>
-          <CardDescription>Per penilai + self assessment · klik untuk detail</CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-2">
-          {b.params.map((p) => (
-            <ExpandRow
-              key={p.key}
-              flagged={p.gapFlag}
-              title={
-                <span className="flex items-center gap-2">
-                  {p.title}
-                  <span className="text-[11px] text-muted-foreground">· bobot {p.weight}%</span>
-                  {p.gapFlag && <span className="text-amber-500">⚠</span>}
-                </span>
-              }
-              right={<span className="shrink-0 text-sm font-semibold tabular-nums text-foreground">{p.avgPct}%</span>}
-            >
-              <div className="space-y-2.5">
-                {b.evaluators.map((ev) => {
-                  const pct = p.perEvalPct[ev.key];
-                  const raw = p.perEvalRaw[ev.key];
-                  return (
-                    <div key={ev.key} className="flex items-center gap-3">
-                      <span className="w-36 shrink-0 truncate text-xs text-muted-foreground">{EVAL_SHORT[ev.key]} <span className="text-muted-foreground/60">({ev.weight}%)</span></span>
-                      <MeterBar
-                        className="flex-1"
-                        pct={pct ?? 0}
-                        colorClass={pct == null ? "bg-transparent" : pct >= 85 ? "bg-brand-500" : pct >= 60 ? "bg-amber-500" : "bg-red-500"}
-                      />
-                      <span className="w-20 shrink-0 text-right text-xs tabular-nums text-foreground">{pct == null ? "—" : <>{raw}/{p.scale} · {pct}%</>}</span>
-                    </div>
-                  );
-                })}
-                {p.selfPct != null && (
-                  <div className="flex items-center gap-3 border-t border-border pt-2.5">
-                    <span className="w-36 shrink-0 text-xs text-violet-600 dark:text-violet-400">Self Assessment</span>
-                    <MeterBar className="flex-1" pct={p.selfPct} colorClass="bg-violet-500" />
-                    <span className="w-20 shrink-0 text-right text-xs tabular-nums text-muted-foreground">{p.selfPct}%</span>
-                  </div>
-                )}
-              </div>
-            </ExpandRow>
-          ))}
-        </CardContent>
-      </Card>
-
-      <PerceptionCard bundle={b} />
-
-      {/* recommendations */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Rekomendasi Tindak Lanjut</CardTitle>
-          <CardDescription>Langkah berikutnya berdasarkan hasil</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <ul className="space-y-2.5">
-            {b.recommendations.map((r, i) => (
-              <li key={i} className="flex gap-3 text-sm leading-relaxed">
-                <span className="shrink-0 text-base leading-none">{r.icon}</span>
-                <span className="text-muted-foreground">{r.text}</span>
-              </li>
-            ))}
-          </ul>
-        </CardContent>
-      </Card>
-
-      {/* fast track */}
-      {b.final > 95 && (
-        <Card className="ring-1 ring-violet-500/30">
-          <CardHeader>
-            <CardTitle>Syarat Fast Track Promotion</CardTitle>
-            <CardDescription>Skor &gt; 95 terpenuhi — verifikasi syarat</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <label className="flex items-start gap-2 text-xs text-foreground">
-              <input
-                type="checkbox"
-                checked={editable ? a.financialImpact : subject.source === "record"}
-                onChange={(e) => editable && a.setFinancialImpact(e.target.checked)}
-                disabled={!editable}
-                className="mt-0.5 size-4 accent-violet-500"
-              />
-              <span>Terdapat bukti dampak finansial terukur (efisiensi / revenue / penghematan) + Attitude nilai 3 dari penilai.</span>
-            </label>
-          </CardContent>
-        </Card>
-      )}
-
-      {/* notes */}
-      {(notes.length > 0 || hasIvNote) && (
-        <Card>
-          <CardHeader>
-            <CardTitle>Catatan Penilai & Interview</CardTitle>
-            <CardDescription>Bukti kualitatif pendukung</CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-2.5">
-            {notes.map((nt) => (
-              <div key={nt.name} className="flex gap-3 rounded-xl border border-border bg-muted/20 p-3">
-                <span className="grid size-8 shrink-0 place-items-center rounded-full bg-muted text-[11px] font-semibold text-foreground ring-1 ring-border">{initials(nt.name)}</span>
-                <div className="min-w-0">
-                  <p className="text-xs font-semibold text-foreground">{nt.name}</p>
-                  <p className="mt-0.5 text-sm leading-relaxed text-muted-foreground">“{nt.note}”</p>
-                </div>
-              </div>
-            ))}
-            {hasIvNote && (
-              <div className="flex gap-3 rounded-xl border border-amber-500/30 bg-amber-500/5 p-3">
-                <span className="grid size-8 shrink-0 place-items-center rounded-full bg-amber-500/15 text-amber-600 dark:text-amber-400">🎙</span>
-                <div className="min-w-0">
-                  <p className="text-xs font-semibold text-amber-700 dark:text-amber-400">Catatan Interview</p>
-                  <p className="mt-0.5 whitespace-pre-line text-sm leading-relaxed text-muted-foreground">{a.ivNote}</p>
-                </div>
-              </div>
-            )}
-          </CardContent>
-        </Card>
-      )}
-
-      {/* reset (running only) */}
-      {subject.source === "live" && (
-        <div className="flex justify-end">
-          <Button
-            variant="outline"
-            onClick={() => {
-              if (typeof window !== "undefined" && window.confirm("Reset seluruh data assessment yang sedang berjalan?")) a.resetAssessment();
-            }}
-          >
-            <RotateCcw className="size-4" /> Reset &amp; Mulai Ulang
-          </Button>
-        </div>
-      )}
-    </>
   );
 }
 
@@ -653,7 +632,7 @@ function PerceptionCard({ bundle }: { bundle: ResultBundle }) {
                 <span className="flex shrink-0 items-center gap-2 text-xs tabular-nums text-muted-foreground">
                   SA {r.self}% · Penilai {r.ev}%
                   <span className={cn("rounded-full px-2 py-0.5 font-medium", r.gap > 0 ? "bg-amber-500/15 text-amber-600 dark:text-amber-400" : "bg-sky-500/15 text-sky-600 dark:text-sky-400")}>
-                    {r.gap > 0 ? `▲ +${r.gap}` : `▼ ${r.gap}`}
+                    {r.gap > 0 ? `+${r.gap}` : r.gap}
                   </span>
                 </span>
               </div>
@@ -665,90 +644,6 @@ function PerceptionCard({ bundle }: { bundle: ResultBundle }) {
             Persepsi karyawan selaras dengan penilai di semua parameter (tidak ada gap ≥ 20 poin).
           </p>
         )}
-      </CardContent>
-    </Card>
-  );
-}
-
-/** Vertical timeline of an employee's assessments across periods, with trend. */
-function HistoryTimeline({ history, currentId, onSelect }: { history: EnrichedRecord[]; currentId: string | null; onSelect: (id: string) => void }) {
-  return (
-    <ol className="relative space-y-1">
-      {history.map((r, i) => {
-        const prev = history[i + 1];
-        const delta = prev ? Math.round((r.finalScore - prev.finalScore) * 10) / 10 : null;
-        const active = r.id === currentId;
-        const meta = HASIL_META[r.hasil];
-        return (
-          <li key={r.id} className="relative flex gap-3 pl-1">
-            <div className="flex flex-col items-center">
-              <span className={cn("mt-1.5 size-2.5 shrink-0 rounded-full ring-2 ring-background", BAR_BG[meta.tone])} />
-              {i < history.length - 1 && <span className="w-px flex-1 bg-border" />}
-            </div>
-            <button
-              type="button"
-              onClick={() => onSelect(r.id)}
-              className={cn(
-                "mb-1 flex w-full flex-wrap items-center justify-between gap-2 rounded-lg border px-3 py-2 text-left transition-colors",
-                active ? "border-brand-500/40 bg-brand-500/5" : "border-transparent hover:bg-muted/40",
-              )}
-            >
-              <div className="min-w-0">
-                <p className="flex items-center gap-2 text-sm font-medium text-foreground">
-                  {r.tanggal}
-                  {active && <span className="rounded-full bg-brand-500/15 px-1.5 py-0.5 text-[10px] font-semibold text-brand-700 dark:text-brand-400">Dilihat</span>}
-                </p>
-                <p className="text-xs text-muted-foreground">{r.batch} · Golongan {r.golongan}</p>
-              </div>
-              <div className="flex shrink-0 items-center gap-2">
-                {delta != null && (
-                  <span className={cn("text-xs font-medium tabular-nums", delta > 0 ? "text-brand-600 dark:text-brand-400" : delta < 0 ? "text-red-500" : "text-muted-foreground")}>
-                    {delta > 0 ? `▲ +${delta}` : delta < 0 ? `▼ ${delta}` : "±0"}
-                  </span>
-                )}
-                <span className="text-sm font-semibold tabular-nums text-foreground">{r.finalScore.toFixed(1)}</span>
-                <TierPill tone={meta.tone}>{meta.label}</TierPill>
-              </div>
-            </button>
-          </li>
-        );
-      })}
-    </ol>
-  );
-}
-
-/** Notification card: decided assessments that need a follow-up action. */
-function FollowUpCard({ onSelect }: { onSelect: (r: AssessmentRecord) => void }) {
-  if (!FOLLOW_UP_RECORDS.length) {
-    return (
-      <Banner tone="success" icon="✓">
-        <strong>Tidak ada tindak lanjut.</strong> Semua hasil yang sudah diputuskan dalam kondisi baik.
-      </Banner>
-    );
-  }
-  return (
-    <Card>
-      <CardHeader className="flex-row items-center justify-between gap-2">
-        <CardTitle className="flex items-center gap-2">
-          <AlertTriangle className="size-4 text-amber-500" /> Perlu Tindak Lanjut
-        </CardTitle>
-        <span className="rounded-full bg-amber-500/15 px-2 py-0.5 text-xs font-bold text-amber-600 ring-1 ring-amber-500/30 dark:text-amber-400">
-          {FOLLOW_UP_RECORDS.length}
-        </span>
-      </CardHeader>
-      <CardContent className="space-y-2">
-        {FOLLOW_UP_RECORDS.map((r) => (
-          <div key={r.id} className="flex items-center justify-between gap-2 rounded-xl border border-border bg-muted/20 p-2.5">
-            <div className="min-w-0">
-              <p className="truncate text-sm font-medium text-foreground">{r.name}</p>
-              <p className="truncate text-[11px] text-muted-foreground">{r.jabatan} · skor {r.finalScore.toFixed(1)}</p>
-            </div>
-            <div className="flex shrink-0 items-center gap-1.5">
-              <TierPill tone={HASIL_META[r.hasil].tone}>{HASIL_META[r.hasil].label}</TierPill>
-              <Button size="sm" variant="outline" onClick={() => onSelect(r)}>Lihat</Button>
-            </div>
-          </div>
-        ))}
       </CardContent>
     </Card>
   );

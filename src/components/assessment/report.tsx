@@ -330,7 +330,7 @@ function buildFullReportHtml(record: AssessmentRecord, b: ResultBundle, mode: Re
     .join("");
   const paramHead = b.evaluators.map((ev) => `<th style="padding:7px 10px;text-align:center;color:${t.sub};font-weight:600">${ev.name.split(" ")[0]} (${ev.weight}%)</th>`).join("");
 
-  const recos = b.recommendations.map((r) => `<li style="display:flex;gap:8px;padding:4px 0;color:${t.text};font-size:12.5px;line-height:1.55"><span>${r.icon}</span><span>${r.text}</span></li>`).join("");
+  const recos = b.recommendations.map((r) => `<li style="display:flex;gap:8px;padding:4px 0;color:${t.text};font-size:12.5px;line-height:1.55"><span style="color:${t.accent}">•</span><span>${r.text}</span></li>`).join("");
 
   // Perception block
   let perception = "";
