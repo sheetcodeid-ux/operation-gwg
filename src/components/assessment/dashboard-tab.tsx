@@ -5,14 +5,11 @@ import type { ColumnDef } from "@tanstack/react-table";
 import {
   CalendarClock,
   CheckCircle2,
-  ClipboardCheck,
   ClipboardList,
-  Crown,
   Mic,
   PenLine,
   RotateCcw,
   TriangleAlert,
-  Users,
   UserSearch,
   XCircle,
   Zap,
@@ -26,9 +23,7 @@ import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Combobox } from "@/components/ui/combobox";
-import { SegmentedTabs } from "@/components/ui/segmented-tabs";
 import { ColoredBarChart } from "@/components/charts/charts";
-import { ConcentricRings } from "@/components/dashboard/concentric-rings";
 import { DataTable } from "@/components/ui/data-table";
 import { EmptyState } from "@/components/ui/page-header";
 import { useAssessment } from "./context";
@@ -41,7 +36,6 @@ const TONE_TO_HASIL: Record<string, HasilStatus> = { no: "tidak_layak", wait: "d
 const DIST_ORDER: HasilStatus[] = ["fast_track", "layak", "ditunda", "tidak_layak"];
 const EVAL_SHORT: Record<EvaluatorKey, string> = { al: "Atasan", hc: "HC", dir: "Director" };
 const EVAL_HEX: Record<EvaluatorKey, string> = { al: "#38bdf8", hc: "#22c55e", dir: "#8b5cf6" };
-const EVAL_ICON: Record<EvaluatorKey, LucideIcon> = { al: ClipboardCheck, hc: Users, dir: Crown };
 const TONE_HEX: Record<string, string> = { fast: "#8b5cf6", ok: "#22c55e", wait: "#f59e0b", no: "#ef4444" };
 const DIST_SHORT: Record<HasilStatus, string> = { fast_track: "Fast", layak: "Layak", ditunda: "Tunda", tidak_layak: "Tidak" };
 const RECO: Record<RecoKind, { icon: LucideIcon; cls: string }> = {
@@ -477,57 +471,37 @@ function IndividualView({ bundle, subject, editable, reportRecord }: { bundle: R
   );
 }
 
-/** Insight — evaluator (or SA/Interview) scores as concentric rings + legend. */
+/** Simple, tidy score summary — evaluators + self assessment + interview. */
 function InsightRingsCard({ bundle }: { bundle: ResultBundle }) {
-  const [tab, setTab] = React.useState<"penilai" | "sa">("penilai");
   const b = bundle;
-
-  const penilai = b.evalScores.map((e) => ({
-    label: EVAL_SHORT[e.key],
-    value: e.score,
-    color: EVAL_HEX[e.key],
-    icon: EVAL_ICON[e.key],
-    sub: `Bobot ${e.weight}%`,
-    num: e.done ? e.score.toFixed(1) : "—",
-  }));
-  const sa = [
-    { label: "Self Assessment", value: b.selfScore ?? 0, color: "#a78bfa", icon: ClipboardCheck, sub: "Referensi", num: b.selfScore != null ? b.selfScore.toFixed(1) : "—" },
-    { label: "Interview", value: b.ivScore, color: "#f59e0b", icon: Mic, sub: b.ivRek?.label ?? "Belum dilaksanakan", num: b.ivScore > 0 ? b.ivScore.toFixed(1) : "—" },
-  ];
-  const rows = tab === "penilai" ? penilai : sa;
-
   return (
     <Card className="flex flex-col">
       <CardHeader>
-        <CardTitle>Insight Skor</CardTitle>
+        <CardTitle>Ringkasan Skor</CardTitle>
         <CardDescription>Penilai resmi & self assessment</CardDescription>
       </CardHeader>
-      <CardContent className="flex flex-1 flex-col gap-4">
-        <SegmentedTabs
-          value={tab}
-          onChange={(v) => setTab(v as "penilai" | "sa")}
-          items={[{ value: "penilai", label: "Penilai" }, { value: "sa", label: "SA & IV" }]}
-        />
-        <div className="flex flex-1 flex-wrap content-center items-center justify-center gap-5">
-          <ConcentricRings rings={rows.map((r) => ({ label: r.label, value: r.value, color: r.color }))} centerValue={b.final} centerLabel="Skor Final" size={150} />
-          <ul className="min-w-40 flex-1 space-y-3">
-            {rows.map((r) => {
-              const Icon = r.icon;
-              return (
-                <li key={r.label} className="flex items-center gap-3">
-                  <span className="grid size-9 shrink-0 place-items-center rounded-full" style={{ background: `${r.color}22` }}>
-                    <Icon className="size-4" style={{ color: r.color }} />
-                  </span>
-                  <div className="min-w-0 flex-1">
-                    <p className="truncate text-sm font-semibold text-foreground">{r.label}</p>
-                    <p className="truncate text-[11px] text-muted-foreground">{r.sub}</p>
-                  </div>
-                  <span className="shrink-0 text-sm font-semibold tabular-nums" style={{ color: r.color }}>{r.num}</span>
-                </li>
-              );
-            })}
-          </ul>
+      <CardContent className="flex flex-1 flex-col justify-center gap-2">
+        {b.evalScores.map((e) => (
+          <div key={e.key} className="flex items-center gap-3 rounded-xl border border-border bg-muted/20 p-3">
+            <span className="size-2.5 shrink-0 rounded-full" style={{ background: EVAL_HEX[e.key] }} />
+            <div className="min-w-0 flex-1">
+              <p className="text-sm font-medium text-foreground">{EVAL_SHORT[e.key]}</p>
+              <p className="text-[11px] text-muted-foreground">Bobot {e.weight}%{e.done ? ` · +${e.contribution.toFixed(1)} poin` : ""}</p>
+            </div>
+            <span className="shrink-0 text-sm font-semibold tabular-nums text-foreground">{e.done ? e.score.toFixed(1) : "—"}</span>
+          </div>
+        ))}
+        <div className="mt-1 grid grid-cols-2 gap-2 border-t border-border pt-3">
+          <div className="rounded-xl border border-border bg-muted/20 p-3 text-center">
+            <p className="text-[11px] font-semibold uppercase tracking-wide text-violet-600 dark:text-violet-400">Self Assessment</p>
+            <p className="mt-0.5 text-lg font-semibold tabular-nums text-foreground">{b.selfScore != null ? b.selfScore.toFixed(1) : "—"}</p>
+          </div>
+          <div className="rounded-xl border border-border bg-muted/20 p-3 text-center">
+            <p className="text-[11px] font-semibold uppercase tracking-wide text-amber-600 dark:text-amber-400">Interview</p>
+            <p className="mt-0.5 text-lg font-semibold tabular-nums text-foreground">{b.ivScore > 0 ? b.ivScore.toFixed(1) : "—"}</p>
+          </div>
         </div>
+        {b.ivRek && <p className="text-center text-[11px] text-muted-foreground">Rekomendasi interview: <span className="font-medium text-foreground">{b.ivRek.short}</span></p>}
       </CardContent>
     </Card>
   );

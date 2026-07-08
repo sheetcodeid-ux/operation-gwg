@@ -6,12 +6,13 @@ import {
   evaluatorFilled,
   evaluatorsFor,
   PARAMETERS,
+  resolveInterviewRec,
   type DimensionKey,
   type DimensionScores,
   type Evaluator,
   type EvaluatorKey,
   type EvaluatorScores,
-  type IvRecommendation,
+  type IvRecValue,
   type ParamKey,
   type ParamScores,
 } from "@/lib/assessment/config";
@@ -96,8 +97,11 @@ interface AssessmentState {
   pickDimension: (key: DimensionKey, value: number) => void;
   ivNote: string;
   setIvNote: (v: string) => void;
-  ivRecommendation: IvRecommendation["value"] | null;
-  setIvRecommendation: (v: IvRecommendation["value"]) => void;
+  /** Interview recommendation vote per official evaluator (Atasan/HC/Director). */
+  ivVotes: Partial<Record<EvaluatorKey, IvRecValue>>;
+  setIvVote: (evaluator: EvaluatorKey, value: IvRecValue) => void;
+  /** Final interview recommendation = majority of the votes (derived). */
+  ivRecommendation: IvRecValue | null;
 
   /** Optional qualitative note per evaluator, shown on the dashboard. */
   evaluatorNotes: Partial<Record<EvaluatorKey, string>>;
@@ -133,7 +137,8 @@ export function AssessmentProvider({ children }: { children: React.ReactNode }) 
   const [scores, setScores] = React.useState<EvaluatorScores>(emptyEvaluatorScores());
   const [interview, setInterview] = React.useState<DimensionScores>({});
   const [ivNote, setIvNote] = React.useState("");
-  const [ivRecommendation, setIvRecommendation] = React.useState<IvRecommendation["value"] | null>(null);
+  const [ivVotes, setIvVotes] = React.useState<Partial<Record<EvaluatorKey, IvRecValue>>>({});
+  const setIvVote = React.useCallback((evaluator: EvaluatorKey, value: IvRecValue) => setIvVotes((v) => ({ ...v, [evaluator]: value })), []);
   const [evaluatorNotes, setEvaluatorNotes] = React.useState<Partial<Record<EvaluatorKey, string>>>({});
   const [financialImpact, setFinancialImpact] = React.useState(false);
   const setEvaluatorNote = React.useCallback((key: EvaluatorKey, note: string) => setEvaluatorNotes((n) => ({ ...n, [key]: note })), []);
@@ -151,7 +156,7 @@ export function AssessmentProvider({ children }: { children: React.ReactNode }) 
         if (d.scores) setScores(d.scores);
         if (d.interview) setInterview(d.interview);
         if (typeof d.ivNote === "string") setIvNote(d.ivNote);
-        if (d.ivRecommendation) setIvRecommendation(d.ivRecommendation);
+        if (d.ivVotes) setIvVotes(d.ivVotes);
         if (d.evaluatorNotes) setEvaluatorNotes(d.evaluatorNotes);
         if (typeof d.financialImpact === "boolean") setFinancialImpact(d.financialImpact);
       }
@@ -163,10 +168,10 @@ export function AssessmentProvider({ children }: { children: React.ReactNode }) 
     try {
       localStorage.setItem(
         STORAGE_KEY,
-        JSON.stringify({ candidate, syarat, self, scores, interview, ivNote, ivRecommendation, evaluatorNotes, financialImpact }),
+        JSON.stringify({ candidate, syarat, self, scores, interview, ivNote, ivVotes, evaluatorNotes, financialImpact }),
       );
     } catch {}
-  }, [hydrated, candidate, syarat, self, scores, interview, ivNote, ivRecommendation, evaluatorNotes, financialImpact]);
+  }, [hydrated, candidate, syarat, self, scores, interview, ivNote, ivVotes, evaluatorNotes, financialImpact]);
 
   const resetAssessment = React.useCallback(() => {
     setCandidate({ ...EMPTY_CANDIDATE });
@@ -175,7 +180,7 @@ export function AssessmentProvider({ children }: { children: React.ReactNode }) 
     setScores(emptyEvaluatorScores());
     setInterview({});
     setIvNote("");
-    setIvRecommendation(null);
+    setIvVotes({});
     setEvaluatorNotes({});
     setFinancialImpact(false);
     setSaved(false);
@@ -242,6 +247,11 @@ export function AssessmentProvider({ children }: { children: React.ReactNode }) 
     [resolved.jabatan, resolved.isHead],
   );
   const penilaianComplete = activeEvaluators.every((e) => evaluatorFilled(scores[e.key]) === PARAMETERS.length);
+  // Final interview recommendation = majority vote across the active evaluators.
+  const ivRecommendation = React.useMemo(
+    () => resolveInterviewRec(activeEvaluators.map((e) => ivVotes[e.key]).filter((v): v is IvRecValue => !!v)),
+    [activeEvaluators, ivVotes],
+  );
   const continueToInterview = React.useCallback(() => flowTo("interview"), [flowTo]);
   const finishInterview = React.useCallback(() => flowTo("dashboard"), [flowTo]);
 
@@ -298,8 +308,9 @@ export function AssessmentProvider({ children }: { children: React.ReactNode }) 
     pickDimension,
     ivNote,
     setIvNote,
+    ivVotes,
+    setIvVote,
     ivRecommendation,
-    setIvRecommendation,
     evaluatorNotes,
     setEvaluatorNote,
     financialImpact,

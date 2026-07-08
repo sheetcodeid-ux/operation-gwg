@@ -1,13 +1,20 @@
 "use client";
 
-import { CheckCircle2 } from "lucide-react";
-import { DIMENSIONS, IV_RECOMMENDATIONS, interviewScore } from "@/lib/assessment/config";
+import { CheckCircle2, Mic } from "lucide-react";
+import { DIMENSIONS, IV_RECOMMENDATIONS, interviewScore, type IvRecValue } from "@/lib/assessment/config";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/input";
 import { useAssessment } from "./context";
 import { CascadingPicker } from "./cascading-picker";
 import { Banner, Card, ScoreOptions, SectionLabel } from "./parts";
+
+const REC_ACTIVE: Record<IvRecValue, string> = {
+  sangat_layak: "border-violet-500/60 bg-violet-500/10 text-violet-600 dark:text-violet-400",
+  layak: "border-brand-500/60 bg-brand-500/10 text-brand-700 dark:text-brand-400",
+  tunda: "border-amber-500/60 bg-amber-500/10 text-amber-600 dark:text-amber-400",
+  tidak_layak: "border-red-500/60 bg-red-500/10 text-red-600 dark:text-red-400",
+};
 
 /** Tab ④: final interview — 4 weighted dimensions + narrative + recommendation. */
 export function InterviewTab() {
@@ -16,7 +23,7 @@ export function InterviewTab() {
 
   return (
     <div className="space-y-4">
-      <Banner tone="amber" icon="🎙">
+      <Banner tone="amber" icon={<Mic className="size-4" />}>
         <strong>Interview Akhir</strong> dilakukan setelah semua penilaian selesai. Interviewer membaca Self Assessment
         karyawan lebih dulu. Durasi ideal 30–45 menit. Hasil interview memverifikasi & memperkuat bukti — bukan pengganti skor.
       </Banner>
@@ -77,26 +84,49 @@ export function InterviewTab() {
         />
       </Card>
 
+      <SectionLabel>Rekomendasi Interview per Penilai</SectionLabel>
       <Card>
-        <p className="mb-2.5 text-sm font-semibold text-foreground">Rekomendasi dari Sesi Interview</p>
-        <div className="space-y-2">
-          {IV_RECOMMENDATIONS.map((r) => {
-            const active = a.ivRecommendation === r.value;
-            return (
-              <button
-                key={r.value}
-                type="button"
-                onClick={() => a.setIvRecommendation(r.value)}
-                className={cn(
-                  "flex w-full flex-col gap-0.5 rounded-xl border p-3 text-left transition-colors",
-                  active ? "border-amber-500/60 bg-amber-500/10 ring-1 ring-amber-500/30" : "border-border bg-muted/20 hover:bg-muted/40",
-                )}
-              >
-                <span className="text-sm font-medium text-foreground">{r.label}</span>
-                <span className="text-xs leading-relaxed text-muted-foreground">{r.body}</span>
-              </button>
-            );
-          })}
+        <p className="text-sm font-semibold text-foreground">Rekomendasi tiap penilai resmi</p>
+        <p className="mb-3 mt-0.5 text-xs text-muted-foreground">
+          Bersifat kuantitatif — tidak mengubah skor. Hasil akhir diambil dari <strong>rekomendasi terbanyak</strong>; bila ketiganya
+          berbeda, diambil pilihan tengah (median).
+        </p>
+        <div className="space-y-3">
+          {a.activeEvaluators.map((e) => (
+            <div key={e.key}>
+              <p className="mb-1.5 text-xs font-medium text-foreground/80">{e.name}</p>
+              <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+                {IV_RECOMMENDATIONS.map((r) => {
+                  const active = a.ivVotes[e.key] === r.value;
+                  return (
+                    <button
+                      key={r.value}
+                      type="button"
+                      onClick={() => a.setIvVote(e.key, r.value)}
+                      title={r.body}
+                      className={cn(
+                        "rounded-lg border px-2.5 py-2 text-xs font-medium transition-colors",
+                        active ? REC_ACTIVE[r.value] : "border-border bg-muted/20 text-muted-foreground hover:bg-muted/40",
+                      )}
+                    >
+                      {r.short}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          ))}
+        </div>
+
+        <div className="mt-4 flex flex-wrap items-center justify-between gap-2 border-t border-border pt-3">
+          <p className="text-sm text-muted-foreground">Rekomendasi akhir (terbanyak):</p>
+          {a.ivRecommendation ? (
+            <span className={cn("rounded-full border px-3 py-1 text-sm font-semibold", REC_ACTIVE[a.ivRecommendation])}>
+              {IV_RECOMMENDATIONS.find((r) => r.value === a.ivRecommendation)?.short}
+            </span>
+          ) : (
+            <span className="text-sm text-muted-foreground">Belum semua penilai memberi rekomendasi</span>
+          )}
         </div>
       </Card>
 
@@ -108,8 +138,8 @@ export function InterviewTab() {
 function FinishGate() {
   const a = useAssessment();
   const dimsDone = DIMENSIONS.every((d) => !!a.interview[d.key]);
-  const ready = dimsDone && !!a.ivRecommendation;
-  if (ready) {
+  const allVoted = a.activeEvaluators.every((e) => !!a.ivVotes[e.key]);
+  if (dimsDone && allVoted) {
     return (
       <Button className="h-12 w-full text-base" onClick={a.finishInterview}>
         <CheckCircle2 className="size-5" /> Selesai — Lihat Hasil di Dashboard
@@ -118,7 +148,7 @@ function FinishGate() {
   }
   return (
     <div className="rounded-xl border border-dashed border-border bg-muted/20 p-4 text-center text-sm text-muted-foreground">
-      Lengkapi 4 dimensi interview dan pilih rekomendasi untuk menyelesaikan interview.
+      Lengkapi 4 dimensi interview dan rekomendasi dari semua penilai untuk menyelesaikan interview.
     </div>
   );
 }

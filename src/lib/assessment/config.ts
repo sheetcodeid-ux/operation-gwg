@@ -239,18 +239,41 @@ export const DIMENSIONS: Dimension[] = [
   },
 ];
 
+export type IvRecValue = "sangat_layak" | "layak" | "tunda" | "tidak_layak";
+
 export interface IvRecommendation {
-  value: "sangat_layak" | "layak" | "tunda" | "tidak_layak";
+  value: IvRecValue;
+  /** Short label for chips/dropdowns (no emoji). */
+  short: string;
   label: string;
   body: string;
 }
 
 export const IV_RECOMMENDATIONS: IvRecommendation[] = [
-  { value: "sangat_layak", label: "⭐ Sangat Layak — Interview memperkuat rekomendasi", body: "Karyawan tampil melampaui ekspektasi. Interview menemukan bukti tambahan yang memperkuat kelayakan kenaikan golongan." },
-  { value: "layak", label: "✓ Layak — Interview mendukung keputusan berdasarkan skor", body: "Karyawan tampil sesuai ekspektasi. Tidak ada informasi baru yang mengubah rekomendasi berdasarkan skor penilaian." },
-  { value: "tunda", label: "⏸ Perlu Pertimbangan Ulang", body: "Ada beberapa hal dari interview yang perlu diklarifikasi atau dipertimbangkan lebih lanjut sebelum keputusan final." },
-  { value: "tidak_layak", label: "✗ Tidak Direkomendasikan — Interview mengungkap concern serius", body: "Sesi interview mengungkap concern serius sehingga tidak direkomendasikan untuk naik golongan periode ini, terlepas dari skor." },
+  { value: "sangat_layak", short: "Sangat Layak", label: "Sangat Layak — Interview memperkuat rekomendasi", body: "Karyawan tampil melampaui ekspektasi. Interview menemukan bukti tambahan yang memperkuat kelayakan kenaikan golongan." },
+  { value: "layak", short: "Layak", label: "Layak — Interview mendukung keputusan berdasarkan skor", body: "Karyawan tampil sesuai ekspektasi. Tidak ada informasi baru yang mengubah rekomendasi berdasarkan skor penilaian." },
+  { value: "tunda", short: "Perlu Pertimbangan", label: "Perlu Pertimbangan Ulang", body: "Ada beberapa hal dari interview yang perlu diklarifikasi atau dipertimbangkan lebih lanjut sebelum keputusan final." },
+  { value: "tidak_layak", short: "Tidak Direkomendasikan", label: "Tidak Direkomendasikan — Interview mengungkap concern serius", body: "Sesi interview mengungkap concern serius sehingga tidak direkomendasikan untuk naik golongan periode ini, terlepas dari skor." },
 ];
+
+/** Favourability rank (higher = better) — used to break interview-vote ties. */
+export const IV_RANK: Record<IvRecValue, number> = { sangat_layak: 4, layak: 3, tunda: 2, tidak_layak: 1 };
+
+/**
+ * Final interview recommendation from each evaluator's vote:
+ * the majority (most-picked) wins; on a tie — including all-different — take the
+ * median option by favourability rank (the balanced middle choice).
+ */
+export function resolveInterviewRec(votes: IvRecValue[]): IvRecValue | null {
+  if (!votes.length) return null;
+  const freq = new Map<IvRecValue, number>();
+  for (const v of votes) freq.set(v, (freq.get(v) ?? 0) + 1);
+  const maxFreq = Math.max(...freq.values());
+  const modes = [...freq.entries()].filter(([, c]) => c === maxFreq).map(([v]) => v);
+  if (modes.length === 1) return modes[0];
+  const sorted = [...votes].sort((a, b) => IV_RANK[a] - IV_RANK[b]);
+  return sorted[Math.floor((sorted.length - 1) / 2)];
+}
 
 export interface GradeTier {
   min: number;
