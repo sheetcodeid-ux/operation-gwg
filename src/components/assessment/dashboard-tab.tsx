@@ -193,7 +193,10 @@ export function DashboardTab() {
   );
 }
 
-/** Batch-wide tracking tiles — precise, automatic counts across all assessments. */
+const BAR_BG: Record<string, string> = { fast: "bg-violet-500", ok: "bg-brand-500", wait: "bg-amber-500", no: "bg-red-500" };
+const DIST_ORDER: HasilStatus[] = ["fast_track", "layak", "ditunda", "tidak_layak"];
+
+/** Batch-wide tracking tiles + outcome distribution — automatic, precise counts. */
 function BatchTracking({ live }: { live: AssessmentRecord | null }) {
   const all = live ? [live, ...ASSESSMENTS] : ASSESSMENTS;
   const total = all.length;
@@ -202,13 +205,48 @@ function BatchTracking({ live }: { live: AssessmentRecord | null }) {
   const count = (h: HasilStatus) => all.filter((r) => r.status !== "Proses Penilaian" && r.status !== "Draft" && r.hasil === h).length;
   const avg = total ? Math.round((all.reduce((s, r) => s + r.finalScore, 0) / total) * 10) / 10 : 0;
 
+  // Distribution over decided assessments (a result is only meaningful once assessed).
+  const decided = all.filter((r) => r.status !== "Proses Penilaian" && r.status !== "Draft");
+  const dTotal = decided.length || 1;
+  const dist = DIST_ORDER.map((h) => ({ h, n: decided.filter((r) => r.hasil === h).length }));
+  const dMax = Math.max(...dist.map((d) => d.n), 1);
+
   return (
-    <ScrollRow cols={4}>
-      <MiniStat label="Total Assessment" value={total} hint={`Rata-rata skor ${avg}`} />
-      <MiniStat label="Selesai / Berjalan" value={`${selesai} / ${berjalan}`} tone="ok" hint="status proses" />
-      <MiniStat label="Layak + Fast Track" value={count("layak") + count("fast_track")} tone="ok" hint={`Fast track ${count("fast_track")}`} />
-      <MiniStat label="Ditunda / Tidak Layak" value={`${count("ditunda")} / ${count("tidak_layak")}`} tone="wait" hint="perlu tindak lanjut" />
-    </ScrollRow>
+    <div className="space-y-3">
+      <ScrollRow cols={4}>
+        <MiniStat label="Total Assessment" value={total} hint={`Rata-rata skor ${avg}`} />
+        <MiniStat label="Selesai / Berjalan" value={`${selesai} / ${berjalan}`} tone="ok" hint="status proses" />
+        <MiniStat label="Layak + Fast Track" value={count("layak") + count("fast_track")} tone="ok" hint={`Fast track ${count("fast_track")}`} />
+        <MiniStat label="Ditunda / Tidak Layak" value={`${count("ditunda")} / ${count("tidak_layak")}`} tone="wait" hint="perlu tindak lanjut" />
+      </ScrollRow>
+
+      <Card>
+        <div className="mb-3 flex items-center justify-between">
+          <p className="text-sm font-semibold text-foreground">Distribusi Hasil</p>
+          <span className="text-[11px] text-muted-foreground">{decided.length} assessment sudah diputuskan</span>
+        </div>
+        <div className="space-y-2.5">
+          {dist.map(({ h, n }) => {
+            const meta = HASIL_META[h];
+            const pct = Math.round((n / dTotal) * 100);
+            return (
+              <div key={h} className="flex items-center gap-3">
+                <span className="flex w-32 shrink-0 items-center gap-1.5">
+                  <span className={cn("size-2.5 shrink-0 rounded-full", BAR_BG[meta.tone])} />
+                  <span className="truncate text-xs text-foreground">{meta.label}</span>
+                </span>
+                <div className="h-2.5 flex-1 overflow-hidden rounded-full bg-muted" title={`${n} karyawan · ${pct}%`}>
+                  <div className={cn("h-full rounded-full transition-all", BAR_BG[meta.tone])} style={{ width: `${(n / dMax) * 100}%` }} />
+                </div>
+                <span className="w-16 shrink-0 text-right text-xs tabular-nums text-muted-foreground">
+                  <span className="font-semibold text-foreground">{n}</span> · {pct}%
+                </span>
+              </div>
+            );
+          })}
+        </div>
+      </Card>
+    </div>
   );
 }
 
