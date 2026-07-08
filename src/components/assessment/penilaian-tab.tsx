@@ -11,6 +11,7 @@ import {
 } from "@/lib/assessment/config";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
+import { Textarea } from "@/components/ui/input";
 import { useAssessment } from "./context";
 import { CascadingPicker } from "./cascading-picker";
 import { Banner, Card, ScoreOptions, ScrollRow, SectionLabel } from "./parts";
@@ -127,6 +128,17 @@ export function PenilaianTab() {
           );
         })}
       </div>
+
+      <Card>
+        <p className="mb-1.5 text-sm font-semibold text-foreground">Catatan {evaluator.name}</p>
+        <p className="mb-2 text-xs text-muted-foreground">Opsional — catatan kualitatif yang tampil di Dashboard sebagai bukti pendukung.</p>
+        <Textarea
+          rows={3}
+          value={a.evaluatorNotes[active] ?? ""}
+          onChange={(e) => a.setEvaluatorNote(active, e.target.value)}
+          placeholder="Contoh: konsisten melampaui target, inisiatif tinggi, perlu penguatan pada presentasi ke manajemen…"
+        />
+      </Card>
 
       {a.penilaianComplete ? (
         <Button className="h-12 w-full text-base" onClick={a.continueToInterview}>

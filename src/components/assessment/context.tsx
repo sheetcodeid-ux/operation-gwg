@@ -97,9 +97,18 @@ interface AssessmentState {
   ivRecommendation: IvRecommendation["value"] | null;
   setIvRecommendation: (v: IvRecommendation["value"]) => void;
 
+  /** Optional qualitative note per evaluator, shown on the dashboard. */
+  evaluatorNotes: Partial<Record<EvaluatorKey, string>>;
+  setEvaluatorNote: (key: EvaluatorKey, note: string) => void;
+
   financialImpact: boolean;
   setFinancialImpact: (v: boolean) => void;
+
+  /** Clear all captured data and start over. */
+  resetAssessment: () => void;
 }
+
+const STORAGE_KEY = "gwg-assessment-draft";
 
 const Ctx = React.createContext<AssessmentState | null>(null);
 
@@ -122,7 +131,56 @@ export function AssessmentProvider({ children }: { children: React.ReactNode }) 
   const [interview, setInterview] = React.useState<DimensionScores>({});
   const [ivNote, setIvNote] = React.useState("");
   const [ivRecommendation, setIvRecommendation] = React.useState<IvRecommendation["value"] | null>(null);
+  const [evaluatorNotes, setEvaluatorNotes] = React.useState<Partial<Record<EvaluatorKey, string>>>({});
   const [financialImpact, setFinancialImpact] = React.useState(false);
+  const setEvaluatorNote = React.useCallback((key: EvaluatorKey, note: string) => setEvaluatorNotes((n) => ({ ...n, [key]: note })), []);
+
+  // ── draft persistence: survive a refresh (frontend-only, no backend yet) ──
+  const [hydrated, setHydrated] = React.useState(false);
+  React.useEffect(() => {
+    try {
+      const raw = localStorage.getItem(STORAGE_KEY);
+      if (raw) {
+        const d = JSON.parse(raw);
+        if (d.candidate) setCandidate({ ...EMPTY_CANDIDATE, ...d.candidate });
+        if (d.syarat) setSyarat(d.syarat);
+        if (d.self) setSelf(d.self);
+        if (d.scores) setScores(d.scores);
+        if (d.interview) setInterview(d.interview);
+        if (typeof d.ivNote === "string") setIvNote(d.ivNote);
+        if (d.ivRecommendation) setIvRecommendation(d.ivRecommendation);
+        if (d.evaluatorNotes) setEvaluatorNotes(d.evaluatorNotes);
+        if (typeof d.financialImpact === "boolean") setFinancialImpact(d.financialImpact);
+      }
+    } catch {}
+    setHydrated(true);
+  }, []);
+  React.useEffect(() => {
+    if (!hydrated) return;
+    try {
+      localStorage.setItem(
+        STORAGE_KEY,
+        JSON.stringify({ candidate, syarat, self, scores, interview, ivNote, ivRecommendation, evaluatorNotes, financialImpact }),
+      );
+    } catch {}
+  }, [hydrated, candidate, syarat, self, scores, interview, ivNote, ivRecommendation, evaluatorNotes, financialImpact]);
+
+  const resetAssessment = React.useCallback(() => {
+    setCandidate({ ...EMPTY_CANDIDATE });
+    setSyarat({ 1: false, 2: false, 3: false });
+    setSelf({});
+    setScores(emptyEvaluatorScores());
+    setInterview({});
+    setIvNote("");
+    setIvRecommendation(null);
+    setEvaluatorNotes({});
+    setFinancialImpact(false);
+    setSaved(false);
+    try {
+      localStorage.removeItem(STORAGE_KEY);
+    } catch {}
+    setTabState("syarat");
+  }, []);
 
   const setTab = React.useCallback((t: TabKey) => {
     setTabState(t);
@@ -228,8 +286,11 @@ export function AssessmentProvider({ children }: { children: React.ReactNode }) 
     setIvNote,
     ivRecommendation,
     setIvRecommendation,
+    evaluatorNotes,
+    setEvaluatorNote,
     financialImpact,
     setFinancialImpact,
+    resetAssessment,
   };
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;

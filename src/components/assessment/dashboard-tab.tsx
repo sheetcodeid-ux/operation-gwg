@@ -6,12 +6,24 @@ import { UserSearch } from "lucide-react";
 import { departmentOptions, employeesForPosition, formatGolongan, positionsForDepartment } from "@/lib/assessment/org";
 import { ASSESSMENTS, computeResult, type EnrichedRecord, type ResultBundle } from "@/lib/assessment/result";
 import { HASIL_META, HASIL_OPTIONS, type AssessmentRecord, type HasilStatus } from "@/lib/assessment/records";
+import { RotateCcw } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { Button } from "@/components/ui/button";
 import { DataTable } from "@/components/ui/data-table";
 import { EmptyState } from "@/components/ui/page-header";
 import { useAssessment } from "./context";
 import { ReportButton } from "./report";
+import { CompetencyRadar } from "./radar";
 import { Banner, Card, Dropdown, ExpandRow, MiniStat, ScoreRing, ScrollRow, SectionLabel, TierPill } from "./parts";
+
+const PARAM_SHORT: Record<string, string> = {
+  kpi: "KPI",
+  att: "Attitude",
+  loy: "Loyalitas",
+  skl: "Skill",
+  kon: "Kontrib.",
+  msk: "Masa",
+};
 
 const TONE_TO_HASIL: Record<string, HasilStatus> = { no: "tidak_layak", wait: "ditunda", ok: "layak", fast: "fast_track" };
 
@@ -166,7 +178,7 @@ export function DashboardTab() {
           description="Karyawan ini belum masuk periode penilaian atau prosesnya belum dimulai. Mulai dari tab Syarat & SA lalu Penilaian."
         />
       ) : bundle && subject ? (
-        <IndividualResult bundle={bundle} subject={subject} editable={editable} />
+        <IndividualResult bundle={bundle} subject={subject} editable={editable} reportRecord={selectedRecord ?? liveRecord!} />
       ) : (
         <EmptyState
           icon={UserSearch}
@@ -201,9 +213,20 @@ function BatchTracking({ live }: { live: AssessmentRecord | null }) {
 }
 
 /** Full per-employee result — mirrors the HTML dashboard layout, all measured. */
-function IndividualResult({ bundle, subject, editable }: { bundle: ResultBundle; subject: Subject; editable: boolean }) {
+function IndividualResult({
+  bundle,
+  subject,
+  editable,
+  reportRecord,
+}: {
+  bundle: ResultBundle;
+  subject: Subject;
+  editable: boolean;
+  reportRecord: AssessmentRecord;
+}) {
   const a = useAssessment();
   const b = bundle;
+  const radarData = b.params.map((p) => ({ label: p.title, short: PARAM_SHORT[p.key] ?? p.title, value: p.avgPct }));
 
   return (
     <div className="space-y-4">
@@ -222,11 +245,7 @@ function IndividualResult({ bundle, subject, editable }: { bundle: ResultBundle;
               {subject.jabatan || "—"} · {subject.departemen || "—"} · Golongan {subject.golongan || "—"} → {subject.golonganTujuan || "—"}
             </p>
           </div>
-          {subject.source === "record" && (
-            <ReportButton
-              record={ASSESSMENTS.find((r) => r.name === subject.name)!}
-            />
-          )}
+          <ReportButton record={reportRecord} />
         </div>
       </Card>
 
@@ -309,6 +328,17 @@ function IndividualResult({ bundle, subject, editable }: { bundle: ResultBundle;
         </Banner>
       )}
 
+      {/* Competency radar (single brand hue) */}
+      {b.anyFilled && (
+        <>
+          <SectionLabel>Profil Kompetensi</SectionLabel>
+          <Card>
+            <CompetencyRadar data={radarData} />
+            <p className="mt-2 text-center text-[11px] text-muted-foreground">Rata-rata tertimbang normalisasi tiap parameter (0–100).</p>
+          </Card>
+        </>
+      )}
+
       {/* Parameter comparison — professional expandable dropdowns */}
       <SectionLabel>Perbandingan Nilai per Parameter</SectionLabel>
       <div className="space-y-2">
@@ -386,6 +416,48 @@ function IndividualResult({ bundle, subject, editable }: { bundle: ResultBundle;
             <span>Terdapat bukti dampak finansial terukur (efisiensi / revenue / penghematan).</span>
           </label>
         </Card>
+      )}
+
+      {/* Evaluator & interview notes (running assessment only) */}
+      {subject.source === "live" && (() => {
+        const notes = b.evaluators
+          .map((e) => ({ name: e.name, note: (a.evaluatorNotes[e.key] ?? "").trim() }))
+          .filter((n) => n.note);
+        const hasIv = a.ivNote.trim().length > 0;
+        if (!notes.length && !hasIv) return null;
+        return (
+          <>
+            <SectionLabel>Catatan Penilai & Interview</SectionLabel>
+            <div className="space-y-2">
+              {notes.map((n) => (
+                <Card key={n.name}>
+                  <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">{n.name}</p>
+                  <p className="mt-1 text-sm leading-relaxed text-foreground">“{n.note}”</p>
+                </Card>
+              ))}
+              {hasIv && (
+                <Card>
+                  <p className="text-[11px] font-semibold uppercase tracking-wide text-amber-600 dark:text-amber-400">Catatan Interview</p>
+                  <p className="mt-1 whitespace-pre-line text-sm leading-relaxed text-foreground">{a.ivNote}</p>
+                </Card>
+              )}
+            </div>
+          </>
+        );
+      })()}
+
+      {/* Reset — running assessment only */}
+      {subject.source === "live" && (
+        <div className="flex justify-end pt-2">
+          <Button
+            variant="outline"
+            onClick={() => {
+              if (typeof window !== "undefined" && window.confirm("Reset seluruh data assessment yang sedang berjalan?")) a.resetAssessment();
+            }}
+          >
+            <RotateCcw className="size-4" /> Reset &amp; Mulai Ulang
+          </Button>
+        </div>
       )}
     </div>
   );
