@@ -58,6 +58,8 @@ interface AssessmentState {
   tab: TabKey;
   setTab: (t: TabKey) => void;
   visited: Set<TabKey>;
+  /** True only right after button-driven navigation (Simpan & Lanjut / Selesai). */
+  entrance: boolean;
 
   candidate: Candidate;
   resolved: ResolvedCandidate;
@@ -122,6 +124,7 @@ export function AssessmentProvider({ children }: { children: React.ReactNode }) 
   const [role, setRoleState] = React.useState<AssessmentRole>("director");
   const [tab, setTabState] = React.useState<TabKey>("panduan");
   const [visited, setVisited] = React.useState<Set<TabKey>>(new Set<TabKey>(["panduan"]));
+  const [entrance, setEntrance] = React.useState(false); // true only for button-driven navigation
 
   const [candidate, setCandidate] = React.useState<Candidate>({ ...EMPTY_CANDIDATE });
   const [syarat, setSyarat] = React.useState<Record<number, boolean>>({ 1: false, 2: false, 3: false });
@@ -182,7 +185,17 @@ export function AssessmentProvider({ children }: { children: React.ReactNode }) 
     setTabState("syarat");
   }, []);
 
+  // Tab click (manual browsing): switch instantly, no entrance animation/scroll.
   const setTab = React.useCallback((t: TabKey) => {
+    setEntrance(false);
+    setTabState(t);
+    setVisited((v) => (v.has(t) ? v : new Set(v).add(t)));
+  }, []);
+
+  // Button-driven step (Simpan & Lanjut / Selesai): animate up + scroll to top so
+  // the user lands at the next page's header without scrolling manually.
+  const flowTo = React.useCallback((t: TabKey) => {
+    setEntrance(true);
     setTabState(t);
     setVisited((v) => (v.has(t) ? v : new Set(v).add(t)));
   }, []);
@@ -229,8 +242,8 @@ export function AssessmentProvider({ children }: { children: React.ReactNode }) 
     [resolved.jabatan, resolved.isHead],
   );
   const penilaianComplete = activeEvaluators.every((e) => evaluatorFilled(scores[e.key]) === PARAMETERS.length);
-  const continueToInterview = React.useCallback(() => setTab("interview"), [setTab]);
-  const finishInterview = React.useCallback(() => setTab("dashboard"), [setTab]);
+  const continueToInterview = React.useCallback(() => flowTo("interview"), [flowTo]);
+  const finishInterview = React.useCallback(() => flowTo("dashboard"), [flowTo]);
 
   const identityComplete =
     !!candidate.departmentId &&
@@ -249,8 +262,8 @@ export function AssessmentProvider({ children }: { children: React.ReactNode }) 
   const saveAndContinue = React.useCallback(() => {
     setSaved(true);
     // Karyawan may not access Penilaian (spec §3) — only advance when allowed.
-    if (canSeeTab(role, "penilaian")) setTab("penilaian");
-  }, [role, setTab]);
+    if (canSeeTab(role, "penilaian")) flowTo("penilaian");
+  }, [role, flowTo]);
 
   const value: AssessmentState = {
     role,
@@ -258,6 +271,7 @@ export function AssessmentProvider({ children }: { children: React.ReactNode }) 
     tab,
     setTab,
     visited,
+    entrance,
     candidate,
     resolved,
     setDepartment,

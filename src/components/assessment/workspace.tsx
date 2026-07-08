@@ -38,11 +38,11 @@ function WorkspaceInner() {
   // Content is rendered from the access-checked tab, never a raw drifted value.
   const activeTab: TabKey = canSeeTab(a.role, a.tab) ? a.tab : tabs[0].key;
 
-  // On tab change (incl. "Selesai"/"Lanjut" navigation) jump back to the top so
-  // the new page starts at its header, not wherever the previous one scrolled.
+  // Only button-driven navigation (Simpan & Lanjut / Selesai) jumps to the top —
+  // manual tab clicks switch in place with no scroll or entrance animation.
   React.useEffect(() => {
-    window.scrollTo({ top: 0, behavior: "smooth" });
-  }, [activeTab]);
+    if (a.entrance) window.scrollTo({ top: 0, behavior: "smooth" });
+  }, [activeTab, a.entrance]);
 
   return (
     <>
@@ -96,8 +96,8 @@ function WorkspaceInner() {
         </div>
       </div>
 
-      {/* key remounts on tab change so the entrance animation replays */}
-      <div key={activeTab} className="animate-fade-up">
+      {/* Entrance animation only for button-driven navigation, not manual clicks. */}
+      <div key={activeTab} className={a.entrance ? "animate-fade-up" : undefined}>
         {activeTab === "panduan" && <PanduanTab />}
         {activeTab === "syarat" && <SyaratTab />}
         {activeTab === "penilaian" && <PenilaianTab />}
