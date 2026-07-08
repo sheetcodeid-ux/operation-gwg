@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { ArrowRight } from "lucide-react";
+import { ArrowRight, Settings2, Star } from "lucide-react";
 import {
   PARAMETERS,
   evaluatorFilled,
@@ -40,7 +40,7 @@ export function PenilaianTab() {
 
   return (
     <div className="space-y-4">
-      <Banner tone="info" icon="⚙">
+      <Banner tone="info" icon={<Settings2 className="size-4" />}>
         Isi penilaian dari penilai resmi. Setiap parameter menampilkan kontribusi skor secara langsung agar transparan.
         Skor penilai dihitung otomatis di kartu ringkasan.
       </Banner>
@@ -57,7 +57,7 @@ export function PenilaianTab() {
       </Card>
 
       {single ? (
-        <Banner tone="violet" icon="★">
+        <Banner tone="violet" icon={<Star className="size-4" />}>
           Jabatan <strong>{a.resolved.jabatan || "ini"}</strong> dinilai langsung oleh <strong>Director</strong> — hanya 1
           penilai resmi (bobot 100%).
         </Banner>

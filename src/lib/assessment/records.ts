@@ -62,7 +62,7 @@ export const MOCK_ASSESSMENTS: AssessmentRecord[] = [
     status: "Selesai",
     hasil: "layak",
     finalScore: 88.4,
-    interviewResult: "✓ Layak",
+    interviewResult: "Layak",
     decision: "Layak Naik Golongan",
   },
   {
@@ -80,7 +80,7 @@ export const MOCK_ASSESSMENTS: AssessmentRecord[] = [
     status: "Selesai",
     hasil: "fast_track",
     finalScore: 96.1,
-    interviewResult: "⭐ Sangat Layak",
+    interviewResult: "Sangat Layak",
     decision: "Fast Track — pertimbangan promosi",
   },
   {
@@ -98,7 +98,7 @@ export const MOCK_ASSESSMENTS: AssessmentRecord[] = [
     status: "Selesai",
     hasil: "ditunda",
     finalScore: 79.2,
-    interviewResult: "⏸ Perlu Pertimbangan Ulang",
+    interviewResult: "Perlu Pertimbangan Ulang",
     decision: "Ditunda — review 6 bulan",
   },
   {
@@ -152,7 +152,7 @@ export const MOCK_ASSESSMENTS: AssessmentRecord[] = [
     status: "Selesai",
     hasil: "layak",
     finalScore: 90.3,
-    interviewResult: "✓ Layak",
+    interviewResult: "Layak",
     decision: "Layak Naik Golongan",
   },
   // ── earlier-period records (drive the per-employee history timeline) ──
@@ -171,7 +171,7 @@ export const MOCK_ASSESSMENTS: AssessmentRecord[] = [
     status: "Selesai",
     hasil: "ditunda",
     finalScore: 77.0,
-    interviewResult: "⏸ Perlu Pertimbangan Ulang",
+    interviewResult: "Perlu Pertimbangan Ulang",
     decision: "Ditunda — review 6 bulan",
   },
   {
@@ -189,7 +189,7 @@ export const MOCK_ASSESSMENTS: AssessmentRecord[] = [
     status: "Selesai",
     hasil: "ditunda",
     finalScore: 71.5,
-    interviewResult: "⏸ Perlu Pertimbangan Ulang",
+    interviewResult: "Perlu Pertimbangan Ulang",
     decision: "Ditunda",
   },
   {
@@ -207,7 +207,7 @@ export const MOCK_ASSESSMENTS: AssessmentRecord[] = [
     status: "Selesai",
     hasil: "layak",
     finalScore: 89.0,
-    interviewResult: "✓ Layak",
+    interviewResult: "Layak",
     decision: "Layak Naik Golongan",
   },
   {
@@ -225,7 +225,7 @@ export const MOCK_ASSESSMENTS: AssessmentRecord[] = [
     status: "Selesai",
     hasil: "layak",
     finalScore: 92.7,
-    interviewResult: "✓ Layak",
+    interviewResult: "Layak",
     decision: "Layak Naik Golongan",
   },
 ];

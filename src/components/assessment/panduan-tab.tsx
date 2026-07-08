@@ -1,5 +1,6 @@
 "use client";
 
+import { Info } from "lucide-react";
 import { EVALUATORS, FLOW_STEPS, PARAMETERS } from "@/lib/assessment/config";
 import { Banner, Card, SectionLabel } from "./parts";
 
@@ -7,7 +8,7 @@ import { Banner, Card, SectionLabel } from "./parts";
 export function PanduanTab() {
   return (
     <div className="space-y-4">
-      <Banner tone="info" icon="ℹ">
+      <Banner tone="info" icon={<Info className="size-4" />}>
         <strong>Sistem Penilaian Kenaikan Golongan</strong> menilai kelayakan karyawan naik golongan secara transparan
         melalui 3 penilai resmi, self assessment, dan interview akhir. Skor minimum <strong>85</strong> untuk dinyatakan
         layak. Semua nilai dilengkapi bobot dan sumber data agar dapat dipertanggungjawabkan.

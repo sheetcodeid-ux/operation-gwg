@@ -1,6 +1,6 @@
 "use client";
 
-import { ArrowRight, Check, X } from "lucide-react";
+import { ArrowRight, Check, MessageSquare, Star, TriangleAlert, X } from "lucide-react";
 import { PARAMETERS, SYARAT_UTAMA } from "@/lib/assessment/config";
 import { BATCHES, GOLONGAN, GOLONGAN_LEVELS, golonganHasLevel } from "@/lib/assessment/org";
 import { cn } from "@/lib/utils";
@@ -21,7 +21,7 @@ export function SyaratTab() {
   return (
     <div className="space-y-4">
       <SectionLabel>① Verifikasi Syarat Utama</SectionLabel>
-      <Banner tone="amber" icon="⚠">
+      <Banner tone="amber" icon={<TriangleAlert className="size-4" />}>
         Ketiga syarat di bawah <strong>harus terpenuhi</strong> sebelum proses penilaian dilanjutkan. Jika ada yang tidak
         terpenuhi, proses dihentikan dan dijadwalkan ulang.
       </Banner>
@@ -111,7 +111,7 @@ export function SyaratTab() {
 
         {a.resolved.isHead && (
           <div className="mt-4">
-            <Banner tone="violet" icon="★">
+            <Banner tone="violet" icon={<Star className="size-4" />}>
               Jabatan <strong>Head</strong> — dinilai langsung oleh <strong>Director</strong> (1 penilai resmi).
             </Banner>
           </div>
@@ -119,7 +119,7 @@ export function SyaratTab() {
       </Card>
 
       <SectionLabel>③ Self Assessment — Penilaian Mandiri Karyawan</SectionLabel>
-      <Banner tone="violet" icon="💬">
+      <Banner tone="violet" icon={<MessageSquare className="size-4" />}>
         Diisi oleh karyawan secara mandiri dan jujur. Penilaian ini <strong>tidak mempengaruhi skor final</strong>, namun
         dipakai sebagai bahan perbandingan persepsi saat kalibrasi dan interview akhir.
       </Banner>
