@@ -38,11 +38,17 @@ function WorkspaceInner() {
   // Content is rendered from the access-checked tab, never a raw drifted value.
   const activeTab: TabKey = canSeeTab(a.role, a.tab) ? a.tab : tabs[0].key;
 
-  // Only button-driven navigation (Simpan & Lanjut / Selesai) jumps to the top —
-  // manual tab clicks switch in place with no scroll or entrance animation.
+  // Every tab change lands at the top of the new page. Button-driven steps
+  // (Simpan & Lanjut / Selesai) glide up smoothly (paired with the fade-up);
+  // manual tab clicks jump instantly with no entrance animation. Re-issue after
+  // layout so a tall tab (Dashboard) can't keep the old scroll via scroll-anchoring.
   React.useEffect(() => {
-    if (a.entrance) window.scrollTo({ top: 0, behavior: "smooth" });
-  }, [activeTab, a.entrance]);
+    const behavior: ScrollBehavior = a.entrance ? "smooth" : "auto";
+    window.scrollTo({ top: 0, behavior });
+    const id = requestAnimationFrame(() => window.scrollTo({ top: 0, behavior }));
+    return () => cancelAnimationFrame(id);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeTab]);
 
   return (
     <>
