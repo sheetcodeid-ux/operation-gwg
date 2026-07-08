@@ -12,7 +12,7 @@ import { Button } from "@/components/ui/button";
 import { DataTable } from "@/components/ui/data-table";
 import { EmptyState } from "@/components/ui/page-header";
 import { useAssessment } from "./context";
-import { ReportButton } from "./report";
+import { DashboardReportButton, ReportButton } from "./report";
 import { CompetencyRadar } from "./radar";
 import { Banner, Card, Dropdown, ExpandRow, MiniStat, ScoreRing, ScrollRow, SectionLabel, TierPill } from "./parts";
 
@@ -283,7 +283,10 @@ function IndividualResult({
               {subject.jabatan || "—"} · {subject.departemen || "—"} · Golongan {subject.golongan || "—"} → {subject.golonganTujuan || "—"}
             </p>
           </div>
-          <ReportButton record={reportRecord} />
+          <div className="flex shrink-0 items-center gap-2">
+            <ReportButton record={reportRecord} />
+            <DashboardReportButton record={reportRecord} bundle={b} />
+          </div>
         </div>
       </Card>
 
