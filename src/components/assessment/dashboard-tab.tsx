@@ -3,14 +3,16 @@
 import * as React from "react";
 import type { ColumnDef } from "@tanstack/react-table";
 import { AlertTriangle, RotateCcw, UserSearch } from "lucide-react";
-import { departmentOptions, employeesForPosition, formatGolongan, positionsForDepartment } from "@/lib/assessment/org";
+import { BATCHES, departmentOptions, employeesForPosition, formatGolongan, positionsForDepartment } from "@/lib/assessment/org";
 import { ASSESSMENTS, FOLLOW_UP_RECORDS, LATEST_ASSESSMENTS, computeResult, historyFor, type EnrichedRecord, type ResultBundle } from "@/lib/assessment/result";
 import { HASIL_META, HASIL_OPTIONS, type AssessmentRecord, type HasilStatus } from "@/lib/assessment/records";
 import type { EvaluatorKey } from "@/lib/assessment/config";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Combobox } from "@/components/ui/combobox";
 import { SegmentedTabs } from "@/components/ui/segmented-tabs";
+import { ColoredBarChart } from "@/components/charts/charts";
 import { DataTable } from "@/components/ui/data-table";
 import { EmptyState } from "@/components/ui/page-header";
 import { useAssessment } from "./context";
@@ -24,6 +26,8 @@ const BAR_BG: Record<string, string> = { fast: "bg-violet-500", ok: "bg-brand-50
 const DIST_ORDER: HasilStatus[] = ["fast_track", "layak", "ditunda", "tidak_layak"];
 const EVAL_DOT: Record<EvaluatorKey, string> = { al: "bg-sky-500", hc: "bg-brand-500", dir: "bg-violet-500" };
 const EVAL_SHORT: Record<EvaluatorKey, string> = { al: "Atasan", hc: "HC", dir: "Director" };
+const TONE_HEX: Record<string, string> = { fast: "#8b5cf6", ok: "#22c55e", wait: "#f59e0b", no: "#ef4444" };
+const DIST_SHORT: Record<HasilStatus, string> = { fast_track: "Fast", layak: "Layak", ditunda: "Tunda", tidak_layak: "Tidak" };
 
 const initials = (n: string) => n.split(" ").slice(0, 2).map((w) => w[0]).join("").toUpperCase();
 
@@ -256,46 +260,38 @@ function Stat({ label, value }: { label: string; value: string }) {
   );
 }
 
-/** Distribusi Hasil — styled like the Operation "Performance Metrics" card. */
+/** Distribusi Hasil — vertical bar chart + stat footer, exactly like the
+ *  Operation "Performance Metrics" card (header title + selector, chart, stats). */
 function DistribusiCard() {
-  const decided = LATEST_ASSESSMENTS.filter((r) => r.status !== "Proses Penilaian" && r.status !== "Draft");
+  const [batch, setBatch] = React.useState("");
+  const decided = LATEST_ASSESSMENTS.filter(
+    (r) => (!batch || r.batch === batch) && r.status !== "Proses Penilaian" && r.status !== "Draft",
+  );
   const dTotal = decided.length || 1;
   const dist = DIST_ORDER.map((h) => ({ h, n: decided.filter((r) => r.hasil === h).length }));
-  const dMax = Math.max(...dist.map((d) => d.n), 1);
   const n = (h: HasilStatus) => dist.find((d) => d.h === h)?.n ?? 0;
   const layakPct = Math.round(((n("layak") + n("fast_track")) / dTotal) * 100);
   const perluTL = n("ditunda") + n("tidak_layak");
+  const chartData = dist.map(({ h, n: cnt }) => ({ label: DIST_SHORT[h], value: Math.round((cnt / dTotal) * 100), color: TONE_HEX[HASIL_META[h].tone] }));
+
   return (
     <Card className="flex flex-col">
-      <CardHeader>
-        <CardTitle>Distribusi Hasil</CardTitle>
-        <CardDescription>{decided.length} assessment sudah diputuskan</CardDescription>
+      <CardHeader className="flex-row items-start justify-between gap-2">
+        <div className="min-w-0">
+          <CardTitle className="truncate">Distribusi Hasil</CardTitle>
+          <CardDescription className="truncate">Persentase per hasil</CardDescription>
+        </div>
+        <Combobox
+          className="min-w-0 shrink basis-32"
+          value={batch}
+          onChange={setBatch}
+          options={[{ value: "", label: "Semua Batch" }, ...BATCHES.map((b) => ({ value: b, label: b }))]}
+          searchPlaceholder="Batch…"
+        />
       </CardHeader>
       <CardContent className="flex flex-1 flex-col">
-        <div className="space-y-2.5">
-          {dist.map(({ h, n: cnt }) => {
-            const meta = HASIL_META[h];
-            const pct = Math.round((cnt / dTotal) * 100);
-            return (
-              <div key={h} className="flex items-center gap-2.5">
-                <span className="flex w-24 shrink-0 items-center gap-1.5">
-                  <span className={cn("size-2.5 shrink-0 rounded-full", BAR_BG[meta.tone])} />
-                  <span className="truncate text-xs text-foreground">{meta.label}</span>
-                </span>
-                <MeterBar
-                  className="flex-1"
-                  pct={(cnt / dMax) * 100}
-                  colorClass={BAR_BG[meta.tone]}
-                  tooltip={<span>{meta.label}: <span className="tabular-nums">{cnt}</span> · {pct}%</span>}
-                />
-                <span className="w-12 shrink-0 text-right text-xs tabular-nums text-muted-foreground">
-                  <span className="font-semibold text-foreground">{cnt}</span>·{pct}%
-                </span>
-              </div>
-            );
-          })}
-        </div>
-        <div className="mt-4 grid grid-cols-3 gap-2 border-t border-border pt-3 text-center">
+        <ColoredBarChart data={chartData} height={190} max={100} unit="%" />
+        <div className="mt-3 grid grid-cols-3 gap-2 border-t border-border pt-3 text-center">
           <Stat label="Diputuskan" value={String(decided.length)} />
           <Stat label="Layak" value={`${layakPct}%`} />
           <Stat label="Perlu TL" value={String(perluTL)} />

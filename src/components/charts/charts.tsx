@@ -93,6 +93,41 @@ export function CategoryBarChart({
   );
 }
 
+/* ---- Vertical bar chart with a distinct color per bar ---- */
+export function ColoredBarChart({
+  data,
+  height = 200,
+  max,
+  radius = 6,
+  maxBarSize = 40,
+  angle = 0,
+  unit = "",
+}: {
+  data: { label: string; value: number; color: string }[];
+  height?: number;
+  max?: number;
+  radius?: number;
+  maxBarSize?: number;
+  angle?: number;
+  unit?: string;
+}) {
+  return (
+    <ResponsiveContainer width="100%" height={height}>
+      <BarChart data={data} margin={{ top: 8, right: 8, left: -18, bottom: 0 }}>
+        <CartesianGrid strokeDasharray="3 3" stroke={GRID} vertical={false} />
+        <XAxis dataKey="label" tick={AXIS} tickLine={false} axisLine={false} interval={0} angle={angle} dy={6} height={angle ? 40 : 24} />
+        <YAxis tick={AXIS} tickLine={false} axisLine={false} allowDecimals={false} width={30} domain={max ? [0, max] : undefined} />
+        <Tooltip contentStyle={tooltipStyle} cursor={{ fill: "rgba(255,255,255,0.04)" }} formatter={(v) => [`${v}${unit}`, ""]} />
+        <Bar dataKey="value" radius={[radius, radius, radius, radius]} maxBarSize={maxBarSize}>
+          {data.map((d, i) => (
+            <Cell key={i} fill={d.color} />
+          ))}
+        </Bar>
+      </BarChart>
+    </ResponsiveContainer>
+  );
+}
+
 /* ---- Combo: previous period (gray gradient bars) vs current (glowing blue line) ---- */
 function CompareTick(props: { x?: number; y?: number; payload?: { value: string }; weekendLabels?: Set<string> }) {
   const { x = 0, y = 0, payload, weekendLabels } = props;
