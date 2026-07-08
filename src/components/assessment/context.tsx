@@ -20,7 +20,7 @@ import { formatGolongan, getDepartment, getEmployee, getPosition } from "@/lib/a
 import type { AssessmentRole, TabKey } from "@/lib/assessment/access";
 import { canSeeTab, TAB_ACCESS } from "@/lib/assessment/access";
 import type { EvaluatorIdentity, SessionSeed, SessionState } from "@/lib/assessment/session";
-import { openSession, submitMyEvaluation } from "@/lib/actions/assessment";
+import { openSession, submitMyEvaluation, updateSessionShared } from "@/lib/actions/assessment";
 
 /** Cascading identity: department → position → employee, plus the manual fields. */
 export interface Candidate {
@@ -361,7 +361,14 @@ export function AssessmentProvider({
       try {
         const res = await submitMyEvaluation({ sessionId: session.id, ...patch });
         if (res.ok) {
-          setSession(res.session);
+          // Also persist the shared session fields (self-assessment, interview
+          // note, fast-track) so the dashboard reflects the full picture.
+          const shared = await updateSessionShared(session.id, {
+            selfScores: self,
+            ivNote,
+            financialImpact,
+          }).catch(() => null);
+          setSession(shared ?? res.session);
           return { ok: true };
         }
         return { ok: false, error: res.error };
@@ -371,7 +378,7 @@ export function AssessmentProvider({
         setSessionBusy(false);
       }
     },
-    [evaluator, session],
+    [evaluator, session, self, ivNote, financialImpact],
   );
 
   const saveAndContinue = React.useCallback(() => {

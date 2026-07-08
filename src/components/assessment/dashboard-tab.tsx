@@ -16,7 +16,8 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import { departmentOptions, employeesForPosition, formatGolongan, positionsForDepartment } from "@/lib/assessment/org";
-import { ASSESSMENTS, LATEST_ASSESSMENTS, computeResult, historyFor, type RecoKind, type ResultBundle } from "@/lib/assessment/result";
+import { ASSESSMENTS, LATEST_ASSESSMENTS, computeResult, historyFor, sessionToEnriched, type EnrichedRecord, type RecoKind, type ResultBundle } from "@/lib/assessment/result";
+import { listAllSessions } from "@/lib/actions/assessment";
 import { HASIL_META, HASIL_OPTIONS, type AssessmentRecord, type HasilStatus } from "@/lib/assessment/records";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -106,7 +107,28 @@ export function DashboardTab() {
     return employeesForPosition(pos?.id).map((e) => ({ value: e.name, label: e.name }));
   }, [dDept, dJab]);
 
-  const selectedRecord = React.useMemo(() => (dNama ? historyFor(dNama)[0] ?? null : null), [dNama]);
+  // Live server-backed sessions (all evaluators, cross-device) — polled.
+  const [dbRecords, setDbRecords] = React.useState<EnrichedRecord[]>([]);
+  React.useEffect(() => {
+    let cancelled = false;
+    const load = () =>
+      listAllSessions()
+        .then((ss) => {
+          if (!cancelled) setDbRecords(ss.map(sessionToEnriched));
+        })
+        .catch(() => {});
+    load();
+    const t = setInterval(load, 8000);
+    return () => {
+      cancelled = true;
+      clearInterval(t);
+    };
+  }, []);
+
+  const selectedRecord = React.useMemo(
+    () => (dNama ? dbRecords.find((r) => r.name === dNama) ?? historyFor(dNama)[0] ?? null : null),
+    [dNama, dbRecords],
+  );
   const liveIsSelected = !!dNama && liveRecord?.name === dNama;
   const emptyEmployee = !!dNama && !selectedRecord && !liveIsSelected;
 
@@ -149,7 +171,7 @@ export function DashboardTab() {
   return (
     <div className="space-y-4">
       <SectionLabel>Ringkasan Batch (Tracking)</SectionLabel>
-      <BatchTracking live={liveRecord} />
+      <BatchTracking live={liveRecord} extra={dbRecords} />
 
       <SectionLabel>Lihat Hasil per Karyawan</SectionLabel>
       <Card>
@@ -209,7 +231,7 @@ export function DashboardTab() {
       )}
 
       <SectionLabel>Seluruh Data Assessment</SectionLabel>
-      <AllAssessmentsTable live={liveRecord} />
+      <AllAssessmentsTable live={liveRecord} extra={dbRecords} />
     </div>
   );
 }
@@ -218,8 +240,8 @@ const BAR_BG: Record<string, string> = { fast: "bg-violet-500", ok: "bg-brand-50
 const DIST_ORDER: HasilStatus[] = ["fast_track", "layak", "ditunda", "tidak_layak"];
 
 /** Batch-wide tracking tiles + outcome distribution — automatic, precise counts. */
-function BatchTracking({ live }: { live: AssessmentRecord | null }) {
-  const all = live ? [live, ...LATEST_ASSESSMENTS] : LATEST_ASSESSMENTS;
+function BatchTracking({ live, extra = [] }: { live: AssessmentRecord | null; extra?: EnrichedRecord[] }) {
+  const all = [...(live ? [live] : []), ...extra, ...LATEST_ASSESSMENTS];
   const total = all.length;
   const selesai = all.filter((r) => r.status === "Selesai" || r.status === "Menunggu Interview").length;
   const berjalan = total - selesai;
@@ -597,7 +619,7 @@ function PerceptionInsight({ bundle }: { bundle: ResultBundle }) {
 }
 
 /** Data table of every assessment, with cascading Departemen → Jabatan → Nama + Status filters. */
-function AllAssessmentsTable({ live }: { live: AssessmentRecord | null }) {
+function AllAssessmentsTable({ live, extra = [] }: { live: AssessmentRecord | null; extra?: EnrichedRecord[] }) {
   const [dept, setDept] = React.useState("");
   const [jabatan, setJabatan] = React.useState("");
   const [nama, setNama] = React.useState("");
@@ -609,7 +631,7 @@ function AllAssessmentsTable({ live }: { live: AssessmentRecord | null }) {
     return employeesForPosition(pos?.id).map((e) => ({ value: e.name, label: e.name }));
   }, [dept, jabatan]);
 
-  const all = React.useMemo(() => (live ? [live, ...ASSESSMENTS] : ASSESSMENTS), [live]);
+  const all = React.useMemo(() => [...(live ? [live] : []), ...extra, ...ASSESSMENTS], [live, extra]);
   const rows = React.useMemo(
     () =>
       all.filter(

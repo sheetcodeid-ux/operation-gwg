@@ -15,6 +15,7 @@ import {
   interviewScore,
   IV_RECOMMENDATIONS,
   PARAMETERS,
+  resolveInterviewRec,
   type DimensionKey,
   type DimensionScores,
   type Evaluator,
@@ -22,10 +23,12 @@ import {
   type EvaluatorScores,
   type GradeTier,
   type IvRecommendation,
+  type IvRecValue,
   type ParamKey,
   type ParamScores,
 } from "./config";
 import { MOCK_ASSESSMENTS, type AssessmentRecord, type HasilStatus } from "./records";
+import type { SessionState } from "./session";
 
 const clamp = (n: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, n));
 
@@ -327,6 +330,48 @@ export const ASSESSMENTS: EnrichedRecord[] = MOCK_ASSESSMENTS.map(enrichRecord);
 /** Every assessment for one employee, newest first (the history timeline). */
 export function historyFor(name: string): EnrichedRecord[] {
   return ASSESSMENTS.filter((r) => r.name === name).sort((a, b) => (a.tanggal < b.tanggal ? 1 : -1));
+}
+
+/** Map a live server-backed session into the same enriched record the
+ *  dashboard renders — evaluator columns, self, interview and votes reduced
+ *  through the one computeResult path. */
+export function sessionToEnriched(s: SessionState): EnrichedRecord {
+  const evaluators = evaluatorsForTitle(s.jabatan);
+  const scores = emptyEvaluatorScores();
+  for (const ev of s.evaluations) scores[ev.evaluatorKey] = ev.scores ?? {};
+  const withIv = s.evaluations.find((e) => Object.keys(e.interview ?? {}).length > 0);
+  const votes = s.evaluations.map((e) => e.ivVote).filter((v): v is IvRecValue => !!v);
+  const detail: ResultInput = {
+    scores,
+    self: s.selfScores ?? {},
+    interview: withIv?.interview ?? {},
+    ivRecValue: resolveInterviewRec(votes),
+    evaluators,
+    financialImpact: s.financialImpact,
+  };
+  const bundle = computeResult(detail);
+  const anySubmitted = s.evaluations.some((e) => e.submitted);
+  const status = bundle.allFilled ? "Menunggu Interview" : anySubmitted ? "Proses Penilaian" : "Draft";
+  const base: AssessmentRecord = {
+    id: s.id,
+    tanggal: (s.updatedAt || new Date().toISOString()).slice(0, 10),
+    batch: s.batch || "—",
+    nik: s.nik || "—",
+    name: s.employeeName,
+    departmentId: s.departmentId,
+    departmentName: s.departmentName,
+    jabatan: s.jabatan,
+    golongan: s.golongan || "—",
+    golonganTujuan: s.golonganTujuan || "—",
+    penilai: s.directorOnly ? "Director" : "Atasan, HC, Director",
+    status,
+    hasil: TONE_TO_HASIL[bundle.decisionTone],
+    finalScore: bundle.final,
+    interviewResult: bundle.ivRek?.label ?? "—",
+    decision: bundle.decisionLabel,
+    evaluators: bundle.evalScores.map((e) => ({ name: e.name, weight: e.weight, score: e.score })),
+  };
+  return { ...base, detail, bundle };
 }
 
 /** The current standing per employee — one latest record each (batch tracking). */
