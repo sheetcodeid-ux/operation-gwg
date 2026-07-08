@@ -31,7 +31,14 @@ export function CompetencyRadar({ data, size = 260 }: { data: RadarPoint[]; size
 
   return (
     <div className="relative mx-auto" style={{ width: size, height: size }}>
-      <svg width={size} height={size} role="img" aria-label="Profil kompetensi per parameter" style={{ overflow: "visible" }}>
+      <svg
+        width={size}
+        height={size}
+        role="img"
+        aria-label="Profil kompetensi per parameter"
+        className="animate-pop-in"
+        style={{ overflow: "visible", transformOrigin: "center" }}
+      >
         {/* grid rings */}
         {rings.map((lvl) => (
           <polygon key={lvl} points={poly(() => R * lvl)} fill="none" stroke="currentColor" strokeWidth={1} className="text-border" />

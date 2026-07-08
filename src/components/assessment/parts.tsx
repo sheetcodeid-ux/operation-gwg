@@ -129,13 +129,19 @@ export function ExpandRow({
       <button
         type="button"
         onClick={() => setOpen((v) => !v)}
+        aria-expanded={open}
         className="flex w-full items-center gap-3 bg-muted/20 px-4 py-3 text-left transition-colors hover:bg-muted/40"
       >
-        <ChevronDown className={cn("size-4 shrink-0 text-muted-foreground transition-transform", open && "rotate-180")} />
+        <ChevronDown className={cn("size-4 shrink-0 text-muted-foreground transition-transform duration-300", open && "rotate-180")} />
         <span className="min-w-0 flex-1 text-sm font-medium text-foreground">{title}</span>
         {right}
       </button>
-      {open && <div className="border-t border-border p-4">{children}</div>}
+      {/* Smooth height animation via grid 0fr→1fr (no JS measurement). */}
+      <div className={cn("grid transition-[grid-template-rows] duration-300 ease-out", open ? "grid-rows-[1fr]" : "grid-rows-[0fr]")}>
+        <div className="overflow-hidden">
+          <div className="border-t border-border p-4">{children}</div>
+        </div>
+      </div>
     </div>
   );
 }

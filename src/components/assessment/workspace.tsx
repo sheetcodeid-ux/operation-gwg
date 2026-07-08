@@ -90,12 +90,15 @@ function WorkspaceInner() {
         </div>
       </div>
 
-      {activeTab === "panduan" && <PanduanTab />}
-      {activeTab === "syarat" && <SyaratTab />}
-      {activeTab === "penilaian" && <PenilaianTab />}
-      {activeTab === "interview" && <InterviewTab />}
-      {activeTab === "dashboard" && <DashboardTab />}
-      {activeTab === "referensi" && <ReferensiTab />}
+      {/* key remounts on tab change so the entrance animation replays */}
+      <div key={activeTab} className="animate-fade-up">
+        {activeTab === "panduan" && <PanduanTab />}
+        {activeTab === "syarat" && <SyaratTab />}
+        {activeTab === "penilaian" && <PenilaianTab />}
+        {activeTab === "interview" && <InterviewTab />}
+        {activeTab === "dashboard" && <DashboardTab />}
+        {activeTab === "referensi" && <ReferensiTab />}
+      </div>
     </>
   );
 }
