@@ -314,10 +314,22 @@ export function evaluatorsForTitle(jabatan: string): Evaluator[] {
   return evaluatorsFor(jabatan ? { isHead: /^head/i.test(jabatan), title: jabatan } : null) ?? EVALUATORS;
 }
 
-/** Canonical, computed assessment list used by the dashboard, table and report. */
+/** Canonical, computed assessment list (full history) — table + report + timeline. */
 export const ASSESSMENTS: EnrichedRecord[] = MOCK_ASSESSMENTS.map(enrichRecord);
 
-/** Decided assessments whose outcome needs a follow-up action (notifications). */
-export const FOLLOW_UP_RECORDS: EnrichedRecord[] = ASSESSMENTS.filter(
+/** Every assessment for one employee, newest first (the history timeline). */
+export function historyFor(name: string): EnrichedRecord[] {
+  return ASSESSMENTS.filter((r) => r.name === name).sort((a, b) => (a.tanggal < b.tanggal ? 1 : -1));
+}
+
+/** The current standing per employee — one latest record each (batch tracking). */
+export const LATEST_ASSESSMENTS: EnrichedRecord[] = (() => {
+  const byName = new Map<string, EnrichedRecord>();
+  for (const r of [...ASSESSMENTS].sort((a, b) => (a.tanggal < b.tanggal ? -1 : 1))) byName.set(r.name, r);
+  return [...byName.values()];
+})();
+
+/** Decided assessments (latest per employee) whose outcome needs follow-up. */
+export const FOLLOW_UP_RECORDS: EnrichedRecord[] = LATEST_ASSESSMENTS.filter(
   (r) => r.status !== "Proses Penilaian" && r.status !== "Draft" && (r.hasil === "ditunda" || r.hasil === "tidak_layak"),
 );

@@ -4,7 +4,7 @@ import * as React from "react";
 import type { ColumnDef } from "@tanstack/react-table";
 import { UserSearch } from "lucide-react";
 import { departmentOptions, employeesForPosition, formatGolongan, positionsForDepartment } from "@/lib/assessment/org";
-import { ASSESSMENTS, FOLLOW_UP_RECORDS, computeResult, type EnrichedRecord, type ResultBundle } from "@/lib/assessment/result";
+import { ASSESSMENTS, FOLLOW_UP_RECORDS, LATEST_ASSESSMENTS, computeResult, historyFor, type EnrichedRecord, type ResultBundle } from "@/lib/assessment/result";
 import { HASIL_META, HASIL_OPTIONS, type AssessmentRecord, type HasilStatus } from "@/lib/assessment/records";
 import { AlertTriangle, RotateCcw } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -79,13 +79,15 @@ export function DashboardTab() {
   const [dDept, setDDept] = React.useState("");
   const [dJab, setDJab] = React.useState("");
   const [dNama, setDNama] = React.useState("");
+  const [viewId, setViewId] = React.useState<string | null>(null); // which period is shown
   const jabOpts = React.useMemo(() => positionsForDepartment(dDept).map((p) => ({ value: p.title, label: p.title })), [dDept]);
   const namaOpts = React.useMemo(() => {
     const pos = positionsForDepartment(dDept).find((p) => p.title === dJab);
     return employeesForPosition(pos?.id).map((e) => ({ value: e.name, label: e.name }));
   }, [dDept, dJab]);
 
-  const selectedRecord: EnrichedRecord | null = dNama ? ASSESSMENTS.find((r) => r.name === dNama) ?? null : null;
+  const nameHistory = React.useMemo(() => (dNama ? historyFor(dNama) : []), [dNama]);
+  const selectedRecord: EnrichedRecord | null = nameHistory.length ? nameHistory.find((r) => r.id === viewId) ?? nameHistory[0] : null;
   const liveIsSelected = !!dNama && liveRecord?.name === dNama;
   const emptyEmployee = !!dNama && !selectedRecord && !liveIsSelected;
 
@@ -123,6 +125,7 @@ export function DashboardTab() {
     setDDept("");
     setDJab("");
     setDNama("");
+    setViewId(null);
   };
 
   const individualRef = React.useRef<HTMLDivElement>(null);
@@ -130,6 +133,7 @@ export function DashboardTab() {
     setDDept(r.departmentId);
     setDJab(r.jabatan);
     setDNama(r.name);
+    setViewId(null);
     setTimeout(() => individualRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }), 60);
   };
 
@@ -151,6 +155,7 @@ export function DashboardTab() {
               setDDept(v);
               setDJab("");
               setDNama("");
+              setViewId(null);
             }}
             options={[{ value: "", label: "— Assessment Berjalan —" }, ...departmentOptions()]}
             placeholder="Assessment Berjalan"
@@ -161,6 +166,7 @@ export function DashboardTab() {
             onChange={(v) => {
               setDJab(v);
               setDNama("");
+              setViewId(null);
             }}
             options={jabOpts}
             placeholder={dDept ? "Pilih jabatan…" : "Pilih departemen dulu"}
@@ -169,7 +175,10 @@ export function DashboardTab() {
           <Dropdown
             label="Nama Karyawan"
             value={dNama}
-            onChange={setDNama}
+            onChange={(v) => {
+              setDNama(v);
+              setViewId(null);
+            }}
             options={namaOpts}
             placeholder={dJab ? "Pilih nama…" : "Pilih jabatan dulu"}
             disabled={!dJab}
@@ -189,7 +198,15 @@ export function DashboardTab() {
           description="Karyawan ini belum masuk periode penilaian atau prosesnya belum dimulai. Mulai dari tab Syarat & SA lalu Penilaian."
         />
       ) : bundle && subject ? (
-        <IndividualResult bundle={bundle} subject={subject} editable={editable} reportRecord={selectedRecord ?? liveRecord!} />
+        <IndividualResult
+          bundle={bundle}
+          subject={subject}
+          editable={editable}
+          reportRecord={selectedRecord ?? liveRecord!}
+          history={subject.source === "record" ? nameHistory : []}
+          currentId={selectedRecord?.id ?? null}
+          onSelectPeriod={(id) => setViewId(id)}
+        />
       ) : (
         <EmptyState
           icon={UserSearch}
@@ -210,7 +227,7 @@ const DIST_ORDER: HasilStatus[] = ["fast_track", "layak", "ditunda", "tidak_laya
 
 /** Batch-wide tracking tiles + outcome distribution — automatic, precise counts. */
 function BatchTracking({ live }: { live: AssessmentRecord | null }) {
-  const all = live ? [live, ...ASSESSMENTS] : ASSESSMENTS;
+  const all = live ? [live, ...LATEST_ASSESSMENTS] : LATEST_ASSESSMENTS;
   const total = all.length;
   const selesai = all.filter((r) => r.status === "Selesai" || r.status === "Menunggu Interview").length;
   const berjalan = total - selesai;
@@ -275,11 +292,17 @@ function IndividualResult({
   subject,
   editable,
   reportRecord,
+  history,
+  currentId,
+  onSelectPeriod,
 }: {
   bundle: ResultBundle;
   subject: Subject;
   editable: boolean;
   reportRecord: AssessmentRecord;
+  history: EnrichedRecord[];
+  currentId: string | null;
+  onSelectPeriod: (id: string) => void;
 }) {
   const a = useAssessment();
   const b = bundle;
@@ -350,6 +373,16 @@ function IndividualResult({
           {b.ivRek && <p className="mt-2 text-xs text-muted-foreground">Rekomendasi interview: <span className="font-medium text-foreground">{b.ivRek.label}</span></p>}
         </Card>
       </div>
+
+      {/* Assessment history timeline (multiple periods) */}
+      {history.length > 1 && (
+        <>
+          <SectionLabel>Riwayat Assessment ({history.length} periode)</SectionLabel>
+          <Card>
+            <HistoryTimeline history={history} currentId={currentId} onSelect={onSelectPeriod} />
+          </Card>
+        </>
+      )}
 
       {/* Per-evaluator cards */}
       <SectionLabel>Skor per Penilai (Resmi)</SectionLabel>
@@ -581,6 +614,54 @@ function PerceptionInsight({ bundle }: { bundle: ResultBundle }) {
         )}
       </Card>
     </>
+  );
+}
+
+/** Vertical timeline of an employee's assessments across periods, with trend. */
+function HistoryTimeline({ history, currentId, onSelect }: { history: EnrichedRecord[]; currentId: string | null; onSelect: (id: string) => void }) {
+  return (
+    <ol className="relative space-y-1">
+      {history.map((r, i) => {
+        const prev = history[i + 1]; // older entry (history is newest-first)
+        const delta = prev ? Math.round((r.finalScore - prev.finalScore) * 10) / 10 : null;
+        const active = r.id === currentId;
+        const meta = HASIL_META[r.hasil];
+        return (
+          <li key={r.id} className="relative flex gap-3 pl-1">
+            {/* rail */}
+            <div className="flex flex-col items-center">
+              <span className={cn("mt-1.5 size-2.5 shrink-0 rounded-full ring-2 ring-background", BAR_BG[meta.tone])} />
+              {i < history.length - 1 && <span className="w-px flex-1 bg-border" />}
+            </div>
+            <button
+              type="button"
+              onClick={() => onSelect(r.id)}
+              className={cn(
+                "mb-1 flex w-full flex-wrap items-center justify-between gap-2 rounded-lg border px-3 py-2 text-left transition-colors",
+                active ? "border-brand-500/40 bg-brand-500/5" : "border-transparent hover:bg-muted/40",
+              )}
+            >
+              <div className="min-w-0">
+                <p className="flex items-center gap-2 text-sm font-medium text-foreground">
+                  {r.tanggal}
+                  {active && <span className="rounded-full bg-brand-500/15 px-1.5 py-0.5 text-[10px] font-semibold text-brand-700 dark:text-brand-400">Dilihat</span>}
+                </p>
+                <p className="text-xs text-muted-foreground">{r.batch} · Golongan {r.golongan}</p>
+              </div>
+              <div className="flex shrink-0 items-center gap-2">
+                {delta != null && (
+                  <span className={cn("text-xs font-medium tabular-nums", delta > 0 ? "text-brand-600 dark:text-brand-400" : delta < 0 ? "text-red-500" : "text-muted-foreground")}>
+                    {delta > 0 ? `▲ +${delta}` : delta < 0 ? `▼ ${delta}` : "±0"}
+                  </span>
+                )}
+                <span className="text-sm font-semibold tabular-nums text-foreground">{r.finalScore.toFixed(1)}</span>
+                <TierPill tone={meta.tone}>{meta.label}</TierPill>
+              </div>
+            </button>
+          </li>
+        );
+      })}
+    </ol>
   );
 }
 
