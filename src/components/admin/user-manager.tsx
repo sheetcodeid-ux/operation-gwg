@@ -52,6 +52,7 @@ const ROLE_TONE: Record<Role, Tone> = {
   kitchen_rnd: "neutral",
   coordinator_rnd: "amber",
   legal: "brand",
+  assessor: "cyan",
 };
 const ROLES = Object.keys(ROLE_LABEL) as Role[];
 const needsOutlets = (r: Role) => r === "area_coordinator" || r === "head_operation" || r === "pos_operation";

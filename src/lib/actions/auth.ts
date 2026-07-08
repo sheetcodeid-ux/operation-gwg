@@ -3,6 +3,7 @@
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { SESSION_COOKIE, signSession } from "@/lib/auth";
+import { landingFor } from "@/lib/nav";
 import { getUser } from "@/lib/data/store";
 import { ensureHydrated } from "@/lib/data/hydrate";
 import { verifyCredentials } from "@/lib/data/credentials";
@@ -22,10 +23,11 @@ const COOKIE_OPTS = {
 
 /** Demo sign-in: persist the chosen persona id in a session cookie. */
 export async function signInAsDemo(userId: string) {
-  if (!getUser(userId)) return { error: "Unknown user" };
+  const demoUser = getUser(userId);
+  if (!demoUser) return { error: "Unknown user" };
   const store = await cookies();
   store.set(SESSION_COOKIE, signSession(userId), COOKIE_OPTS);
-  redirect("/dashboard");
+  redirect(landingFor(demoUser.role));
 }
 
 /** Username (email) + password sign-in. Supabase when live, credential store in demo. */
@@ -59,7 +61,7 @@ export async function signInWithPassword(_prev: { error?: string } | null, formD
       const store = await cookies();
       store.set(SESSION_COOKIE, signSession(profile.id), COOKIE_OPTS);
       rateLimitReset(rlKey);
-      redirect("/dashboard");
+      redirect(landingFor(profile.role));
     }
     if (res?.error && res.error.message.toLowerCase().includes("invalid")) {
       return { error: "Invalid username or password." };
@@ -76,7 +78,8 @@ export async function signInWithPassword(_prev: { error?: string } | null, formD
   const store = await cookies();
   store.set(SESSION_COOKIE, signSession(result.userId), COOKIE_OPTS);
   rateLimitReset(rlKey);
-  redirect("/dashboard");
+  const signedIn = getUser(result.userId);
+  redirect(signedIn ? landingFor(signedIn.role) : "/dashboard");
 }
 
 export async function signOut() {

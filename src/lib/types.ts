@@ -25,7 +25,9 @@ export type Role =
   | "kitchen_rnd"
   | "coordinator_rnd"
   // HRD division
-  | "legal";
+  | "legal"
+  // Assessment-only evaluator (division Head acting as Atasan Langsung)
+  | "assessor";
 
 export interface UserProfile {
   id: string;

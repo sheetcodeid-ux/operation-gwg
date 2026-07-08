@@ -69,6 +69,8 @@ export const ROLE_PERMISSIONS: Record<Role, Permission[]> = {
   coordinator_rnd: ["create_work_task"],
   // HRD — Work Tracker only.
   legal: ["create_work_task"],
+  // Assessment evaluator — no Work Tracker/ops permissions.
+  assessor: [],
 };
 
 export function can(user: Pick<UserProfile, "role">, permission: Permission): boolean {

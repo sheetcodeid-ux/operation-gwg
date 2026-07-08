@@ -66,6 +66,7 @@ export const ROLE_DIVISION: Record<Role, Division> = {
   kitchen_rnd: "R&D",
   coordinator_rnd: "R&D",
   legal: "HRD",
+  assessor: "HRD",
 };
 
 const OPERATION_FULL: MenuKey[] = [
@@ -93,6 +94,7 @@ export const ROLE_MENUS: Record<Role, MenuKey[]> = {
   kitchen_rnd: ["work"],
   coordinator_rnd: ["work"],
   legal: ["work", "assessment"], // HRD — grade-promotion assessment
+  assessor: ["assessment"], // division Head / evaluator — assessment only
 };
 
 /** Menus shown per division in the Super Admin sidebar (all divisions listed). */
@@ -137,4 +139,11 @@ export function navFor(role: Role): NavItem[] {
 /** Whether a role may open a given menu (route guard helper). */
 export function canSeeMenu(role: Role, key: MenuKey): boolean {
   return ROLE_MENUS[role].includes(key);
+}
+
+/** Where a role should land after login — its first visible menu.
+ *  Roles without the executive dashboard (legal, assessor) go to their own
+ *  first menu instead of an empty /dashboard. */
+export function landingFor(role: Role): string {
+  return navFor(role)[0]?.href ?? "/dashboard";
 }
