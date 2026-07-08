@@ -316,3 +316,8 @@ export function evaluatorsForTitle(jabatan: string): Evaluator[] {
 
 /** Canonical, computed assessment list used by the dashboard, table and report. */
 export const ASSESSMENTS: EnrichedRecord[] = MOCK_ASSESSMENTS.map(enrichRecord);
+
+/** Decided assessments whose outcome needs a follow-up action (notifications). */
+export const FOLLOW_UP_RECORDS: EnrichedRecord[] = ASSESSMENTS.filter(
+  (r) => r.status !== "Proses Penilaian" && r.status !== "Draft" && (r.hasil === "ditunda" || r.hasil === "tidak_layak"),
+);

@@ -4,9 +4,9 @@ import * as React from "react";
 import type { ColumnDef } from "@tanstack/react-table";
 import { UserSearch } from "lucide-react";
 import { departmentOptions, employeesForPosition, formatGolongan, positionsForDepartment } from "@/lib/assessment/org";
-import { ASSESSMENTS, computeResult, type EnrichedRecord, type ResultBundle } from "@/lib/assessment/result";
+import { ASSESSMENTS, FOLLOW_UP_RECORDS, computeResult, type EnrichedRecord, type ResultBundle } from "@/lib/assessment/result";
 import { HASIL_META, HASIL_OPTIONS, type AssessmentRecord, type HasilStatus } from "@/lib/assessment/records";
-import { RotateCcw } from "lucide-react";
+import { AlertTriangle, RotateCcw } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { DataTable } from "@/components/ui/data-table";
@@ -125,11 +125,22 @@ export function DashboardTab() {
     setDNama("");
   };
 
+  const individualRef = React.useRef<HTMLDivElement>(null);
+  const selectEmployee = (r: AssessmentRecord) => {
+    setDDept(r.departmentId);
+    setDJab(r.jabatan);
+    setDNama(r.name);
+    setTimeout(() => individualRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }), 60);
+  };
+
   return (
     <div className="space-y-4">
       <SectionLabel>Ringkasan Batch (Tracking)</SectionLabel>
       <BatchTracking live={liveRecord} />
 
+      <FollowUpPanel onSelect={selectEmployee} />
+
+      <div ref={individualRef} className="scroll-mt-24 space-y-4">
       <SectionLabel>Lihat Hasil per Karyawan</SectionLabel>
       <Card>
         <ScrollRow cols={3}>
@@ -186,6 +197,7 @@ export function DashboardTab() {
           description="Pilih karyawan di atas untuk melihat hasil, atau pilih karyawan yang dinilai di tab Penilaian."
         />
       )}
+      </div>
 
       <SectionLabel>Seluruh Data Assessment</SectionLabel>
       <AllAssessmentsTable live={liveRecord} />
@@ -561,6 +573,47 @@ function PerceptionInsight({ bundle }: { bundle: ResultBundle }) {
         )}
       </Card>
     </>
+  );
+}
+
+/** Notification panel: decided assessments that need a follow-up action. */
+function FollowUpPanel({ onSelect }: { onSelect: (r: AssessmentRecord) => void }) {
+  if (!FOLLOW_UP_RECORDS.length) {
+    return (
+      <Banner tone="success" icon="✓">
+        <strong>Tidak ada assessment yang memerlukan tindak lanjut.</strong> Semua hasil yang sudah diputuskan dalam kondisi baik.
+      </Banner>
+    );
+  }
+  return (
+    <Card className="p-0">
+      <div className="flex items-center justify-between border-b border-border px-4 py-3">
+        <p className="flex items-center gap-2 text-sm font-semibold text-foreground">
+          <AlertTriangle className="size-4 text-amber-500" /> Perlu Tindak Lanjut
+        </p>
+        <span className="rounded-full bg-amber-500/15 px-2 py-0.5 text-xs font-bold text-amber-600 ring-1 ring-amber-500/30 dark:text-amber-400">
+          {FOLLOW_UP_RECORDS.length}
+        </span>
+      </div>
+      <div className="divide-y divide-border">
+        {FOLLOW_UP_RECORDS.map((r) => (
+          <div key={r.id} className="flex items-center justify-between gap-3 px-4 py-2.5">
+            <div className="min-w-0">
+              <p className="truncate text-sm font-medium text-foreground">{r.name}</p>
+              <p className="truncate text-xs text-muted-foreground">
+                {r.jabatan} · {r.departmentName} · skor {r.finalScore.toFixed(1)}
+              </p>
+            </div>
+            <div className="flex shrink-0 items-center gap-2">
+              <TierPill tone={HASIL_META[r.hasil].tone}>{HASIL_META[r.hasil].label}</TierPill>
+              <Button size="sm" variant="outline" onClick={() => onSelect(r)}>
+                Lihat
+              </Button>
+            </div>
+          </div>
+        ))}
+      </div>
+    </Card>
   );
 }
 
