@@ -423,6 +423,9 @@ function IndividualResult({
         ))}
       </div>
 
+      {/* Perception analysis: self-assessment vs evaluators */}
+      <PerceptionInsight bundle={b} />
+
       {/* Recommendations */}
       <SectionLabel>Rekomendasi Tindak Lanjut</SectionLabel>
       <Card>
@@ -498,6 +501,63 @@ function IndividualResult({
         </div>
       )}
     </div>
+  );
+}
+
+/** Auto insight: where the employee's self-assessment diverges from the evaluators. */
+function PerceptionInsight({ bundle }: { bundle: ResultBundle }) {
+  if (bundle.selfScore == null || !bundle.anyFilled) return null;
+  const rows = bundle.params
+    .filter((p) => p.selfPct != null && Object.keys(p.perEvalPct).length > 0)
+    .map((p) => ({ title: p.title, self: p.selfPct as number, ev: p.avgPct, gap: (p.selfPct as number) - p.avgPct }));
+  if (!rows.length) return null;
+
+  const flagged = rows.filter((r) => Math.abs(r.gap) >= 20).sort((a, b) => Math.abs(b.gap) - Math.abs(a.gap));
+  const overall = Math.round(bundle.selfScore - bundle.final);
+  const label = overall >= 8 ? "Cenderung menilai diri lebih tinggi" : overall <= -8 ? "Cenderung menilai diri lebih rendah" : "Persepsi selaras dengan penilai";
+  const tone = Math.abs(overall) >= 8 ? "wait" : "ok";
+
+  return (
+    <>
+      <SectionLabel>Analisis Persepsi — Self Assessment vs Penilai</SectionLabel>
+      <Card>
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div className="flex items-center gap-4">
+            <div>
+              <p className="text-[11px] uppercase tracking-wide text-muted-foreground">Self Assessment</p>
+              <p className="text-xl font-semibold tabular-nums text-foreground">{bundle.selfScore.toFixed(1)}</p>
+            </div>
+            <span className="text-muted-foreground">vs</span>
+            <div>
+              <p className="text-[11px] uppercase tracking-wide text-muted-foreground">Penilai (final)</p>
+              <p className="text-xl font-semibold tabular-nums text-foreground">{bundle.final.toFixed(1)}</p>
+            </div>
+          </div>
+          <TierPill tone={tone}>{label}</TierPill>
+        </div>
+        {flagged.length ? (
+          <div className="mt-3 space-y-1.5 border-t border-border pt-3">
+            <p className="text-xs text-muted-foreground">Perbedaan persepsi signifikan (≥ 20 poin):</p>
+            {flagged.map((r) => (
+              <div key={r.title} className="flex items-center justify-between gap-2 text-sm">
+                <span className="min-w-0 truncate text-foreground">{r.title}</span>
+                <span className="flex shrink-0 items-center gap-2 text-xs tabular-nums text-muted-foreground">
+                  SA {r.self}% · Penilai {r.ev}%
+                  <span className={cn("rounded-full px-2 py-0.5 font-medium", r.gap > 0 ? "bg-amber-500/15 text-amber-600 dark:text-amber-400" : "bg-sky-500/15 text-sky-600 dark:text-sky-400")}>
+                    {r.gap > 0 ? `▲ +${r.gap}` : `▼ ${r.gap}`}
+                  </span>
+                </span>
+              </div>
+            ))}
+            <p className="pt-1 text-[11px] text-muted-foreground">Parameter di atas sebaiknya dibahas saat kalibrasi / interview.</p>
+          </div>
+        ) : (
+          <p className="mt-3 border-t border-border pt-3 text-xs text-muted-foreground">
+            Persepsi karyawan selaras dengan penilai di semua parameter (tidak ada gap ≥ 20 poin).
+          </p>
+        )}
+      </Card>
+    </>
   );
 }
 
