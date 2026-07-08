@@ -1,6 +1,7 @@
 "use client";
 
-import { CheckCircle2, Mic } from "lucide-react";
+import * as React from "react";
+import { ArrowRight, CheckCircle2, Circle, Loader2, Mic } from "lucide-react";
 import { DIMENSIONS, IV_RECOMMENDATIONS, interviewScore, type IvRecValue } from "@/lib/assessment/config";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -85,59 +86,123 @@ export function InterviewTab() {
       </Card>
 
       <SectionLabel>Rekomendasi Interview per Penilai</SectionLabel>
-      <Card>
-        <p className="text-sm font-semibold text-foreground">Rekomendasi tiap penilai resmi</p>
-        <p className="mb-3 mt-0.5 text-xs text-muted-foreground">
-          Bersifat kuantitatif — tidak mengubah skor. Hasil akhir diambil dari <strong>rekomendasi terbanyak</strong>; bila ketiganya
-          berbeda, diambil pilihan tengah (median).
-        </p>
-        <div className="space-y-3">
-          {a.activeEvaluators.map((e) => (
-            <div key={e.key}>
-              <p className="mb-1.5 text-xs font-medium text-foreground/80">{e.name}</p>
-              <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-                {IV_RECOMMENDATIONS.map((r) => {
-                  const active = a.ivVotes[e.key] === r.value;
-                  return (
-                    <button
-                      key={r.value}
-                      type="button"
-                      onClick={() => a.setIvVote(e.key, r.value)}
-                      title={r.body}
-                      className={cn(
-                        "rounded-lg border px-2.5 py-2 text-xs font-medium transition-colors",
-                        active ? REC_ACTIVE[r.value] : "border-border bg-muted/20 text-muted-foreground hover:bg-muted/40",
-                      )}
-                    >
-                      {r.short}
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-          ))}
-        </div>
-
-        <div className="mt-4 flex flex-wrap items-center justify-between gap-2 border-t border-border pt-3">
-          <p className="text-sm text-muted-foreground">Rekomendasi akhir (terbanyak):</p>
-          {a.ivRecommendation ? (
-            <span className={cn("rounded-full border px-3 py-1 text-sm font-semibold", REC_ACTIVE[a.ivRecommendation])}>
-              {IV_RECOMMENDATIONS.find((r) => r.value === a.ivRecommendation)?.short}
-            </span>
-          ) : (
-            <span className="text-sm text-muted-foreground">Belum semua penilai memberi rekomendasi</span>
-          )}
-        </div>
-      </Card>
+      <RecommendationSection />
 
       <FinishGate />
     </div>
   );
 }
 
+/** Vote block: a logged-in evaluator sets only their own recommendation and sees
+ *  the others' live status; admin/preview keeps the full three-evaluator grid. */
+function RecommendationSection() {
+  const a = useAssessment();
+  const mine = a.activeEvaluators.find((e) => e.key === a.evaluator?.evaluatorKey);
+
+  if (a.evaluator && mine) {
+    const others = a.activeEvaluators.filter((e) => e.key !== mine.key);
+    return (
+      <Card>
+        <p className="text-sm font-semibold text-foreground">Rekomendasi Anda — {mine.name}</p>
+        <p className="mb-3 mt-0.5 text-xs text-muted-foreground">
+          Bersifat kuantitatif, tidak mengubah skor. Pilih lalu simpan tanpa menunggu penilai lain.
+        </p>
+        <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+          {IV_RECOMMENDATIONS.map((r) => {
+            const active = a.ivVotes[mine.key] === r.value;
+            return (
+              <button
+                key={r.value}
+                type="button"
+                onClick={() => a.setIvVote(mine.key, r.value)}
+                title={r.body}
+                className={cn(
+                  "rounded-lg border px-2.5 py-2 text-xs font-medium transition-colors",
+                  active ? REC_ACTIVE[r.value] : "border-border bg-muted/20 text-muted-foreground hover:bg-muted/40",
+                )}
+              >
+                {r.short}
+              </button>
+            );
+          })}
+        </div>
+        {others.length > 0 && (
+          <div className="mt-4 space-y-2 border-t border-border pt-3">
+            <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Status penilai lain</p>
+            {others.map((e) => {
+              const row = a.session?.evaluations.find((x) => x.evaluatorKey === e.key);
+              const voted = !!row?.ivVote;
+              return (
+                <div key={e.key} className="flex items-center justify-between text-xs">
+                  <span className="flex items-center gap-1.5 text-muted-foreground">
+                    {voted ? <CheckCircle2 className="size-3.5 text-brand-500" /> : <Circle className="size-3.5" />} {e.name}
+                  </span>
+                  <span className="text-muted-foreground">
+                    {voted ? IV_RECOMMENDATIONS.find((r) => r.value === row!.ivVote)?.short : "Belum"}
+                  </span>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </Card>
+    );
+  }
+
+  return (
+    <Card>
+      <p className="text-sm font-semibold text-foreground">Rekomendasi tiap penilai resmi</p>
+      <p className="mb-3 mt-0.5 text-xs text-muted-foreground">
+        Bersifat kuantitatif — tidak mengubah skor. Hasil akhir diambil dari <strong>rekomendasi terbanyak</strong>; bila ketiganya
+        berbeda, diambil pilihan tengah (median).
+      </p>
+      <div className="space-y-3">
+        {a.activeEvaluators.map((e) => (
+          <div key={e.key}>
+            <p className="mb-1.5 text-xs font-medium text-foreground/80">{e.name}</p>
+            <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+              {IV_RECOMMENDATIONS.map((r) => {
+                const active = a.ivVotes[e.key] === r.value;
+                return (
+                  <button
+                    key={r.value}
+                    type="button"
+                    onClick={() => a.setIvVote(e.key, r.value)}
+                    title={r.body}
+                    className={cn(
+                      "rounded-lg border px-2.5 py-2 text-xs font-medium transition-colors",
+                      active ? REC_ACTIVE[r.value] : "border-border bg-muted/20 text-muted-foreground hover:bg-muted/40",
+                    )}
+                  >
+                    {r.short}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        ))}
+      </div>
+
+      <div className="mt-4 flex flex-wrap items-center justify-between gap-2 border-t border-border pt-3">
+        <p className="text-sm text-muted-foreground">Rekomendasi akhir (terbanyak):</p>
+        {a.ivRecommendation ? (
+          <span className={cn("rounded-full border px-3 py-1 text-sm font-semibold", REC_ACTIVE[a.ivRecommendation])}>
+            {IV_RECOMMENDATIONS.find((r) => r.value === a.ivRecommendation)?.short}
+          </span>
+        ) : (
+          <span className="text-sm text-muted-foreground">Belum semua penilai memberi rekomendasi</span>
+        )}
+      </div>
+    </Card>
+  );
+}
+
 function FinishGate() {
   const a = useAssessment();
   const dimsDone = DIMENSIONS.every((d) => !!a.interview[d.key]);
+
+  if (a.evaluator) return <MyInterviewSave dimsDone={dimsDone} />;
+
   const allVoted = a.activeEvaluators.every((e) => !!a.ivVotes[e.key]);
   if (dimsDone && allVoted) {
     return (
@@ -149,6 +214,39 @@ function FinishGate() {
   return (
     <div className="rounded-xl border border-dashed border-border bg-muted/20 p-4 text-center text-sm text-muted-foreground">
       Lengkapi 4 dimensi interview dan rekomendasi dari semua penilai untuk menyelesaikan interview.
+    </div>
+  );
+}
+
+/** Per-evaluator interview save — submits the caller's dimensions + vote independently. */
+function MyInterviewSave({ dimsDone }: { dimsDone: boolean }) {
+  const a = useAssessment();
+  const [msg, setMsg] = React.useState<string | null>(null);
+  const myKey = a.evaluator?.evaluatorKey;
+  const myVote = myKey ? a.ivVotes[myKey] ?? null : null;
+  const ready = dimsDone && !!myVote;
+  const myRow = a.session?.evaluations.find((x) => x.evaluatorKey === myKey);
+  const saved = !!myRow?.submitted && !!myRow?.ivVote;
+
+  const onSave = async () => {
+    setMsg(null);
+    const res = await a.submitMine({ interview: a.interview, ivVote: myVote, submitted: true });
+    setMsg(res.ok ? "Interview Anda tersimpan." : res.error ?? "Gagal menyimpan.");
+  };
+
+  return (
+    <div className="space-y-2">
+      <Button className="h-12 w-full text-base" onClick={onSave} disabled={!ready || a.sessionBusy}>
+        {a.sessionBusy ? <Loader2 className="size-5 animate-spin" /> : <CheckCircle2 className="size-5" />}
+        {saved ? "Perbarui Interview Saya" : "Simpan Interview Saya"}
+      </Button>
+      {!ready && <p className="text-center text-xs text-muted-foreground">Lengkapi 4 dimensi & pilih rekomendasi Anda dulu.</p>}
+      {msg && <p className={cn("text-center text-xs", saved ? "text-brand-600 dark:text-brand-400" : "text-muted-foreground")}>{msg}</p>}
+      {saved && (
+        <Button variant="outline" className="h-11 w-full" onClick={a.finishInterview}>
+          Lihat Hasil di Dashboard <ArrowRight className="size-4" />
+        </Button>
+      )}
     </div>
   );
 }

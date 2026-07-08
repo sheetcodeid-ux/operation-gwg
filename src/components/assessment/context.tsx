@@ -16,10 +16,11 @@ import {
   type ParamKey,
   type ParamScores,
 } from "@/lib/assessment/config";
-import { getDepartment, getEmployee, getPosition } from "@/lib/assessment/org";
+import { formatGolongan, getDepartment, getEmployee, getPosition } from "@/lib/assessment/org";
 import type { AssessmentRole, TabKey } from "@/lib/assessment/access";
 import { canSeeTab, TAB_ACCESS } from "@/lib/assessment/access";
-import type { EvaluatorIdentity } from "@/lib/assessment/session";
+import type { EvaluatorIdentity, SessionSeed, SessionState } from "@/lib/assessment/session";
+import { openSession, submitMyEvaluation } from "@/lib/actions/assessment";
 
 /** Cascading identity: department → position → employee, plus the manual fields. */
 export interface Candidate {
@@ -60,6 +61,17 @@ interface AssessmentState {
   canSwitchRole: boolean;
   /** The signed-in user's evaluator identity (al/hc/dir), or null if not an evaluator. */
   evaluator: EvaluatorIdentity | null;
+  /** Live server-backed session for the selected candidate (evaluator flow). */
+  session: SessionState | null;
+  sessionBusy: boolean;
+  /** Submit/save the signed-in evaluator's own column — independent of the others. */
+  submitMine: (patch: {
+    scores?: ParamScores;
+    note?: string;
+    interview?: DimensionScores;
+    ivVote?: IvRecValue | null;
+    submitted?: boolean;
+  }) => Promise<{ ok: boolean; error?: string }>;
 
   tab: TabKey;
   setTab: (t: TabKey) => void;
@@ -157,6 +169,11 @@ export function AssessmentProvider({
   const [evaluatorNotes, setEvaluatorNotes] = React.useState<Partial<Record<EvaluatorKey, string>>>({});
   const [financialImpact, setFinancialImpact] = React.useState(false);
   const setEvaluatorNote = React.useCallback((key: EvaluatorKey, note: string) => setEvaluatorNotes((n) => ({ ...n, [key]: note })), []);
+
+  // ── server-backed session (evaluator flow): each evaluator submits their own
+  //    column independently; progress from other devices is polled back in. ──
+  const [session, setSession] = React.useState<SessionState | null>(null);
+  const [sessionBusy, setSessionBusy] = React.useState(false);
 
   // ── draft persistence: survive a refresh (frontend-only, no backend yet) ──
   const [hydrated, setHydrated] = React.useState(false);
@@ -288,6 +305,75 @@ export function AssessmentProvider({
   const readyForPenilaian =
     syaratPassed && identityComplete && selfComplete && visited.has("panduan") && visited.has("referensi");
 
+  // Open (find-or-create) the server session once a logged-in evaluator has a
+  // full candidate selected, then poll so other evaluators' progress shows up.
+  const seedKey = evaluator
+    ? [candidate.departmentId, resolved.nama, candidate.batch].join("|")
+    : "";
+  React.useEffect(() => {
+    if (!evaluator || !identityComplete || !resolved.nama) {
+      setSession(null);
+      return;
+    }
+    let cancelled = false;
+    const seed: SessionSeed = {
+      batch: candidate.batch,
+      nik: candidate.nik,
+      employeeName: resolved.nama,
+      jabatan: resolved.jabatan,
+      departmentId: candidate.departmentId,
+      departmentName: resolved.departemen,
+      golongan: formatGolongan(candidate.golongan, candidate.golonganLevel) || candidate.golongan,
+      golonganTujuan: formatGolongan(candidate.golonganTujuan, candidate.golonganTujuanLevel) || candidate.golonganTujuan,
+      directorOnly: activeEvaluators.length === 1,
+    };
+    setSessionBusy(true);
+    openSession(seed)
+      .then((s) => {
+        if (!cancelled) setSession(s);
+      })
+      .finally(() => {
+        if (!cancelled) setSessionBusy(false);
+      });
+    // Poll for cross-device updates every 5s.
+    const poll = setInterval(async () => {
+      const cur = await openSession(seed).catch(() => null);
+      if (!cancelled && cur) setSession(cur);
+    }, 5000);
+    return () => {
+      cancelled = true;
+      clearInterval(poll);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [seedKey, identityComplete]);
+
+  const submitMine = React.useCallback(
+    async (patch: {
+      scores?: ParamScores;
+      note?: string;
+      interview?: DimensionScores;
+      ivVote?: IvRecValue | null;
+      submitted?: boolean;
+    }): Promise<{ ok: boolean; error?: string }> => {
+      if (!evaluator) return { ok: false, error: "Akun ini bukan penilai resmi." };
+      if (!session) return { ok: false, error: "Sesi assessment belum siap. Lengkapi identitas karyawan dulu." };
+      setSessionBusy(true);
+      try {
+        const res = await submitMyEvaluation({ sessionId: session.id, ...patch });
+        if (res.ok) {
+          setSession(res.session);
+          return { ok: true };
+        }
+        return { ok: false, error: res.error };
+      } catch {
+        return { ok: false, error: "Gagal menyimpan ke server." };
+      } finally {
+        setSessionBusy(false);
+      }
+    },
+    [evaluator, session],
+  );
+
   const saveAndContinue = React.useCallback(() => {
     setSaved(true);
     // Karyawan may not access Penilaian (spec §3) — only advance when allowed.
@@ -299,6 +385,9 @@ export function AssessmentProvider({
     setRole,
     canSwitchRole,
     evaluator,
+    session,
+    sessionBusy,
+    submitMine,
     tab,
     setTab,
     visited,
