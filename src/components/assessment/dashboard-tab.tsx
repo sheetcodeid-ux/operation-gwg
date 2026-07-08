@@ -14,7 +14,7 @@ import { EmptyState } from "@/components/ui/page-header";
 import { useAssessment } from "./context";
 import { DashboardReportButton, ReportButton } from "./report";
 import { CompetencyRadar } from "./radar";
-import { Banner, Card, Dropdown, ExpandRow, MiniStat, ScoreRing, ScrollRow, SectionLabel, TierPill } from "./parts";
+import { Banner, Card, Dropdown, ExpandRow, MeterBar, MiniStat, ScoreRing, ScrollRow, SectionLabel, TierPill } from "./parts";
 
 const PARAM_SHORT: Record<string, string> = {
   kpi: "KPI",
@@ -247,9 +247,16 @@ function BatchTracking({ live }: { live: AssessmentRecord | null }) {
                   <span className={cn("size-2.5 shrink-0 rounded-full", BAR_BG[meta.tone])} />
                   <span className="truncate text-xs text-foreground">{meta.label}</span>
                 </span>
-                <div className="h-2.5 flex-1 overflow-hidden rounded-full bg-muted" title={`${n} karyawan · ${pct}%`}>
-                  <div className={cn("h-full rounded-full transition-all", BAR_BG[meta.tone])} style={{ width: `${(n / dMax) * 100}%` }} />
-                </div>
+                <MeterBar
+                  className="flex-1"
+                  pct={(n / dMax) * 100}
+                  colorClass={BAR_BG[meta.tone]}
+                  tooltip={
+                    <span>
+                      {meta.label}: <span className="tabular-nums">{n}</span> karyawan · {pct}% dari total
+                    </span>
+                  }
+                />
                 <span className="w-16 shrink-0 text-right text-xs tabular-nums text-muted-foreground">
                   <span className="font-semibold text-foreground">{n}</span> · {pct}%
                 </span>
@@ -309,9 +316,8 @@ function IndividualResult({
             <p className="text-sm font-semibold text-foreground">Progres Penilaian</p>
             <span className="text-sm font-semibold tabular-nums text-foreground">{b.completionPct}%</span>
           </div>
-          <div className="h-2 overflow-hidden rounded-full bg-muted">
-            <div className="h-full rounded-full bg-brand-500 transition-all" style={{ width: `${b.completionPct}%` }} />
-          </div>
+          <MeterBar pct={b.completionPct} colorClass="bg-brand-500" tooltip={`${b.filledEvaluators}/${b.totalEvaluators} penilai lengkap`} />
+
           <div className="mt-3 flex flex-wrap gap-2">
             {b.evalScores.map((e) => (
               <span
@@ -415,9 +421,11 @@ function IndividualResult({
                 return (
                   <div key={ev.key} className="flex items-center gap-3">
                     <span className="w-40 shrink-0 truncate text-xs text-muted-foreground">{ev.name} <span className="text-muted-foreground/60">({ev.weight}%)</span></span>
-                    <div className="h-2 flex-1 overflow-hidden rounded-full bg-muted">
-                      <div className={cn("h-full rounded-full", pct == null ? "" : pct >= 85 ? "bg-brand-500" : pct >= 60 ? "bg-amber-500" : "bg-red-500")} style={{ width: `${pct ?? 0}%` }} />
-                    </div>
+                    <MeterBar
+                      className="flex-1"
+                      pct={pct ?? 0}
+                      colorClass={pct == null ? "bg-transparent" : pct >= 85 ? "bg-brand-500" : pct >= 60 ? "bg-amber-500" : "bg-red-500"}
+                    />
                     <span className="w-20 shrink-0 text-right text-xs tabular-nums text-foreground">
                       {pct == null ? "—" : <>{raw}/{p.scale} · {pct}%</>}
                     </span>

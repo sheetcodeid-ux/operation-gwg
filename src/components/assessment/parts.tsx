@@ -109,6 +109,41 @@ export function MiniStat({ label, value, tone, hint }: { label: string; value: R
   );
 }
 
+/** A meter/progress bar with an optional hover tooltip and hover-brighten. */
+export function MeterBar({
+  pct,
+  colorClass,
+  tooltip,
+  className,
+}: {
+  pct: number;
+  colorClass: string;
+  tooltip?: React.ReactNode;
+  className?: string;
+}) {
+  const [hover, setHover] = React.useState(false);
+  return (
+    <div
+      className={cn("group relative", className)}
+      onMouseEnter={() => setHover(true)}
+      onMouseLeave={() => setHover(false)}
+    >
+      <div className="h-2.5 w-full overflow-hidden rounded-full bg-muted">
+        <div
+          className={cn("h-full rounded-full transition-[width,filter] duration-300 group-hover:brightness-110", colorClass)}
+          style={{ width: `${Math.max(0, Math.min(100, pct))}%` }}
+        />
+      </div>
+      {tooltip && hover && (
+        <div className="pointer-events-none absolute bottom-full left-1/2 z-20 mb-2 -translate-x-1/2 whitespace-nowrap rounded-lg border border-border bg-popover px-2.5 py-1 text-xs font-medium text-foreground shadow-md">
+          {tooltip}
+          <span className="absolute left-1/2 top-full size-2 -translate-x-1/2 -translate-y-1/2 rotate-45 border-b border-r border-border bg-popover" />
+        </div>
+      )}
+    </div>
+  );
+}
+
 /** Collapsible row — a professional "dropdown" for a parameter's detail. */
 export function ExpandRow({
   title,
