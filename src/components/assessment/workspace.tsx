@@ -27,17 +27,19 @@ export function AssessmentWorkspace({
   evaluator,
   isAdmin,
   viewerName,
+  showSample,
 }: {
   evaluator: EvaluatorIdentity | null;
   isAdmin: boolean;
   viewerName: string;
+  showSample: boolean;
 }) {
   // Viewpoint is derived from the login: a registered evaluator lands on their
   // own view (Atasan/HC/Director); Super Admin defaults to Director but keeps
   // the manual switcher; anyone else who can reach the page falls back to HR.
   const initialRole: AssessmentRole = evaluator ? EVALUATOR_TO_ROLE[evaluator.evaluatorKey] : isAdmin ? "director" : "hr";
   return (
-    <AssessmentProvider initialRole={initialRole} canSwitchRole={isAdmin} evaluator={evaluator}>
+    <AssessmentProvider initialRole={initialRole} canSwitchRole={isAdmin} evaluator={evaluator} showSample={showSample}>
       <WorkspaceInner viewerName={viewerName} />
     </AssessmentProvider>
   );

@@ -9,6 +9,7 @@ import {
   ClipboardList,
   PenLine,
   RotateCcw,
+  Trash2,
   TriangleAlert,
   UserSearch,
   XCircle,
@@ -17,7 +18,7 @@ import {
 } from "lucide-react";
 import { departmentOptions, employeesForPosition, formatGolongan, positionsForDepartment } from "@/lib/assessment/org";
 import { ASSESSMENTS, LATEST_ASSESSMENTS, computeResult, historyFor, sessionToEnriched, type EnrichedRecord, type RecoKind, type ResultBundle } from "@/lib/assessment/result";
-import { listAllSessions } from "@/lib/actions/assessment";
+import { deleteSession, listAllSessions } from "@/lib/actions/assessment";
 import { HASIL_META, HASIL_OPTIONS, type AssessmentRecord, type HasilStatus } from "@/lib/assessment/records";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -109,25 +110,46 @@ export function DashboardTab() {
 
   // Live server-backed sessions (all evaluators, cross-device) — polled.
   const [dbRecords, setDbRecords] = React.useState<EnrichedRecord[]>([]);
+  const reload = React.useCallback(
+    () =>
+      listAllSessions()
+        .then((ss) => setDbRecords(ss.map(sessionToEnriched)))
+        .catch(() => {}),
+    [],
+  );
   React.useEffect(() => {
     let cancelled = false;
-    const load = () =>
-      listAllSessions()
-        .then((ss) => {
-          if (!cancelled) setDbRecords(ss.map(sessionToEnriched));
-        })
-        .catch(() => {});
+    const load = () => {
+      if (!cancelled) void reload();
+    };
     load();
     const t = setInterval(load, 8000);
     return () => {
       cancelled = true;
       clearInterval(t);
     };
-  }, []);
+  }, [reload]);
+
+  // Admin-only delete — removes from the shared DB, so it disappears for all users.
+  const liveIds = React.useMemo(() => new Set(dbRecords.map((r) => r.id)), [dbRecords]);
+  const handleDelete = React.useCallback(
+    async (id: string, name: string) => {
+      if (typeof window !== "undefined" && !window.confirm(`Hapus assessment "${name}" untuk semua pengguna? Tindakan ini tidak dapat dibatalkan.`)) return;
+      setDbRecords((rs) => rs.filter((r) => r.id !== id)); // optimistic
+      const res = await deleteSession(id);
+      if (!res.ok && typeof window !== "undefined") window.alert(res.error ?? "Gagal menghapus.");
+      void reload();
+    },
+    [reload],
+  );
+
+  // Sample data is demo-only; production (DB live) shows real sessions alone.
+  const sampleAll = a.showSample ? ASSESSMENTS : [];
+  const sampleLatest = a.showSample ? LATEST_ASSESSMENTS : [];
 
   const selectedRecord = React.useMemo(
-    () => (dNama ? dbRecords.find((r) => r.name === dNama) ?? historyFor(dNama)[0] ?? null : null),
-    [dNama, dbRecords],
+    () => (dNama ? dbRecords.find((r) => r.name === dNama) ?? (a.showSample ? historyFor(dNama)[0] : undefined) ?? null : null),
+    [dNama, dbRecords, a.showSample],
   );
   const liveIsSelected = !!dNama && liveRecord?.name === dNama;
   const emptyEmployee = !!dNama && !selectedRecord && !liveIsSelected;
@@ -171,7 +193,7 @@ export function DashboardTab() {
   return (
     <div className="space-y-4">
       <SectionLabel>Ringkasan Batch (Tracking)</SectionLabel>
-      <BatchTracking live={liveRecord} extra={dbRecords} />
+      <BatchTracking live={liveRecord} extra={dbRecords} sample={sampleLatest} />
 
       <SectionLabel>Lihat Hasil per Karyawan</SectionLabel>
       <Card>
@@ -231,7 +253,14 @@ export function DashboardTab() {
       )}
 
       <SectionLabel>Seluruh Data Assessment</SectionLabel>
-      <AllAssessmentsTable live={liveRecord} extra={dbRecords} />
+      <AllAssessmentsTable
+        live={liveRecord}
+        extra={dbRecords}
+        sample={sampleAll}
+        canDelete={a.canSwitchRole}
+        liveIds={liveIds}
+        onDelete={handleDelete}
+      />
     </div>
   );
 }
@@ -240,8 +269,8 @@ const BAR_BG: Record<string, string> = { fast: "bg-violet-500", ok: "bg-brand-50
 const DIST_ORDER: HasilStatus[] = ["fast_track", "layak", "ditunda", "tidak_layak"];
 
 /** Batch-wide tracking tiles + outcome distribution — automatic, precise counts. */
-function BatchTracking({ live, extra = [] }: { live: AssessmentRecord | null; extra?: EnrichedRecord[] }) {
-  const all = [...(live ? [live] : []), ...extra, ...LATEST_ASSESSMENTS];
+function BatchTracking({ live, extra = [], sample = [] }: { live: AssessmentRecord | null; extra?: EnrichedRecord[]; sample?: EnrichedRecord[] }) {
+  const all = [...(live ? [live] : []), ...extra, ...sample];
   const total = all.length;
   const selesai = all.filter((r) => r.status === "Selesai" || r.status === "Menunggu Interview").length;
   const berjalan = total - selesai;
@@ -619,7 +648,21 @@ function PerceptionInsight({ bundle }: { bundle: ResultBundle }) {
 }
 
 /** Data table of every assessment, with cascading Departemen → Jabatan → Nama + Status filters. */
-function AllAssessmentsTable({ live, extra = [] }: { live: AssessmentRecord | null; extra?: EnrichedRecord[] }) {
+function AllAssessmentsTable({
+  live,
+  extra = [],
+  sample = [],
+  canDelete = false,
+  liveIds,
+  onDelete,
+}: {
+  live: AssessmentRecord | null;
+  extra?: EnrichedRecord[];
+  sample?: EnrichedRecord[];
+  canDelete?: boolean;
+  liveIds?: Set<string>;
+  onDelete?: (id: string, name: string) => void;
+}) {
   const [dept, setDept] = React.useState("");
   const [jabatan, setJabatan] = React.useState("");
   const [nama, setNama] = React.useState("");
@@ -631,7 +674,7 @@ function AllAssessmentsTable({ live, extra = [] }: { live: AssessmentRecord | nu
     return employeesForPosition(pos?.id).map((e) => ({ value: e.name, label: e.name }));
   }, [dept, jabatan]);
 
-  const all = React.useMemo(() => [...(live ? [live] : []), ...extra, ...ASSESSMENTS], [live, extra]);
+  const all = React.useMemo(() => [...(live ? [live] : []), ...extra, ...sample], [live, extra, sample]);
   const rows = React.useMemo(
     () =>
       all.filter(
@@ -664,9 +707,32 @@ function AllAssessmentsTable({ live, extra = [] }: { live: AssessmentRecord | nu
           return <TierPill tone={HASIL_META[h].tone}>{HASIL_META[h].label}</TierPill>;
         },
       },
-      { id: "actions", header: "", cell: ({ row }) => <ReportButton record={row.original} /> },
+      {
+        id: "actions",
+        header: "",
+        cell: ({ row }) => {
+          const rec = row.original;
+          const deletable = canDelete && liveIds?.has(rec.id);
+          return (
+            <div className="flex items-center justify-end gap-1">
+              <ReportButton record={rec} />
+              {deletable && (
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  className="text-red-600 hover:bg-red-500/10 hover:text-red-600 dark:text-red-400"
+                  title="Hapus assessment (untuk semua pengguna)"
+                  onClick={() => onDelete?.(rec.id, rec.name)}
+                >
+                  <Trash2 className="size-4" />
+                </Button>
+              )}
+            </div>
+          );
+        },
+      },
     ],
-    [],
+    [canDelete, liveIds, onDelete],
   );
 
   return (

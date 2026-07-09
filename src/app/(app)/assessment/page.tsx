@@ -4,6 +4,7 @@ import { redirect } from "next/navigation";
 import { getSessionUser } from "@/lib/auth";
 import { canSeeMenu } from "@/lib/nav";
 import { getMyEvaluator } from "@/lib/actions/assessment";
+import { dbEnabled } from "@/lib/data/db";
 import { PageHeader } from "@/components/ui/page-header";
 import { AssessmentWorkspace } from "@/components/assessment/workspace";
 
@@ -25,7 +26,8 @@ export default async function AssessmentPage() {
         title="Assessment Kenaikan Golongan"
         description="Sistem penilaian kenaikan golongan HRD — multi-penilai, self assessment, interview & keputusan final"
       />
-      <AssessmentWorkspace evaluator={evaluator} isAdmin={isAdmin} viewerName={user.name} />
+      {/* In production (DB live) show only real sessions; sample data is demo-only. */}
+      <AssessmentWorkspace evaluator={evaluator} isAdmin={isAdmin} viewerName={user.name} showSample={!dbEnabled} />
     </div>
   );
 }

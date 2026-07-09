@@ -256,6 +256,16 @@ export async function updateSessionMeta(
   await db().from("assessment_sessions").update(row).eq("id", sessionId);
 }
 
+/** Delete a session and all its evaluations (FK cascade). Shared DB, so the
+ *  removal is visible to every user on their next poll. */
+export async function deleteSession(id: string): Promise<void> {
+  if (!dbEnabled) {
+    memSessions.delete(id);
+    return;
+  }
+  await db().from("assessment_sessions").delete().eq("id", id);
+}
+
 /** Test/seed helper (demo mode only): register an evaluator identity. */
 export function _memRegisterEvaluator(id: EvaluatorIdentity) {
   memEvaluators.set(id.userId, id);

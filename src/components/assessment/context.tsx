@@ -59,6 +59,9 @@ interface AssessmentState {
   setRole: (r: AssessmentRole) => void;
   /** True only for Super Admin — controls whether the viewpoint switcher shows. */
   canSwitchRole: boolean;
+  /** Show built-in sample data (demo mode). False in production (DB live) so the
+   *  dashboard shows only real sessions. */
+  showSample: boolean;
   /** The signed-in user's evaluator identity (al/hc/dir), or null if not an evaluator. */
   evaluator: EvaluatorIdentity | null;
   /** Live server-backed session for the selected candidate (evaluator flow). */
@@ -146,11 +149,13 @@ export function AssessmentProvider({
   initialRole = "director",
   canSwitchRole = true,
   evaluator = null,
+  showSample = true,
 }: {
   children: React.ReactNode;
   initialRole?: AssessmentRole;
   canSwitchRole?: boolean;
   evaluator?: EvaluatorIdentity | null;
+  showSample?: boolean;
 }) {
   const [role, setRoleState] = React.useState<AssessmentRole>(initialRole);
   const [tab, setTabState] = React.useState<TabKey>("panduan");
@@ -391,6 +396,7 @@ export function AssessmentProvider({
     role,
     setRole,
     canSwitchRole,
+    showSample,
     evaluator,
     session,
     sessionBusy,

@@ -2,6 +2,7 @@
 
 import { getSessionUser } from "@/lib/auth";
 import {
+  deleteSession as dbDeleteSession,
   getOrCreateSession,
   getSession,
   listSessions,
@@ -84,6 +85,16 @@ export async function submitMyEvaluation(
 
   const fresh = await getSession(input.sessionId);
   return fresh ? { ok: true, session: fresh } : { ok: false, error: "Gagal memuat ulang sesi." };
+}
+
+/** Admin-only: delete a session (and its evaluations) from the shared DB — the
+ *  removal propagates to every user on their next dashboard poll. */
+export async function deleteSession(sessionId: string): Promise<{ ok: boolean; error?: string }> {
+  const user = await getSessionUser();
+  if (!user) return { ok: false, error: "Tidak ada sesi login." };
+  if (user.role !== "super_admin") return { ok: false, error: "Hanya admin yang dapat menghapus assessment." };
+  await dbDeleteSession(sessionId);
+  return { ok: true };
 }
 
 /** Update shared session fields (self-assessment, interview note, financial impact, status). */
