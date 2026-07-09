@@ -18,6 +18,9 @@ export async function createUser(input: {
   areaId?: string | null;
   outletIds?: string[];
   password: string;
+  phone?: string | null;
+  country?: string | null;
+  avatarUrl?: string | null;
 }): Promise<UserProfile> {
   const user: UserProfile = {
     id: nextId(),
@@ -26,7 +29,9 @@ export async function createUser(input: {
     role: input.role,
     areaId: input.areaId ?? null,
     outletIds: input.outletIds ?? [],
-    avatarUrl: null,
+    avatarUrl: input.avatarUrl ?? null,
+    phone: input.phone ?? null,
+    country: input.country ?? null,
     active: true,
     createdAt: new Date().toISOString(),
   };
@@ -63,7 +68,16 @@ export function resetUserPassword(id: string, password: string) {
 /** Update editable profile fields (name/email/role/assignment). */
 export function updateUser(
   id: string,
-  patch: { name?: string; email?: string; role?: Role; areaId?: string | null; outletIds?: string[] },
+  patch: {
+    name?: string;
+    email?: string;
+    role?: Role;
+    areaId?: string | null;
+    outletIds?: string[];
+    phone?: string | null;
+    country?: string | null;
+    avatarUrl?: string | null;
+  },
 ) {
   const user = getUser(id);
   if (!user) return;
@@ -72,6 +86,9 @@ export function updateUser(
   if (patch.role !== undefined) user.role = patch.role;
   if (patch.areaId !== undefined) user.areaId = patch.areaId;
   if (patch.outletIds !== undefined) user.outletIds = patch.outletIds;
+  if (patch.phone !== undefined) user.phone = patch.phone;
+  if (patch.country !== undefined) user.country = patch.country;
+  if (patch.avatarUrl !== undefined) user.avatarUrl = patch.avatarUrl;
   void saveUser(user);
 }
 

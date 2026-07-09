@@ -24,6 +24,8 @@ export const userToRow = (u: UserProfile) => ({
   area_id: u.areaId ?? null,
   outlet_ids: u.outletIds ?? [],
   avatar_url: u.avatarUrl ?? null,
+  phone: u.phone ?? null,
+  country: u.country ?? null,
   active: u.active,
   created_at: u.createdAt,
 });
@@ -35,6 +37,8 @@ export const userFromRow = (r: any): UserProfile => ({
   areaId: r.area_id,
   outletIds: r.outlet_ids ?? [],
   avatarUrl: r.avatar_url,
+  phone: r.phone ?? null,
+  country: r.country ?? null,
   active: r.active,
   createdAt: r.created_at,
 });

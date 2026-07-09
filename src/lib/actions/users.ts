@@ -35,6 +35,9 @@ export interface CreateUserInput {
   role: Role;
   password: string;
   outletIds: string[];
+  phone?: string | null;
+  country?: string | null;
+  avatarUrl?: string | null;
 }
 
 export async function createUserAction(input: CreateUserInput) {
@@ -51,7 +54,17 @@ export async function createUserAction(input: CreateUserInput) {
 
   const { areaId, outletIds } = normalizeAssignment(clean.role, clean.outletIds);
   try {
-    await createUser({ name: clean.name, email: clean.email, role: clean.role, areaId, outletIds, password: clean.password });
+    await createUser({
+      name: clean.name,
+      email: clean.email,
+      role: clean.role,
+      areaId,
+      outletIds,
+      password: clean.password,
+      phone: input.phone ?? null,
+      country: input.country ?? null,
+      avatarUrl: input.avatarUrl ?? null,
+    });
   } catch (e) {
     return { error: persistMessage(e) };
   }
@@ -66,6 +79,9 @@ export interface UpdateUserInput {
   role: Role;
   password?: string;
   outletIds: string[];
+  phone?: string | null;
+  country?: string | null;
+  avatarUrl?: string | null;
 }
 
 export async function updateUserAction(input: UpdateUserInput) {
@@ -80,7 +96,16 @@ export async function updateUserAction(input: UpdateUserInput) {
   if (input.password && input.password.length < 6) return { error: "Password must be at least 6 characters." };
 
   const { areaId, outletIds } = normalizeAssignment(input.role, input.outletIds);
-  updateUser(input.id, { name, email, role: input.role, areaId, outletIds });
+  updateUser(input.id, {
+    name,
+    email,
+    role: input.role,
+    areaId,
+    outletIds,
+    phone: input.phone ?? null,
+    country: input.country ?? null,
+    ...(input.avatarUrl !== undefined ? { avatarUrl: input.avatarUrl } : {}),
+  });
   if (input.password) resetUserPassword(input.id, input.password);
   revalidatePath("/admin/users");
   return { ok: true };

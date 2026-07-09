@@ -39,6 +39,9 @@ export interface UserProfile {
   /** Assigned outlets/branches. Optional — HQ roles (super_admin, data_operation, admin_operation) have none. */
   outletIds?: string[];
   avatarUrl?: string | null;
+  /** Optional contact details (User Management). */
+  phone?: string | null;
+  country?: string | null;
   active: boolean;
   createdAt: string;
 }

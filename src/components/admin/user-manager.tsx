@@ -50,6 +50,9 @@ export interface UserRow {
   active: boolean;
   scope: string;
   createdAt: string;
+  phone: string | null;
+  country: string | null;
+  avatarUrl: string | null;
 }
 export interface OutletLite {
   id: string;
@@ -206,7 +209,7 @@ export function UserManager({ users, outlets }: { users: UserRow[]; outlets: Out
                 <tr key={u.id} className="border-b border-border/60 transition-colors last:border-0 hover:bg-foreground/[0.06]">
                   <td className="px-4 py-3">
                     <div className="flex items-center gap-3">
-                      <Avatar name={u.name} size={38} />
+                      <Avatar name={u.name} size={38} src={u.avatarUrl} />
                       <div className="min-w-0">
                         <p className="truncate font-medium text-foreground">{u.name}</p>
                         <span className="mt-0.5 inline-block">
@@ -338,7 +341,9 @@ function UserFormPanel({
   const [division, setDivision] = React.useState<Division>(initDivision);
   const [role, setRole] = React.useState<Role>(user?.role ?? rolesInDivision(initDivision)[0]);
   const [selected, setSelected] = React.useState<string[]>(user?.outletIds ?? []);
-  const [avatar, setAvatar] = React.useState<string | null>(null);
+  const [phone, setPhone] = React.useState(user?.phone ?? "");
+  const [country, setCountry] = React.useState(user?.country ?? "");
+  const [avatar, setAvatar] = React.useState<string | null>(user?.avatarUrl ?? null);
   const fileRef = React.useRef<HTMLInputElement>(null);
 
   const isEdit = mode === "edit";
@@ -365,9 +370,10 @@ function UserFormPanel({
     if (pwd && pwd.length < 6) return toast.error("Password minimal 6 karakter.");
     if (pwd !== pwd2) return toast.error("Konfirmasi password tidak cocok.");
     start(async () => {
+      const contact = { phone: phone.trim() || null, country: country.trim() || null, avatarUrl: avatar };
       const res = isEdit
-        ? await updateUserAction({ id: user!.id, name, email, role, password: pwd || undefined, outletIds: selected })
-        : await createUserAction({ name, email, role, password: pwd, outletIds: selected });
+        ? await updateUserAction({ id: user!.id, name, email, role, password: pwd || undefined, outletIds: selected, ...contact })
+        : await createUserAction({ name, email, role, password: pwd, outletIds: selected, ...contact });
       if (res?.error) {
         toast.error(res.error);
         return;
@@ -434,6 +440,15 @@ function UserFormPanel({
           </Field>
           <Field label={isEdit ? "Konfirmasi Password" : "Konfirmasi Password *"}>
             <Input type={showPwd ? "text" : "password"} value={pwd2} onChange={(e) => setPwd2(e.target.value)} placeholder="Ulangi password" />
+          </Field>
+        </div>
+
+        <div className="grid grid-cols-2 gap-3">
+          <Field label="Nomor Telepon">
+            <Input value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="+62…" />
+          </Field>
+          <Field label="Negara">
+            <Input value={country} onChange={(e) => setCountry(e.target.value)} placeholder="Indonesia" />
           </Field>
         </div>
 

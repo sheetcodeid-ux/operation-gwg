@@ -30,6 +30,9 @@ export default async function UsersPage() {
     active: u.active,
     scope: scopeOf(u),
     createdAt: u.createdAt,
+    phone: u.phone ?? null,
+    country: u.country ?? null,
+    avatarUrl: u.avatarUrl ?? null,
   }));
 
   const outletLite: OutletLite[] = getOutlets().map((o) => ({

@@ -19,11 +19,24 @@ export function Avatar({
   name,
   size = 32,
   className,
+  src,
 }: {
   name: string;
   size?: number;
   className?: string;
+  src?: string | null;
 }) {
+  if (src) {
+    return (
+      // eslint-disable-next-line @next/next/no-img-element
+      <img
+        src={src}
+        alt={name}
+        className={cn("shrink-0 rounded-full object-cover ring-1 ring-border", className)}
+        style={{ width: size, height: size }}
+      />
+    );
+  }
   const gradient = GRADIENTS[hashIndex(name, GRADIENTS.length)];
   return (
     <span
