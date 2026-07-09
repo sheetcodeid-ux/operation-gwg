@@ -41,8 +41,8 @@ export async function getOrgExtra(): Promise<OrgExtra> {
     db().from("org_employees").select("id,department_id,jabatan,name,is_head"),
   ]);
   return {
-    departments: (d.data ?? []).map((r: any) => ({ id: r.id, name: r.name })),
-    employees: (e.data ?? []).map((r: any) => ({
+    departments: ((d.data ?? []) as DeptRow[]).map((r) => ({ id: r.id, name: r.name })),
+    employees: ((e.data ?? []) as EmpRow[]).map((r) => ({
       id: r.id,
       departmentId: r.department_id,
       jabatan: r.jabatan,

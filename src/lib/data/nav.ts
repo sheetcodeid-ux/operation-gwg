@@ -29,7 +29,7 @@ export async function getNavExtra(): Promise<NavExtra> {
   }
   const { data } = await db().from("org_divisions").select("id,name,icon,menus");
   return {
-    divisions: (data ?? []).map((r: any) => ({
+    divisions: ((data ?? []) as DivRow[]).map((r) => ({
       id: r.id,
       name: r.name,
       icon: r.icon,

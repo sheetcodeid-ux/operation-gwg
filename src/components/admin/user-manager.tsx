@@ -127,7 +127,7 @@ export function UserManager({ users, outlets, navExtra }: { users: UserRow[]; ou
     [users, q, email, division, role],
   );
 
-  const now = Date.now();
+  const [now] = React.useState(() => Date.now());
   const activeCount = users.filter((u) => u.active).length;
   const adminCount = users.filter((u) => u.role === "super_admin").length;
   const recentCount = users.filter((u) => now - new Date(u.createdAt).getTime() < 30 * 864e5).length;
