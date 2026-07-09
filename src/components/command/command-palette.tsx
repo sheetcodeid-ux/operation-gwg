@@ -37,7 +37,7 @@ const NAV_DESC: Record<string, string> = {
   "/outlets": "Outlet directory and 360° view",
   "/reports": "Outlet, coordinator and region reports",
   "/admin/users": "Manage users and access scope",
-  "/admin/organization": "Areas and outlet assignments",
+  "/admin/departments": "Departemen, divisi & struktur assessment",
   "/admin/audit": "Recent operational activity",
 };
 

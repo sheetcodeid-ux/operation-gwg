@@ -1,5 +1,5 @@
 import { redirect } from "next/navigation";
-import { ConciergeBell, ListChecks, MessageSquareWarning, ScrollText, SprayCan } from "lucide-react";
+import { CalendarRange, ConciergeBell, ListChecks, MessageSquareWarning, ScrollText, SprayCan } from "lucide-react";
 import type { Metadata } from "next";
 import { getSessionUser } from "@/lib/auth";
 import { listComplaints, listEvents, listHospitality, listHygiene, listTasks, outletName } from "@/lib/data/store";
@@ -54,14 +54,15 @@ export default async function AuditPage() {
   ].sort((a, b) => +new Date(b.at) - +new Date(a.at));
 
   return (
-    <div className="mx-auto max-w-4xl">
+    <div className="mx-auto max-w-5xl">
       <PageHeader icon={ScrollText} title="Audit Logs" description="Recent operational activity across your scope" />
 
-      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-        <StatTile icon={ConciergeBell} label="Assessments" value={hosp.length} tone="brand" />
-        <StatTile icon={SprayCan} label="Hygiene Audits" value={hyg.length} tone="success" />
-        <StatTile icon={ListChecks} label="Tasks" value={tasks.length} tone="cyan" />
-        <StatTile icon={MessageSquareWarning} label="Complaints" value={complaints.length} tone="amber" />
+      <div className="grid grid-cols-2 gap-3 md:grid-cols-3 lg:grid-cols-5">
+        <StatTile icon={ConciergeBell} label="Hospitality" value={hosp.length} sub="penilaian layanan" />
+        <StatTile icon={SprayCan} label="Hygiene" value={hyg.length} sub="audit kebersihan" />
+        <StatTile icon={ListChecks} label="Tasks" value={tasks.length} sub="work tracker" />
+        <StatTile icon={MessageSquareWarning} label="Complaints" value={complaints.length} sub="keluhan" />
+        <StatTile icon={CalendarRange} label="Events" value={evts.length} sub="event & milestone" />
       </div>
 
       <div className="mt-4">

@@ -12,7 +12,7 @@ export type MenuKey =
   | "reports"
   | "assessment"
   | "users"
-  | "organization"
+  | "departments"
   | "audit";
 
 /** Division a role belongs to — used as the sidebar group header. */
@@ -41,7 +41,7 @@ export const NAV_MENUS: Omit<NavItem, "section">[] = [
   { key: "reports", label: "Reports", href: "/reports", icon: "FileText" },
   { key: "assessment", label: "Assessment Golongan", href: "/assessment", icon: "Award" },
   { key: "users", label: "User Management", href: "/admin/users", icon: "Users" },
-  { key: "organization", label: "Organization", href: "/admin/organization", icon: "Network" },
+  { key: "departments", label: "Departemen & Divisi", href: "/admin/departments", icon: "Network" },
   { key: "audit", label: "Audit Logs", href: "/admin/audit", icon: "ScrollText" },
 ];
 
@@ -105,7 +105,7 @@ const DIVISION_MENUS: { division: Division; menus: MenuKey[] }[] = [
   { division: "Supervisor", menus: ["hygiene", "complaints"] },
   { division: "R&D", menus: ["work"] },
   { division: "HRD", menus: ["work", "assessment"] },
-  { division: "Administrator", menus: ["users", "organization", "audit"] },
+  { division: "Administrator", menus: ["users", "departments", "audit"] },
 ];
 
 // ── Admin-defined extra divisions (DB-backed) ──────────────────────────────

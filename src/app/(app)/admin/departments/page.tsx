@@ -1,7 +1,6 @@
 import { redirect } from "next/navigation";
-import Link from "next/link";
 import type { Metadata } from "next";
-import { ArrowLeft, Network } from "lucide-react";
+import { Network } from "lucide-react";
 import { getSessionUser } from "@/lib/auth";
 import { can } from "@/lib/rbac";
 import { builtInDepartments } from "@/lib/assessment/org";
@@ -54,14 +53,6 @@ export default async function DepartmentsPage() {
         icon={Network}
         title="Departemen & Divisi"
         description="Kelola struktur organisasi assessment & divisi aplikasi (sidebar)"
-        actions={
-          <Link
-            href="/admin/users"
-            className="inline-flex h-9 items-center gap-2 rounded-lg border border-border px-3 text-sm font-medium text-foreground transition-colors hover:bg-muted"
-          >
-            <ArrowLeft className="size-4" /> User Management
-          </Link>
-        }
       />
 
       <OrgSettings departments={departments} divisions={divisions} menuOptions={menuOptions} />

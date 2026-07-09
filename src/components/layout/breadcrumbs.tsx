@@ -19,7 +19,7 @@ const LABELS: Record<string, string> = {
   profile: "Profile",
   admin: "Admin",
   users: "Users",
-  organization: "Organization",
+  departments: "Departemen & Divisi",
   audit: "Audit Logs",
   ca: "Coordinator",
   area: "Region",
