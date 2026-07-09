@@ -15,18 +15,21 @@ export function MobileNav({
   allowedKeys,
   homeDivision,
   isAdmin,
+  grants = [],
 }: {
   items: NavItem[];
   allowedKeys: MenuKey[];
   homeDivision: string;
   isAdmin: boolean;
+  grants?: string[];
 }) {
   const [open, setOpen] = useState(false);
   const pathname = usePathname();
   const { t } = useI18n();
   const { showLocked } = useNavLock();
   const allowed = useMemo(() => new Set(allowedKeys), [allowedKeys]);
-  const canOpen = (i: NavItem) => isAdmin || (i.section === homeDivision && allowed.has(i.key));
+  const grantSet = useMemo(() => new Set(grants), [grants]);
+  const canOpen = (i: NavItem) => isAdmin || (i.section === homeDivision && allowed.has(i.key)) || grantSet.has(`${i.section}:${i.key}`);
   const sections = useMemo(() => [...new Set(items.map((i) => i.section))], [items]);
   const [expanded, setExpanded] = useState<Set<string>>(() => new Set([homeDivision]));
   const toggle = (s: string) =>

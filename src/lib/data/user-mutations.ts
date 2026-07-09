@@ -77,6 +77,7 @@ export function updateUser(
     phone?: string | null;
     country?: string | null;
     avatarUrl?: string | null;
+    grants?: string[];
   },
 ) {
   const user = getUser(id);
@@ -89,6 +90,7 @@ export function updateUser(
   if (patch.phone !== undefined) user.phone = patch.phone;
   if (patch.country !== undefined) user.country = patch.country;
   if (patch.avatarUrl !== undefined) user.avatarUrl = patch.avatarUrl;
+  if (patch.grants !== undefined) user.grants = patch.grants;
   void saveUser(user);
 }
 

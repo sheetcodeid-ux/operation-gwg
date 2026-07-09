@@ -27,8 +27,11 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   const allowedKeys = accessibleMenuKeys(user.role);
   const home = homeDivision(user.role);
   const isAdmin = user.role === "super_admin";
+  const grants = user.grants ?? [];
   const allowed = new Set(allowedKeys);
-  const canOpen = (n: (typeof navItems)[number]) => isAdmin || (n.section === home && allowed.has(n.key));
+  const grantSet = new Set(grants);
+  const canOpen = (n: (typeof navItems)[number]) =>
+    isAdmin || (n.section === home && allowed.has(n.key)) || grantSet.has(`${n.section}:${n.key}`);
   const notifications = listNotifications(user);
   const outletItems = visibleOutlets(user).map((o) => ({
     id: o.id,
@@ -43,9 +46,9 @@ export default async function AppLayout({ children }: { children: React.ReactNod
         <NavLockProvider>
           <ScrollReset />
           <div className="min-h-dvh">
-            <Topbar user={user} notifications={notifications} navItems={navItems} allowedKeys={allowedKeys} homeDivision={home} isAdmin={isAdmin} />
+            <Topbar user={user} notifications={notifications} navItems={navItems} allowedKeys={allowedKeys} homeDivision={home} isAdmin={isAdmin} grants={grants} />
             <div className="flex">
-              <Sidebar items={navItems} allowedKeys={allowedKeys} homeDivision={home} isAdmin={isAdmin} />
+              <Sidebar items={navItems} allowedKeys={allowedKeys} homeDivision={home} isAdmin={isAdmin} grants={grants} />
               {/* overflow-x-clip: no child may widen the page — wide content must
                   scroll inside its own overflow-x-auto wrapper (tables, kanban). */}
               <div className="min-w-0 flex-1 overflow-x-clip">

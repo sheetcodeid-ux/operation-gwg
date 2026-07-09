@@ -4,11 +4,14 @@ import * as React from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
+  Check,
   Clock,
   Eye,
   EyeOff,
   ImagePlus,
+  KeyRound,
   Loader2,
+  Lock,
   MoreVertical,
   Pencil,
   Plus,
@@ -23,14 +26,16 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { ROLE_LABEL, type Tone } from "@/lib/constants";
-import { ROLE_DIVISION, type Division } from "@/lib/nav";
+import { ROLE_DIVISION, accessibleMenuKeys, navAll, type Division } from "@/lib/nav";
 import type { Role } from "@/lib/types";
 import {
   assignRoleAction,
   createUserAction,
   deleteUserAction,
+  updateGrantsAction,
   updateUserAction,
 } from "@/lib/actions/users";
+import { useI18n } from "@/lib/i18n/provider";
 import { Avatar } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -53,6 +58,7 @@ export interface UserRow {
   phone: string | null;
   country: string | null;
   avatarUrl: string | null;
+  grants: string[];
 }
 export interface OutletLite {
   id: string;
@@ -92,6 +98,7 @@ export function UserManager({ users, outlets }: { users: UserRow[]; outlets: Out
   const [creating, setCreating] = React.useState(false);
   const [editUser, setEditUser] = React.useState<UserRow | null>(null);
   const [rolesUser, setRolesUser] = React.useState<UserRow | null>(null);
+  const [accessUser, setAccessUser] = React.useState<UserRow | null>(null);
 
   const [q, setQ] = React.useState("");
   const [email, setEmail] = React.useState("");
@@ -234,7 +241,7 @@ export function UserManager({ users, outlets }: { users: UserRow[]; outlets: Out
                       >
                         <Eye className="size-4" /> View
                       </Link>
-                      <RowMenu user={u} onEdit={() => setEditUser(u)} onRoles={() => setRolesUser(u)} />
+                      <RowMenu user={u} onEdit={() => setEditUser(u)} onRoles={() => setRolesUser(u)} onAccess={() => setAccessUser(u)} />
                     </div>
                   </td>
                 </tr>
@@ -254,16 +261,17 @@ export function UserManager({ users, outlets }: { users: UserRow[]; outlets: Out
       {creating && <UserFormPanel mode="create" outlets={outlets} onClose={() => setCreating(false)} />}
       {editUser && <UserFormPanel mode="edit" user={editUser} outlets={outlets} onClose={() => setEditUser(null)} />}
       {rolesUser && <AssignRolesPanel user={rolesUser} onClose={() => setRolesUser(null)} />}
+      {accessUser && <AccessPanel user={accessUser} onClose={() => setAccessUser(null)} />}
     </>
   );
 }
 
-function RowMenu({ user, onEdit, onRoles }: { user: UserRow; onEdit: () => void; onRoles: () => void }) {
+function RowMenu({ user, onEdit, onRoles, onAccess }: { user: UserRow; onEdit: () => void; onRoles: () => void; onAccess: () => void }) {
   const router = useRouter();
   const [pending, start] = React.useTransition();
   return (
     <Popover
-      contentClassName="w-44"
+      contentClassName="w-48"
       trigger={({ toggle }) => (
         <button onClick={toggle} className="grid size-8 place-items-center rounded-full text-muted-foreground transition-colors hover:bg-muted hover:text-foreground">
           <MoreVertical className="size-4" />
@@ -289,6 +297,15 @@ function RowMenu({ user, onEdit, onRoles }: { user: UserRow; onEdit: () => void;
             }}
           >
             <Shield className="size-4 text-muted-foreground" /> Assign Roles
+          </button>
+          <button
+            className="flex w-full items-center gap-2.5 rounded-md px-2.5 py-2 text-foreground/90 hover:bg-muted"
+            onClick={() => {
+              close();
+              onAccess();
+            }}
+          >
+            <KeyRound className="size-4 text-muted-foreground" /> Hak Akses
           </button>
           <button
             disabled={pending}
@@ -544,6 +561,114 @@ function AssignRolesPanel({ user, onClose }: { user: UserRow; onClose: () => voi
       <SlideOverFooter onClose={onClose} pending={pending}>
         <Button onClick={submit} disabled={pending}>
           {pending ? <Loader2 className="size-4 animate-spin" /> : <Shield className="size-4" />} Update Roles
+        </Button>
+      </SlideOverFooter>
+    </SlideOver>
+  );
+}
+
+/** Grant a user extra menu access outside their own division (per-menu). */
+function AccessPanel({ user, onClose }: { user: UserRow; onClose: () => void }) {
+  const router = useRouter();
+  const { t } = useI18n();
+  const [pending, start] = React.useTransition();
+  const home = ROLE_DIVISION[user.role];
+  const roleAllowed = React.useMemo(() => new Set(accessibleMenuKeys(user.role)), [user.role]);
+  const all = React.useMemo(() => navAll(), []);
+  const sections = React.useMemo(() => [...new Set(all.map((i) => i.section))], [all]);
+  const [grants, setGrants] = React.useState<Set<string>>(() => new Set(user.grants));
+
+  const toggle = (key: string) =>
+    setGrants((g) => {
+      const n = new Set(g);
+      if (n.has(key)) n.delete(key);
+      else n.add(key);
+      return n;
+    });
+
+  function submit() {
+    start(async () => {
+      const res = await updateGrantsAction(user.id, [...grants]);
+      if (res?.error) {
+        toast.error(res.error);
+        return;
+      }
+      toast.success("Hak akses diperbarui");
+      onClose();
+      router.refresh();
+    });
+  }
+
+  return (
+    <SlideOver title="Hak Akses" subtitle="Beri akses menu di luar divisi asal pengguna" onClose={onClose}>
+      <div className="flex-1 space-y-4 overflow-y-auto p-5">
+        <div className="flex items-center gap-3 rounded-xl border border-border bg-muted/30 p-3">
+          <Avatar name={user.name} size={40} src={user.avatarUrl} />
+          <div className="min-w-0">
+            <p className="truncate font-medium text-foreground">{user.name}</p>
+            <p className="truncate text-xs text-muted-foreground">
+              Divisi asal: <span className="font-medium text-foreground">{home}</span>
+            </p>
+          </div>
+        </div>
+
+        <p className="text-xs text-muted-foreground">
+          Centang menu divisi lain yang boleh dibuka pengguna ini. Menu divisi asalnya (dari role) sudah otomatis aktif.
+        </p>
+
+        <div className="space-y-4">
+          {sections.map((section) => {
+            const items = all.filter((i) => i.section === section);
+            return (
+              <div key={section}>
+                <p className="mb-1.5 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">{section}</p>
+                <div className="space-y-1 rounded-xl border border-border p-1.5">
+                  {items.map((item) => {
+                    const gid = `${section}:${item.key}`;
+                    const fromRole = section === home && roleAllowed.has(item.key);
+                    const checked = fromRole || grants.has(gid);
+                    return (
+                      <label
+                        key={gid}
+                        className={cn(
+                          "flex cursor-pointer items-center gap-3 rounded-lg px-2.5 py-2 text-sm transition-colors",
+                          fromRole ? "opacity-60" : "hover:bg-muted/50",
+                        )}
+                      >
+                        <span
+                          className={cn(
+                            "grid size-4 shrink-0 place-items-center rounded border",
+                            checked ? "border-primary bg-primary text-primary-foreground" : "border-muted-foreground/40",
+                          )}
+                        >
+                          {checked && <Check className="size-3" />}
+                        </span>
+                        <span className="flex-1 truncate text-foreground">{t(`nav.${item.label}`)}</span>
+                        {fromRole && (
+                          <span className="flex items-center gap-1 text-[10px] text-muted-foreground">
+                            <Lock className="size-3" /> dari role
+                          </span>
+                        )}
+                        <input
+                          type="checkbox"
+                          className="hidden"
+                          checked={checked}
+                          disabled={fromRole}
+                          onChange={() => !fromRole && toggle(gid)}
+                        />
+                      </label>
+                    );
+                  })}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+
+      <SlideOverFooter onClose={onClose} pending={pending}>
+        <Button onClick={submit} disabled={pending}>
+          {pending ? <Loader2 className="size-4 animate-spin" /> : <KeyRound className="size-4" />} Simpan Akses
         </Button>
       </SlideOverFooter>
     </SlideOver>

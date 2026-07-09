@@ -33,6 +33,7 @@ export default async function UsersPage() {
     phone: u.phone ?? null,
     country: u.country ?? null,
     avatarUrl: u.avatarUrl ?? null,
+    grants: u.grants ?? [],
   }));
 
   const outletLite: OutletLite[] = getOutlets().map((o) => ({

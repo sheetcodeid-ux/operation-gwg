@@ -16,6 +16,7 @@ export function Topbar({
   allowedKeys,
   homeDivision,
   isAdmin,
+  grants,
 }: {
   user: UserProfile;
   notifications: AppNotification[];
@@ -23,6 +24,7 @@ export function Topbar({
   allowedKeys: MenuKey[];
   homeDivision: string;
   isAdmin: boolean;
+  grants: string[];
 }) {
   return (
     <header className="no-print sticky top-0 z-50 flex h-16 items-center border-b border-border bg-background/80 backdrop-blur-xl">
@@ -31,7 +33,7 @@ export function Topbar({
 
       {/* Mobile brand */}
       <div className="flex items-center gap-2 px-4 lg:hidden">
-        <MobileNav items={navItems} allowedKeys={allowedKeys} homeDivision={homeDivision} isAdmin={isAdmin} />
+        <MobileNav items={navItems} allowedKeys={allowedKeys} homeDivision={homeDivision} isAdmin={isAdmin} grants={grants} />
         <Link href="/dashboard" className="flex items-center gap-2">
           <div className="grid size-8 place-items-center rounded-lg bg-primary">
             <Sparkles className="size-4 text-primary-foreground" />

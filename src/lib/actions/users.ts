@@ -122,6 +122,15 @@ export async function assignRoleAction(userId: string, role: Role) {
   return { ok: true };
 }
 
+export async function updateGrantsAction(userId: string, grants: string[]) {
+  const admin = await getSessionUser();
+  if (!admin || !can(admin, "manage_users")) return { error: "Not authorized" };
+  if (!getUser(userId)) return { error: "User not found." };
+  updateUser(userId, { grants });
+  revalidatePath("/admin/users");
+  return { ok: true };
+}
+
 export async function deleteUserAction(userId: string) {
   const admin = await getSessionUser();
   if (!admin || !can(admin, "manage_users")) return { error: "Not authorized" };

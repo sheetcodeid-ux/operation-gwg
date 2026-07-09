@@ -42,6 +42,8 @@ export interface UserProfile {
   /** Optional contact details (User Management). */
   phone?: string | null;
   country?: string | null;
+  /** Extra per-user menu grants beyond the role, as "<Division>:<menuKey>". */
+  grants?: string[];
   active: boolean;
   createdAt: string;
 }

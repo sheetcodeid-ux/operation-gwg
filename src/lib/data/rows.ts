@@ -26,6 +26,7 @@ export const userToRow = (u: UserProfile) => ({
   avatar_url: u.avatarUrl ?? null,
   phone: u.phone ?? null,
   country: u.country ?? null,
+  grants: u.grants ?? [],
   active: u.active,
   created_at: u.createdAt,
 });
@@ -39,6 +40,7 @@ export const userFromRow = (r: any): UserProfile => ({
   avatarUrl: r.avatar_url,
   phone: r.phone ?? null,
   country: r.country ?? null,
+  grants: r.grants ?? [],
   active: r.active,
   createdAt: r.created_at,
 });

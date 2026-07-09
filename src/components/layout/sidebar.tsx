@@ -19,11 +19,13 @@ export function Sidebar({
   allowedKeys,
   homeDivision,
   isAdmin,
+  grants = [],
 }: {
   items: NavItem[];
   allowedKeys: MenuKey[];
   homeDivision: string;
   isAdmin: boolean;
+  grants?: string[];
 }) {
   const pathname = usePathname();
   const { t } = useI18n();
@@ -32,10 +34,11 @@ export function Sidebar({
   const [pending, startTransition] = useTransition();
 
   const allowed = useMemo(() => new Set(allowedKeys), [allowedKeys]);
+  const grantSet = useMemo(() => new Set(grants), [grants]);
   const sections = useMemo(() => [...new Set(items.map((i) => i.section))], [items]);
   const isActive = (href: string) => pathname === href || pathname.startsWith(href + "/");
-  // A menu is openable only within the user's own division (admin sees all).
-  const canOpen = (i: NavItem) => isAdmin || (i.section === homeDivision && allowed.has(i.key));
+  // Openable within the user's own division, or via an explicit per-user grant.
+  const canOpen = (i: NavItem) => isAdmin || (i.section === homeDivision && allowed.has(i.key)) || grantSet.has(`${i.section}:${i.key}`);
 
   // The user's own division starts expanded; the rest collapsed.
   const [expanded, setExpanded] = useState<Set<string>>(() => new Set([homeDivision]));
