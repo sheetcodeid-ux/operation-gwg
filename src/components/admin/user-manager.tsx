@@ -1,21 +1,22 @@
 "use client";
 
 import * as React from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
   Clock,
   Eye,
   EyeOff,
   ImagePlus,
-  KeyRound,
   Loader2,
-  MoreHorizontal,
+  MoreVertical,
+  Pencil,
   Plus,
-  Power,
   RotateCcw,
   Search,
+  Shield,
   ShieldCheck,
-  Store,
+  Trash2,
   UserPlus,
   Users,
   X,
@@ -25,18 +26,18 @@ import { ROLE_LABEL, type Tone } from "@/lib/constants";
 import { ROLE_DIVISION, type Division } from "@/lib/nav";
 import type { Role } from "@/lib/types";
 import {
+  assignRoleAction,
   createUserAction,
-  resetPasswordAction,
-  toggleActiveAction,
-  updateAssignmentAction,
+  deleteUserAction,
+  updateUserAction,
 } from "@/lib/actions/users";
 import { Avatar } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { Popover } from "@/components/ui/popover";
 import { Field, Input, Label } from "@/components/ui/input";
 import { Combobox } from "@/components/ui/combobox";
+import { StatTile } from "@/components/ui/stat";
 import { cn } from "@/lib/utils";
 
 export interface UserRow {
@@ -86,10 +87,9 @@ const fmtDate = (iso: string) => {
 
 export function UserManager({ users, outlets }: { users: UserRow[]; outlets: OutletLite[] }) {
   const [creating, setCreating] = React.useState(false);
-  const [resetUser, setResetUser] = React.useState<UserRow | null>(null);
-  const [assignUser, setAssignUser] = React.useState<UserRow | null>(null);
+  const [editUser, setEditUser] = React.useState<UserRow | null>(null);
+  const [rolesUser, setRolesUser] = React.useState<UserRow | null>(null);
 
-  // ── filters ──
   const [q, setQ] = React.useState("");
   const [email, setEmail] = React.useState("");
   const [division, setDivision] = React.useState<string>("");
@@ -113,7 +113,6 @@ export function UserManager({ users, outlets }: { users: UserRow[]; outlets: Out
     [users, q, email, division, role],
   );
 
-  // ── stats ──
   const now = Date.now();
   const activeCount = users.filter((u) => u.active).length;
   const adminCount = users.filter((u) => u.role === "super_admin").length;
@@ -121,7 +120,6 @@ export function UserManager({ users, outlets }: { users: UserRow[]; outlets: Out
 
   return (
     <>
-      {/* Header */}
       <div className="mb-5 flex flex-wrap items-start justify-between gap-3">
         <div>
           <h1 className="text-2xl font-semibold text-foreground">User Management</h1>
@@ -132,12 +130,12 @@ export function UserManager({ users, outlets }: { users: UserRow[]; outlets: Out
         </Button>
       </div>
 
-      {/* Stat cards */}
+      {/* Stat cards — same model as the Operation dashboard KPI cards. */}
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-        <StatCard icon={Users} label="Total Users" value={users.length} tone="text-brand-500" />
-        <StatCard icon={ShieldCheck} label="Aktif" value={activeCount} tone="text-emerald-500" />
-        <StatCard icon={ShieldCheck} label="Admin" value={adminCount} tone="text-violet-500" />
-        <StatCard icon={Clock} label="Baru (30 hari)" value={recentCount} tone="text-amber-500" />
+        <StatTile icon={Users} label="Total Users" value={users.length} sub="Semua akun terdaftar" />
+        <StatTile icon={ShieldCheck} label="Aktif" value={activeCount} sub="Bisa login" />
+        <StatTile icon={Shield} label="Admin" value={adminCount} sub="Super Admin" />
+        <StatTile icon={Clock} label="Baru (30 hari)" value={recentCount} sub="Ditambahkan bulan ini" />
       </div>
 
       {/* Filters */}
@@ -192,7 +190,7 @@ export function UserManager({ users, outlets }: { users: UserRow[]; outlets: Out
       {/* Table */}
       <div className="glass mt-4 overflow-hidden rounded-2xl border border-border">
         <div className="overflow-x-auto">
-          <table className="w-full min-w-[46rem] text-sm">
+          <table className="w-full min-w-[52rem] text-sm">
             <thead>
               <tr className="whitespace-nowrap border-b border-border text-left text-xs font-medium uppercase tracking-wide text-muted-foreground">
                 <th className="px-4 py-3">Nama</th>
@@ -205,10 +203,10 @@ export function UserManager({ users, outlets }: { users: UserRow[]; outlets: Out
             </thead>
             <tbody>
               {filtered.map((u) => (
-                <tr key={u.id} className="border-b border-border/60 last:border-0 hover:bg-muted/30">
+                <tr key={u.id} className="border-b border-border/60 transition-colors last:border-0 hover:bg-foreground/[0.06]">
                   <td className="px-4 py-3">
                     <div className="flex items-center gap-3">
-                      <Avatar name={u.name} size={36} />
+                      <Avatar name={u.name} size={38} />
                       <div className="min-w-0">
                         <p className="truncate font-medium text-foreground">{u.name}</p>
                         <span className="mt-0.5 inline-block">
@@ -225,8 +223,16 @@ export function UserManager({ users, outlets }: { users: UserRow[]; outlets: Out
                       {u.active ? "Aktif" : "Nonaktif"}
                     </Badge>
                   </td>
-                  <td className="px-4 py-3 text-right">
-                    <RowMenu user={u} onReset={() => setResetUser(u)} onAssign={() => setAssignUser(u)} />
+                  <td className="px-4 py-3">
+                    <div className="flex items-center justify-end gap-1">
+                      <Link
+                        href={`/admin/users/${u.id}`}
+                        className="inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-sm text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+                      >
+                        <Eye className="size-4" /> View
+                      </Link>
+                      <RowMenu user={u} onEdit={() => setEditUser(u)} onRoles={() => setRolesUser(u)} />
+                    </div>
                   </td>
                 </tr>
               ))}
@@ -242,43 +248,100 @@ export function UserManager({ users, outlets }: { users: UserRow[]; outlets: Out
         </div>
       </div>
 
-      {creating && <CreateUserPanel outlets={outlets} onClose={() => setCreating(false)} />}
-      {resetUser && <ResetDialog user={resetUser} onClose={() => setResetUser(null)} />}
-      {assignUser && needsOutlets(assignUser.role) && (
-        <AssignDialog user={assignUser} outlets={outlets} onClose={() => setAssignUser(null)} />
-      )}
+      {creating && <UserFormPanel mode="create" outlets={outlets} onClose={() => setCreating(false)} />}
+      {editUser && <UserFormPanel mode="edit" user={editUser} outlets={outlets} onClose={() => setEditUser(null)} />}
+      {rolesUser && <AssignRolesPanel user={rolesUser} onClose={() => setRolesUser(null)} />}
     </>
   );
 }
 
-function StatCard({ icon: Icon, label, value, tone }: { icon: typeof Users; label: string; value: number; tone: string }) {
+function RowMenu({ user, onEdit, onRoles }: { user: UserRow; onEdit: () => void; onRoles: () => void }) {
+  const router = useRouter();
+  const [pending, start] = React.useTransition();
   return (
-    <div className="glass rounded-2xl border border-border p-4">
-      <div className="flex items-center gap-2 text-xs font-medium text-muted-foreground">
-        <Icon className={cn("size-4", tone)} />
-        {label}
-      </div>
-      <p className="mt-2 text-2xl font-semibold tabular-nums text-foreground">{value}</p>
-    </div>
+    <Popover
+      contentClassName="w-44"
+      trigger={({ toggle }) => (
+        <button onClick={toggle} className="grid size-8 place-items-center rounded-full text-muted-foreground transition-colors hover:bg-muted hover:text-foreground">
+          <MoreVertical className="size-4" />
+        </button>
+      )}
+    >
+      {(close) => (
+        <div className="text-sm">
+          <button
+            className="flex w-full items-center gap-2.5 rounded-md px-2.5 py-2 text-foreground/90 hover:bg-muted"
+            onClick={() => {
+              close();
+              onEdit();
+            }}
+          >
+            <Pencil className="size-4 text-muted-foreground" /> Edit
+          </button>
+          <button
+            className="flex w-full items-center gap-2.5 rounded-md px-2.5 py-2 text-foreground/90 hover:bg-muted"
+            onClick={() => {
+              close();
+              onRoles();
+            }}
+          >
+            <Shield className="size-4 text-muted-foreground" /> Assign Roles
+          </button>
+          <button
+            disabled={pending}
+            className="flex w-full items-center gap-2.5 rounded-md px-2.5 py-2 text-red-600 hover:bg-red-500/10 disabled:opacity-50 dark:text-red-400"
+            onClick={() => {
+              if (typeof window !== "undefined" && !window.confirm(`Hapus pengguna "${user.name}"? Tindakan ini tidak dapat dibatalkan.`)) return;
+              start(async () => {
+                const res = await deleteUserAction(user.id);
+                if (res?.error) toast.error(res.error);
+                else {
+                  toast.success("Pengguna dihapus");
+                  close();
+                  router.refresh();
+                }
+              });
+            }}
+          >
+            {pending ? <Loader2 className="size-4 animate-spin" /> : <Trash2 className="size-4" />} Delete
+          </button>
+        </div>
+      )}
+    </Popover>
   );
 }
 
-/** Aniq-style right-hand slide-over to create a user, targeted at a division. */
-function CreateUserPanel({ outlets, onClose }: { outlets: OutletLite[]; onClose: () => void }) {
+/** Shared create/edit slide-over. */
+function UserFormPanel({
+  mode,
+  user,
+  outlets,
+  onClose,
+}: {
+  mode: "create" | "edit";
+  user?: UserRow;
+  outlets: OutletLite[];
+  onClose: () => void;
+}) {
   const router = useRouter();
   const [pending, start] = React.useTransition();
-  const [first, setFirst] = React.useState("");
-  const [last, setLast] = React.useState("");
-  const [email, setEmail] = React.useState("");
+  const initFirst = user ? user.name.split(" ")[0] ?? "" : "";
+  const initLast = user ? user.name.split(" ").slice(1).join(" ") : "";
+  const initDivision = user ? ROLE_DIVISION[user.role] : DEFAULT_DIVISION;
+
+  const [first, setFirst] = React.useState(initFirst);
+  const [last, setLast] = React.useState(initLast);
+  const [email, setEmail] = React.useState(user?.email ?? "");
   const [pwd, setPwd] = React.useState("");
   const [pwd2, setPwd2] = React.useState("");
   const [showPwd, setShowPwd] = React.useState(false);
-  const [division, setDivision] = React.useState<Division>(DEFAULT_DIVISION);
-  const [role, setRole] = React.useState<Role>(rolesInDivision(DEFAULT_DIVISION)[0]);
-  const [selected, setSelected] = React.useState<string[]>([]);
+  const [division, setDivision] = React.useState<Division>(initDivision);
+  const [role, setRole] = React.useState<Role>(user?.role ?? rolesInDivision(initDivision)[0]);
+  const [selected, setSelected] = React.useState<string[]>(user?.outletIds ?? []);
   const [avatar, setAvatar] = React.useState<string | null>(null);
   const fileRef = React.useRef<HTMLInputElement>(null);
 
+  const isEdit = mode === "edit";
   const name = `${first} ${last}`.trim();
   const divisionRoles = rolesInDivision(division);
 
@@ -287,7 +350,6 @@ function CreateUserPanel({ outlets, onClose }: { outlets: OutletLite[]; onClose:
     setRole(rolesInDivision(d)[0]);
     setSelected([]);
   }
-
   function onFile(e: React.ChangeEvent<HTMLInputElement>) {
     const f = e.target.files?.[0];
     if (!f) return;
@@ -299,273 +361,213 @@ function CreateUserPanel({ outlets, onClose }: { outlets: OutletLite[]; onClose:
   function submit() {
     if (!name) return toast.error("Nama depan wajib diisi.");
     if (!email) return toast.error("Email wajib diisi.");
-    if (pwd.length < 6) return toast.error("Password minimal 6 karakter.");
+    if (!isEdit && pwd.length < 6) return toast.error("Password minimal 6 karakter.");
+    if (pwd && pwd.length < 6) return toast.error("Password minimal 6 karakter.");
     if (pwd !== pwd2) return toast.error("Konfirmasi password tidak cocok.");
     start(async () => {
-      const res = await createUserAction({ name, email, role, password: pwd, outletIds: selected });
+      const res = isEdit
+        ? await updateUserAction({ id: user!.id, name, email, role, password: pwd || undefined, outletIds: selected })
+        : await createUserAction({ name, email, role, password: pwd, outletIds: selected });
       if (res?.error) {
         toast.error(res.error);
         return;
       }
-      toast.success(`Pengguna ${name} dibuat di divisi ${division}`);
+      toast.success(isEdit ? "Pengguna diperbarui" : `Pengguna ${name} dibuat di divisi ${division}`);
       onClose();
       router.refresh();
     });
   }
 
   return (
+    <SlideOver title={isEdit ? "Edit User" : "Create New User"} subtitle={isEdit ? "Perbarui data pengguna" : "Tambah pengguna baru untuk divisi tujuan"} onClose={onClose}>
+      <div className="flex-1 space-y-4 overflow-y-auto p-5">
+        <div>
+          <Label>Foto Profil</Label>
+          <div className="mt-1.5 flex items-center gap-4">
+            {avatar ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img src={avatar} alt="preview" className="size-16 rounded-full object-cover ring-1 ring-border" />
+            ) : name ? (
+              <Avatar name={name} size={64} />
+            ) : (
+              <div className="grid size-16 place-items-center rounded-full bg-muted text-muted-foreground ring-1 ring-border">
+                <ImagePlus className="size-6" />
+              </div>
+            )}
+            <div>
+              <input ref={fileRef} type="file" accept="image/*" onChange={onFile} className="hidden" />
+              <Button type="button" variant="outline" size="sm" onClick={() => fileRef.current?.click()}>
+                <ImagePlus className="size-4" /> Pilih Gambar
+              </Button>
+              <p className="mt-1 text-[11px] text-muted-foreground">Opsional · default dari inisial nama</p>
+            </div>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-2 gap-3">
+          <Field label="Nama Depan *">
+            <Input value={first} onChange={(e) => setFirst(e.target.value)} placeholder="Nama depan" />
+          </Field>
+          <Field label="Nama Belakang">
+            <Input value={last} onChange={(e) => setLast(e.target.value)} placeholder="Nama belakang" />
+          </Field>
+        </div>
+
+        <Field label="Email *">
+          <Input value={email} onChange={(e) => setEmail(e.target.value)} placeholder="nama@gwg.co" />
+        </Field>
+
+        <div className="grid grid-cols-2 gap-3">
+          <Field label={isEdit ? "Password" : "Password *"}>
+            <div className="relative">
+              <Input
+                type={showPwd ? "text" : "password"}
+                value={pwd}
+                onChange={(e) => setPwd(e.target.value)}
+                placeholder={isEdit ? "Kosongkan bila tak diubah" : "Min. 6 karakter"}
+                className="pr-9"
+              />
+              <button type="button" onClick={() => setShowPwd((s) => !s)} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground">
+                {showPwd ? <EyeOff className="size-4" /> : <Eye className="size-4" />}
+              </button>
+            </div>
+          </Field>
+          <Field label={isEdit ? "Konfirmasi Password" : "Konfirmasi Password *"}>
+            <Input type={showPwd ? "text" : "password"} value={pwd2} onChange={(e) => setPwd2(e.target.value)} placeholder="Ulangi password" />
+          </Field>
+        </div>
+
+        <div className="grid grid-cols-2 gap-3">
+          <Field label="Divisi *">
+            <Combobox matchTriggerWidth searchable={false} value={division} onChange={(v) => pickDivision(v as Division)} options={DIVISIONS.map((d) => ({ value: d, label: d }))} />
+          </Field>
+          <Field label="Jabatan / Role *">
+            <Combobox
+              matchTriggerWidth
+              searchable={false}
+              value={role}
+              onChange={(v) => {
+                setRole(v as Role);
+                setSelected([]);
+              }}
+              options={divisionRoles.map((r) => ({ value: r, label: ROLE_LABEL[r] }))}
+            />
+          </Field>
+        </div>
+
+        {needsOutlets(role) && <OutletPicker outlets={outlets} multi={isMulti(role)} selected={selected} onChange={setSelected} />}
+      </div>
+
+      <SlideOverFooter onClose={onClose} pending={pending}>
+        <Button onClick={submit} disabled={pending}>
+          {pending ? <Loader2 className="size-4 animate-spin" /> : <UserPlus className="size-4" />} {isEdit ? "Update User" : "Create User"}
+        </Button>
+      </SlideOverFooter>
+    </SlideOver>
+  );
+}
+
+/** Aniq-style "Manage Roles" — pick a single role (radio chips). */
+function AssignRolesPanel({ user, onClose }: { user: UserRow; onClose: () => void }) {
+  const router = useRouter();
+  const [pending, start] = React.useTransition();
+  const [role, setRole] = React.useState<Role>(user.role);
+
+  function submit() {
+    start(async () => {
+      const res = await assignRoleAction(user.id, role);
+      if (res?.error) {
+        toast.error(res.error);
+        return;
+      }
+      toast.success("Role diperbarui");
+      onClose();
+      router.refresh();
+    });
+  }
+
+  return (
+    <SlideOver title="Manage Roles" subtitle="Tetapkan peran akses pengguna" onClose={onClose}>
+      <div className="flex-1 space-y-5 overflow-y-auto p-5">
+        <div className="flex items-center gap-3 rounded-xl border border-border bg-muted/30 p-3">
+          <Avatar name={user.name} size={40} />
+          <div className="min-w-0">
+            <p className="truncate font-medium text-foreground">{user.name}</p>
+            <p className="truncate text-xs text-muted-foreground">{user.email}</p>
+          </div>
+        </div>
+
+        <div>
+          <Label>Peran Tersedia</Label>
+          <div className="mt-2 grid grid-cols-1 gap-2 sm:grid-cols-2">
+            {ROLES.map((r) => {
+              const active = role === r;
+              return (
+                <button
+                  key={r}
+                  type="button"
+                  onClick={() => setRole(r)}
+                  className={cn(
+                    "flex items-center gap-2.5 rounded-xl border px-3 py-2.5 text-left text-sm transition-colors",
+                    active ? "border-primary bg-primary/10 text-foreground" : "border-border text-muted-foreground hover:bg-muted/50",
+                  )}
+                >
+                  <span className={cn("grid size-4 shrink-0 place-items-center rounded-full border", active ? "border-primary" : "border-muted-foreground/40")}>
+                    {active && <span className="size-2 rounded-full bg-primary" />}
+                  </span>
+                  <span className="min-w-0">
+                    <span className="block truncate font-medium text-foreground">{ROLE_LABEL[r]}</span>
+                    <span className="block truncate text-[11px] text-muted-foreground">{ROLE_DIVISION[r]}</span>
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      </div>
+
+      <SlideOverFooter onClose={onClose} pending={pending}>
+        <Button onClick={submit} disabled={pending}>
+          {pending ? <Loader2 className="size-4 animate-spin" /> : <Shield className="size-4" />} Update Roles
+        </Button>
+      </SlideOverFooter>
+    </SlideOver>
+  );
+}
+
+function SlideOver({ title, subtitle, onClose, children }: { title: string; subtitle: string; onClose: () => void; children: React.ReactNode }) {
+  React.useEffect(() => {
+    const onKey = (e: KeyboardEvent) => e.key === "Escape" && onClose();
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [onClose]);
+  return (
     <div className="fixed inset-0 z-[90]">
       <div className="absolute inset-0 bg-background/50 backdrop-blur-sm" onClick={onClose} />
       <div className="absolute right-0 top-0 flex h-full w-full max-w-md flex-col border-l border-border bg-background shadow-2xl">
-        {/* header */}
         <div className="flex items-center justify-between border-b border-border px-5 py-4">
           <div>
-            <p className="text-base font-semibold text-foreground">Create New User</p>
-            <p className="text-xs text-muted-foreground">Tambah pengguna baru untuk divisi tujuan</p>
+            <p className="text-base font-semibold text-foreground">{title}</p>
+            <p className="text-xs text-muted-foreground">{subtitle}</p>
           </div>
           <button onClick={onClose} className="grid size-8 place-items-center rounded-lg text-muted-foreground hover:bg-muted hover:text-foreground">
             <X className="size-4" />
           </button>
         </div>
-
-        {/* body */}
-        <div className="flex-1 space-y-4 overflow-y-auto p-5">
-          {/* profile picture */}
-          <div>
-            <Label>Foto Profil</Label>
-            <div className="mt-1.5 flex items-center gap-4">
-              {avatar ? (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img src={avatar} alt="preview" className="size-16 rounded-full object-cover ring-1 ring-border" />
-              ) : name ? (
-                <Avatar name={name} size={64} />
-              ) : (
-                <div className="grid size-16 place-items-center rounded-full bg-muted text-muted-foreground ring-1 ring-border">
-                  <ImagePlus className="size-6" />
-                </div>
-              )}
-              <div>
-                <input ref={fileRef} type="file" accept="image/*" onChange={onFile} className="hidden" />
-                <Button type="button" variant="outline" size="sm" onClick={() => fileRef.current?.click()}>
-                  <ImagePlus className="size-4" /> Pilih Gambar
-                </Button>
-                <p className="mt-1 text-[11px] text-muted-foreground">Opsional · default dari inisial nama</p>
-              </div>
-            </div>
-          </div>
-
-          <div className="grid grid-cols-2 gap-3">
-            <Field label="Nama Depan *">
-              <Input value={first} onChange={(e) => setFirst(e.target.value)} placeholder="Nama depan" />
-            </Field>
-            <Field label="Nama Belakang">
-              <Input value={last} onChange={(e) => setLast(e.target.value)} placeholder="Nama belakang" />
-            </Field>
-          </div>
-
-          <Field label="Email *">
-            <Input value={email} onChange={(e) => setEmail(e.target.value)} placeholder="nama@gwg.co" />
-          </Field>
-
-          <div className="grid grid-cols-2 gap-3">
-            <Field label="Password *">
-              <div className="relative">
-                <Input
-                  type={showPwd ? "text" : "password"}
-                  value={pwd}
-                  onChange={(e) => setPwd(e.target.value)}
-                  placeholder="Min. 6 karakter"
-                  className="pr-9"
-                />
-                <button
-                  type="button"
-                  onClick={() => setShowPwd((s) => !s)}
-                  className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
-                >
-                  {showPwd ? <EyeOff className="size-4" /> : <Eye className="size-4" />}
-                </button>
-              </div>
-            </Field>
-            <Field label="Konfirmasi Password *">
-              <Input
-                type={showPwd ? "text" : "password"}
-                value={pwd2}
-                onChange={(e) => setPwd2(e.target.value)}
-                placeholder="Ulangi password"
-              />
-            </Field>
-          </div>
-
-          {/* Division + Role — the target division for this user */}
-          <div className="grid grid-cols-2 gap-3">
-            <Field label="Divisi *">
-              <Combobox
-                matchTriggerWidth
-                searchable={false}
-                value={division}
-                onChange={(v) => pickDivision(v as Division)}
-                options={DIVISIONS.map((d) => ({ value: d, label: d }))}
-              />
-            </Field>
-            <Field label="Jabatan / Role *">
-              <Combobox
-                matchTriggerWidth
-                searchable={false}
-                value={role}
-                onChange={(v) => {
-                  setRole(v as Role);
-                  setSelected([]);
-                }}
-                options={divisionRoles.map((r) => ({ value: r, label: ROLE_LABEL[r] }))}
-              />
-            </Field>
-          </div>
-
-          {needsOutlets(role) && (
-            <OutletPicker outlets={outlets} multi={isMulti(role)} selected={selected} onChange={setSelected} />
-          )}
-        </div>
-
-        {/* footer */}
-        <div className="flex items-center justify-end gap-2 border-t border-border px-5 py-4">
-          <Button variant="ghost" onClick={onClose} disabled={pending}>
-            Cancel
-          </Button>
-          <Button onClick={submit} disabled={pending}>
-            {pending ? <Loader2 className="size-4 animate-spin" /> : <UserPlus className="size-4" />} Create User
-          </Button>
-        </div>
+        {children}
       </div>
     </div>
   );
 }
 
-function RowMenu({ user, onReset, onAssign }: { user: UserRow; onReset: () => void; onAssign: () => void }) {
-  const router = useRouter();
-  const [pending, start] = React.useTransition();
+function SlideOverFooter({ onClose, pending, children }: { onClose: () => void; pending: boolean; children: React.ReactNode }) {
   return (
-    <Popover
-      contentClassName="w-48"
-      trigger={({ toggle }) => (
-        <button onClick={toggle} className="grid size-8 place-items-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground">
-          <MoreHorizontal className="size-4" />
-        </button>
-      )}
-    >
-      {(close) => (
-        <div className="text-sm">
-          <button
-            className="flex w-full items-center gap-2.5 rounded-md px-2.5 py-2 text-foreground/90 hover:bg-muted"
-            onClick={() => {
-              close();
-              onReset();
-            }}
-          >
-            <KeyRound className="size-4 text-muted-foreground" /> Reset password
-          </button>
-          {needsOutlets(user.role) && (
-            <button
-              className="flex w-full items-center gap-2.5 rounded-md px-2.5 py-2 text-foreground/90 hover:bg-muted"
-              onClick={() => {
-                close();
-                onAssign();
-              }}
-            >
-              <Store className="size-4 text-muted-foreground" /> Edit outlets
-            </button>
-          )}
-          <button
-            disabled={pending}
-            className="flex w-full items-center gap-2.5 rounded-md px-2.5 py-2 text-foreground/90 hover:bg-muted disabled:opacity-50"
-            onClick={() =>
-              start(async () => {
-                const res = await toggleActiveAction(user.id, !user.active);
-                if (res?.error) toast.error(res.error);
-                else {
-                  toast.success(user.active ? "User deactivated" : "User activated");
-                  close();
-                  router.refresh();
-                }
-              })
-            }
-          >
-            <Power className="size-4 text-muted-foreground" /> {user.active ? "Deactivate" : "Activate"}
-          </button>
-        </div>
-      )}
-    </Popover>
-  );
-}
-
-function ResetDialog({ user, onClose }: { user: UserRow; onClose: () => void }) {
-  const [pending, start] = React.useTransition();
-  const [pwd, setPwd] = React.useState("");
-  return (
-    <Dialog open onOpenChange={(v) => !v && onClose()}>
-      <DialogContent title="Reset Password" description={`Set a new password for ${user.name}.`} className="max-w-sm">
-        <div className="space-y-4 p-5">
-          <Field label="New Password">
-            <Input type="text" value={pwd} onChange={(e) => setPwd(e.target.value)} placeholder="min. 6 chars" />
-          </Field>
-          <div className="flex justify-end gap-2">
-            <Button variant="ghost" onClick={onClose} disabled={pending}>
-              Cancel
-            </Button>
-            <Button
-              disabled={pending}
-              onClick={() =>
-                start(async () => {
-                  const res = await resetPasswordAction(user.id, pwd);
-                  if (res?.error) toast.error(res.error);
-                  else {
-                    toast.success("Password reset");
-                    onClose();
-                  }
-                })
-              }
-            >
-              {pending && <Loader2 className="size-4 animate-spin" />} Reset
-            </Button>
-          </div>
-        </div>
-      </DialogContent>
-    </Dialog>
-  );
-}
-
-function AssignDialog({ user, outlets, onClose }: { user: UserRow; outlets: OutletLite[]; onClose: () => void }) {
-  const router = useRouter();
-  const [pending, start] = React.useTransition();
-  const [selected, setSelected] = React.useState<string[]>(user.outletIds);
-  return (
-    <Dialog open onOpenChange={(v) => !v && onClose()}>
-      <DialogContent title="Edit Outlet Assignment" description={`${user.name} · ${ROLE_LABEL[user.role]}`} className="max-w-lg">
-        <div className="max-h-[70vh] space-y-4 overflow-y-auto p-5">
-          <OutletPicker outlets={outlets} multi={isMulti(user.role)} selected={selected} onChange={setSelected} />
-          <div className="flex justify-end gap-2">
-            <Button variant="ghost" onClick={onClose} disabled={pending}>
-              Cancel
-            </Button>
-            <Button
-              disabled={pending}
-              onClick={() =>
-                start(async () => {
-                  const res = await updateAssignmentAction(user.id, user.role, selected);
-                  if (res?.error) toast.error(res.error);
-                  else {
-                    toast.success("Assignment updated");
-                    onClose();
-                    router.refresh();
-                  }
-                })
-              }
-            >
-              {pending && <Loader2 className="size-4 animate-spin" />} Save
-            </Button>
-          </div>
-        </div>
-      </DialogContent>
-    </Dialog>
+    <div className="flex items-center justify-end gap-2 border-t border-border px-5 py-4">
+      <Button variant="ghost" onClick={onClose} disabled={pending}>
+        Cancel
+      </Button>
+      {children}
+    </div>
   );
 }
 
@@ -584,15 +586,13 @@ function OutletPicker({
   const filtered = outlets.filter(
     (o) => o.name.toLowerCase().includes(q.toLowerCase()) || o.code.toLowerCase().includes(q.toLowerCase()),
   );
-
   function toggle(id: string) {
     if (multi) onChange(selected.includes(id) ? selected.filter((x) => x !== id) : [...selected, id]);
     else onChange([id]);
   }
-
   return (
-    <Field label={multi ? `Assigned Outlets (${selected.length})` : "Assigned Outlet"}>
-      <Input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search outlets…" className="mb-2" />
+    <Field label={multi ? `Outlet Ditugaskan (${selected.length})` : "Outlet Ditugaskan"}>
+      <Input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Cari outlet…" className="mb-2" />
       <div className="max-h-52 space-y-0.5 overflow-y-auto rounded-lg border border-border p-1">
         {filtered.map((o) => {
           const active = selected.includes(o.id);
@@ -613,7 +613,7 @@ function OutletPicker({
             </button>
           );
         })}
-        {filtered.length === 0 && <p className="px-2 py-3 text-center text-xs text-muted-foreground">No outlets</p>}
+        {filtered.length === 0 && <p className="px-2 py-3 text-center text-xs text-muted-foreground">Tidak ada outlet</p>}
       </div>
     </Field>
   );

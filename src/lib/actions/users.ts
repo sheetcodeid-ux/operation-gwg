@@ -3,8 +3,16 @@
 import { revalidatePath } from "next/cache";
 import { getSessionUser } from "@/lib/auth";
 import { can } from "@/lib/rbac";
-import { getOutlet } from "@/lib/data/store";
-import { createUser, emailExists, resetUserPassword, setUserActive, setUserAssignment } from "@/lib/data/user-mutations";
+import { getOutlet, getUser } from "@/lib/data/store";
+import {
+  createUser,
+  deleteUser,
+  emailExists,
+  resetUserPassword,
+  setUserActive,
+  setUserAssignment,
+  updateUser,
+} from "@/lib/data/user-mutations";
 import { persistMessage } from "@/lib/data/persist";
 import { createUserSchema, parseInput } from "@/lib/validation";
 import type { Role } from "@/lib/types";
@@ -47,6 +55,53 @@ export async function createUserAction(input: CreateUserInput) {
   } catch (e) {
     return { error: persistMessage(e) };
   }
+  revalidatePath("/admin/users");
+  return { ok: true };
+}
+
+export interface UpdateUserInput {
+  id: string;
+  name: string;
+  email: string;
+  role: Role;
+  password?: string;
+  outletIds: string[];
+}
+
+export async function updateUserAction(input: UpdateUserInput) {
+  const admin = await getSessionUser();
+  if (!admin || !can(admin, "manage_users")) return { error: "Not authorized" };
+  if (!getUser(input.id)) return { error: "User not found." };
+  const name = input.name.trim();
+  const email = input.email.trim().toLowerCase();
+  if (!name) return { error: "Name is required." };
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return { error: "Enter a valid email." };
+  if (emailExists(email, input.id)) return { error: "Email already exists." };
+  if (input.password && input.password.length < 6) return { error: "Password must be at least 6 characters." };
+
+  const { areaId, outletIds } = normalizeAssignment(input.role, input.outletIds);
+  updateUser(input.id, { name, email, role: input.role, areaId, outletIds });
+  if (input.password) resetUserPassword(input.id, input.password);
+  revalidatePath("/admin/users");
+  return { ok: true };
+}
+
+export async function assignRoleAction(userId: string, role: Role) {
+  const admin = await getSessionUser();
+  if (!admin || !can(admin, "manage_users")) return { error: "Not authorized" };
+  const user = getUser(userId);
+  if (!user) return { error: "User not found." };
+  const { areaId, outletIds } = normalizeAssignment(role, user.outletIds ?? []);
+  updateUser(userId, { role, areaId, outletIds });
+  revalidatePath("/admin/users");
+  return { ok: true };
+}
+
+export async function deleteUserAction(userId: string) {
+  const admin = await getSessionUser();
+  if (!admin || !can(admin, "manage_users")) return { error: "Not authorized" };
+  if (userId === admin.id) return { error: "You can't delete your own account." };
+  await deleteUser(userId);
   revalidatePath("/admin/users");
   return { ok: true };
 }

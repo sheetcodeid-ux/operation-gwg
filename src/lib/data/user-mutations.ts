@@ -4,7 +4,7 @@ import { randomUUID } from "node:crypto";
 import { SEED } from "./seed";
 import { registerCredential, setPassword } from "./credentials";
 import { getUser } from "./store";
-import { saveUser, PersistError } from "./persist";
+import { saveUser, deleteUserRow, PersistError } from "./persist";
 import type { Role, UserProfile } from "../types";
 
 /** Admin user-management writes (demo). Phase 11: Supabase Auth admin API + profiles table. */
@@ -60,6 +60,28 @@ export function resetUserPassword(id: string, password: string) {
   setPassword(id, password);
 }
 
-export function emailExists(email: string) {
-  return SEED.users.some((u) => u.email.toLowerCase() === email.trim().toLowerCase());
+/** Update editable profile fields (name/email/role/assignment). */
+export function updateUser(
+  id: string,
+  patch: { name?: string; email?: string; role?: Role; areaId?: string | null; outletIds?: string[] },
+) {
+  const user = getUser(id);
+  if (!user) return;
+  if (patch.name !== undefined) user.name = patch.name.trim();
+  if (patch.email !== undefined) user.email = patch.email.trim().toLowerCase();
+  if (patch.role !== undefined) user.role = patch.role;
+  if (patch.areaId !== undefined) user.areaId = patch.areaId;
+  if (patch.outletIds !== undefined) user.outletIds = patch.outletIds;
+  void saveUser(user);
+}
+
+/** Remove a user's profile (they can no longer sign in). */
+export async function deleteUser(id: string) {
+  const i = SEED.users.findIndex((u) => u.id === id);
+  if (i >= 0) SEED.users.splice(i, 1);
+  await deleteUserRow(id);
+}
+
+export function emailExists(email: string, exceptId?: string) {
+  return SEED.users.some((u) => u.id !== exceptId && u.email.toLowerCase() === email.trim().toLowerCase());
 }

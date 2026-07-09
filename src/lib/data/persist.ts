@@ -84,6 +84,8 @@ export const saveComplaint = (c: Complaint): Promise<PersistResult> =>
 
 export const saveUser = (u: UserProfile): Promise<PersistResult> =>
   dbEnabled ? write("users", db().from("users").upsert(userToRow(u))) : Promise.resolve(OK);
+export const deleteUserRow = (id: string): Promise<PersistResult> =>
+  dbEnabled ? write("users", db().from("users").delete().eq("id", id)) : Promise.resolve(OK);
 
 export const saveNotification = (n: AppNotification): Promise<PersistResult> =>
   dbEnabled ? write("notifications", db().from("notifications").upsert(notificationToRow(n))) : Promise.resolve(OK);
