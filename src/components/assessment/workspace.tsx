@@ -76,11 +76,12 @@ function WorkspaceInner({ viewerName }: { viewerName: string }) {
           </div>
           <Combobox
             portal
+            matchTriggerWidth
+            searchable={false}
             value={a.role}
             onChange={(v) => a.setRole(v as typeof a.role)}
             options={ASSESSMENT_ROLES.map((r) => ({ value: r.value, label: r.label }))}
             className="w-full sm:w-72"
-            searchPlaceholder="Cari peran…"
           />
         </div>
       ) : (

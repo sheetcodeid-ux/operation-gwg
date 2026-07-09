@@ -14,6 +14,7 @@ export function Popover({
   className,
   contentClassName,
   portal = false,
+  matchTriggerWidth = false,
 }: {
   trigger: (props: { open: boolean; toggle: () => void }) => React.ReactNode;
   children: React.ReactNode | ((close: () => void) => React.ReactNode);
@@ -21,6 +22,8 @@ export function Popover({
   className?: string;
   contentClassName?: string;
   portal?: boolean;
+  /** Size the menu to exactly the trigger width (not the content width). */
+  matchTriggerWidth?: boolean;
 }) {
   const [open, setOpen] = React.useState(false);
   const ref = React.useRef<HTMLDivElement>(null);
@@ -72,7 +75,7 @@ export function Popover({
         portal ? "fixed" : cn("absolute mt-2 min-w-56", align === "end" ? "right-0" : "left-0"),
         contentClassName,
       )}
-      style={portal && pos ? { top: pos.top, left: pos.left, minWidth: pos.width } : undefined}
+      style={portal && pos ? { top: pos.top, left: pos.left, ...(matchTriggerWidth ? { width: pos.width } : { minWidth: pos.width }) } : undefined}
     >
       {typeof children === "function" ? children(close) : children}
     </div>

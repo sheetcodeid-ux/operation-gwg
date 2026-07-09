@@ -25,6 +25,7 @@ export function Dropdown({
   placeholder,
   disabled,
   className,
+  searchable = false,
 }: {
   label?: string;
   value: string;
@@ -33,17 +34,21 @@ export function Dropdown({
   placeholder?: string;
   disabled?: boolean;
   className?: string;
+  /** Enable the type-to-filter box (only for long lists like employee names). */
+  searchable?: boolean;
 }) {
   return (
     <div className={cn("flex flex-col gap-1.5", className)}>
       {label && <Label>{label}</Label>}
       <Combobox
         portal
+        matchTriggerWidth
+        searchable={searchable}
         value={value}
         onChange={onChange}
         options={options}
         placeholder={placeholder ?? "Pilih…"}
-        searchPlaceholder="Cari…"
+        searchPlaceholder="Cari nama…"
         disabled={disabled}
       />
     </div>

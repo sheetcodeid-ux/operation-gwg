@@ -36,6 +36,7 @@ export function CascadingPicker() {
       />
       <Dropdown
         label="Nama Lengkap"
+        searchable
         value={a.candidate.employeeId}
         onChange={a.setEmployee}
         options={employees}

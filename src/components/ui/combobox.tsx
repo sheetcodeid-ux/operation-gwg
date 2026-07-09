@@ -21,6 +21,8 @@ export function Combobox({
   className,
   disabled,
   portal,
+  searchable = true,
+  matchTriggerWidth = false,
 }: {
   options: ComboOption[];
   value: string;
@@ -31,6 +33,10 @@ export function Combobox({
   disabled?: boolean;
   /** Render the menu in a portal so it escapes overflow-clipping ancestors. */
   portal?: boolean;
+  /** Show the type-to-filter search box. Off avoids the mobile keyboard popping. */
+  searchable?: boolean;
+  /** Size the menu to exactly the trigger width. */
+  matchTriggerWidth?: boolean;
 }) {
   const selected = options.find((o) => o.value === value);
 
@@ -38,10 +44,15 @@ export function Combobox({
     <Popover
       portal={portal}
       className={cn("w-full", className)}
-      // Menu keeps a readable width even when the trigger has shrunk (mobile):
-      // at least 13rem (or the trigger width if larger), capped to the viewport.
-      contentClassName="w-max min-w-[max(100%,13rem)] max-w-[min(20rem,calc(100vw-2rem))] p-0"
-      align="end"
+      matchTriggerWidth={matchTriggerWidth}
+      // Default: menu keeps a readable width (>= 13rem or trigger width, capped).
+      // matchTriggerWidth: menu is exactly the trigger width (Popover sets width).
+      contentClassName={
+        matchTriggerWidth
+          ? "p-0"
+          : "w-max min-w-[max(100%,13rem)] max-w-[min(20rem,calc(100vw-2rem))] p-0"
+      }
+      align={matchTriggerWidth ? "start" : "end"}
       trigger={({ open, toggle }) => (
         <button
           type="button"
@@ -58,7 +69,7 @@ export function Combobox({
         </button>
       )}
     >
-      {(close) => <ComboList options={options} value={value} onPick={(v) => { onChange(v); close(); }} searchPlaceholder={searchPlaceholder} />}
+      {(close) => <ComboList options={options} value={value} onPick={(v) => { onChange(v); close(); }} searchPlaceholder={searchPlaceholder} searchable={searchable} />}
     </Popover>
   );
 }
@@ -68,11 +79,13 @@ function ComboList({
   value,
   onPick,
   searchPlaceholder,
+  searchable = true,
 }: {
   options: ComboOption[];
   value: string;
   onPick: (v: string) => void;
   searchPlaceholder: string;
+  searchable?: boolean;
 }) {
   const [q, setQ] = React.useState("");
   const [active, setActive] = React.useState(0);
@@ -97,20 +110,22 @@ function ComboList({
 
   return (
     <div>
-      <div className="flex items-center gap-2 border-b border-border px-3">
-        <Search className="size-4 shrink-0 text-muted-foreground" />
-        <input
-          autoFocus
-          value={q}
-          onChange={(e) => {
-            setQ(e.target.value);
-            setActive(0);
-          }}
-          onKeyDown={onKey}
-          placeholder={searchPlaceholder}
-          className="h-10 w-full bg-transparent text-sm text-foreground placeholder:text-muted-foreground focus:outline-none"
-        />
-      </div>
+      {searchable && (
+        <div className="flex items-center gap-2 border-b border-border px-3">
+          <Search className="size-4 shrink-0 text-muted-foreground" />
+          <input
+            autoFocus
+            value={q}
+            onChange={(e) => {
+              setQ(e.target.value);
+              setActive(0);
+            }}
+            onKeyDown={onKey}
+            placeholder={searchPlaceholder}
+            className="h-10 w-full bg-transparent text-sm text-foreground placeholder:text-muted-foreground focus:outline-none"
+          />
+        </div>
+      )}
       <div className="max-h-60 overflow-y-auto p-1">
         {filtered.length === 0 ? (
           <p className="px-3 py-6 text-center text-sm text-muted-foreground">No results.</p>

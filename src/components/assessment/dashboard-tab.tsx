@@ -222,6 +222,7 @@ export function DashboardTab() {
           />
           <Dropdown
             label="Nama Karyawan"
+            searchable
             value={dNama}
             onChange={setDNama}
             options={namaOpts}
@@ -762,6 +763,7 @@ function AllAssessmentsTable({
         />
         <Dropdown
           label="Nama"
+          searchable
           value={nama}
           onChange={setNama}
           options={[{ value: "", label: "Semua Nama" }, ...namaOptions]}
