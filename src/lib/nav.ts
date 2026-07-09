@@ -136,6 +136,26 @@ export function navFor(role: Role): NavItem[] {
   return NAV_MENUS.filter((m) => allowed.has(m.key)).map((m) => ({ ...m, section: division }));
 }
 
+/** Every division + its menus (the full sidebar) — shown to EVERY role.
+ *  Access is enforced separately via accessibleMenuKeys(); non-accessible
+ *  menus render locked. */
+export function navAll(): NavItem[] {
+  return DIVISION_MENUS.flatMap(({ division, menus }) => {
+    const set = new Set(menus);
+    return NAV_MENUS.filter((m) => set.has(m.key)).map((m) => ({ ...m, section: division }));
+  });
+}
+
+/** The menus a role may actually open (everything else is shown but locked). */
+export function accessibleMenuKeys(role: Role): MenuKey[] {
+  return [...ROLE_MENUS[role]];
+}
+
+/** The division a role belongs to (its own, unlocked division header). */
+export function homeDivision(role: Role): Division {
+  return ROLE_DIVISION[role];
+}
+
 /** Whether a role may open a given menu (route guard helper). */
 export function canSeeMenu(role: Role, key: MenuKey): boolean {
   return ROLE_MENUS[role].includes(key);

@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { Search, Sparkles } from "lucide-react";
 import type { AppNotification, UserProfile } from "@/lib/types";
-import type { NavItem } from "@/lib/nav";
+import type { MenuKey, NavItem } from "@/lib/nav";
 import { MobileNav } from "./mobile-nav";
 import { TopbarBrand } from "./topbar-brand";
 import { NotificationCenter } from "./notifications";
@@ -13,10 +13,16 @@ export function Topbar({
   user,
   notifications,
   navItems,
+  allowedKeys,
+  homeDivision,
+  isAdmin,
 }: {
   user: UserProfile;
   notifications: AppNotification[];
   navItems: NavItem[];
+  allowedKeys: MenuKey[];
+  homeDivision: string;
+  isAdmin: boolean;
 }) {
   return (
     <header className="no-print sticky top-0 z-50 flex h-16 items-center border-b border-border bg-background/80 backdrop-blur-xl">
@@ -25,7 +31,7 @@ export function Topbar({
 
       {/* Mobile brand */}
       <div className="flex items-center gap-2 px-4 lg:hidden">
-        <MobileNav items={navItems} />
+        <MobileNav items={navItems} allowedKeys={allowedKeys} homeDivision={homeDivision} isAdmin={isAdmin} />
         <Link href="/dashboard" className="flex items-center gap-2">
           <div className="grid size-8 place-items-center rounded-lg bg-primary">
             <Sparkles className="size-4 text-primary-foreground" />

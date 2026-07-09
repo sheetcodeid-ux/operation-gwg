@@ -1,25 +1,51 @@
 "use client";
 
-import { useMemo, useTransition } from "react";
+import { useMemo, useState, useTransition } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { LogOut } from "lucide-react";
-import { type NavItem } from "@/lib/nav";
+import { ChevronDown, Lock, LogOut } from "lucide-react";
+import { DIVISION_ICON, type Division, type MenuKey, type NavItem } from "@/lib/nav";
 import { signOut } from "@/lib/actions/auth";
 import { useI18n } from "@/lib/i18n/provider";
 import { useSidebar } from "./sidebar-context";
+import { useNavLock } from "./nav-lock";
 import { NAV_ICONS } from "./icons";
 import { cn } from "@/lib/utils";
 
-export function Sidebar({ items }: { items: NavItem[] }) {
+/** Aniq-UI style sidebar: every division is shown as a collapsible group; the
+ *  divisions the role cannot access render locked (blur + notice on click). */
+export function Sidebar({
+  items,
+  allowedKeys,
+  homeDivision,
+  isAdmin,
+}: {
+  items: NavItem[];
+  allowedKeys: MenuKey[];
+  homeDivision: string;
+  isAdmin: boolean;
+}) {
   const pathname = usePathname();
   const { t } = useI18n();
   const { collapsed } = useSidebar();
+  const { showLocked } = useNavLock();
   const [pending, startTransition] = useTransition();
 
-  // Divisions become static section headers, in first-seen order.
+  const allowed = useMemo(() => new Set(allowedKeys), [allowedKeys]);
   const sections = useMemo(() => [...new Set(items.map((i) => i.section))], [items]);
   const isActive = (href: string) => pathname === href || pathname.startsWith(href + "/");
+  // A menu is openable only within the user's own division (admin sees all).
+  const canOpen = (i: NavItem) => isAdmin || (i.section === homeDivision && allowed.has(i.key));
+
+  // The user's own division starts expanded; the rest collapsed.
+  const [expanded, setExpanded] = useState<Set<string>>(() => new Set([homeDivision]));
+  const toggle = (s: string) =>
+    setExpanded((e) => {
+      const n = new Set(e);
+      if (n.has(s)) n.delete(s);
+      else n.add(s);
+      return n;
+    });
 
   return (
     <aside
@@ -29,51 +55,110 @@ export function Sidebar({ items }: { items: NavItem[] }) {
       )}
     >
       <nav className="flex-1 overflow-y-auto px-3 py-4">
-        {sections.map((section, si) => {
-          const sectionItems = items.filter((i) => i.section === section);
-          return (
-            <div key={section} className={cn(si > 0 && (collapsed ? "mt-2" : "mt-6"))}>
-              {collapsed ? (
-                si > 0 && <div className="mx-1 mb-2 h-px bg-border/70" />
-              ) : (
-                <p className="mb-1 px-3 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground/70">
-                  {section}
-                </p>
-              )}
+        {collapsed ? (
+          // Compact rail: only the accessible menus, as centered icons.
+          <div className="space-y-1">
+            {items
+              .filter(canOpen)
+              .map((item) => {
+                const Icon = NAV_ICONS[item.icon];
+                const active = isActive(item.href);
+                return (
+                  <Link
+                    key={item.href}
+                    href={item.href}
+                    title={t(`nav.${item.label}`)}
+                    className={cn(
+                      "flex h-10 items-center justify-center rounded-lg transition-colors",
+                      active
+                        ? "bg-sidebar-accent text-sidebar-accent-foreground shadow-sm"
+                        : "text-muted-foreground hover:bg-muted/50 hover:text-foreground",
+                    )}
+                  >
+                    {Icon && <Icon className="size-[18px]" />}
+                  </Link>
+                );
+              })}
+          </div>
+        ) : (
+          sections.map((section) => {
+            const secItems = items.filter((i) => i.section === section);
+            const secLocked = secItems.every((i) => !canOpen(i));
+            const open = expanded.has(section);
+            const DivIcon = NAV_ICONS[DIVISION_ICON[section as Division]];
+            return (
+              <div key={section} className="mb-1">
+                <button
+                  type="button"
+                  onClick={() => toggle(section)}
+                  aria-expanded={open}
+                  className={cn(
+                    "flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-sm font-medium transition-colors",
+                    secLocked ? "text-muted-foreground/70 hover:bg-muted/30" : "text-foreground hover:bg-muted/50",
+                  )}
+                >
+                  {DivIcon && <DivIcon className="size-[18px] shrink-0" />}
+                  <span className="flex-1 truncate text-left">{section}</span>
+                  {secLocked && <Lock className="size-3.5 shrink-0 text-muted-foreground/60" />}
+                  <ChevronDown className={cn("size-4 shrink-0 text-muted-foreground transition-transform duration-200", open && "rotate-180")} />
+                </button>
 
-              <div className="space-y-1">
-                {sectionItems.map((item) => {
-                  const Icon = NAV_ICONS[item.icon];
-                  const active = isActive(item.href);
-                  return (
-                    <Link
-                      key={`${section}:${item.href}`}
-                      href={item.href}
-                      title={collapsed ? t(`nav.${item.label}`) : undefined}
-                      className={cn(
-                        "group flex items-center rounded-lg text-sm transition-colors",
-                        collapsed ? "h-10 justify-center" : "gap-3 px-3 py-2.5",
-                        active
-                          ? "bg-sidebar-accent font-medium text-sidebar-accent-foreground shadow-sm"
-                          : "text-muted-foreground hover:bg-muted/50 hover:text-foreground",
-                      )}
-                    >
-                      {Icon && (
-                        <Icon
-                          className={cn(
-                            "size-[18px] shrink-0 transition-colors",
-                            active ? "text-foreground" : "text-muted-foreground group-hover:text-foreground/80",
-                          )}
-                        />
-                      )}
-                      {!collapsed && <span className="truncate">{t(`nav.${item.label}`)}</span>}
-                    </Link>
-                  );
-                })}
+                <div
+                  className={cn(
+                    "grid transition-[grid-template-rows] duration-200",
+                    open ? "grid-rows-[1fr]" : "grid-rows-[0fr]",
+                  )}
+                >
+                  <div className="overflow-hidden">
+                    <div className="relative ml-[1.55rem] mt-1 space-y-0.5 border-l border-border pl-3">
+                      {secItems.map((item) => {
+                        const Icon = NAV_ICONS[item.icon];
+                        const locked = !canOpen(item);
+                        const active = !locked && isActive(item.href);
+                        const label = t(`nav.${item.label}`);
+
+                        if (locked) {
+                          return (
+                            <button
+                              key={item.href}
+                              type="button"
+                              onClick={() => showLocked(section)}
+                              className="flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-left text-sm text-muted-foreground/55 transition-colors hover:bg-muted/30 hover:text-muted-foreground"
+                            >
+                              {Icon && <Icon className="size-4 shrink-0" />}
+                              <span className="flex-1 truncate">{label}</span>
+                              <Lock className="size-3 shrink-0" />
+                            </button>
+                          );
+                        }
+
+                        return (
+                          <Link
+                            key={item.href}
+                            href={item.href}
+                            className={cn(
+                              "group relative flex items-center gap-2.5 rounded-lg px-2.5 py-2 text-sm transition-colors",
+                              active
+                                ? "bg-sidebar-accent font-medium text-sidebar-accent-foreground"
+                                : "text-muted-foreground hover:bg-muted/50 hover:text-foreground",
+                            )}
+                          >
+                            {/* active indicator line, sitting on the group rail */}
+                            {active && <span className="absolute -left-[13px] top-1.5 bottom-1.5 w-0.5 rounded-full bg-primary" />}
+                            {Icon && (
+                              <Icon className={cn("size-4 shrink-0", active ? "text-foreground" : "text-muted-foreground group-hover:text-foreground/80")} />
+                            )}
+                            <span className="truncate">{label}</span>
+                          </Link>
+                        );
+                      })}
+                    </div>
+                  </div>
+                </div>
               </div>
-            </div>
-          );
-        })}
+            );
+          })
+        )}
       </nav>
 
       <div className="border-t border-border p-3">

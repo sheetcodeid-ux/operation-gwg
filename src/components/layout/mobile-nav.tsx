@@ -1,17 +1,42 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Menu, Sparkles, X } from "lucide-react";
-import { type NavItem } from "@/lib/nav";
+import { ChevronDown, Lock, Menu, Sparkles, X } from "lucide-react";
+import { DIVISION_ICON, type Division, type MenuKey, type NavItem } from "@/lib/nav";
+import { useI18n } from "@/lib/i18n/provider";
+import { useNavLock } from "./nav-lock";
 import { NAV_ICONS } from "./icons";
 import { cn } from "@/lib/utils";
 
-export function MobileNav({ items }: { items: NavItem[] }) {
+export function MobileNav({
+  items,
+  allowedKeys,
+  homeDivision,
+  isAdmin,
+}: {
+  items: NavItem[];
+  allowedKeys: MenuKey[];
+  homeDivision: string;
+  isAdmin: boolean;
+}) {
   const [open, setOpen] = useState(false);
   const pathname = usePathname();
-  const sections = [...new Set(items.map((i) => i.section))];
+  const { t } = useI18n();
+  const { showLocked } = useNavLock();
+  const allowed = useMemo(() => new Set(allowedKeys), [allowedKeys]);
+  const canOpen = (i: NavItem) => isAdmin || (i.section === homeDivision && allowed.has(i.key));
+  const sections = useMemo(() => [...new Set(items.map((i) => i.section))], [items]);
+  const [expanded, setExpanded] = useState<Set<string>>(() => new Set([homeDivision]));
+  const toggle = (s: string) =>
+    setExpanded((e) => {
+      const n = new Set(e);
+      if (n.has(s)) n.delete(s);
+      else n.add(s);
+      return n;
+    });
+  const isActive = (href: string) => pathname === href || pathname.startsWith(href + "/");
 
   return (
     <>
@@ -40,31 +65,74 @@ export function MobileNav({ items }: { items: NavItem[] }) {
             </div>
 
             {sections.map((section) => {
-              const sectionItems = items.filter((i) => i.section === section);
-              if (!sectionItems.length) return null;
+              const secItems = items.filter((i) => i.section === section);
+              if (!secItems.length) return null;
+              const secLocked = secItems.every((i) => !canOpen(i));
+              const isOpen = expanded.has(section);
+              const DivIcon = NAV_ICONS[DIVISION_ICON[section as Division]];
               return (
-                <div key={section} className="mb-4">
-                  <p className="px-2 pb-1.5 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
-                    {section}
-                  </p>
-                  {sectionItems.map((item) => {
-                    const Icon = NAV_ICONS[item.icon];
-                    const active = pathname === item.href || pathname.startsWith(item.href + "/");
-                    return (
-                      <Link
-                        key={`${section}:${item.href}`}
-                        href={item.href}
-                        onClick={() => setOpen(false)}
-                        className={cn(
-                          "flex items-center gap-3 rounded-lg px-2 py-2 text-sm",
-                          active ? "bg-sidebar-accent text-sidebar-accent-foreground" : "text-muted-foreground hover:text-foreground",
-                        )}
-                      >
-                        {Icon && <Icon className="size-4" />}
-                        {item.label}
-                      </Link>
-                    );
-                  })}
+                <div key={section} className="mb-1">
+                  <button
+                    type="button"
+                    onClick={() => toggle(section)}
+                    aria-expanded={isOpen}
+                    className={cn(
+                      "flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-sm font-medium transition-colors",
+                      secLocked ? "text-muted-foreground/70" : "text-foreground hover:bg-muted/50",
+                    )}
+                  >
+                    {DivIcon && <DivIcon className="size-[18px] shrink-0" />}
+                    <span className="flex-1 truncate text-left">{section}</span>
+                    {secLocked && <Lock className="size-3.5 shrink-0 text-muted-foreground/60" />}
+                    <ChevronDown className={cn("size-4 shrink-0 text-muted-foreground transition-transform duration-200", isOpen && "rotate-180")} />
+                  </button>
+
+                  <div className={cn("grid transition-[grid-template-rows] duration-200", isOpen ? "grid-rows-[1fr]" : "grid-rows-[0fr]")}>
+                    <div className="overflow-hidden">
+                      <div className="relative ml-[1.4rem] mt-1 space-y-0.5 border-l border-border pl-3">
+                        {secItems.map((item) => {
+                          const Icon = NAV_ICONS[item.icon];
+                          const locked = !canOpen(item);
+                          const active = !locked && isActive(item.href);
+                          const label = t(`nav.${item.label}`);
+
+                          if (locked) {
+                            return (
+                              <button
+                                key={item.href}
+                                type="button"
+                                onClick={() => {
+                                  setOpen(false);
+                                  showLocked(section);
+                                }}
+                                className="flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-left text-sm text-muted-foreground/55 hover:bg-muted/30"
+                              >
+                                {Icon && <Icon className="size-4 shrink-0" />}
+                                <span className="flex-1 truncate">{label}</span>
+                                <Lock className="size-3 shrink-0" />
+                              </button>
+                            );
+                          }
+
+                          return (
+                            <Link
+                              key={item.href}
+                              href={item.href}
+                              onClick={() => setOpen(false)}
+                              className={cn(
+                                "relative flex items-center gap-2.5 rounded-lg px-2.5 py-2 text-sm transition-colors",
+                                active ? "bg-sidebar-accent font-medium text-sidebar-accent-foreground" : "text-muted-foreground hover:bg-muted/50 hover:text-foreground",
+                              )}
+                            >
+                              {active && <span className="absolute -left-[13px] top-1.5 bottom-1.5 w-0.5 rounded-full bg-primary" />}
+                              {Icon && <Icon className="size-4 shrink-0" />}
+                              <span className="truncate">{label}</span>
+                            </Link>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  </div>
                 </div>
               );
             })}
