@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { getSessionUser } from "@/lib/auth";
 import { can } from "@/lib/rbac";
 import { addOrgDepartment, addOrgEmployee, deleteOrgDepartment, deleteOrgEmployee } from "@/lib/data/org";
+import { addNavDivision, deleteNavDivision } from "@/lib/data/nav";
 
 async function guard() {
   const admin = await getSessionUser();
@@ -13,6 +14,13 @@ async function guard() {
 function refresh() {
   revalidatePath("/admin/departments");
   revalidatePath("/assessment");
+}
+
+/** Custom sidebar divisions touch the whole app shell + user grants. */
+function refreshNav() {
+  revalidatePath("/admin/departments");
+  revalidatePath("/admin/users");
+  revalidatePath("/", "layout");
 }
 
 export async function addDepartmentAction(name: string) {
@@ -49,5 +57,26 @@ export async function deleteEmployeeAction(id: string) {
   if (!(await guard())) return { error: "Not authorized" };
   await deleteOrgEmployee(id);
   refresh();
+  return { ok: true };
+}
+
+// ── Admin-defined sidebar divisions (grup menu) ────────────────────────────
+
+export async function addDivisionAction(input: { name: string; icon: string; menus: string[] }) {
+  if (!(await guard())) return { error: "Not authorized" };
+  const name = input.name.trim();
+  if (name.length < 2) return { error: "Nama divisi minimal 2 karakter." };
+  if (["Operation", "Supervisor", "R&D", "HRD", "Administrator"].includes(name))
+    return { error: "Nama itu dipakai divisi bawaan. Gunakan nama lain." };
+  if (!input.menus.length) return { error: "Pilih minimal satu menu untuk divisi ini." };
+  await addNavDivision({ name, icon: input.icon || "Briefcase", menus: input.menus });
+  refreshNav();
+  return { ok: true };
+}
+
+export async function deleteDivisionAction(id: string) {
+  if (!(await guard())) return { error: "Not authorized" };
+  await deleteNavDivision(id);
+  refreshNav();
   return { ok: true };
 }

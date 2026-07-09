@@ -2,7 +2,8 @@ import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { getSessionUser } from "@/lib/auth";
 import { areaName, listNotifications, visibleOutlets } from "@/lib/data/store";
-import { accessibleMenuKeys, homeDivision, navAll } from "@/lib/nav";
+import { accessibleMenuKeys, homeDivision, navAll, setNavExtras } from "@/lib/nav";
+import { getNavExtra } from "@/lib/data/nav";
 import { I18nProvider } from "@/lib/i18n/provider";
 import type { Lang } from "@/lib/i18n/dict";
 import { Sidebar } from "@/components/layout/sidebar";
@@ -20,6 +21,10 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   if (!user) redirect("/clear-session");
 
   const lang = ((await cookies()).get("gwg_lang")?.value as Lang) || "en";
+
+  // Merge admin-defined sidebar divisions before building the nav. Empty ⇒
+  // identical to the built-in sidebar.
+  setNavExtras(await getNavExtra());
 
   // Everyone sees the FULL sidebar (all divisions, like admin); access is
   // enforced per-item — divisions that aren't the user's own render locked.

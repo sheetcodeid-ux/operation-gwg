@@ -72,7 +72,7 @@ export function MobileNav({
               if (!secItems.length) return null;
               const secLocked = secItems.every((i) => !canOpen(i));
               const isOpen = expanded.has(section);
-              const DivIcon = NAV_ICONS[DIVISION_ICON[section as Division]];
+              const DivIcon = NAV_ICONS[secItems[0]?.sectionIcon ?? DIVISION_ICON[section as Division]];
               return (
                 <div key={section} className="mb-1">
                   <button

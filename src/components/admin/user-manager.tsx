@@ -27,7 +27,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { ROLE_LABEL, type Tone } from "@/lib/constants";
-import { ROLE_DIVISION, accessibleMenuKeys, navAll, type Division } from "@/lib/nav";
+import { ROLE_DIVISION, accessibleMenuKeys, navAll, setNavExtras, type Division, type NavExtra } from "@/lib/nav";
 import type { Role } from "@/lib/types";
 import {
   assignRoleAction,
@@ -95,7 +95,10 @@ const fmtDate = (iso: string) => {
   return Number.isNaN(d.getTime()) ? "—" : d.toLocaleDateString("id-ID", { day: "numeric", month: "short", year: "numeric" });
 };
 
-export function UserManager({ users, outlets }: { users: UserRow[]; outlets: OutletLite[] }) {
+export function UserManager({ users, outlets, navExtra }: { users: UserRow[]; outlets: OutletLite[]; navExtra?: NavExtra }) {
+  // Merge admin-defined sidebar divisions before the grants panel reads navAll().
+  // Empty ⇒ identical to the built-in sidebar.
+  setNavExtras(navExtra ?? { divisions: [] });
   const [creating, setCreating] = React.useState(false);
   const [editUser, setEditUser] = React.useState<UserRow | null>(null);
   const [rolesUser, setRolesUser] = React.useState<UserRow | null>(null);

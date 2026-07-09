@@ -3,6 +3,8 @@ import type { Metadata } from "next";
 import { getSessionUser } from "@/lib/auth";
 import { areaName, getOutlets, getUsers } from "@/lib/data/store";
 import { can } from "@/lib/rbac";
+import { getNavExtra } from "@/lib/data/nav";
+import type { NavExtra } from "@/lib/nav";
 import { UserManager, type OutletLite, type UserRow } from "@/components/admin/user-manager";
 
 export const metadata: Metadata = { title: "User Management" };
@@ -44,9 +46,11 @@ export default async function UsersPage() {
     areaName: areaName(o.areaId),
   }));
 
+  const navExtra: NavExtra = await getNavExtra();
+
   return (
     <div className="w-full">
-      <UserManager users={userRows} outlets={outletLite} />
+      <UserManager users={userRows} outlets={outletLite} navExtra={navExtra} />
     </div>
   );
 }

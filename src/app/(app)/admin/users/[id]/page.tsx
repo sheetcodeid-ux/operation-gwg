@@ -6,7 +6,8 @@ import { getSessionUser } from "@/lib/auth";
 import { areaName, getOutlets, getUser } from "@/lib/data/store";
 import { can } from "@/lib/rbac";
 import { ROLE_LABEL } from "@/lib/constants";
-import { ROLE_DIVISION, accessibleMenuKeys, navAll } from "@/lib/nav";
+import { ROLE_DIVISION, accessibleMenuKeys, navAll, setNavExtras } from "@/lib/nav";
+import { getNavExtra } from "@/lib/data/nav";
 import { Avatar } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { StatTile } from "@/components/ui/stat";
@@ -52,6 +53,7 @@ export default async function UserDetailPage({ params }: { params: Promise<{ id:
   const outlets: OutletLite[] = getOutlets().map((o) => ({ id: o.id, name: o.name, code: o.code, areaId: o.areaId, areaName: areaName(o.areaId) }));
 
   // Menus this user can actually open (own division from role + explicit grants).
+  setNavExtras(await getNavExtra());
   const home = ROLE_DIVISION[u.role];
   const roleAllowed = new Set(accessibleMenuKeys(u.role));
   const grants = new Set(u.grants ?? []);

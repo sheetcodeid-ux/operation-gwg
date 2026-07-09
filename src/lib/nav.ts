@@ -25,6 +25,8 @@ export interface NavItem {
   icon: string; // lucide icon name
   /** Sidebar group — the user's division. Attached when building per-user nav. */
   section: string;
+  /** Lucide icon name for the section header (built-in or admin-defined). */
+  sectionIcon?: string;
 }
 
 /** Static definition of every menu (order = sidebar order within a group). */
@@ -106,6 +108,51 @@ const DIVISION_MENUS: { division: Division; menus: MenuKey[] }[] = [
   { division: "Administrator", menus: ["users", "organization", "audit"] },
 ];
 
+// ── Admin-defined extra divisions (DB-backed) ──────────────────────────────
+// A custom division is a named sidebar group over EXISTING menus. It never
+// alters the built-in divisions, roles, menus or access rules; it only adds new
+// groups. Access to its menus is granted per-user through the existing grants
+// mechanism ("<Division>:<menuKey>"). Empty extras ⇒ behaviour identical to base.
+
+/** One admin-defined sidebar division. */
+export interface NavExtraDivision {
+  id: string;
+  name: string;
+  icon: string; // lucide icon name (see NAV_ICONS)
+  menus: MenuKey[]; // subset of NAV_MENUS keys
+}
+export interface NavExtra {
+  divisions: NavExtraDivision[];
+}
+
+/** Shape a stable division id from its name (matches the data layer). */
+export const navDivisionId = (name: string) =>
+  `div_${name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "")}`;
+
+/** Names reserved by built-in divisions — custom ones can't shadow them. */
+const RESERVED_DIVISIONS = new Set<string>(DIVISION_MENUS.map((d) => d.division));
+
+let EXTRA_DIVISIONS: NavExtraDivision[] = [];
+
+/** Inject DB-added sidebar divisions (called once with page-fetched data). */
+export function setNavExtras(extra: NavExtra) {
+  const valid = new Set<MenuKey>(NAV_MENUS.map((m) => m.key));
+  EXTRA_DIVISIONS = (extra.divisions ?? [])
+    .filter((d) => d.name && !RESERVED_DIVISIONS.has(d.name))
+    .map((d) => ({ ...d, menus: d.menus.filter((k) => valid.has(k)) }));
+}
+
+/** The admin-defined divisions currently merged (for the management UI). */
+export const extraDivisions = (): NavExtraDivision[] => EXTRA_DIVISIONS;
+
+/** Build the NavItems for the admin-defined divisions (custom sidebar groups). */
+function extraNavItems(): NavItem[] {
+  return EXTRA_DIVISIONS.flatMap((div) => {
+    const set = new Set(div.menus);
+    return NAV_MENUS.filter((m) => set.has(m.key)).map((m) => ({ ...m, section: div.name, sectionIcon: div.icon }));
+  });
+}
+
 /** Roles that own Work-Tracker tasks — used as the "division" options when
  *  creating a task (every division that does Work Tracker, incl. R&D & HRD). */
 export const WORK_DIVISIONS: Role[] = [
@@ -126,24 +173,26 @@ export const WORK_DIVISIONS: Role[] = [
  *  their own division's menus. */
 export function navFor(role: Role): NavItem[] {
   if (role === "super_admin") {
-    return DIVISION_MENUS.flatMap(({ division, menus }) => {
+    const base = DIVISION_MENUS.flatMap(({ division, menus }) => {
       const allowed = new Set(menus);
-      return NAV_MENUS.filter((m) => allowed.has(m.key)).map((m) => ({ ...m, section: division }));
+      return NAV_MENUS.filter((m) => allowed.has(m.key)).map((m) => ({ ...m, section: division, sectionIcon: DIVISION_ICON[division] }));
     });
+    return [...base, ...extraNavItems()];
   }
   const allowed = new Set(ROLE_MENUS[role]);
   const division = ROLE_DIVISION[role];
-  return NAV_MENUS.filter((m) => allowed.has(m.key)).map((m) => ({ ...m, section: division }));
+  return NAV_MENUS.filter((m) => allowed.has(m.key)).map((m) => ({ ...m, section: division, sectionIcon: DIVISION_ICON[division] }));
 }
 
 /** Every division + its menus (the full sidebar) — shown to EVERY role.
  *  Access is enforced separately via accessibleMenuKeys(); non-accessible
- *  menus render locked. */
+ *  menus render locked. Admin-defined divisions are appended after the base. */
 export function navAll(): NavItem[] {
-  return DIVISION_MENUS.flatMap(({ division, menus }) => {
+  const base = DIVISION_MENUS.flatMap(({ division, menus }) => {
     const set = new Set(menus);
-    return NAV_MENUS.filter((m) => set.has(m.key)).map((m) => ({ ...m, section: division }));
+    return NAV_MENUS.filter((m) => set.has(m.key)).map((m) => ({ ...m, section: division, sectionIcon: DIVISION_ICON[division] }));
   });
+  return [...base, ...extraNavItems()];
 }
 
 /** The menus a role may actually open (everything else is shown but locked). */
