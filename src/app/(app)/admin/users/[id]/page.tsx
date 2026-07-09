@@ -1,15 +1,18 @@
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import type { Metadata } from "next";
-import { ArrowLeft, Shield, User as UserIcon } from "lucide-react";
+import { ArrowLeft, KeyRound, LayoutGrid, ShieldCheck, User as UserIcon, Briefcase } from "lucide-react";
 import { getSessionUser } from "@/lib/auth";
-import { getUser } from "@/lib/data/store";
+import { areaName, getOutlets, getUser } from "@/lib/data/store";
 import { can } from "@/lib/rbac";
 import { ROLE_LABEL } from "@/lib/constants";
-import { ROLE_DIVISION } from "@/lib/nav";
+import { ROLE_DIVISION, accessibleMenuKeys, navAll } from "@/lib/nav";
 import { Avatar } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
-import { UserDetailTabs } from "@/components/admin/user-detail-tabs";
+import { StatTile } from "@/components/ui/stat";
+import { UserDetailActions } from "@/components/admin/user-detail-actions";
+import { UserDetailTabs, type AccessEntry } from "@/components/admin/user-detail-tabs";
+import type { OutletLite, UserRow } from "@/components/admin/user-manager";
 
 export const metadata: Metadata = { title: "Detail Pengguna" };
 
@@ -27,6 +30,40 @@ export default async function UserDetailPage({ params }: { params: Promise<{ id:
     ? "—"
     : created.toLocaleDateString("id-ID", { day: "numeric", month: "long", year: "numeric" });
 
+  const n = u.outletIds?.length ?? 0;
+  const scope = n === 0 && !u.areaId ? "Head Office" : u.role === "area_coordinator" ? `${n} outlets` : n ? `${n} outlet` : "Head Office";
+
+  const row: UserRow = {
+    id: u.id,
+    name: u.name,
+    email: u.email,
+    role: u.role,
+    areaId: u.areaId ?? null,
+    outletIds: u.outletIds ?? [],
+    active: u.active,
+    scope,
+    createdAt: u.createdAt,
+    phone: u.phone ?? null,
+    country: u.country ?? null,
+    avatarUrl: u.avatarUrl ?? null,
+    grants: u.grants ?? [],
+  };
+
+  const outlets: OutletLite[] = getOutlets().map((o) => ({ id: o.id, name: o.name, code: o.code, areaId: o.areaId, areaName: areaName(o.areaId) }));
+
+  // Menus this user can actually open (own division from role + explicit grants).
+  const home = ROLE_DIVISION[u.role];
+  const roleAllowed = new Set(accessibleMenuKeys(u.role));
+  const grants = new Set(u.grants ?? []);
+  const access: AccessEntry[] = navAll()
+    .map((i) => {
+      const fromRole = i.section === home && roleAllowed.has(i.key);
+      const granted = grants.has(`${i.section}:${i.key}`);
+      if (!fromRole && !granted) return null;
+      return { section: i.section, label: i.label, source: fromRole ? "role" : "grant" } as AccessEntry;
+    })
+    .filter((x): x is AccessEntry => x !== null);
+
   return (
     <div className="w-full max-w-5xl">
       {/* header */}
@@ -39,35 +76,40 @@ export default async function UserDetailPage({ params }: { params: Promise<{ id:
         </Link>
         <div>
           <h1 className="text-2xl font-semibold text-foreground">Detail Pengguna</h1>
-          <p className="text-sm text-muted-foreground">Lihat data pribadi dan peran yang ditetapkan</p>
+          <p className="text-sm text-muted-foreground">Lihat & kelola data, peran, dan hak akses pengguna</p>
         </div>
       </div>
 
-      {/* profile */}
-      <div className="glass rounded-2xl border border-border p-5">
-        <div className="flex flex-wrap items-center justify-between gap-4">
-          <div className="flex items-center gap-4">
-            <Avatar name={u.name} size={64} src={u.avatarUrl} />
-            <div className="min-w-0">
-              <p className="text-xl font-semibold text-foreground">{u.name}</p>
-              <p className="flex items-center gap-1.5 text-sm text-muted-foreground">
-                <UserIcon className="size-3.5" /> @{username}
-              </p>
+      {/* profile banner */}
+      <div className="glass overflow-hidden rounded-2xl border border-border">
+        <div className="h-20 bg-gradient-to-r from-brand-500/25 via-cyan-500/15 to-transparent" />
+        <div className="px-5 pb-5">
+          <div className="-mt-8 flex flex-wrap items-end justify-between gap-4">
+            <div className="flex items-end gap-4">
+              <Avatar name={u.name} size={72} src={u.avatarUrl} className="ring-4 ring-background" />
+              <div className="min-w-0 pb-1">
+                <p className="text-xl font-semibold text-foreground">{u.name}</p>
+                <p className="flex items-center gap-1.5 text-sm text-muted-foreground">
+                  <UserIcon className="size-3.5" /> @{username}
+                </p>
+              </div>
+            </div>
+            <div className="flex flex-col items-end gap-2 pb-1">
+              <Badge tone={u.active ? "success" : "danger"} dot>
+                {u.active ? "Aktif" : "Nonaktif"}
+              </Badge>
+              <UserDetailActions user={row} outlets={outlets} />
             </div>
           </div>
-          <Badge tone={u.active ? "success" : "danger"} dot>
-            {u.active ? "Aktif" : "Nonaktif"}
-          </Badge>
         </div>
+      </div>
 
-        <div className="mt-5 border-t border-border pt-4">
-          <p className="flex items-center gap-1.5 text-xs font-medium uppercase tracking-wide text-muted-foreground">
-            <Shield className="size-3.5" /> Peran Ditetapkan
-          </p>
-          <span className="mt-2 inline-block">
-            <Badge tone="brand">{ROLE_LABEL[u.role]}</Badge>
-          </span>
-        </div>
+      {/* summary tiles */}
+      <div className="mt-4 grid grid-cols-2 gap-3 lg:grid-cols-4">
+        <StatTile icon={Briefcase} label="Divisi" value={home} sub="Divisi asal" />
+        <StatTile icon={ShieldCheck} label="Peran" value={ROLE_LABEL[u.role]} sub="Role akses" />
+        <StatTile icon={LayoutGrid} label="Menu Akses" value={access.length} sub={`${grants.size} tambahan`} />
+        <StatTile icon={KeyRound} label="Cakupan" value={scope} sub="Penugasan" />
       </div>
 
       <UserDetailTabs
@@ -76,10 +118,11 @@ export default async function UserDetailPage({ params }: { params: Promise<{ id:
           name: u.name,
           email: u.email,
           roleLabel: ROLE_LABEL[u.role],
-          division: ROLE_DIVISION[u.role],
+          division: home,
           createdLabel,
           phone: u.phone ?? null,
           country: u.country ?? null,
+          access,
         }}
       />
     </div>

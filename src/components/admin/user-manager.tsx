@@ -332,7 +332,7 @@ function RowMenu({ user, onEdit, onRoles, onAccess }: { user: UserRow; onEdit: (
 }
 
 /** Shared create/edit slide-over. */
-function UserFormPanel({
+export function UserFormPanel({
   mode,
   user,
   outlets,
@@ -500,7 +500,7 @@ function UserFormPanel({
 }
 
 /** Aniq-style "Manage Roles" — pick a single role (radio chips). */
-function AssignRolesPanel({ user, onClose }: { user: UserRow; onClose: () => void }) {
+export function AssignRolesPanel({ user, onClose }: { user: UserRow; onClose: () => void }) {
   const router = useRouter();
   const [pending, start] = React.useTransition();
   const [role, setRole] = React.useState<Role>(user.role);
@@ -568,7 +568,7 @@ function AssignRolesPanel({ user, onClose }: { user: UserRow; onClose: () => voi
 }
 
 /** Grant a user extra menu access outside their own division (per-menu). */
-function AccessPanel({ user, onClose }: { user: UserRow; onClose: () => void }) {
+export function AccessPanel({ user, onClose }: { user: UserRow; onClose: () => void }) {
   const router = useRouter();
   const { t } = useI18n();
   const [pending, start] = React.useTransition();
