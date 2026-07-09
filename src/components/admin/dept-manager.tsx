@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import { useRouter } from "next/navigation";
-import { Building2, Crown, Loader2, Plus, Trash2, UserPlus, Users } from "lucide-react";
+import { Building2, Crown, Loader2, Plus, Search, Trash2, UserPlus } from "lucide-react";
 import { toast } from "sonner";
 import {
   addDepartmentAction,
@@ -10,10 +10,12 @@ import {
   deleteDepartmentAction,
   deleteEmployeeAction,
 } from "@/lib/actions/org-structure";
+import { Avatar } from "@/components/ui/avatar";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Field, Input, Label } from "@/components/ui/input";
+import { Field, Input } from "@/components/ui/input";
 import { Combobox } from "@/components/ui/combobox";
-import { StatTile } from "@/components/ui/stat";
+import { EmptyState } from "@/components/ui/page-header";
 import { cn } from "@/lib/utils";
 
 export interface DeptEmp {
@@ -38,10 +40,7 @@ export function DeptManager({ departments }: { departments: DeptDisplay[] }) {
   const [empName, setEmpName] = React.useState("");
   const [empJabatan, setEmpJabatan] = React.useState("");
   const [empHead, setEmpHead] = React.useState(false);
-
-  const totalEmp = departments.reduce((s, d) => s + d.employees.length, 0);
-  const extraDept = departments.filter((d) => d.source === "extra").length;
-  const extraEmp = departments.reduce((s, d) => s + d.employees.filter((e) => e.source === "extra").length, 0);
+  const [query, setQuery] = React.useState("");
 
   const run = (fn: () => Promise<{ error?: string; ok?: boolean }>, ok: string, after?: () => void) =>
     start(async () => {
@@ -54,40 +53,61 @@ export function DeptManager({ departments }: { departments: DeptDisplay[] }) {
       }
     });
 
-  return (
-    <>
-      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-        <StatTile icon={Building2} label="Departemen/Divisi" value={departments.length} sub={`${extraDept} tambahan`} />
-        <StatTile icon={Users} label="Total Karyawan" value={totalEmp} sub={`${extraEmp} tambahan`} />
-        <StatTile icon={Building2} label="Bawaan" value={departments.length - extraDept} sub="Tak bisa dihapus" />
-        <StatTile icon={UserPlus} label="Tambahan" value={extraEmp + extraDept} sub="Bisa dikelola" />
-      </div>
+  const addDept = () => run(() => addDepartmentAction(deptName), "Departemen ditambahkan", () => setDeptName(""));
 
-      {/* Add forms */}
-      <div className="mt-4 grid gap-4 lg:grid-cols-2">
+  const q = query.trim().toLowerCase();
+  const filtered = React.useMemo(() => {
+    if (!q) return departments;
+    return departments
+      .map((d) => {
+        const nameHit = d.name.toLowerCase().includes(q);
+        const emps = nameHit ? d.employees : d.employees.filter((e) => e.name.toLowerCase().includes(q) || e.jabatan.toLowerCase().includes(q));
+        return nameHit || emps.length ? { ...d, employees: emps } : null;
+      })
+      .filter((d): d is DeptDisplay => d !== null);
+  }, [departments, q]);
+
+  return (
+    <div className="space-y-4">
+      {/* Add panels */}
+      <div className="grid gap-4 lg:grid-cols-2">
         <div className="glass rounded-2xl border border-border p-5">
-          <p className="mb-3 flex items-center gap-2 text-sm font-semibold text-foreground">
-            <Building2 className="size-4 text-muted-foreground" /> Tambah Departemen / Divisi
-          </p>
+          <div className="mb-4 flex items-center gap-2.5">
+            <div className="grid size-9 place-items-center rounded-xl bg-muted ring-1 ring-border">
+              <Building2 className="size-4 text-muted-foreground" />
+            </div>
+            <div>
+              <p className="text-sm font-semibold text-foreground">Tambah Departemen</p>
+              <p className="text-[11px] text-muted-foreground">Grup baru untuk struktur assessment</p>
+            </div>
+          </div>
           <div className="flex items-end gap-2">
-            <Field label="Nama" className="flex-1">
-              <Input value={deptName} onChange={(e) => setDeptName(e.target.value)} placeholder="mis. Marketing" />
+            <Field label="Nama Departemen" className="flex-1">
+              <Input
+                value={deptName}
+                onChange={(e) => setDeptName(e.target.value)}
+                placeholder="mis. Marketing"
+                onKeyDown={(e) => e.key === "Enter" && deptName.trim() && addDept()}
+              />
             </Field>
-            <Button
-              disabled={pending}
-              onClick={() => run(() => addDepartmentAction(deptName), "Departemen ditambahkan", () => setDeptName(""))}
-            >
+            <Button disabled={pending || !deptName.trim()} onClick={addDept}>
               {pending ? <Loader2 className="size-4 animate-spin" /> : <Plus className="size-4" />} Tambah
             </Button>
           </div>
         </div>
 
         <div className="glass rounded-2xl border border-border p-5">
-          <p className="mb-3 flex items-center gap-2 text-sm font-semibold text-foreground">
-            <UserPlus className="size-4 text-muted-foreground" /> Tambah Karyawan
-          </p>
-          <div className="grid gap-2 sm:grid-cols-2">
-            <Field label="Departemen/Divisi">
+          <div className="mb-4 flex items-center gap-2.5">
+            <div className="grid size-9 place-items-center rounded-xl bg-muted ring-1 ring-border">
+              <UserPlus className="size-4 text-muted-foreground" />
+            </div>
+            <div>
+              <p className="text-sm font-semibold text-foreground">Tambah Karyawan</p>
+              <p className="text-[11px] text-muted-foreground">Masukkan orang ke sebuah departemen</p>
+            </div>
+          </div>
+          <div className="grid gap-2.5 sm:grid-cols-2">
+            <Field label="Departemen">
               <Combobox
                 matchTriggerWidth
                 value={empDept}
@@ -104,13 +124,13 @@ export function DeptManager({ departments }: { departments: DeptDisplay[] }) {
               <Input value={empName} onChange={(e) => setEmpName(e.target.value)} placeholder="Nama lengkap" />
             </Field>
           </div>
-          <label className="mt-2 flex items-center gap-2 text-xs text-foreground">
+          <label className="mt-2.5 flex items-center gap-2 text-xs text-foreground">
             <input type="checkbox" checked={empHead} onChange={(e) => setEmpHead(e.target.checked)} className="size-4 accent-primary" />
-            Ini kepala/atasan divisi (dinilai langsung oleh Director)
+            <Crown className="size-3.5 text-amber-500" /> Kepala / atasan divisi (dinilai langsung oleh Director)
           </label>
           <Button
             className="mt-3 w-full"
-            disabled={pending}
+            disabled={pending || !empDept || !empName.trim()}
             onClick={() =>
               run(
                 () => addEmployeeAction({ departmentId: empDept, jabatan: empJabatan, name: empName, isHead: empHead }),
@@ -128,70 +148,89 @@ export function DeptManager({ departments }: { departments: DeptDisplay[] }) {
         </div>
       </div>
 
+      {/* Search */}
+      <div className="relative">
+        <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+        <Input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Cari departemen, jabatan, atau nama karyawan…" className="pl-9" />
+      </div>
+
       {/* Department list */}
-      <div className="mt-4 space-y-3">
-        {departments.map((d) => (
-          <div key={d.id} className="glass rounded-2xl border border-border p-4">
-            <div className="mb-2 flex items-center justify-between gap-2">
-              <div className="flex items-center gap-2">
-                <Building2 className="size-4 text-muted-foreground" />
-                <span className="font-semibold text-foreground">{d.name}</span>
-                <span
-                  className={cn(
-                    "rounded-full px-2 py-0.5 text-[10px] font-medium",
-                    d.source === "extra" ? "bg-primary/10 text-primary" : "bg-muted text-muted-foreground",
-                  )}
-                >
-                  {d.source === "extra" ? "tambahan" : "bawaan"}
-                </span>
-                <span className="text-xs text-muted-foreground">· {d.employees.length} karyawan</span>
+      {filtered.length === 0 ? (
+        <EmptyState icon={Search} title="Tidak ada hasil" description={`Tak ada departemen atau karyawan yang cocok dengan “${query}”.`} />
+      ) : (
+        <div className="space-y-3">
+          {filtered.map((d) => (
+            <div key={d.id} className="glass rounded-2xl border border-border p-4">
+              <div className="mb-3 flex items-center justify-between gap-2">
+                <div className="flex min-w-0 items-center gap-2.5">
+                  <div className="grid size-9 shrink-0 place-items-center rounded-xl bg-muted ring-1 ring-border">
+                    <Building2 className="size-4 text-muted-foreground" />
+                  </div>
+                  <div className="min-w-0">
+                    <div className="flex items-center gap-2">
+                      <span className="truncate font-semibold text-foreground">{d.name}</span>
+                      <Badge tone={d.source === "extra" ? "cyan" : "neutral"}>{d.source === "extra" ? "tambahan" : "bawaan"}</Badge>
+                    </div>
+                    <p className="text-[11px] text-muted-foreground">{d.employees.length} karyawan</p>
+                  </div>
+                </div>
+                {d.source === "extra" && (
+                  <button
+                    type="button"
+                    disabled={pending}
+                    className="grid size-8 shrink-0 place-items-center rounded-lg text-red-600 transition-colors hover:bg-red-500/10 dark:text-red-400"
+                    title="Hapus departemen"
+                    onClick={() => {
+                      if (typeof window !== "undefined" && !window.confirm(`Hapus departemen "${d.name}" beserta karyawannya?`)) return;
+                      run(() => deleteDepartmentAction(d.id), "Departemen dihapus");
+                    }}
+                  >
+                    <Trash2 className="size-4" />
+                  </button>
+                )}
               </div>
-              {d.source === "extra" && (
-                <button
-                  type="button"
-                  disabled={pending}
-                  className="grid size-8 place-items-center rounded-lg text-red-600 hover:bg-red-500/10 dark:text-red-400"
-                  title="Hapus departemen"
-                  onClick={() => {
-                    if (typeof window !== "undefined" && !window.confirm(`Hapus departemen "${d.name}" beserta karyawannya?`)) return;
-                    run(() => deleteDepartmentAction(d.id), "Departemen dihapus");
-                  }}
-                >
-                  <Trash2 className="size-4" />
-                </button>
+              {d.employees.length === 0 ? (
+                <p className="rounded-xl border border-dashed border-border px-3 py-4 text-center text-xs text-muted-foreground">Belum ada karyawan di departemen ini</p>
+              ) : (
+                <div className="grid gap-1.5 sm:grid-cols-2">
+                  {d.employees.map((e) => {
+                    const isHead = e.jabatan.toLowerCase().startsWith("head") || e.jabatan.toLowerCase().includes("kepala");
+                    return (
+                      <div
+                        key={e.id}
+                        className={cn(
+                          "group flex items-center gap-2.5 rounded-xl border px-2.5 py-2 transition-colors",
+                          e.source === "extra" ? "border-primary/25 bg-primary/[0.04]" : "border-border bg-muted/20",
+                        )}
+                      >
+                        <Avatar name={e.name} size={30} />
+                        <div className="min-w-0 flex-1">
+                          <div className="flex items-center gap-1.5">
+                            <span className="truncate text-sm font-medium text-foreground">{e.name}</span>
+                            {isHead && <Crown className="size-3 shrink-0 text-amber-500" />}
+                          </div>
+                          <p className="truncate text-[11px] text-muted-foreground">{e.jabatan}</p>
+                        </div>
+                        {e.source === "extra" && (
+                          <button
+                            type="button"
+                            disabled={pending}
+                            className="shrink-0 rounded-md p-1 text-muted-foreground opacity-0 transition-opacity hover:text-red-500 group-hover:opacity-100"
+                            title="Hapus karyawan"
+                            onClick={() => run(() => deleteEmployeeAction(e.id), "Karyawan dihapus")}
+                          >
+                            <Trash2 className="size-3.5" />
+                          </button>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
               )}
             </div>
-            {d.employees.length > 0 && (
-              <div className="flex flex-wrap gap-2">
-                {d.employees.map((e) => (
-                  <span
-                    key={e.id}
-                    className={cn(
-                      "inline-flex items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-xs",
-                      e.source === "extra" ? "border-primary/30 bg-primary/5" : "border-border bg-muted/30",
-                    )}
-                  >
-                    {e.jabatan.toLowerCase().startsWith("head") && <Crown className="size-3 text-amber-500" />}
-                    <span className="font-medium text-foreground">{e.name}</span>
-                    <span className="text-muted-foreground">· {e.jabatan}</span>
-                    {e.source === "extra" && (
-                      <button
-                        type="button"
-                        disabled={pending}
-                        className="ml-0.5 text-red-500 hover:text-red-600"
-                        title="Hapus karyawan"
-                        onClick={() => run(() => deleteEmployeeAction(e.id), "Karyawan dihapus")}
-                      >
-                        <Trash2 className="size-3" />
-                      </button>
-                    )}
-                  </span>
-                ))}
-              </div>
-            )}
-          </div>
-        ))}
-      </div>
-    </>
+          ))}
+        </div>
+      )}
+    </div>
   );
 }
