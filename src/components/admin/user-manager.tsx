@@ -13,6 +13,7 @@ import {
   Loader2,
   Lock,
   MoreVertical,
+  Network,
   Pencil,
   Plus,
   RotateCcw,
@@ -135,9 +136,17 @@ export function UserManager({ users, outlets }: { users: UserRow[]; outlets: Out
           <h1 className="text-2xl font-semibold text-foreground">User Management</h1>
           <p className="mt-0.5 text-sm text-muted-foreground">Kelola akun pengguna dan hak aksesnya per divisi</p>
         </div>
-        <Button onClick={() => setCreating(true)}>
-          <Plus className="size-4" /> Add User
-        </Button>
+        <div className="flex items-center gap-2">
+          <Link
+            href="/admin/departments"
+            className="inline-flex h-9 items-center gap-2 rounded-lg border border-border px-3 text-sm font-medium text-foreground transition-colors hover:bg-muted"
+          >
+            <Network className="size-4" /> Departemen &amp; Divisi
+          </Link>
+          <Button onClick={() => setCreating(true)}>
+            <Plus className="size-4" /> Add User
+          </Button>
+        </div>
       </div>
 
       {/* Stat cards — same model as the Operation dashboard KPI cards. */}

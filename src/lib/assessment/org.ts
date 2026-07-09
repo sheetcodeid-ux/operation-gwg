@@ -135,8 +135,8 @@ export interface Department {
   positions: Position[];
 }
 
-/** Built, id-stamped hierarchy derived from ORG_RAW. */
-export const DEPARTMENTS: Department[] = ORG_RAW.map((d) => {
+/** Built, id-stamped base hierarchy derived from ORG_RAW (always present). */
+const BASE_DEPARTMENTS: Department[] = ORG_RAW.map((d) => {
   const departmentId = `dep_${slug(d.department)}`;
   return {
     id: departmentId,
@@ -159,16 +159,70 @@ export const DEPARTMENTS: Department[] = ORG_RAW.map((d) => {
   };
 });
 
-// ─── lookup maps (built once) ───
-const DEPT_BY_ID = new Map(DEPARTMENTS.map((d) => [d.id, d]));
-const POS_BY_ID = new Map<string, Position>();
-const EMP_BY_ID = new Map<string, Employee>();
-for (const d of DEPARTMENTS) {
-  for (const p of d.positions) {
-    POS_BY_ID.set(p.id, p);
-    for (const e of p.employees) EMP_BY_ID.set(e.id, e);
+/** DB-added departments + employees, merged on top of the base.
+ *  Shape a department id from a name so it matches base ids where possible. */
+export interface OrgExtra {
+  departments: { id: string; name: string }[];
+  employees: { id: string; departmentId: string; jabatan: string; name: string; isHead: boolean }[];
+}
+
+export const orgDepartmentId = (name: string) => `dep_${slug(name)}`;
+
+function buildMerged(base: Department[], extra: OrgExtra): Department[] {
+  const byId = new Map<string, Department>();
+  for (const d of base) byId.set(d.id, { ...d, positions: d.positions.map((p) => ({ ...p, employees: [...p.employees] })) });
+  for (const ed of extra.departments) {
+    if (!byId.has(ed.id)) byId.set(ed.id, { id: ed.id, name: ed.name, positions: [] });
+  }
+  for (const e of extra.employees) {
+    let dept = byId.get(e.departmentId);
+    if (!dept) {
+      dept = { id: e.departmentId, name: e.departmentId, positions: [] };
+      byId.set(e.departmentId, dept);
+    }
+    const positionId = `${dept.id}__pos_${slug(e.jabatan)}`;
+    let pos = dept.positions.find((p) => p.id === positionId);
+    if (!pos) {
+      pos = { id: positionId, title: e.jabatan, isHead: e.isHead || e.jabatan.toLowerCase().startsWith("head"), departmentId: dept.id, employees: [] };
+      dept.positions.push(pos);
+    }
+    if (!pos.employees.some((x) => x.id === e.id)) {
+      pos.employees.push({ id: e.id, name: e.name, positionId: pos.id, departmentId: dept.id });
+    }
+  }
+  return [...byId.values()];
+}
+
+// ── live merged hierarchy (base + DB extras). Empty extras ⇒ identical to base. ──
+let DEPARTMENTS: Department[] = BASE_DEPARTMENTS;
+let DEPT_BY_ID = new Map<string, Department>();
+let POS_BY_ID = new Map<string, Position>();
+let EMP_BY_ID = new Map<string, Employee>();
+
+function rebuildIndex() {
+  DEPT_BY_ID = new Map(DEPARTMENTS.map((d) => [d.id, d]));
+  POS_BY_ID = new Map();
+  EMP_BY_ID = new Map();
+  for (const d of DEPARTMENTS) {
+    for (const p of d.positions) {
+      POS_BY_ID.set(p.id, p);
+      for (const e of p.employees) EMP_BY_ID.set(e.id, e);
+    }
   }
 }
+rebuildIndex();
+
+/** Inject DB-added org data (called once with data fetched for the page). */
+export function setOrgExtras(extra: OrgExtra) {
+  DEPARTMENTS = extra.departments.length || extra.employees.length ? buildMerged(BASE_DEPARTMENTS, extra) : BASE_DEPARTMENTS;
+  rebuildIndex();
+}
+
+/** The full (merged) department list. */
+export const allDepartments = () => DEPARTMENTS;
+
+/** The pristine built-in (hardcoded) departments — never mutated. */
+export const builtInDepartments = () => BASE_DEPARTMENTS;
 
 export const getDepartment = (id: string | undefined) => (id ? DEPT_BY_ID.get(id) : undefined);
 export const getPosition = (id: string | undefined) => (id ? POS_BY_ID.get(id) : undefined);

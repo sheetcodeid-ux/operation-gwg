@@ -4,6 +4,7 @@ import * as React from "react";
 import { BookOpen, ClipboardList, GaugeCircle, Mic, ScrollText, Sparkles } from "lucide-react";
 import { ASSESSMENT_ROLES, EVALUATOR_TO_ROLE, canSeeTab, type AssessmentRole, type TabKey } from "@/lib/assessment/access";
 import type { EvaluatorIdentity } from "@/lib/assessment/session";
+import { setOrgExtras, type OrgExtra } from "@/lib/assessment/org";
 import { cn } from "@/lib/utils";
 import { Combobox } from "@/components/ui/combobox";
 import { AssessmentProvider, useAssessment } from "./context";
@@ -28,12 +29,19 @@ export function AssessmentWorkspace({
   isAdmin,
   viewerName,
   showSample,
+  orgExtra,
 }: {
   evaluator: EvaluatorIdentity | null;
   isAdmin: boolean;
   viewerName: string;
   showSample: boolean;
+  orgExtra?: OrgExtra;
 }) {
+  // Merge admin-managed departments/employees into the org before the pickers
+  // read it. Called synchronously in the render body (not useMemo, whose result
+  // is discardable) so the module-level org state is refreshed *before* any child
+  // picker reads departmentOptions(). Empty extras ⇒ identical to the built-in.
+  setOrgExtras(orgExtra ?? { departments: [], employees: [] });
   // Viewpoint is derived from the login: a registered evaluator lands on their
   // own view (Atasan/HC/Director); Super Admin defaults to Director but keeps
   // the manual switcher; anyone else who can reach the page falls back to HR.
