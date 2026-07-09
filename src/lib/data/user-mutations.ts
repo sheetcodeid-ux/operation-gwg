@@ -21,6 +21,7 @@ export async function createUser(input: {
   phone?: string | null;
   country?: string | null;
   avatarUrl?: string | null;
+  department?: string | null;
 }): Promise<UserProfile> {
   const user: UserProfile = {
     id: nextId(),
@@ -32,6 +33,7 @@ export async function createUser(input: {
     avatarUrl: input.avatarUrl ?? null,
     phone: input.phone ?? null,
     country: input.country ?? null,
+    department: input.department ?? null,
     active: true,
     createdAt: new Date().toISOString(),
   };
@@ -77,6 +79,7 @@ export function updateUser(
     phone?: string | null;
     country?: string | null;
     avatarUrl?: string | null;
+    department?: string | null;
     grants?: string[];
   },
 ) {
@@ -90,6 +93,7 @@ export function updateUser(
   if (patch.phone !== undefined) user.phone = patch.phone;
   if (patch.country !== undefined) user.country = patch.country;
   if (patch.avatarUrl !== undefined) user.avatarUrl = patch.avatarUrl;
+  if (patch.department !== undefined) user.department = patch.department;
   if (patch.grants !== undefined) user.grants = patch.grants;
   void saveUser(user);
 }

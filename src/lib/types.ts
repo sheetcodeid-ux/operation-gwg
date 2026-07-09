@@ -42,6 +42,9 @@ export interface UserProfile {
   /** Optional contact details (User Management). */
   phone?: string | null;
   country?: string | null;
+  /** Org department/division (Finance, Creative, …) — decoupled from `role`,
+   *  which drives menu access. Sourced from the managed Departemen & Divisi. */
+  department?: string | null;
   /** Extra per-user menu grants beyond the role, as "<Division>:<menuKey>". */
   grants?: string[];
   active: boolean;

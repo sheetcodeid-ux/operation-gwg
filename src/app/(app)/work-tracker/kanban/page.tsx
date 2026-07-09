@@ -25,7 +25,7 @@ export default async function WorkKanbanPage() {
         description="Drag tasks between columns to update their status — synced with the table"
         actions={
           canCreate && sheet.outlets.length > 0 ? (
-            <NewTaskButton outlets={sheet.outlets} coordinators={sheet.coordinators} members={sheet.members} />
+            <NewTaskButton outlets={sheet.outlets} coordinators={sheet.coordinators} members={sheet.members} defaultDivision={sheet.defaultDivision} />
           ) : undefined
         }
       />

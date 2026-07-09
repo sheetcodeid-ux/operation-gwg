@@ -24,7 +24,7 @@ export default async function WorkTrackerPage() {
         description="Operational tasks across your outlets — priority, status and progress"
         actions={
           canCreate && sheet.outlets.length > 0 ? (
-            <NewTaskButton outlets={sheet.outlets} coordinators={sheet.coordinators} members={sheet.members} />
+            <NewTaskButton outlets={sheet.outlets} coordinators={sheet.coordinators} members={sheet.members} defaultDivision={sheet.defaultDivision} />
           ) : undefined
         }
       />

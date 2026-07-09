@@ -1,6 +1,6 @@
 import { areaName, getUsers, listTasks, outletName, userName, visibleOutlets } from "@/lib/data/store";
 import { WORK_DIVISIONS } from "@/lib/nav";
-import type { UserProfile } from "@/lib/types";
+import type { Role, UserProfile } from "@/lib/types";
 import type { WorkRow } from "./work-table";
 
 const DIVISIONS = WORK_DIVISIONS;
@@ -43,9 +43,14 @@ export function buildTaskSheetData(user: UserProfile) {
       .map((u) => ({ id: u.id, name: u.name }));
   }
 
+  // Pre-select the creator's own division when they open the New Task form,
+  // instead of always defaulting to Operation.
+  const defaultDivision: Role = (DIVISIONS as Role[]).includes(user.role) ? user.role : DIVISIONS[0];
+
   return {
     outlets: all.map((o) => ({ id: o.id, name: o.name, coordinatorId: coordByOutlet.get(o.id) ?? null })),
     coordinators: coordinators.map((c) => ({ id: c.id, name: c.name })),
     members,
+    defaultDivision,
   };
 }

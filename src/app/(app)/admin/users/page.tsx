@@ -4,6 +4,8 @@ import { getSessionUser } from "@/lib/auth";
 import { areaName, getOutlets, getUsers } from "@/lib/data/store";
 import { can } from "@/lib/rbac";
 import { getNavExtra } from "@/lib/data/nav";
+import { getOrgExtra } from "@/lib/data/org";
+import { allDepartments, setOrgExtras } from "@/lib/assessment/org";
 import type { NavExtra } from "@/lib/nav";
 import { UserManager, type OutletLite, type UserRow } from "@/components/admin/user-manager";
 
@@ -35,6 +37,7 @@ export default async function UsersPage() {
     phone: u.phone ?? null,
     country: u.country ?? null,
     avatarUrl: u.avatarUrl ?? null,
+    department: u.department ?? null,
     grants: u.grants ?? [],
   }));
 
@@ -48,9 +51,16 @@ export default async function UsersPage() {
 
   const navExtra: NavExtra = await getNavExtra();
 
+  // Selectable org departments/divisions = managed assessment departments
+  // (built-in + admin-added) + custom sidebar divisions.
+  setOrgExtras(await getOrgExtra());
+  const departmentOptions = [
+    ...new Set([...allDepartments().map((d) => d.name), ...navExtra.divisions.map((d) => d.name)]),
+  ];
+
   return (
     <div className="w-full">
-      <UserManager users={userRows} outlets={outletLite} navExtra={navExtra} />
+      <UserManager users={userRows} outlets={outletLite} navExtra={navExtra} departmentOptions={departmentOptions} />
     </div>
   );
 }

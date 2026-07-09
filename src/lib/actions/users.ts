@@ -38,6 +38,7 @@ export interface CreateUserInput {
   phone?: string | null;
   country?: string | null;
   avatarUrl?: string | null;
+  department?: string | null;
 }
 
 export async function createUserAction(input: CreateUserInput) {
@@ -64,6 +65,7 @@ export async function createUserAction(input: CreateUserInput) {
       phone: input.phone ?? null,
       country: input.country ?? null,
       avatarUrl: input.avatarUrl ?? null,
+      department: input.department ?? null,
     });
   } catch (e) {
     return { error: persistMessage(e) };
@@ -82,6 +84,7 @@ export interface UpdateUserInput {
   phone?: string | null;
   country?: string | null;
   avatarUrl?: string | null;
+  department?: string | null;
 }
 
 export async function updateUserAction(input: UpdateUserInput) {
@@ -104,6 +107,7 @@ export async function updateUserAction(input: UpdateUserInput) {
     outletIds,
     phone: input.phone ?? null,
     country: input.country ?? null,
+    department: input.department ?? null,
     ...(input.avatarUrl !== undefined ? { avatarUrl: input.avatarUrl } : {}),
   });
   if (input.password) resetUserPassword(input.id, input.password);

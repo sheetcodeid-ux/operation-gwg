@@ -47,6 +47,7 @@ export default async function UserDetailPage({ params }: { params: Promise<{ id:
     phone: u.phone ?? null,
     country: u.country ?? null,
     avatarUrl: u.avatarUrl ?? null,
+    department: u.department ?? null,
     grants: u.grants ?? [],
   };
 
@@ -55,6 +56,7 @@ export default async function UserDetailPage({ params }: { params: Promise<{ id:
   // Menus this user can actually open (own division from role + explicit grants).
   setNavExtras(await getNavExtra());
   const home = ROLE_DIVISION[u.role];
+  const orgDivision = u.department || home; // display label (org placement)
   const roleAllowed = new Set(accessibleMenuKeys(u.role));
   const grants = new Set(u.grants ?? []);
   const access: AccessEntry[] = navAll()
@@ -108,7 +110,7 @@ export default async function UserDetailPage({ params }: { params: Promise<{ id:
 
       {/* summary tiles */}
       <div className="mt-4 grid grid-cols-2 gap-3 lg:grid-cols-4">
-        <StatTile icon={Briefcase} label="Divisi" value={home} sub="Divisi asal" />
+        <StatTile icon={Briefcase} label="Divisi" value={orgDivision} sub={u.department ? "Departemen" : "Divisi asal"} />
         <StatTile icon={ShieldCheck} label="Peran" value={ROLE_LABEL[u.role]} sub="Role akses" />
         <StatTile icon={LayoutGrid} label="Menu Akses" value={access.length} sub={`${grants.size} tambahan`} />
         <StatTile icon={KeyRound} label="Cakupan" value={scope} sub="Penugasan" />

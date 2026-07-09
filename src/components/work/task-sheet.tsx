@@ -64,11 +64,13 @@ export function TaskSheet({
   task,
   outlets,
   members,
+  defaultDivision,
 }: {
   trigger: React.ReactElement;
   task?: EditableTask;
   outlets: TaskOutlet[];
   members?: DivisionMembers;
+  defaultDivision?: Role;
   /** Accepted for back-compat; no longer used (assignment is by division). */
   coordinators?: { id: string; name: string }[];
 }) {
@@ -80,13 +82,13 @@ export function TaskSheet({
         description={task ? "Update this task." : "Create a task by division — with or without a branch."}
         className="max-w-lg"
       >
-        <TaskForm task={task} outlets={outlets} members={members} />
+        <TaskForm task={task} outlets={outlets} members={members} defaultDivision={defaultDivision} />
       </SheetContent>
     </Sheet>
   );
 }
 
-function TaskForm({ task, outlets, members }: { task?: EditableTask; outlets: TaskOutlet[]; members?: DivisionMembers }) {
+function TaskForm({ task, outlets, members, defaultDivision }: { task?: EditableTask; outlets: TaskOutlet[]; members?: DivisionMembers; defaultDivision?: Role }) {
   const router = useRouter();
   const { setOpen } = useSheetControl();
   const [pending, startTransition] = React.useTransition();
@@ -97,7 +99,7 @@ function TaskForm({ task, outlets, members }: { task?: EditableTask; outlets: Ta
     category: task?.category ?? (WORK_CATEGORIES[0] as string),
     priority: task?.priority ?? ("medium" as Priority),
     status: task?.status ?? ("open" as TaskStatus),
-    division: task?.division ?? ("pos_operation" as Role),
+    division: task?.division ?? defaultDivision ?? ("pos_operation" as Role),
     outletId: task?.outletId ?? outlets[0]?.id ?? "",
     picIds: task?.picIds ?? [],
     startDate: task ? toDateInput(task.start) : defaultDateISO(),

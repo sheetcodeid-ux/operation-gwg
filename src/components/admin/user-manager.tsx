@@ -58,6 +58,7 @@ export interface UserRow {
   phone: string | null;
   country: string | null;
   avatarUrl: string | null;
+  department: string | null;
   grants: string[];
 }
 export interface OutletLite {
@@ -94,7 +95,21 @@ const fmtDate = (iso: string) => {
   return Number.isNaN(d.getTime()) ? "—" : d.toLocaleDateString("id-ID", { day: "numeric", month: "short", year: "numeric" });
 };
 
-export function UserManager({ users, outlets, navExtra }: { users: UserRow[]; outlets: OutletLite[]; navExtra?: NavExtra }) {
+/** A user's org division for display/filter: their assigned department, else the
+ *  division implied by their access role. */
+const userDivision = (u: UserRow) => u.department || ROLE_DIVISION[u.role];
+
+export function UserManager({
+  users,
+  outlets,
+  navExtra,
+  departmentOptions = [],
+}: {
+  users: UserRow[];
+  outlets: OutletLite[];
+  navExtra?: NavExtra;
+  departmentOptions?: string[];
+}) {
   // Merge admin-defined sidebar divisions before the grants panel reads navAll().
   // Empty ⇒ identical to the built-in sidebar.
   setNavExtras(navExtra ?? { divisions: [] });
@@ -120,7 +135,7 @@ export function UserManager({ users, outlets, navExtra }: { users: UserRow[]; ou
         (u) =>
           (!q || u.name.toLowerCase().includes(q.toLowerCase()) || u.email.toLowerCase().includes(q.toLowerCase())) &&
           (!email || u.email.toLowerCase().includes(email.toLowerCase())) &&
-          (!division || ROLE_DIVISION[u.role] === division) &&
+          (!division || userDivision(u) === division) &&
           (!role || u.role === role),
       ),
     [users, q, email, division, role],
@@ -172,7 +187,10 @@ export function UserManager({ users, outlets, navExtra }: { users: UserRow[]; ou
                 setDivision(v);
                 setRole("");
               }}
-              options={[{ value: "", label: "Semua Divisi" }, ...DIVISIONS.map((d) => ({ value: d, label: d }))]}
+              options={[
+                { value: "", label: "Semua Divisi" },
+                ...[...new Set([...departmentOptions, ...DIVISIONS])].map((d) => ({ value: d, label: d })),
+              ]}
               placeholder="Semua Divisi"
             />
           </Field>
@@ -229,7 +247,7 @@ export function UserManager({ users, outlets, navExtra }: { users: UserRow[]; ou
                     </div>
                   </td>
                   <td className="px-4 py-3 text-muted-foreground">{u.email}</td>
-                  <td className="px-4 py-3 text-muted-foreground">{ROLE_DIVISION[u.role]}</td>
+                  <td className="px-4 py-3 text-muted-foreground">{userDivision(u)}</td>
                   <td className="px-4 py-3 whitespace-nowrap tabular-nums text-muted-foreground">{fmtDate(u.createdAt)}</td>
                   <td className="px-4 py-3 text-center">
                     <Badge tone={u.active ? "success" : "danger"} dot>
@@ -261,8 +279,8 @@ export function UserManager({ users, outlets, navExtra }: { users: UserRow[]; ou
         </div>
       </div>
 
-      {creating && <UserFormPanel mode="create" outlets={outlets} onClose={() => setCreating(false)} />}
-      {editUser && <UserFormPanel mode="edit" user={editUser} outlets={outlets} onClose={() => setEditUser(null)} />}
+      {creating && <UserFormPanel mode="create" outlets={outlets} departmentOptions={departmentOptions} onClose={() => setCreating(false)} />}
+      {editUser && <UserFormPanel mode="edit" user={editUser} outlets={outlets} departmentOptions={departmentOptions} onClose={() => setEditUser(null)} />}
       {rolesUser && <AssignRolesPanel user={rolesUser} onClose={() => setRolesUser(null)} />}
       {accessUser && <AccessPanel user={accessUser} onClose={() => setAccessUser(null)} />}
     </>
@@ -339,11 +357,13 @@ export function UserFormPanel({
   mode,
   user,
   outlets,
+  departmentOptions = [],
   onClose,
 }: {
   mode: "create" | "edit";
   user?: UserRow;
   outlets: OutletLite[];
+  departmentOptions?: string[];
   onClose: () => void;
 }) {
   const router = useRouter();
@@ -360,6 +380,7 @@ export function UserFormPanel({
   const [showPwd, setShowPwd] = React.useState(false);
   const [division, setDivision] = React.useState<Division>(initDivision);
   const [role, setRole] = React.useState<Role>(user?.role ?? rolesInDivision(initDivision)[0]);
+  const [department, setDepartment] = React.useState<string>(user?.department ?? "");
   const [selected, setSelected] = React.useState<string[]>(user?.outletIds ?? []);
   const [phone, setPhone] = React.useState(user?.phone ?? "");
   const [country, setCountry] = React.useState(user?.country ?? "");
@@ -390,7 +411,7 @@ export function UserFormPanel({
     if (pwd && pwd.length < 6) return toast.error("Password minimal 6 karakter.");
     if (pwd !== pwd2) return toast.error("Konfirmasi password tidak cocok.");
     start(async () => {
-      const contact = { phone: phone.trim() || null, country: country.trim() || null, avatarUrl: avatar };
+      const contact = { phone: phone.trim() || null, country: country.trim() || null, avatarUrl: avatar, department: department || null };
       const res = isEdit
         ? await updateUserAction({ id: user!.id, name, email, role, password: pwd || undefined, outletIds: selected, ...contact })
         : await createUserAction({ name, email, role, password: pwd, outletIds: selected, ...contact });
@@ -472,8 +493,20 @@ export function UserFormPanel({
           </Field>
         </div>
 
+        <Field label="Departemen / Divisi">
+          <Combobox
+            matchTriggerWidth
+            value={department}
+            onChange={setDepartment}
+            options={[{ value: "", label: "— Ikuti role —" }, ...departmentOptions.map((d) => ({ value: d, label: d }))]}
+            placeholder="Pilih departemen…"
+            searchPlaceholder="Cari departemen…"
+          />
+          <p className="mt-1 text-[11px] text-muted-foreground">Tempat organisasi pengguna (Finance, Creative, …) dari Departemen &amp; Divisi. Kosong = ikut divisi role.</p>
+        </Field>
+
         <div className="grid grid-cols-2 gap-3">
-          <Field label="Divisi *">
+          <Field label="Divisi Akses *">
             <Combobox matchTriggerWidth searchable={false} value={division} onChange={(v) => pickDivision(v as Division)} options={DIVISIONS.map((d) => ({ value: d, label: d }))} />
           </Field>
           <Field label="Jabatan / Role *">
