@@ -210,6 +210,18 @@ export function canSeeMenu(role: Role, key: MenuKey): boolean {
   return ROLE_MENUS[role].includes(key);
 }
 
+/** Whether any per-user grant unlocks a menu, in ANY division. Grants are
+ *  stored as "<Division>:<menuKey>"; we compare only the menu-key segment so a
+ *  grant from a custom division (e.g. "Marketing:reports") also counts. */
+export function hasMenuGrant(grants: string[] | undefined, key: MenuKey): boolean {
+  return (grants ?? []).some((g) => g.slice(g.lastIndexOf(":") + 1) === key);
+}
+
+/** Grant-aware route access: role's own menus OR an explicit grant (admin: all). */
+export function canOpenMenu(role: Role, key: MenuKey, grants?: string[]): boolean {
+  return role === "super_admin" || canSeeMenu(role, key) || hasMenuGrant(grants, key);
+}
+
 /** Where a role should land after login — its first visible menu.
  *  Roles without the executive dashboard (legal, assessor) go to their own
  *  first menu instead of an empty /dashboard. */

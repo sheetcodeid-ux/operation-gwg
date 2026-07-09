@@ -2,7 +2,7 @@ import { Award } from "lucide-react";
 import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 import { getSessionUser } from "@/lib/auth";
-import { canSeeMenu } from "@/lib/nav";
+import { canSeeMenu, hasMenuGrant } from "@/lib/nav";
 import { getMyEvaluator } from "@/lib/actions/assessment";
 import { dbEnabled } from "@/lib/data/db";
 import { getOrgExtra } from "@/lib/data/org";
@@ -13,7 +13,8 @@ export const metadata: Metadata = { title: "Assessment Kenaikan Golongan" };
 
 export default async function AssessmentPage() {
   const user = (await getSessionUser())!;
-  if (!canSeeMenu(user.role, "assessment")) redirect("/dashboard");
+  // Role's own menu OR an explicit per-user grant (incl. custom divisions).
+  if (!canSeeMenu(user.role, "assessment") && !hasMenuGrant(user.grants, "assessment")) redirect("/dashboard");
 
   // Role viewpoint comes from the signed-in identity: registered evaluators land
   // on their own view; only Super Admin keeps the manual switcher.

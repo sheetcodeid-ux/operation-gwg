@@ -5,6 +5,7 @@ import type { Metadata } from "next";
 import { getSessionUser } from "@/lib/auth";
 import { areaReportRows, coordinatorReportRows, outletReportRows } from "@/lib/data/store";
 import { can } from "@/lib/rbac";
+import { hasMenuGrant } from "@/lib/nav";
 import { ROLE_LABEL } from "@/lib/constants";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { PageHeader } from "@/components/ui/page-header";
@@ -16,7 +17,8 @@ export const metadata: Metadata = { title: "Reports" };
 
 export default async function ReportsPage() {
   const user = (await getSessionUser())!;
-  if (!can(user, "view_reports")) redirect("/dashboard");
+  // Role permission OR an explicit per-user grant (incl. custom divisions).
+  if (!can(user, "view_reports") && !hasMenuGrant(user.grants, "reports")) redirect("/dashboard");
 
   const outlets = outletReportRows(user);
   const coordinators = coordinatorReportRows(user);
