@@ -40,15 +40,10 @@ export function Sidebar({
   // Openable within the user's own division, or via an explicit per-user grant.
   const canOpen = (i: NavItem) => isAdmin || (i.section === homeDivision && allowed.has(i.key)) || grantSet.has(`${i.section}:${i.key}`);
 
-  // The user's own division starts expanded; the rest collapsed.
-  const [expanded, setExpanded] = useState<Set<string>>(() => new Set([homeDivision]));
-  const toggle = (s: string) =>
-    setExpanded((e) => {
-      const n = new Set(e);
-      if (n.has(s)) n.delete(s);
-      else n.add(s);
-      return n;
-    });
+  // Single-open accordion: the user's own division starts open; opening another
+  // closes the previous one. null = all collapsed.
+  const [openSection, setOpenSection] = useState<string | null>(homeDivision);
+  const toggle = (s: string) => setOpenSection((cur) => (cur === s ? null : s));
 
   return (
     <aside
@@ -87,7 +82,7 @@ export function Sidebar({
           sections.map((section) => {
             const secItems = items.filter((i) => i.section === section);
             const secLocked = secItems.every((i) => !canOpen(i));
-            const open = expanded.has(section);
+            const open = openSection === section;
             const DivIcon = NAV_ICONS[secItems[0]?.sectionIcon ?? DIVISION_ICON[section as Division]];
             return (
               <div key={section} className="mb-1">

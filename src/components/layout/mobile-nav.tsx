@@ -31,14 +31,10 @@ export function MobileNav({
   const grantSet = useMemo(() => new Set(grants), [grants]);
   const canOpen = (i: NavItem) => isAdmin || (i.section === homeDivision && allowed.has(i.key)) || grantSet.has(`${i.section}:${i.key}`);
   const sections = useMemo(() => [...new Set(items.map((i) => i.section))], [items]);
-  const [expanded, setExpanded] = useState<Set<string>>(() => new Set([homeDivision]));
-  const toggle = (s: string) =>
-    setExpanded((e) => {
-      const n = new Set(e);
-      if (n.has(s)) n.delete(s);
-      else n.add(s);
-      return n;
-    });
+  // Single-open accordion: home division open by default; opening another closes
+  // the previous one. null = all collapsed.
+  const [openSection, setOpenSection] = useState<string | null>(homeDivision);
+  const toggle = (s: string) => setOpenSection((cur) => (cur === s ? null : s));
   const isActive = (href: string) => pathname === href || pathname.startsWith(href + "/");
 
   return (
@@ -71,7 +67,7 @@ export function MobileNav({
               const secItems = items.filter((i) => i.section === section);
               if (!secItems.length) return null;
               const secLocked = secItems.every((i) => !canOpen(i));
-              const isOpen = expanded.has(section);
+              const isOpen = openSection === section;
               const DivIcon = NAV_ICONS[secItems[0]?.sectionIcon ?? DIVISION_ICON[section as Division]];
               return (
                 <div key={section} className="mb-1">
