@@ -97,12 +97,28 @@ export function roundPrice(p: number, step = 500): number {
   return Math.ceil(p / step) * step;
 }
 
-/** Three price suggestions from HPP + GWG margin bands (min 30%). */
-export function priceTiers(hpp: number): PriceTier[] {
+export type Brand = "Nordu" | "Cattu" | "Busari";
+export const BRANDS: Brand[] = ["Nordu", "Cattu", "Busari"];
+
+/** Gross-margin bands per brand (on selling price), from the GWG makalah:
+ *  Nordu 35–40%, Cattu 35–40% (min 35%), Busari 30–35% (min 30%). Bar ≥30%. */
+export const BRAND_MARGIN: Record<Brand, { min: number; idealLow: number; idealHigh: number }> = {
+  Nordu: { min: 0.35, idealLow: 0.35, idealHigh: 0.4 },
+  Cattu: { min: 0.35, idealLow: 0.35, idealHigh: 0.4 },
+  Busari: { min: 0.3, idealLow: 0.3, idealHigh: 0.35 },
+};
+
+/** Three price suggestions from HPP + margin bands. Brand-aware when given a
+ *  brand (uses that brand's band, floor 30%); otherwise generic 30/40/48%. */
+export function priceTiers(hpp: number, brand?: Brand): PriceTier[] {
+  const band = brand ? BRAND_MARGIN[brand] : null;
+  const margins = band
+    ? { kompetitif: Math.max(0.3, band.min), standar: band.idealHigh, premium: Math.min(0.6, band.idealHigh + 0.08) }
+    : { kompetitif: 0.3, standar: 0.4, premium: 0.48 };
   const defs: Omit<PriceTier, "price" | "profit" | "margin">[] = [
-    { key: "kompetitif", label: "Kompetitif", targetMargin: 0.3, note: "Harga sedikit di bawah rata-rata pasar untuk menarik pelanggan." },
-    { key: "standar", label: "Standar", targetMargin: 0.4, note: "Harga rata-rata pasar dengan margin keuntungan yang sehat." },
-    { key: "premium", label: "Premium", targetMargin: 0.48, note: "Harga lebih tinggi, didukung kualitas bahan & branding unggul." },
+    { key: "kompetitif", label: "Kompetitif", targetMargin: margins.kompetitif, note: "Margin minimum brand — untuk menarik pelanggan." },
+    { key: "standar", label: "Standar", targetMargin: margins.standar, note: "Margin ideal brand dengan keuntungan sehat." },
+    { key: "premium", label: "Premium", targetMargin: margins.premium, note: "Harga lebih tinggi, didukung kualitas bahan & branding unggul." },
   ];
   return defs.map((d) => {
     const price = hpp > 0 ? roundPrice(hpp / (1 - d.targetMargin)) : 0;
