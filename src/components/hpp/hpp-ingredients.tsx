@@ -2,28 +2,35 @@
 
 import * as React from "react";
 import { useRouter } from "next/navigation";
-import { AlertTriangle, BellOff, Check, Package, Pencil, Plus, Search, Trash2, Upload, X } from "lucide-react";
+import { AlertTriangle, ArrowDown, ArrowUp, ArrowUpDown, BellOff, Check, Package, Pencil, Plus, Search, TrendingUp, Trash2, Upload, X } from "lucide-react";
 import { toast } from "sonner";
 import { saveIngredientAction, deleteIngredientAction, clearIngredientAlertAction, importIngredientsAction } from "@/lib/actions/hpp-ingredients";
 import type { HppIngredient } from "@/lib/data/hpp-ingredients";
 import { Button } from "@/components/ui/button";
 import { Field, Input, Label } from "@/components/ui/input";
 import { StatTile } from "@/components/ui/stat";
+import { Combobox } from "@/components/ui/combobox";
 import { Reveal } from "@/components/hpp/motion";
 import { cn } from "@/lib/utils";
 
 const rp = (n: number) => "Rp " + Math.round(n || 0).toLocaleString("id-ID");
 const num = (v: string) => Number(String(v).replace(/[^\d.-]/g, "")) || 0;
 const UNITS = ["g", "kg", "ml", "L", "pcs"];
+const perUnit = (i: { buyPrice: number; buyQty: number }) => (i.buyQty ? i.buyPrice / i.buyQty : i.buyPrice);
 
 export type MenuUse = { id: string; name: string; ingredientIds: string[] };
 
 type Form = { id?: string; name: string; buyPrice: string; buyQty: string; buyUnit: string; region: string };
 const empty: Form = { name: "", buyPrice: "", buyQty: "1", buyUnit: "kg", region: "" };
 
+type SortKey = "name" | "region" | "price" | "usage";
+
 export function HppIngredients({ ingredients, menus, canEdit }: { ingredients: HppIngredient[]; menus: MenuUse[]; canEdit: boolean }) {
   const router = useRouter();
   const [q, setQ] = React.useState("");
+  const [region, setRegion] = React.useState("all");
+  const [sortKey, setSortKey] = React.useState<SortKey>("name");
+  const [sortDir, setSortDir] = React.useState<"asc" | "desc">("asc");
   const [form, setForm] = React.useState<Form>(empty);
   const [saving, setSaving] = React.useState(false);
   const [showImport, setShowImport] = React.useState(false);
@@ -36,13 +43,41 @@ export function HppIngredients({ ingredients, menus, canEdit }: { ingredients: H
     return m;
   }, [menus]);
 
+  const regions = React.useMemo(() => [...new Set(ingredients.map((i) => i.region).filter((x): x is string => !!x))].sort(), [ingredients]);
   const alerts = ingredients.filter((i) => i.alert);
   const affectedMenus = new Set(alerts.flatMap((i) => usage.get(i.id) ?? [])).size;
 
   const rows = React.useMemo(() => {
     const needle = q.trim().toLowerCase();
-    return ingredients.filter((i) => !needle || i.name.toLowerCase().includes(needle) || (i.region ?? "").toLowerCase().includes(needle));
-  }, [ingredients, q]);
+    const filtered = ingredients.filter((i) => {
+      if (region !== "all" && (i.region ?? "") !== region) return false;
+      if (needle && !i.name.toLowerCase().includes(needle) && !(i.region ?? "").toLowerCase().includes(needle)) return false;
+      return true;
+    });
+    const dir = sortDir === "asc" ? 1 : -1;
+    const val = (i: HppIngredient): number | string => {
+      switch (sortKey) {
+        case "name": return i.name.toLowerCase();
+        case "region": return (i.region ?? "").toLowerCase();
+        case "price": return perUnit(i);
+        case "usage": return (usage.get(i.id) ?? []).length;
+      }
+    };
+    return filtered.sort((a, b) => {
+      const va = val(a);
+      const vb = val(b);
+      if (typeof va === "number" && typeof vb === "number") return (va - vb) * dir;
+      return String(va).localeCompare(String(vb)) * dir;
+    });
+  }, [ingredients, q, region, sortKey, sortDir, usage]);
+
+  const toggleSort = (k: SortKey) => {
+    if (sortKey === k) setSortDir((d) => (d === "asc" ? "desc" : "asc"));
+    else {
+      setSortKey(k);
+      setSortDir(k === "price" || k === "usage" ? "desc" : "asc");
+    }
+  };
 
   async function save() {
     if (!form.name.trim()) return toast.error("Isi nama bahan dulu.");
@@ -72,8 +107,8 @@ export function HppIngredients({ ingredients, menus, canEdit }: { ingredients: H
       .map((l) => l.trim())
       .filter(Boolean)
       .map((line) => {
-        const [name, price, qty, unit, region] = line.split(/[\t,;]/).map((s) => s.trim());
-        return { name: name ?? "", buyPrice: num(price ?? "0"), buyQty: num(qty ?? "1") || 1, buyUnit: UNITS.includes(unit) ? unit : "kg", region: region || null };
+        const [name, price, qty, unit, reg] = line.split(/[\t,;]/).map((s) => s.trim());
+        return { name: name ?? "", buyPrice: num(price ?? "0"), buyQty: num(qty ?? "1") || 1, buyUnit: UNITS.includes(unit) ? unit : "kg", region: reg || null };
       })
       .filter((r) => r.name);
   }, [importText]);
@@ -102,13 +137,15 @@ export function HppIngredients({ ingredients, menus, canEdit }: { ingredients: H
     }
   }
 
+  const hasFilter = q || region !== "all";
+
   return (
     <div className="space-y-4">
       <Reveal className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         <StatTile icon={Package} label="Total Bahan" value={String(ingredients.length)} />
         <StatTile icon={AlertTriangle} label="Naik >5%" value={String(alerts.length)} sub={alerts.length ? "perlu update HPP" : "stabil"} />
         <StatTile icon={AlertTriangle} label="Menu Terdampak" value={String(affectedMenus)} />
-        <StatTile icon={Package} label="Wilayah" value={String(new Set(ingredients.map((i) => i.region).filter(Boolean)).size)} />
+        <StatTile icon={Package} label="Wilayah" value={String(regions.length)} />
       </Reveal>
 
       {alerts.length > 0 && (
@@ -156,6 +193,7 @@ export function HppIngredients({ ingredients, menus, canEdit }: { ingredients: H
               </div>
             </div>
           )}
+
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
             <Field label="Nama Bahan" className="sm:col-span-2 lg:col-span-1">
               <Input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="mis. Susu UHT" />
@@ -163,17 +201,15 @@ export function HppIngredients({ ingredients, menus, canEdit }: { ingredients: H
             <div>
               <Label>Harga Beli / Jumlah</Label>
               <div className="mt-1.5 flex gap-1.5">
-                <Input value={form.buyPrice} onChange={(e) => setForm({ ...form, buyPrice: e.target.value })} placeholder="Rp" inputMode="numeric" className="flex-1" />
-                <Input value={form.buyQty} onChange={(e) => setForm({ ...form, buyQty: e.target.value })} placeholder="1" inputMode="numeric" className="w-14" />
+                <Input value={form.buyPrice} onChange={(e) => setForm({ ...form, buyPrice: e.target.value })} placeholder="Rp" inputMode="numeric" className="min-w-0 flex-1" />
+                <Input value={form.buyQty} onChange={(e) => setForm({ ...form, buyQty: e.target.value })} placeholder="1" inputMode="numeric" className="w-12 shrink-0" />
                 <select
                   value={form.buyUnit}
                   onChange={(e) => setForm({ ...form, buyUnit: e.target.value })}
-                  className="h-9 w-20 shrink-0 rounded-lg border border-input bg-background/40 px-2 text-sm text-foreground focus:border-ring focus:outline-none focus:ring-2 focus:ring-ring/25 dark:bg-input/30"
+                  className="h-9 w-16 shrink-0 rounded-lg border border-input bg-background/40 px-2 text-sm text-foreground focus:border-ring focus:outline-none focus:ring-2 focus:ring-ring/25 dark:bg-input/30"
                 >
                   {UNITS.map((u) => (
-                    <option key={u} value={u}>
-                      {u}
-                    </option>
+                    <option key={u} value={u}>{u}</option>
                   ))}
                 </select>
               </div>
@@ -195,63 +231,74 @@ export function HppIngredients({ ingredients, menus, canEdit }: { ingredients: H
         </div>
       )}
 
-      {/* Search */}
-      <div className="relative">
-        <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
-        <input
-          value={q}
-          onChange={(e) => setQ(e.target.value)}
-          placeholder="Cari bahan atau wilayah…"
-          className="h-10 w-full rounded-xl border border-input bg-background/40 pl-9 pr-3 text-sm text-foreground focus:border-ring focus:outline-none focus:ring-2 focus:ring-ring/25 dark:bg-input/30"
-        />
+      {/* Toolbar */}
+      <div className="glass space-y-2 rounded-2xl border border-border p-3">
+        <div className="relative">
+          <Search className="pointer-events-none absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+          <input
+            value={q}
+            onChange={(e) => setQ(e.target.value)}
+            placeholder="Cari bahan atau wilayah…"
+            className="h-9 w-full rounded-lg border border-input bg-background/40 pl-8 pr-3 text-sm text-foreground focus:border-ring focus:outline-none focus:ring-2 focus:ring-ring/25 dark:bg-input/30"
+          />
+        </div>
+        <div className="scroll-fade-x -mx-1 flex items-center gap-2 overflow-x-auto px-1 pb-0.5">
+          <div className="w-44 shrink-0">
+            <Combobox portal searchable={regions.length > 6} matchTriggerWidth value={region} onChange={setRegion} options={[{ value: "all", label: "Semua Wilayah" }, ...regions.map((r) => ({ value: r, label: r }))]} />
+          </div>
+          <span className="shrink-0 whitespace-nowrap px-1 text-[11px] text-muted-foreground">{rows.length} bahan{hasFilter ? " (terfilter)" : ""}</span>
+          {hasFilter && (
+            <button type="button" onClick={() => { setQ(""); setRegion("all"); }} className="shrink-0 whitespace-nowrap rounded-lg border border-border px-2.5 py-1.5 text-xs font-medium text-muted-foreground hover:text-foreground">
+              Reset
+            </button>
+          )}
+        </div>
       </div>
 
       {/* Table */}
       <div className="glass overflow-hidden rounded-2xl border border-border">
         <div className="overflow-x-auto" data-lenis-prevent>
-          <table className="w-full min-w-[680px] text-sm">
+          <table className="w-full min-w-[720px] text-sm">
             <thead className="border-b border-border bg-muted/40 text-left text-[11px] uppercase tracking-wide text-muted-foreground">
               <tr>
-                <th className="px-4 py-2.5 font-medium">Bahan</th>
-                <th className="px-3 py-2.5 font-medium">Wilayah</th>
-                <th className="px-3 py-2.5 text-right font-medium">Harga Beli</th>
-                <th className="px-3 py-2.5 font-medium">Menu Pakai</th>
+                <Th label="Bahan" k="name" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} className="px-4" />
+                <Th label="Wilayah" k="region" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} />
+                <Th label="Harga Beli" k="price" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} align="right" />
+                <Th label="Menu Pakai" k="usage" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} />
                 <th className="px-4 py-2.5 text-right font-medium">Aksi</th>
               </tr>
             </thead>
             <tbody>
               {rows.length === 0 && (
                 <tr>
-                  <td colSpan={5} className="px-4 py-10 text-center text-sm text-muted-foreground">
-                    Belum ada bahan baku. Tambahkan lewat form di atas.
+                  <td colSpan={5} className="px-4 py-12 text-center text-sm text-muted-foreground">
+                    {hasFilter ? "Tidak ada bahan yang cocok." : "Belum ada bahan baku. Tambahkan lewat form di atas."}
                   </td>
                 </tr>
               )}
               {rows.map((i) => {
                 const used = usage.get(i.id) ?? [];
                 return (
-                  <tr key={i.id} className="border-b border-border/60 last:border-0 hover:bg-muted/20">
+                  <tr key={i.id} className="border-b border-border/60 last:border-0 hover:bg-muted/25">
                     <td className="px-4 py-2.5">
                       <div className="flex items-center gap-2">
                         <p className="font-medium text-foreground">{i.name}</p>
                         {i.alert && (
                           <span className="inline-flex items-center gap-1 rounded-full bg-amber-500/12 px-1.5 py-0.5 text-[10px] font-semibold text-amber-600 dark:text-amber-400">
-                            <AlertTriangle className="size-3" /> naik &gt;5%
+                            <TrendingUp className="size-3" /> naik &gt;5%
                           </span>
                         )}
                       </div>
-                      {i.prevPrice != null && i.alert && <p className="text-[10px] text-muted-foreground">dari {rp(i.prevPrice)}</p>}
+                      {i.alert && i.prevPrice != null && <p className="text-[10px] text-muted-foreground">dari {rp(i.prevPrice)}</p>}
                     </td>
                     <td className="px-3 py-2.5 text-muted-foreground">{i.region || "—"}</td>
-                    <td className="px-3 py-2.5 text-right tabular-nums text-foreground">
-                      {rp(i.buyPrice)}
-                      <span className="text-[11px] text-muted-foreground"> / {i.buyQty} {i.buyUnit}</span>
+                    <td className="px-3 py-2.5 text-right">
+                      <p className="tabular-nums text-foreground">{rp(i.buyPrice)} <span className="text-[11px] text-muted-foreground">/ {i.buyQty} {i.buyUnit}</span></p>
+                      <p className="text-[10px] text-muted-foreground">≈ {rp(perUnit(i))}/{i.buyUnit}</p>
                     </td>
                     <td className="px-3 py-2.5">
                       {used.length > 0 ? (
-                        <span className="rounded-full bg-muted px-2 py-0.5 text-[11px] font-medium text-muted-foreground" title={used.join(", ")}>
-                          {used.length} menu
-                        </span>
+                        <span className="rounded-full bg-muted px-2 py-0.5 text-[11px] font-medium text-muted-foreground" title={used.join(", ")}>{used.length} menu</span>
                       ) : (
                         <span className="text-[11px] text-muted-foreground">—</span>
                       )}
@@ -259,24 +306,12 @@ export function HppIngredients({ ingredients, menus, canEdit }: { ingredients: H
                     <td className="px-4 py-2.5">
                       <div className="flex items-center justify-end gap-1">
                         {canEdit && i.alert && (
-                          <button
-                            type="button"
-                            onClick={() => act(() => clearIngredientAlertAction(i.id), "Tanda selesai")}
-                            title="Tandai sudah update"
-                            className="grid size-8 place-items-center rounded-lg text-muted-foreground transition-colors hover:bg-emerald-500/10 hover:text-emerald-500"
-                          >
+                          <button type="button" onClick={() => act(() => clearIngredientAlertAction(i.id), "Tanda selesai")} title="Tandai sudah update" className="grid size-8 place-items-center rounded-lg text-muted-foreground transition-colors hover:bg-emerald-500/10 hover:text-emerald-500">
                             <BellOff className="size-4" />
                           </button>
                         )}
                         {canEdit && (
-                          <button
-                            type="button"
-                            onClick={() =>
-                              setForm({ id: i.id, name: i.name, buyPrice: String(i.buyPrice), buyQty: String(i.buyQty), buyUnit: i.buyUnit, region: i.region ?? "" })
-                            }
-                            title="Edit"
-                            className="grid size-8 place-items-center rounded-lg text-muted-foreground transition-colors hover:bg-blue-500/10 hover:text-blue-500"
-                          >
+                          <button type="button" onClick={() => setForm({ id: i.id, name: i.name, buyPrice: String(i.buyPrice), buyQty: String(i.buyQty), buyUnit: i.buyUnit, region: i.region ?? "" })} title="Edit" className="grid size-8 place-items-center rounded-lg text-muted-foreground transition-colors hover:bg-blue-500/10 hover:text-blue-500">
                             <Pencil className="size-4" />
                           </button>
                         )}
@@ -303,5 +338,33 @@ export function HppIngredients({ ingredients, menus, canEdit }: { ingredients: H
         </div>
       </div>
     </div>
+  );
+}
+
+function Th({
+  label,
+  k,
+  sortKey,
+  sortDir,
+  onSort,
+  align = "left",
+  className,
+}: {
+  label: string;
+  k: SortKey;
+  sortKey: SortKey;
+  sortDir: "asc" | "desc";
+  onSort: (k: SortKey) => void;
+  align?: "left" | "right";
+  className?: string;
+}) {
+  const activeSort = sortKey === k;
+  return (
+    <th className={cn("py-2.5 font-medium", align === "right" ? "px-3 text-right" : "px-3", className)}>
+      <button type="button" onClick={() => onSort(k)} className={cn("inline-flex items-center gap-1 uppercase transition-colors hover:text-foreground", activeSort && "text-foreground", align === "right" && "flex-row-reverse")}>
+        {label}
+        {activeSort ? (sortDir === "asc" ? <ArrowUp className="size-3" /> : <ArrowDown className="size-3" />) : <ArrowUpDown className="size-3 opacity-40" />}
+      </button>
+    </th>
   );
 }
