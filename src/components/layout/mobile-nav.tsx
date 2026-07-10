@@ -1,6 +1,7 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { createPortal } from "react-dom";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { ChevronDown, Lock, Menu, Sparkles, X } from "lucide-react";
@@ -37,18 +38,14 @@ export function MobileNav({
   const toggle = (s: string) => setOpenSection((cur) => (cur === s ? null : s));
   const isActive = (href: string) => pathname === href || pathname.startsWith(href + "/");
 
-  return (
-    <>
-      <button
-        onClick={() => setOpen(true)}
-        className="grid size-9 place-items-center rounded-lg text-foreground/80 hover:bg-muted/50 lg:hidden"
-        aria-label="Open navigation"
-      >
-        <Menu className="size-5" />
-      </button>
+  // The drawer is portalled to <body>: rendered here it would sit inside the
+  // topbar's backdrop-blur, whose backdrop-filter traps position:fixed to the
+  // 64px header — so the overlay only covered a top strip. Portalling escapes it.
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => setMounted(true), []);
 
-      {open && (
-        <div className="fixed inset-0 z-50 lg:hidden">
+  const drawer = (
+    <div className="fixed inset-0 z-[60] lg:hidden">
           <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={() => setOpen(false)} />
           <div className="surface-solid absolute left-0 top-0 h-full w-72 overflow-y-auto p-4">
             <div className="mb-4 flex items-center justify-between">
@@ -137,7 +134,18 @@ export function MobileNav({
             })}
           </div>
         </div>
-      )}
+  );
+
+  return (
+    <>
+      <button
+        onClick={() => setOpen(true)}
+        className="grid size-9 place-items-center rounded-lg text-foreground/80 hover:bg-muted/50 lg:hidden"
+        aria-label="Open navigation"
+      >
+        <Menu className="size-5" />
+      </button>
+      {mounted && open && createPortal(drawer, document.body)}
     </>
   );
 }
