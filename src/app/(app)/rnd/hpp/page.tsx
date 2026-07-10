@@ -4,8 +4,9 @@ import { redirect } from "next/navigation";
 import { getSessionUser } from "@/lib/auth";
 import { canOpenMenu } from "@/lib/nav";
 import { listHpp } from "@/lib/data/hpp";
+import { listIngredients } from "@/lib/data/hpp-ingredients";
 import { PageHeader } from "@/components/ui/page-header";
-import { HppCalculator } from "@/components/hpp/hpp-calculator";
+import { HppCalculator, type IngredientOption } from "@/components/hpp/hpp-calculator";
 
 export const metadata: Metadata = { title: "Kalkulator HPP" };
 
@@ -19,7 +20,14 @@ export default async function HppPage() {
     user.department === "Food & Beverage";
   if (!canEdit) redirect("/dashboard");
 
-  const history = await listHpp();
+  const [history, rawIngredients] = await Promise.all([listHpp(), listIngredients()]);
+  const ingredients: IngredientOption[] = rawIngredients.map((i) => ({
+    id: i.id,
+    name: i.name,
+    buyPrice: i.buyPrice,
+    buyQty: i.buyQty,
+    buyUnit: i.buyUnit,
+  }));
 
   return (
     <div className="w-full">
@@ -28,7 +36,7 @@ export default async function HppPage() {
         title="Kalkulator HPP"
         description="Harga Pokok Produksi R&D — hitung biaya, saran harga jual, BEP & proyeksi laba"
       />
-      <HppCalculator initialHistory={history} canEdit={canEdit} />
+      <HppCalculator initialHistory={history} canEdit={canEdit} ingredients={ingredients} />
     </div>
   );
 }

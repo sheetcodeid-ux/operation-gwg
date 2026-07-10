@@ -114,7 +114,17 @@ function NumInput({ value, onChange, className, placeholder }: { value: number; 
   );
 }
 
-export function HppCalculator({ initialHistory, canEdit }: { initialHistory: HppRecord[]; canEdit: boolean }) {
+export type IngredientOption = { id: string; name: string; buyPrice: number; buyQty: number; buyUnit: string };
+
+export function HppCalculator({
+  initialHistory,
+  canEdit,
+  ingredients = [],
+}: {
+  initialHistory: HppRecord[];
+  canEdit: boolean;
+  ingredients?: IngredientOption[];
+}) {
   const router = useRouter();
   const [saving, startSave] = React.useTransition();
 
@@ -171,6 +181,11 @@ export function HppCalculator({ initialHistory, canEdit }: { initialHistory: Hpp
   );
 
   const setVar = (id: string, patch: Partial<VariableItem>) => setVariables((v) => v.map((x) => (x.id === id ? { ...x, ...patch } : x)));
+  const pickIngredient = (vid: string, ingId: string) => {
+    const ing = ingredients.find((x) => x.id === ingId);
+    if (!ing) return setVar(vid, { ingredientId: undefined });
+    setVar(vid, { ingredientId: ing.id, name: ing.name, buyPrice: ing.buyPrice, buyQty: ing.buyQty, buyUnit: ing.buyUnit });
+  };
   const setFix = (id: string, patch: Partial<FixedItem>) => setFixed((f) => f.map((x) => (x.id === id ? { ...x, ...patch } : x)));
 
   function onImage(e: React.ChangeEvent<HTMLInputElement>) {
@@ -363,8 +378,24 @@ export function HppCalculator({ initialHistory, canEdit }: { initialHistory: Hpp
           <div className="space-y-2">
             {variables.map((v) => (
               <div key={v.id} className="rounded-xl border border-border bg-muted/20 p-2.5">
+                {ingredients.length > 0 && (
+                  <div className="mb-2">
+                    <select
+                      value={v.ingredientId ?? ""}
+                      onChange={(e) => pickIngredient(v.id, e.target.value)}
+                      className="h-8 w-full rounded-lg border border-dashed border-input bg-background/40 px-2 text-[11px] text-muted-foreground focus:border-ring focus:outline-none focus:ring-2 focus:ring-ring/25 dark:bg-input/30"
+                    >
+                      <option value="">— Pilih dari Master Bahan Baku (opsional) —</option>
+                      {ingredients.map((ing) => (
+                        <option key={ing.id} value={ing.id}>
+                          {ing.name} · {rp(ing.buyPrice)}/{ing.buyQty}{ing.buyUnit}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                )}
                 <div className="flex items-center gap-2">
-                  <Input value={v.name} onChange={(e) => setVar(v.id, { name: e.target.value })} placeholder="Nama bahan (mis. Kopi Espresso)" className="flex-1" />
+                  <Input value={v.name} onChange={(e) => setVar(v.id, { name: e.target.value, ingredientId: undefined })} placeholder="Nama bahan (mis. Kopi Espresso)" className="flex-1" />
                   <button
                     type="button"
                     onClick={() => setVariables((x) => x.filter((i) => i.id !== v.id))}
