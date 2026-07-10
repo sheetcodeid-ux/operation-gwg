@@ -284,7 +284,7 @@ export function HppCalculator({
     setName(r.name);
     setImage(r.imageUrl);
     setCategory(r.category === "makanan" ? "makanan" : "minuman");
-    setBrand((["Nordu", "Cattu", "Busari"].includes(r.brand) ? r.brand : "Nordu") as Brand);
+    setBrand((BRANDS as string[]).includes(r.brand) ? (r.brand as Brand) : "Nordu");
     setMode(r.mode === "per_resep" ? "per_resep" : "per_pcs");
     setVariables(r.variables);
     setFixed(r.fixed);
@@ -325,31 +325,42 @@ export function HppCalculator({
             </div>
             <div>
               <Label>Brand</Label>
-              <Segmented
-                className="mt-1.5"
-                value={brand}
-                onChange={(v) => setBrand(v as Brand)}
-                items={BRANDS.map((b) => ({ value: b, label: b }))}
-              />
+              <div className="mt-1.5">
+                <Combobox
+                  portal
+                  matchTriggerWidth
+                  searchable={false}
+                  value={brand}
+                  onChange={(v) => setBrand(v as Brand)}
+                  options={BRANDS.map((b) => ({ value: b, label: b }))}
+                />
+              </div>
             </div>
           </div>
 
           <div className="mt-3">
-            <Label>Gambar Produk (opsional)</Label>
+            <Label>Foto Produk (opsional)</Label>
             <div className="mt-1.5 flex items-center gap-3">
               {image ? (
                 // eslint-disable-next-line @next/next/no-img-element
-                <img src={image} alt="produk" className="size-16 rounded-xl object-cover ring-1 ring-border" />
+                <img src={image} alt="produk" className="size-16 shrink-0 rounded-xl object-cover ring-1 ring-border" />
               ) : (
-                <div className="grid size-16 place-items-center rounded-xl bg-muted text-muted-foreground ring-1 ring-border">
+                <div className="grid size-16 shrink-0 place-items-center rounded-xl bg-muted text-muted-foreground ring-1 ring-border">
                   <ImagePlus className="size-6" />
                 </div>
               )}
-              <div>
-                <input ref={fileRef} type="file" accept="image/*" onChange={onImage} className="hidden" />
-                <Button type="button" variant="outline" size="sm" onClick={() => fileRef.current?.click()}>
-                  <ImagePlus className="size-4" /> Pilih Gambar
-                </Button>
+              <input ref={fileRef} type="file" accept="image/*" onChange={onImage} className="hidden" />
+              <div className="min-w-0 flex-1">
+                <div className="flex flex-wrap gap-2">
+                  <Button type="button" variant="outline" size="sm" onClick={() => fileRef.current?.click()}>
+                    <ImagePlus className="size-4" /> {image ? "Ganti Foto" : "Tambah Foto"}
+                  </Button>
+                  {image && (
+                    <Button type="button" variant="outline" size="sm" onClick={() => setImage(null)} className="text-red-500 hover:text-red-600">
+                      <Trash2 className="size-4" /> Hapus
+                    </Button>
+                  )}
+                </div>
                 <p className="mt-1 text-[11px] text-muted-foreground">Untuk database & verifikasi tim F&B.</p>
               </div>
             </div>

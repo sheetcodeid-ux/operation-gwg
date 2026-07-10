@@ -99,15 +99,17 @@ export function roundPrice(p: number, step = 500): number {
   return Math.ceil(p / step) * step;
 }
 
-export type Brand = "Nordu" | "Cattu" | "Busari";
-export const BRANDS: Brand[] = ["Nordu", "Cattu", "Busari"];
+export type Brand = "Nordu" | "Cattu" | "Busari" | "Lesung Pipi";
+export const BRANDS: Brand[] = ["Nordu", "Cattu", "Busari", "Lesung Pipi"];
 
 /** Gross-margin bands per brand (on selling price), from the GWG makalah:
- *  Nordu 35–40%, Cattu 35–40% (min 35%), Busari 30–35% (min 30%). Bar ≥30%. */
+ *  Nordu 35–40%, Cattu 35–40% (min 35%), Busari 30–35% (min 30%). Bar ≥30%.
+ *  Lesung Pipi follows the group default (min 30%, ideal 35–40%). */
 export const BRAND_MARGIN: Record<Brand, { min: number; idealLow: number; idealHigh: number }> = {
   Nordu: { min: 0.35, idealLow: 0.35, idealHigh: 0.4 },
   Cattu: { min: 0.35, idealLow: 0.35, idealHigh: 0.4 },
   Busari: { min: 0.3, idealLow: 0.3, idealHigh: 0.35 },
+  "Lesung Pipi": { min: 0.3, idealLow: 0.35, idealHigh: 0.4 },
 };
 
 /** Three price suggestions from HPP + margin bands. Brand-aware when given a

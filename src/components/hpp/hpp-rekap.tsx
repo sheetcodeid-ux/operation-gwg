@@ -4,7 +4,7 @@ import * as React from "react";
 import { useRouter } from "next/navigation";
 import { AlertTriangle, CheckCircle2, ClipboardCheck, Coffee, Layers, Search, Send, Trash2, UtensilsCrossed, XCircle } from "lucide-react";
 import { toast } from "sonner";
-import { foodCostPct, foodCostStatus } from "@/lib/hpp/calc";
+import { BRANDS, foodCostPct, foodCostStatus } from "@/lib/hpp/calc";
 import { HPP_STATUS_META, STATUS_PILL } from "@/lib/hpp/status";
 import { deleteHppAction, reviewHppAction, submitHppAction } from "@/lib/actions/hpp";
 import type { HppRecord } from "@/lib/data/hpp";
@@ -102,7 +102,7 @@ export function HppRekap({ records, canEdit, canVerify }: { records: HppRecord[]
         </div>
         <div className="scroll-fade-x -mx-1 flex items-center gap-2 overflow-x-auto px-1 pb-0.5">
           <div className="w-36 shrink-0">
-            <Combobox portal searchable={false} matchTriggerWidth value={brand} onChange={setBrand} options={[{ value: "all", label: "Semua Brand" }, { value: "Nordu", label: "Nordu" }, { value: "Cattu", label: "Cattu" }, { value: "Busari", label: "Busari" }]} />
+            <Combobox portal searchable={false} matchTriggerWidth value={brand} onChange={setBrand} options={[{ value: "all", label: "Semua Brand" }, ...BRANDS.map((b) => ({ value: b, label: b }))]} />
           </div>
           <div className="w-40 shrink-0">
             <Combobox portal searchable={false} matchTriggerWidth value={category} onChange={setCategory} options={[{ value: "all", label: "Semua Kategori" }, { value: "makanan", label: "Makanan" }, { value: "minuman", label: "Minuman" }]} />

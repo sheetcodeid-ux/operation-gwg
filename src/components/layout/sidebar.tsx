@@ -38,7 +38,17 @@ export function Sidebar({
   const allowed = useMemo(() => new Set(allowedKeys), [allowedKeys]);
   const grantSet = useMemo(() => new Set(grants), [grants]);
   const sections = useMemo(() => [...new Set(items.map((i) => i.section))], [items]);
-  const isActive = (href: string) => pathname === href || pathname.startsWith(href + "/");
+  // Only the most specific matching route is active, so a parent (e.g. /rnd/hpp)
+  // isn't highlighted alongside its own sub-routes (/rnd/hpp/rekap, /rnd/hpp/bahan).
+  const activeHref = useMemo(() => {
+    let best = "";
+    for (const it of items) {
+      const h = it.href;
+      if ((pathname === h || pathname.startsWith(h + "/")) && h.length > best.length) best = h;
+    }
+    return best;
+  }, [items, pathname]);
+  const isActive = (href: string) => href === activeHref;
   // Openable within the user's own division, their assigned department, or via
   // an explicit per-user grant.
   const canOpen = (i: NavItem) =>
