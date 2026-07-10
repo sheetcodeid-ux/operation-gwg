@@ -71,6 +71,22 @@ export async function reviewHppAction(id: string, decision: "verified" | "reject
   if (!rec) return { error: "Data tidak ditemukan." };
   if (decision === "rejected" && !note.trim()) return { error: "Beri catatan alasan penolakan." };
   await setHppStatus(id, decision, user.id, note.trim() || null);
+  // Notify the R&D author directly (topbar bell) of the review outcome.
+  if (rec.createdBy) {
+    await saveNotification({
+      id: `ntf_${randomUUID()}`,
+      kind: "hpp_review",
+      title: decision === "verified" ? "Menu HPP diverifikasi" : "Menu HPP ditolak",
+      message:
+        decision === "verified"
+          ? `${rec.name} (${rec.brand}) telah diverifikasi tim F&B.`
+          : `${rec.name} (${rec.brand}) ditolak tim F&B: ${note.trim()}`,
+      targetUser: rec.createdBy,
+      severity: decision === "verified" ? "info" : "warning",
+      read: false,
+      createdAt: new Date().toISOString(),
+    });
+  }
   revalidateHpp();
   return { ok: true };
 }

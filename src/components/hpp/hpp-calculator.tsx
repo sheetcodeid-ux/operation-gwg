@@ -257,7 +257,8 @@ export function HppCalculator({
       ["  Biaya Variabel Efektif / Produk", Math.round(variableCost)],
       ["  Alokasi Biaya Tetap / Produk", Math.round(fixedAlloc)],
       ["  BTKL / Bulan (dapur/bar)", Math.round(btkl)],
-      ["Harga Jual Pilihan", Math.round(price)],
+      ["Harga Jual Pilihan (tanpa pajak)", Math.round(price)],
+      ["Harga After-tax (referensi, PBJT 10%)", Math.round(price * 1.1)],
       ["Food cost %", `${(fc * 100).toFixed(1)}% (${foodCostStatus(fc, category).label})`],
       ["Margin Kontribusi / unit", Math.round(proj.contribution)],
       ["BEP (unit)", proj.bepUnit],
@@ -629,6 +630,27 @@ export function HppCalculator({
                 </button>
               );
             })}
+          </div>
+
+          {/* PBJT reference — pajak di LUAR HPP & harga jual; hanya referensi struk.
+              Untuk bar/minuman, harga after-tax tidak ditampilkan ke tamu (makalah). */}
+          <div className="mt-3 rounded-xl border border-dashed border-border bg-muted/20 p-3 text-[11px]">
+            <div className="flex items-center justify-between">
+              <span className="text-muted-foreground">Harga jual (tanpa pajak)</span>
+              <span className="font-semibold tabular-nums text-foreground">{rp(price)}</span>
+            </div>
+            <div className="mt-1 flex items-center justify-between">
+              <span className="text-muted-foreground">+ PBJT 10% (referensi struk)</span>
+              <span className="tabular-nums text-muted-foreground">{rp(price * 0.1)}</span>
+            </div>
+            <div className="mt-1 flex items-center justify-between border-t border-border/60 pt-1.5">
+              <span className="text-muted-foreground">Harga after-tax (referensi)</span>
+              <span className="font-semibold tabular-nums text-foreground">{rp(price * 1.1)}</span>
+            </div>
+            <p className="mt-2 text-[10px] text-muted-foreground">
+              PBJT 10% di luar HPP &amp; margin (kebijakan HPP).{" "}
+              {category === "minuman" ? "Untuk bar/minuman, harga after-tax tidak ditampilkan ke tamu." : "Hanya sebagai referensi pada struk."}
+            </p>
           </div>
         </div>
 
