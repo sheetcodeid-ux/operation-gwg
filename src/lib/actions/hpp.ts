@@ -3,22 +3,9 @@
 import { randomUUID } from "node:crypto";
 import { revalidatePath } from "next/cache";
 import { getSessionUser } from "@/lib/auth";
-import { canOpenMenu } from "@/lib/nav";
 import { deleteHpp, getHpp, saveHpp, setHppStatus, type HppDraft } from "@/lib/data/hpp";
 import { saveNotification } from "@/lib/data/persist";
-import type { UserProfile } from "@/lib/types";
-
-/** Anyone who can open the HPP menu (R&D roles, admin, grants, R&D dept members). */
-function allowed(user: UserProfile | null): user is UserProfile {
-  if (!user) return false;
-  return canOpenMenu(user.role, "hpp", user.grants) || user.department === "R&D" || user.department === "Food & Beverage";
-}
-
-/** Who may verify/reject a calculation: tim F&B or Super Admin (per makalah). */
-function canVerify(user: UserProfile | null): user is UserProfile {
-  if (!user) return false;
-  return user.role === "super_admin" || user.department === "Food & Beverage";
-}
+import { canUseHpp as allowed, canVerifyHpp as canVerify } from "@/lib/hpp/access";
 
 function revalidateHpp() {
   revalidatePath("/rnd/hpp");

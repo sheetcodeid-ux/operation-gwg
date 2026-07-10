@@ -3,6 +3,7 @@ import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 import { getSessionUser } from "@/lib/auth";
 import { canOpenMenu } from "@/lib/nav";
+import { canVerifyHpp } from "@/lib/hpp/access";
 import { listHpp } from "@/lib/data/hpp";
 import { PageHeader } from "@/components/ui/page-header";
 import { HppRekap } from "@/components/hpp/hpp-rekap";
@@ -17,8 +18,8 @@ export default async function HppRekapPage() {
     user.department === "Food & Beverage";
   if (!canEdit) redirect("/dashboard");
 
-  // Only tim F&B (or Super Admin) may verify/reject.
-  const canVerify = user.role === "super_admin" || user.department === "Food & Beverage";
+  // Only the R&D Head (or Super Admin) may verify/reject.
+  const canVerify = canVerifyHpp(user);
   const records = await listHpp();
 
   return (

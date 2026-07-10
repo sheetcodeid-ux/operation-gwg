@@ -6,6 +6,7 @@ import { canOpenMenu } from "@/lib/nav";
 import { listHpp } from "@/lib/data/hpp";
 import { listIngredients } from "@/lib/data/hpp-ingredients";
 import { foodCostPct } from "@/lib/hpp/calc";
+import { canVerifyHpp } from "@/lib/hpp/access";
 import { PageHeader } from "@/components/ui/page-header";
 import { HppCalculator, type IngredientOption } from "@/components/hpp/hpp-calculator";
 import { HppGuide, type GuideStats } from "@/components/hpp/hpp-guide";
@@ -33,7 +34,7 @@ export default async function HppPage({ searchParams }: { searchParams: Promise<
   }));
 
   // Live stats for the data-driven guide (auto-adjusts as the team works).
-  const canVerify = user.role === "super_admin" || user.department === "Food & Beverage";
+  const canVerify = canVerifyHpp(user);
   const guideStats: GuideStats = {
     ingredients: rawIngredients.length,
     ingredientAlerts: rawIngredients.filter((i) => i.alert).length,
