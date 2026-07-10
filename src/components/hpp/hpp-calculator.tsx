@@ -422,20 +422,20 @@ export function HppCalculator({
                     <Trash2 className="size-4" />
                   </button>
                 </div>
-                <div className="mt-2 grid grid-cols-[1fr_auto] gap-2 sm:grid-cols-2">
-                  <div>
+                <div className="mt-2 grid grid-cols-1 gap-2 sm:grid-cols-2">
+                  <div className="min-w-0">
                     <p className="mb-1 text-[10px] font-medium uppercase tracking-wide text-muted-foreground">Takaran / produk</p>
                     <div className="flex gap-1.5">
-                      <NumInput value={v.takaran} onChange={(n) => setVar(v.id, { takaran: n })} className="w-full" placeholder="0" />
+                      <NumInput value={v.takaran} onChange={(n) => setVar(v.id, { takaran: n })} className="w-full min-w-0" placeholder="0" />
                       <div className="w-20 shrink-0">
                         <UnitSelect value={v.takaranUnit} onChange={(u) => setVar(v.id, { takaranUnit: u })} />
                       </div>
                     </div>
                   </div>
-                  <div>
+                  <div className="min-w-0">
                     <p className="mb-1 text-[10px] font-medium uppercase tracking-wide text-muted-foreground">Harga beli / jml</p>
                     <div className="flex gap-1.5">
-                      <NumInput value={v.buyPrice} onChange={(n) => setVar(v.id, { buyPrice: n })} className="w-full" placeholder="Rp" />
+                      <NumInput value={v.buyPrice} onChange={(n) => setVar(v.id, { buyPrice: n })} className="w-full min-w-0" placeholder="Rp" />
                       <NumInput value={v.buyQty} onChange={(n) => setVar(v.id, { buyQty: n })} className="w-14 shrink-0" placeholder="1" />
                       <div className="w-20 shrink-0">
                         <UnitSelect value={v.buyUnit} onChange={(u) => setVar(v.id, { buyUnit: u })} />
