@@ -1,12 +1,12 @@
 "use client";
 
 import * as React from "react";
-import { CalendarRange, ConciergeBell, ListChecks, MessageSquareWarning, Search, SprayCan, type LucideIcon } from "lucide-react";
+import { CalendarRange, Calculator, ConciergeBell, ListChecks, MessageSquareWarning, Search, SprayCan, type LucideIcon } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { EmptyState } from "@/components/ui/page-header";
 import { cn, fromNow } from "@/lib/utils";
 
-export type AuditType = "hospitality" | "hygiene" | "task" | "complaint" | "event";
+export type AuditType = "hospitality" | "hygiene" | "task" | "complaint" | "event" | "hpp";
 
 export interface AuditItem {
   at: string;
@@ -21,6 +21,7 @@ const META: Record<AuditType, { label: string; icon: LucideIcon; color: string; 
   task: { label: "Tasks", icon: ListChecks, color: "bg-blue-500/10 text-blue-600 ring-blue-500/25 dark:text-blue-400", dot: "bg-blue-500" },
   complaint: { label: "Complaints", icon: MessageSquareWarning, color: "bg-amber-500/10 text-amber-600 ring-amber-500/25 dark:text-amber-400", dot: "bg-amber-500" },
   event: { label: "Events", icon: CalendarRange, color: "bg-rose-500/10 text-rose-600 ring-rose-500/25 dark:text-rose-400", dot: "bg-rose-500" },
+  hpp: { label: "HPP", icon: Calculator, color: "bg-cyan-500/10 text-cyan-600 ring-cyan-500/25 dark:text-cyan-400", dot: "bg-cyan-500" },
 };
 const TYPES = Object.keys(META) as AuditType[];
 

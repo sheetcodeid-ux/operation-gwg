@@ -2,9 +2,9 @@
 
 import * as React from "react";
 import { useRouter } from "next/navigation";
-import { AlertTriangle, BellOff, Check, Package, Pencil, Plus, Search, Trash2, X } from "lucide-react";
+import { AlertTriangle, BellOff, Check, Package, Pencil, Plus, Search, Trash2, Upload, X } from "lucide-react";
 import { toast } from "sonner";
-import { saveIngredientAction, deleteIngredientAction, clearIngredientAlertAction } from "@/lib/actions/hpp-ingredients";
+import { saveIngredientAction, deleteIngredientAction, clearIngredientAlertAction, importIngredientsAction } from "@/lib/actions/hpp-ingredients";
 import type { HppIngredient } from "@/lib/data/hpp-ingredients";
 import { Button } from "@/components/ui/button";
 import { Field, Input, Label } from "@/components/ui/input";
@@ -25,6 +25,9 @@ export function HppIngredients({ ingredients, menus, canEdit }: { ingredients: H
   const [q, setQ] = React.useState("");
   const [form, setForm] = React.useState<Form>(empty);
   const [saving, setSaving] = React.useState(false);
+  const [showImport, setShowImport] = React.useState(false);
+  const [importText, setImportText] = React.useState("");
+  const [importing, setImporting] = React.useState(false);
 
   const usage = React.useMemo(() => {
     const m = new Map<string, string[]>();
@@ -62,6 +65,33 @@ export function HppIngredients({ ingredients, menus, canEdit }: { ingredients: H
     }
   }
 
+  const parsedImport = React.useMemo(() => {
+    return importText
+      .split(/\r?\n/)
+      .map((l) => l.trim())
+      .filter(Boolean)
+      .map((line) => {
+        const [name, price, qty, unit, region] = line.split(/[\t,;]/).map((s) => s.trim());
+        return { name: name ?? "", buyPrice: num(price ?? "0"), buyQty: num(qty ?? "1") || 1, buyUnit: UNITS.includes(unit) ? unit : "kg", region: region || null };
+      })
+      .filter((r) => r.name);
+  }, [importText]);
+
+  async function runImport() {
+    if (parsedImport.length === 0) return toast.error("Belum ada baris valid untuk diimpor.");
+    setImporting(true);
+    try {
+      const res = await importIngredientsAction(parsedImport);
+      if (res?.error) return toast.error(res.error);
+      toast.success(`${res.count} bahan diimpor`);
+      setImportText("");
+      setShowImport(false);
+      router.refresh();
+    } finally {
+      setImporting(false);
+    }
+  }
+
   async function act(fn: () => Promise<{ error?: string }>, ok: string) {
     const res = await fn();
     if (res?.error) toast.error(res.error);
@@ -92,9 +122,39 @@ export function HppIngredients({ ingredients, menus, canEdit }: { ingredients: H
       {/* Add / edit form */}
       {canEdit && (
         <div className="glass rounded-2xl border border-border p-5">
-          <p className="mb-3 flex items-center gap-2 text-sm font-semibold text-foreground">
-            <Plus className="size-4 text-muted-foreground" /> {form.id ? "Edit Bahan Baku" : "Tambah Bahan Baku"}
-          </p>
+          <div className="mb-3 flex items-center justify-between gap-2">
+            <p className="flex items-center gap-2 text-sm font-semibold text-foreground">
+              <Plus className="size-4 text-muted-foreground" /> {form.id ? "Edit Bahan Baku" : "Tambah Bahan Baku"}
+            </p>
+            <button
+              type="button"
+              onClick={() => setShowImport((v) => !v)}
+              className="inline-flex items-center gap-1.5 rounded-lg border border-border px-2.5 py-1.5 text-xs font-medium text-muted-foreground transition-colors hover:text-foreground"
+            >
+              <Upload className="size-3.5" /> Import massal
+            </button>
+          </div>
+
+          {showImport && (
+            <div className="mb-3 rounded-xl border border-dashed border-border bg-muted/20 p-3">
+              <p className="text-[11px] text-muted-foreground">
+                Tempel satu bahan per baris, pisahkan dengan koma: <b>Nama, Harga, Qty, Satuan, Wilayah</b>. Contoh: <code className="rounded bg-muted px-1">Susu UHT, 18000, 1, L, Kalimantan</code>
+              </p>
+              <textarea
+                value={importText}
+                onChange={(e) => setImportText(e.target.value)}
+                rows={5}
+                placeholder={"Susu UHT, 18000, 1, L, Kalimantan\nKopi Arabica, 150000, 1, kg, Umum"}
+                className="mt-2 w-full rounded-lg border border-input bg-background/40 p-2.5 text-sm text-foreground focus:border-ring focus:outline-none focus:ring-2 focus:ring-ring/25 dark:bg-input/30"
+              />
+              <div className="mt-2 flex items-center justify-between">
+                <span className="text-[11px] text-muted-foreground">{parsedImport.length} baris terbaca</span>
+                <Button onClick={runImport} disabled={importing || parsedImport.length === 0} size="sm">
+                  <Upload className="size-4" /> Import {parsedImport.length || ""}
+                </Button>
+              </div>
+            </div>
+          )}
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
             <Field label="Nama Bahan" className="sm:col-span-2 lg:col-span-1">
               <Input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="mis. Susu UHT" />

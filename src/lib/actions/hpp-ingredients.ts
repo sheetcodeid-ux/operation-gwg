@@ -26,6 +26,17 @@ export async function saveIngredientAction(input: IngredientDraft) {
   return { ok: true, id: rec.id, priceJump };
 }
 
+/** Bulk-import ingredients (each row creates a new master entry). */
+export async function importIngredientsAction(rows: IngredientDraft[]) {
+  const user = await getSessionUser();
+  if (!allowed(user)) return { error: "Not authorized" };
+  const valid = rows.filter((r) => r.name.trim());
+  if (valid.length === 0) return { error: "Tidak ada baris valid untuk diimpor." };
+  for (const r of valid) await upsertIngredient({ ...r, id: undefined, name: r.name.trim() }, user.id);
+  revalidate();
+  return { ok: true, count: valid.length };
+}
+
 export async function deleteIngredientAction(id: string) {
   const user = await getSessionUser();
   if (!allowed(user)) return { error: "Not authorized" };
