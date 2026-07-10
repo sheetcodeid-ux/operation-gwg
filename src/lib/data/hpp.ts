@@ -12,6 +12,9 @@ export interface HppRecord {
   mode: string; // per_pcs | per_resep
   allocMode: AllocMode;
   targetSales: number;
+  wastePct: number; // waste normal ≤5% (GWG policy)
+  btkl: number; // Biaya Tenaga Kerja Langsung / bulan (dapur/bar)
+  useClass: boolean; // Sistem Class Nordu (+Rp5.000 / class)
   variables: VariableItem[];
   fixed: FixedItem[];
   chosenPrice: number;
@@ -58,6 +61,9 @@ const toRow = (r: HppRecord) => ({
   mode: r.mode,
   alloc_mode: r.allocMode,
   target_sales: r.targetSales,
+  waste_pct: r.wastePct,
+  btkl: r.btkl,
+  use_class: r.useClass,
   variables: r.variables,
   fixed: r.fixed,
   chosen_price: r.chosenPrice,
@@ -76,6 +82,9 @@ interface HppRow {
   mode: string;
   alloc_mode: AllocMode;
   target_sales: number;
+  waste_pct: number | string | null;
+  btkl: number | string | null;
+  use_class: boolean | null;
   variables: VariableItem[];
   fixed: FixedItem[];
   chosen_price: number | string;
@@ -94,6 +103,9 @@ const fromRow = (r: HppRow): HppRecord => ({
   mode: r.mode,
   allocMode: r.alloc_mode,
   targetSales: r.target_sales,
+  wastePct: r.waste_pct == null ? 5 : Number(r.waste_pct),
+  btkl: r.btkl == null ? 0 : Number(r.btkl),
+  useClass: r.use_class ?? false,
   variables: r.variables ?? [],
   fixed: r.fixed ?? [],
   chosenPrice: Number(r.chosen_price),

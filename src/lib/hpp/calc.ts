@@ -184,5 +184,25 @@ export function foodCostPct(variableCost: number, price: number): number {
   return price > 0 ? variableCost / price : 0;
 }
 
+export type CostTone = "good" | "warn" | "bad";
+
+/** Food-cost health per GWG policy: makanan ideal ≤35%, minuman ideal 25–35%,
+ *  >70% = over cost (wajib evaluasi). Returns a tone + short label. */
+export function foodCostStatus(fc: number, category: "makanan" | "minuman"): { tone: CostTone; label: string } {
+  const pct = fc * 100;
+  if (pct <= 0) return { tone: "warn", label: "Isi harga & bahan" };
+  if (pct > 70) return { tone: "bad", label: "Over cost (>70%)" };
+  const idealMin = category === "minuman" ? 25 : 0;
+  const idealMax = 35;
+  if (pct < idealMin) return { tone: "good", label: "Sangat efisien" };
+  if (pct <= idealMax) return { tone: "good", label: "Ideal" };
+  return { tone: "warn", label: "Perlu evaluasi (>35%)" };
+}
+
+/** Waste cost = wastePct of raw-material (variable) cost — GWG waste normal ≤5%. */
+export function wasteCost(variableCost: number, wastePct: number): number {
+  return round2(variableCost * (Math.max(0, wastePct) / 100));
+}
+
 const round2 = (n: number) => Math.round((n + Number.EPSILON) * 100) / 100;
 const round1 = (n: number) => Math.round((n + Number.EPSILON) * 10) / 10;
