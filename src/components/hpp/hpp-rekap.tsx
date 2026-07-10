@@ -201,6 +201,36 @@ export function HppRekap({ records, canEdit, canVerify }: { records: HppRecord[]
     downloadCsv("database-hpp", toCsv(headers, data));
   }
 
+  // Remember view/sort/tab preferences across visits.
+  const prefsLoaded = React.useRef(false);
+  React.useEffect(() => {
+    try {
+      const p = JSON.parse(localStorage.getItem("hpp_rekap_prefs") || "{}");
+      if (p.view === "table" || p.view === "cards") setView(p.view);
+      if (p.sortKey) setSortKey(p.sortKey);
+      if (p.sortDir === "asc" || p.sortDir === "desc") setSortDir(p.sortDir);
+      if (p.statusTab) setStatusTab(p.statusTab);
+    } catch {}
+    prefsLoaded.current = true;
+  }, []);
+  React.useEffect(() => {
+    if (!prefsLoaded.current) return;
+    try {
+      localStorage.setItem("hpp_rekap_prefs", JSON.stringify({ view, sortKey, sortDir, statusTab }));
+    } catch {}
+  }, [view, sortKey, sortDir, statusTab]);
+
+  // Live sync: refresh the shared queue when the tab regains focus/visibility.
+  React.useEffect(() => {
+    const refresh = () => { if (!document.hidden) router.refresh(); };
+    window.addEventListener("focus", refresh);
+    document.addEventListener("visibilitychange", refresh);
+    return () => {
+      window.removeEventListener("focus", refresh);
+      document.removeEventListener("visibilitychange", refresh);
+    };
+  }, [router]);
+
   const hasFilter = q || brand !== "all" || category !== "all" || overOnly;
 
   return (
@@ -229,6 +259,13 @@ export function HppRekap({ records, canEdit, canVerify }: { records: HppRecord[]
             <ViewBtn active={view === "table"} onClick={() => setView("table")} title="Tabel"><List className="size-4" /></ViewBtn>
             <ViewBtn active={view === "cards"} onClick={() => setView("cards")} title="Kartu"><LayoutGrid className="size-4" /></ViewBtn>
           </div>
+          <span title="Sinkron otomatis saat tab aktif" className="hidden shrink-0 items-center gap-1.5 rounded-lg border border-border px-2.5 text-[11px] font-medium text-muted-foreground sm:inline-flex sm:h-9">
+            <span className="relative flex size-1.5">
+              <span className="absolute inline-flex size-full animate-ping rounded-full bg-emerald-500 opacity-75" />
+              <span className="relative inline-flex size-1.5 rounded-full bg-emerald-500" />
+            </span>
+            Live
+          </span>
           <button type="button" onClick={exportCsv} title="Export CSV" className="grid h-9 w-9 shrink-0 place-items-center rounded-lg border border-border text-muted-foreground transition-colors hover:text-foreground">
             <Download className="size-4" />
           </button>
