@@ -114,20 +114,13 @@ export function DataTable<TData, TValue>({
 
   return (
     <div className="space-y-3">
-      {/* One row: search + filters stay side-by-side and SHRINK together as the
-          screen narrows (each filter uses min-w-0 shrink basis-*). */}
+      {/* One row: filters swipe horizontally on small screens (instead of
+          crushing to tiny chevrons); search + columns collapse to icons. */}
       <div className="flex items-center gap-2">
-        <div className="relative min-w-24 max-w-xs flex-1">
-          <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
-          <Input
-            value={globalFilter}
-            onChange={(e) => setGlobalFilter(e.target.value)}
-            placeholder={searchPlaceholder}
-            className="pl-9"
-          />
-        </div>
-        <div className="ml-auto flex min-w-0 items-center gap-2">
-          {toolbar}
+        {/* Filters — horizontal scroller (portal dropdowns escape the clip). */}
+        {toolbar && <div className="no-scrollbar -mx-0.5 flex min-w-0 flex-1 items-center gap-2 overflow-x-auto px-0.5 py-0.5">{toolbar}</div>}
+
+        <div className={cn("flex shrink-0 items-center gap-2", !toolbar && "ml-auto")}>
           <button
             onClick={exportCsv}
             title="Export to Excel (CSV)"
@@ -135,16 +128,55 @@ export function DataTable<TData, TValue>({
           >
             <Download className="size-4" />
           </button>
+          {/* Search: inline field on ≥sm; a search icon that opens a field on mobile. */}
+          <div className="relative hidden w-52 sm:block lg:w-60">
+            <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+            <Input value={globalFilter} onChange={(e) => setGlobalFilter(e.target.value)} placeholder={searchPlaceholder} className="pl-9" />
+          </div>
+          <div className="sm:hidden">
+            <Popover
+              portal
+              align="end"
+              contentClassName="w-[min(20rem,calc(100vw-1.5rem))]"
+              trigger={({ toggle, open }) => (
+                <button
+                  onClick={toggle}
+                  aria-expanded={open}
+                  title="Cari"
+                  className={cn(
+                    "grid size-9 shrink-0 place-items-center rounded-lg border border-border transition-colors hover:bg-muted hover:text-foreground",
+                    globalFilter ? "border-primary text-primary" : "text-muted-foreground",
+                  )}
+                >
+                  <Search className="size-4" />
+                </button>
+              )}
+            >
+              <div className="relative p-1">
+                <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+                {/* eslint-disable-next-line jsx-a11y/no-autofocus */}
+                <input
+                  autoFocus
+                  value={globalFilter}
+                  onChange={(e) => setGlobalFilter(e.target.value)}
+                  placeholder={searchPlaceholder}
+                  className="h-9 w-full rounded-lg bg-transparent pl-9 pr-2 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none"
+                />
+              </div>
+            </Popover>
+          </div>
+
           {hideableColumns.length > 0 && (
             <Popover
+              align="end"
               contentClassName="w-52"
               trigger={({ toggle }) => (
                 <button
                   onClick={toggle}
                   title="Columns"
-                  className="inline-flex h-9 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-lg border border-border px-3 text-sm text-muted-foreground hover:bg-muted hover:text-foreground"
+                  className="inline-flex h-9 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-lg border border-border px-2.5 text-sm text-muted-foreground hover:bg-muted hover:text-foreground sm:px-3"
                 >
-                  <SlidersHorizontal className="size-4" /> Columns
+                  <SlidersHorizontal className="size-4" /> <span className="hidden sm:inline">Columns</span>
                 </button>
               )}
             >

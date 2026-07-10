@@ -191,21 +191,25 @@ export function WorkTable({
             data={filtered}
             searchPlaceholder="Search tasks…"
             toolbar={
-              <div className="contents">
-                <MonthFilter options={months} value={month} onChange={setMonth} className="min-w-0 shrink basis-40" />
-                <DivisionFilter value={division} onChange={setDivision} options={divisions} className="min-w-0 shrink basis-44" />
-                <PicFilter people={people} value={pic} onChange={setPic} className="min-w-0 shrink basis-40" />
+              <div className="flex items-center gap-2">
+                <MonthFilter options={months} value={month} onChange={setMonth} className="w-36 shrink-0" />
+                <DivisionFilter value={division} onChange={setDivision} options={divisions} className="w-40 shrink-0" />
+                <PicFilter people={people} value={pic} onChange={setPic} className="w-40 shrink-0" />
                 <Combobox
+                  portal
+                  searchable={false}
                   value={priority}
                   onChange={setPriority}
-                  className="min-w-0 shrink basis-36"
-                  options={[{ value: "all", label: "All priority" }, ...(Object.keys(PRIORITY_META) as Priority[]).map((p) => ({ value: p, label: PRIORITY_META[p].label }))]}
+                  className="w-36 shrink-0"
+                  options={[{ value: "all", label: "Semua Prioritas" }, ...(Object.keys(PRIORITY_META) as Priority[]).map((p) => ({ value: p, label: PRIORITY_META[p].label }))]}
                 />
                 <Combobox
+                  portal
+                  searchable={false}
                   value={status}
                   onChange={setStatus}
-                  className="min-w-0 shrink basis-36"
-                  options={[{ value: "all", label: "All status" }, ...(Object.keys(TASK_STATUS_META) as TaskStatus[]).map((s) => ({ value: s, label: TASK_STATUS_META[s].label }))]}
+                  className="w-36 shrink-0"
+                  options={[{ value: "all", label: "Semua Status" }, ...(Object.keys(TASK_STATUS_META) as TaskStatus[]).map((s) => ({ value: s, label: TASK_STATUS_META[s].label }))]}
                 />
               </div>
             }

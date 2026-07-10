@@ -60,11 +60,12 @@ export function MonthFilter({
 }) {
   return (
     <Combobox
-      className={className ?? "min-w-0 shrink basis-40"}
+      portal
+      searchable={false}
+      className={className ?? "w-40 shrink-0"}
       value={value}
       onChange={onChange}
-      options={[{ value: "all", label: "All months" }, ...options]}
-      searchPlaceholder="Month…"
+      options={[{ value: "all", label: "Semua Bulan" }, ...options]}
     />
   );
 }
@@ -83,11 +84,12 @@ export function DivisionFilter({
 }) {
   return (
     <Combobox
-      className={className ?? "min-w-0 shrink basis-44"}
+      portal
+      searchable={false}
+      className={className ?? "w-44 shrink-0"}
       value={value}
       onChange={onChange}
       options={[{ value: "all", label: "Semua Divisi" }, ...options.map((d) => ({ value: d, label: divisionLabel(d) }))]}
-      searchPlaceholder="Divisi…"
     />
   );
 }
@@ -106,11 +108,12 @@ export function PicFilter({
 }) {
   return (
     <Combobox
-      className={className ?? "min-w-0 shrink basis-44"}
+      portal
+      className={className ?? "w-44 shrink-0"}
       value={value}
       onChange={onChange}
-      options={[{ value: "all", label: "All PIC" }, ...people.map((p) => ({ value: p.id, label: p.name }))]}
-      searchPlaceholder="PIC…"
+      options={[{ value: "all", label: "Semua PIC" }, ...people.map((p) => ({ value: p.id, label: p.name }))]}
+      searchPlaceholder="Cari nama…"
     />
   );
 }

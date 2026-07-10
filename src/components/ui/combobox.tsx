@@ -45,12 +45,14 @@ export function Combobox({
       portal={portal}
       className={cn("w-full", className)}
       matchTriggerWidth={matchTriggerWidth}
-      // Default: menu keeps a readable width (>= 13rem or trigger width, capped).
+      // Default: menu sizes to content, at least the trigger width (Popover sets
+      // minWidth) or 13rem, capped so it never exceeds the viewport. Avoid `100%`
+      // here — under a portal it resolves to the viewport, not the trigger.
       // matchTriggerWidth: menu is exactly the trigger width (Popover sets width).
       contentClassName={
         matchTriggerWidth
           ? "p-0"
-          : "w-max min-w-[max(100%,13rem)] max-w-[min(20rem,calc(100vw-2rem))] p-0"
+          : "w-max min-w-[13rem] max-w-[min(20rem,calc(100vw-1.5rem))] p-0"
       }
       align={matchTriggerWidth ? "start" : "end"}
       trigger={({ open, toggle }) => (

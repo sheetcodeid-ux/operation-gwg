@@ -2,6 +2,7 @@
 
 import * as React from "react";
 import { createPortal } from "react-dom";
+import { bodyZoom } from "@/components/layout/fit-scale";
 import { cn } from "@/lib/utils";
 
 /** Minimal anchored popover with click-outside + escape handling.
@@ -34,8 +35,26 @@ export function Popover({
   const place = React.useCallback(() => {
     if (!ref.current) return;
     const r = ref.current.getBoundingClientRect();
-    setPos({ top: r.bottom + 8, left: r.left, width: r.width });
+    // The app scales <body> with CSS zoom on small screens; getBoundingClientRect
+    // returns visual (post-zoom) px, but a fixed child of the zoomed body is
+    // scaled again — so divide by the zoom to cancel it.
+    const z = bodyZoom();
+    setPos({ top: r.bottom / z + 8, left: r.left / z, width: r.width / z });
   }, []);
+
+  // Keep the menu inside the viewport horizontally (no off-screen overflow).
+  React.useEffect(() => {
+    if (!open || !portal || !pos || !menuRef.current) return;
+    const z = bodyZoom();
+    const vw = window.innerWidth / z;
+    const mw = menuRef.current.offsetWidth;
+    const margin = 8;
+    let left = align === "end" ? pos.left + pos.width - mw : pos.left;
+    left = Math.min(left, vw - mw - margin);
+    left = Math.max(margin, left);
+    if (Math.abs(left - pos.left) > 0.5) setPos((p) => (p ? { ...p, left } : p));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, portal, pos?.top, pos?.width]);
 
   React.useEffect(() => {
     if (!open) return;
