@@ -299,9 +299,9 @@ export function HppCalculator({
   }
 
   return (
-    <div className="grid gap-4 lg:grid-cols-2">
+    <div className="grid min-w-0 gap-4 lg:grid-cols-2">
       {/* ============ LEFT: INPUT ============ */}
-      <div className="space-y-4">
+      <div className="min-w-0 space-y-4">
         <div className="glass rounded-2xl border border-border p-5">
           <p className="mb-3 flex items-center gap-2 text-sm font-semibold text-foreground">
             <Boxes className="size-4 text-muted-foreground" /> Data Produk
@@ -387,11 +387,11 @@ export function HppCalculator({
 
         {/* Variable costs */}
         <div className="glass rounded-2xl border border-border p-5">
-          <div className="mb-1 flex items-center justify-between">
-            <p className="flex items-center gap-2 text-sm font-semibold text-foreground">
-              <Sparkles className="size-4 text-muted-foreground" /> Biaya Variabel (Bahan Baku + Packing)
+          <div className="mb-1 flex items-center justify-between gap-2">
+            <p className="flex min-w-0 items-center gap-2 text-sm font-semibold text-foreground">
+              <Sparkles className="size-4 shrink-0 text-muted-foreground" /> <span className="min-w-0">Biaya Variabel (Bahan Baku + Packing)</span>
             </p>
-            <span className="rounded-full bg-primary/10 px-2 py-0.5 text-[11px] font-semibold text-primary tabular-nums">{rp(base.variableCost)}</span>
+            <span className="shrink-0 rounded-full bg-primary/10 px-2 py-0.5 text-[11px] font-semibold text-primary tabular-nums">{rp(base.variableCost)}</span>
           </div>
           <p className="mb-3 text-[11px] text-muted-foreground">Semua bahan untuk membuat {mode === "per_resep" ? "satu resep" : "satu produk"}. Pakai harga tertinggi (antisipasi inflasi).</p>
 
@@ -422,22 +422,24 @@ export function HppCalculator({
                     <Trash2 className="size-4" />
                   </button>
                 </div>
-                <div className="mt-2 grid grid-cols-1 gap-2 sm:grid-cols-2">
-                  <div className="min-w-0">
+                {/* Inputs stay side-by-side; on narrow screens the row swipes
+                    horizontally with an edge fade (scroll-fade-x) like elsewhere. */}
+                <div className="scroll-fade-x mt-2 flex gap-3 pb-0.5">
+                  <div className="w-[9.5rem] shrink-0">
                     <p className="mb-1 text-[10px] font-medium uppercase tracking-wide text-muted-foreground">Takaran / produk</p>
                     <div className="flex gap-1.5">
                       <NumInput value={v.takaran} onChange={(n) => setVar(v.id, { takaran: n })} className="w-full min-w-0" placeholder="0" />
-                      <div className="w-20 shrink-0">
+                      <div className="w-16 shrink-0">
                         <UnitSelect value={v.takaranUnit} onChange={(u) => setVar(v.id, { takaranUnit: u })} />
                       </div>
                     </div>
                   </div>
-                  <div className="min-w-0">
+                  <div className="w-[13rem] shrink-0">
                     <p className="mb-1 text-[10px] font-medium uppercase tracking-wide text-muted-foreground">Harga beli / jml</p>
                     <div className="flex gap-1.5">
                       <NumInput value={v.buyPrice} onChange={(n) => setVar(v.id, { buyPrice: n })} className="w-full min-w-0" placeholder="Rp" />
-                      <NumInput value={v.buyQty} onChange={(n) => setVar(v.id, { buyQty: n })} className="w-14 shrink-0" placeholder="1" />
-                      <div className="w-20 shrink-0">
+                      <NumInput value={v.buyQty} onChange={(n) => setVar(v.id, { buyQty: n })} className="w-12 shrink-0" placeholder="1" />
+                      <div className="w-16 shrink-0">
                         <UnitSelect value={v.buyUnit} onChange={(u) => setVar(v.id, { buyUnit: u })} />
                       </div>
                     </div>
@@ -486,9 +488,9 @@ export function HppCalculator({
 
         {/* Fixed costs */}
         <div className="glass rounded-2xl border border-border p-5">
-          <div className="mb-1 flex items-center justify-between">
-            <p className="text-sm font-semibold text-foreground">Alokasi Biaya Tetap per Produk</p>
-            <span className="rounded-full bg-muted px-2 py-0.5 text-[11px] font-semibold text-muted-foreground tabular-nums">{rp(base.totalFixed)}/bln</span>
+          <div className="mb-1 flex items-center justify-between gap-2">
+            <p className="min-w-0 text-sm font-semibold text-foreground">Alokasi Biaya Tetap per Produk</p>
+            <span className="shrink-0 rounded-full bg-muted px-2 py-0.5 text-[11px] font-semibold text-muted-foreground tabular-nums">{rp(base.totalFixed)}/bln</span>
           </div>
           <p className="mb-3 text-[11px] text-muted-foreground">Overhead & operasional bulanan (tanpa sewa bangunan & pajak, sesuai kebijakan HPP).</p>
 
@@ -558,7 +560,7 @@ export function HppCalculator({
       {/* ============ RIGHT: RESULTS ============ */}
       {/* Desktop: pin the results panel below the sticky topbar (h-16) and let it
           scroll internally, so the HPP figures stay visible while editing inputs. */}
-      <div data-lenis-prevent className="space-y-4 lg:sticky lg:top-20 lg:max-h-[calc(100dvh-5.5rem)] lg:self-start lg:overflow-y-auto lg:pr-1 lg:[scrollbar-width:thin]">
+      <div data-lenis-prevent className="min-w-0 space-y-4 lg:sticky lg:top-20 lg:max-h-[calc(100dvh-5.5rem)] lg:self-start lg:overflow-y-auto lg:pr-1 lg:[scrollbar-width:thin]">
         {/* HPP breakdown */}
         <div className="glass rounded-2xl border border-border p-5">
           <p className="mb-3 flex items-center gap-2 text-sm font-semibold text-foreground">
