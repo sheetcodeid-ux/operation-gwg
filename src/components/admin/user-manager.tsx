@@ -26,7 +26,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { ROLE_LABEL, type Tone } from "@/lib/constants";
-import { ROLE_DIVISION, accessibleMenuKeys, navAll, setNavExtras, type Division, type NavExtra } from "@/lib/nav";
+import { ROLE_DIVISION, accessibleMenuKeys, builtInDivisions, navAll, setNavExtras, type Division, type NavExtra } from "@/lib/nav";
 import type { Role } from "@/lib/types";
 import {
   assignRoleAction,
@@ -83,10 +83,13 @@ const ROLE_TONE: Record<Role, Tone> = {
   coordinator_rnd: "amber",
   legal: "brand",
   assessor: "cyan",
+  member: "neutral",
 };
-const ROLES = Object.keys(ROLE_LABEL) as Role[];
-const DIVISIONS = [...new Set(ROLES.map((r) => ROLE_DIVISION[r]))];
-const DEFAULT_DIVISION: Division = DIVISIONS.includes("Operation") ? "Operation" : DIVISIONS[0];
+const ROLES = (Object.keys(ROLE_LABEL) as Role[]).filter((r) => r !== "member");
+const DEFAULT_DIVISION: Division = "Operation";
+// Every sidebar division (built-in role-divisions + department-aligned ones).
+const ALL_DIVISIONS = builtInDivisions() as Division[];
+// Roles a division exposes for manual pick (the generic `member` is auto-assigned).
 const rolesInDivision = (d: Division) => ROLES.filter((r) => ROLE_DIVISION[r] === d);
 const needsOutlets = (r: Role) => r === "area_coordinator" || r === "head_operation" || r === "pos_operation";
 const isMulti = (r: Role) => r === "area_coordinator";
@@ -189,7 +192,7 @@ export function UserManager({
               }}
               options={[
                 { value: "", label: "Semua Divisi" },
-                ...[...new Set([...departmentOptions, ...DIVISIONS])].map((d) => ({ value: d, label: d })),
+                ...[...new Set([...ALL_DIVISIONS, ...departmentOptions])].map((d) => ({ value: d, label: d })),
               ]}
               placeholder="Semua Divisi"
             />
@@ -279,8 +282,8 @@ export function UserManager({
         </div>
       </div>
 
-      {creating && <UserFormPanel mode="create" outlets={outlets} departmentOptions={departmentOptions} onClose={() => setCreating(false)} />}
-      {editUser && <UserFormPanel mode="edit" user={editUser} outlets={outlets} departmentOptions={departmentOptions} onClose={() => setEditUser(null)} />}
+      {creating && <UserFormPanel mode="create" outlets={outlets} onClose={() => setCreating(false)} />}
+      {editUser && <UserFormPanel mode="edit" user={editUser} outlets={outlets} onClose={() => setEditUser(null)} />}
       {rolesUser && <AssignRolesPanel user={rolesUser} onClose={() => setRolesUser(null)} />}
       {accessUser && <AccessPanel user={accessUser} onClose={() => setAccessUser(null)} />}
     </>
@@ -357,20 +360,19 @@ export function UserFormPanel({
   mode,
   user,
   outlets,
-  departmentOptions = [],
   onClose,
 }: {
   mode: "create" | "edit";
   user?: UserRow;
   outlets: OutletLite[];
-  departmentOptions?: string[];
   onClose: () => void;
 }) {
   const router = useRouter();
   const [pending, start] = React.useTransition();
   const initFirst = user ? user.name.split(" ")[0] ?? "" : "";
   const initLast = user ? user.name.split(" ").slice(1).join(" ") : "";
-  const initDivision = user ? ROLE_DIVISION[user.role] : DEFAULT_DIVISION;
+  // A user's division = their department (if set) else the division of their role.
+  const initDivision = (user ? user.department || ROLE_DIVISION[user.role] : DEFAULT_DIVISION) as Division;
 
   const [first, setFirst] = React.useState(initFirst);
   const [last, setLast] = React.useState(initLast);
@@ -379,7 +381,7 @@ export function UserFormPanel({
   const [pwd2, setPwd2] = React.useState("");
   const [showPwd, setShowPwd] = React.useState(false);
   const [division, setDivision] = React.useState<Division>(initDivision);
-  const [role, setRole] = React.useState<Role>(user?.role ?? rolesInDivision(initDivision)[0]);
+  const [role, setRole] = React.useState<Role>(user?.role ?? rolesInDivision(initDivision)[0] ?? "member");
   const [department, setDepartment] = React.useState<string>(user?.department ?? "");
   const [selected, setSelected] = React.useState<string[]>(user?.outletIds ?? []);
   const [phone, setPhone] = React.useState(user?.phone ?? "");
@@ -389,11 +391,25 @@ export function UserFormPanel({
 
   const isEdit = mode === "edit";
   const name = `${first} ${last}`.trim();
-  const divisionRoles = rolesInDivision(division);
+  // Roles to choose from: the selected division's, falling back to the current
+  // role's own division so an existing role always shows.
+  const divisionRoles = rolesInDivision(division).length ? rolesInDivision(division) : rolesInDivision(ROLE_DIVISION[role]);
+  // A generic member (department-aligned division like Finance/Creative) has no
+  // role to pick — their access is simply that division.
+  const isMember = role === "member";
 
   function pickDivision(d: Division) {
     setDivision(d);
-    setRole(rolesInDivision(d)[0]);
+    const roles = rolesInDivision(d);
+    if (roles.length) {
+      // Built-in role-division: pick a role; access follows the role.
+      setRole(roles[0]);
+      setDepartment("");
+    } else {
+      // Department division (Creative, Finance, …): generic member placed there.
+      setRole("member");
+      setDepartment(d);
+    }
     setSelected([]);
   }
   function onFile(e: React.ChangeEvent<HTMLInputElement>) {
@@ -493,35 +509,42 @@ export function UserFormPanel({
           </Field>
         </div>
 
-        <Field label="Departemen / Divisi">
-          <Combobox
-            matchTriggerWidth
-            value={department}
-            onChange={setDepartment}
-            options={[{ value: "", label: "— Ikuti role —" }, ...departmentOptions.map((d) => ({ value: d, label: d }))]}
-            placeholder="Pilih departemen…"
-            searchPlaceholder="Cari departemen…"
-          />
-          <p className="mt-1 text-[11px] text-muted-foreground">Tempat organisasi pengguna (Finance, Creative, …) dari Departemen &amp; Divisi. Kosong = ikut divisi role.</p>
-        </Field>
-
         <div className="grid grid-cols-2 gap-3">
-          <Field label="Divisi Akses *">
-            <Combobox matchTriggerWidth searchable={false} value={division} onChange={(v) => pickDivision(v as Division)} options={DIVISIONS.map((d) => ({ value: d, label: d }))} />
-          </Field>
-          <Field label="Jabatan / Role *">
+          <Field label="Divisi *">
             <Combobox
+              portal
               matchTriggerWidth
               searchable={false}
-              value={role}
-              onChange={(v) => {
-                setRole(v as Role);
-                setSelected([]);
-              }}
-              options={divisionRoles.map((r) => ({ value: r, label: ROLE_LABEL[r] }))}
+              value={division}
+              onChange={(v) => pickDivision(v as Division)}
+              options={[...new Set([...ALL_DIVISIONS, division])].map((d) => ({ value: d, label: d }))}
             />
           </Field>
+          <Field label="Jabatan / Role *">
+            {isMember ? (
+              <div className="flex h-9 items-center gap-1.5 rounded-lg border border-input bg-muted/30 px-3 text-sm text-muted-foreground">
+                Anggota Divisi
+              </div>
+            ) : (
+              <Combobox
+                portal
+                matchTriggerWidth
+                searchable={false}
+                value={role}
+                onChange={(v) => {
+                  setRole(v as Role);
+                  setSelected([]);
+                }}
+                options={divisionRoles.map((r) => ({ value: r, label: ROLE_LABEL[r] }))}
+              />
+            )}
+          </Field>
         </div>
+        <p className="text-[11px] text-muted-foreground">
+          {isMember
+            ? `Pengguna menjadi anggota divisi ${division} — hanya mengakses menu divisi tersebut (mis. Work Tracker).`
+            : "Divisi menentukan menu yang bisa diakses; pilih jabatan/role di dalamnya."}
+        </p>
 
         {needsOutlets(role) && <OutletPicker outlets={outlets} multi={isMulti(role)} selected={selected} onChange={setSelected} />}
       </div>

@@ -86,6 +86,9 @@ export const ROLE_DIVISION: Record<Role, Division> = {
   coordinator_rnd: "R&D",
   legal: "Human Capital",
   assessor: "Human Capital",
+  // Generic member: a placeholder home division; real access comes from their
+  // per-user `department` (ROLE_MENUS is empty, so the home division shows nothing).
+  member: "Human Capital",
 };
 
 const OPERATION_FULL: MenuKey[] = [
@@ -114,6 +117,7 @@ export const ROLE_MENUS: Record<Role, MenuKey[]> = {
   coordinator_rnd: ["work"],
   legal: ["work", "assessment"], // HRD — grade-promotion assessment
   assessor: ["assessment"], // division Head / evaluator — assessment only
+  member: [], // no role menus — access is entirely via their `department`
 };
 
 /** Menus shown per division in the Super Admin sidebar (all divisions listed). */

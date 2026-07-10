@@ -27,7 +27,10 @@ export type Role =
   // HRD division
   | "legal"
   // Assessment-only evaluator (division Head acting as Atasan Langsung)
-  | "assessor";
+  | "assessor"
+  // Generic division member — access comes from their `department` (e.g. a
+  // Creative/Finance staff who only opens their division's Work Tracker).
+  | "member";
 
 export interface UserProfile {
   id: string;

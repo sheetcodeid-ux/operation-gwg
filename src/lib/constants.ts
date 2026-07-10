@@ -31,6 +31,7 @@ export const ROLE_LABEL: Record<Role, string> = {
   coordinator_rnd: "Coordinator R&D",
   legal: "Legal",
   assessor: "Penilai Assessment",
+  member: "Anggota Divisi",
 };
 
 /* ------------------------------------------------------------------ */

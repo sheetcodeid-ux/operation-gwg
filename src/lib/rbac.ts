@@ -71,6 +71,8 @@ export const ROLE_PERMISSIONS: Record<Role, Permission[]> = {
   legal: ["create_work_task"],
   // Assessment evaluator — no Work Tracker/ops permissions.
   assessor: [],
+  // Generic division member — can add tasks in their division's Work Tracker.
+  member: ["create_work_task"],
 };
 
 export function can(user: Pick<UserProfile, "role">, permission: Permission): boolean {
