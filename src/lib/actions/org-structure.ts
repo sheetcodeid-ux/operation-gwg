@@ -5,6 +5,7 @@ import { getSessionUser } from "@/lib/auth";
 import { can } from "@/lib/rbac";
 import { addOrgDepartment, addOrgEmployee, deleteOrgDepartment, deleteOrgEmployee } from "@/lib/data/org";
 import { addNavDivision, deleteNavDivision } from "@/lib/data/nav";
+import { builtInDivisions } from "@/lib/nav";
 
 async function guard() {
   const admin = await getSessionUser();
@@ -66,7 +67,7 @@ export async function addDivisionAction(input: { name: string; icon: string; men
   if (!(await guard())) return { error: "Not authorized" };
   const name = input.name.trim();
   if (name.length < 2) return { error: "Nama divisi minimal 2 karakter." };
-  if (["Operation", "Supervisor", "R&D", "HRD", "Administrator"].includes(name))
+  if (builtInDivisions().includes(name))
     return { error: "Nama itu dipakai divisi bawaan. Gunakan nama lain." };
   if (!input.menus.length) return { error: "Pilih minimal satu menu untuk divisi ini." };
   await addNavDivision({ name, icon: input.icon || "Briefcase", menus: input.menus });

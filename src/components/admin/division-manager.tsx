@@ -153,7 +153,7 @@ export function DivisionManager({
           <EmptyState
             icon={LayoutGrid}
             title="Belum ada divisi tambahan"
-            description="Divisi bawaan (Operation, Supervisor, R&D, HRD, Administrator) tetap aktif. Buat divisi baru untuk mengelompokkan menu di sidebar."
+            description="Divisi bawaan tetap aktif. Buat divisi baru untuk mengelompokkan menu di sidebar."
           />
         ) : (
           <div className="space-y-3">

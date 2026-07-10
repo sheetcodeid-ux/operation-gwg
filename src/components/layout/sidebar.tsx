@@ -20,12 +20,14 @@ export function Sidebar({
   homeDivision,
   isAdmin,
   grants = [],
+  department = "",
 }: {
   items: NavItem[];
   allowedKeys: MenuKey[];
   homeDivision: string;
   isAdmin: boolean;
   grants?: string[];
+  department?: string;
 }) {
   const pathname = usePathname();
   const { t } = useI18n();
@@ -37,8 +39,10 @@ export function Sidebar({
   const grantSet = useMemo(() => new Set(grants), [grants]);
   const sections = useMemo(() => [...new Set(items.map((i) => i.section))], [items]);
   const isActive = (href: string) => pathname === href || pathname.startsWith(href + "/");
-  // Openable within the user's own division, or via an explicit per-user grant.
-  const canOpen = (i: NavItem) => isAdmin || (i.section === homeDivision && allowed.has(i.key)) || grantSet.has(`${i.section}:${i.key}`);
+  // Openable within the user's own division, their assigned department, or via
+  // an explicit per-user grant.
+  const canOpen = (i: NavItem) =>
+    isAdmin || (i.section === homeDivision && allowed.has(i.key)) || i.section === department || grantSet.has(`${i.section}:${i.key}`);
 
   // Single-open accordion: the user's own division starts open; opening another
   // closes the previous one. null = all collapsed.

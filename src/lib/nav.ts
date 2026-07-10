@@ -16,7 +16,18 @@ export type MenuKey =
   | "audit";
 
 /** Division a role belongs to — used as the sidebar group header. */
-export type Division = "Operation" | "Supervisor" | "R&D" | "HRD" | "Administrator";
+export type Division =
+  | "Operation"
+  | "Supervisor"
+  | "R&D"
+  | "Human Capital"
+  | "Administrator"
+  | "Finance"
+  | "Creative"
+  | "Project Manager"
+  | "Auditor"
+  | "Sekretaris"
+  | "Business Development";
 
 export interface NavItem {
   key: MenuKey;
@@ -50,8 +61,14 @@ export const DIVISION_ICON: Record<Division, string> = {
   Operation: "Briefcase",
   Supervisor: "ShieldCheck",
   "R&D": "FlaskConical",
-  HRD: "Scale",
+  "Human Capital": "Scale",
   Administrator: "Settings2",
+  Finance: "ChartSpline",
+  Creative: "Award",
+  "Project Manager": "ListChecks",
+  Auditor: "ShieldCheck",
+  Sekretaris: "FileText",
+  "Business Development": "Store",
 };
 
 /** Which division each role sits in (drives the sidebar group header). */
@@ -67,8 +84,8 @@ export const ROLE_DIVISION: Record<Role, Division> = {
   bar_rnd: "R&D",
   kitchen_rnd: "R&D",
   coordinator_rnd: "R&D",
-  legal: "HRD",
-  assessor: "HRD",
+  legal: "Human Capital",
+  assessor: "Human Capital",
 };
 
 const OPERATION_FULL: MenuKey[] = [
@@ -104,7 +121,14 @@ const DIVISION_MENUS: { division: Division; menus: MenuKey[] }[] = [
   { division: "Operation", menus: OPERATION_FULL },
   { division: "Supervisor", menus: ["hygiene", "complaints"] },
   { division: "R&D", menus: ["work"] },
-  { division: "HRD", menus: ["work", "assessment"] },
+  { division: "Human Capital", menus: ["work", "assessment"] },
+  // New department-aligned divisions — Work Tracker only for now.
+  { division: "Finance", menus: ["work"] },
+  { division: "Creative", menus: ["work"] },
+  { division: "Project Manager", menus: ["work"] },
+  { division: "Auditor", menus: ["work"] },
+  { division: "Sekretaris", menus: ["work"] },
+  { division: "Business Development", menus: ["work"] },
   { division: "Administrator", menus: ["users", "departments", "audit"] },
 ];
 
@@ -131,6 +155,9 @@ export const navDivisionId = (name: string) =>
 
 /** Names reserved by built-in divisions — custom ones can't shadow them. */
 const RESERVED_DIVISIONS = new Set<string>(DIVISION_MENUS.map((d) => d.division));
+
+/** Built-in (hardcoded) division names — the reserved set as a list. */
+export const builtInDivisions = (): string[] => [...RESERVED_DIVISIONS];
 
 let EXTRA_DIVISIONS: NavExtraDivision[] = [];
 

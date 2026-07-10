@@ -17,12 +17,14 @@ export function MobileNav({
   homeDivision,
   isAdmin,
   grants = [],
+  department = "",
 }: {
   items: NavItem[];
   allowedKeys: MenuKey[];
   homeDivision: string;
   isAdmin: boolean;
   grants?: string[];
+  department?: string;
 }) {
   const [open, setOpen] = useState(false);
   const pathname = usePathname();
@@ -30,7 +32,8 @@ export function MobileNav({
   const { showLocked } = useNavLock();
   const allowed = useMemo(() => new Set(allowedKeys), [allowedKeys]);
   const grantSet = useMemo(() => new Set(grants), [grants]);
-  const canOpen = (i: NavItem) => isAdmin || (i.section === homeDivision && allowed.has(i.key)) || grantSet.has(`${i.section}:${i.key}`);
+  const canOpen = (i: NavItem) =>
+    isAdmin || (i.section === homeDivision && allowed.has(i.key)) || i.section === department || grantSet.has(`${i.section}:${i.key}`);
   const sections = useMemo(() => [...new Set(items.map((i) => i.section))], [items]);
   // Single-open accordion: home division open by default; opening another closes
   // the previous one. null = all collapsed.
