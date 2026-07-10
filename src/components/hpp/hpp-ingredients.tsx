@@ -2,9 +2,9 @@
 
 import * as React from "react";
 import { useRouter } from "next/navigation";
-import { AlertTriangle, ArrowDown, ArrowUp, ArrowUpDown, BellOff, Check, Download, Package, Pencil, Plus, Search, TrendingUp, Trash2, Upload, X } from "lucide-react";
+import { AlertTriangle, ArrowDown, ArrowUp, ArrowUpDown, BellOff, Check, CheckSquare, Download, Package, Pencil, Plus, Search, Square, TrendingUp, Trash2, Upload, X } from "lucide-react";
 import { toast } from "sonner";
-import { saveIngredientAction, deleteIngredientAction, clearIngredientAlertAction, importIngredientsAction } from "@/lib/actions/hpp-ingredients";
+import { saveIngredientAction, deleteIngredientAction, clearIngredientAlertAction, importIngredientsAction, bulkDeleteIngredientsAction, bulkClearAlertsAction } from "@/lib/actions/hpp-ingredients";
 import type { HppIngredient } from "@/lib/data/hpp-ingredients";
 import { downloadCsv, toCsv } from "@/lib/csv";
 import { Button } from "@/components/ui/button";
@@ -144,6 +144,34 @@ export function HppIngredients({ ingredients, menus, canEdit }: { ingredients: H
     }
   }
 
+  // ---- bulk selection ----
+  const [selected, setSelected] = React.useState<Set<string>>(new Set());
+  const [bulkBusy, setBulkBusy] = React.useState(false);
+  const toggleRow = (id: string) => setSelected((s) => { const n = new Set(s); n.has(id) ? n.delete(id) : n.add(id); return n; });
+  const allShownSelected = rows.length > 0 && rows.every((i) => selected.has(i.id));
+  const toggleAll = () => setSelected((s) => {
+    const n = new Set(s);
+    if (allShownSelected) rows.forEach((i) => n.delete(i.id));
+    else rows.forEach((i) => n.add(i.id));
+    return n;
+  });
+  const selectedAlertIds = [...selected].filter((id) => ingredients.find((i) => i.id === id)?.alert);
+  async function bulk(fn: () => Promise<{ error?: string; count?: number }>, okMsg: (n: number) => string) {
+    setBulkBusy(true);
+    try {
+      const res = await fn();
+      if (res?.error) toast.error(res.error);
+      else { toast.success(okMsg(res.count ?? 0)); setSelected(new Set()); router.refresh(); }
+    } finally {
+      setBulkBusy(false);
+    }
+  }
+  const bulkDelete = () => {
+    if (typeof window !== "undefined" && !window.confirm(`Hapus ${selected.size} bahan terpilih?`)) return;
+    bulk(() => bulkDeleteIngredientsAction([...selected]), (n) => `${n} bahan dihapus`);
+  };
+  const bulkClear = () => bulk(() => bulkClearAlertsAction(selectedAlertIds), (n) => `${n} tanda selesai`);
+
   const hasFilter = q || region !== "all";
 
   return (
@@ -267,13 +295,32 @@ export function HppIngredients({ ingredients, menus, canEdit }: { ingredients: H
         </div>
       </div>
 
+      {/* Bulk action bar */}
+      {canEdit && selected.size > 0 && (
+        <div className="glass sticky top-20 z-20 flex flex-wrap items-center gap-2 rounded-2xl border border-primary/30 p-3 shadow-lg">
+          <span className="text-sm font-semibold text-foreground">{selected.size} dipilih</span>
+          <div className="ml-auto flex flex-wrap items-center gap-2">
+            {selectedAlertIds.length > 0 && <Button size="sm" variant="outline" onClick={bulkClear} disabled={bulkBusy}><BellOff className="size-4" /> Tandai selesai ({selectedAlertIds.length})</Button>}
+            <Button size="sm" variant="outline" onClick={bulkDelete} disabled={bulkBusy} className="text-red-500 hover:text-red-600"><Trash2 className="size-4" /> Hapus ({selected.size})</Button>
+            <button type="button" onClick={() => setSelected(new Set())} className="rounded-lg px-2 py-1 text-xs font-medium text-muted-foreground hover:text-foreground">Batal</button>
+          </div>
+        </div>
+      )}
+
       {/* Table */}
       <div className="glass overflow-hidden rounded-2xl border border-border">
         <div className="overflow-x-auto" data-lenis-prevent>
-          <table className="w-full min-w-[720px] text-sm">
+          <table className="w-full min-w-[760px] text-sm">
             <thead className="border-b border-border bg-muted/40 text-left text-[11px] uppercase tracking-wide text-muted-foreground">
               <tr>
-                <Th label="Bahan" k="name" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} className="px-4" />
+                {canEdit && (
+                  <th className="w-10 px-4 py-2.5">
+                    <button type="button" onClick={toggleAll} title="Pilih semua" className="grid place-items-center text-muted-foreground hover:text-foreground">
+                      {allShownSelected ? <CheckSquare className="size-4 text-primary" /> : <Square className="size-4" />}
+                    </button>
+                  </th>
+                )}
+                <Th label="Bahan" k="name" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} className={canEdit ? "px-1" : "px-4"} />
                 <Th label="Wilayah" k="region" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} />
                 <Th label="Harga Beli" k="price" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} align="right" />
                 <Th label="Menu Pakai" k="usage" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} />
@@ -283,7 +330,7 @@ export function HppIngredients({ ingredients, menus, canEdit }: { ingredients: H
             <tbody>
               {rows.length === 0 && (
                 <tr>
-                  <td colSpan={5} className="px-4 py-12 text-center text-sm text-muted-foreground">
+                  <td colSpan={canEdit ? 6 : 5} className="px-4 py-12 text-center text-sm text-muted-foreground">
                     {hasFilter ? "Tidak ada bahan yang cocok." : "Belum ada bahan baku. Tambahkan lewat form di atas."}
                   </td>
                 </tr>
@@ -291,8 +338,15 @@ export function HppIngredients({ ingredients, menus, canEdit }: { ingredients: H
               {rows.map((i) => {
                 const used = usage.get(i.id) ?? [];
                 return (
-                  <tr key={i.id} className="border-b border-border/60 last:border-0 hover:bg-muted/25">
-                    <td className="px-4 py-2.5">
+                  <tr key={i.id} className={cn("border-b border-border/60 last:border-0 hover:bg-muted/25", selected.has(i.id) && "bg-primary/[0.06]")}>
+                    {canEdit && (
+                      <td className="w-10 px-4 py-2.5">
+                        <button type="button" onClick={() => toggleRow(i.id)} className="grid place-items-center text-muted-foreground hover:text-foreground">
+                          {selected.has(i.id) ? <CheckSquare className="size-4 text-primary" /> : <Square className="size-4" />}
+                        </button>
+                      </td>
+                    )}
+                    <td className={cn("py-2.5", canEdit ? "px-1" : "px-4")}>
                       <div className="flex items-center gap-2">
                         <p className="font-medium text-foreground">{i.name}</p>
                         {i.alert && (

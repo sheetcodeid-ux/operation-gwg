@@ -14,8 +14,9 @@ export const metadata: Metadata = { title: "Kalkulator HPP" };
 
 /** Who may open the HPP calculator: R&D roles / grants / admin, or anyone whose
  *  department is R&D or Food & Beverage (the kitchen & bar teams that cost menu). */
-export default async function HppPage() {
+export default async function HppPage({ searchParams }: { searchParams: Promise<{ edit?: string }> }) {
   const user = (await getSessionUser())!;
+  const { edit } = await searchParams;
   const canEdit =
     canOpenMenu(user.role, "hpp", user.grants) ||
     user.department === "R&D" ||
@@ -52,7 +53,7 @@ export default async function HppPage() {
         description="Harga Pokok Produksi R&D — hitung biaya, saran harga jual, BEP & proyeksi laba"
       />
       <HppGuide stats={guideStats} canVerify={canVerify} />
-      <HppCalculator initialHistory={history} canEdit={canEdit} ingredients={ingredients} />
+      <HppCalculator initialHistory={history} canEdit={canEdit} ingredients={ingredients} autoLoadId={edit} />
     </div>
   );
 }

@@ -52,3 +52,19 @@ export async function clearIngredientAlertAction(id: string) {
   revalidate();
   return { ok: true };
 }
+
+export async function bulkDeleteIngredientsAction(ids: string[]) {
+  const user = await getSessionUser();
+  if (!allowed(user)) return { error: "Not authorized" };
+  for (const id of ids) await deleteIngredient(id);
+  revalidate();
+  return { ok: true, count: ids.length };
+}
+
+export async function bulkClearAlertsAction(ids: string[]) {
+  const user = await getSessionUser();
+  if (!allowed(user)) return { error: "Not authorized" };
+  for (const id of ids) await clearIngredientAlert(id);
+  revalidate();
+  return { ok: true, count: ids.length };
+}
