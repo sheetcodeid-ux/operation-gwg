@@ -8,7 +8,7 @@ import { createTask, deleteTask, updateTask, updateTaskStatus } from "@/lib/data
 import { persistMessage } from "@/lib/data/persist";
 import { DEMO_NOW_ISO } from "@/lib/now";
 import { parseInput, taskInputSchema, taskStatusSchema } from "@/lib/validation";
-import type { Priority, Role, TaskStatus } from "@/lib/types";
+import type { Priority, TaskStatus } from "@/lib/types";
 
 export interface TaskInput {
   title: string;
@@ -16,7 +16,7 @@ export interface TaskInput {
   category: string;
   priority: Priority;
   status: TaskStatus;
-  division: Role;
+  division: string;
   /** null = division/HQ task with no branch. */
   outletId: string | null;
   /** Manually-picked PIC user ids (1 or many). */

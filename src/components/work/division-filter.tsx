@@ -2,14 +2,13 @@
 
 import { ROLE_LABEL } from "@/lib/constants";
 import type { Role } from "@/lib/types";
-import { WORK_DIVISIONS } from "@/lib/nav";
 import { Combobox } from "@/components/ui/combobox";
 import type { DivisionMembers } from "./task-sheet";
 
-export const DIVISIONS: Role[] = WORK_DIVISIONS;
-
-export function divisionLabel(r: Role) {
-  return ROLE_LABEL[r];
+/** Label a division value: a department name shows as-is; a legacy role value
+ *  falls back to its human role label. */
+export function divisionLabel(d: string) {
+  return ROLE_LABEL[d as Role] ?? d;
 }
 
 /** Flatten division members → unique people, sorted by name (for the PIC filter). */
@@ -24,7 +23,7 @@ export function flattenMembers(members?: DivisionMembers): { id: string; name: s
 export function membersForDivision(members: DivisionMembers | undefined, division: string): { id: string; name: string }[] {
   if (!members) return [];
   if (division === "all") return flattenMembers(members);
-  const list = members[division as Role] ?? [];
+  const list = members[division] ?? [];
   return [...list].sort((a, b) => a.name.localeCompare(b.name));
 }
 
@@ -70,15 +69,25 @@ export function MonthFilter({
   );
 }
 
-/** Dropdown to filter tasks by division. value "all" = no filter. */
-export function DivisionFilter({ value, onChange, className }: { value: string; onChange: (v: string) => void; className?: string }) {
+/** Dropdown to filter tasks by division/department. value "all" = no filter. */
+export function DivisionFilter({
+  value,
+  onChange,
+  className,
+  options = [],
+}: {
+  value: string;
+  onChange: (v: string) => void;
+  className?: string;
+  options?: string[];
+}) {
   return (
     <Combobox
       className={className ?? "min-w-0 shrink basis-44"}
       value={value}
       onChange={onChange}
-      options={[{ value: "all", label: "All divisions" }, ...DIVISIONS.map((r) => ({ value: r, label: ROLE_LABEL[r] }))]}
-      searchPlaceholder="Division…"
+      options={[{ value: "all", label: "Semua Divisi" }, ...options.map((d) => ({ value: d, label: divisionLabel(d) }))]}
+      searchPlaceholder="Divisi…"
     />
   );
 }

@@ -13,7 +13,7 @@ export const metadata: Metadata = { title: "Work Tracker" };
 export default async function WorkTrackerPage() {
   const user = (await getSessionUser())!;
   const rows = buildWorkRows(user);
-  const sheet = buildTaskSheetData(user);
+  const sheet = await buildTaskSheetData(user);
   const canCreate = can(user, "create_work_task");
 
   return (
@@ -24,7 +24,7 @@ export default async function WorkTrackerPage() {
         description="Operational tasks across your outlets — priority, status and progress"
         actions={
           canCreate && sheet.outlets.length > 0 ? (
-            <NewTaskButton outlets={sheet.outlets} coordinators={sheet.coordinators} members={sheet.members} defaultDivision={sheet.defaultDivision} />
+            <NewTaskButton outlets={sheet.outlets} coordinators={sheet.coordinators} members={sheet.members} divisions={sheet.divisions} defaultDivision={sheet.defaultDivision} />
           ) : undefined
         }
       />
@@ -32,7 +32,7 @@ export default async function WorkTrackerPage() {
       <WorkViews />
 
       <div className="mt-4">
-        <WorkTable rows={rows} outlets={sheet.outlets} coordinators={sheet.coordinators} members={sheet.members} canEdit={canCreate} />
+        <WorkTable rows={rows} outlets={sheet.outlets} coordinators={sheet.coordinators} members={sheet.members} divisions={sheet.divisions} canEdit={canCreate} />
       </div>
     </div>
   );

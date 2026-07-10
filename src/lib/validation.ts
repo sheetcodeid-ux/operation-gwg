@@ -59,7 +59,8 @@ export const taskInputSchema = z.object({
   category: shortText.default(""),
   priority: prioritySchema,
   status: taskStatusSchema,
-  division: roleSchema,
+  // Department/division name (Finance, Creative, …), not a role enum.
+  division: z.string().trim().min(1, "Divisi wajib dipilih.").max(120),
   outletId: id.nullable(),
   picIds: z.array(id).max(50).default([]),
   startDate: isoDate.default(""),

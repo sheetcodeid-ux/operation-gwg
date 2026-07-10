@@ -19,7 +19,7 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import { PRIORITY_META, TASK_STATUS_META } from "@/lib/constants";
-import type { Priority, Role, TaskStatus } from "@/lib/types";
+import type { Priority, TaskStatus } from "@/lib/types";
 import { updateTaskStatusAction } from "@/lib/actions/work";
 import { cn, formatDate } from "@/lib/utils";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -35,7 +35,7 @@ export interface QuickTaskItem {
   id: string;
   title: string;
   description: string;
-  division: Role;
+  division: string;
   outletId: string;
   outlet: string;
   coordinator: string;
@@ -56,12 +56,16 @@ export function QuickTasks({
   outlets,
   coordinators,
   members,
+  divisions,
+  defaultDivision,
 }: {
   tasks: QuickTaskItem[];
   canAdd: boolean;
   outlets: TaskOutlet[];
   coordinators: { id: string; name: string }[];
   members?: DivisionMembers;
+  divisions?: string[];
+  defaultDivision?: string;
 }) {
   const router = useRouter();
   const [tab, setTab] = React.useState<"active" | "completed">("active");
@@ -93,6 +97,8 @@ export function QuickTasks({
             outlets={outlets}
             coordinators={coordinators}
             members={members}
+            divisions={divisions}
+            defaultDivision={defaultDivision}
             trigger={
               <Button size="sm">
                 <Plus /> New Task
@@ -177,6 +183,7 @@ export function QuickTasks({
                         outlets={outlets}
                         coordinators={coordinators}
                         members={members}
+                        divisions={divisions}
                         trigger={
                           <button
                             type="button"

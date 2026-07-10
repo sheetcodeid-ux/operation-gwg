@@ -3,8 +3,8 @@
 import * as React from "react";
 import { type ColumnDef } from "@tanstack/react-table";
 import { AlertTriangle, CircleCheck, CircleDot, Eye, ListChecks, TriangleAlert } from "lucide-react";
-import { PRIORITY_META, ROLE_LABEL, TASK_STATUS_META } from "@/lib/constants";
-import type { Priority, Role, TaskStatus } from "@/lib/types";
+import { PRIORITY_META, TASK_STATUS_META } from "@/lib/constants";
+import type { Priority, TaskStatus } from "@/lib/types";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { DataTable } from "@/components/ui/data-table";
@@ -13,7 +13,7 @@ import { StatTile } from "@/components/ui/stat";
 import { Combobox } from "@/components/ui/combobox";
 import { formatDate, isOverdue } from "@/lib/utils";
 import { TaskDetailDialog } from "./task-detail";
-import { DivisionFilter, PicFilter, MonthFilter, membersForDivision, monthKey, monthOptions } from "./division-filter";
+import { DivisionFilter, PicFilter, MonthFilter, divisionLabel, membersForDivision, monthKey, monthOptions } from "./division-filter";
 import { useWorkFilters } from "./use-work-filters";
 import type { DivisionMembers, TaskOutlet } from "./task-sheet";
 
@@ -24,7 +24,7 @@ export interface WorkRow {
   category: string;
   priority: Priority;
   status: TaskStatus;
-  division: Role;
+  division: string;
   outletId: string;
   outlet: string;
   area: string;
@@ -40,12 +40,14 @@ export function WorkTable({
   outlets,
   coordinators,
   members,
+  divisions,
   canEdit,
 }: {
   rows: WorkRow[];
   outlets?: TaskOutlet[];
   coordinators?: { id: string; name: string }[];
   members?: DivisionMembers;
+  divisions?: string[];
   canEdit?: boolean;
 }) {
   const [priority, setPriority] = React.useState<string>("all");
@@ -97,7 +99,7 @@ export function WorkTable({
       {
         accessorKey: "division",
         header: "Division",
-        cell: ({ getValue }) => <Badge tone="brand">{ROLE_LABEL[getValue<Role>()]}</Badge>,
+        cell: ({ getValue }) => <Badge tone="brand">{divisionLabel(getValue<string>())}</Badge>,
       },
       { accessorKey: "category", header: "Category", cell: ({ getValue }) => <span className="text-muted-foreground">{getValue<string>()}</span> },
       {
@@ -151,6 +153,7 @@ export function WorkTable({
               outlets={outlets}
               coordinators={coordinators}
               members={members}
+              divisions={divisions}
               canEdit={canEdit}
               trigger={
                 <button
@@ -165,7 +168,7 @@ export function WorkTable({
         ),
       },
     ],
-    [outlets, coordinators, members, canEdit],
+    [outlets, coordinators, members, divisions, canEdit],
   );
 
   return (
@@ -190,7 +193,7 @@ export function WorkTable({
             toolbar={
               <div className="contents">
                 <MonthFilter options={months} value={month} onChange={setMonth} className="min-w-0 shrink basis-40" />
-                <DivisionFilter value={division} onChange={setDivision} className="min-w-0 shrink basis-44" />
+                <DivisionFilter value={division} onChange={setDivision} options={divisions} className="min-w-0 shrink basis-44" />
                 <PicFilter people={people} value={pic} onChange={setPic} className="min-w-0 shrink basis-40" />
                 <Combobox
                   value={priority}

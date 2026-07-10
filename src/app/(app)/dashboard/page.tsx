@@ -28,6 +28,7 @@ import { OutletRankingTable } from "@/components/dashboard/outlet-ranking-table"
 import { PerformanceMetrics } from "@/components/dashboard/performance-metrics";
 import { ComplaintTrendCard } from "@/components/dashboard/complaint-trend-card";
 import { QuickTasks } from "@/components/dashboard/quick-tasks";
+import { departmentList } from "@/components/work/work-data";
 import { formatNumber } from "@/lib/utils";
 
 export const metadata: Metadata = { title: "Executive Dashboard" };
@@ -121,12 +122,15 @@ export default async function DashboardPage({
     }));
   const taskOutlets = scoped.map((o) => ({ id: o.id, name: o.name, coordinatorId: outletCoordId.get(o.id) ?? null }));
   const coordList = coordinators.map((c) => ({ id: c.id, name: c.name }));
+  // Tasks are organised by department (Finance, Creative, …), same as Work Tracker.
+  const divisions = await departmentList();
   const divisionMembers: Record<string, { id: string; name: string }[]> = {};
-  for (const r of ["head_operation", "area_coordinator", "data_operation", "pos_operation", "admin_operation"] as const) {
-    divisionMembers[r] = getUsers()
-      .filter((u) => u.role === r && u.active)
+  for (const d of divisions) {
+    divisionMembers[d] = getUsers()
+      .filter((u) => u.active && u.department === d)
       .map((u) => ({ id: u.id, name: u.name }));
   }
+  const defaultDivision = (user.department && divisions.includes(user.department) ? user.department : divisions[0]) ?? "";
   const scopeOptions = [
     ...visibleAreas.map(([id, name]) => ({ value: `area:${id}`, label: name, group: "Wilayah" })),
     ...coordinators.map((c) => ({ value: `ca:${c.id}`, label: c.name, group: "Coordinator Area" })),
@@ -197,6 +201,8 @@ export default async function DashboardPage({
           outlets={taskOutlets}
           coordinators={coordList}
           members={divisionMembers}
+          divisions={divisions}
+          defaultDivision={defaultDivision}
         />
       </div>
     </div>

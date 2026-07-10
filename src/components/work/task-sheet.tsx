@@ -4,10 +4,9 @@ import * as React from "react";
 import { useRouter } from "next/navigation";
 import { CalendarClock, Loader2 } from "lucide-react";
 import { toast } from "sonner";
-import { PRIORITY_META, ROLE_LABEL, TASK_STATUS_META, WORK_CATEGORIES } from "@/lib/constants";
-import type { Priority, Role, TaskStatus } from "@/lib/types";
+import { PRIORITY_META, TASK_STATUS_META, WORK_CATEGORIES } from "@/lib/constants";
+import type { Priority, TaskStatus } from "@/lib/types";
 import { createTaskAction, updateTaskAction } from "@/lib/actions/work";
-import { WORK_DIVISIONS } from "@/lib/nav";
 import { DEMO_NOW } from "@/lib/now";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -17,6 +16,7 @@ import { Combobox } from "@/components/ui/combobox";
 import { DatePicker } from "@/components/ui/date-picker";
 import { MultiCombobox, SelectionChips } from "@/components/ui/multi-combobox";
 import { SegmentedTabs } from "@/components/ui/segmented-tabs";
+import { divisionLabel } from "./division-filter";
 
 export interface TaskOutlet {
   id: string;
@@ -31,7 +31,7 @@ export interface EditableTask {
   category: string;
   priority: Priority;
   status: TaskStatus;
-  division: Role;
+  division: string;
   outletId: string | null;
   picIds: string[];
   start: string;
@@ -41,7 +41,6 @@ export interface EditableTask {
 
 const PRIORITIES = Object.keys(PRIORITY_META) as Priority[];
 const STATUSES = Object.keys(TASK_STATUS_META) as TaskStatus[];
-const DIVISIONS: Role[] = WORK_DIVISIONS;
 
 /** Default date for the form, anchored to the demo "now" (not the wall clock),
  *  so new tasks land in the same period the dashboard/calendar display. */
@@ -64,13 +63,15 @@ export function TaskSheet({
   task,
   outlets,
   members,
+  divisions,
   defaultDivision,
 }: {
   trigger: React.ReactElement;
   task?: EditableTask;
   outlets: TaskOutlet[];
   members?: DivisionMembers;
-  defaultDivision?: Role;
+  divisions?: string[];
+  defaultDivision?: string;
   /** Accepted for back-compat; no longer used (assignment is by division). */
   coordinators?: { id: string; name: string }[];
 }) {
@@ -82,13 +83,25 @@ export function TaskSheet({
         description={task ? "Update this task." : "Create a task by division — with or without a branch."}
         className="max-w-lg"
       >
-        <TaskForm task={task} outlets={outlets} members={members} defaultDivision={defaultDivision} />
+        <TaskForm task={task} outlets={outlets} members={members} divisions={divisions} defaultDivision={defaultDivision} />
       </SheetContent>
     </Sheet>
   );
 }
 
-function TaskForm({ task, outlets, members, defaultDivision }: { task?: EditableTask; outlets: TaskOutlet[]; members?: DivisionMembers; defaultDivision?: Role }) {
+function TaskForm({
+  task,
+  outlets,
+  members,
+  divisions = [],
+  defaultDivision,
+}: {
+  task?: EditableTask;
+  outlets: TaskOutlet[];
+  members?: DivisionMembers;
+  divisions?: string[];
+  defaultDivision?: string;
+}) {
   const router = useRouter();
   const { setOpen } = useSheetControl();
   const [pending, startTransition] = React.useTransition();
@@ -99,7 +112,7 @@ function TaskForm({ task, outlets, members, defaultDivision }: { task?: Editable
     category: task?.category ?? (WORK_CATEGORIES[0] as string),
     priority: task?.priority ?? ("medium" as Priority),
     status: task?.status ?? ("open" as TaskStatus),
-    division: task?.division ?? defaultDivision ?? ("pos_operation" as Role),
+    division: task?.division ?? defaultDivision ?? divisions[0] ?? "",
     outletId: task?.outletId ?? outlets[0]?.id ?? "",
     picIds: task?.picIds ?? [],
     startDate: task ? toDateInput(task.start) : defaultDateISO(),
@@ -115,7 +128,7 @@ function TaskForm({ task, outlets, members, defaultDivision }: { task?: Editable
     // Reset PIC selection because members differ per division (keep any still valid).
     const next = members?.[v] ?? [];
     const validIds = new Set(next.map((m) => m.id));
-    setForm((f) => ({ ...f, division: v as Role, picIds: f.picIds.filter((id) => validIds.has(id)) }));
+    setForm((f) => ({ ...f, division: v, picIds: f.picIds.filter((id) => validIds.has(id)) }));
   }
 
   const duration = Math.round((+new Date(form.dueDate) - +new Date(form.startDate)) / 86_400_000);
@@ -175,7 +188,7 @@ function TaskForm({ task, outlets, members, defaultDivision }: { task?: Editable
           <Combobox
             value={form.division}
             onChange={pickDivision}
-            options={DIVISIONS.map((r) => ({ value: r, label: ROLE_LABEL[r] }))}
+            options={divisions.map((d) => ({ value: d, label: divisionLabel(d) }))}
             searchPlaceholder="Cari divisi…"
           />
         </Field>

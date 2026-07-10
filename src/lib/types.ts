@@ -163,8 +163,8 @@ export interface WorkTask {
   category: string;
   priority: Priority;
   status: TaskStatus;
-  /** Operation division the task belongs to. */
-  division: Role;
+  /** Department/division the task belongs to (Finance, Creative, …). */
+  division: string;
   /** Branch is optional — null = division/HQ-level task (no branch). */
   outletId: string | null;
   areaId: string | null;

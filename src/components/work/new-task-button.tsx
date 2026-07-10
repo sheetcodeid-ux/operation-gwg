@@ -1,6 +1,5 @@
 "use client";
 
-import type { Role } from "@/lib/types";
 import { Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { TaskSheet, type DivisionMembers, type TaskOutlet } from "@/components/work/task-sheet";
@@ -9,18 +8,21 @@ export function NewTaskButton({
   outlets,
   coordinators,
   members,
+  divisions,
   defaultDivision,
 }: {
   outlets: TaskOutlet[];
   coordinators: { id: string; name: string }[];
   members?: DivisionMembers;
-  defaultDivision?: Role;
+  divisions?: string[];
+  defaultDivision?: string;
 }) {
   return (
     <TaskSheet
       outlets={outlets}
       coordinators={coordinators}
       members={members}
+      divisions={divisions}
       defaultDivision={defaultDivision}
       trigger={
         <Button size="sm">

@@ -14,7 +14,7 @@ export const metadata: Metadata = { title: "Work Tracker · Kanban" };
 export default async function WorkKanbanPage() {
   const user = (await getSessionUser())!;
   const rows = buildWorkRows(user);
-  const sheet = buildTaskSheetData(user);
+  const sheet = await buildTaskSheetData(user);
   const canCreate = can(user, "create_work_task");
 
   return (
@@ -25,7 +25,7 @@ export default async function WorkKanbanPage() {
         description="Drag tasks between columns to update their status — synced with the table"
         actions={
           canCreate && sheet.outlets.length > 0 ? (
-            <NewTaskButton outlets={sheet.outlets} coordinators={sheet.coordinators} members={sheet.members} defaultDivision={sheet.defaultDivision} />
+            <NewTaskButton outlets={sheet.outlets} coordinators={sheet.coordinators} members={sheet.members} divisions={sheet.divisions} defaultDivision={sheet.defaultDivision} />
           ) : undefined
         }
       />
@@ -34,7 +34,7 @@ export default async function WorkKanbanPage() {
 
       <Card className="mt-4">
         <CardContent className="pt-5">
-          <KanbanBoard rows={rows} outlets={sheet.outlets} coordinators={sheet.coordinators} members={sheet.members} canEdit={canCreate} />
+          <KanbanBoard rows={rows} outlets={sheet.outlets} coordinators={sheet.coordinators} members={sheet.members} divisions={sheet.divisions} canEdit={canCreate} />
         </CardContent>
       </Card>
     </div>

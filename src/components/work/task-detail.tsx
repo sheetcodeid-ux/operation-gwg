@@ -4,7 +4,7 @@ import * as React from "react";
 import { useRouter } from "next/navigation";
 import { CalendarClock, CalendarDays, Layers, Loader2, MapPin, Pencil, Store, Tag, Trash2, User, type LucideIcon } from "lucide-react";
 import { toast } from "sonner";
-import { PRIORITY_META, ROLE_LABEL, TASK_STATUS_META } from "@/lib/constants";
+import { PRIORITY_META, TASK_STATUS_META } from "@/lib/constants";
 import { deleteTaskAction } from "@/lib/actions/work";
 import { formatDate } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
@@ -12,28 +12,30 @@ import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import { Dialog, DialogContent, DialogTrigger, useDialogControl } from "@/components/ui/dialog";
 import { TaskSheet, type DivisionMembers, type TaskOutlet } from "./task-sheet";
+import { divisionLabel } from "./division-filter";
 import type { WorkRow } from "./work-table";
 
 interface EditProps {
   outlets?: TaskOutlet[];
   coordinators?: { id: string; name: string }[];
   members?: DivisionMembers;
+  divisions?: string[];
   canEdit?: boolean;
 }
 
 /** Clickable wrapper: renders `trigger`, opens a centered task-detail dialog (with optional Edit). */
-export function TaskDetailDialog({ task, trigger, outlets, coordinators, members, canEdit }: { task: WorkRow; trigger: React.ReactElement } & EditProps) {
+export function TaskDetailDialog({ task, trigger, outlets, coordinators, members, divisions, canEdit }: { task: WorkRow; trigger: React.ReactElement } & EditProps) {
   return (
     <Dialog>
       <DialogTrigger>{trigger}</DialogTrigger>
       <DialogContent title={task.title} description={`${task.outlet} · ${task.area}`} align="center" className="max-w-md">
-        <TaskDetail task={task} outlets={outlets} coordinators={coordinators} members={members} canEdit={canEdit} />
+        <TaskDetail task={task} outlets={outlets} coordinators={coordinators} members={members} divisions={divisions} canEdit={canEdit} />
       </DialogContent>
     </Dialog>
   );
 }
 
-export function TaskDetail({ task, outlets, coordinators, members, canEdit }: { task: WorkRow } & EditProps) {
+export function TaskDetail({ task, outlets, coordinators, members, divisions, canEdit }: { task: WorkRow } & EditProps) {
   const router = useRouter();
   const { setOpen } = useDialogControl();
   const [pending, startTransition] = React.useTransition();
@@ -78,7 +80,7 @@ export function TaskDetail({ task, outlets, coordinators, members, canEdit }: { 
       </div>
 
       <div className="grid grid-cols-2 gap-2.5">
-        <DetailTile icon={Layers} label="Division" value={ROLE_LABEL[task.division]} />
+        <DetailTile icon={Layers} label="Division" value={divisionLabel(task.division)} />
         <DetailTile icon={Store} label="Outlet" value={task.outlet} />
         <DetailTile icon={MapPin} label="Area" value={task.area} />
         <DetailTile icon={Tag} label="Category" value={task.category} />
@@ -149,6 +151,7 @@ export function TaskDetail({ task, outlets, coordinators, members, canEdit }: { 
             outlets={outlets}
             coordinators={coordinators}
             members={members}
+            divisions={divisions}
             trigger={
               <Button size="sm">
                 <Pencil className="size-3.5" /> Edit Task

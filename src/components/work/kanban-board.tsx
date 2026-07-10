@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { ROLE_LABEL, TASK_STATUS_META, PRIORITY_META } from "@/lib/constants";
+import { TASK_STATUS_META, PRIORITY_META } from "@/lib/constants";
 import type { TaskStatus } from "@/lib/types";
 import { updateTaskStatusAction } from "@/lib/actions/work";
 import { cn, formatDate, isOverdue } from "@/lib/utils";
@@ -12,7 +12,7 @@ import { TONE_HEX } from "@/components/ui/tone";
 import { Avatar } from "@/components/ui/avatar";
 import { bodyZoom } from "@/components/layout/fit-scale";
 import { TaskDetail } from "./task-detail";
-import { DivisionFilter, PicFilter, MonthFilter, membersForDivision, monthKey, monthOptions } from "./division-filter";
+import { DivisionFilter, PicFilter, MonthFilter, divisionLabel, membersForDivision, monthKey, monthOptions } from "./division-filter";
 import { useWorkFilters } from "./use-work-filters";
 import type { DivisionMembers, TaskOutlet } from "./task-sheet";
 import type { WorkRow } from "./work-table";
@@ -24,12 +24,14 @@ export function KanbanBoard({
   outlets,
   coordinators,
   members,
+  divisions,
   canEdit,
 }: {
   rows: WorkRow[];
   outlets?: TaskOutlet[];
   coordinators?: { id: string; name: string }[];
   members?: DivisionMembers;
+  divisions?: string[];
   canEdit?: boolean;
 }) {
   const [tasks, setTasks] = React.useState(rows);
@@ -96,7 +98,7 @@ export function KanbanBoard({
       <div className="mb-3 flex flex-wrap items-center gap-2">
         <span className="text-xs font-medium text-muted-foreground">Filter</span>
         <MonthFilter options={months} value={month} onChange={setMonth} className="min-w-0 shrink basis-40" />
-        <DivisionFilter value={division} onChange={setDivision} className="min-w-0 shrink basis-44" />
+        <DivisionFilter value={division} onChange={setDivision} options={divisions} className="min-w-0 shrink basis-44" />
         <PicFilter people={people} value={pic} onChange={setPic} className="min-w-0 shrink basis-40" />
       </div>
       <div className="flex gap-4 overflow-x-auto pb-2">
@@ -171,7 +173,7 @@ export function KanbanBoard({
       {openTask && (
         <Dialog open onOpenChange={(o) => !o && setOpenTaskId(null)}>
           <DialogContent title={openTask.title} description={`${openTask.outlet} · ${openTask.area}`} align="center" className="max-w-md">
-            <TaskDetail task={openTask} outlets={outlets} coordinators={coordinators} members={members} canEdit={canEdit} />
+            <TaskDetail task={openTask} outlets={outlets} coordinators={coordinators} members={members} divisions={divisions} canEdit={canEdit} />
           </DialogContent>
         </Dialog>
       )}
@@ -198,7 +200,7 @@ function KanbanCard({
         <Badge tone={PRIORITY_META[task.priority].tone}>{PRIORITY_META[task.priority].label}</Badge>
       </div>
       <div className="mt-1.5 flex items-center gap-1.5">
-        <Badge tone="brand">{ROLE_LABEL[task.division]}</Badge>
+        <Badge tone="brand">{divisionLabel(task.division)}</Badge>
       </div>
       <p className="mt-1 truncate text-[11px] text-muted-foreground">
         {task.outlet} · {task.area}
