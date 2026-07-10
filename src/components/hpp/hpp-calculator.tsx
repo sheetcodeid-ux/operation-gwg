@@ -3,6 +3,7 @@
 import * as React from "react";
 import { useRouter } from "next/navigation";
 import {
+  AlertTriangle,
   BarChart3,
   Boxes,
   Calculator,
@@ -11,6 +12,7 @@ import {
   Coffee,
   History,
   ImagePlus,
+  Layers,
   Loader2,
   Plus,
   RotateCcw,
@@ -18,6 +20,7 @@ import {
   Sparkles,
   Trash2,
   TrendingUp,
+  Users,
   UtensilsCrossed,
   type LucideIcon,
 } from "lucide-react";
@@ -38,11 +41,13 @@ import {
   bepSeries,
   calcHpp,
   foodCostPct,
+  foodCostStatus,
   itemSubtotal,
   priceTiers,
   projection,
   roundPrice,
   sensitivity,
+  wasteCost,
   type AllocMode,
   type FixedItem,
   type VariableItem,
@@ -118,7 +123,10 @@ export function HppCalculator({ initialHistory, canEdit }: { initialHistory: Hpp
   const [allocMode, setAllocMode] = React.useState<AllocMode>("product");
   const [targetSales, setTargetSales] = React.useState(1000);
   const [totalUnitsAll, setTotalUnitsAll] = React.useState(1000);
+  const [wastePct, setWastePct] = React.useState(5); // waste normal ≤5% (GWG)
+  const [btkl, setBtkl] = React.useState(0); // BTKL dapur/bar / bulan
   const [fixed, setFixed] = React.useState<FixedItem[]>([]);
+  const [useClass, setUseClass] = React.useState(false); // Sistem Class Nordu
 
   const [sensPct, setSensPct] = React.useState(0);
   const [chosenPrice, setChosenPrice] = React.useState(0);
@@ -127,13 +135,21 @@ export function HppCalculator({ initialHistory, canEdit }: { initialHistory: Hpp
   const fileRef = React.useRef<HTMLInputElement>(null);
 
   // ---- derived ----
+  // BTKL (kitchen/bar labour) is a monthly cost allocated per product like any
+  // other fixed cost, so we fold it into the fixed pool before allocation.
+  const fixedAll = React.useMemo(
+    () => (btkl > 0 ? [...fixed, { id: "__btkl", name: "BTKL (dapur/bar)", monthly: btkl }] : fixed),
+    [fixed, btkl],
+  );
   const base = React.useMemo(
-    () => calcHpp({ variables, fixed, allocMode, targetSales, totalUnitsAllProducts: totalUnitsAll }),
-    [variables, fixed, allocMode, targetSales, totalUnitsAll],
+    () => calcHpp({ variables, fixed: fixedAll, allocMode, targetSales, totalUnitsAllProducts: totalUnitsAll }),
+    [variables, fixedAll, allocMode, targetSales, totalUnitsAll],
   );
   // Per resep: variable cost is per batch → divide by yield to get per-pcs.
   const divisor = mode === "per_resep" ? Math.max(1, yieldPcs) : 1;
-  const variableCost = base.variableCost / divisor;
+  const rawVariable = base.variableCost / divisor; // bahan baku + packing / produk
+  const waste = wasteCost(rawVariable, wastePct); // waste 5% dari bahan baku
+  const variableCost = rawVariable + waste; // biaya variabel efektif (incl. waste)
   const fixedAlloc = base.fixedAlloc;
   const hpp = variableCost + fixedAlloc;
 
@@ -142,6 +158,7 @@ export function HppCalculator({ initialHistory, canEdit }: { initialHistory: Hpp
   const sens = React.useMemo(() => sensitivity(variableCost, fixedAlloc, sensPct / 100, price), [variableCost, fixedAlloc, sensPct, price]);
   const proj = React.useMemo(() => projection(variableCost, base.totalFixed, price, targetProfit), [variableCost, base.totalFixed, price, targetProfit]);
   const fc = foodCostPct(variableCost, price);
+  const fcStatus = foodCostStatus(fc, category);
   const series = React.useMemo(
     () => bepSeries(price, variableCost, base.totalFixed, Math.max(proj.targetUnit, proj.bepUnit) * 1.05 || 100),
     [price, variableCost, base.totalFixed, proj.targetUnit, proj.bepUnit],
@@ -168,6 +185,9 @@ export function HppCalculator({ initialHistory, canEdit }: { initialHistory: Hpp
     setFixed([]);
     setAllocMode("product");
     setTargetSales(1000);
+    setWastePct(5);
+    setBtkl(0);
+    setUseClass(false);
     setChosenPrice(0);
     setTargetProfit(10_000_000);
     setSensPct(0);
@@ -183,6 +203,9 @@ export function HppCalculator({ initialHistory, canEdit }: { initialHistory: Hpp
         mode,
         allocMode,
         targetSales,
+        wastePct,
+        btkl,
+        useClass,
         variables,
         fixed,
         chosenPrice: price,
@@ -205,10 +228,13 @@ export function HppCalculator({ initialHistory, canEdit }: { initialHistory: Hpp
       ["Produk", name || "-"],
       ["Kategori", category === "makanan" ? "Makanan" : "Minuman"],
       ["Total HPP / Produk", Math.round(hpp)],
-      ["  Biaya Variabel / Produk", Math.round(variableCost)],
+      ["  Bahan Baku + Packing / Produk", Math.round(rawVariable)],
+      [`  Waste (${wastePct}%)`, Math.round(waste)],
+      ["  Biaya Variabel Efektif / Produk", Math.round(variableCost)],
       ["  Alokasi Biaya Tetap / Produk", Math.round(fixedAlloc)],
+      ["  BTKL / Bulan (dapur/bar)", Math.round(btkl)],
       ["Harga Jual Pilihan", Math.round(price)],
-      ["Food cost %", `${(fc * 100).toFixed(1)}%`],
+      ["Food cost %", `${(fc * 100).toFixed(1)}% (${foodCostStatus(fc, category).label})`],
       ["Margin Kontribusi / unit", Math.round(proj.contribution)],
       ["BEP (unit)", proj.bepUnit],
       ["Target Jual / Bulan", proj.targetUnit],
@@ -230,6 +256,9 @@ export function HppCalculator({ initialHistory, canEdit }: { initialHistory: Hpp
     setFixed(r.fixed);
     setAllocMode(r.allocMode);
     setTargetSales(r.targetSales || 1000);
+    setWastePct(r.wastePct ?? 5);
+    setBtkl(r.btkl ?? 0);
+    setUseClass(!!r.useClass);
     setChosenPrice(r.chosenPrice || 0);
     setTargetProfit(r.targetProfit || 10_000_000);
     window.scrollTo({ top: 0, behavior: "smooth" });
@@ -359,6 +388,31 @@ export function HppCalculator({ initialHistory, canEdit }: { initialHistory: Hpp
           >
             <Plus className="size-4" /> Tambah Bahan Baku
           </button>
+
+          {/* Waste — GWG policy: waste normal ≤5% dari bahan baku, masuk ke HPP. */}
+          <div className="mt-3 rounded-xl border border-border bg-muted/20 p-3">
+            <div className="flex items-center justify-between gap-2">
+              <div>
+                <p className="text-xs font-medium text-foreground">Waste / Susut Bahan</p>
+                <p className="text-[11px] text-muted-foreground">Normal ≤5% dari bahan baku (kebijakan HPP)</p>
+              </div>
+              <div className="flex items-center gap-1.5">
+                <div className="w-16">
+                  <NumInput value={wastePct} onChange={setWastePct} placeholder="5" />
+                </div>
+                <span className="text-sm font-medium text-muted-foreground">%</span>
+              </div>
+            </div>
+            <div className="mt-2 flex items-center justify-between border-t border-border/60 pt-2 text-xs">
+              <span className="text-muted-foreground">Biaya waste / produk</span>
+              <span className="font-semibold tabular-nums text-foreground">{rp(waste)}</span>
+            </div>
+            {wastePct > 5 && (
+              <p className="mt-2 flex items-center gap-1.5 rounded-lg bg-amber-500/10 px-2 py-1.5 text-[11px] font-medium text-amber-600 dark:text-amber-400">
+                <AlertTriangle className="size-3.5 shrink-0" /> Waste {wastePct}% melebihi batas normal 5% — catat kelebihannya sebagai waste abnormal (beban operasional terpisah).
+              </p>
+            )}
+          </div>
         </div>
 
         {/* Fixed costs */}
@@ -388,10 +442,26 @@ export function HppCalculator({ initialHistory, canEdit }: { initialHistory: Hpp
             )}
           </div>
 
+          {/* BTKL — Biaya Tenaga Kerja Langsung (kitchen/bar staff), per makalah. */}
+          <div className="mt-3 rounded-xl border border-border bg-muted/20 p-3">
+            <div className="flex items-center justify-between gap-2">
+              <div className="flex items-center gap-2">
+                <Users className="size-4 shrink-0 text-muted-foreground" />
+                <div>
+                  <p className="text-xs font-medium text-foreground">BTKL — Tenaga Kerja Langsung</p>
+                  <p className="text-[11px] text-muted-foreground">Gaji karyawan dapur/bar per bulan</p>
+                </div>
+              </div>
+              <div className="w-32 shrink-0">
+                <NumInput value={btkl} onChange={setBtkl} placeholder="Rp/bln" />
+              </div>
+            </div>
+          </div>
+
           <div className="mt-3 space-y-2">
             {fixed.map((f) => (
               <div key={f.id} className="flex items-center gap-2">
-                <Input value={f.name} onChange={(e) => setFix(f.id, { name: e.target.value })} placeholder="Nama biaya (mis. Listrik & Air)" className="flex-1" />
+                <Input value={f.name} onChange={(e) => setFix(f.id, { name: e.target.value })} placeholder="Nama biaya (mis. Listrik, Gas & Air)" className="flex-1" />
                 <div className="w-32 shrink-0">
                   <NumInput value={f.monthly} onChange={(n) => setFix(f.id, { monthly: n })} placeholder="Rp/bln" />
                 </div>
@@ -426,8 +496,10 @@ export function HppCalculator({ initialHistory, canEdit }: { initialHistory: Hpp
             <Calculator className="size-4 text-muted-foreground" /> Rincian HPP per Produk
           </p>
           <div className="space-y-1.5 text-sm">
-            <Row label="Biaya Variabel per Produk" value={rp(variableCost)} />
-            <Row label="Alokasi Biaya Tetap" value={rp(fixedAlloc)} hint={`Total ${rp(base.totalFixed)} / ${allocMode === "even" ? totalUnitsAll : targetSales} unit`} />
+            <Row label="Bahan Baku + Packing" value={rp(rawVariable)} />
+            <Row label={`Waste (${wastePct}%)`} value={rp(waste)} />
+            <Row label="Biaya Variabel Efektif" value={rp(variableCost)} />
+            <Row label="Alokasi Biaya Tetap" value={rp(fixedAlloc)} hint={`Overhead${btkl > 0 ? " + BTKL" : ""} ${rp(base.totalFixed)} / ${allocMode === "even" ? totalUnitsAll : targetSales} unit`} />
             <div className="mt-1 flex items-center justify-between rounded-xl bg-primary/10 px-3 py-2.5">
               <span className="font-semibold text-foreground">Total HPP per Produk</span>
               <span className="text-lg font-bold tabular-nums text-primary">{rp(hpp)}</span>
@@ -456,10 +528,27 @@ export function HppCalculator({ initialHistory, canEdit }: { initialHistory: Hpp
 
         {/* Price suggestions */}
         <div className="glass rounded-2xl border border-border p-5">
-          <div className="mb-3 flex items-center justify-between">
+          <div className="mb-3 flex items-center justify-between gap-2">
             <p className="text-sm font-semibold text-foreground">Saran Harga Jual</p>
-            <span className="rounded-full bg-muted px-2 py-0.5 text-[10px] font-medium text-muted-foreground">Food cost {(fc * 100).toFixed(1)}%</span>
+            <span
+              className={cn(
+                "shrink-0 rounded-full px-2 py-0.5 text-[10px] font-semibold",
+                fcStatus.tone === "good" && "bg-emerald-500/12 text-emerald-600 dark:text-emerald-400",
+                fcStatus.tone === "warn" && "bg-amber-500/12 text-amber-600 dark:text-amber-400",
+                fcStatus.tone === "bad" && "bg-red-500/12 text-red-600 dark:text-red-400",
+              )}
+            >
+              Food cost {(fc * 100).toFixed(1)}% · {fcStatus.label}
+            </span>
           </div>
+          <p className="mb-3 text-[11px] text-muted-foreground">
+            Target food cost {category === "minuman" ? "minuman 25–35%" : "makanan ≤35%"} · over cost bila &gt;70% (wajib evaluasi).
+          </p>
+          {fcStatus.tone === "bad" && (
+            <p className="mb-3 flex items-center gap-1.5 rounded-lg bg-red-500/10 px-2 py-1.5 text-[11px] font-medium text-red-600 dark:text-red-400">
+              <AlertTriangle className="size-3.5 shrink-0" /> Food cost di atas 70% — menu over cost, wajib dievaluasi ulang (naikkan harga / turunkan biaya bahan).
+            </p>
+          )}
           <div className="space-y-2">
             {tiers.map((t) => {
               const active = price === t.price;
@@ -488,6 +577,44 @@ export function HppCalculator({ initialHistory, canEdit }: { initialHistory: Hpp
               );
             })}
           </div>
+        </div>
+
+        {/* Nordu class pricing — HPP identical, harga jual +Rp5.000 / class. */}
+        <div className="glass rounded-2xl border border-border p-5">
+          <div className="flex items-center justify-between gap-2">
+            <p className="flex items-center gap-2 text-sm font-semibold text-foreground">
+              <Layers className="size-4 text-muted-foreground" /> Sistem Class Nordu
+            </p>
+            <button
+              type="button"
+              role="switch"
+              aria-checked={useClass}
+              onClick={() => setUseClass((v) => !v)}
+              className={cn("relative h-5 w-9 shrink-0 rounded-full transition-colors", useClass ? "bg-primary" : "bg-muted")}
+            >
+              <span className={cn("absolute top-0.5 size-4 rounded-full bg-background shadow transition-all", useClass ? "left-[1.125rem]" : "left-0.5")} />
+            </button>
+          </div>
+          <p className="mt-1 text-[11px] text-muted-foreground">HPP tetap sama; harga jual naik +Rp5.000 tiap class dari Class 1 (terendah).</p>
+          {useClass && (
+            <div className="mt-3 space-y-2">
+              {[0, 1, 2].map((i) => {
+                const cp = price + i * 5000;
+                const m = cp > 0 ? (cp - hpp) / cp : 0;
+                return (
+                  <div key={i} className="flex items-center justify-between gap-3 rounded-xl border border-border bg-muted/20 p-3">
+                    <div className="min-w-0">
+                      <span className="rounded-md bg-muted px-2 py-0.5 text-[11px] font-semibold text-foreground">Class {i + 1}</span>
+                      <p className="mt-1 text-[11px] text-muted-foreground">
+                        {i === 0 ? "Base price" : `+Rp ${(i * 5000).toLocaleString("id-ID")} dari Class 1`} · Margin {(m * 100).toFixed(1)}%
+                      </p>
+                    </div>
+                    <span className="shrink-0 text-base font-bold tabular-nums text-foreground">{rp(cp)}</span>
+                  </div>
+                );
+              })}
+            </div>
+          )}
         </div>
 
         {/* Target & projection */}
