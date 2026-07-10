@@ -166,30 +166,29 @@
 .dark {
   color-scheme: dark;
 
-  /* Charcoal surfaces with a subtle cool tint + clearer elevation steps so
-     cards/sidebar read as distinct layers (not one flat dark mass). */
-  --background: oklch(0.15 0.006 264);
-  --foreground: oklch(0.975 0.004 264);
-  --card: oklch(0.212 0.008 264);
-  --card-foreground: oklch(0.975 0.004 264);
-  --popover: oklch(0.238 0.009 264);
-  --popover-foreground: oklch(0.975 0.004 264);
-  --primary: oklch(0.92 0.004 264);
-  --primary-foreground: oklch(0.2 0.004 264);
-  --secondary: oklch(0.258 0.009 264);
-  --secondary-foreground: oklch(0.975 0.004 264);
-  --muted: oklch(0.25 0.009 264);
-  --muted-foreground: oklch(0.73 0.016 264);
-  --accent: oklch(0.305 0.012 264);
-  --accent-foreground: oklch(0.985 0.004 264);
-  --destructive: oklch(0.66 0.21 25);
+  /* Neutral charcoal surfaces (Aniq-ui style) + green accent */
+  --background: oklch(0.145 0.003 270);
+  --foreground: oklch(0.97 0.003 270);
+  --card: oklch(0.185 0.004 270);
+  --card-foreground: oklch(0.97 0.003 270);
+  --popover: oklch(0.205 0.004 270);
+  --popover-foreground: oklch(0.97 0.003 270);
+  --primary: oklch(0.92 0.004 270);
+  --primary-foreground: oklch(0.2 0.004 270);
+  --secondary: oklch(0.255 0.004 270);
+  --secondary-foreground: oklch(0.97 0.003 270);
+  --muted: oklch(0.245 0.004 270);
+  --muted-foreground: oklch(0.71 0.01 270);
+  --accent: oklch(0.27 0.004 270);
+  --accent-foreground: oklch(0.97 0.003 270);
+  --destructive: oklch(0.64 0.21 25);
   --destructive-foreground: oklch(0.99 0 0);
-  --success: oklch(0.75 0.16 152);
-  --warning: oklch(0.81 0.15 70);
-  --info: oklch(0.73 0.12 200);
-  --border: oklch(1 0 0 / 11%);
-  --input: oklch(1 0 0 / 14%);
-  --ring: oklch(0.6 0.02 264);
+  --success: oklch(0.74 0.16 152);
+  --warning: oklch(0.8 0.15 70);
+  --info: oklch(0.72 0.12 200);
+  --border: oklch(1 0 0 / 8%);
+  --input: oklch(1 0 0 / 12%);
+  --ring: oklch(0.55 0.01 270);
 
   --chart-1: oklch(0.74 0.16 152);
   --chart-2: oklch(0.66 0.13 250);
@@ -197,14 +196,14 @@
   --chart-4: oklch(0.72 0.12 195);
   --chart-5: oklch(0.68 0.2 350);
 
-  --sidebar: oklch(0.185 0.008 264);
-  --sidebar-foreground: oklch(0.975 0.004 264);
-  --sidebar-primary: oklch(0.92 0.004 264);
-  --sidebar-primary-foreground: oklch(0.2 0.004 264);
-  --sidebar-accent: oklch(0.315 0.014 264);
-  --sidebar-accent-foreground: oklch(0.985 0.004 264);
-  --sidebar-border: oklch(1 0 0 / 11%);
-  --sidebar-ring: oklch(0.6 0.02 264);
+  --sidebar: oklch(0.165 0.004 270);
+  --sidebar-foreground: oklch(0.97 0.003 270);
+  --sidebar-primary: oklch(0.92 0.004 270);
+  --sidebar-primary-foreground: oklch(0.2 0.004 270);
+  --sidebar-accent: oklch(0.27 0.004 270);
+  --sidebar-accent-foreground: oklch(0.97 0.003 270);
+  --sidebar-border: oklch(1 0 0 / 8%);
+  --sidebar-ring: oklch(0.55 0.01 270);
 }
 
 @layer base {
@@ -260,12 +259,12 @@
 @layer components {
   /* Translucent panel — for cards over the ambient backdrop */
   .glass {
-    background: color-mix(in oklch, var(--card) 92%, transparent);
+    background: color-mix(in oklch, var(--card) 82%, transparent);
     backdrop-filter: blur(14px) saturate(140%);
     -webkit-backdrop-filter: blur(14px) saturate(140%);
     border: 1px solid var(--border);
-    box-shadow: 0 1px 0 0 color-mix(in oklch, var(--foreground) 6%, transparent) inset,
-      0 12px 34px -18px rgba(0, 0, 0, 0.55);
+    box-shadow: 0 1px 0 0 color-mix(in oklch, var(--foreground) 4%, transparent) inset,
+      0 10px 30px -16px rgba(0, 0, 0, 0.5);
   }
 
   /* Gradient surface for metric/stat cards (Aniq-ui style) — visible top-left sheen → darker bottom. */
