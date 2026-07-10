@@ -8,6 +8,7 @@ export interface HppRecord {
   id: string;
   name: string;
   imageUrl: string | null;
+  category: string; // makanan | minuman
   mode: string; // per_pcs | per_resep
   allocMode: AllocMode;
   targetSales: number;
@@ -53,6 +54,7 @@ const toRow = (r: HppRecord) => ({
   id: r.id,
   name: r.name,
   image_url: r.imageUrl,
+  category: r.category,
   mode: r.mode,
   alloc_mode: r.allocMode,
   target_sales: r.targetSales,
@@ -70,6 +72,7 @@ interface HppRow {
   id: string;
   name: string;
   image_url: string | null;
+  category: string | null;
   mode: string;
   alloc_mode: AllocMode;
   target_sales: number;
@@ -87,6 +90,7 @@ const fromRow = (r: HppRow): HppRecord => ({
   id: r.id,
   name: r.name,
   imageUrl: r.image_url,
+  category: r.category ?? "minuman",
   mode: r.mode,
   allocMode: r.alloc_mode,
   targetSales: r.target_sales,

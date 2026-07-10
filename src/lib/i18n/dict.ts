@@ -23,8 +23,10 @@ export const DICT: Record<Lang, Record<string, string>> = {
     "nav.Outlets": "Outlets",
     "nav.Reports": "Reports",
     "nav.Assessment Golongan": "Grade Assessment",
+    "nav.Kalkulator HPP": "COGS Calculator",
     "nav.User Management": "User Management",
     "nav.Organization": "Organization",
+    "nav.Departemen & Divisi": "Departments & Divisions",
     "nav.Audit Logs": "Audit Logs",
 
     "common.commandCenter": "Command Center",
@@ -55,8 +57,10 @@ export const DICT: Record<Lang, Record<string, string>> = {
     "nav.Outlets": "Outlet",
     "nav.Reports": "Laporan",
     "nav.Assessment Golongan": "Assessment Golongan",
+    "nav.Kalkulator HPP": "Kalkulator HPP",
     "nav.User Management": "Manajemen User",
     "nav.Organization": "Organisasi",
+    "nav.Departemen & Divisi": "Departemen & Divisi",
     "nav.Audit Logs": "Log Audit",
 
     "common.commandCenter": "Pusat Kendali",
