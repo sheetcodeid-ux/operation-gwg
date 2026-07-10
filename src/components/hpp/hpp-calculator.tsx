@@ -8,6 +8,7 @@ import {
   Calculator,
   Check,
   ChevronsUpDown,
+  Coffee,
   History,
   ImagePlus,
   Loader2,
@@ -17,6 +18,8 @@ import {
   Sparkles,
   Trash2,
   TrendingUp,
+  UtensilsCrossed,
+  type LucideIcon,
 } from "lucide-react";
 import { toast } from "sonner";
 import {
@@ -108,13 +111,14 @@ export function HppCalculator({ initialHistory, canEdit }: { initialHistory: Hpp
 
   const [name, setName] = React.useState("");
   const [image, setImage] = React.useState<string | null>(null);
+  const [category, setCategory] = React.useState<"makanan" | "minuman">("minuman");
   const [mode, setMode] = React.useState<"per_pcs" | "per_resep">("per_pcs");
   const [yieldPcs, setYieldPcs] = React.useState(1); // pcs per resep (per_resep only)
-  const [variables, setVariables] = React.useState<VariableItem[]>([emptyVar()]);
+  const [variables, setVariables] = React.useState<VariableItem[]>([]);
   const [allocMode, setAllocMode] = React.useState<AllocMode>("product");
   const [targetSales, setTargetSales] = React.useState(1000);
   const [totalUnitsAll, setTotalUnitsAll] = React.useState(1000);
-  const [fixed, setFixed] = React.useState<FixedItem[]>([emptyFixed()]);
+  const [fixed, setFixed] = React.useState<FixedItem[]>([]);
 
   const [sensPct, setSensPct] = React.useState(0);
   const [chosenPrice, setChosenPrice] = React.useState(0);
@@ -157,10 +161,11 @@ export function HppCalculator({ initialHistory, canEdit }: { initialHistory: Hpp
   function reset() {
     setName("");
     setImage(null);
+    setCategory("minuman");
     setMode("per_pcs");
     setYieldPcs(1);
-    setVariables([emptyVar()]);
-    setFixed([emptyFixed()]);
+    setVariables([]);
+    setFixed([]);
     setAllocMode("product");
     setTargetSales(1000);
     setChosenPrice(0);
@@ -174,6 +179,7 @@ export function HppCalculator({ initialHistory, canEdit }: { initialHistory: Hpp
       const res = await saveHppAction({
         name,
         imageUrl: image,
+        category,
         mode,
         allocMode,
         targetSales,
@@ -197,6 +203,7 @@ export function HppCalculator({ initialHistory, canEdit }: { initialHistory: Hpp
   function exportCsv() {
     const rows: (string | number)[][] = [
       ["Produk", name || "-"],
+      ["Kategori", category === "makanan" ? "Makanan" : "Minuman"],
       ["Total HPP / Produk", Math.round(hpp)],
       ["  Biaya Variabel / Produk", Math.round(variableCost)],
       ["  Alokasi Biaya Tetap / Produk", Math.round(fixedAlloc)],
@@ -217,9 +224,10 @@ export function HppCalculator({ initialHistory, canEdit }: { initialHistory: Hpp
   function loadRecord(r: HppRecord) {
     setName(r.name);
     setImage(r.imageUrl);
+    setCategory(r.category === "makanan" ? "makanan" : "minuman");
     setMode(r.mode === "per_resep" ? "per_resep" : "per_pcs");
-    setVariables(r.variables.length ? r.variables : [emptyVar()]);
-    setFixed(r.fixed.length ? r.fixed : [emptyFixed()]);
+    setVariables(r.variables);
+    setFixed(r.fixed);
     setAllocMode(r.allocMode);
     setTargetSales(r.targetSales || 1000);
     setChosenPrice(r.chosenPrice || 0);
@@ -238,6 +246,19 @@ export function HppCalculator({ initialHistory, canEdit }: { initialHistory: Hpp
           <Field label="Nama Produk">
             <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="mis. Kopi Susu Gula Aren" />
           </Field>
+
+          <div className="mt-3">
+            <Label>Kategori Produk</Label>
+            <Segmented
+              className="mt-1.5"
+              value={category}
+              onChange={(v) => setCategory(v as typeof category)}
+              items={[
+                { value: "minuman", label: "Minuman", icon: Coffee },
+                { value: "makanan", label: "Makanan", icon: UtensilsCrossed },
+              ]}
+            />
+          </div>
 
           <div className="mt-3">
             <Label>Gambar Produk (opsional)</Label>
@@ -296,7 +317,7 @@ export function HppCalculator({ initialHistory, canEdit }: { initialHistory: Hpp
                   <Input value={v.name} onChange={(e) => setVar(v.id, { name: e.target.value })} placeholder="Nama bahan (mis. Kopi Espresso)" className="flex-1" />
                   <button
                     type="button"
-                    onClick={() => setVariables((x) => (x.length > 1 ? x.filter((i) => i.id !== v.id) : x))}
+                    onClick={() => setVariables((x) => x.filter((i) => i.id !== v.id))}
                     className="grid size-8 shrink-0 place-items-center rounded-lg text-muted-foreground hover:bg-red-500/10 hover:text-red-500"
                     title="Hapus bahan"
                   >
@@ -376,7 +397,7 @@ export function HppCalculator({ initialHistory, canEdit }: { initialHistory: Hpp
                 </div>
                 <button
                   type="button"
-                  onClick={() => setFixed((x) => (x.length > 1 ? x.filter((i) => i.id !== f.id) : x))}
+                  onClick={() => setFixed((x) => x.filter((i) => i.id !== f.id))}
                   className="grid size-8 shrink-0 place-items-center rounded-lg text-muted-foreground hover:bg-red-500/10 hover:text-red-500"
                   title="Hapus biaya"
                 >
@@ -580,7 +601,14 @@ export function HppCalculator({ initialHistory, canEdit }: { initialHistory: Hpp
               {initialHistory.map((r) => (
                 <div key={r.id} className="group flex items-center gap-2 rounded-xl border border-border bg-muted/20 px-3 py-2">
                   <button type="button" onClick={() => loadRecord(r)} className="min-w-0 flex-1 text-left">
-                    <p className="truncate text-sm font-medium text-foreground">{r.name}</p>
+                    <div className="flex items-center gap-1.5">
+                      {r.category === "makanan" ? (
+                        <UtensilsCrossed className="size-3.5 shrink-0 text-muted-foreground" />
+                      ) : (
+                        <Coffee className="size-3.5 shrink-0 text-muted-foreground" />
+                      )}
+                      <p className="truncate text-sm font-medium text-foreground">{r.name}</p>
+                    </div>
                     <p className="truncate text-[11px] text-muted-foreground">
                       HPP {rp(r.hpp)} · Harga {rp(r.chosenPrice)} · {new Date(r.createdAt).toLocaleDateString("id-ID", { day: "numeric", month: "short" })}
                     </p>
@@ -614,21 +642,33 @@ export function HppCalculator({ initialHistory, canEdit }: { initialHistory: Hpp
 }
 
 /* ---------- small sub-components ---------- */
-function Segmented({ value, onChange, items, className }: { value: string; onChange: (v: string) => void; items: { value: string; label: string }[]; className?: string }) {
+function Segmented({
+  value,
+  onChange,
+  items,
+  className,
+}: {
+  value: string;
+  onChange: (v: string) => void;
+  items: { value: string; label: string; icon?: LucideIcon }[];
+  className?: string;
+}) {
   return (
     <div className={cn("inline-flex w-full gap-1 rounded-xl border border-border bg-muted/50 p-1", className)}>
       {items.map((it) => {
         const active = it.value === value;
+        const Icon = it.icon;
         return (
           <button
             key={it.value}
             type="button"
             onClick={() => onChange(it.value)}
             className={cn(
-              "flex-1 whitespace-nowrap rounded-lg px-3 py-1.5 text-xs font-medium transition-colors",
+              "flex flex-1 items-center justify-center gap-1.5 whitespace-nowrap rounded-lg px-3 py-1.5 text-xs font-medium transition-colors",
               active ? "bg-background text-foreground shadow-sm ring-1 ring-border" : "text-muted-foreground hover:text-foreground",
             )}
           >
+            {Icon && <Icon className="size-3.5" />}
             {it.label}
           </button>
         );
