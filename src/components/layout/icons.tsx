@@ -2,6 +2,7 @@ import {
   Award,
   Banknote,
   Briefcase,
+  Calculator,
   CalendarRange,
   ChartSpline,
   ClipboardCheck,
@@ -46,6 +47,7 @@ export const NAV_ICONS: Record<string, LucideIcon> = {
   ScrollText,
   FileText,
   Award,
+  Calculator,
   // Division (group) icons
   Briefcase,
   ShieldCheck,

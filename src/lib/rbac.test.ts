@@ -41,9 +41,9 @@ describe("RBAC capabilities", () => {
 });
 
 describe("menu access matrix", () => {
-  it("gives R&D roles only Work Tracker", () => {
+  it("gives R&D roles Work Tracker + Kalkulator HPP", () => {
     for (const r of ["bar_rnd", "kitchen_rnd", "head_bar_rnd", "coordinator_rnd"] as const) {
-      expect(ROLE_MENUS[r]).toEqual(["work"]);
+      expect(ROLE_MENUS[r]).toEqual(["work", "hpp"]);
     }
   });
 
