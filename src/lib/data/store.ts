@@ -25,6 +25,7 @@ import type {
 import { SEED } from "./seed";
 import { db, dbEnabled } from "./db";
 import { notificationFromRow } from "./rows";
+import { canVerifyHpp } from "../hpp/access";
 import { DEMO_NOW } from "../now";
 import { buildCompareData, type CompareData } from "../compare-data";
 
@@ -95,8 +96,8 @@ export async function listNotifications(user: UserProfile) {
   if (!dbEnabled) return base;
   // DB notifications relevant to this user:
   //  • targeted directly at them (e.g. their menu was verified/rejected), or
-  //  • HPP review requests (untargeted) — only for tim F&B / Super Admin.
-  const canVerify = user.role === "super_admin" || user.department === "Food & Beverage";
+  //  • HPP review requests (untargeted) — only for the R&D Head / Super Admin.
+  const canVerify = canVerifyHpp(user);
   const { data } = await db()
     .from("notifications")
     .select("*")
