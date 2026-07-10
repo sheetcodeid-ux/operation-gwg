@@ -92,13 +92,21 @@ export function listComplaints(user: UserProfile): Complaint[] {
 export async function listNotifications(user: UserProfile) {
   const ids = visibleOutletIdSet(user);
   const base = SEED.notifications.filter((n) => !n.outletId || ids.has(n.outletId));
-  // HPP review notifications live in the DB and are for tim F&B / Super Admin only.
   if (!dbEnabled) return base;
+  // DB notifications relevant to this user:
+  //  • targeted directly at them (e.g. their menu was verified/rejected), or
+  //  • HPP review requests (untargeted) — only for tim F&B / Super Admin.
   const canVerify = user.role === "super_admin" || user.department === "Food & Beverage";
-  if (!canVerify) return base;
-  const { data } = await db().from("notifications").select("*").eq("kind", "hpp_review").order("created_at", { ascending: false }).limit(30);
-  const hpp = (data ?? []).map(notificationFromRow);
-  return [...hpp, ...base];
+  const { data } = await db()
+    .from("notifications")
+    .select("*")
+    .or(`target_user.eq.${user.id},kind.eq.hpp_review`)
+    .order("created_at", { ascending: false })
+    .limit(40);
+  const extra = (data ?? [])
+    .map(notificationFromRow)
+    .filter((n) => (n.targetUser ? n.targetUser === user.id : n.kind === "hpp_review" && canVerify));
+  return [...extra, ...base];
 }
 
 function byDateDesc<T>(key: keyof T) {

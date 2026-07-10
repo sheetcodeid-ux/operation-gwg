@@ -276,6 +276,8 @@ export interface AppNotification {
   message: string;
   outletId?: string;
   areaId?: string;
+  /** When set, the notification is for this single user (by id), not an audience. */
+  targetUser?: string;
   severity: "info" | "warning" | "critical";
   read: boolean;
   createdAt: string;
