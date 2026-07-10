@@ -24,7 +24,11 @@ export interface DivisionDisplay {
 }
 
 /** Icons offered for a custom division (must exist in NAV_ICONS). */
-const ICON_CHOICES = ["Briefcase", "ShieldCheck", "FlaskConical", "Scale", "Settings2", "Network", "Store", "Users", "Award", "ChartSpline"];
+const ICON_CHOICES = [
+  "Briefcase", "ShieldCheck", "FlaskConical", "Scale", "Settings2", "Network", "Store", "Users", "UserRound",
+  "Wallet", "Banknote", "Palette", "FolderKanban", "SearchCheck", "ClipboardCheck", "NotebookPen", "Handshake",
+  "Rocket", "TrendingUp", "Award", "ChartSpline", "ListChecks", "FileText", "CalendarRange",
+];
 
 export function DivisionManager({
   divisions,

@@ -61,14 +61,14 @@ export const DIVISION_ICON: Record<Division, string> = {
   Operation: "Briefcase",
   Supervisor: "ShieldCheck",
   "R&D": "FlaskConical",
-  "Human Capital": "Scale",
+  "Human Capital": "UserRound", // people, not a legal scale
   Administrator: "Settings2",
-  Finance: "ChartSpline",
-  Creative: "Award",
-  "Project Manager": "ListChecks",
-  Auditor: "ShieldCheck",
-  Sekretaris: "FileText",
-  "Business Development": "Store",
+  Finance: "Wallet",
+  Creative: "Palette",
+  "Project Manager": "FolderKanban",
+  Auditor: "SearchCheck", // distinct from Supervisor's shield
+  Sekretaris: "NotebookPen",
+  "Business Development": "Handshake",
 };
 
 /** Which division each role sits in (drives the sidebar group header). */
