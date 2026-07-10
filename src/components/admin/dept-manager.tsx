@@ -231,6 +231,14 @@ export function DeptManager({ departments }: { departments: DeptDisplay[] }) {
                                   </div>
                                   <p className="truncate text-[11px] text-muted-foreground">{e.jabatan}</p>
                                 </div>
+                                <button
+                                  type="button"
+                                  className="shrink-0 rounded-md p-1 text-muted-foreground opacity-0 transition-opacity hover:text-primary group-hover:opacity-100"
+                                  title={`Buatkan akun login untuk ${e.name}`}
+                                  onClick={() => router.push(`/admin/users?add=1&name=${encodeURIComponent(e.name)}&div=${encodeURIComponent(d.name)}`)}
+                                >
+                                  <UserPlus className="size-3.5" />
+                                </button>
                                 {e.source === "extra" && (
                                   <button
                                     type="button"

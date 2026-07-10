@@ -107,19 +107,34 @@ export function UserManager({
   outlets,
   navExtra,
   departmentOptions = [],
+  initialPrefill,
 }: {
   users: UserRow[];
   outlets: OutletLite[];
   navExtra?: NavExtra;
   departmentOptions?: string[];
+  /** From "Buatkan Akun" on the Departemen page — opens the create form filled. */
+  initialPrefill?: UserPrefill;
 }) {
   // Merge admin-defined sidebar divisions before the grants panel reads navAll().
   // Empty ⇒ identical to the built-in sidebar.
   setNavExtras(navExtra ?? { divisions: [] });
+  const router = useRouter();
   const [creating, setCreating] = React.useState(false);
+  const [prefill, setPrefill] = React.useState<UserPrefill | undefined>(undefined);
   const [editUser, setEditUser] = React.useState<UserRow | null>(null);
   const [rolesUser, setRolesUser] = React.useState<UserRow | null>(null);
   const [accessUser, setAccessUser] = React.useState<UserRow | null>(null);
+
+  // "Buatkan Akun" from the Departemen page: open the create form pre-filled,
+  // then strip the query so a refresh doesn't reopen it.
+  React.useEffect(() => {
+    if (!initialPrefill || (!initialPrefill.name && !initialPrefill.division)) return;
+    setPrefill(initialPrefill);
+    setCreating(true);
+    router.replace("/admin/users");
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const [q, setQ] = React.useState("");
   const [email, setEmail] = React.useState("");
@@ -156,7 +171,7 @@ export function UserManager({
           <h1 className="text-2xl font-semibold text-foreground">User Management</h1>
           <p className="mt-0.5 text-sm text-muted-foreground">Kelola akun pengguna dan hak aksesnya per divisi</p>
         </div>
-        <Button onClick={() => setCreating(true)}>
+        <Button onClick={() => { setPrefill(undefined); setCreating(true); }}>
           <Plus className="size-4" /> Add User
         </Button>
       </div>
@@ -282,7 +297,7 @@ export function UserManager({
         </div>
       </div>
 
-      {creating && <UserFormPanel mode="create" outlets={outlets} onClose={() => setCreating(false)} />}
+      {creating && <UserFormPanel mode="create" outlets={outlets} prefill={prefill} onClose={() => { setCreating(false); setPrefill(undefined); }} />}
       {editUser && <UserFormPanel mode="edit" user={editUser} outlets={outlets} onClose={() => setEditUser(null)} />}
       {rolesUser && <AssignRolesPanel user={rolesUser} onClose={() => setRolesUser(null)} />}
       {accessUser && <AccessPanel user={accessUser} onClose={() => setAccessUser(null)} />}
@@ -355,24 +370,35 @@ function RowMenu({ user, onEdit, onRoles, onAccess }: { user: UserRow; onEdit: (
   );
 }
 
+/** Prefill for a fresh Create form (e.g. "Buatkan Akun" from an org employee). */
+export interface UserPrefill {
+  name?: string;
+  division?: string;
+}
+
 /** Shared create/edit slide-over. */
 export function UserFormPanel({
   mode,
   user,
   outlets,
+  prefill,
   onClose,
 }: {
   mode: "create" | "edit";
   user?: UserRow;
   outlets: OutletLite[];
+  prefill?: UserPrefill;
   onClose: () => void;
 }) {
   const router = useRouter();
   const [pending, start] = React.useTransition();
-  const initFirst = user ? user.name.split(" ")[0] ?? "" : "";
-  const initLast = user ? user.name.split(" ").slice(1).join(" ") : "";
+  const prefillName = prefill?.name ?? "";
+  const initFirst = user ? user.name.split(" ")[0] ?? "" : prefillName.split(" ")[0] ?? "";
+  const initLast = user ? user.name.split(" ").slice(1).join(" ") : prefillName.split(" ").slice(1).join(" ");
   // A user's division = their department (if set) else the division of their role.
-  const initDivision = (user ? user.department || ROLE_DIVISION[user.role] : DEFAULT_DIVISION) as Division;
+  // For a fresh form it starts empty — the admin must choose one explicitly.
+  const initDivision: Division | "" = user ? ((user.department || ROLE_DIVISION[user.role]) as Division) : ((prefill?.division ?? "") as Division | "");
+  const initRole: Role | "" = user?.role ?? (initDivision ? (rolesInDivision(initDivision as Division)[0] ?? "member") : "");
 
   const [first, setFirst] = React.useState(initFirst);
   const [last, setLast] = React.useState(initLast);
@@ -380,9 +406,9 @@ export function UserFormPanel({
   const [pwd, setPwd] = React.useState("");
   const [pwd2, setPwd2] = React.useState("");
   const [showPwd, setShowPwd] = React.useState(false);
-  const [division, setDivision] = React.useState<Division>(initDivision);
-  const [role, setRole] = React.useState<Role>(user?.role ?? rolesInDivision(initDivision)[0] ?? "member");
-  const [department, setDepartment] = React.useState<string>(user?.department ?? "");
+  const [division, setDivision] = React.useState<Division | "">(initDivision);
+  const [role, setRole] = React.useState<Role | "">(initRole);
+  const [department, setDepartment] = React.useState<string>(user?.department ?? (initRole === "member" ? (initDivision as string) : ""));
   const [selected, setSelected] = React.useState<string[]>(user?.outletIds ?? []);
   const [phone, setPhone] = React.useState(user?.phone ?? "");
   const [country, setCountry] = React.useState(user?.country ?? "");
@@ -393,14 +419,26 @@ export function UserFormPanel({
   const name = `${first} ${last}`.trim();
   // Roles to choose from: the selected division's, falling back to the current
   // role's own division so an existing role always shows.
-  const divisionRoles = rolesInDivision(division).length ? rolesInDivision(division) : rolesInDivision(ROLE_DIVISION[role]);
+  const divisionRoles = division
+    ? rolesInDivision(division as Division).length
+      ? rolesInDivision(division as Division)
+      : role
+        ? rolesInDivision(ROLE_DIVISION[role as Role])
+        : []
+    : [];
   // A generic member (department-aligned division like Finance/Creative) has no
   // role to pick — their access is simply that division.
   const isMember = role === "member";
 
-  function pickDivision(d: Division) {
+  function pickDivision(d: Division | "") {
     setDivision(d);
-    const roles = rolesInDivision(d);
+    if (!d) {
+      setRole("");
+      setDepartment("");
+      setSelected([]);
+      return;
+    }
+    const roles = rolesInDivision(d as Division);
     if (roles.length) {
       // Built-in role-division: pick a role; access follows the role.
       setRole(roles[0]);
@@ -423,14 +461,15 @@ export function UserFormPanel({
   function submit() {
     if (!name) return toast.error("Nama depan wajib diisi.");
     if (!email) return toast.error("Email wajib diisi.");
+    if (!division || !role) return toast.error("Pilih divisi tujuan dulu.");
     if (!isEdit && pwd.length < 6) return toast.error("Password minimal 6 karakter.");
     if (pwd && pwd.length < 6) return toast.error("Password minimal 6 karakter.");
     if (pwd !== pwd2) return toast.error("Konfirmasi password tidak cocok.");
     start(async () => {
       const contact = { phone: phone.trim() || null, country: country.trim() || null, avatarUrl: avatar, department: department || null };
       const res = isEdit
-        ? await updateUserAction({ id: user!.id, name, email, role, password: pwd || undefined, outletIds: selected, ...contact })
-        : await createUserAction({ name, email, role, password: pwd, outletIds: selected, ...contact });
+        ? await updateUserAction({ id: user!.id, name, email, role: role as Role, password: pwd || undefined, outletIds: selected, ...contact })
+        : await createUserAction({ name, email, role: role as Role, password: pwd, outletIds: selected, ...contact });
       if (res?.error) {
         toast.error(res.error);
         return;
@@ -516,12 +555,17 @@ export function UserFormPanel({
               matchTriggerWidth
               searchable={false}
               value={division}
-              onChange={(v) => pickDivision(v as Division)}
-              options={[...new Set([...ALL_DIVISIONS, division])].map((d) => ({ value: d, label: d }))}
+              onChange={(v) => pickDivision(v as Division | "")}
+              placeholder="— Pilih Divisi —"
+              options={[{ value: "", label: "— Pilih Divisi —" }, ...[...new Set([...ALL_DIVISIONS, ...(division ? [division] : [])])].map((d) => ({ value: d, label: d }))]}
             />
           </Field>
           <Field label="Jabatan / Role *">
-            {isMember ? (
+            {!division ? (
+              <div className="flex h-9 items-center rounded-lg border border-input bg-muted/20 px-3 text-sm text-muted-foreground/70">
+                Pilih divisi dulu
+              </div>
+            ) : isMember ? (
               <div className="flex h-9 items-center gap-1.5 rounded-lg border border-input bg-muted/30 px-3 text-sm text-muted-foreground">
                 Anggota Divisi
               </div>
@@ -541,12 +585,14 @@ export function UserFormPanel({
           </Field>
         </div>
         <p className="text-[11px] text-muted-foreground">
-          {isMember
-            ? `Pengguna menjadi anggota divisi ${division} — hanya mengakses menu divisi tersebut (mis. Work Tracker).`
-            : "Divisi menentukan menu yang bisa diakses; pilih jabatan/role di dalamnya."}
+          {!division
+            ? "Pilih divisi tujuan pengguna terlebih dahulu."
+            : isMember
+              ? `Pengguna menjadi anggota divisi ${division} — hanya mengakses menu divisi tersebut (mis. Work Tracker).`
+              : "Divisi menentukan menu yang bisa diakses; pilih jabatan/role di dalamnya."}
         </p>
 
-        {needsOutlets(role) && <OutletPicker outlets={outlets} multi={isMulti(role)} selected={selected} onChange={setSelected} />}
+        {role && needsOutlets(role as Role) && <OutletPicker outlets={outlets} multi={isMulti(role as Role)} selected={selected} onChange={setSelected} />}
       </div>
 
       <SlideOverFooter onClose={onClose} pending={pending}>

@@ -11,9 +11,12 @@ import { UserManager, type OutletLite, type UserRow } from "@/components/admin/u
 
 export const metadata: Metadata = { title: "User Management" };
 
-export default async function UsersPage() {
+export default async function UsersPage({ searchParams }: { searchParams: Promise<{ add?: string; name?: string; div?: string }> }) {
   const user = (await getSessionUser())!;
   if (!can(user, "manage_users")) redirect("/dashboard");
+
+  const sp = await searchParams;
+  const initialPrefill = sp.add ? { name: sp.name ?? "", division: sp.div ?? "" } : undefined;
 
   const users = getUsers();
 
@@ -60,7 +63,7 @@ export default async function UsersPage() {
 
   return (
     <div className="w-full">
-      <UserManager users={userRows} outlets={outletLite} navExtra={navExtra} departmentOptions={departmentOptions} />
+      <UserManager users={userRows} outlets={outletLite} navExtra={navExtra} departmentOptions={departmentOptions} initialPrefill={initialPrefill} />
     </div>
   );
 }
