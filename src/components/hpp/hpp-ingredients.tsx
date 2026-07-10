@@ -2,10 +2,11 @@
 
 import * as React from "react";
 import { useRouter } from "next/navigation";
-import { AlertTriangle, ArrowDown, ArrowUp, ArrowUpDown, BellOff, Check, Package, Pencil, Plus, Search, TrendingUp, Trash2, Upload, X } from "lucide-react";
+import { AlertTriangle, ArrowDown, ArrowUp, ArrowUpDown, BellOff, Check, Download, Package, Pencil, Plus, Search, TrendingUp, Trash2, Upload, X } from "lucide-react";
 import { toast } from "sonner";
 import { saveIngredientAction, deleteIngredientAction, clearIngredientAlertAction, importIngredientsAction } from "@/lib/actions/hpp-ingredients";
 import type { HppIngredient } from "@/lib/data/hpp-ingredients";
+import { downloadCsv, toCsv } from "@/lib/csv";
 import { Button } from "@/components/ui/button";
 import { Field, Input, Label } from "@/components/ui/input";
 import { StatTile } from "@/components/ui/stat";
@@ -128,6 +129,12 @@ export function HppIngredients({ ingredients, menus, canEdit }: { ingredients: H
     }
   }
 
+  function exportCsv() {
+    const headers = ["Bahan", "Wilayah", "Harga Beli", "Qty", "Satuan", "Harga/Satuan", "Menu Pakai", "Status"];
+    const data = rows.map((i) => [i.name, i.region ?? "", Math.round(i.buyPrice), i.buyQty, i.buyUnit, Math.round(perUnit(i)), (usage.get(i.id) ?? []).length, i.alert ? "naik >5%" : "stabil"]);
+    downloadCsv("master-bahan-baku", toCsv(headers, data));
+  }
+
   async function act(fn: () => Promise<{ error?: string }>, ok: string) {
     const res = await fn();
     if (res?.error) toast.error(res.error);
@@ -233,14 +240,19 @@ export function HppIngredients({ ingredients, menus, canEdit }: { ingredients: H
 
       {/* Toolbar */}
       <div className="glass space-y-2 rounded-2xl border border-border p-3">
-        <div className="relative">
-          <Search className="pointer-events-none absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
-          <input
-            value={q}
-            onChange={(e) => setQ(e.target.value)}
-            placeholder="Cari bahan atau wilayah…"
-            className="h-9 w-full rounded-lg border border-input bg-background/40 pl-8 pr-3 text-sm text-foreground focus:border-ring focus:outline-none focus:ring-2 focus:ring-ring/25 dark:bg-input/30"
-          />
+        <div className="flex items-center gap-2">
+          <div className="relative flex-1">
+            <Search className="pointer-events-none absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+            <input
+              value={q}
+              onChange={(e) => setQ(e.target.value)}
+              placeholder="Cari bahan atau wilayah…"
+              className="h-9 w-full rounded-lg border border-input bg-background/40 pl-8 pr-3 text-sm text-foreground focus:border-ring focus:outline-none focus:ring-2 focus:ring-ring/25 dark:bg-input/30"
+            />
+          </div>
+          <button type="button" onClick={exportCsv} title="Export CSV" className="grid h-9 w-9 shrink-0 place-items-center rounded-lg border border-border text-muted-foreground transition-colors hover:text-foreground">
+            <Download className="size-4" />
+          </button>
         </div>
         <div className="scroll-fade-x -mx-1 flex items-center gap-2 overflow-x-auto px-1 pb-0.5">
           <div className="w-44 shrink-0">
