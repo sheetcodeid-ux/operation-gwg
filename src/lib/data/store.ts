@@ -23,6 +23,8 @@ import type {
   WorkTask,
 } from "../types";
 import { SEED } from "./seed";
+import { db, dbEnabled } from "./db";
+import { notificationFromRow } from "./rows";
 import { DEMO_NOW } from "../now";
 import { buildCompareData, type CompareData } from "../compare-data";
 
@@ -87,9 +89,16 @@ export function listComplaints(user: UserProfile): Complaint[] {
   const ids = visibleOutletIdSet(user);
   return SEED.complaints.filter((c) => ids.has(c.outletId)).sort(byDateDesc("createdAt"));
 }
-export function listNotifications(user: UserProfile) {
+export async function listNotifications(user: UserProfile) {
   const ids = visibleOutletIdSet(user);
-  return SEED.notifications.filter((n) => !n.outletId || ids.has(n.outletId));
+  const base = SEED.notifications.filter((n) => !n.outletId || ids.has(n.outletId));
+  // HPP review notifications live in the DB and are for tim F&B / Super Admin only.
+  if (!dbEnabled) return base;
+  const canVerify = user.role === "super_admin" || user.department === "Food & Beverage";
+  if (!canVerify) return base;
+  const { data } = await db().from("notifications").select("*").eq("kind", "hpp_review").order("created_at", { ascending: false }).limit(30);
+  const hpp = (data ?? []).map(notificationFromRow);
+  return [...hpp, ...base];
 }
 
 function byDateDesc<T>(key: keyof T) {

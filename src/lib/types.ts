@@ -266,7 +266,8 @@ export type NotificationKind =
   | "complaint_overdue"
   | "task_overdue"
   | "event_deadline"
-  | "score_drop";
+  | "score_drop"
+  | "hpp_review";
 
 export interface AppNotification {
   id: string;

@@ -1,9 +1,11 @@
 "use server";
 
+import { randomUUID } from "node:crypto";
 import { revalidatePath } from "next/cache";
 import { getSessionUser } from "@/lib/auth";
 import { canOpenMenu } from "@/lib/nav";
 import { deleteHpp, getHpp, saveHpp, setHppStatus, type HppDraft } from "@/lib/data/hpp";
+import { saveNotification } from "@/lib/data/persist";
 import type { UserProfile } from "@/lib/types";
 
 /** Anyone who can open the HPP menu (R&D roles, admin, grants, R&D dept members). */
@@ -47,6 +49,16 @@ export async function submitHppAction(id: string) {
   const rec = await getHpp(id);
   if (!rec) return { error: "Data tidak ditemukan." };
   await setHppStatus(id, "submitted", null, null);
+  // Signal tim F&B (surfaced in the topbar bell for F&B / admin only).
+  await saveNotification({
+    id: `ntf_${randomUUID()}`,
+    kind: "hpp_review",
+    title: "Menu HPP menunggu verifikasi",
+    message: `${rec.name} (${rec.brand}) diajukan oleh ${user.name} — perlu diverifikasi tim F&B.`,
+    severity: "info",
+    read: false,
+    createdAt: new Date().toISOString(),
+  });
   revalidateHpp();
   return { ok: true };
 }

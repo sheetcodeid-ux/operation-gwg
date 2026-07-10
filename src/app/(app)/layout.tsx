@@ -38,7 +38,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   const grantSet = new Set(grants);
   const canOpen = (n: (typeof navItems)[number]) =>
     isAdmin || (n.section === home && allowed.has(n.key)) || n.section === department || grantSet.has(`${n.section}:${n.key}`);
-  const notifications = listNotifications(user);
+  const notifications = await listNotifications(user);
   const outletItems = visibleOutlets(user).map((o) => ({
     id: o.id,
     name: o.name,
