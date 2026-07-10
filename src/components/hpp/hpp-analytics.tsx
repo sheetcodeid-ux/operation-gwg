@@ -5,6 +5,7 @@ import { BarChart3 } from "lucide-react";
 import { Bar, BarChart, Cell, LabelList, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { foodCostPct } from "@/lib/hpp/calc";
 import type { HppRecord } from "@/lib/data/hpp";
+import { Reveal } from "@/components/hpp/motion";
 
 const rp = (n: number) => "Rp " + Math.round(n || 0).toLocaleString("id-ID");
 
@@ -41,7 +42,7 @@ export function HppAnalytics({ records }: { records: HppRecord[] }) {
 
   return (
     <div className="grid gap-3 lg:grid-cols-2">
-      <div className="glass rounded-2xl border border-border p-5">
+      <Reveal className="glass rounded-2xl border border-border p-5">
         <p className="mb-1 flex items-center gap-2 text-sm font-semibold text-foreground">
           <BarChart3 className="size-4 text-muted-foreground" /> Distribusi Food Cost
         </p>
@@ -67,9 +68,9 @@ export function HppAnalytics({ records }: { records: HppRecord[] }) {
             </BarChart>
           </ResponsiveContainer>
         </div>
-      </div>
+      </Reveal>
 
-      <div className="glass rounded-2xl border border-border p-5">
+      <Reveal delay={0.08} className="glass rounded-2xl border border-border p-5">
         <p className="mb-1 flex items-center gap-2 text-sm font-semibold text-foreground">
           <BarChart3 className="size-4 text-muted-foreground" /> Rata-rata HPP per Brand
         </p>
@@ -90,7 +91,7 @@ export function HppAnalytics({ records }: { records: HppRecord[] }) {
             </BarChart>
           </ResponsiveContainer>
         </div>
-      </div>
+      </Reveal>
     </div>
   );
 }

@@ -91,6 +91,7 @@ export function Popover({
       ref={menuRef}
       className={cn(
         "surface-solid z-50 origin-top rounded-xl p-1.5",
+        "animate-in fade-in-0 zoom-in-95 duration-150 ease-out",
         portal ? "fixed" : cn("absolute mt-2 min-w-56", align === "end" ? "right-0" : "left-0"),
         contentClassName,
       )}

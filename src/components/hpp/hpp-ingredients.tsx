@@ -9,6 +9,7 @@ import type { HppIngredient } from "@/lib/data/hpp-ingredients";
 import { Button } from "@/components/ui/button";
 import { Field, Input, Label } from "@/components/ui/input";
 import { StatTile } from "@/components/ui/stat";
+import { Reveal } from "@/components/hpp/motion";
 import { cn } from "@/lib/utils";
 
 const rp = (n: number) => "Rp " + Math.round(n || 0).toLocaleString("id-ID");
@@ -103,12 +104,12 @@ export function HppIngredients({ ingredients, menus, canEdit }: { ingredients: H
 
   return (
     <div className="space-y-4">
-      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+      <Reveal className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         <StatTile icon={Package} label="Total Bahan" value={String(ingredients.length)} />
         <StatTile icon={AlertTriangle} label="Naik >5%" value={String(alerts.length)} sub={alerts.length ? "perlu update HPP" : "stabil"} />
         <StatTile icon={AlertTriangle} label="Menu Terdampak" value={String(affectedMenus)} />
         <StatTile icon={Package} label="Wilayah" value={String(new Set(ingredients.map((i) => i.region).filter(Boolean)).size)} />
-      </div>
+      </Reveal>
 
       {alerts.length > 0 && (
         <div className="flex items-start gap-2 rounded-2xl border border-amber-500/30 bg-amber-500/10 p-4 text-sm text-amber-700 dark:text-amber-300">
@@ -207,7 +208,7 @@ export function HppIngredients({ ingredients, menus, canEdit }: { ingredients: H
 
       {/* Table */}
       <div className="glass overflow-hidden rounded-2xl border border-border">
-        <div className="overflow-x-auto">
+        <div className="overflow-x-auto" data-lenis-prevent>
           <table className="w-full min-w-[680px] text-sm">
             <thead className="border-b border-border bg-muted/40 text-left text-[11px] uppercase tracking-wide text-muted-foreground">
               <tr>
