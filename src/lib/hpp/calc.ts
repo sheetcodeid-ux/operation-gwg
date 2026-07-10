@@ -27,6 +27,8 @@ export interface VariableItem {
   buyPrice: number; // purchase price
   buyQty: number; // purchase quantity
   buyUnit: string; // kg / L / pcs / g / ml
+  /** Linked master-ingredient id (optional) — enables price-change propagation. */
+  ingredientId?: string;
 }
 
 export interface FixedItem {

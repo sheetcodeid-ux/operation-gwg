@@ -13,6 +13,7 @@ export type MenuKey =
   | "assessment"
   | "hpp"
   | "hpp_db"
+  | "hpp_bahan"
   | "users"
   | "departments"
   | "audit";
@@ -55,6 +56,7 @@ export const NAV_MENUS: Omit<NavItem, "section">[] = [
   { key: "assessment", label: "Assessment Golongan", href: "/assessment", icon: "Award" },
   { key: "hpp", label: "Kalkulator HPP", href: "/rnd/hpp", icon: "Calculator" },
   { key: "hpp_db", label: "Database HPP", href: "/rnd/hpp/rekap", icon: "Table2" },
+  { key: "hpp_bahan", label: "Master Bahan Baku", href: "/rnd/hpp/bahan", icon: "Package" },
   { key: "users", label: "User Management", href: "/admin/users", icon: "Users" },
   { key: "departments", label: "Departemen & Divisi", href: "/admin/departments", icon: "Network" },
   { key: "audit", label: "Audit Logs", href: "/admin/audit", icon: "ScrollText" },
@@ -115,10 +117,10 @@ export const ROLE_MENUS: Record<Role, MenuKey[]> = {
   pos_operation: ["work"],
   admin_operation: ["work", "complaints"],
   supervisor: ["hygiene", "complaints"], // their own branch only
-  head_bar_rnd: ["work", "hpp", "hpp_db"],
-  bar_rnd: ["work", "hpp", "hpp_db"],
-  kitchen_rnd: ["work", "hpp", "hpp_db"],
-  coordinator_rnd: ["work", "hpp", "hpp_db"],
+  head_bar_rnd: ["work", "hpp", "hpp_db", "hpp_bahan"],
+  bar_rnd: ["work", "hpp", "hpp_db", "hpp_bahan"],
+  kitchen_rnd: ["work", "hpp", "hpp_db", "hpp_bahan"],
+  coordinator_rnd: ["work", "hpp", "hpp_db", "hpp_bahan"],
   legal: ["work", "assessment"], // HRD — grade-promotion assessment
   assessor: ["assessment"], // division Head / evaluator — assessment only
   member: [], // no role menus — access is entirely via their `department`
@@ -128,7 +130,7 @@ export const ROLE_MENUS: Record<Role, MenuKey[]> = {
 const DIVISION_MENUS: { division: Division; menus: MenuKey[] }[] = [
   { division: "Operation", menus: OPERATION_FULL },
   { division: "Supervisor", menus: ["hygiene", "complaints"] },
-  { division: "R&D", menus: ["work", "hpp", "hpp_db"] },
+  { division: "R&D", menus: ["work", "hpp", "hpp_db", "hpp_bahan"] },
   { division: "Human Capital", menus: ["work", "assessment"] },
   // New department-aligned divisions — Work Tracker only for now.
   { division: "Finance", menus: ["work"] },

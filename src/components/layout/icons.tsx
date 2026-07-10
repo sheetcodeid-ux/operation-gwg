@@ -16,6 +16,7 @@ import {
   MessageSquareWarning,
   Network,
   NotebookPen,
+  Package,
   Palette,
   Rocket,
   Scale,
@@ -50,6 +51,7 @@ export const NAV_ICONS: Record<string, LucideIcon> = {
   Award,
   Calculator,
   Table2,
+  Package,
   // Division (group) icons
   Briefcase,
   ShieldCheck,
