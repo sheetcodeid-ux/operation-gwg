@@ -28,21 +28,24 @@ export function EventFilters({
 }) {
   const { month, outlet, status, setMonth, setOutlet, setStatus } = useEventFilters();
   return (
-    <div className={className ?? "flex flex-wrap gap-2"}>
-      <MonthFilter options={months} value={month} onChange={setMonth} className="min-w-0 shrink basis-40" />
+    <div className={className ?? "scroll-fade-x -mx-1 flex items-center gap-2 px-1 py-0.5"}>
+      <MonthFilter options={months} value={month} onChange={setMonth} className="w-36 shrink-0" />
       <Combobox
+        portal
         value={outlet}
         onChange={setOutlet}
-        className="min-w-0 shrink basis-48"
-        options={[{ value: "all", label: "All outlets" }, ...outlets.map((o) => ({ value: o.id, label: o.name }))]}
-        searchPlaceholder="Outlet…"
+        className="w-48 shrink-0"
+        options={[{ value: "all", label: "Semua Outlet" }, ...outlets.map((o) => ({ value: o.id, label: o.name }))]}
+        searchPlaceholder="Cari outlet…"
       />
       <Combobox
+        portal
+        searchable={false}
         value={status}
         onChange={setStatus}
-        className="min-w-0 shrink basis-36"
+        className="w-36 shrink-0"
         options={[
-          { value: "all", label: "All status" },
+          { value: "all", label: "Semua Status" },
           ...(Object.keys(EVENT_STATUS_META) as EventStatus[]).map((s) => ({ value: s, label: EVENT_STATUS_META[s].label })),
         ]}
       />

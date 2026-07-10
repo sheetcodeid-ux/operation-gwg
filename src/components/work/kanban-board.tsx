@@ -95,7 +95,7 @@ export function KanbanBoard({
 
   return (
     <>
-      <div className="no-scrollbar -mx-0.5 mb-3 flex items-center gap-2 overflow-x-auto px-0.5 py-0.5">
+      <div className="scroll-fade-x -mx-1 mb-3 flex items-center gap-2 px-1 py-0.5">
         <span className="shrink-0 text-xs font-medium text-muted-foreground">Filter</span>
         <MonthFilter options={months} value={month} onChange={setMonth} className="w-36 shrink-0" />
         <DivisionFilter value={division} onChange={setDivision} options={divisions} className="w-40 shrink-0" />

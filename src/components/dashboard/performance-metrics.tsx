@@ -42,7 +42,9 @@ export function PerformanceMetrics({ data }: { data: CoordinatorPerf[] }) {
           <CardDescription className="truncate">By coordinator area</CardDescription>
         </div>
         <Combobox
-          className="min-w-0 shrink basis-36"
+          portal
+          searchable={false}
+          className="w-36 shrink-0"
           options={METRICS.map((m) => ({ value: m.value, label: m.label }))}
           value={metric}
           onChange={(v) => setMetric(v as Metric)}

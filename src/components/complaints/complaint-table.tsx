@@ -180,10 +180,12 @@ export function ComplaintTable({ rows, canManage }: { rows: ComplaintRow[]; canM
               </Button>
             )}
             <Combobox
+              portal
+              searchable={false}
               value={status}
               onChange={setStatus}
-              className="min-w-0 shrink basis-40"
-              options={[{ value: "all", label: "All status" }, ...STATUSES.map((s) => ({ value: s, label: COMPLAINT_STATUS_META[s].label }))]}
+              className="w-40 shrink-0"
+              options={[{ value: "all", label: "Semua Status" }, ...STATUSES.map((s) => ({ value: s, label: COMPLAINT_STATUS_META[s].label }))]}
             />
           </div>
         }
@@ -232,6 +234,9 @@ function ResolveDialog({ complaint, onClose }: { complaint: ComplaintRow; onClos
           <div className="grid grid-cols-2 gap-3">
             <Field label="Status">
               <Combobox
+                portal
+                searchable={false}
+                matchTriggerWidth
                 value={status}
                 onChange={(v) => setStatus(v as ComplaintStatus)}
                 options={STATUSES.map((s) => ({ value: s, label: COMPLAINT_STATUS_META[s].label }))}
@@ -239,6 +244,9 @@ function ResolveDialog({ complaint, onClose }: { complaint: ComplaintRow; onClos
             </Field>
             <Field label="Root Cause (5M)">
               <Combobox
+                portal
+                searchable={false}
+                matchTriggerWidth
                 value={rootCause}
                 onChange={(v) => setRootCause(v as RootCauseCategory)}
                 options={CAUSES.map((c) => ({ value: c, label: ROOT_CAUSE_META[c].label }))}

@@ -45,7 +45,9 @@ export function TrendCompareCard({
         <div className="flex min-w-0 shrink-0 items-center gap-2">
           {mode === "monthly" && (
             <Combobox
-              className="min-w-0 shrink basis-40"
+              portal
+              searchable={false}
+              className="w-40 shrink-0"
               options={data.months.map((m) => ({ value: String(m.month), label: m.label }))}
               value={String(month)}
               onChange={(v) => setMonth(Number(v))}

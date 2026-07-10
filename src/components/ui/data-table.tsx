@@ -117,8 +117,9 @@ export function DataTable<TData, TValue>({
       {/* One row: filters swipe horizontally on small screens (instead of
           crushing to tiny chevrons); search + columns collapse to icons. */}
       <div className="flex items-center gap-2">
-        {/* Filters — horizontal scroller (portal dropdowns escape the clip). */}
-        {toolbar && <div className="no-scrollbar -mx-0.5 flex min-w-0 flex-1 items-center gap-2 overflow-x-auto px-0.5 py-0.5">{toolbar}</div>}
+        {/* Filters — horizontal swipe strip with edge fade (portal dropdowns
+            escape the clip). */}
+        {toolbar && <div className="scroll-fade-x -mx-1 flex min-w-0 flex-1 items-center gap-2 px-1 py-0.5">{toolbar}</div>}
 
         <div className={cn("flex shrink-0 items-center gap-2", !toolbar && "ml-auto")}>
           <button
@@ -154,7 +155,6 @@ export function DataTable<TData, TValue>({
             >
               <div className="relative p-1">
                 <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
-                {/* eslint-disable-next-line jsx-a11y/no-autofocus */}
                 <input
                   autoFocus
                   value={globalFilter}

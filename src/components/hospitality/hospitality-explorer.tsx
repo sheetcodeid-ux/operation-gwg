@@ -87,13 +87,14 @@ export function HospitalityExplorer({ rows, outlets }: { rows: HospitalityRow[];
           searchPlaceholder="Cari staff / coordinator…"
           toolbar={
             <div className="contents">
-              <MonthFilter options={months} value={month} onChange={setMonth} className="min-w-0 shrink basis-40" />
+              <MonthFilter options={months} value={month} onChange={setMonth} className="w-40 shrink-0" />
               <Combobox
+                portal
                 value={outlet}
                 onChange={setOutlet}
-                className="min-w-0 shrink basis-48"
-                options={[{ value: "all", label: "All outlets" }, ...outlets.map((o) => ({ value: o.id, label: o.name }))]}
-                searchPlaceholder="Outlet…"
+                className="w-48 shrink-0"
+                options={[{ value: "all", label: "Semua Outlet" }, ...outlets.map((o) => ({ value: o.id, label: o.name }))]}
+                searchPlaceholder="Cari outlet…"
               />
             </div>
           }

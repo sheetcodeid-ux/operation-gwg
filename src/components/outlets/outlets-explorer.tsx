@@ -80,11 +80,12 @@ export function OutletsExplorer({ rows, areas }: { rows: OutletRow[]; areas: { i
           searchPlaceholder="Search outlet / city…"
           toolbar={
             <Combobox
+              portal
               value={area}
               onChange={setArea}
-              className="min-w-0 shrink basis-44"
-              options={[{ value: "all", label: "All areas" }, ...areas.map((a) => ({ value: a.id, label: a.name }))]}
-              searchPlaceholder="Area…"
+              className="w-44 shrink-0"
+              options={[{ value: "all", label: "Semua Area" }, ...areas.map((a) => ({ value: a.id, label: a.name }))]}
+              searchPlaceholder="Cari area…"
             />
           }
         />

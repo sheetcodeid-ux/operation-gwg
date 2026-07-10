@@ -62,11 +62,12 @@ export function ReportsOutletTable({ rows, areas }: { rows: ReportOutletRow[]; a
       searchPlaceholder="Search outlet…"
       toolbar={
         <Combobox
+          portal
           value={area}
           onChange={setArea}
-          className="min-w-0 shrink basis-44"
-          options={[{ value: "all", label: "All regions" }, ...areas.map((a) => ({ value: a.id, label: a.name }))]}
-          searchPlaceholder="Region…"
+          className="w-44 shrink-0"
+          options={[{ value: "all", label: "Semua Region" }, ...areas.map((a) => ({ value: a.id, label: a.name }))]}
+          searchPlaceholder="Cari region…"
         />
       }
     />

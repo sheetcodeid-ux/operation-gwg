@@ -83,7 +83,9 @@ export function OutletRankingTable({ rows }: { rows: RankedOutletRow[] }) {
           />
         </div>
         <Combobox
-          className="min-w-0 shrink basis-40"
+          portal
+          searchable={false}
+          className="w-40 shrink-0"
           options={[
             { value: "high", label: "Tertinggi" },
             { value: "low", label: "Terendah" },

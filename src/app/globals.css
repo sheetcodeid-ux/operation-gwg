@@ -307,6 +307,19 @@
     display: none;
   }
 
+  /* Horizontal filter strip: swipes on small screens, no scrollbar, with a
+     soft fade at both edges so off-screen items dissolve elegantly. */
+  .scroll-fade-x {
+    overflow-x: auto;
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+    -webkit-mask-image: linear-gradient(to right, transparent 0, #000 14px, #000 calc(100% - 14px), transparent 100%);
+    mask-image: linear-gradient(to right, transparent 0, #000 14px, #000 calc(100% - 14px), transparent 100%);
+  }
+  .scroll-fade-x::-webkit-scrollbar {
+    display: none;
+  }
+
   /* Subtle grid backdrop (login) */
   .grid-bg {
     background-image:
