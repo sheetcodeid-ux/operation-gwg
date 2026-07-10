@@ -39,7 +39,16 @@ export function MobileNav({
   // the previous one. null = all collapsed.
   const [openSection, setOpenSection] = useState<string | null>(homeDivision);
   const toggle = (s: string) => setOpenSection((cur) => (cur === s ? null : s));
-  const isActive = (href: string) => pathname === href || pathname.startsWith(href + "/");
+  // Most-specific match only — avoids a parent route lighting up with its children.
+  const activeHref = useMemo(() => {
+    let best = "";
+    for (const it of items) {
+      const h = it.href;
+      if ((pathname === h || pathname.startsWith(h + "/")) && h.length > best.length) best = h;
+    }
+    return best;
+  }, [items, pathname]);
+  const isActive = (href: string) => href === activeHref;
 
   // The drawer is portalled to <body>: rendered here it would sit inside the
   // topbar's backdrop-blur, whose backdrop-filter traps position:fixed to the
