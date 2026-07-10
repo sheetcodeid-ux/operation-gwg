@@ -11,6 +11,7 @@ export type MenuKey =
   | "outlets"
   | "reports"
   | "assessment"
+  | "hpp"
   | "users"
   | "departments"
   | "audit";
@@ -51,6 +52,7 @@ export const NAV_MENUS: Omit<NavItem, "section">[] = [
   { key: "outlets", label: "Outlets", href: "/outlets", icon: "Store" },
   { key: "reports", label: "Reports", href: "/reports", icon: "FileText" },
   { key: "assessment", label: "Assessment Golongan", href: "/assessment", icon: "Award" },
+  { key: "hpp", label: "Kalkulator HPP", href: "/rnd/hpp", icon: "Calculator" },
   { key: "users", label: "User Management", href: "/admin/users", icon: "Users" },
   { key: "departments", label: "Departemen & Divisi", href: "/admin/departments", icon: "Network" },
   { key: "audit", label: "Audit Logs", href: "/admin/audit", icon: "ScrollText" },
@@ -111,10 +113,10 @@ export const ROLE_MENUS: Record<Role, MenuKey[]> = {
   pos_operation: ["work"],
   admin_operation: ["work", "complaints"],
   supervisor: ["hygiene", "complaints"], // their own branch only
-  head_bar_rnd: ["work"],
-  bar_rnd: ["work"],
-  kitchen_rnd: ["work"],
-  coordinator_rnd: ["work"],
+  head_bar_rnd: ["work", "hpp"],
+  bar_rnd: ["work", "hpp"],
+  kitchen_rnd: ["work", "hpp"],
+  coordinator_rnd: ["work", "hpp"],
   legal: ["work", "assessment"], // HRD — grade-promotion assessment
   assessor: ["assessment"], // division Head / evaluator — assessment only
   member: [], // no role menus — access is entirely via their `department`
@@ -124,7 +126,7 @@ export const ROLE_MENUS: Record<Role, MenuKey[]> = {
 const DIVISION_MENUS: { division: Division; menus: MenuKey[] }[] = [
   { division: "Operation", menus: OPERATION_FULL },
   { division: "Supervisor", menus: ["hygiene", "complaints"] },
-  { division: "R&D", menus: ["work"] },
+  { division: "R&D", menus: ["work", "hpp"] },
   { division: "Human Capital", menus: ["work", "assessment"] },
   // New department-aligned divisions — Work Tracker only for now.
   { division: "Finance", menus: ["work"] },
