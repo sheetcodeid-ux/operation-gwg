@@ -25,6 +25,7 @@ import {
   ShieldCheck,
   SprayCan,
   Store,
+  Table2,
   TrendingUp,
   UserRound,
   Users,
@@ -48,6 +49,7 @@ export const NAV_ICONS: Record<string, LucideIcon> = {
   FileText,
   Award,
   Calculator,
+  Table2,
   // Division (group) icons
   Briefcase,
   ShieldCheck,

@@ -4,11 +4,18 @@ import { randomUUID } from "node:crypto";
 import { db, dbEnabled } from "./db";
 import type { AllocMode, FixedItem, VariableItem } from "@/lib/hpp/calc";
 
+export type HppStatus = "draft" | "submitted" | "verified" | "rejected";
+
 export interface HppRecord {
   id: string;
   name: string;
   imageUrl: string | null;
   category: string; // makanan | minuman
+  brand: string; // Nordu | Cattu | Busari
+  status: HppStatus; // draft → submitted → verified | rejected
+  reviewNote: string | null;
+  reviewedBy: string | null;
+  reviewedAt: string | null;
   mode: string; // per_pcs | per_resep
   allocMode: AllocMode;
   targetSales: number;
@@ -25,24 +32,59 @@ export interface HppRecord {
   createdAt: string;
 }
 
-export type HppDraft = Omit<HppRecord, "id" | "createdAt">;
+/** New-save payload: everything except server-managed id/createdAt and the
+ *  review lifecycle (status/review fields are set server-side, never by client). */
+export type HppDraft = Omit<HppRecord, "id" | "createdAt" | "status" | "reviewNote" | "reviewedBy" | "reviewedAt">;
 
 const mem = new Map<string, HppRecord>();
 
 export async function listHpp(): Promise<HppRecord[]> {
   if (!dbEnabled) return [...mem.values()].sort((a, b) => b.createdAt.localeCompare(a.createdAt));
-  const { data } = await db().from("hpp_calculations").select("*").order("created_at", { ascending: false }).limit(100);
+  const { data } = await db().from("hpp_calculations").select("*").order("created_at", { ascending: false }).limit(200);
   return (data ?? []).map(fromRow);
 }
 
+export async function getHpp(id: string): Promise<HppRecord | null> {
+  if (!dbEnabled) return mem.get(id) ?? null;
+  const { data } = await db().from("hpp_calculations").select("*").eq("id", id).maybeSingle();
+  return data ? fromRow(data as HppRow) : null;
+}
+
 export async function saveHpp(input: HppDraft): Promise<HppRecord> {
-  const rec: HppRecord = { ...input, id: `hpp_${randomUUID()}`, createdAt: new Date().toISOString() };
+  const rec: HppRecord = {
+    ...input,
+    id: `hpp_${randomUUID()}`,
+    status: "draft",
+    reviewNote: null,
+    reviewedBy: null,
+    reviewedAt: null,
+    createdAt: new Date().toISOString(),
+  };
   if (!dbEnabled) {
     mem.set(rec.id, rec);
     return rec;
   }
   await db().from("hpp_calculations").insert(toRow(rec));
   return rec;
+}
+
+/** Move a record through the review lifecycle (submit / verify / reject). */
+export async function setHppStatus(id: string, status: HppStatus, reviewedBy: string | null, note: string | null): Promise<void> {
+  const reviewedAt = status === "verified" || status === "rejected" ? new Date().toISOString() : null;
+  if (!dbEnabled) {
+    const rec = mem.get(id);
+    if (rec) mem.set(id, { ...rec, status, reviewNote: note, reviewedBy: status === "submitted" ? null : reviewedBy, reviewedAt });
+    return;
+  }
+  await db()
+    .from("hpp_calculations")
+    .update({
+      status,
+      review_note: note,
+      reviewed_by: status === "submitted" ? null : reviewedBy,
+      reviewed_at: reviewedAt,
+    })
+    .eq("id", id);
 }
 
 export async function deleteHpp(id: string): Promise<void> {
@@ -58,6 +100,11 @@ const toRow = (r: HppRecord) => ({
   name: r.name,
   image_url: r.imageUrl,
   category: r.category,
+  brand: r.brand,
+  status: r.status,
+  review_note: r.reviewNote,
+  reviewed_by: r.reviewedBy,
+  reviewed_at: r.reviewedAt,
   mode: r.mode,
   alloc_mode: r.allocMode,
   target_sales: r.targetSales,
@@ -79,6 +126,11 @@ interface HppRow {
   name: string;
   image_url: string | null;
   category: string | null;
+  brand: string | null;
+  status: HppStatus | null;
+  review_note: string | null;
+  reviewed_by: string | null;
+  reviewed_at: string | null;
   mode: string;
   alloc_mode: AllocMode;
   target_sales: number;
@@ -100,6 +152,11 @@ const fromRow = (r: HppRow): HppRecord => ({
   name: r.name,
   imageUrl: r.image_url,
   category: r.category ?? "minuman",
+  brand: r.brand ?? "Nordu",
+  status: r.status ?? "draft",
+  reviewNote: r.review_note,
+  reviewedBy: r.reviewed_by,
+  reviewedAt: r.reviewed_at,
   mode: r.mode,
   allocMode: r.alloc_mode,
   targetSales: r.target_sales,

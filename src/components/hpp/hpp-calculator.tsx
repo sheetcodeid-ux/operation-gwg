@@ -37,6 +37,8 @@ import {
   YAxis,
 } from "recharts";
 import {
+  BRAND_MARGIN,
+  BRANDS,
   UNITS,
   bepSeries,
   calcHpp,
@@ -49,11 +51,13 @@ import {
   sensitivity,
   wasteCost,
   type AllocMode,
+  type Brand,
   type FixedItem,
   type VariableItem,
 } from "@/lib/hpp/calc";
 import { saveHppAction, deleteHppAction } from "@/lib/actions/hpp";
 import type { HppRecord } from "@/lib/data/hpp";
+import { HPP_STATUS_META, STATUS_PILL } from "@/lib/hpp/status";
 import { downloadCsv, toCsv } from "@/lib/csv";
 import { Button } from "@/components/ui/button";
 import { Field, Input, Label } from "@/components/ui/input";
@@ -117,6 +121,7 @@ export function HppCalculator({ initialHistory, canEdit }: { initialHistory: Hpp
   const [name, setName] = React.useState("");
   const [image, setImage] = React.useState<string | null>(null);
   const [category, setCategory] = React.useState<"makanan" | "minuman">("minuman");
+  const [brand, setBrand] = React.useState<Brand>("Nordu");
   const [mode, setMode] = React.useState<"per_pcs" | "per_resep">("per_pcs");
   const [yieldPcs, setYieldPcs] = React.useState(1); // pcs per resep (per_resep only)
   const [variables, setVariables] = React.useState<VariableItem[]>([]);
@@ -153,7 +158,8 @@ export function HppCalculator({ initialHistory, canEdit }: { initialHistory: Hpp
   const fixedAlloc = base.fixedAlloc;
   const hpp = variableCost + fixedAlloc;
 
-  const tiers = React.useMemo(() => priceTiers(hpp), [hpp]);
+  const tiers = React.useMemo(() => priceTiers(hpp, brand), [hpp, brand]);
+  const brandBand = BRAND_MARGIN[brand];
   const price = chosenPrice || tiers[1]?.price || 0; // default: Standar
   const sens = React.useMemo(() => sensitivity(variableCost, fixedAlloc, sensPct / 100, price), [variableCost, fixedAlloc, sensPct, price]);
   const proj = React.useMemo(() => projection(variableCost, base.totalFixed, price, targetProfit), [variableCost, base.totalFixed, price, targetProfit]);
@@ -179,6 +185,7 @@ export function HppCalculator({ initialHistory, canEdit }: { initialHistory: Hpp
     setName("");
     setImage(null);
     setCategory("minuman");
+    setBrand("Nordu");
     setMode("per_pcs");
     setYieldPcs(1);
     setVariables([]);
@@ -200,6 +207,7 @@ export function HppCalculator({ initialHistory, canEdit }: { initialHistory: Hpp
         name,
         imageUrl: image,
         category,
+        brand,
         mode,
         allocMode,
         targetSales,
@@ -226,6 +234,7 @@ export function HppCalculator({ initialHistory, canEdit }: { initialHistory: Hpp
   function exportCsv() {
     const rows: (string | number)[][] = [
       ["Produk", name || "-"],
+      ["Brand", brand],
       ["Kategori", category === "makanan" ? "Makanan" : "Minuman"],
       ["Total HPP / Produk", Math.round(hpp)],
       ["  Bahan Baku + Packing / Produk", Math.round(rawVariable)],
@@ -251,6 +260,7 @@ export function HppCalculator({ initialHistory, canEdit }: { initialHistory: Hpp
     setName(r.name);
     setImage(r.imageUrl);
     setCategory(r.category === "makanan" ? "makanan" : "minuman");
+    setBrand((["Nordu", "Cattu", "Busari"].includes(r.brand) ? r.brand : "Nordu") as Brand);
     setMode(r.mode === "per_resep" ? "per_resep" : "per_pcs");
     setVariables(r.variables);
     setFixed(r.fixed);
@@ -276,17 +286,28 @@ export function HppCalculator({ initialHistory, canEdit }: { initialHistory: Hpp
             <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="mis. Kopi Susu Gula Aren" />
           </Field>
 
-          <div className="mt-3">
-            <Label>Kategori Produk</Label>
-            <Segmented
-              className="mt-1.5"
-              value={category}
-              onChange={(v) => setCategory(v as typeof category)}
-              items={[
-                { value: "minuman", label: "Minuman", icon: Coffee },
-                { value: "makanan", label: "Makanan", icon: UtensilsCrossed },
-              ]}
-            />
+          <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
+            <div>
+              <Label>Kategori Produk</Label>
+              <Segmented
+                className="mt-1.5"
+                value={category}
+                onChange={(v) => setCategory(v as typeof category)}
+                items={[
+                  { value: "minuman", label: "Minuman", icon: Coffee },
+                  { value: "makanan", label: "Makanan", icon: UtensilsCrossed },
+                ]}
+              />
+            </div>
+            <div>
+              <Label>Brand</Label>
+              <Segmented
+                className="mt-1.5"
+                value={brand}
+                onChange={(v) => setBrand(v as Brand)}
+                items={BRANDS.map((b) => ({ value: b, label: b }))}
+              />
+            </div>
           </div>
 
           <div className="mt-3">
@@ -542,7 +563,8 @@ export function HppCalculator({ initialHistory, canEdit }: { initialHistory: Hpp
             </span>
           </div>
           <p className="mb-3 text-[11px] text-muted-foreground">
-            Target food cost {category === "minuman" ? "minuman 25–35%" : "makanan ≤35%"} · over cost bila &gt;70% (wajib evaluasi).
+            Margin ideal {brand} {(brandBand.idealLow * 100).toFixed(0)}–{(brandBand.idealHigh * 100).toFixed(0)}% · food cost{" "}
+            {category === "minuman" ? "minuman 25–35%" : "makanan ≤35%"} · over cost bila &gt;70%.
           </p>
           {fcStatus.tone === "bad" && (
             <p className="mb-3 flex items-center gap-1.5 rounded-lg bg-red-500/10 px-2 py-1.5 text-[11px] font-medium text-red-600 dark:text-red-400">
@@ -579,7 +601,9 @@ export function HppCalculator({ initialHistory, canEdit }: { initialHistory: Hpp
           </div>
         </div>
 
-        {/* Nordu class pricing — HPP identical, harga jual +Rp5.000 / class. */}
+        {/* Nordu class pricing — HPP identical, harga jual +Rp5.000 / class.
+            Class system applies to Nordu only (per makalah). */}
+        {brand === "Nordu" && (
         <div className="glass rounded-2xl border border-border p-5">
           <div className="flex items-center justify-between gap-2">
             <p className="flex items-center gap-2 text-sm font-semibold text-foreground">
@@ -616,6 +640,7 @@ export function HppCalculator({ initialHistory, canEdit }: { initialHistory: Hpp
             </div>
           )}
         </div>
+        )}
 
         {/* Target & projection */}
         <div className="glass rounded-2xl border border-border p-5">
@@ -737,9 +762,12 @@ export function HppCalculator({ initialHistory, canEdit }: { initialHistory: Hpp
                         <Coffee className="size-3.5 shrink-0 text-muted-foreground" />
                       )}
                       <p className="truncate text-sm font-medium text-foreground">{r.name}</p>
+                      <span className={cn("shrink-0 rounded-full px-1.5 py-0.5 text-[9px] font-semibold", STATUS_PILL[HPP_STATUS_META[r.status].tone])}>
+                        {HPP_STATUS_META[r.status].label}
+                      </span>
                     </div>
                     <p className="truncate text-[11px] text-muted-foreground">
-                      HPP {rp(r.hpp)} · Harga {rp(r.chosenPrice)} · {new Date(r.createdAt).toLocaleDateString("id-ID", { day: "numeric", month: "short" })}
+                      {r.brand} · HPP {rp(r.hpp)} · Harga {rp(r.chosenPrice)} · {new Date(r.createdAt).toLocaleDateString("id-ID", { day: "numeric", month: "short" })}
                     </p>
                   </button>
                   {canEdit && (
