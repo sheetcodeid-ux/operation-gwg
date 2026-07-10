@@ -91,6 +91,8 @@ export function ScrollRow({ children, cols = 3, className }: { children: React.R
         ref={ref}
         className={cn(
           "flex gap-3 overflow-x-auto pb-1 sm:overflow-visible sm:pb-0 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden",
+          // Soft fade at both edges while swiping (mobile only; a grid on ≥sm).
+          "[-webkit-mask-image:linear-gradient(to_right,transparent,#000_14px,#000_calc(100%-14px),transparent)] [mask-image:linear-gradient(to_right,transparent,#000_14px,#000_calc(100%-14px),transparent)] sm:[-webkit-mask-image:none] sm:[mask-image:none]",
           "[&>*]:min-w-[14rem] [&>*]:shrink-0 sm:[&>*]:min-w-0",
           cols === 2 ? "sm:grid sm:grid-cols-2" : cols === 4 ? "sm:grid sm:grid-cols-2 lg:grid-cols-4" : "sm:grid sm:grid-cols-3",
         )}
