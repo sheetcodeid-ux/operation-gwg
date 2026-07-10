@@ -62,6 +62,7 @@ import { downloadCsv, toCsv } from "@/lib/csv";
 import { Button } from "@/components/ui/button";
 import { Field, Input, Label } from "@/components/ui/input";
 import { StatTile } from "@/components/ui/stat";
+import { Combobox } from "@/components/ui/combobox";
 import { cn } from "@/lib/utils";
 
 /* ---------- helpers ---------- */
@@ -186,6 +187,13 @@ export function HppCalculator({
     if (!ing) return setVar(vid, { ingredientId: undefined });
     setVar(vid, { ingredientId: ing.id, name: ing.name, buyPrice: ing.buyPrice, buyQty: ing.buyQty, buyUnit: ing.buyUnit });
   };
+  const ingredientOptions = React.useMemo(
+    () => [
+      { value: "", label: "Input manual", hint: "tanpa master" },
+      ...ingredients.map((ing) => ({ value: ing.id, label: ing.name, hint: `${rp(ing.buyPrice)}/${ing.buyQty}${ing.buyUnit}` })),
+    ],
+    [ingredients],
+  );
   const setFix = (id: string, patch: Partial<FixedItem>) => setFixed((f) => f.map((x) => (x.id === id ? { ...x, ...patch } : x)));
 
   function onImage(e: React.ChangeEvent<HTMLInputElement>) {
@@ -381,18 +389,15 @@ export function HppCalculator({
               <div key={v.id} className="rounded-xl border border-border bg-muted/20 p-2.5">
                 {ingredients.length > 0 && (
                   <div className="mb-2">
-                    <select
+                    <Combobox
+                      portal
+                      matchTriggerWidth
                       value={v.ingredientId ?? ""}
-                      onChange={(e) => pickIngredient(v.id, e.target.value)}
-                      className="h-8 w-full rounded-lg border border-dashed border-input bg-background/40 px-2 text-[11px] text-muted-foreground focus:border-ring focus:outline-none focus:ring-2 focus:ring-ring/25 dark:bg-input/30"
-                    >
-                      <option value="">— Pilih dari Master Bahan Baku (opsional) —</option>
-                      {ingredients.map((ing) => (
-                        <option key={ing.id} value={ing.id}>
-                          {ing.name} · {rp(ing.buyPrice)}/{ing.buyQty}{ing.buyUnit}
-                        </option>
-                      ))}
-                    </select>
+                      onChange={(val) => pickIngredient(v.id, val)}
+                      options={ingredientOptions}
+                      placeholder="Pilih dari Master Bahan Baku (opsional)"
+                      searchPlaceholder="Cari bahan…"
+                    />
                   </div>
                 )}
                 <div className="flex items-center gap-2">
@@ -542,7 +547,7 @@ export function HppCalculator({
       {/* ============ RIGHT: RESULTS ============ */}
       {/* Desktop: pin the results panel below the sticky topbar (h-16) and let it
           scroll internally, so the HPP figures stay visible while editing inputs. */}
-      <div className="space-y-4 lg:sticky lg:top-20 lg:max-h-[calc(100dvh-5.5rem)] lg:self-start lg:overflow-y-auto lg:pr-1 lg:[scrollbar-width:thin]">
+      <div data-lenis-prevent className="space-y-4 lg:sticky lg:top-20 lg:max-h-[calc(100dvh-5.5rem)] lg:self-start lg:overflow-y-auto lg:pr-1 lg:[scrollbar-width:thin]">
         {/* HPP breakdown */}
         <div className="glass rounded-2xl border border-border p-5">
           <p className="mb-3 flex items-center gap-2 text-sm font-semibold text-foreground">
@@ -758,7 +763,7 @@ export function HppCalculator({
               </ResponsiveContainer>
             </div>
           ) : (
-            <div className="mt-3 max-h-64 overflow-auto rounded-xl border border-border">
+            <div data-lenis-prevent className="mt-3 max-h-64 overflow-auto rounded-xl border border-border">
               <table className="w-full text-xs">
                 <thead className="sticky top-0 bg-muted/70 text-left text-[10px] uppercase text-muted-foreground">
                   <tr>

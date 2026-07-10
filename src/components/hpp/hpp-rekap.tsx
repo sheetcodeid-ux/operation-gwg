@@ -9,6 +9,8 @@ import { HPP_STATUS_META, STATUS_PILL } from "@/lib/hpp/status";
 import { deleteHppAction, reviewHppAction, submitHppAction } from "@/lib/actions/hpp";
 import type { HppRecord } from "@/lib/data/hpp";
 import { StatTile } from "@/components/ui/stat";
+import { Combobox } from "@/components/ui/combobox";
+import { Reveal } from "@/components/hpp/motion";
 import { cn } from "@/lib/utils";
 
 const rp = (n: number) => "Rp " + Math.round(n || 0).toLocaleString("id-ID");
@@ -80,16 +82,16 @@ export function HppRekap({ records, canEdit, canVerify }: { records: HppRecord[]
   return (
     <div className="space-y-4">
       {/* Summary */}
-      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+      <Reveal className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         <StatTile icon={ClipboardCheck} label="Total Menu" value={String(stats.total)} />
         <StatTile icon={CheckCircle2} label="Food Cost Ideal" value={String(stats.ideal)} />
         <StatTile icon={AlertTriangle} label="Over Cost (>70%)" value={String(stats.over)} sub={stats.over > 0 ? "wajib evaluasi" : "aman"} />
         <StatTile icon={Send} label="Menunggu Verifikasi" value={String(stats.pending)} />
-      </div>
+      </Reveal>
 
-      {/* Filters */}
-      <div className="glass flex flex-wrap items-center gap-2 rounded-2xl border border-border p-3">
-        <div className="relative min-w-[10rem] flex-1">
+      {/* Filters — search full-width; the dropdowns swipe horizontally on mobile. */}
+      <div className="glass space-y-2 rounded-2xl border border-border p-3">
+        <div className="relative">
           <Search className="pointer-events-none absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
           <input
             value={q}
@@ -98,28 +100,32 @@ export function HppRekap({ records, canEdit, canVerify }: { records: HppRecord[]
             className="h-9 w-full rounded-lg border border-input bg-background/40 pl-8 pr-3 text-sm text-foreground focus:border-ring focus:outline-none focus:ring-2 focus:ring-ring/25 dark:bg-input/30"
           />
         </div>
-        <Select value={brand} onChange={setBrand} options={[["all", "Semua Brand"], ["Nordu", "Nordu"], ["Cattu", "Cattu"], ["Busari", "Busari"]]} />
-        <Select value={category} onChange={setCategory} options={[["all", "Semua Kategori"], ["makanan", "Makanan"], ["minuman", "Minuman"]]} />
-        <Select
-          value={status}
-          onChange={setStatus}
-          options={[["all", "Semua Status"], ["draft", "Draft"], ["submitted", "Diajukan"], ["verified", "Diverifikasi"], ["rejected", "Ditolak"]]}
-        />
-        <button
-          type="button"
-          onClick={() => setOverOnly((v) => !v)}
-          className={cn(
-            "h-9 shrink-0 rounded-lg border px-3 text-sm font-medium transition-colors",
-            overOnly ? "border-red-500/40 bg-red-500/10 text-red-600 dark:text-red-400" : "border-border text-muted-foreground hover:text-foreground",
-          )}
-        >
-          Over cost saja
-        </button>
+        <div className="scroll-fade-x -mx-1 flex items-center gap-2 overflow-x-auto px-1 pb-0.5">
+          <div className="w-36 shrink-0">
+            <Combobox portal searchable={false} matchTriggerWidth value={brand} onChange={setBrand} options={[{ value: "all", label: "Semua Brand" }, { value: "Nordu", label: "Nordu" }, { value: "Cattu", label: "Cattu" }, { value: "Busari", label: "Busari" }]} />
+          </div>
+          <div className="w-40 shrink-0">
+            <Combobox portal searchable={false} matchTriggerWidth value={category} onChange={setCategory} options={[{ value: "all", label: "Semua Kategori" }, { value: "makanan", label: "Makanan" }, { value: "minuman", label: "Minuman" }]} />
+          </div>
+          <div className="w-40 shrink-0">
+            <Combobox portal searchable={false} matchTriggerWidth value={status} onChange={setStatus} options={[{ value: "all", label: "Semua Status" }, { value: "draft", label: "Draft" }, { value: "submitted", label: "Diajukan" }, { value: "verified", label: "Diverifikasi" }, { value: "rejected", label: "Ditolak" }]} />
+          </div>
+          <button
+            type="button"
+            onClick={() => setOverOnly((v) => !v)}
+            className={cn(
+              "h-9 shrink-0 whitespace-nowrap rounded-lg border px-3 text-sm font-medium transition-colors",
+              overOnly ? "border-red-500/40 bg-red-500/10 text-red-600 dark:text-red-400" : "border-border text-muted-foreground hover:text-foreground",
+            )}
+          >
+            Over cost saja
+          </button>
+        </div>
       </div>
 
       {/* Table */}
       <div className="glass overflow-hidden rounded-2xl border border-border">
-        <div className="overflow-x-auto">
+        <div className="overflow-x-auto" data-lenis-prevent>
           <table className="w-full min-w-[720px] text-sm">
             <thead className="border-b border-border bg-muted/40 text-left text-[11px] uppercase tracking-wide text-muted-foreground">
               <tr>
@@ -217,22 +223,6 @@ export function HppRekap({ records, canEdit, canVerify }: { records: HppRecord[]
         <Layers className="size-3.5" /> Alur: R&D menyusun &amp; mengajukan (Draft → Diajukan), tim F&B memverifikasi atau menolak sebelum menu final.
       </p>
     </div>
-  );
-}
-
-function Select({ value, onChange, options }: { value: string; onChange: (v: string) => void; options: [string, string][] }) {
-  return (
-    <select
-      value={value}
-      onChange={(e) => onChange(e.target.value)}
-      className="h-9 shrink-0 rounded-lg border border-input bg-background/40 px-2.5 text-sm text-foreground focus:border-ring focus:outline-none focus:ring-2 focus:ring-ring/25 dark:bg-input/30"
-    >
-      {options.map(([v, l]) => (
-        <option key={v} value={v}>
-          {l}
-        </option>
-      ))}
-    </select>
   );
 }
 
