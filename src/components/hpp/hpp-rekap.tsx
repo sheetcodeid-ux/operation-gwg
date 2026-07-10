@@ -8,13 +8,16 @@ import {
   ArrowUp,
   ArrowUpDown,
   CheckCircle2,
+  CheckSquare,
   ClipboardCheck,
   Coffee,
   Download,
   LayoutGrid,
   List,
+  Pencil,
   Search,
   Send,
+  Square,
   Trash2,
   UtensilsCrossed,
   XCircle,
@@ -22,7 +25,7 @@ import {
 import { toast } from "sonner";
 import { BRANDS, foodCostPct, foodCostStatus } from "@/lib/hpp/calc";
 import { HPP_STATUS_META, STATUS_PILL, type StatusTone } from "@/lib/hpp/status";
-import { deleteHppAction, reviewHppAction, submitHppAction } from "@/lib/actions/hpp";
+import { bulkDeleteHppAction, bulkReviewHppAction, bulkSubmitHppAction, deleteHppAction, reviewHppAction, submitHppAction } from "@/lib/actions/hpp";
 import type { HppRecord, HppStatus } from "@/lib/data/hpp";
 import { downloadCsv, toCsv } from "@/lib/csv";
 import { StatTile } from "@/components/ui/stat";
@@ -66,7 +69,7 @@ export function HppRekap({ records, canEdit, canVerify }: { records: HppRecord[]
   const [sortKey, setSortKey] = React.useState<SortKey>("name");
   const [sortDir, setSortDir] = React.useState<"asc" | "desc">("asc");
   const [view, setView] = React.useState<"table" | "cards">("table");
-  const [selected, setSelected] = React.useState<HppRecord | null>(null);
+  const [detail, setDetail] = React.useState<HppRecord | null>(null);
   const [busy, setBusy] = React.useState<string | null>(null);
 
   // Filtered by everything EXCEPT status (so the status tabs can show counts).
@@ -132,7 +135,7 @@ export function HppRekap({ records, canEdit, canVerify }: { records: HppRecord[]
     try {
       const res = await fn();
       if (res?.error) toast.error(res.error);
-      else { toast.success(okMsg); setSelected(null); router.refresh(); }
+      else { toast.success(okMsg); setDetail(null); router.refresh(); }
     } finally {
       setBusy(null);
     }
@@ -148,6 +151,45 @@ export function HppRekap({ records, canEdit, canVerify }: { records: HppRecord[]
   const del = (r: HppRecord) => {
     if (typeof window !== "undefined" && !window.confirm(`Hapus "${r.name}"?`)) return;
     run(r.id, () => deleteHppAction(r.id), "Dihapus");
+  };
+
+  // ---- bulk selection ----
+  const byId = React.useMemo(() => new Map(records.map((r) => [r.id, r])), [records]);
+  const [selected, setSelected] = React.useState<Set<string>>(new Set());
+  const [bulkBusy, setBulkBusy] = React.useState(false);
+  const toggleRow = (id: string) => setSelected((s) => { const n = new Set(s); n.has(id) ? n.delete(id) : n.add(id); return n; });
+  const allShownSelected = rows.length > 0 && rows.every(({ r }) => selected.has(r.id));
+  const toggleAll = () => setSelected((s) => {
+    const n = new Set(s);
+    if (allShownSelected) rows.forEach(({ r }) => n.delete(r.id));
+    else rows.forEach(({ r }) => n.add(r.id));
+    return n;
+  });
+  const selArr = React.useMemo(() => [...selected].map((id) => byId.get(id)).filter((r): r is HppRecord => !!r), [selected, byId]);
+  const selDraft = selArr.filter((r) => r.status === "draft" || r.status === "rejected").map((r) => r.id);
+  const selSubmitted = selArr.filter((r) => r.status === "submitted").map((r) => r.id);
+
+  async function bulk(fn: () => Promise<{ error?: string; count?: number }>, okMsg: (n: number) => string) {
+    setBulkBusy(true);
+    try {
+      const res = await fn();
+      if (res?.error) toast.error(res.error);
+      else { toast.success(okMsg(res.count ?? 0)); setSelected(new Set()); router.refresh(); }
+    } finally {
+      setBulkBusy(false);
+    }
+  }
+  const bulkSubmit = () => bulk(() => bulkSubmitHppAction(selDraft), (n) => `${n} menu diajukan ke F&B`);
+  const bulkVerify = () => bulk(() => bulkReviewHppAction(selSubmitted, "verified", ""), (n) => `${n} menu diverifikasi`);
+  const bulkReject = () => {
+    const note = typeof window !== "undefined" ? window.prompt(`Alasan menolak ${selSubmitted.length} menu?`) : "";
+    if (note == null) return;
+    if (!note.trim()) return toast.error("Beri catatan alasan penolakan.");
+    bulk(() => bulkReviewHppAction(selSubmitted, "rejected", note), (n) => `${n} menu ditolak`);
+  };
+  const bulkDelete = () => {
+    if (typeof window !== "undefined" && !window.confirm(`Hapus ${selArr.length} menu terpilih?`)) return;
+    bulk(() => bulkDeleteHppAction(selArr.map((r) => r.id)), (n) => `${n} menu dihapus`);
   };
 
   function exportCsv() {
@@ -235,6 +277,24 @@ export function HppRekap({ records, canEdit, canVerify }: { records: HppRecord[]
         </div>
       </div>
 
+      {/* Bulk action bar */}
+      {selected.size > 0 && (
+        <div className="glass sticky top-20 z-20 flex flex-wrap items-center gap-2 rounded-2xl border border-primary/30 p-3 shadow-lg">
+          <span className="text-sm font-semibold text-foreground">{selArr.length} dipilih</span>
+          <div className="ml-auto flex flex-wrap items-center gap-2">
+            {canEdit && selDraft.length > 0 && <Button size="sm" onClick={bulkSubmit} disabled={bulkBusy}><Send className="size-4" /> Ajukan ({selDraft.length})</Button>}
+            {canVerify && selSubmitted.length > 0 && (
+              <>
+                <Button size="sm" onClick={bulkVerify} disabled={bulkBusy}><CheckCircle2 className="size-4" /> Verifikasi ({selSubmitted.length})</Button>
+                <Button size="sm" variant="outline" onClick={bulkReject} disabled={bulkBusy}><XCircle className="size-4" /> Tolak</Button>
+              </>
+            )}
+            {canEdit && <Button size="sm" variant="outline" onClick={bulkDelete} disabled={bulkBusy} className="text-red-500 hover:text-red-600"><Trash2 className="size-4" /> Hapus ({selArr.length})</Button>}
+            <button type="button" onClick={() => setSelected(new Set())} className="rounded-lg px-2 py-1 text-xs font-medium text-muted-foreground hover:text-foreground">Batal</button>
+          </div>
+        </div>
+      )}
+
       {rows.length === 0 ? (
         <div className="glass rounded-2xl border border-border px-4 py-12 text-center text-sm text-muted-foreground">
           {hasFilter || statusTab !== "all" ? "Tidak ada menu yang cocok dengan filter." : "Belum ada menu tersimpan. Buat di Kalkulator HPP."}
@@ -246,7 +306,7 @@ export function HppRekap({ records, canEdit, canVerify }: { records: HppRecord[]
             const fs = foodCostStatus(fc, cat(r.category));
             const meta = HPP_STATUS_META[r.status];
             return (
-              <button key={r.id} type="button" onClick={() => setSelected(r)} className="glass group flex flex-col overflow-hidden rounded-2xl border border-border text-left transition-colors hover:border-primary/40">
+              <button key={r.id} type="button" onClick={() => setDetail(r)} className="glass group flex flex-col overflow-hidden rounded-2xl border border-border text-left transition-colors hover:border-primary/40">
                 <div className="relative aspect-[16/9] w-full overflow-hidden bg-muted">
                   {r.imageUrl ? (
                     // eslint-disable-next-line @next/next/no-img-element
@@ -285,10 +345,15 @@ export function HppRekap({ records, canEdit, canVerify }: { records: HppRecord[]
         /* ---------- TABLE VIEW ---------- */
         <div className="glass overflow-hidden rounded-2xl border border-border">
           <div className="overflow-x-auto" data-lenis-prevent>
-            <table className="w-full min-w-[820px] text-sm">
+            <table className="w-full min-w-[860px] text-sm">
               <thead className="border-b border-border bg-muted/40 text-left text-[11px] uppercase tracking-wide text-muted-foreground">
                 <tr>
-                  <Th label="Menu" k="name" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} className="px-4" />
+                  <th className="w-10 px-4 py-2.5">
+                    <button type="button" onClick={toggleAll} title="Pilih semua" className="grid place-items-center text-muted-foreground hover:text-foreground">
+                      {allShownSelected ? <CheckSquare className="size-4 text-primary" /> : <Square className="size-4" />}
+                    </button>
+                  </th>
+                  <Th label="Menu" k="name" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} className="px-1" />
                   <Th label="Brand" k="brand" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} />
                   <Th label="HPP" k="hpp" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} align="right" />
                   <Th label="Harga" k="price" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} align="right" />
@@ -303,8 +368,13 @@ export function HppRekap({ records, canEdit, canVerify }: { records: HppRecord[]
                   const fs = foodCostStatus(fc, cat(r.category));
                   const meta = HPP_STATUS_META[r.status];
                   return (
-                    <tr key={r.id} className="group cursor-pointer border-b border-border/60 last:border-0 hover:bg-muted/25" onClick={() => setSelected(r)}>
-                      <td className="px-4 py-2.5">
+                    <tr key={r.id} className={cn("group cursor-pointer border-b border-border/60 last:border-0 hover:bg-muted/25", selected.has(r.id) && "bg-primary/[0.06]")} onClick={() => setDetail(r)}>
+                      <td className="w-10 px-4 py-2.5" onClick={(e) => e.stopPropagation()}>
+                        <button type="button" onClick={() => toggleRow(r.id)} className="grid place-items-center text-muted-foreground hover:text-foreground">
+                          {selected.has(r.id) ? <CheckSquare className="size-4 text-primary" /> : <Square className="size-4" />}
+                        </button>
+                      </td>
+                      <td className="px-1 py-2.5">
                         <div className="flex items-center gap-2.5">
                           {r.imageUrl ? (
                             // eslint-disable-next-line @next/next/no-img-element
@@ -355,10 +425,10 @@ export function HppRekap({ records, canEdit, canVerify }: { records: HppRecord[]
       )}
 
       {/* Detail sheet */}
-      <Sheet open={!!selected} onOpenChange={(v) => !v && setSelected(null)}>
-        {selected && (
-          <SheetContent title={selected.name || "(tanpa nama)"} description={`${selected.brand} · ${cat(selected.category) === "makanan" ? "Makanan" : "Minuman"}`}>
-            <DetailBody r={selected} canEdit={canEdit} canVerify={canVerify} busy={busy === selected.id} onSubmit={() => submit(selected)} onVerify={() => verify(selected)} onReject={() => reject(selected)} onDelete={() => del(selected)} />
+      <Sheet open={!!detail} onOpenChange={(v) => !v && setDetail(null)}>
+        {detail && (
+          <SheetContent title={detail.name || "(tanpa nama)"} description={`${detail.brand} · ${cat(detail.category) === "makanan" ? "Makanan" : "Minuman"}`}>
+            <DetailBody r={detail} canEdit={canEdit} canVerify={canVerify} busy={busy === detail.id} onEdit={() => router.push(`/rnd/hpp?edit=${detail.id}`)} onSubmit={() => submit(detail)} onVerify={() => verify(detail)} onReject={() => reject(detail)} onDelete={() => del(detail)} />
           </SheetContent>
         )}
       </Sheet>
@@ -366,7 +436,7 @@ export function HppRekap({ records, canEdit, canVerify }: { records: HppRecord[]
   );
 }
 
-function DetailBody({ r, canEdit, canVerify, busy, onSubmit, onVerify, onReject, onDelete }: { r: HppRecord; canEdit: boolean; canVerify: boolean; busy: boolean; onSubmit: () => void; onVerify: () => void; onReject: () => void; onDelete: () => void }) {
+function DetailBody({ r, canEdit, canVerify, busy, onEdit, onSubmit, onVerify, onReject, onDelete }: { r: HppRecord; canEdit: boolean; canVerify: boolean; busy: boolean; onEdit: () => void; onSubmit: () => void; onVerify: () => void; onReject: () => void; onDelete: () => void }) {
   const fc = foodCostPct(r.variableCost, r.chosenPrice);
   const fs = foodCostStatus(fc, cat(r.category));
   const margin = marginOf(r);
@@ -405,6 +475,9 @@ function DetailBody({ r, canEdit, canVerify, busy, onSubmit, onVerify, onReject,
       </div>
       {(canEdit || canVerify) && (
         <div className="flex flex-wrap gap-2 border-t border-border p-4">
+          {canEdit && (
+            <Button variant="outline" onClick={onEdit} disabled={busy} className="flex-1"><Pencil className="size-4" /> Edit di Kalkulator</Button>
+          )}
           {canEdit && (r.status === "draft" || r.status === "rejected") && (
             <Button onClick={onSubmit} disabled={busy} className="flex-1"><Send className="size-4" /> Ajukan ke F&B</Button>
           )}

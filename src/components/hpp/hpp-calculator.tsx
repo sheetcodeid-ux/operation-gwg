@@ -121,10 +121,12 @@ export function HppCalculator({
   initialHistory,
   canEdit,
   ingredients = [],
+  autoLoadId,
 }: {
   initialHistory: HppRecord[];
   canEdit: boolean;
   ingredients?: IngredientOption[];
+  autoLoadId?: string;
 }) {
   const router = useRouter();
   const [saving, startSave] = React.useTransition();
@@ -297,6 +299,19 @@ export function HppCalculator({
     setTargetProfit(r.targetProfit || 10_000_000);
     window.scrollTo({ top: 0, behavior: "smooth" });
   }
+
+  // Deep-link edit from Database HPP (/rnd/hpp?edit=<id>): load it once on mount.
+  const loadedRef = React.useRef(false);
+  React.useEffect(() => {
+    if (loadedRef.current || !autoLoadId) return;
+    const rec = initialHistory.find((r) => r.id === autoLoadId);
+    if (rec) {
+      loadedRef.current = true;
+      loadRecord(rec);
+      toast.info(`Memuat "${rec.name}" untuk diedit`);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [autoLoadId]);
 
   return (
     <div className="grid min-w-0 gap-4 lg:grid-cols-2">
