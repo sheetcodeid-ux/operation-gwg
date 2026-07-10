@@ -5,7 +5,6 @@ import { getSessionUser } from "@/lib/auth";
 import { canOpenMenu } from "@/lib/nav";
 import { listHpp } from "@/lib/data/hpp";
 import { PageHeader } from "@/components/ui/page-header";
-import { HppAnalytics } from "@/components/hpp/hpp-analytics";
 import { HppRekap } from "@/components/hpp/hpp-rekap";
 
 export const metadata: Metadata = { title: "Database HPP" };
@@ -29,9 +28,6 @@ export default async function HppRekapPage() {
         title="Database HPP"
         description="Rekap seluruh menu — HPP, harga jual, food cost & status verifikasi F&B"
       />
-      <div className="mb-4">
-        <HppAnalytics records={records} />
-      </div>
       <HppRekap records={records} canEdit={canEdit} canVerify={canVerify} />
     </div>
   );
