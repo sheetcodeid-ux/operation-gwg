@@ -68,37 +68,6 @@ export async function saveHpp(input: HppDraft): Promise<HppRecord> {
   return rec;
 }
 
-/** Update a menu's recipe/derived fields (Excel round-trip) — keeps id, status,
- *  createdAt, createdBy and the review lifecycle untouched. */
-export async function updateHppCalc(id: string, d: HppDraft): Promise<void> {
-  if (!dbEnabled) {
-    const rec = mem.get(id);
-    if (rec) mem.set(id, { ...rec, ...d, id: rec.id, status: rec.status, createdBy: rec.createdBy, createdAt: rec.createdAt, reviewNote: rec.reviewNote, reviewedBy: rec.reviewedBy, reviewedAt: rec.reviewedAt });
-    return;
-  }
-  await db()
-    .from("hpp_calculations")
-    .update({
-      name: d.name,
-      image_url: d.imageUrl,
-      category: d.category,
-      brand: d.brand,
-      mode: d.mode,
-      alloc_mode: d.allocMode,
-      target_sales: d.targetSales,
-      waste_pct: d.wastePct,
-      btkl: d.btkl,
-      use_class: d.useClass,
-      variables: d.variables,
-      fixed: d.fixed,
-      chosen_price: d.chosenPrice,
-      target_profit: d.targetProfit,
-      variable_cost: d.variableCost,
-      hpp: d.hpp,
-    })
-    .eq("id", id);
-}
-
 /** Move a record through the review lifecycle (submit / verify / reject). */
 export async function setHppStatus(id: string, status: HppStatus, reviewedBy: string | null, note: string | null): Promise<void> {
   const reviewedAt = status === "verified" || status === "rejected" ? new Date().toISOString() : null;
