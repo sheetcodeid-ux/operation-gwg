@@ -82,18 +82,48 @@ export function HppSalesPanel({
   const [msg, setMsg] = React.useState<string | null>(null);
   const [err, setErr] = React.useState<string | null>(null);
 
-  function sync() {
-    setMsg(null);
-    setErr(null);
-    start(async () => {
-      const r = await syncSalesAction(month ?? undefined);
-      if (r?.error) setErr(r.error);
-      else {
-        setMsg(`Tersinkron ${r?.count ?? 0} menu untuk ${r?.month ? monthLabel(r.month) : "bulan ini"}.`);
-        router.refresh(); // re-fetch the server component so the synced rows show
+  const sync = React.useCallback(
+    (silent = false) => {
+      if (!silent) {
+        setMsg(null);
+        setErr(null);
       }
-    });
-  }
+      start(async () => {
+        const r = await syncSalesAction(month ?? undefined);
+        if (r?.error) {
+          if (!silent) setErr(r.error);
+        } else {
+          if (!silent) setMsg(`Tersinkron ${r?.count ?? 0} menu untuk ${r?.month ? monthLabel(r.month) : "bulan ini"}.`);
+          router.refresh(); // re-fetch the server component so the synced rows show
+        }
+      });
+    },
+    [month, router],
+  );
+
+  // Near-real-time: auto-pull from the ERP when the panel opens (if stale) and
+  // every 3 min while the tab is visible. True push isn't possible (external ERP),
+  // so we poll from the open dashboard — enough to feel live for the R&D team.
+  const AUTO_MS = 3 * 60_000;
+  React.useEffect(() => {
+    if (!configured) return;
+    const stale = !syncedAt || Date.now() - +new Date(syncedAt) > AUTO_MS;
+    // Defer the first pull so the page paints before the network call.
+    const kick = stale ? setTimeout(() => sync(true), 400) : undefined;
+    const id = setInterval(() => {
+      if (document.visibilityState === "visible") sync(true);
+    }, AUTO_MS);
+    const onVisible = () => {
+      if (document.visibilityState === "visible") sync(true);
+    };
+    document.addEventListener("visibilitychange", onVisible);
+    return () => {
+      if (kick) clearTimeout(kick);
+      clearInterval(id);
+      document.removeEventListener("visibilitychange", onVisible);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [configured, sync]);
 
   const d = React.useMemo(() => {
     const byName = new Map<string, SalesMenu>();
@@ -140,6 +170,15 @@ export function HppSalesPanel({
         <div className="min-w-0">
           <p className="flex items-center gap-2 text-sm font-semibold text-foreground">
             <ShoppingBag className="size-4 text-muted-foreground" /> Penjualan Aktual vs Proyeksi
+            {configured && (
+              <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500/12 px-1.5 py-0.5 text-[10px] font-semibold text-emerald-600 dark:text-emerald-400">
+                <span className="relative flex size-1.5">
+                  <span className="absolute inline-flex size-full animate-ping rounded-full bg-emerald-500 opacity-75" />
+                  <span className="relative inline-flex size-1.5 rounded-full bg-emerald-500" />
+                </span>
+                Live
+              </span>
+            )}
           </p>
           <p className="mt-0.5 text-[11px] text-muted-foreground">
             {configured ? (
@@ -156,7 +195,7 @@ export function HppSalesPanel({
         {configured && (
           <button
             type="button"
-            onClick={sync}
+            onClick={() => sync()}
             disabled={pending}
             className="inline-flex shrink-0 items-center gap-1.5 rounded-lg border border-border bg-card px-3 py-1.5 text-[12px] font-medium text-foreground transition-colors hover:bg-muted disabled:opacity-50"
           >
