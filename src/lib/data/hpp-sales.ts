@@ -31,18 +31,39 @@ export async function latestSalesMonth(): Promise<string | null> {
   return data?.[0]?.month ?? null;
 }
 
-/** Replace a month's sales with a fresh sync. */
+/** Replace a month's sales with a fresh sync.
+ *  The ERP may list the same menu name more than once (e.g. across categories),
+ *  so we aggregate by name (summing qty & omzet) before saving — the table PK is
+ *  (month, menu_name), and a duplicate would otherwise reject the whole insert. */
 export async function saveSales(month: string, rows: MenuPerformanceRow[], syncedAt: string): Promise<number> {
-  const mapped: SalesRow[] = rows
-    .filter((r) => r.menuName.trim())
-    .map((r) => ({ month, menuName: r.menuName.trim(), categoryName: r.categoryName, category: r.category, qty: r.qty, amount: r.amount, volume: r.volume, omzet: r.omzet, keterangan: r.keterangan, syncedAt }));
+  const agg = new Map<string, SalesRow>();
+  for (const r of rows) {
+    const menuName = r.menuName.trim();
+    if (!menuName) continue;
+    const key = menuName.toLowerCase();
+    const ex = agg.get(key);
+    if (ex) {
+      ex.qty += r.qty;
+      ex.amount += r.amount;
+    } else {
+      agg.set(key, { month, menuName, categoryName: r.categoryName, category: r.category, qty: r.qty, amount: r.amount, volume: r.volume, omzet: r.omzet, keterangan: r.keterangan, syncedAt });
+    }
+  }
+  const mapped = [...agg.values()];
+
   if (!dbEnabled) {
     for (const [k, v] of mem) if (v.month === month) mem.delete(k);
     for (const r of mapped) mem.set(`${month}|${r.menuName}`, r);
     return mapped.length;
   }
+
   await db().from("hpp_sales").delete().eq("month", month);
-  if (mapped.length) await db().from("hpp_sales").insert(mapped.map(toRow));
+  // Chunked upsert so a large month can't hit payload limits; surface real errors.
+  for (let i = 0; i < mapped.length; i += 500) {
+    const chunk = mapped.slice(i, i + 500).map(toRow);
+    const { error } = await db().from("hpp_sales").upsert(chunk, { onConflict: "month,menu_name" });
+    if (error) throw new Error(`gagal menyimpan penjualan: ${error.message}`);
+  }
   return mapped.length;
 }
 
