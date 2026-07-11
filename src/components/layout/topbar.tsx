@@ -1,5 +1,6 @@
 import Link from "next/link";
-import { Search, Sparkles } from "lucide-react";
+import { Search } from "lucide-react";
+import { BrandLogo } from "./brand-logo";
 import type { AppNotification, UserProfile } from "@/lib/types";
 import type { MenuKey, NavItem } from "@/lib/nav";
 import { MobileNav } from "./mobile-nav";
@@ -37,9 +38,7 @@ export function Topbar({
       <div className="flex items-center gap-2 px-4 lg:hidden">
         <MobileNav items={navItems} allowedKeys={allowedKeys} homeDivision={homeDivision} isAdmin={isAdmin} grants={grants} department={department} />
         <Link href="/dashboard" className="flex items-center gap-2">
-          <div className="grid size-8 place-items-center rounded-lg bg-primary">
-            <Sparkles className="size-4 text-primary-foreground" />
-          </div>
+          <BrandLogo />
           <span className="hidden text-sm font-semibold text-foreground sm:inline">Operation GWG</span>
         </Link>
       </div>
