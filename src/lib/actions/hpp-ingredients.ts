@@ -26,15 +26,21 @@ export async function saveIngredientAction(input: IngredientDraft) {
   return { ok: true, id: rec.id, priceJump };
 }
 
-/** Bulk-import ingredients (each row creates a new master entry). */
+/** Bulk-import ingredients. Rows WITH an id update the existing master entry
+ *  (and re-run >5% detection); rows without an id create a new one. Lets the
+ *  Excel-template flow round-trip: download → edit prices → import back. */
 export async function importIngredientsAction(rows: IngredientDraft[]) {
   const user = await getSessionUser();
   if (!allowed(user)) return { error: "Not authorized" };
   const valid = rows.filter((r) => r.name.trim());
   if (valid.length === 0) return { error: "Tidak ada baris valid untuk diimpor." };
-  for (const r of valid) await upsertIngredient({ ...r, id: undefined, name: r.name.trim() }, user.id);
+  let jumps = 0;
+  for (const r of valid) {
+    const { priceJump } = await upsertIngredient({ ...r, name: r.name.trim() }, user.id);
+    if (priceJump) jumps++;
+  }
   revalidate();
-  return { ok: true, count: valid.length };
+  return { ok: true, count: valid.length, jumps };
 }
 
 export async function deleteIngredientAction(id: string) {

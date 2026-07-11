@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import { useRouter } from "next/navigation";
-import { AlertTriangle, ArrowDown, ArrowUp, ArrowUpDown, BellOff, Check, CheckSquare, Download, Package, Pencil, Plus, Search, Square, TrendingUp, Trash2, Upload, X } from "lucide-react";
+import { AlertTriangle, ArrowDown, ArrowUp, ArrowUpDown, BellOff, Check, CheckSquare, Download, FileDown, FileUp, Package, Pencil, Plus, Search, Square, TrendingUp, Trash2, Upload, X } from "lucide-react";
 import { toast } from "sonner";
 import { saveIngredientAction, deleteIngredientAction, clearIngredientAlertAction, importIngredientsAction, bulkDeleteIngredientsAction, bulkClearAlertsAction } from "@/lib/actions/hpp-ingredients";
 import type { HppIngredient } from "@/lib/data/hpp-ingredients";
@@ -25,6 +25,7 @@ type Form = { id?: string; name: string; buyPrice: string; buyQty: string; buyUn
 const empty: Form = { name: "", buyPrice: "", buyQty: "1", buyUnit: "kg", region: "" };
 
 type SortKey = "name" | "region" | "price" | "usage";
+type ImportRow = { id?: string; name: string; buyPrice: number; buyQty: number; buyUnit: string; region: string | null };
 
 export function HppIngredients({ ingredients, menus, canEdit }: { ingredients: HppIngredient[]; menus: MenuUse[]; canEdit: boolean }) {
   const router = useRouter();
@@ -37,6 +38,8 @@ export function HppIngredients({ ingredients, menus, canEdit }: { ingredients: H
   const [showImport, setShowImport] = React.useState(false);
   const [importText, setImportText] = React.useState("");
   const [importing, setImporting] = React.useState(false);
+  const [excel, setExcel] = React.useState<{ name: string; rows: ImportRow[] } | null>(null);
+  const fileRef = React.useRef<HTMLInputElement>(null);
 
   const usage = React.useMemo(() => {
     const m = new Map<string, string[]>();
@@ -114,18 +117,66 @@ export function HppIngredients({ ingredients, menus, canEdit }: { ingredients: H
       .filter((r) => r.name);
   }, [importText]);
 
-  async function runImport() {
-    if (parsedImport.length === 0) return toast.error("Belum ada baris valid untuk diimpor.");
+  async function doImport(list: ImportRow[]) {
+    if (list.length === 0) return toast.error("Belum ada baris valid untuk diimpor.");
     setImporting(true);
     try {
-      const res = await importIngredientsAction(parsedImport);
+      const res = await importIngredientsAction(list);
       if (res?.error) return toast.error(res.error);
-      toast.success(`${res.count} bahan diimpor`);
+      toast.success(`${res.count} bahan diproses${res.jumps ? ` · ${res.jumps} naik >5%` : ""}`);
       setImportText("");
+      setExcel(null);
       setShowImport(false);
       router.refresh();
     } finally {
       setImporting(false);
+    }
+  }
+  const runImport = () => doImport(parsedImport);
+
+  /** Download an .xlsx template pre-filled with the current ingredients (with a
+   *  hidden-ish ID column) so users edit prices in Excel and import it back. */
+  async function downloadTemplate() {
+    const XLSX = await import("xlsx");
+    const src = ingredients.length
+      ? ingredients
+      : [{ id: "", name: "Contoh: Susu UHT", buyPrice: 18000, buyQty: 1, buyUnit: "L", region: "Umum" } as HppIngredient];
+    const data = src.map((i) => ({ ID: i.id, "Nama Bahan": i.name, "Harga Beli": Math.round(i.buyPrice), Qty: i.buyQty, Satuan: i.buyUnit, Wilayah: i.region ?? "" }));
+    const ws = XLSX.utils.json_to_sheet(data);
+    ws["!cols"] = [{ wch: 26 }, { wch: 26 }, { wch: 12 }, { wch: 6 }, { wch: 8 }, { wch: 16 }];
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "Bahan Baku");
+    XLSX.writeFile(wb, "template-bahan-baku.xlsx");
+    toast.success("Template Excel diunduh");
+  }
+
+  async function onExcelFile(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    e.target.value = ""; // allow re-selecting the same file
+    if (!file) return;
+    try {
+      const XLSX = await import("xlsx");
+      const wb = XLSX.read(await file.arrayBuffer(), { type: "array" });
+      const sheet = wb.Sheets[wb.SheetNames[0]];
+      const json = XLSX.utils.sheet_to_json<Record<string, unknown>>(sheet);
+      const pick = (r: Record<string, unknown>, ...keys: string[]) => { for (const k of keys) if (r[k] != null && r[k] !== "") return String(r[k]); return ""; };
+      const rows: ImportRow[] = json
+        .map((r) => {
+          const unit = pick(r, "Satuan", "Unit");
+          return {
+            id: pick(r, "ID", "Id", "id") || undefined,
+            name: pick(r, "Nama Bahan", "Nama", "Name").trim(),
+            buyPrice: num(pick(r, "Harga Beli", "Harga", "Price")),
+            buyQty: num(pick(r, "Qty", "Jumlah")) || 1,
+            buyUnit: UNITS.includes(unit) ? unit : "kg",
+            region: pick(r, "Wilayah", "Region").trim() || null,
+          };
+        })
+        .filter((r) => r.name);
+      if (rows.length === 0) return toast.error("File tidak berisi baris valid. Pakai template yang disediakan.");
+      setExcel({ name: file.name, rows });
+    } catch {
+      toast.error("Gagal membaca file. Pastikan format .xlsx dari template.");
     }
   }
 
@@ -209,22 +260,54 @@ export function HppIngredients({ ingredients, menus, canEdit }: { ingredients: H
           </div>
 
           {showImport && (
-            <div className="mb-3 rounded-xl border border-dashed border-border bg-muted/20 p-3">
-              <p className="text-[11px] text-muted-foreground">
-                Tempel satu bahan per baris, pisahkan dengan koma: <b>Nama, Harga, Qty, Satuan, Wilayah</b>. Contoh: <code className="rounded bg-muted px-1">Susu UHT, 18000, 1, L, Kalimantan</code>
-              </p>
-              <textarea
-                value={importText}
-                onChange={(e) => setImportText(e.target.value)}
-                rows={5}
-                placeholder={"Susu UHT, 18000, 1, L, Kalimantan\nKopi Arabica, 150000, 1, kg, Umum"}
-                className="mt-2 w-full rounded-lg border border-input bg-background/40 p-2.5 text-sm text-foreground focus:border-ring focus:outline-none focus:ring-2 focus:ring-ring/25 dark:bg-input/30"
-              />
-              <div className="mt-2 flex items-center justify-between">
-                <span className="text-[11px] text-muted-foreground">{parsedImport.length} baris terbaca</span>
-                <Button onClick={runImport} disabled={importing || parsedImport.length === 0} size="sm">
-                  <Upload className="size-4" /> Import {parsedImport.length || ""}
-                </Button>
+            <div className="mb-3 space-y-3 rounded-xl border border-dashed border-border bg-muted/20 p-3">
+              {/* Excel template round-trip (seperti Shopee) */}
+              <div>
+                <p className="text-[11px] text-muted-foreground">
+                  <b className="text-foreground">Cara Excel:</b> unduh template (berisi semua bahan saat ini), ubah harganya di Excel, lalu import kembali — data langsung terupdate & harga naik &gt;5% otomatis ditandai. <b>Kolom ID jangan diubah.</b>
+                </p>
+                <div className="mt-2 flex flex-wrap gap-2">
+                  <Button variant="outline" size="sm" onClick={downloadTemplate}>
+                    <FileDown className="size-4" /> Download Template Excel
+                  </Button>
+                  <input ref={fileRef} type="file" accept=".xlsx,.xls" onChange={onExcelFile} className="hidden" />
+                  <Button variant="outline" size="sm" onClick={() => fileRef.current?.click()}>
+                    <FileUp className="size-4" /> Pilih File Excel
+                  </Button>
+                </div>
+                {excel && (
+                  <div className="mt-2 flex items-center justify-between gap-2 rounded-lg border border-primary/30 bg-primary/[0.05] px-3 py-2">
+                    <span className="min-w-0 flex-1 truncate text-[12px] text-foreground">{excel.name} · <b>{excel.rows.length}</b> baris siap</span>
+                    <div className="flex shrink-0 items-center gap-1.5">
+                      <Button size="sm" onClick={() => doImport(excel.rows)} disabled={importing}><Upload className="size-4" /> Import {excel.rows.length}</Button>
+                      <button type="button" onClick={() => setExcel(null)} className="rounded-lg px-2 py-1 text-xs font-medium text-muted-foreground hover:text-foreground">Batal</button>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              <div className="flex items-center gap-2 text-[10px] uppercase tracking-wide text-muted-foreground">
+                <span className="h-px flex-1 bg-border" /> atau tempel manual <span className="h-px flex-1 bg-border" />
+              </div>
+
+              {/* Manual paste */}
+              <div>
+                <p className="text-[11px] text-muted-foreground">
+                  Satu bahan per baris: <b>Nama, Harga, Qty, Satuan, Wilayah</b>. Contoh: <code className="rounded bg-muted px-1">Susu UHT, 18000, 1, L, Kalimantan</code>
+                </p>
+                <textarea
+                  value={importText}
+                  onChange={(e) => setImportText(e.target.value)}
+                  rows={4}
+                  placeholder={"Susu UHT, 18000, 1, L, Kalimantan\nKopi Arabica, 150000, 1, kg, Umum"}
+                  className="mt-2 w-full rounded-lg border border-input bg-background/40 p-2.5 text-sm text-foreground focus:border-ring focus:outline-none focus:ring-2 focus:ring-ring/25 dark:bg-input/30"
+                />
+                <div className="mt-2 flex items-center justify-between">
+                  <span className="text-[11px] text-muted-foreground">{parsedImport.length} baris terbaca</span>
+                  <Button onClick={runImport} disabled={importing || parsedImport.length === 0} size="sm" variant="outline">
+                    <Upload className="size-4" /> Import {parsedImport.length || ""}
+                  </Button>
+                </div>
               </div>
             </div>
           )}
