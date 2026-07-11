@@ -4,11 +4,12 @@ import { useEffect, useMemo, useState } from "react";
 import { createPortal } from "react-dom";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { ChevronDown, Lock, Menu, Sparkles, X } from "lucide-react";
+import { ChevronDown, Lock, Menu, X } from "lucide-react";
 import { DIVISION_ICON, type Division, type MenuKey, type NavItem } from "@/lib/nav";
 import { useI18n } from "@/lib/i18n/provider";
 import { useNavLock } from "./nav-lock";
 import { NAV_ICONS } from "./icons";
+import { BrandLogo } from "./brand-logo";
 import { cn } from "@/lib/utils";
 
 export function MobileNav({
@@ -62,9 +63,7 @@ export function MobileNav({
           <div className="surface-solid absolute left-0 top-0 h-full w-72 overflow-y-auto p-4">
             <div className="mb-4 flex items-center justify-between">
               <div className="flex items-center gap-2">
-                <div className="grid size-8 place-items-center rounded-lg bg-primary">
-                  <Sparkles className="size-4 text-primary-foreground" />
-                </div>
+                <BrandLogo />
                 <span className="text-sm font-semibold text-foreground">Operation GWG</span>
               </div>
               <button onClick={() => setOpen(false)} className="grid size-8 place-items-center rounded-lg hover:bg-muted/50">

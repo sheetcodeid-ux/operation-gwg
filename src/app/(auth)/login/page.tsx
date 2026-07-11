@@ -1,4 +1,5 @@
-import { LogIn, Sparkles } from "lucide-react";
+import { LogIn } from "lucide-react";
+import { BrandLogo } from "@/components/layout/brand-logo";
 import type { Metadata } from "next";
 import { getAreas, getOutlets } from "@/lib/data/store";
 import { LoginForm } from "@/components/auth/login-form";
@@ -19,9 +20,7 @@ export default function LoginPage() {
       {/* top bar */}
       <div className="absolute inset-x-0 top-0 flex items-center justify-between p-5">
         <div className="flex items-center gap-2">
-          <div className="grid size-8 place-items-center rounded-lg bg-primary">
-            <Sparkles className="size-4 text-primary-foreground" />
-          </div>
+          <BrandLogo />
           <span className="text-sm font-semibold text-foreground">Operation GWG</span>
         </div>
         <ThemeToggle />
