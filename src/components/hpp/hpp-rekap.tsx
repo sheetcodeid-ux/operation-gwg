@@ -381,7 +381,7 @@ export function HppRekap({ records, canEdit, canVerify }: { records: HppRecord[]
       ) : (
         /* ---------- TABLE VIEW ---------- */
         <div className="glass overflow-hidden rounded-2xl border border-border">
-          <div className="overflow-x-auto" data-lenis-prevent>
+          <div className="overflow-x-auto">
             <table className="w-full min-w-[860px] text-sm">
               <thead className="border-b border-border bg-muted/40 text-left text-[11px] uppercase tracking-wide text-muted-foreground">
                 <tr>
@@ -480,7 +480,7 @@ function DetailBody({ r, canEdit, canVerify, busy, onEdit, onSubmit, onVerify, o
   const meta = HPP_STATUS_META[r.status];
   return (
     <>
-      <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto p-5" data-lenis-prevent>
+      <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto p-5">
         {r.imageUrl && (
           // eslint-disable-next-line @next/next/no-img-element
           <img src={r.imageUrl} alt="" className="aspect-video w-full rounded-xl object-cover ring-1 ring-border" />

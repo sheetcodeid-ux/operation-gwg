@@ -1,11 +1,5 @@
-import { SmoothScroll } from "@/components/hpp/motion";
-
-/** R&D section: enable Lenis smooth scrolling for the HPP pages. */
+/** R&D section layout. (Lenis smooth-scroll removed — it made the pages heavy
+ *  and slowed navigation; scrolling is now native.) */
 export default function RndLayout({ children }: { children: React.ReactNode }) {
-  return (
-    <>
-      <SmoothScroll />
-      {children}
-    </>
-  );
+  return <>{children}</>;
 }

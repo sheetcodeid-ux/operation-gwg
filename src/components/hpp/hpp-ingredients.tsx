@@ -392,7 +392,7 @@ export function HppIngredients({ ingredients, menus, canEdit }: { ingredients: H
 
       {/* Table */}
       <div className="glass overflow-hidden rounded-2xl border border-border">
-        <div className="overflow-x-auto" data-lenis-prevent>
+        <div className="overflow-x-auto">
           <table className="w-full min-w-[760px] text-sm">
             <thead className="border-b border-border bg-muted/40 text-left text-[11px] uppercase tracking-wide text-muted-foreground">
               <tr>

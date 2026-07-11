@@ -575,7 +575,7 @@ export function HppCalculator({
       {/* ============ RIGHT: RESULTS ============ */}
       {/* Desktop: pin the results panel below the sticky topbar (h-16) and let it
           scroll internally, so the HPP figures stay visible while editing inputs. */}
-      <div data-lenis-prevent className="min-w-0 space-y-4 lg:sticky lg:top-20 lg:max-h-[calc(100dvh-5.5rem)] lg:self-start lg:overflow-y-auto lg:pr-1 lg:[scrollbar-width:thin]">
+      <div className="min-w-0 space-y-4 lg:sticky lg:top-20 lg:max-h-[calc(100dvh-5.5rem)] lg:self-start lg:overflow-y-auto lg:pr-1 lg:[scrollbar-width:thin]">
         {/* HPP breakdown */}
         <div className="glass rounded-2xl border border-border p-5">
           <p className="mb-3 flex items-center gap-2 text-sm font-semibold text-foreground">
@@ -791,7 +791,7 @@ export function HppCalculator({
               </ResponsiveContainer>
             </div>
           ) : (
-            <div data-lenis-prevent className="mt-3 max-h-64 overflow-auto rounded-xl border border-border">
+            <div className="mt-3 max-h-64 overflow-auto rounded-xl border border-border">
               <table className="w-full text-xs">
                 <thead className="sticky top-0 bg-muted/70 text-left text-[10px] uppercase text-muted-foreground">
                   <tr>
