@@ -22,6 +22,7 @@ import {
 import { BRANDS, BRAND_MARGIN, foodCostPct, foodCostStatus, type Brand } from "@/lib/hpp/calc";
 import { KpiCarousel, type Kpi } from "@/components/dashboard/kpi-card";
 import { Reveal } from "@/components/hpp/motion";
+import { HppSalesPanel, type SalesMenu, type SalesRowLite } from "@/components/hpp/hpp-sales-panel";
 import { cn } from "@/lib/utils";
 
 const rp = (n: number) => "Rp " + Math.round(n || 0).toLocaleString("id-ID");
@@ -51,7 +52,9 @@ const BUCKETS: { label: string; test: (p: number) => boolean; color: string }[] 
 const DAY = 86_400_000;
 const pctDelta = (cur: number, prev: number) => (prev === 0 ? (cur > 0 ? 100 : 0) : Math.round(((cur - prev) / prev) * 100));
 
-export function HppDashboard({ menus, ingredients }: { menus: DashMenu[]; ingredients: DashIngredient[] }) {
+export type DashSales = { configured: boolean; month: string | null; syncedAt: string | null; menus: SalesMenu[]; rows: SalesRowLite[] };
+
+export function HppDashboard({ menus, ingredients, sales }: { menus: DashMenu[]; ingredients: DashIngredient[]; sales: DashSales }) {
   const [brand, setBrand] = React.useState<string>("all");
   const [now] = React.useState(() => Date.now());
 
@@ -165,6 +168,9 @@ export function HppDashboard({ menus, ingredients }: { menus: DashMenu[]; ingred
       </div>
 
       <KpiCarousel items={d.kpis} />
+
+      {/* Actual sales from ERP (GWG Manage) vs HPP projection */}
+      <HppSalesPanel configured={sales.configured} month={sales.month} syncedAt={sales.syncedAt} brand={brand} menus={sales.menus} sales={sales.rows} />
 
       {/* Smart insights & recommendations */}
       <Reveal className="glass rounded-2xl border border-border p-5">
