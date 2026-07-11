@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import Link from "next/link";
-import { Activity, AlertTriangle, ArrowRight, BarChart3, CheckCircle2, ClipboardCheck, Coffee, Send, TrendingUp, UtensilsCrossed } from "lucide-react";
+import { Activity, AlertTriangle, ArrowRight, BarChart3, CheckCircle2, ClipboardCheck, Coffee, Info, Lightbulb, Send, TrendingUp, UtensilsCrossed } from "lucide-react";
 import {
   Area,
   AreaChart,
@@ -19,7 +19,7 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
-import { BRANDS, foodCostPct, foodCostStatus } from "@/lib/hpp/calc";
+import { BRANDS, BRAND_MARGIN, foodCostPct, foodCostStatus, type Brand } from "@/lib/hpp/calc";
 import { KpiCarousel, type Kpi } from "@/components/dashboard/kpi-card";
 import { Reveal } from "@/components/hpp/motion";
 import { cn } from "@/lib/utils";
@@ -29,6 +29,9 @@ const cat = (c: string): "makanan" | "minuman" => (c === "makanan" ? "makanan" :
 const tip = { background: "var(--popover)", border: "1px solid var(--border)", borderRadius: 12, fontSize: 12 } as const;
 
 export type DashMenu = { id: string; name: string; brand: string; category: string; status: string; statusLabel: string; statusTone: string; hpp: number; price: number; variableCost: number; createdAt: string; reviewedAt: string | null };
+type InsightTone = "bad" | "warn" | "info" | "good";
+type Insight = { tone: InsightTone; text: string; href?: string; cta?: string };
+const TONE_RANK: Record<InsightTone, number> = { bad: 0, warn: 1, info: 2, good: 3 };
 export type DashIngredient = { id: string; name: string; region: string; from: number; to: number; alert: boolean; affected: number };
 
 const STATUS_COLOR: Record<string, string> = { draft: "#94a3b8", submitted: "#3b82f6", verified: "#22c55e", rejected: "#ef4444" };
@@ -113,7 +116,30 @@ export function HppDashboard({ menus, ingredients }: { menus: DashMenu[]; ingred
     const pending = fm.filter((m) => m.status === "submitted");
     const recent = [...fm].sort((a, b) => b.createdAt.localeCompare(a.createdAt)).slice(0, 5);
 
-    return { kpis, dist, byBrand, status, pending, recent, months, health, overCount, pricedCount: priced.length };
+    // ---- Smart insights (deterministic, prioritised) ----
+    const insights: Insight[] = [];
+    if (overCount > 0) insights.push({ tone: "bad", text: `${overCount} menu over cost (>70%) — wajib dievaluasi harga jual atau biaya bahan.`, href: "/rnd/hpp/rekap", cta: "Tinjau" });
+    const rejected = byStatus("rejected");
+    if (rejected > 0) insights.push({ tone: "warn", text: `${rejected} menu ditolak F&B — perbaiki lalu ajukan ulang.`, href: "/rnd/hpp/rekap", cta: "Perbaiki" });
+    if (alertsCount > 0) {
+      const affected = ingredients.filter((i) => i.alert).reduce((a, i) => a + i.affected, 0);
+      insights.push({ tone: "warn", text: `${alertsCount} bahan baku naik >5%${affected > 0 ? ` — memengaruhi ${affected} menu` : ""}. Hitung ulang HPP terkait.`, href: "/rnd/hpp/bahan", cta: "Update" });
+    }
+    for (const br of BRANDS) {
+      const rows = priced.filter((m) => m.brand === br);
+      if (!rows.length) continue;
+      const m = rows.reduce((a, x) => a + marginOf(x), 0) / rows.length;
+      const min = BRAND_MARGIN[br as Brand].min;
+      if (m < min) insights.push({ tone: "warn", text: `Margin ${br} rata-rata ${(m * 100).toFixed(0)}% — di bawah minimum ${(min * 100).toFixed(0)}%.` });
+    }
+    if (priced.length && avgFc > 0.35) insights.push({ tone: "warn", text: `Rata-rata food cost ${(avgFc * 100).toFixed(1)}% di atas ideal 35%.` });
+    const subCount = byStatus("submitted");
+    if (subCount > 0) insights.push({ tone: "info", text: `${subCount} menu menunggu verifikasi tim F&B.`, href: "/rnd/hpp/rekap", cta: "Verifikasi" });
+    if (fm.length === 0) insights.push({ tone: "info", text: "Belum ada menu. Mulai hitung di Kalkulator HPP.", href: "/rnd/hpp", cta: "Mulai" });
+    if (insights.length === 0) insights.push({ tone: "good", text: "Semua indikator R&D sehat — tidak ada yang perlu ditindaklanjuti saat ini." });
+    insights.sort((a, b) => TONE_RANK[a.tone] - TONE_RANK[b.tone]);
+
+    return { kpis, dist, byBrand, status, pending, recent, months, health, overCount, pricedCount: priced.length, insights };
   }, [fm, ingredients, now]);
 
   const statusTotal = d.status.reduce((s, x) => s + x.value, 0);
@@ -139,6 +165,41 @@ export function HppDashboard({ menus, ingredients }: { menus: DashMenu[]; ingred
       </div>
 
       <KpiCarousel items={d.kpis} />
+
+      {/* Smart insights & recommendations */}
+      <Reveal className="glass rounded-2xl border border-border p-5">
+        <CardTitle icon={Lightbulb} title="Insight & Rekomendasi" sub="Analisis otomatis — tindakan prioritas" />
+        <div className="mt-3 grid gap-2 sm:grid-cols-2">
+          {d.insights.map((it, i) => (
+            <div
+              key={i}
+              className={cn(
+                "flex items-start gap-2.5 rounded-xl border p-3",
+                it.tone === "bad" && "border-red-500/30 bg-red-500/[0.06]",
+                it.tone === "warn" && "border-amber-500/30 bg-amber-500/[0.06]",
+                it.tone === "info" && "border-blue-500/30 bg-blue-500/[0.06]",
+                it.tone === "good" && "border-emerald-500/30 bg-emerald-500/[0.06]",
+              )}
+            >
+              {it.tone === "good" ? (
+                <CheckCircle2 className="mt-0.5 size-4 shrink-0 text-emerald-500" />
+              ) : it.tone === "info" ? (
+                <Info className="mt-0.5 size-4 shrink-0 text-blue-500" />
+              ) : (
+                <AlertTriangle className={cn("mt-0.5 size-4 shrink-0", it.tone === "bad" ? "text-red-500" : "text-amber-500")} />
+              )}
+              <p className="min-w-0 flex-1 text-[13px] leading-relaxed text-foreground">
+                {it.text}
+                {it.href && (
+                  <Link href={it.href} className="ml-1.5 inline-flex items-center gap-0.5 whitespace-nowrap font-medium text-primary hover:underline">
+                    {it.cta ?? "Buka"} <ArrowRight className="size-3" />
+                  </Link>
+                )}
+              </p>
+            </div>
+          ))}
+        </div>
+      </Reveal>
 
       {/* Row: health gauge + trend */}
       <div className="grid gap-4 lg:grid-cols-3">
