@@ -3,9 +3,22 @@
 import { randomUUID } from "node:crypto";
 import { revalidatePath } from "next/cache";
 import { getSessionUser } from "@/lib/auth";
-import { deleteHpp, getHpp, saveHpp, setHppStatus, type HppDraft } from "@/lib/data/hpp";
+import { deleteHpp, getHpp, saveHpp, setHppStatus, updateHppCalc, type HppDraft } from "@/lib/data/hpp";
 import { saveNotification } from "@/lib/data/persist";
 import { canUseHpp as allowed, canVerifyHpp as canVerify } from "@/lib/hpp/access";
+import { calcHpp, priceTiers, wasteCost, BRANDS, type Brand, type VariableItem } from "@/lib/hpp/calc";
+
+export type MenuImportRow = {
+  id?: string;
+  name: string;
+  brand: string;
+  category: string;
+  wastePct: number;
+  btkl: number;
+  targetSales: number;
+  chosenPrice: number; // 0 = auto (standar tier)
+  variables: { name: string; takaran: number; takaranUnit: string; buyPrice: number; buyQty: number; buyUnit: string }[];
+};
 
 function revalidateHpp() {
   revalidatePath("/rnd/hpp");
@@ -105,6 +118,44 @@ export async function bulkReviewHppAction(ids: string[], decision: "verified" | 
   }
   revalidateHpp();
   return { ok: true, count: n };
+}
+
+/** Excel import of menus: recompute HPP from the recipe and upsert (rows with a
+ *  known id update that menu; others create a new draft). */
+export async function importMenusAction(rows: MenuImportRow[]) {
+  const user = await getSessionUser();
+  if (!allowed(user)) return { error: "Not authorized" };
+  const valid = rows.filter((r) => r.name.trim());
+  if (valid.length === 0) return { error: "Tidak ada menu valid untuk diimpor." };
+  let created = 0;
+  let updated = 0;
+  for (const r of valid) {
+    const brand = (BRANDS as string[]).includes(r.brand) ? r.brand : "Nordu";
+    const category = r.category === "makanan" ? "makanan" : "minuman";
+    const targetSales = r.targetSales || 1000;
+    const variables: VariableItem[] = r.variables
+      .filter((v) => v.name.trim())
+      .map((v) => ({ id: `var_${randomUUID().slice(0, 8)}`, name: v.name.trim(), takaran: v.takaran || 0, takaranUnit: v.takaranUnit || "g", buyPrice: v.buyPrice || 0, buyQty: v.buyQty || 1, buyUnit: v.buyUnit || "kg" }));
+    const fixedForCalc = r.btkl > 0 ? [{ id: "__btkl", name: "BTKL", monthly: r.btkl }] : [];
+    const base = calcHpp({ variables, fixed: fixedForCalc, allocMode: "product", targetSales });
+    const waste = wasteCost(base.variableCost, r.wastePct);
+    const variableCost = base.variableCost + waste;
+    const hpp = variableCost + base.fixedAlloc;
+    const chosenPrice = r.chosenPrice > 0 ? r.chosenPrice : priceTiers(hpp, brand as Brand)[1]?.price ?? 0;
+    const draft: HppDraft = {
+      name: r.name.trim(), imageUrl: null, category, brand, mode: "per_pcs", allocMode: "product", targetSales,
+      wastePct: r.wastePct || 0, btkl: r.btkl || 0, useClass: false, variables, fixed: [], chosenPrice,
+      targetProfit: 10_000_000, variableCost, hpp, createdBy: user.id,
+    };
+    if (r.id) {
+      const existing = await getHpp(r.id);
+      if (existing) { await updateHppCalc(r.id, draft); updated++; continue; }
+    }
+    await saveHpp(draft);
+    created++;
+  }
+  revalidateHpp();
+  return { ok: true, count: created + updated, created, updated };
 }
 
 /** Bulk delete menus. */
