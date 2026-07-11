@@ -2,6 +2,7 @@
 
 import * as React from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import {
   AlertTriangle,
   ArrowRight,
@@ -76,6 +77,7 @@ export function HppSalesPanel({
   menus: SalesMenu[];
   sales: SalesRowLite[];
 }) {
+  const router = useRouter();
   const [pending, start] = React.useTransition();
   const [msg, setMsg] = React.useState<string | null>(null);
   const [err, setErr] = React.useState<string | null>(null);
@@ -86,7 +88,10 @@ export function HppSalesPanel({
     start(async () => {
       const r = await syncSalesAction(month ?? undefined);
       if (r?.error) setErr(r.error);
-      else setMsg(`Tersinkron ${r?.count ?? 0} menu untuk ${r?.month ? monthLabel(r.month) : "bulan ini"}.`);
+      else {
+        setMsg(`Tersinkron ${r?.count ?? 0} menu untuk ${r?.month ? monthLabel(r.month) : "bulan ini"}.`);
+        router.refresh(); // re-fetch the server component so the synced rows show
+      }
     });
   }
 
@@ -127,6 +132,7 @@ export function HppSalesPanel({
   }, [menus, sales, brand]);
 
   const attainment = d.targetUnits > 0 ? d.matchedUnits / d.targetUnits : 0;
+  const hasMatch = d.matched.length > 0;
 
   return (
     <Reveal className="glass rounded-2xl border border-border p-5">
@@ -185,10 +191,22 @@ export function HppSalesPanel({
         <div className="mt-4 space-y-4">
           {/* KPI strip */}
           <div className="grid grid-cols-2 gap-2.5 lg:grid-cols-4">
-            <Stat icon={Coins} label="Omzet Aktual" value={rpShort(d.matchedOmzet)} sub={`${d.matchedUnits.toLocaleString("id-ID")} unit terjual`} tone="brand" />
-            <Stat icon={TrendingUp} label="Margin Aktual" value={`${(d.marginActual * 100).toFixed(0)}%`} sub={`laba kotor ${rpShort(d.labaKotor)}`} tone={d.marginActual >= 0.3 ? "good" : "warn"} />
-            <Stat icon={AlertTriangle} label="Food Cost Aktual" value={`${(d.fcActual * 100).toFixed(1)}%`} sub={d.fcActual <= 0.35 ? "ideal ≤35%" : "di atas 35%"} tone={d.fcActual > 0 && d.fcActual <= 0.35 ? "good" : d.fcActual > 0.5 ? "bad" : "warn"} />
-            <Stat icon={Package} label="Capaian Target" value={d.targetUnits > 0 ? `${(attainment * 100).toFixed(0)}%` : "—"} sub={d.targetUnits > 0 ? `${d.matchedUnits}/${d.targetUnits} unit` : "target belum diisi"} tone={attainment >= 1 ? "good" : attainment >= 0.7 ? "warn" : "bad"} />
+            <Stat icon={Coins} label="Omzet Aktual" value={rpShort(d.omzetTotal)} sub={`${d.unitTotal.toLocaleString("id-ID")} unit · seluruh ERP`} tone="brand" />
+            <Stat
+              icon={TrendingUp}
+              label="Margin Aktual"
+              value={hasMatch ? `${(d.marginActual * 100).toFixed(0)}%` : "—"}
+              sub={hasMatch ? `laba kotor ${rpShort(d.labaKotor)}` : "butuh menu ber-HPP"}
+              tone={!hasMatch ? "brand" : d.marginActual >= 0.3 ? "good" : "warn"}
+            />
+            <Stat
+              icon={AlertTriangle}
+              label="Food Cost Aktual"
+              value={hasMatch ? `${(d.fcActual * 100).toFixed(1)}%` : "—"}
+              sub={hasMatch ? (d.fcActual <= 0.35 ? "ideal ≤35%" : "di atas 35%") : `${d.matched.length} dari HPP`}
+              tone={!hasMatch ? "brand" : d.fcActual > 0 && d.fcActual <= 0.35 ? "good" : d.fcActual > 0.5 ? "bad" : "warn"}
+            />
+            <Stat icon={Package} label="Capaian Target" value={d.targetUnits > 0 ? `${(attainment * 100).toFixed(0)}%` : "—"} sub={d.targetUnits > 0 ? `${d.matchedUnits}/${d.targetUnits} unit` : "target belum diisi"} tone={d.targetUnits === 0 ? "brand" : attainment >= 1 ? "good" : attainment >= 0.7 ? "warn" : "bad"} />
           </div>
 
           {/* Top sellers — actual vs projected */}
