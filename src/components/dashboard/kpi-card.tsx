@@ -19,9 +19,11 @@ import {
   MessageSquareWarning,
   Package,
   Send,
+  ShoppingCart,
   SprayCan,
   Store,
   TrendingUp,
+  Wallet,
   type LucideIcon,
 } from "lucide-react";
 import type { Tone } from "@/lib/constants";
@@ -44,6 +46,8 @@ const KPI_ICONS: Record<string, LucideIcon> = {
   ClipboardCheck,
   Coins,
   Send,
+  ShoppingCart,
+  Wallet,
 };
 
 export interface Kpi {
