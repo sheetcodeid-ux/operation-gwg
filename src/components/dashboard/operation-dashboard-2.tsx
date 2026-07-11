@@ -1,58 +1,59 @@
 "use client";
 
 /**
- * Dashboard Operation 2 — financial/operational overview.
+ * Dashboard Operation 2 — financial/operational overview (Juknis v1.0).
  *
- * Matches the user's Figma: a 3-rail layout (narrow · wide · narrow). On desktop
- * each rail SCROLLS INDEPENDENTLY inside the viewport, so cards stay compact and
- * side-by-side with no trailing empty space. Colors come from the app's real
- * chart palette (tone.ts): blue #3b82f6, green, amber, slate — NOT violet.
- * Data is deterministic PLACEHOLDER, marked `TODO(api)` for later ERP/DB wiring.
+ * Layout mirrors Dashboard 1 (Card primitives + balanced grid-cols-3 rows,
+ * items-stretch) — normal page flow, NO frozen/independent-scroll rails.
+ * Colors follow the app palette (tone.ts): blue #3b82f6, green, amber, slate.
+ * Data is deterministic PLACEHOLDER, marked TODO(api) for later ERP/DB wiring.
  */
 
 import * as React from "react";
 import {
+  AlertTriangle,
+  ArrowDown,
   ArrowDownRight,
   ArrowRight,
+  ArrowUp,
+  ArrowUpDown,
   ArrowUpRight,
   Boxes,
+  CheckCircle2,
   ChevronDown,
+  CircleAlert,
   Coins,
   Download,
   Eye,
+  Flame,
   Layers,
-  MoreHorizontal,
   PackageSearch,
   Search,
   ShoppingCart,
-  SlidersHorizontal,
+  TrendingDown,
   TrendingUp,
   Wallet,
+  XCircle,
   type LucideIcon,
 } from "lucide-react";
-import { Bar, BarChart, CartesianGrid, RadialBar, RadialBarChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
+import { Bar, BarChart, CartesianGrid, Line, LineChart, ReferenceLine, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { Card } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
 import { SegmentedTabs } from "@/components/ui/segmented-tabs";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
+import { ConcentricRings } from "@/components/dashboard/concentric-rings";
 import { cn } from "@/lib/utils";
 
-/* ---------- palette = Dashboard 1 (tone.ts): blue / green / amber / slate ---------- */
-const C = { blue: "#3b82f6", blueLt: "#93c5fd", green: "#22c55e", green2: "#16a34a", amber: "#f59e0b", slate: "#94a3b8", slate2: "#64748b", teal: "#14b8a6", sky: "#0ea5e9", gray: "#cbd5e1" };
-const tip = { background: "var(--popover)", border: "1px solid var(--border)", borderRadius: 12, fontSize: 12 } as const;
+/* ---------- palette (tone.ts) ---------- */
+const C = { blue: "#3b82f6", blueLt: "#93c5fd", green: "#22c55e", amber: "#f59e0b", red: "#ef4444", slate: "#94a3b8", slate2: "#64748b" };
+/** 8 shades of blue (dark → light) for the stacked Beban chart gradient. */
+const BLUES = ["#1e40af", "#1d4ed8", "#2563eb", "#3b82f6", "#60a5fa", "#93c5fd", "#bfdbfe", "#dbeafe"];
 const rp = (n: number) => "Rp" + Math.round(n).toLocaleString("id-ID");
-
 const rand = (seed: number) => { let s = seed; return () => ((s = (s * 1103515245 + 12345) & 0x7fffffff) / 0x7fffffff); };
-const EXPENSE_CATS = [
-  { key: "Utilitas", color: C.blue },
-  { key: "Sewa", color: C.sky },
-  { key: "Tenaga Kerja", color: C.teal },
-  { key: "Potongan", color: C.green },
-  { key: "Manajemen Fee", color: C.amber },
-  { key: "Pemasaran", color: C.slate2 },
-  { key: "Ongkos Kirim", color: C.slate },
-  { key: "Lainnya", color: C.gray },
-];
+
+const EXPENSE_CATS = ["Utilitas", "Sewa", "Tenaga Kerja", "Potongan", "Manajemen Fee", "Pemasaran", "Ongkos Kirim", "Lainnya"];
+const EXPENSE_THRESHOLD: Record<string, number> = { Utilitas: 3, Sewa: 3, "Tenaga Kerja": 13, Potongan: 3, "Manajemen Fee": 3, Pemasaran: 3, "Ongkos Kirim": 3, Lainnya: 3 };
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "Mei", "Jun", "Jul", "Agu", "Sep", "Okt", "Nov", "Des"];
 
 /* ==================================================================== */
@@ -64,11 +65,11 @@ export function OperationDashboard2() {
 
   return (
     <div className="w-full space-y-4">
-      {/* Controls */}
+      {/* Global filter row */}
       <div className="flex flex-wrap items-center gap-2">
         <div className="flex items-center gap-2 rounded-xl border border-border bg-card px-3 py-2 text-xs">
           <span className="text-muted-foreground">Periode</span>
-          <PillSelect value={period} onChange={setPeriod} options={[{ v: "hari", l: "Per Hari" }, { v: "minggu", l: "Per Minggu" }, { v: "bulan", l: "Per Bulan 2026.03" }]} bare />
+          <PillSelect value={period} onChange={setPeriod} bare options={[{ v: "hari", l: "Per Hari" }, { v: "minggu", l: "Per Minggu" }, { v: "bulan", l: "Per Bulan 2026.03" }]} />
         </div>
         <div className="ml-auto flex flex-wrap items-center gap-2">
           <PillSelect value={ca} onChange={setCa} options={[{ v: "all", l: "Semua CA" }, { v: "owner", l: "Owner" }, { v: "spv", l: "SPV" }]} />
@@ -78,46 +79,50 @@ export function OperationDashboard2() {
         </div>
       </div>
 
-      {/* 3-rail layout. On lg+ each rail scrolls inside the viewport (no empty space);
-          on mobile everything stacks and the page scrolls normally. */}
-      <div className="lg:h-[calc(100vh-11.5rem)] lg:overflow-hidden">
-        <div className="grid gap-4 lg:h-full lg:grid-cols-12">
-          <Rail>
-            <TargetGauge />
-            <ProgressCard title="Proyeksi Bulanan" pct={50} actual={300_000_000} target={600_000_000} />
-            <ProgressCard title="Target Harian" pct={50} actual={10_000_000} target={20_000_000} />
-            <WeeklyTarget />
-            <ProdukCard />
-          </Rail>
+      {/* KPI — 4 cards sejajar */}
+      <div className="grid grid-cols-2 gap-4 xl:grid-cols-4">
+        <KpiTile icon={Coins} label="Net Sales" value={rp(100_000_000)} delta={2.45} />
+        <KpiTile icon={ShoppingCart} label="Pembelian" value={rp(100_000_000)} delta={2.45} />
+        <KpiTile icon={Wallet} label="Beban Operasional" value={rp(100_000_000)} delta={-2.45} positiveIsGood={false} />
+        <KpiTile icon={TrendingUp} label="Laba Bersih" value={rp(100_000_000)} delta={2.45} />
+      </div>
 
-          <Rail wide>
-            <KpiCluster />
-            <PenjualanChart />
-            <BebanChart />
-            <PerformaCabang />
-          </Rail>
+      {/* Row: Penjualan + Distribusi Margin */}
+      <div className="grid items-stretch gap-4 lg:grid-cols-3">
+        <PenjualanChart className="lg:col-span-2" period={period} />
+        <DistribusiMargin />
+      </div>
 
-          <Rail>
-            <DistribusiMargin />
-            <KontrolCard />
-            <RencanaPengeluaran />
-            <AktivitasTerkini />
-          </Rail>
-        </div>
+      {/* Row: Beban Operasional + Kontrol */}
+      <div className="grid items-stretch gap-4 lg:grid-cols-3">
+        <BebanChart className="lg:col-span-2" />
+        <KontrolCard />
+      </div>
+
+      {/* Row: Performa Cabang (executive table) + Aktivitas Terkini */}
+      <div className="grid items-stretch gap-4 lg:grid-cols-3">
+        <PerformaCabang className="lg:col-span-2" />
+        <AktivitasTerkini />
+      </div>
+
+      {/* Row: Target Per Bulan + Target Mingguan + Produk */}
+      <div className="grid gap-4 lg:grid-cols-3">
+        <TargetGauge />
+        <WeeklyTarget />
+        <ProdukCard />
+      </div>
+
+      {/* Row: Proyeksi + Target Harian + Rencana Pengeluaran */}
+      <div className="grid gap-4 lg:grid-cols-3">
+        <ProgressCard title="Proyeksi Bulanan" pct={50} actual={300_000_000} target={600_000_000} />
+        <ProgressCard title="Target Harian" pct={50} actual={10_000_000} target={20_000_000} />
+        <RencanaPengeluaran />
       </div>
     </div>
   );
 }
 
-function Rail({ children, wide }: { children: React.ReactNode; wide?: boolean }) {
-  return (
-    <div className={cn("min-w-0 space-y-4 lg:h-full lg:overflow-y-auto lg:pr-1 lg:[scrollbar-width:thin]", wide ? "lg:col-span-6" : "lg:col-span-3")}>
-      {children}
-    </div>
-  );
-}
-
-/* ---------- shared bits ---------- */
+/* ---------- shared ---------- */
 function PillSelect({ value, onChange, options, bare }: { value: string; onChange: (v: string) => void; options: { v: string; l: string }[]; bare?: boolean }) {
   return (
     <div className="relative inline-flex items-center">
@@ -128,9 +133,8 @@ function PillSelect({ value, onChange, options, bare }: { value: string; onChang
     </div>
   );
 }
-/** Compact glass card (Aniq). */
 function Panel({ children, className }: { children: React.ReactNode; className?: string }) {
-  return <Card className={cn("p-4", className)}>{children}</Card>;
+  return <Card className={cn("flex flex-col p-5", className)}>{children}</Card>;
 }
 function Head({ title, desc, right }: { title: string; desc?: string; right?: React.ReactNode }) {
   return (
@@ -157,12 +161,33 @@ function Delta({ v, positiveIsGood = true }: { v: number; positiveIsGood?: boole
   );
 }
 
-/* ---------- MIDDLE: KPIs ---------- */
+/* Premium hover tooltip (crosshair) shared by charts. */
+type TipPayload = { name?: string; value?: number; color?: string; dataKey?: string };
+type TipProps = { active?: boolean; label?: React.ReactNode; payload?: TipPayload[]; money?: boolean; suffix?: string };
+function ChartTip({ active, label, payload, money, suffix }: TipProps) {
+  if (!active || !payload?.length) return null;
+  return (
+    <div className="rounded-xl border border-border bg-popover px-3 py-2 text-xs shadow-lg">
+      {label != null && <p className="mb-1.5 font-medium text-foreground">{label}</p>}
+      <div className="space-y-1">
+        {payload.filter((p) => p.value != null).map((p, i) => (
+          <div key={i} className="flex items-center gap-2">
+            <span className="size-2 rounded-full" style={{ background: p.color }} />
+            <span className="text-muted-foreground">{p.name}</span>
+            <span className="ml-auto font-semibold tabular-nums text-foreground">{money ? rp(Math.abs(Number(p.value))) : `${Number(p.value)}${suffix ?? ""}`}</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+/* ---------- KPI ---------- */
 function KpiTile({ icon: Icon, label, value, delta, positiveIsGood }: { icon: LucideIcon; label: string; value: string; delta: number; positiveIsGood?: boolean }) {
   return (
     <div className="card-gradient flex flex-col rounded-2xl p-4">
       <div className="flex items-center justify-between gap-2">
-        <div className="grid size-9 shrink-0 place-items-center rounded-xl bg-muted ring-1 ring-border"><Icon className="size-5 text-muted-foreground" /></div>
+        <div className="grid size-10 shrink-0 place-items-center rounded-xl bg-muted ring-1 ring-border"><Icon className="size-5 text-muted-foreground" /></div>
         <GripDots />
       </div>
       <div className="mt-4 flex items-end justify-between gap-2">
@@ -176,32 +201,333 @@ function KpiTile({ icon: Icon, label, value, delta, positiveIsGood }: { icon: Lu
     </div>
   );
 }
-function KpiCluster() {
+
+/* ---------- Penjualan (3-line chart) ---------- */
+function PenjualanChart({ className, period }: { className?: string; period: string }) {
+  const [mode, setMode] = React.useState("harian");
+  const points = mode === "harian" ? 24 : mode === "mingguan" ? 7 : 30;
+  const label = (i: number) => (mode === "harian" ? String(i).padStart(2, "0") : mode === "mingguan" ? ["Sen", "Sel", "Rab", "Kam", "Jum", "Sab", "Min"][i] : String(i + 1));
+  const r = rand(7 + points);
+  const data = Array.from({ length: points }, (_, i) => ({ x: label(i), hari: Math.round(3000 + r() * 6000), kemarin: Math.round(2500 + r() * 5000), target: 6500 }));
   return (
-    <div className="grid grid-cols-2 gap-4">
-      <KpiTile icon={Coins} label="Net Sales" value={rp(100_000_000)} delta={2.45} />
-      <KpiTile icon={ShoppingCart} label="Pembelian" value={rp(100_000_000)} delta={2.45} />
-      <KpiTile icon={Wallet} label="Beban Operasional" value={rp(100_000_000)} delta={-2.45} positiveIsGood={false} />
-      <KpiTile icon={TrendingUp} label="Laba Bersih" value={rp(100_000_000)} delta={2.45} />
-    </div>
+    <Panel className={className}>
+      <Head title="Penjualan" desc="Hari ini vs kemarin vs target" right={<PillSelect value={mode} onChange={setMode} options={[{ v: "harian", l: "Harian" }, { v: "mingguan", l: "Mingguan" }, { v: "bulanan", l: "Bulanan" }]} />} />
+      <div className="mb-2 flex items-center gap-2"><p className="text-xl font-bold tabular-nums text-foreground">{rp(100_000_000)}</p><Delta v={1.78} /><span className="text-[11px] text-muted-foreground">+Rp1.780.000 dari tahun lalu</span></div>
+      <div className="min-h-[15rem] flex-1">
+        <ResponsiveContainer width="100%" height="100%">
+          <LineChart data={data} margin={{ top: 8, right: 8, left: -16, bottom: 0 }}>
+            <CartesianGrid strokeDasharray="3 3" stroke="rgba(148,163,184,0.16)" vertical={false} />
+            <XAxis dataKey="x" tick={{ fill: C.slate, fontSize: 10 }} tickLine={false} axisLine={false} interval={mode === "harian" ? 1 : 0} minTickGap={4} />
+            <YAxis tick={{ fill: C.slate, fontSize: 10 }} tickLine={false} axisLine={false} width={36} tickFormatter={(v) => `${Math.round(Number(v) / 1000)}K`} />
+            <Tooltip cursor={{ stroke: "rgba(148,163,184,0.4)", strokeDasharray: "3 3" }} content={(p) => <ChartTip {...(p as unknown as TipProps)} money />} />
+            <Line type="monotone" dataKey="target" name="Target" stroke={C.amber} strokeWidth={2} strokeDasharray="5 4" dot={false} />
+            <Line type="monotone" dataKey="kemarin" name="Kemarin" stroke={C.slate} strokeWidth={2} dot={false} activeDot={{ r: 4 }} />
+            <Line type="monotone" dataKey="hari" name="Hari ini" stroke={C.blue} strokeWidth={2.5} dot={false} activeDot={{ r: 5 }} className="chart-glow-blue" />
+          </LineChart>
+        </ResponsiveContainer>
+      </div>
+      <div className="mt-2 flex flex-wrap items-center justify-center gap-4 text-[11px] text-muted-foreground">
+        <span className="flex items-center gap-1.5"><span className="h-0.5 w-4 rounded-full" style={{ background: C.blue }} /> Hari ini</span>
+        <span className="flex items-center gap-1.5"><span className="h-0.5 w-4 rounded-full" style={{ background: C.slate }} /> Kemarin</span>
+        <span className="flex items-center gap-1.5"><span className="h-0.5 w-4 rounded-full border-b-2 border-dashed" style={{ borderColor: C.amber }} /> Target</span>
+      </div>
+    </Panel>
   );
 }
 
-/* ---------- LEFT ---------- */
+/* ---------- Distribusi Margin (2 concentric-ring views) ---------- */
+function DistribusiMargin() {
+  const [view, setView] = React.useState("wilayah");
+  const sets: Record<string, { sehat: number; cukup: number; kritis: number }> = {
+    wilayah: { sehat: 30, cukup: 15, kritis: 5 },
+    coordinator: { sehat: 22, cukup: 18, kritis: 10 },
+  };
+  const d = sets[view];
+  const total = d.sehat + d.cukup + d.kritis;
+  const pct = (n: number) => Math.round((n / total) * 100);
+  const rings = [
+    { label: "Sehat", value: pct(d.sehat), color: C.green },
+    { label: "Cukup", value: pct(d.cukup), color: C.amber },
+    { label: "Kritis", value: pct(d.kritis), color: C.red },
+  ];
+  const legend = [
+    { label: "Sehat", sub: ">30% margin", color: C.green, count: d.sehat, icon: CheckCircle2 },
+    { label: "Cukup", sub: "29–30% margin", color: C.amber, count: d.cukup, icon: CircleAlert },
+    { label: "Kritis", sub: "<15% margin", color: C.red, count: d.kritis, icon: AlertTriangle },
+  ];
+  return (
+    <Panel>
+      <Head title="Distribusi Margin" desc="Sebaran kesehatan margin cabang" />
+      <SegmentedTabs size="sm" value={view} onChange={setView} items={[{ value: "wilayah", label: "Wilayah" }, { value: "coordinator", label: "Coordinator" }]} />
+      <div className="mt-3 flex flex-1 flex-wrap content-center items-center justify-center gap-5">
+        <ConcentricRings rings={rings} centerValue={rings[0].value} centerLabel="Sehat" size={168} />
+        <ul className="min-w-44 flex-1 space-y-3">
+          {legend.map((l) => (
+            <li key={l.label} className="flex items-center gap-3">
+              <span className="grid size-9 shrink-0 place-items-center rounded-full" style={{ background: `${l.color}22` }}><l.icon className="size-4" style={{ color: l.color }} /></span>
+              <div className="min-w-0 flex-1">
+                <p className="truncate text-sm font-semibold text-foreground">{l.label}</p>
+                <p className="truncate text-[11px] text-muted-foreground">{l.sub}</p>
+              </div>
+              <span className="shrink-0 text-sm font-semibold tabular-nums" style={{ color: l.color }}>{l.count}</span>
+            </li>
+          ))}
+        </ul>
+      </div>
+    </Panel>
+  );
+}
+
+/* ---------- Beban Operasional (blue-gradient stacked) ---------- */
+function BebanChart({ className }: { className?: string }) {
+  const [mode, setMode] = React.useState("persentase");
+  const r = rand(11);
+  const data = MONTHS.map((m) => { const row: Record<string, number | string> = { m }; for (const c of EXPENSE_CATS) row[c] = Math.round(2 + r() * 6); return row; });
+  return (
+    <Panel className={className}>
+      <Head title="Beban Operasional" desc="Rincian beban per kategori (% omset) · 12 bulan" right={<PillSelect value={mode} onChange={setMode} options={[{ v: "persentase", l: "Persentase" }, { v: "nominal", l: "Nominal" }]} />} />
+      <div className="mb-1 flex items-center gap-2"><p className="text-xl font-bold tabular-nums text-foreground">{rp(100_000_000)}</p><Delta v={1.78} positiveIsGood={false} /></div>
+      <div className="mb-2 flex flex-wrap gap-x-3 gap-y-1">
+        {EXPENSE_CATS.map((c, i) => <span key={c} className="flex items-center gap-1 text-[10px] text-muted-foreground"><span className="size-2 rounded-full" style={{ background: BLUES[i] }} /> {c}</span>)}
+      </div>
+      <div className="min-h-[14rem] flex-1">
+        <ResponsiveContainer width="100%" height="100%">
+          <BarChart data={data} margin={{ top: 6, right: 4, left: -20, bottom: 0 }}>
+            <CartesianGrid strokeDasharray="3 3" stroke="rgba(148,163,184,0.16)" vertical={false} />
+            <XAxis dataKey="m" tick={{ fill: C.slate, fontSize: 10 }} tickLine={false} axisLine={false} />
+            <YAxis tick={{ fill: C.slate, fontSize: 10 }} tickLine={false} axisLine={false} width={30} tickFormatter={(v) => `${v}%`} />
+            <Tooltip cursor={{ fill: "rgba(148,163,184,0.08)" }} content={(p) => <ChartTip {...(p as unknown as TipProps)} suffix="%" />} />
+            <ReferenceLine y={13} stroke={C.red} strokeDasharray="4 4" strokeOpacity={0.5} />
+            {EXPENSE_CATS.map((c, i) => <Bar key={c} dataKey={c} stackId="e" fill={BLUES[i]} radius={i === EXPENSE_CATS.length - 1 ? [3, 3, 0, 0] : undefined} maxBarSize={34} />)}
+          </BarChart>
+        </ResponsiveContainer>
+      </div>
+      <p className="mt-1 text-[10px] text-muted-foreground">Garis putus merah = ambang batas (threshold {EXPENSE_THRESHOLD["Tenaga Kerja"]}% Tenaga Kerja)</p>
+    </Panel>
+  );
+}
+
+/* ---------- Performa Cabang (executive table, Juknis 2.8) ---------- */
+type SortDir = "asc" | "desc";
+function PerformaCabang({ className }: { className?: string }) {
+  const [tab, setTab] = React.useState("net");
+  const [q, setQ] = React.useState("");
+  const [page, setPage] = React.useState(1);
+  const [dir, setDir] = React.useState<SortDir>("desc");
+  const per = 8;
+
+  const all = React.useMemo(() => {
+    const r = rand(99);
+    return Array.from({ length: 512 }, (_, i) => {
+      const prev = Math.round(80_000_000 + r() * 60_000_000);
+      const cur = Math.round(prev * (0.9 + r() * 0.3));
+      const growth = +(((cur - prev) / prev) * 100).toFixed(2);
+      return { id: i + 1, name: `Cabang ${String.fromCharCode(65 + (i % 26))}${Math.floor(i / 26) + 1}`, area: ["Kalimantan", "Jawa", "Bali"][i % 3], prev, cur, growth };
+    });
+  }, []);
+
+  const filtered = React.useMemo(() => {
+    const s = all.filter((x) => x.name.toLowerCase().includes(q.toLowerCase()));
+    s.sort((a, b) => (dir === "asc" ? a.growth - b.growth : b.growth - a.growth));
+    return s;
+  }, [all, q, dir]);
+
+  const pages = Math.max(1, Math.ceil(filtered.length / per));
+  const cur = Math.min(page, pages);
+  const start = (cur - 1) * per;
+  const rows = filtered.slice(start, start + per);
+  const colLabel = tab === "net" ? "Net Sales" : tab === "beli" ? "Pembelian" : "Laba Bersih";
+
+  return (
+    <Panel className={className}>
+      <Head title="Performa Cabang" desc={`Perbandingan ${colLabel.toLowerCase()} antar cabang`} right={<SegmentedTabs size="sm" value={tab} onChange={(v) => { setTab(v); setPage(1); }} items={[{ value: "net", label: "Net Sales" }, { value: "beli", label: "Pembelian" }, { value: "laba", label: "Laba Bersih" }]} />} />
+      <div className="relative mb-3 max-w-xs">
+        <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+        <input value={q} onChange={(e) => { setQ(e.target.value); setPage(1); }} placeholder="Cari cabang…" className="w-full rounded-lg border border-border bg-transparent py-2 pl-9 pr-3 text-sm outline-none placeholder:text-muted-foreground" />
+      </div>
+      <div className="overflow-x-auto rounded-xl border border-border">
+        <table className="w-full min-w-[42rem] border-collapse text-sm">
+          <thead>
+            <tr className="bg-muted/60 text-xs text-muted-foreground">
+              <th className="sticky left-0 z-10 bg-muted/60 px-3 py-3 text-left font-medium">Cabang</th>
+              <th className="px-3 py-3 text-right font-medium">{tab === "beli" ? "Bulan Lalu" : "Target Lalu"}</th>
+              <th className="px-3 py-3 text-right font-medium">Bulan Ini</th>
+              <th className="px-3 py-3 text-right font-medium">
+                <button type="button" onClick={() => setDir((d) => (d === "asc" ? "desc" : "asc"))} className="ml-auto inline-flex items-center gap-1 hover:text-foreground">
+                  % Pertumbuhan {dir === "desc" ? <ArrowDown className="size-3.5" /> : dir === "asc" ? <ArrowUp className="size-3.5" /> : <ArrowUpDown className="size-3.5" />}
+                </button>
+              </th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((row, i) => (
+              <tr key={row.id} className="border-t border-border/60 transition-colors hover:bg-foreground/10">
+                <td className="sticky left-0 z-10 bg-card px-3 py-2.5">
+                  <div className="flex items-center gap-2.5">
+                    <span className="grid size-8 shrink-0 place-items-center rounded-full bg-muted text-[11px] font-semibold tabular-nums text-muted-foreground ring-1 ring-border">{start + i + 1}</span>
+                    <div className="min-w-0"><p className="truncate font-medium text-foreground">{row.name}</p><p className="truncate text-[11px] text-muted-foreground">{row.area}</p></div>
+                  </div>
+                </td>
+                <td className="px-3 py-2.5 text-right tabular-nums text-muted-foreground">{rp(row.prev)}</td>
+                <td className="px-3 py-2.5 text-right tabular-nums text-foreground">{rp(row.cur)}</td>
+                <td className="px-3 py-2.5 text-right"><span className="inline-flex justify-end"><Delta v={row.growth} /></span></td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      <div className="mt-3 flex flex-wrap items-center justify-between gap-2 text-sm text-muted-foreground">
+        <p className="text-[13px]">Menampilkan {filtered.length ? start + 1 : 0} sampai {start + rows.length} dari {filtered.length} hasil</p>
+        <div className="flex items-center gap-1">
+          <button disabled={cur === 1} onClick={() => setPage(cur - 1)} className="rounded-lg border border-border px-3 py-1.5 text-[13px] hover:bg-muted disabled:opacity-40">Sebelumnya</button>
+          <div className="no-scrollbar flex max-w-[11rem] items-center gap-1 overflow-x-auto">
+            {Array.from({ length: pages }, (_, i) => i + 1).slice(Math.max(0, cur - 2), Math.max(0, cur - 2) + 4).map((n) => (
+              <button key={n} onClick={() => setPage(n)} className={cn("grid size-9 shrink-0 place-items-center rounded-lg text-[13px] font-medium tabular-nums", n === cur ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-muted")}>{n}</button>
+            ))}
+          </div>
+          <button disabled={cur === pages} onClick={() => setPage(cur + 1)} className="rounded-lg border border-border px-3 py-1.5 text-[13px] hover:bg-muted disabled:opacity-40">Berikutnya</button>
+        </div>
+      </div>
+    </Panel>
+  );
+}
+
+/* ---------- Kontrol (tabs + scrollable) ---------- */
+function KontrolCard() {
+  const [tab, setTab] = React.useState("fraud");
+  return (
+    <Panel>
+      <Head title="Kontrol" desc="Pemantauan potensi kebocoran" />
+      <SegmentedTabs size="sm" value={tab} onChange={setTab} items={[{ value: "fraud", label: "Fraud" }, { value: "complain", label: "Complain" }, { value: "bersih", label: "Kebersihan" }, { value: "event", label: "Event" }]} />
+      <div className="mt-3 max-h-72 flex-1 overflow-y-auto pr-1 [scrollbar-width:thin]">
+        {tab === "fraud" && (
+          <div className="space-y-2">
+            {[{ n: "Promosi", v: 21_000_000 }, { n: "Kompliment", v: 5_200_000 }, { n: "Refund", v: 420_000 }, { n: "Void", v: 420_000 }].map((row, i) => (
+              <div key={row.n} className="flex items-center gap-2 rounded-lg border border-border/60 bg-muted/20 px-2.5 py-2">
+                <span className="grid size-5 shrink-0 place-items-center rounded-md bg-blue-500/12 text-[10px] font-semibold text-blue-600 dark:text-blue-400">{i + 1}</span>
+                <span className="min-w-0 flex-1 truncate text-[12px] text-foreground">{row.n}</span>
+                <span className="shrink-0 text-[12px] font-medium tabular-nums text-foreground">{rp(row.v)}</span>
+              </div>
+            ))}
+          </div>
+        )}
+        {tab === "complain" && (
+          <div className="space-y-2">
+            {[{ o: "Cattu A. Yani", k: "Service", s: "Open" }, { o: "Nordu Bengkayang", k: "Food Quality", s: "In Progress" }, { o: "Busari Desa", k: "Cleanliness", s: "Open" }, { o: "Cattu Canteen", k: "Price", s: "In Progress" }, { o: "Nordu Memambang", k: "Order Error", s: "Open" }].map((c, i) => (
+              <div key={i} className="rounded-lg border border-border/60 bg-muted/20 px-2.5 py-2">
+                <div className="flex items-center gap-2">
+                  <span className="min-w-0 flex-1 truncate text-[12px] font-medium text-foreground">{c.o}</span>
+                  <Badge tone={c.s === "Open" ? "danger" : "warning"}>{c.s}</Badge>
+                </div>
+                <p className="mt-0.5 text-[11px] text-muted-foreground">{c.k}</p>
+              </div>
+            ))}
+          </div>
+        )}
+        {tab === "bersih" && (
+          <div className="space-y-2">
+            <div className="flex items-center justify-between rounded-lg border border-border/60 bg-muted/20 px-2.5 py-2 text-[12px]">
+              <span className="text-muted-foreground">Sudah checklist hari ini</span><span className="font-semibold text-foreground">28 / 32 outlet</span>
+            </div>
+            {[{ o: "Cattu A. Yani", a: "Kitchen", ok: true }, { o: "Nordu Bengkayang", a: "Toilet", ok: false }, { o: "Busari Desa", a: "Dining Area", ok: true }, { o: "Cattu Sohor", a: "Bar", ok: true }].map((x, i) => (
+              <div key={i} className="flex items-center gap-2 rounded-lg border border-border/60 bg-muted/20 px-2.5 py-2 text-[12px]">
+                {x.ok ? <CheckCircle2 className="size-4 shrink-0 text-emerald-500" /> : <XCircle className="size-4 shrink-0 text-red-500" />}
+                <span className="min-w-0 flex-1 truncate text-foreground">{x.o}</span>
+                <span className="shrink-0 text-[11px] text-muted-foreground">{x.a}</span>
+              </div>
+            ))}
+          </div>
+        )}
+        {tab === "event" && (
+          <div className="space-y-2">
+            {[{ n: "Promo Kopi Susu", u: 42, up: true }, { n: "Bundling Roti", u: 30, up: true }, { n: "Diskon Weekend", u: 18, up: false }, { n: "Voucher Member", u: 9, up: false }].map((e, i) => (
+              <div key={i} className="flex items-center gap-2 rounded-lg border border-border/60 bg-muted/20 px-2.5 py-2 text-[12px]">
+                <span className="grid size-5 shrink-0 place-items-center rounded-md bg-blue-500/12 text-[10px] font-semibold text-blue-600 dark:text-blue-400">{i + 1}</span>
+                <span className="min-w-0 flex-1 truncate text-foreground">{e.n}</span>
+                <span className="shrink-0 text-[11px] text-muted-foreground">{e.u}×</span>
+                {e.up ? <Flame className="size-3.5 shrink-0 text-amber-500" /> : <TrendingDown className="size-3.5 shrink-0 text-slate-400" />}
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    </Panel>
+  );
+}
+
+/* ---------- Aktivitas Terkini (timeline) ---------- */
+type Act = { who: string; t: string; a: string; tone: "blue" | "green" | "amber" | "red" };
+function ActTimeline({ label, rows }: { label: string; rows: Act[] }) {
+  const dot = { blue: C.blue, green: C.green, amber: C.amber, red: C.red };
+  return (
+    <div>
+      <p className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">{label}</p>
+      <div className="relative space-y-3 pl-1">
+        {rows.map((r, i) => (
+          <div key={i} className="relative flex gap-3">
+            <span className="mt-1 grid size-7 shrink-0 place-items-center rounded-full text-[11px] font-semibold text-white" style={{ background: dot[r.tone] }}>{r.who[0]}</span>
+            <div className="min-w-0 flex-1 rounded-xl border border-border/60 bg-muted/20 px-3 py-2">
+              <p className="text-[11px] text-muted-foreground"><span className="font-semibold text-foreground">{r.who}</span> · {r.t}</p>
+              <p className="mt-0.5 text-[12px] leading-snug text-foreground">{r.a}</p>
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+function AktivitasTerkini() {
+  const [tab, setTab] = React.useState("divisi");
+  const divisi: Record<string, Act[]> = {
+    today: [
+      { who: "Andi", t: "11:45", a: "Review performa operasional 32 outlet selesai", tone: "green" },
+      { who: "Fikri", t: "09:22", a: "Sinkronisasi data penjualan seluruh outlet berhasil", tone: "blue" },
+      { who: "Jayadi", t: "07:15", a: "Menindaklanjuti temuan audit Outlet Bengkayang", tone: "amber" },
+    ],
+    yest: [
+      { who: "Deo", t: "17:50", a: "Approval permintaan stok Outlet Air Upas disetujui", tone: "green" },
+      { who: "Poetri", t: "15:30", a: "Jadwal kunjungan Outlet Tanjung Duren diperbarui", tone: "blue" },
+    ],
+  };
+  const outlet: Record<string, Act[]> = {
+    today: [
+      { who: "Cattu A. Yani", t: "10:12", a: "SPV belum upload checklist kebersihan hari ini", tone: "red" },
+      { who: "Nordu Bengkayang", t: "09:40", a: "Omset turun 12% dari target harian", tone: "amber" },
+      { who: "Busari Desa", t: "08:05", a: "Finance belum input laporan kemarin", tone: "red" },
+    ],
+    yest: [{ who: "Cattu Sohor", t: "18:20", a: "Omset hanya mencapai 28% target bulan ini", tone: "amber" }],
+  };
+  const src = tab === "divisi" ? divisi : outlet;
+  return (
+    <Panel>
+      <Head title="Aktivitas Terkini" desc="Task Tracker (Divisi) & sistem (Outlet)" />
+      <SegmentedTabs size="sm" value={tab} onChange={setTab} items={[{ value: "outlet", label: "Outlet" }, { value: "divisi", label: "Divisi" }]} />
+      <div className="mt-3 flex-1 space-y-4">
+        <ActTimeline label="Hari ini" rows={src.today} />
+        <ActTimeline label="Kemarin" rows={src.yest} />
+      </div>
+    </Panel>
+  );
+}
+
+/* ---------- Target Per Bulan (gauge) ---------- */
 function TargetGauge() {
   const pct = 95.38, R = 52, circ = Math.PI * R;
   const dash = (pct / 100) * circ;
   return (
     <Panel>
       <Head title="Target Per Bulan" desc="Realisasi vs target bulan ini" />
-      <div className="relative mx-auto grid h-24 w-52 place-items-end">
+      <div className="relative mx-auto grid h-28 w-56 place-items-end">
         <svg viewBox="0 0 140 78" className="w-full">
+          <defs>
+            <linearGradient id="gaugeGrad" x1="0" y1="0" x2="1" y2="0"><stop offset="0%" stopColor="#2563eb" /><stop offset="100%" stopColor="#60a5fa" /></linearGradient>
+          </defs>
           <path d="M 18 70 A 52 52 0 0 1 122 70" fill="none" stroke="var(--muted)" strokeWidth="12" strokeLinecap="round" />
-          <path d="M 18 70 A 52 52 0 0 1 122 70" fill="none" stroke={C.blue} strokeWidth="12" strokeLinecap="round" strokeDasharray={`${dash} ${circ}`} />
+          <path d="M 18 70 A 52 52 0 0 1 122 70" fill="none" stroke="url(#gaugeGrad)" strokeWidth="12" strokeLinecap="round" strokeDasharray={`${dash} ${circ}`} style={{ transition: "stroke-dasharray .7s ease" }} />
         </svg>
         <div className="absolute inset-x-0 bottom-0 text-center">
           <p className="text-[10px] text-muted-foreground">Total Target</p>
-          <p className="text-xl font-bold tabular-nums text-foreground">{pct}%</p>
+          <p className="text-2xl font-bold tabular-nums text-foreground">{pct}%</p>
           <p className="text-[10px] font-medium text-red-500">-5% vs bulan lalu</p>
         </div>
       </div>
@@ -216,8 +542,8 @@ function TargetGauge() {
 function ProgressCard({ title, pct, actual, target }: { title: string; pct: number; actual: number; target: number }) {
   return (
     <Panel>
-      <div className="flex items-center justify-between"><h3 className="text-sm font-semibold text-foreground">{title}</h3><span className="text-sm font-semibold text-foreground">{pct}%</span></div>
-      <p className="mt-2 text-[12px] font-semibold tabular-nums text-foreground">{rp(actual)} <span className="text-muted-foreground">/ {rp(target)}</span></p>
+      <div className="flex items-center justify-between"><h3 className="text-sm font-semibold text-foreground">{title}</h3><span className="text-lg font-bold tabular-nums text-foreground">{pct}%</span></div>
+      <p className="mt-3 text-[13px] font-semibold tabular-nums text-foreground">{rp(actual)} <span className="text-muted-foreground">/ {rp(target)}</span></p>
       <div className="mt-2"><Progress value={pct} tone="cyan" /></div>
       <div className="mt-2 flex items-center gap-4 text-[11px] text-muted-foreground">
         <span className="flex items-center gap-1.5"><span className="size-2 rounded-full" style={{ background: C.blue }} /> Actual</span>
@@ -228,11 +554,11 @@ function ProgressCard({ title, pct, actual, target }: { title: string; pct: numb
 }
 function WeeklyTarget() {
   const weeks = [
-    { w: "Minggu I", a: 105_000_000, t: 210_000_000, p: 15 },
-    { w: "Minggu II", a: 15_000_000, t: 30_000_000, p: 2.5 },
-    { w: "Minggu III", a: 120_000_000, t: 240_000_000, p: 17.5 },
-    { w: "Minggu IV", a: 120_000_000, t: 240_000_000, p: 17.5 },
-    { w: "Minggu V", a: 120_000_000, t: 240_000_000, p: 17.5 },
+    { w: "Minggu I", a: 105_000_000, t: 210_000_000, p: 50 },
+    { w: "Minggu II", a: 15_000_000, t: 30_000_000, p: 50 },
+    { w: "Minggu III", a: 120_000_000, t: 240_000_000, p: 50 },
+    { w: "Minggu IV", a: 90_000_000, t: 240_000_000, p: 37.5 },
+    { w: "Minggu V", a: 60_000_000, t: 240_000_000, p: 25 },
   ];
   return (
     <Panel>
@@ -241,7 +567,7 @@ function WeeklyTarget() {
         {weeks.map((w) => (
           <div key={w.w}>
             <div className="flex items-center justify-between text-[12px]"><span className="font-medium text-foreground">{w.w}</span><span className="text-muted-foreground tabular-nums">{w.p}%</span></div>
-            <div className="mt-1"><Progress value={w.p * 4} tone="cyan" /></div>
+            <div className="mt-1"><Progress value={w.p} tone="cyan" /></div>
             <p className="mt-0.5 text-[10px] text-muted-foreground tabular-nums">{rp(w.a)} / {rp(w.t)}</p>
           </div>
         ))}
@@ -252,22 +578,22 @@ function WeeklyTarget() {
 function ProdukCard() {
   const [tab, setTab] = React.useState("total");
   const [q, setQ] = React.useState("");
-  const rows = Array.from({ length: 14 }, (_, i) => ({ rank: i + 1, name: `Kategori ${String.fromCharCode(65 + (i % 6))}`, val: [21_000_000, 5_200_000, 420_000][i % 3] || 420_000 }));
+  const rows = Array.from({ length: 16 }, (_, i) => ({ rank: i + 1, name: `Kategori ${String.fromCharCode(65 + (i % 8))}`, qty: 200 - i * 8, val: [21_000_000, 5_200_000, 420_000][i % 3] || 420_000 }));
   const filtered = rows.filter((r) => r.name.toLowerCase().includes(q.toLowerCase()));
   return (
     <Panel>
-      <Head title="Produk" right={<PillSelect value="kategori" onChange={() => {}} options={[{ v: "kategori", l: "Kategori" }]} />} />
+      <Head title="Produk" right={<PillSelect value="kategori" onChange={() => {}} options={[{ v: "kategori", l: "Kategori" }, { v: "produk", l: "Nama Produk" }]} />} />
       <SegmentedTabs size="sm" value={tab} onChange={setTab} items={[{ value: "jumlah", label: "Jumlah" }, { value: "total", label: "Total" }]} />
       <div className="relative mt-2">
         <Search className="absolute left-2.5 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground" />
         <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Cari Kategori" className="w-full rounded-lg border border-border bg-transparent py-1.5 pl-8 pr-2 text-[12px] outline-none placeholder:text-muted-foreground" />
       </div>
-      <div className="mt-2 max-h-56 space-y-1 overflow-y-auto pr-1 [scrollbar-width:thin]">
+      <div className="mt-2 max-h-60 space-y-1 overflow-y-auto pr-1 [scrollbar-width:thin]">
         {filtered.map((r) => (
           <div key={r.rank} className="flex items-center gap-2 rounded-lg px-1 py-1">
             <span className="grid size-5 shrink-0 place-items-center rounded-md bg-blue-500/12 text-[10px] font-semibold text-blue-600 dark:text-blue-400">{r.rank}</span>
             <span className="min-w-0 flex-1 truncate text-[12px] text-foreground">{r.name}</span>
-            <span className="shrink-0 text-[12px] font-medium tabular-nums text-foreground">{rp(r.val)}</span>
+            <span className="shrink-0 text-[12px] font-medium tabular-nums text-foreground">{tab === "jumlah" ? `${r.qty}×` : rp(r.val)}</span>
           </div>
         ))}
       </div>
@@ -275,231 +601,33 @@ function ProdukCard() {
   );
 }
 
-/* ---------- MIDDLE: charts ---------- */
-function PenjualanChart() {
-  const [mode, setMode] = React.useState("harian");
-  const r = rand(7);
-  const data = Array.from({ length: 24 }, (_, h) => ({ h: String(h).padStart(2, "0"), hari: Math.round(2000 + r() * 6000), kemarin: -Math.round(1500 + r() * 5000) }));
-  return (
-    <Panel>
-      <Head title="Penjualan" desc="Per jam · hari ini vs kemarin" right={<PillSelect value={mode} onChange={setMode} options={[{ v: "harian", l: "Harian" }, { v: "mingguan", l: "Mingguan" }]} />} />
-      <div className="mb-1 flex items-center gap-2"><p className="text-lg font-bold tabular-nums text-foreground">{rp(100_000_000)}</p><Delta v={1.78} /></div>
-      <div className="h-48">
-        <ResponsiveContainer width="100%" height="100%">
-          <BarChart data={data} stackOffset="sign" margin={{ top: 6, right: 4, left: -20, bottom: 0 }}>
-            <CartesianGrid strokeDasharray="3 3" stroke="rgba(148,163,184,0.16)" vertical={false} />
-            <XAxis dataKey="h" tick={{ fill: C.slate, fontSize: 10 }} tickLine={false} axisLine={false} interval={1} />
-            <YAxis tick={{ fill: C.slate, fontSize: 10 }} tickLine={false} axisLine={false} width={36} tickFormatter={(v) => `${Math.round(Number(v) / 1000)}K`} />
-            <Tooltip contentStyle={tip} formatter={(v, n) => [rp(Math.abs(Number(v))), n === "hari" ? "Hari ini" : "Kemarin"]} />
-            <Bar dataKey="hari" name="Hari ini" fill={C.blue} radius={[3, 3, 0, 0]} stackId="s" />
-            <Bar dataKey="kemarin" name="Kemarin" fill={C.blueLt} radius={[0, 0, 3, 3]} stackId="s" />
-          </BarChart>
-        </ResponsiveContainer>
-      </div>
-      <div className="mt-1 flex items-center justify-end gap-4 text-[11px] text-muted-foreground">
-        <span className="flex items-center gap-1.5"><span className="size-2 rounded-full" style={{ background: C.blue }} /> Hari ini</span>
-        <span className="flex items-center gap-1.5"><span className="size-2 rounded-full" style={{ background: C.blueLt }} /> Kemarin</span>
-      </div>
-    </Panel>
-  );
-}
-function BebanChart() {
-  const [mode, setMode] = React.useState("persentase");
-  const r = rand(11);
-  const data = MONTHS.map((m) => { const row: Record<string, number | string> = { m }; for (const c of EXPENSE_CATS) row[c.key] = Math.round(4 + r() * 8); return row; });
-  return (
-    <Panel>
-      <Head title="Beban Operasional" desc="Rincian beban per kategori · 12 bulan" right={<PillSelect value={mode} onChange={setMode} options={[{ v: "persentase", l: "Persentase" }, { v: "nominal", l: "Nominal" }]} />} />
-      <div className="mb-1 flex items-center gap-2"><p className="text-lg font-bold tabular-nums text-foreground">{rp(100_000_000)}</p><Delta v={1.78} /></div>
-      <div className="mb-2 flex flex-wrap gap-x-3 gap-y-1">
-        {EXPENSE_CATS.map((c) => <span key={c.key} className="flex items-center gap-1 text-[10px] text-muted-foreground"><span className="size-2 rounded-full" style={{ background: c.color }} /> {c.key}</span>)}
-      </div>
-      <div className="h-52">
-        <ResponsiveContainer width="100%" height="100%">
-          <BarChart data={data} margin={{ top: 6, right: 4, left: -20, bottom: 0 }}>
-            <CartesianGrid strokeDasharray="3 3" stroke="rgba(148,163,184,0.16)" vertical={false} />
-            <XAxis dataKey="m" tick={{ fill: C.slate, fontSize: 10 }} tickLine={false} axisLine={false} />
-            <YAxis tick={{ fill: C.slate, fontSize: 10 }} tickLine={false} axisLine={false} width={30} />
-            <Tooltip contentStyle={tip} />
-            {EXPENSE_CATS.map((c, i) => <Bar key={c.key} dataKey={c.key} stackId="e" fill={c.color} radius={i === EXPENSE_CATS.length - 1 ? [3, 3, 0, 0] : undefined} />)}
-          </BarChart>
-        </ResponsiveContainer>
-      </div>
-    </Panel>
-  );
-}
-function PerformaCabang() {
-  const [page, setPage] = React.useState(1);
-  const per = 8, total = 512;
-  const r = rand(3 + page);
-  const rows = Array.from({ length: per }, (_, i) => { const pct = +(r() * 6 - 3).toFixed(2); return { no: (page - 1) * per + i + 1, name: "Cabang A", a: 100_000_000, b: 100_000_000, pct }; });
-  const pages = Math.ceil(total / per);
-  const from = (page - 1) * per + 1, to = Math.min(total, page * per);
-  const nums = [1, 2, 3].filter((n) => n <= pages);
-  return (
-    <Panel>
-      <Head title="Performa Cabang" desc="Perbandingan net sales antar cabang" right={
-        <div className="flex items-center gap-2">
-          <PillSelect value="netsales" onChange={() => {}} options={[{ v: "netsales", l: "Net Sales" }, { v: "beban", l: "Beban" }]} />
-          <Button size="icon-sm" variant="outline"><SlidersHorizontal className="size-3.5" /></Button>
-        </div>
-      } />
-      <div className="overflow-x-auto">
-        <table className="w-full text-[12px]">
-          <thead>
-            <tr className="text-left text-muted-foreground">
-              <th className="px-2 py-2 font-medium">#</th><th className="px-2 py-2 font-medium">Nama Cabang</th><th className="px-2 py-2 font-medium">Mei 2026</th><th className="px-2 py-2 font-medium">Jun 2026</th><th className="px-2 py-2 text-right font-medium">%</th>
-            </tr>
-          </thead>
-          <tbody>
-            {rows.map((row) => (
-              <tr key={row.no} className="border-t border-border/60 hover:bg-muted/30">
-                <td className="px-2 py-2 tabular-nums text-muted-foreground">{row.no}</td>
-                <td className="px-2 py-2">
-                  <span className="flex items-center gap-2">
-                    <span className="grid size-7 shrink-0 place-items-center rounded-lg bg-muted text-[10px] font-semibold text-muted-foreground ring-1 ring-border">{row.name.slice(0, 2).toUpperCase()}</span>
-                    <span className="font-medium text-foreground">{row.name}</span>
-                  </span>
-                </td>
-                <td className="px-2 py-2 tabular-nums text-muted-foreground">{rp(row.a)}</td>
-                <td className="px-2 py-2 tabular-nums text-muted-foreground">{rp(row.b)}</td>
-                <td className="px-2 py-2 text-right"><Delta v={row.pct} /></td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-      <div className="mt-3 flex flex-wrap items-center justify-between gap-2 text-[11px] text-muted-foreground">
-        <span>Menampilkan {from}–{to} dari {total}</span>
-        <div className="flex items-center gap-1">
-          <button onClick={() => setPage((p) => Math.max(1, p - 1))} disabled={page === 1} className="rounded-lg border border-border px-2 py-1 hover:bg-muted disabled:opacity-40">Sebelumnya</button>
-          {nums.map((n) => <button key={n} onClick={() => setPage(n)} className={cn("size-7 rounded-lg border text-center tabular-nums", n === page ? "border-primary bg-primary text-primary-foreground" : "border-border hover:bg-muted")}>{n}</button>)}
-          {pages > 3 && <span className="px-1">…</span>}
-          <button onClick={() => setPage((p) => Math.min(pages, p + 1))} disabled={page === pages} className="rounded-lg border border-border px-2 py-1 hover:bg-muted disabled:opacity-40">Berikutnya</button>
-        </div>
-      </div>
-    </Panel>
-  );
-}
-
-/* ---------- RIGHT ---------- */
-function DistribusiMargin() {
-  const [tab, setTab] = React.useState("Semua");
-  const data = [
-    { name: "Sehat", value: 30, fill: C.green },
-    { name: "Cukup", value: 15, fill: C.amber },
-    { name: "Kritis", value: 5, fill: C.slate },
-  ];
-  return (
-    <Panel>
-      <Head title="Distribusi Margin" desc="Sebaran kesehatan margin cabang" />
-      <SegmentedTabs size="sm" value={tab} onChange={setTab} items={["Semua", "Kalimantan", "Jawa", "Bali"].map((t) => ({ value: t, label: t }))} />
-      <div className="mx-auto my-3 h-36 w-36">
-        <ResponsiveContainer width="100%" height="100%">
-          <RadialBarChart data={data} innerRadius="35%" outerRadius="100%" startAngle={90} endAngle={-270}>
-            <RadialBar dataKey="value" background={{ fill: "var(--muted)" }} cornerRadius={8} />
-            <Tooltip contentStyle={tip} formatter={(v, _n, p) => [`${Number(v)} cabang`, p?.payload?.name]} />
-          </RadialBarChart>
-        </ResponsiveContainer>
-      </div>
-      <div className="space-y-1.5">
-        {[{ l: ">30%", n: "Sehat", c: C.green, v: 30 }, { l: "<29%", n: "Cukup", c: C.amber, v: 15 }, { l: "<15%", n: "Kritis", c: C.slate, v: 5 }].map((x) => (
-          <div key={x.n} className="flex items-center gap-2 text-[12px]">
-            <span className="rounded-md px-1.5 py-0.5 text-[10px] font-semibold text-white" style={{ background: x.c }}>{x.l}</span>
-            <span className="text-muted-foreground">{x.n}</span>
-            <span className="ml-auto font-semibold tabular-nums text-foreground">{x.v} Cabang</span>
-          </div>
-        ))}
-      </div>
-    </Panel>
-  );
-}
-function KontrolCard() {
-  const [tab, setTab] = React.useState("Fraud");
-  const rows = [
-    { n: "Promosi", v: 21_000_000 },
-    { n: "Kompliment", v: 5_200_000 },
-    { n: "Refund", v: 420_000 },
-    { n: "Void", v: 420_000 },
-    { n: "Cancel", v: 210_000 },
-  ];
-  return (
-    <Panel>
-      <Head title="Kontrol" desc="Pemantauan potensi kebocoran" />
-      <SegmentedTabs size="sm" value={tab} onChange={setTab} items={["Fraud", "Complain", "Kebersihan", "Event"].map((t) => ({ value: t, label: t }))} />
-      <div className="mt-3 space-y-2">
-        {rows.map((row, i) => (
-          <div key={row.n} className="flex items-center gap-2 rounded-lg border border-border/60 bg-muted/20 px-2.5 py-2">
-            <span className="grid size-5 shrink-0 place-items-center rounded-md bg-blue-500/12 text-[10px] font-semibold text-blue-600 dark:text-blue-400">{i + 1}</span>
-            <span className="min-w-0 flex-1 truncate text-[12px] text-foreground">{row.n}</span>
-            <span className="shrink-0 text-[12px] font-medium tabular-nums text-foreground">{rp(row.v)}</span>
-          </div>
-        ))}
-      </div>
-    </Panel>
-  );
-}
+/* ---------- Rencana Pengeluaran (Juknis 2.11) ---------- */
 function RencanaPengeluaran() {
   const rows = [
-    { l: "Warehouse", a: 105_000_000, t: 210_000_000, p: 15, icon: Boxes },
-    { l: "Non Warehouse", a: 15_000_000, t: 30_000_000, p: 2.5, icon: PackageSearch },
-    { l: "Rasio %", a: 120_000_000, t: 240_000_000, p: 17.5, icon: Layers },
+    { l: "Warehouse", a: 105_000_000, t: 210_000_000, actualPct: 25, limit: 30, icon: Boxes },
+    { l: "Non Warehouse", a: 15_000_000, t: 30_000_000, actualPct: 6, limit: 5, icon: PackageSearch },
+    { l: "Rasio Total", a: 120_000_000, t: 240_000_000, actualPct: 31, limit: 35, icon: Layers },
   ];
   return (
     <Panel>
-      <Head title="Rencana Pengeluaran" desc="Total Pengeluaran Rp120.000.000" />
-      <div className="space-y-3">
-        {rows.map((row) => (
-          <div key={row.l}>
-            <div className="flex items-center justify-between text-[12px]">
-              <span className="flex items-center gap-1.5 font-medium text-foreground"><row.icon className="size-3.5 text-muted-foreground" /> {row.l}</span>
-              <span className="text-muted-foreground tabular-nums">{row.p}%</span>
+      <Head title="Rencana Pengeluaran" desc="Pembelian vs omset · ambang batas" />
+      <div className="space-y-3.5">
+        {rows.map((row) => {
+          const over = row.actualPct > row.limit;
+          return (
+            <div key={row.l} className={cn("rounded-xl border p-3", over ? "border-red-500/30 bg-red-500/[0.05]" : "border-border/60 bg-muted/20")}>
+              <div className="flex items-center justify-between text-[12px]">
+                <span className="flex items-center gap-1.5 font-medium text-foreground"><row.icon className="size-3.5 text-muted-foreground" /> {row.l}</span>
+                <span className="flex items-center gap-1.5">
+                  {over && <Badge tone="danger" className="gap-1 px-1.5 py-0"><AlertTriangle className="size-3" /> Melebihi</Badge>}
+                  <span className={cn("font-semibold tabular-nums", over ? "text-red-500" : "text-foreground")}>{row.actualPct}%</span>
+                </span>
+              </div>
+              <div className="mt-2"><Progress value={(row.actualPct / row.limit) * 100} tone={over ? "danger" : "cyan"} /></div>
+              <p className="mt-1 flex items-center justify-between text-[10px] text-muted-foreground tabular-nums"><span>{rp(row.a)} / {rp(row.t)}</span><span>batas {row.limit}%</span></p>
             </div>
-            <div className="mt-1"><Progress value={row.p * 4} tone="cyan" /></div>
-            <p className="mt-0.5 text-[10px] text-muted-foreground tabular-nums">{rp(row.a)} / {rp(row.t)}</p>
-          </div>
-        ))}
-      </div>
-    </Panel>
-  );
-}
-type ActivityRow = { who: string; t: string; a: string };
-function ActivityGroup({ label, rows }: { label: string; rows: ActivityRow[] }) {
-  return (
-    <div>
-      <p className="mb-1.5 text-[11px] font-semibold text-muted-foreground">{label}</p>
-      <div className="space-y-2.5">
-        {rows.map((r, i) => (
-          <div key={i} className="flex gap-2.5">
-            <span className="grid size-7 shrink-0 place-items-center rounded-full bg-blue-500/12 text-[11px] font-semibold text-blue-600 dark:text-blue-400">{r.who[0]}</span>
-            <div className="min-w-0">
-              <p className="text-[11px] text-muted-foreground"><span className="font-medium text-foreground">{r.who}</span> · {r.t}</p>
-              <p className="text-[12px] leading-snug text-foreground">{r.a}</p>
-            </div>
-          </div>
-        ))}
-      </div>
-    </div>
-  );
-}
-function AktivitasTerkini() {
-  const [tab, setTab] = React.useState("divisi");
-  const today: ActivityRow[] = [
-    { who: "Andi", t: "11:45 AM", a: "Review performa operasional 32 outlet selesai" },
-    { who: "Fikri", t: "09:22 AM", a: "Sinkronisasi data penjualan seluruh outlet berhasil" },
-    { who: "Jayadi", t: "07:15 AM", a: "Menindaklanjuti temuan audit Outlet Bengkayang" },
-  ];
-  const yest: ActivityRow[] = [
-    { who: "Deo", t: "05:50 PM", a: "Approval permintaan stok Outlet Air Upas disetujui" },
-    { who: "Poetri", t: "03:30 PM", a: "Jadwal kunjungan Outlet Tanjung Duren diperbarui" },
-  ];
-  return (
-    <Panel>
-      <Head title="Aktivitas Terkini" desc="Dari Work & Event Tracker" right={<MoreHorizontal className="size-4 text-muted-foreground" />} />
-      <SegmentedTabs size="sm" value={tab} onChange={setTab} items={[{ value: "outlet", label: "Outlet" }, { value: "divisi", label: "Divisi" }]} />
-      <div className="mt-3 space-y-4">
-        <ActivityGroup label="Hari ini" rows={today} />
-        <ActivityGroup label="Kemarin" rows={yest} />
+          );
+        })}
       </div>
     </Panel>
   );
