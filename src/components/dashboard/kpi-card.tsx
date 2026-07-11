@@ -2,19 +2,26 @@
 
 import * as React from "react";
 import {
+  AlertTriangle,
   ArrowDownRight,
   ArrowRight,
   ArrowUpRight,
+  Calculator,
   CalendarRange,
   CheckCircle2,
   ChevronLeft,
   ChevronRight,
+  ClipboardCheck,
+  Coins,
   ConciergeBell,
   ListChecks,
   MapPinned,
   MessageSquareWarning,
+  Package,
+  Send,
   SprayCan,
   Store,
+  TrendingUp,
   type LucideIcon,
 } from "lucide-react";
 import type { Tone } from "@/lib/constants";
@@ -29,6 +36,14 @@ const KPI_ICONS: Record<string, LucideIcon> = {
   CheckCircle2,
   ListChecks,
   CalendarRange,
+  // R&D / HPP
+  Calculator,
+  Package,
+  AlertTriangle,
+  TrendingUp,
+  ClipboardCheck,
+  Coins,
+  Send,
 };
 
 export interface Kpi {
