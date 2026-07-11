@@ -12,6 +12,9 @@ import {
   ClipboardCheck,
   Coffee,
   Download,
+  FileDown,
+  FileSpreadsheet,
+  FileUp,
   LayoutGrid,
   List,
   Pencil,
@@ -25,7 +28,7 @@ import {
 import { toast } from "sonner";
 import { BRANDS, foodCostPct, foodCostStatus } from "@/lib/hpp/calc";
 import { HPP_STATUS_META, STATUS_PILL, type StatusTone } from "@/lib/hpp/status";
-import { bulkDeleteHppAction, bulkReviewHppAction, bulkSubmitHppAction, deleteHppAction, reviewHppAction, submitHppAction } from "@/lib/actions/hpp";
+import { bulkDeleteHppAction, bulkReviewHppAction, bulkSubmitHppAction, deleteHppAction, importMenusAction, reviewHppAction, submitHppAction, type MenuImportRow } from "@/lib/actions/hpp";
 import type { HppRecord, HppStatus } from "@/lib/data/hpp";
 import { downloadCsv, toCsv } from "@/lib/csv";
 import { StatTile } from "@/components/ui/stat";
@@ -192,6 +195,81 @@ export function HppRekap({ records, canEdit, canVerify }: { records: HppRecord[]
     bulk(() => bulkDeleteHppAction(selArr.map((r) => r.id)), (n) => `${n} menu dihapus`);
   };
 
+  // ---- Excel menu round-trip ----
+  const [showExcel, setShowExcel] = React.useState(false);
+  const [excel, setExcel] = React.useState<{ name: string; rows: MenuImportRow[] } | null>(null);
+  const [importing, setImporting] = React.useState(false);
+  const fileRef = React.useRef<HTMLInputElement>(null);
+
+  const EXCEL_COLS = ["ID", "Menu", "Brand", "Kategori", "Waste %", "BTKL/bln", "Target Jual/bln", "Harga Jual", "Bahan", "Takaran", "Satuan Takaran", "Harga Beli", "Qty Beli", "Satuan Beli"] as const;
+
+  async function downloadMenuTemplate() {
+    const XLSX = await import("xlsx");
+    const data: Record<string, string | number>[] = [];
+    const src = records.length ? records : [];
+    for (const m of src) {
+      const head = { ID: m.id, Menu: m.name, Brand: m.brand, Kategori: cat(m.category), "Waste %": m.wastePct, "BTKL/bln": m.btkl, "Target Jual/bln": m.targetSales, "Harga Jual": Math.round(m.chosenPrice) };
+      if (m.variables.length === 0) data.push({ ...head, Bahan: "", Takaran: "", "Satuan Takaran": "", "Harga Beli": "", "Qty Beli": "", "Satuan Beli": "" });
+      for (const v of m.variables) data.push({ ...head, Bahan: v.name, Takaran: v.takaran, "Satuan Takaran": v.takaranUnit, "Harga Beli": Math.round(v.buyPrice), "Qty Beli": v.buyQty, "Satuan Beli": v.buyUnit });
+    }
+    if (data.length === 0) data.push({ ID: "", Menu: "Contoh: Kopi Susu", Brand: "Nordu", Kategori: "minuman", "Waste %": 5, "BTKL/bln": 0, "Target Jual/bln": 1000, "Harga Jual": 0, Bahan: "Kopi Espresso", Takaran: 18, "Satuan Takaran": "g", "Harga Beli": 150000, "Qty Beli": 1, "Satuan Beli": "kg" });
+    const ws = XLSX.utils.json_to_sheet(data, { header: EXCEL_COLS as unknown as string[] });
+    ws["!cols"] = EXCEL_COLS.map((c) => ({ wch: c === "Menu" || c === "Bahan" ? 22 : 12 }));
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "Menu HPP");
+    XLSX.writeFile(wb, "template-menu-hpp.xlsx");
+    toast.success("Template menu diunduh");
+  }
+
+  async function onExcelFile(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    e.target.value = "";
+    if (!file) return;
+    try {
+      const XLSX = await import("xlsx");
+      const wb = XLSX.read(await file.arrayBuffer(), { type: "array" });
+      const json = XLSX.utils.sheet_to_json<Record<string, unknown>>(wb.Sheets[wb.SheetNames[0]]);
+      const S = (r: Record<string, unknown>, ...k: string[]) => { for (const key of k) if (r[key] != null && r[key] !== "") return String(r[key]); return ""; };
+      const N = (s: string) => Number(String(s).replace(/[^\d.-]/g, "")) || 0;
+      const groups = new Map<string, MenuImportRow>();
+      for (const r of json) {
+        const name = S(r, "Menu", "Nama Menu", "Nama").trim();
+        if (!name) continue;
+        const id = S(r, "ID", "Id", "id");
+        const key = id || `name:${name.toLowerCase()}`;
+        let g = groups.get(key);
+        if (!g) {
+          g = { id: id || undefined, name, brand: S(r, "Brand") || "Nordu", category: S(r, "Kategori", "Category") || "minuman", wastePct: N(S(r, "Waste %", "Waste")), btkl: N(S(r, "BTKL/bln", "BTKL")), targetSales: N(S(r, "Target Jual/bln", "Target")) || 1000, chosenPrice: N(S(r, "Harga Jual", "Harga")), variables: [] };
+          groups.set(key, g);
+        }
+        const bahan = S(r, "Bahan", "Nama Bahan").trim();
+        if (bahan) g.variables.push({ name: bahan, takaran: N(S(r, "Takaran")), takaranUnit: S(r, "Satuan Takaran") || "g", buyPrice: N(S(r, "Harga Beli")), buyQty: N(S(r, "Qty Beli")) || 1, buyUnit: S(r, "Satuan Beli") || "kg" });
+      }
+      const rows = [...groups.values()];
+      if (rows.length === 0) return toast.error("File tidak berisi menu valid. Pakai template yang disediakan.");
+      setExcel({ name: file.name, rows });
+    } catch {
+      toast.error("Gagal membaca file. Pastikan format .xlsx dari template.");
+    }
+  }
+
+  async function doImportMenus() {
+    if (!excel) return;
+    setImporting(true);
+    try {
+      const res = await importMenusAction(excel.rows);
+      if (res?.error) toast.error(res.error);
+      else {
+        toast.success(`${res.count} menu diproses · ${res.created} baru, ${res.updated} diperbarui`);
+        setExcel(null);
+        setShowExcel(false);
+        router.refresh();
+      }
+    } finally {
+      setImporting(false);
+    }
+  }
+
   function exportCsv() {
     const headers = ["Menu", "Brand", "Kategori", "Status", "HPP", "Harga", "Margin %", "Food Cost %"];
     const data = rows.map(({ r, fc, margin }) => [
@@ -266,6 +344,11 @@ export function HppRekap({ records, canEdit, canVerify }: { records: HppRecord[]
             </span>
             Live
           </span>
+          {canEdit && (
+            <button type="button" onClick={() => setShowExcel((v) => !v)} title="Import / Export Excel" className={cn("grid h-9 w-9 shrink-0 place-items-center rounded-lg border transition-colors", showExcel ? "border-primary bg-primary/10 text-primary" : "border-border text-muted-foreground hover:text-foreground")}>
+              <FileSpreadsheet className="size-4" />
+            </button>
+          )}
           <button type="button" onClick={exportCsv} title="Export CSV" className="grid h-9 w-9 shrink-0 place-items-center rounded-lg border border-border text-muted-foreground transition-colors hover:text-foreground">
             <Download className="size-4" />
           </button>
@@ -313,6 +396,29 @@ export function HppRekap({ records, canEdit, canVerify }: { records: HppRecord[]
           )}
         </div>
       </div>
+
+      {/* Excel round-trip panel */}
+      {canEdit && showExcel && (
+        <div className="glass space-y-3 rounded-2xl border border-dashed border-border p-4">
+          <p className="text-[12px] text-muted-foreground">
+            <b className="text-foreground">Kelola menu via Excel:</b> unduh template (satu baris per bahan, dikelompokkan per menu), edit di Excel, lalu import — HPP dihitung ulang otomatis. Baris dengan <b>ID</b> memperbarui menu yang sama; tanpa ID membuat menu baru. <b>Kolom ID jangan diubah.</b>
+          </p>
+          <div className="flex flex-wrap items-center gap-2">
+            <Button variant="outline" size="sm" onClick={downloadMenuTemplate}><FileDown className="size-4" /> Download Template Excel</Button>
+            <input ref={fileRef} type="file" accept=".xlsx,.xls" onChange={onExcelFile} className="hidden" />
+            <Button variant="outline" size="sm" onClick={() => fileRef.current?.click()}><FileUp className="size-4" /> Pilih File Excel</Button>
+          </div>
+          {excel && (
+            <div className="flex items-center justify-between gap-2 rounded-lg border border-primary/30 bg-primary/[0.05] px-3 py-2">
+              <span className="min-w-0 flex-1 truncate text-[12px] text-foreground">{excel.name} · <b>{excel.rows.length}</b> menu siap</span>
+              <div className="flex shrink-0 items-center gap-1.5">
+                <Button size="sm" onClick={doImportMenus} disabled={importing}><FileUp className="size-4" /> Import {excel.rows.length}</Button>
+                <button type="button" onClick={() => setExcel(null)} className="rounded-lg px-2 py-1 text-xs font-medium text-muted-foreground hover:text-foreground">Batal</button>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Bulk action bar */}
       {selected.size > 0 && (
