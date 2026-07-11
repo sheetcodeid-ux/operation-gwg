@@ -1,5 +1,5 @@
 /**
- * Deterministic seed dataset for Operation GWG.
+ * Deterministic seed dataset for Operational System.
  *
  * Generated once at module load via a seeded PRNG so every server render sees
  * identical data (no hydration drift). In Phase 11 these structures are

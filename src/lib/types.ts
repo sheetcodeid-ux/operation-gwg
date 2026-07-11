@@ -1,5 +1,5 @@
 /**
- * Operation GWG — Domain model
+ * Operational System — Domain model
  * Single source of truth for entity shapes shared across the data layer,
  * server actions, and UI. Designed to map 1:1 onto the Supabase schema
  * delivered in Phase 11.

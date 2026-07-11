@@ -16,8 +16,8 @@ const geistMono = Geist_Mono({
 
 export const metadata: Metadata = {
   title: {
-    default: "Operation GWG — Executive Command Center",
-    template: "%s · Operation GWG",
+    default: "Operational System — Executive Command Center",
+    template: "%s · Operational System",
   },
   description:
     "Internal operational command center for monitoring 50 outlets across 5 areas: hospitality, hygiene, work, events, and complaints.",

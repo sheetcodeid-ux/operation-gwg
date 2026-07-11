@@ -39,7 +39,7 @@ export function Topbar({
         <MobileNav items={navItems} allowedKeys={allowedKeys} homeDivision={homeDivision} isAdmin={isAdmin} grants={grants} department={department} />
         <Link href="/dashboard" className="flex items-center gap-2">
           <BrandLogo />
-          <span className="hidden text-sm font-semibold text-foreground sm:inline">Operation GWG</span>
+          <span className="hidden text-sm font-semibold text-foreground sm:inline">Operational System</span>
         </Link>
       </div>
 

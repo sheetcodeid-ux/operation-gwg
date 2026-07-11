@@ -220,7 +220,7 @@ export function CommandPalette({ navItems, outlets }: { navItems: NavEntry[]; ou
               to close
             </span>
           </div>
-          <span className="hidden sm:inline">Search by Operation GWG</span>
+          <span className="hidden sm:inline">Search by Operational System</span>
         </div>
       </div>
     </div>
