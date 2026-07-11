@@ -114,7 +114,7 @@ function buildReportHtml(r: AssessmentRecord, mode: ReportMode): string {
 </style></head><body>
   <div class="sheet">
     <div class="band">
-      <div><h1>Laporan Hasil Assessment Kenaikan Golongan</h1><p>Operation GWG · Human Resources Development</p></div>
+      <div><h1>Laporan Hasil Assessment Kenaikan Golongan</h1><p>Operational System · Human Resources Development</p></div>
       <div style="text-align:right"><p style="opacity:0.85;font-size:12px">${r.batch}</p><p>${fmtDate(r.tanggal)}</p></div>
     </div>
     <div class="body">
@@ -376,7 +376,7 @@ function buildFullReportHtml(record: AssessmentRecord, b: ResultBundle, mode: Re
 </style></head><body>
   <div class="sheet">
     <div class="band">
-      <div><h1>Laporan Lengkap Assessment Kenaikan Golongan</h1><p>Operation GWG · Human Resources Development</p></div>
+      <div><h1>Laporan Lengkap Assessment Kenaikan Golongan</h1><p>Operational System · Human Resources Development</p></div>
       <div style="text-align:right"><p style="opacity:0.85;font-size:12px">${record.batch}</p><p>${fmtDate(record.tanggal)}</p></div>
     </div>
     <div class="body">

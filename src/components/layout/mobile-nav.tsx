@@ -64,7 +64,7 @@ export function MobileNav({
             <div className="mb-4 flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <BrandLogo />
-                <span className="text-sm font-semibold text-foreground">Operation GWG</span>
+                <span className="text-sm font-semibold text-foreground">Operational System</span>
               </div>
               <button onClick={() => setOpen(false)} className="grid size-8 place-items-center rounded-lg hover:bg-muted/50">
                 <X className="size-4 text-muted-foreground" />

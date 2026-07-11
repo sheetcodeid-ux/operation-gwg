@@ -27,7 +27,7 @@ export function TopbarBrand() {
       {!collapsed && (
         <Link href="/dashboard" className="flex items-center gap-2.5">
           <BrandLogo />
-          <span className="text-sm font-semibold tracking-tight text-foreground">Operation GWG</span>
+          <span className="text-sm font-semibold tracking-tight text-foreground">Operational System</span>
         </Link>
       )}
     </div>

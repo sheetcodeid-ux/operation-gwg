@@ -21,7 +21,7 @@ export default function LoginPage() {
       <div className="absolute inset-x-0 top-0 flex items-center justify-between p-5">
         <div className="flex items-center gap-2">
           <BrandLogo />
-          <span className="text-sm font-semibold text-foreground">Operation GWG</span>
+          <span className="text-sm font-semibold text-foreground">Operational System</span>
         </div>
         <ThemeToggle />
       </div>
