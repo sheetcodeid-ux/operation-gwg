@@ -43,7 +43,7 @@ import { SegmentedTabs } from "@/components/ui/segmented-tabs";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import { ConcentricRings } from "@/components/dashboard/concentric-rings";
-import type { OpsControl, OpsDashboardData, OpsFinance, OpsFraud, OpsHourly, OpsTarget } from "@/lib/data/ops-dashboard";
+import type { OpsControl, OpsDashboardData, OpsFinance, OpsFraud, OpsHourly, OpsProduct, OpsTarget } from "@/lib/data/ops-dashboard";
 import { cn } from "@/lib/utils";
 
 /* ---------- palette (tone.ts) ---------- */
@@ -107,7 +107,7 @@ export function OperationDashboard2({ initial }: { initial: OpsDashboardData }) 
           <ProgressCard title="Proyeksi Bulanan" live={!!t} pct={t ? Math.round((t.proyeksiBulanan / t.targetMonth) * 100) : 50} actual={t ? t.proyeksiBulanan : 300_000_000} target={t ? t.targetMonth : 600_000_000} />
           <ProgressCard title="Target Harian" live={!!t} pct={t && t.targetHarian > 0 ? Math.round((t.todayActual / t.targetHarian) * 100) : 50} actual={t ? t.todayActual : 10_000_000} target={t ? t.targetHarian : 20_000_000} />
           <WeeklyTarget target={t} />
-          <ProdukCard />
+          <ProdukCard products={initial.products} />
         </div>
 
         {/* MIDDLE rail — KPI 2×2, charts, table */}
@@ -615,25 +615,53 @@ function WeeklyTarget({ target }: { target: OpsTarget | null }) {
     </Panel>
   );
 }
-function ProdukCard() {
-  const [tab, setTab] = React.useState("total");
+function ProdukCard({ products }: { products: OpsProduct[] | null }) {
+  const [tab, setTab] = React.useState("total"); // jumlah | total
+  const [groupBy, setGroupBy] = React.useState("kategori"); // kategori | produk
   const [q, setQ] = React.useState("");
-  const rows = Array.from({ length: 16 }, (_, i) => ({ rank: i + 1, name: `Kategori ${String.fromCharCode(65 + (i % 8))}`, qty: 200 - i * 8, val: [21_000_000, 5_200_000, 420_000][i % 3] || 420_000 }));
+
+  const rows = React.useMemo(() => {
+    const live = products && products.length > 0;
+    const base = live
+      ? products!
+      : Array.from({ length: 16 }, (_, i) => ({ name: `Kategori ${String.fromCharCode(65 + (i % 8))}`, category: `Kategori ${String.fromCharCode(65 + (i % 8))}`, qty: 200 - i * 8, amount: [21_000_000, 5_200_000, 420_000][i % 3] || 420_000 }));
+    // Group by category or keep per product
+    let list: { name: string; qty: number; amount: number }[];
+    if (groupBy === "kategori") {
+      const map = new Map<string, { name: string; qty: number; amount: number }>();
+      for (const p of base) {
+        const g = map.get(p.category) ?? { name: p.category, qty: 0, amount: 0 };
+        g.qty += p.qty; g.amount += p.amount; map.set(p.category, g);
+      }
+      list = [...map.values()];
+    } else {
+      list = base.map((p) => ({ name: p.name, qty: p.qty, amount: p.amount }));
+    }
+    list.sort((a, b) => (tab === "jumlah" ? b.qty - a.qty : b.amount - a.amount));
+    return list;
+  }, [products, groupBy, tab]);
+
   const filtered = rows.filter((r) => r.name.toLowerCase().includes(q.toLowerCase()));
+  const live = !!(products && products.length > 0);
   return (
     <Panel>
-      <Head title="Produk" right={<PillSelect value="kategori" onChange={() => {}} options={[{ v: "kategori", l: "Kategori" }, { v: "produk", l: "Nama Produk" }]} />} />
+      <Head title="Produk" right={
+        <div className="flex items-center gap-1.5">
+          {live && <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500/12 px-1.5 py-0.5 text-[9px] font-semibold uppercase text-emerald-600 dark:text-emerald-400">live</span>}
+          <PillSelect value={groupBy} onChange={setGroupBy} options={[{ v: "kategori", l: "Kategori" }, { v: "produk", l: "Nama Produk" }]} />
+        </div>
+      } />
       <SegmentedTabs size="sm" value={tab} onChange={setTab} items={[{ value: "jumlah", label: "Jumlah" }, { value: "total", label: "Total" }]} />
       <div className="relative mt-2">
         <Search className="absolute left-2.5 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground" />
-        <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Cari Kategori" className="w-full rounded-lg border border-border bg-transparent py-1.5 pl-8 pr-2 text-[12px] outline-none placeholder:text-muted-foreground" />
+        <input value={q} onChange={(e) => setQ(e.target.value)} placeholder={groupBy === "kategori" ? "Cari kategori" : "Cari produk"} className="w-full rounded-lg border border-border bg-transparent py-1.5 pl-8 pr-2 text-[12px] outline-none placeholder:text-muted-foreground" />
       </div>
       <div className="mt-2 max-h-60 space-y-1 overflow-y-auto pr-1 [scrollbar-width:thin]">
-        {filtered.map((r) => (
-          <div key={r.rank} className="flex items-center gap-2 rounded-lg px-1 py-1">
-            <span className="grid size-5 shrink-0 place-items-center rounded-md bg-blue-500/12 text-[10px] font-semibold text-blue-600 dark:text-blue-400">{r.rank}</span>
+        {filtered.map((r, i) => (
+          <div key={r.name + i} className="flex items-center gap-2 rounded-lg px-1 py-1">
+            <span className="grid size-5 shrink-0 place-items-center rounded-md bg-blue-500/12 text-[10px] font-semibold text-blue-600 dark:text-blue-400">{i + 1}</span>
             <span className="min-w-0 flex-1 truncate text-[12px] text-foreground">{r.name}</span>
-            <span className="shrink-0 text-[12px] font-medium tabular-nums text-foreground">{tab === "jumlah" ? `${r.qty}×` : rp(r.val)}</span>
+            <span className="shrink-0 text-[12px] font-medium tabular-nums text-foreground">{tab === "jumlah" ? `${r.qty.toLocaleString("id-ID")}×` : rp(r.amount)}</span>
           </div>
         ))}
       </div>

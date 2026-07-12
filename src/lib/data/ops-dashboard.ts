@@ -42,6 +42,9 @@ export interface OpsTarget {
   weeks: OpsTargetWeek[];
 }
 
+/** Produk (per-menu sales this month, from ERP menu-performance — Juknis 2.7). */
+export interface OpsProduct { name: string; category: string; qty: number; amount: number }
+
 export interface OpsDashboardData {
   configured: boolean;
   date: string; // YYYY-MM-DD used
@@ -52,7 +55,18 @@ export interface OpsDashboardData {
   finance: OpsFinance | null; // from our own Finance-input tables (independent of ERP)
   control: OpsControl | null; // from app Complaints + Hygiene (scoped to the user)
   target: OpsTarget | null; // ERP omzet history (Juknis 2.1)
+  products: OpsProduct[] | null; // ERP menu-performance (Juknis 2.7)
   errors: string[]; // human labels of sources that failed
+}
+
+async function loadProducts(): Promise<OpsProduct[] | null> {
+  try {
+    const perf = await fetchMenuPerformance(ym(new Date()));
+    if (!perf.menus.length) return null;
+    return perf.menus.map((m) => ({ name: m.menuName, category: m.categoryName || "Lainnya", qty: m.qty, amount: m.amount }));
+  } catch {
+    return null;
+  }
 }
 
 const ROMAN = ["I", "II", "III", "IV", "V", "VI"];
@@ -147,7 +161,7 @@ async function loadFinance(month: string): Promise<OpsFinance | null> {
 }
 
 function baseOpsDashboard(): OpsDashboardData {
-  return { configured: false, date: "", kpi: null, hourly: null, fraud: null, branches: [], finance: null, control: null, target: null, errors: [] };
+  return { configured: false, date: "", kpi: null, hourly: null, fraud: null, branches: [], finance: null, control: null, target: null, products: null, errors: [] };
 }
 
 /**
@@ -208,8 +222,10 @@ export async function getOpsDashboard(opts: { date?: string; user?: UserProfile 
   const brs: OpsBranch[] = branches.status === "fulfilled" ? branches.value.map((b) => ({ code: b.code, name: b.name })) : [];
   if (branches.status !== "fulfilled") errors.push("Cabang");
 
-  target = await loadTarget(kpi?.netSales ?? 0);
+  const [tgt, products] = await Promise.all([loadTarget(kpi?.netSales ?? 0), loadProducts()]);
+  target = tgt;
   if (!target) errors.push("Target");
+  if (!products) errors.push("Produk");
 
-  return { configured: true, date: dToday, kpi, hourly, fraud, branches: brs, finance, control, target, errors };
+  return { configured: true, date: dToday, kpi, hourly, fraud, branches: brs, finance, control, target, products, errors };
 }
