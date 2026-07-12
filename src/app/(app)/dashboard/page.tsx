@@ -24,6 +24,7 @@ import { KpiCarousel, type Kpi } from "@/components/dashboard/kpi-card";
 import { HeroCard } from "@/components/dashboard/hero-card";
 import { DashboardSwitcher } from "@/components/dashboard/dashboard-switcher";
 import { OperationDashboard2 } from "@/components/dashboard/operation-dashboard-2";
+import { getOpsDashboard } from "@/lib/data/ops-dashboard";
 import { InsightsPanel } from "@/components/dashboard/insights-panel";
 import { GlobalFilterBar } from "@/components/dashboard/filter-bar";
 import { OutletRankingTable } from "@/components/dashboard/outlet-ranking-table";
@@ -45,6 +46,7 @@ export default async function DashboardPage({
 
   // Dashboard 2 (operational/financial) — switchable on the same page.
   if (sp.view === "ops2") {
+    const opsData = await getOpsDashboard();
     return (
       <div className="w-full">
         <PageHeader
@@ -53,7 +55,7 @@ export default async function DashboardPage({
           description="Ringkasan finansial & operasional seluruh cabang"
           actions={<DashboardSwitcher current="ops2" />}
         />
-        <OperationDashboard2 />
+        <OperationDashboard2 initial={opsData} />
       </div>
     );
   }
