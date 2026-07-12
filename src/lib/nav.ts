@@ -19,7 +19,6 @@ export type MenuKey =
   | "hpp_db"
   | "hpp_bahan"
   | "users"
-  | "departments"
   | "audit";
 
 /** Division a role belongs to — used as the sidebar group header. */
@@ -66,7 +65,6 @@ export const NAV_MENUS: Omit<NavItem, "section">[] = [
   { key: "hpp_db", label: "Database HPP", href: "/rnd/hpp/rekap", icon: "Table2" },
   { key: "hpp_bahan", label: "Master Bahan Baku", href: "/rnd/hpp/bahan", icon: "Package" },
   { key: "users", label: "User Management", href: "/admin/users", icon: "Users" },
-  { key: "departments", label: "Departemen & Divisi", href: "/admin/departments", icon: "Network" },
   { key: "audit", label: "Audit Logs", href: "/admin/audit", icon: "ScrollText" },
 ];
 
@@ -150,7 +148,7 @@ const DIVISION_MENUS: { division: Division; menus: MenuKey[] }[] = [
   { division: "Auditor", menus: ["work"] },
   { division: "Sekretaris", menus: ["work"] },
   { division: "Business Development", menus: ["work"] },
-  { division: "Administrator", menus: ["users", "departments", "audit"] },
+  { division: "Administrator", menus: ["users", "audit"] },
 ];
 
 // ── Admin-defined extra divisions (DB-backed) ──────────────────────────────
