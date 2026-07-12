@@ -43,6 +43,7 @@ import { SegmentedTabs } from "@/components/ui/segmented-tabs";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import { ConcentricRings } from "@/components/dashboard/concentric-rings";
+import type { OpsDashboardData, OpsFraud, OpsHourly } from "@/lib/data/ops-dashboard";
 import { cn } from "@/lib/utils";
 
 /* ---------- palette (tone.ts) ---------- */
@@ -58,10 +59,14 @@ const MONTHS = ["Jan", "Feb", "Mar", "Apr", "Mei", "Jun", "Jul", "Agu", "Sep", "
 
 /* ==================================================================== */
 
-export function OperationDashboard2() {
+export function OperationDashboard2({ initial }: { initial: OpsDashboardData }) {
   const [period, setPeriod] = React.useState("bulan");
   const [cabang, setCabang] = React.useState("all");
   const [ca, setCa] = React.useState("all");
+
+  const kpi = initial.kpi;
+  const nsDelta = kpi && kpi.netSalesPrev > 0 ? +(((kpi.netSales - kpi.netSalesPrev) / kpi.netSalesPrev) * 100).toFixed(1) : 0;
+  const cabangOptions = [{ v: "all", l: "Semua Cabang" }, ...initial.branches.map((b) => ({ v: b.code, l: b.name }))];
 
   return (
     <div className="w-full space-y-4">
@@ -71,9 +76,19 @@ export function OperationDashboard2() {
           <span className="text-muted-foreground">Periode</span>
           <PillSelect value={period} onChange={setPeriod} bare options={[{ v: "hari", l: "Per Hari" }, { v: "minggu", l: "Per Minggu" }, { v: "bulan", l: "Per Bulan 2026.03" }]} />
         </div>
+        {initial.configured ? (
+          <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-500/12 px-2 py-1 text-[11px] font-medium text-emerald-600 dark:text-emerald-400">
+            <span className="size-1.5 rounded-full bg-emerald-500" /> ERP tersambung
+            {initial.errors.length > 0 && <span className="text-amber-600 dark:text-amber-400"> · sebagian gagal: {initial.errors.join(", ")}</span>}
+          </span>
+        ) : (
+          <span className="inline-flex items-center gap-1.5 rounded-full bg-muted px-2 py-1 text-[11px] font-medium text-muted-foreground">
+            <span className="size-1.5 rounded-full bg-slate-400" /> ERP belum tersambung
+          </span>
+        )}
         <div className="ml-auto flex flex-wrap items-center gap-2">
           <PillSelect value={ca} onChange={setCa} options={[{ v: "all", l: "Semua CA" }, { v: "owner", l: "Owner" }, { v: "spv", l: "SPV" }]} />
-          <PillSelect value={cabang} onChange={setCabang} options={[{ v: "all", l: "Semua Cabang" }, { v: "ccay", l: "Cattu A. Yani" }]} />
+          <PillSelect value={cabang} onChange={setCabang} options={cabangOptions} />
           <Button size="sm" className="gap-1.5"><Eye className="size-3.5" /> Petinjau</Button>
           <Button size="sm" variant="outline" className="gap-1.5"><Download className="size-3.5" /> Download</Button>
         </div>
@@ -94,12 +109,12 @@ export function OperationDashboard2() {
         {/* MIDDLE rail — KPI 2×2, charts, table */}
         <div className="min-w-0 space-y-4 lg:col-span-6">
           <div className="grid grid-cols-2 gap-4">
-            <KpiTile icon={Coins} label="Net Sales" value={rp(100_000_000)} delta={2.45} />
+            <KpiTile icon={Coins} label="Net Sales" value={kpi ? rp(kpi.netSales) : rp(100_000_000)} delta={kpi ? nsDelta : 2.45} live={!!kpi} />
             <KpiTile icon={ShoppingCart} label="Pembelian" value={rp(100_000_000)} delta={2.45} />
             <KpiTile icon={Wallet} label="Beban Operasional" value={rp(100_000_000)} delta={-2.45} positiveIsGood={false} />
             <KpiTile icon={TrendingUp} label="Laba Bersih" value={rp(100_000_000)} delta={2.45} />
           </div>
-          <PenjualanChart period={period} />
+          <PenjualanChart hourly={initial.hourly} />
           <BebanChart />
           <PerformaCabang />
         </div>
@@ -107,7 +122,7 @@ export function OperationDashboard2() {
         {/* RIGHT rail — distribusi, kontrol, rencana, aktivitas */}
         <div className="min-w-0 space-y-4 lg:col-span-3">
           <DistribusiMargin />
-          <KontrolCard />
+          <KontrolCard fraud={initial.fraud} />
           <RencanaPengeluaran />
           <AktivitasTerkini />
         </div>
@@ -177,12 +192,12 @@ function ChartTip({ active, label, payload, money, suffix }: TipProps) {
 }
 
 /* ---------- KPI ---------- */
-function KpiTile({ icon: Icon, label, value, delta, positiveIsGood }: { icon: LucideIcon; label: string; value: string; delta: number; positiveIsGood?: boolean }) {
+function KpiTile({ icon: Icon, label, value, delta, positiveIsGood, live }: { icon: LucideIcon; label: string; value: string; delta: number; positiveIsGood?: boolean; live?: boolean }) {
   return (
     <div className="card-gradient flex flex-col rounded-2xl p-4">
       <div className="flex items-center justify-between gap-2">
         <div className="grid size-10 shrink-0 place-items-center rounded-xl bg-muted ring-1 ring-border"><Icon className="size-5 text-muted-foreground" /></div>
-        <GripDots />
+        {live ? <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500/12 px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wide text-emerald-600 dark:text-emerald-400"><span className="size-1 rounded-full bg-emerald-500" />live</span> : <GripDots />}
       </div>
       <div className="mt-4 flex items-end justify-between gap-2">
         <div className="min-w-0">
@@ -197,16 +212,22 @@ function KpiTile({ icon: Icon, label, value, delta, positiveIsGood }: { icon: Lu
 }
 
 /* ---------- Penjualan (3-line chart) ---------- */
-function PenjualanChart({ className, period }: { className?: string; period: string }) {
+function PenjualanChart({ className, hourly }: { className?: string; hourly: OpsHourly[] | null }) {
   const [mode, setMode] = React.useState("harian");
   const points = mode === "harian" ? 24 : mode === "mingguan" ? 7 : 30;
   const label = (i: number) => (mode === "harian" ? String(i).padStart(2, "0") : mode === "mingguan" ? ["Sen", "Sel", "Rab", "Kam", "Jum", "Sab", "Min"][i] : String(i + 1));
   const r = rand(7 + points);
-  const data = Array.from({ length: points }, (_, i) => ({ x: label(i), hari: Math.round(3000 + r() * 6000), kemarin: Math.round(2500 + r() * 5000), target: 6500 }));
+  // Real ERP hourly (today vs yesterday) drives Harian mode; other modes use placeholder until wired.
+  const useReal = mode === "harian" && hourly && hourly.length > 0;
+  const target = useReal ? Math.round(hourly!.reduce((a, p) => Math.max(a, p.hari), 0) * 0.9) : 6500;
+  const data = useReal
+    ? hourly!.map((p) => ({ x: p.x, hari: p.hari, kemarin: p.kemarin, target }))
+    : Array.from({ length: points }, (_, i) => ({ x: label(i), hari: Math.round(3000 + r() * 6000), kemarin: Math.round(2500 + r() * 5000), target: 6500 }));
+  const total = useReal ? hourly!.reduce((a, p) => a + p.hari, 0) : 100_000_000;
   return (
     <Panel className={className}>
-      <Head title="Penjualan" desc="Hari ini vs kemarin vs target" right={<PillSelect value={mode} onChange={setMode} options={[{ v: "harian", l: "Harian" }, { v: "mingguan", l: "Mingguan" }, { v: "bulanan", l: "Bulanan" }]} />} />
-      <div className="mb-2 flex items-center gap-2"><p className="text-xl font-bold tabular-nums text-foreground">{rp(100_000_000)}</p><Delta v={1.78} /><span className="text-[11px] text-muted-foreground">+Rp1.780.000 dari tahun lalu</span></div>
+      <Head title="Penjualan" desc={useReal ? "Data ERP · hari ini vs kemarin vs target" : "Hari ini vs kemarin vs target"} right={<PillSelect value={mode} onChange={setMode} options={[{ v: "harian", l: "Harian" }, { v: "mingguan", l: "Mingguan" }, { v: "bulanan", l: "Bulanan" }]} />} />
+      <div className="mb-2 flex items-center gap-2"><p className="text-xl font-bold tabular-nums text-foreground">{rp(total)}</p><Delta v={1.78} />{useReal && <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500/12 px-1.5 py-0.5 text-[9px] font-semibold uppercase text-emerald-600 dark:text-emerald-400">live</span>}</div>
       <div className="min-h-[15rem] flex-1">
         <ResponsiveContainer width="100%" height="100%">
           <LineChart data={data} margin={{ top: 8, right: 8, left: -16, bottom: 0 }}>
@@ -387,20 +408,21 @@ function PerformaCabang({ className }: { className?: string }) {
 }
 
 /* ---------- Kontrol (tabs + scrollable) ---------- */
-function KontrolCard() {
+function KontrolCard({ fraud }: { fraud: OpsFraud[] | null }) {
   const [tab, setTab] = React.useState("fraud");
+  const fraudRows = fraud && fraud.length > 0 ? fraud : [{ name: "Promosi", value: 21_000_000 }, { name: "Kompliment", value: 5_200_000 }, { name: "Refund", value: 420_000 }, { name: "Void", value: 420_000 }];
   return (
     <Panel>
-      <Head title="Kontrol" desc="Pemantauan potensi kebocoran" />
+      <Head title="Kontrol" desc="Pemantauan potensi kebocoran" right={fraud && fraud.length > 0 ? <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500/12 px-1.5 py-0.5 text-[9px] font-semibold uppercase text-emerald-600 dark:text-emerald-400">live</span> : undefined} />
       <SegmentedTabs size="sm" value={tab} onChange={setTab} items={[{ value: "fraud", label: "Fraud" }, { value: "complain", label: "Complain" }, { value: "bersih", label: "Kebersihan" }, { value: "event", label: "Event" }]} />
       <div className="mt-3 max-h-72 flex-1 overflow-y-auto pr-1 [scrollbar-width:thin]">
         {tab === "fraud" && (
           <div className="space-y-2">
-            {[{ n: "Promosi", v: 21_000_000 }, { n: "Kompliment", v: 5_200_000 }, { n: "Refund", v: 420_000 }, { n: "Void", v: 420_000 }].map((row, i) => (
-              <div key={row.n} className="flex items-center gap-2 rounded-lg border border-border/60 bg-muted/20 px-2.5 py-2">
+            {fraudRows.map((row, i) => (
+              <div key={row.name + i} className="flex items-center gap-2 rounded-lg border border-border/60 bg-muted/20 px-2.5 py-2">
                 <span className="grid size-5 shrink-0 place-items-center rounded-md bg-blue-500/12 text-[10px] font-semibold text-blue-600 dark:text-blue-400">{i + 1}</span>
-                <span className="min-w-0 flex-1 truncate text-[12px] text-foreground">{row.n}</span>
-                <span className="shrink-0 text-[12px] font-medium tabular-nums text-foreground">{rp(row.v)}</span>
+                <span className="min-w-0 flex-1 truncate text-[12px] text-foreground">{row.name}</span>
+                <span className="shrink-0 text-[12px] font-medium tabular-nums text-foreground">{rp(row.value)}</span>
               </div>
             ))}
           </div>

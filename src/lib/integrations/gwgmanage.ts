@@ -61,6 +61,79 @@ async function token(): Promise<string> {
   return login();
 }
 
+/** Authenticated GET against the ERP; returns the `data` field. Re-logs in once on 401. */
+async function authedGet(path: string): Promise<unknown> {
+  const url = `${BASE}${path}`;
+  const call = async (t: string) => fetch(url, { headers: { Authorization: `Bearer ${t}`, Accept: "application/json" }, cache: "no-store" });
+  let res = await call(await token());
+  if (res.status === 401) {
+    cached = null;
+    res = await call(await login());
+  }
+  if (!res.ok) throw new Error(`gwgmanage ${path} failed (${res.status})`);
+  const json = await res.json();
+  return (json as { data?: unknown })?.data ?? {};
+}
+
+const num = (v: unknown) => Number(v) || 0;
+
+/* ---------------- /api/reports/dashboard ---------------- */
+export interface ErpDashboard {
+  netSales: number; // penjualanBersih
+  grossSales: number; // penjualanKotor
+  taxOther: number; // pajakBiayaLain
+  totalTransaksi: number;
+  totalPelanggan: number;
+  avgBill: number; // penjualanBersihPerTransaksi
+  totalVoid: number;
+  totalCancelled: number;
+  totalBebanPlatform: number;
+  platform: { methodName: string; count: number; amount: number }[];
+}
+
+/** Overall store dashboard for a day (period=daily) or a range (dateFrom/dateTo). */
+export async function fetchErpDashboard(opts: { date?: string; dateFrom?: string; dateTo?: string }): Promise<ErpDashboard> {
+  const qs = new URLSearchParams();
+  if (opts.date) { qs.set("period", "daily"); qs.set("date", opts.date); }
+  if (opts.dateFrom) qs.set("dateFrom", opts.dateFrom);
+  if (opts.dateTo) qs.set("dateTo", opts.dateTo);
+  const d = (await authedGet(`/api/reports/dashboard?${qs.toString()}`)) as Record<string, unknown>;
+  const platform = Array.isArray(d.bebanPlatformPerMethod)
+    ? (d.bebanPlatformPerMethod as Record<string, unknown>[]).map((p) => ({ methodName: String(p.methodName ?? ""), count: num(p.count), amount: num(p.amount) }))
+    : [];
+  return {
+    netSales: num(d.penjualanBersih),
+    grossSales: num(d.penjualanKotor),
+    taxOther: num(d.pajakBiayaLain),
+    totalTransaksi: num(d.totalTransaksi),
+    totalPelanggan: num(d.totalPelanggan),
+    avgBill: num(d.penjualanBersihPerTransaksi),
+    totalVoid: num(d.totalVoid),
+    totalCancelled: num(d.totalCancelled),
+    totalBebanPlatform: num(d.totalBebanPlatform),
+    platform,
+  };
+}
+
+/* ---------------- /api/reports/sales-hourly ---------------- */
+export interface ErpHourlyPoint { hour: string; netSales: number; transactionCount: number; paxTotal: number }
+
+/** Hourly sales for a date range (use dateFrom=dateTo for a single day). */
+export async function fetchSalesHourly(dateFrom: string, dateTo: string): Promise<ErpHourlyPoint[]> {
+  const d = (await authedGet(`/api/reports/sales-hourly?dateFrom=${encodeURIComponent(dateFrom)}&dateTo=${encodeURIComponent(dateTo)}`)) as Record<string, unknown>;
+  const rows = Array.isArray(d.hourlySales) ? (d.hourlySales as Record<string, unknown>[]) : [];
+  return rows.map((r) => ({ hour: String(r.hour ?? ""), netSales: num(r.netSales), transactionCount: num(r.transactionCount), paxTotal: num(r.paxTotal) }));
+}
+
+/* ---------------- /api/branches ---------------- */
+export interface ErpBranch { id: number; branchId: number; code: string; name: string }
+
+export async function fetchBranches(): Promise<ErpBranch[]> {
+  const d = await authedGet(`/api/branches`);
+  const rows = Array.isArray(d) ? (d as Record<string, unknown>[]) : [];
+  return rows.map((b) => ({ id: num(b.id), branchId: num(b.branchID), code: String(b.branchCode ?? ""), name: String(b.branchName ?? "") }));
+}
+
 /** Fetch monthly menu performance, re-logging in once on 401. */
 export async function fetchMenuPerformance(month: string): Promise<MenuPerformance> {
   const url = `${BASE}/api/reports/menu-performance?month=${encodeURIComponent(month)}`;
