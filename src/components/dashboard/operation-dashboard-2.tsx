@@ -43,7 +43,7 @@ import { SegmentedTabs } from "@/components/ui/segmented-tabs";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import { ConcentricRings } from "@/components/dashboard/concentric-rings";
-import type { OpsBranchPerf, OpsControl, OpsDashboardData, OpsFinance, OpsFraud, OpsHourly, OpsProduct, OpsTarget } from "@/lib/data/ops-dashboard";
+import type { OpsActivityFeed, OpsBranchPerf, OpsControl, OpsDashboardData, OpsFinance, OpsFraud, OpsHourly, OpsProduct, OpsTarget } from "@/lib/data/ops-dashboard";
 import { cn } from "@/lib/utils";
 
 /* ---------- palette (tone.ts) ---------- */
@@ -54,7 +54,6 @@ const rp = (n: number) => "Rp" + Math.round(n).toLocaleString("id-ID");
 const rand = (seed: number) => { let s = seed; return () => ((s = (s * 1103515245 + 12345) & 0x7fffffff) / 0x7fffffff); };
 
 const EXPENSE_CATS = ["Utilitas", "Sewa", "Tenaga Kerja", "Potongan", "Manajemen Fee", "Pemasaran", "Ongkos Kirim", "Lainnya"];
-const EXPENSE_THRESHOLD: Record<string, number> = { Utilitas: 3, Sewa: 3, "Tenaga Kerja": 13, Potongan: 3, "Manajemen Fee": 3, Pemasaran: 3, "Ongkos Kirim": 3, Lainnya: 3 };
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "Mei", "Jun", "Jul", "Agu", "Sep", "Okt", "Nov", "Des"];
 
 /* ==================================================================== */
@@ -119,7 +118,7 @@ export function OperationDashboard2({ initial }: { initial: OpsDashboardData }) 
             <KpiTile icon={TrendingUp} label="Laba Bersih" value={laba != null ? rp(laba) : rp(100_000_000)} delta={2.45} live={laba != null} />
           </div>
           <PenjualanChart hourly={initial.hourly} />
-          <BebanChart />
+          <BebanChart thresholdTK={initial.settings.expenseThresholds.tenaga_kerja} />
           <PerformaCabang data={initial.branchPerf} />
         </div>
 
@@ -127,8 +126,8 @@ export function OperationDashboard2({ initial }: { initial: OpsDashboardData }) 
         <div className="min-w-0 space-y-4 lg:col-span-3">
           <DistribusiMargin />
           <KontrolCard fraud={initial.fraud} control={initial.control} />
-          <RencanaPengeluaran fin={fin} netSales={kpi?.netSales ?? null} />
-          <AktivitasTerkini />
+          <RencanaPengeluaran fin={fin} netSales={kpi?.netSales ?? null} limits={initial.settings.purchaseLimits} />
+          <AktivitasTerkini activity={initial.activity} />
         </div>
       </div>
     </div>
@@ -298,7 +297,7 @@ function DistribusiMargin() {
 }
 
 /* ---------- Beban Operasional (blue-gradient stacked) ---------- */
-function BebanChart({ className }: { className?: string }) {
+function BebanChart({ className, thresholdTK }: { className?: string; thresholdTK: number }) {
   const [mode, setMode] = React.useState("persentase");
   const r = rand(11);
   const data = MONTHS.map((m) => { const row: Record<string, number | string> = { m }; for (const c of EXPENSE_CATS) row[c] = Math.round(2 + r() * 6); return row; });
@@ -316,12 +315,12 @@ function BebanChart({ className }: { className?: string }) {
             <XAxis dataKey="m" tick={{ fill: C.slate, fontSize: 10 }} tickLine={false} axisLine={false} />
             <YAxis tick={{ fill: C.slate, fontSize: 10 }} tickLine={false} axisLine={false} width={30} tickFormatter={(v) => `${v}%`} />
             <Tooltip cursor={{ fill: "rgba(148,163,184,0.08)" }} content={(p) => <ChartTip {...(p as unknown as TipProps)} suffix="%" />} />
-            <ReferenceLine y={13} stroke={C.red} strokeDasharray="4 4" strokeOpacity={0.5} />
+            <ReferenceLine y={thresholdTK} stroke={C.red} strokeDasharray="4 4" strokeOpacity={0.5} />
             {EXPENSE_CATS.map((c, i) => <Bar key={c} dataKey={c} stackId="e" fill={BLUES[i]} radius={i === EXPENSE_CATS.length - 1 ? [3, 3, 0, 0] : undefined} maxBarSize={34} />)}
           </BarChart>
         </ResponsiveContainer>
       </div>
-      <p className="mt-1 text-[10px] text-muted-foreground">Garis putus merah = ambang batas (threshold {EXPENSE_THRESHOLD["Tenaga Kerja"]}% Tenaga Kerja)</p>
+      <p className="mt-1 text-[10px] text-muted-foreground">Garis putus merah = ambang batas (Tenaga Kerja {thresholdTK}%, diatur di Pengaturan Threshold)</p>
     </Panel>
   );
 }
@@ -437,6 +436,7 @@ function KontrolCard({ fraud, control }: { fraud: OpsFraud[] | null; control: Op
   const fraudRows = fraud && fraud.length > 0 ? fraud : [{ name: "Promosi", value: 21_000_000 }, { name: "Kompliment", value: 5_200_000 }, { name: "Refund", value: 420_000 }, { name: "Void", value: 420_000 }];
   const complaints = control?.complaints ?? [];
   const hygiene = control?.hygiene ?? null;
+  const events = control?.events ?? [];
   return (
     <Panel>
       <Head title="Kontrol" desc="Pemantauan potensi kebocoran" right={fraud && fraud.length > 0 ? <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500/12 px-1.5 py-0.5 text-[9px] font-semibold uppercase text-emerald-600 dark:text-emerald-400">live</span> : undefined} />
@@ -490,16 +490,20 @@ function KontrolCard({ fraud, control }: { fraud: OpsFraud[] | null; control: Op
           </div>
         )}
         {tab === "event" && (
-          <div className="space-y-2">
-            {[{ n: "Promo Kopi Susu", u: 42, up: true }, { n: "Bundling Roti", u: 30, up: true }, { n: "Diskon Weekend", u: 18, up: false }, { n: "Voucher Member", u: 9, up: false }].map((e, i) => (
-              <div key={i} className="flex items-center gap-2 rounded-lg border border-border/60 bg-muted/20 px-2.5 py-2 text-[12px]">
-                <span className="grid size-5 shrink-0 place-items-center rounded-md bg-blue-500/12 text-[10px] font-semibold text-blue-600 dark:text-blue-400">{i + 1}</span>
-                <span className="min-w-0 flex-1 truncate text-foreground">{e.n}</span>
-                <span className="shrink-0 text-[11px] text-muted-foreground">{e.u}×</span>
-                {e.up ? <Flame className="size-3.5 shrink-0 text-amber-500" /> : <TrendingDown className="size-3.5 shrink-0 text-slate-400" />}
-              </div>
-            ))}
-          </div>
+          events.length === 0 ? (
+            <div className="grid place-items-center py-8 text-center text-[12px] text-muted-foreground">Belum ada event</div>
+          ) : (
+            <div className="space-y-2">
+              {events.map((e, i) => (
+                <div key={e.name + i} className="flex items-center gap-2 rounded-lg border border-border/60 bg-muted/20 px-2.5 py-2 text-[12px]">
+                  <span className="grid size-5 shrink-0 place-items-center rounded-md bg-blue-500/12 text-[10px] font-semibold text-blue-600 dark:text-blue-400">{i + 1}</span>
+                  <span className="min-w-0 flex-1 truncate text-foreground">{e.name}</span>
+                  <span className="shrink-0 text-[11px] text-muted-foreground">{e.count}×</span>
+                  {e.up ? <Flame className="size-3.5 shrink-0 text-amber-500" /> : <TrendingDown className="size-3.5 shrink-0 text-slate-400" />}
+                </div>
+              ))}
+            </div>
+          )
         )}
       </div>
     </Panel>
@@ -527,35 +531,33 @@ function ActTimeline({ label, rows }: { label: string; rows: Act[] }) {
     </div>
   );
 }
-function AktivitasTerkini() {
+const PH_DIVISI: Act[] = [
+  { who: "Andi", t: "11:45", a: "Review performa operasional 32 outlet selesai", tone: "green" },
+  { who: "Fikri", t: "09:22", a: "Sinkronisasi data penjualan seluruh outlet berhasil", tone: "blue" },
+  { who: "Jayadi", t: "07:15", a: "Menindaklanjuti temuan audit Outlet Bengkayang", tone: "amber" },
+];
+const PH_OUTLET: Act[] = [
+  { who: "Cattu A. Yani", t: "10:12", a: "SPV belum upload checklist kebersihan hari ini", tone: "red" },
+  { who: "Nordu Bengkayang", t: "09:40", a: "Omset turun 12% dari target harian", tone: "amber" },
+  { who: "Busari Desa", t: "08:05", a: "Finance belum input laporan kemarin", tone: "red" },
+];
+function AktivitasTerkini({ activity }: { activity: OpsActivityFeed | null }) {
   const [tab, setTab] = React.useState("divisi");
-  const divisi: Record<string, Act[]> = {
-    today: [
-      { who: "Andi", t: "11:45", a: "Review performa operasional 32 outlet selesai", tone: "green" },
-      { who: "Fikri", t: "09:22", a: "Sinkronisasi data penjualan seluruh outlet berhasil", tone: "blue" },
-      { who: "Jayadi", t: "07:15", a: "Menindaklanjuti temuan audit Outlet Bengkayang", tone: "amber" },
-    ],
-    yest: [
-      { who: "Deo", t: "17:50", a: "Approval permintaan stok Outlet Air Upas disetujui", tone: "green" },
-      { who: "Poetri", t: "15:30", a: "Jadwal kunjungan Outlet Tanjung Duren diperbarui", tone: "blue" },
-    ],
-  };
-  const outlet: Record<string, Act[]> = {
-    today: [
-      { who: "Cattu A. Yani", t: "10:12", a: "SPV belum upload checklist kebersihan hari ini", tone: "red" },
-      { who: "Nordu Bengkayang", t: "09:40", a: "Omset turun 12% dari target harian", tone: "amber" },
-      { who: "Busari Desa", t: "08:05", a: "Finance belum input laporan kemarin", tone: "red" },
-    ],
-    yest: [{ who: "Cattu Sohor", t: "18:20", a: "Omset hanya mencapai 28% target bulan ini", tone: "amber" }],
-  };
-  const src = tab === "divisi" ? divisi : outlet;
+  const toActs = (src: OpsActivityFeed["divisi"]): Act[] => src.map((a) => ({ who: a.who, t: a.time, a: a.desc, tone: a.tone }));
+  const divisi = activity && activity.divisi.length > 0 ? toActs(activity.divisi) : PH_DIVISI;
+  const outlet = activity && activity.outlet.length > 0 ? toActs(activity.outlet) : PH_OUTLET;
+  const rows = tab === "divisi" ? divisi : outlet;
+  const live = !!(activity && (activity.divisi.length > 0 || activity.outlet.length > 0));
   return (
     <Panel>
-      <Head title="Aktivitas Terkini" desc="Task Tracker (Divisi) & sistem (Outlet)" />
+      <Head title="Aktivitas Terkini" desc="Task Tracker (Divisi) & sistem (Outlet)" right={live ? <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500/12 px-1.5 py-0.5 text-[9px] font-semibold uppercase text-emerald-600 dark:text-emerald-400">live</span> : undefined} />
       <SegmentedTabs size="sm" value={tab} onChange={setTab} items={[{ value: "outlet", label: "Outlet" }, { value: "divisi", label: "Divisi" }]} />
-      <div className="mt-3 flex-1 space-y-4">
-        <ActTimeline label="Hari ini" rows={src.today} />
-        <ActTimeline label="Kemarin" rows={src.yest} />
+      <div className="mt-3 flex-1">
+        {rows.length === 0 ? (
+          <div className="grid place-items-center py-8 text-center text-[12px] text-muted-foreground">Belum ada aktivitas</div>
+        ) : (
+          <ActTimeline label={tab === "divisi" ? "Task selesai" : "Perlu perhatian"} rows={rows} />
+        )}
       </div>
     </Panel>
   );
@@ -690,14 +692,14 @@ function ProdukCard({ products }: { products: OpsProduct[] | null }) {
 }
 
 /* ---------- Rencana Pengeluaran (Juknis 2.11) ---------- */
-function RencanaPengeluaran({ fin, netSales }: { fin: OpsFinance | null; netSales: number | null }) {
+function RencanaPengeluaran({ fin, netSales, limits }: { fin: OpsFinance | null; netSales: number | null; limits: { warehouse: number; nonWarehouse: number; total: number } }) {
   const live = !!(fin && netSales && netSales > 0);
   const pctOf = (v: number) => (live ? +((v / netSales!) * 100).toFixed(1) : 0);
   const rows = live
     ? [
-        { l: "Warehouse", a: fin!.purchaseWh, t: netSales! * 0.3, actualPct: pctOf(fin!.purchaseWh), limit: 30, icon: Boxes },
-        { l: "Non Warehouse", a: fin!.purchaseNonWh, t: netSales! * 0.05, actualPct: pctOf(fin!.purchaseNonWh), limit: 5, icon: PackageSearch },
-        { l: "Rasio Total", a: fin!.purchaseTotal, t: netSales! * 0.35, actualPct: pctOf(fin!.purchaseTotal), limit: 35, icon: Layers },
+        { l: "Warehouse", a: fin!.purchaseWh, t: netSales! * (limits.warehouse / 100), actualPct: pctOf(fin!.purchaseWh), limit: limits.warehouse, icon: Boxes },
+        { l: "Non Warehouse", a: fin!.purchaseNonWh, t: netSales! * (limits.nonWarehouse / 100), actualPct: pctOf(fin!.purchaseNonWh), limit: limits.nonWarehouse, icon: PackageSearch },
+        { l: "Rasio Total", a: fin!.purchaseTotal, t: netSales! * (limits.total / 100), actualPct: pctOf(fin!.purchaseTotal), limit: limits.total, icon: Layers },
       ]
     : [
         { l: "Warehouse", a: 105_000_000, t: 210_000_000, actualPct: 25, limit: 30, icon: Boxes },

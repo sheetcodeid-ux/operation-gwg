@@ -2,7 +2,9 @@ import "server-only";
 
 import { fetchBranches, fetchErpDashboard, fetchMenuPerformance, fetchSalesHourly, gwgmanageConfigured } from "@/lib/integrations/gwgmanage";
 import { expenseTotal, listExpenses, listOpOutlets, listPurchases, sumExpenses, sumPurchases } from "@/lib/data/ops-finance";
-import { areaName, listComplaints, listHygiene, outletName, visibleOutlets } from "@/lib/data/store";
+import { areaName, listComplaints, listEvents, listHygiene, listTasks, outletName, userName, visibleOutlets } from "@/lib/data/store";
+import { getOpsSettings } from "@/lib/data/ops-settings";
+import { DEFAULT_SETTINGS, type OpsSettings } from "@/lib/ops/settings-types";
 import type { ComplaintCategory, UserProfile } from "@/lib/types";
 
 export interface OpsKpi {
@@ -27,7 +29,12 @@ export interface OpsBranch { code: string; name: string }
 export interface OpsComplaint { outlet: string; category: string; note: string; status: "Open" | "In Progress" }
 export interface OpsHygieneRow { outlet: string; area: string; ok: boolean; supervisor: string }
 export interface OpsHygiene { checkedToday: number; totalOutlets: number; rows: OpsHygieneRow[] }
-export interface OpsControl { complaints: OpsComplaint[]; hygiene: OpsHygiene | null }
+export interface OpsEventRow { name: string; count: number; up: boolean } // Kontrol › Event (Event Tracker)
+export interface OpsControl { complaints: OpsComplaint[]; hygiene: OpsHygiene | null; events: OpsEventRow[] }
+
+/** Aktivitas Terkini (Juknis 2.12): Divisi = Work Tracker; Outlet = sistem otomatis. */
+export interface OpsActivity { who: string; time: string; desc: string; tone: "blue" | "green" | "amber" | "red" }
+export interface OpsActivityFeed { divisi: OpsActivity[]; outlet: OpsActivity[] }
 
 /** Target & projection (Juknis 2.1–2.3, computed from 3-month omzet history). */
 export interface OpsTargetWeek { label: string; target: number; actual: number; porsi: number }
@@ -78,6 +85,8 @@ export interface OpsDashboardData {
   target: OpsTarget | null; // ERP omzet history (Juknis 2.1)
   products: OpsProduct[] | null; // ERP menu-performance (Juknis 2.7)
   branchPerf: OpsBranchPerf[]; // per-outlet Finance (Pembelian & Beban)
+  activity: OpsActivityFeed | null; // Work/Event tracker (Juknis 2.12)
+  settings: OpsSettings; // configurable thresholds (Juknis bab 6)
   errors: string[]; // human labels of sources that failed
 }
 
@@ -165,7 +174,35 @@ function loadControl(user: UserProfile): OpsControl {
   const rows: OpsHygieneRow[] = src.slice(0, 10).map((h) => ({ outlet: outletName(h.outletId), area: areaName(h.areaId), ok: h.isClean, supervisor: h.supervisorName }));
   const hygiene: OpsHygiene = { checkedToday: new Set(todays.map((h) => h.outletId)).size, totalOutlets: visibleOutlets(user).length, rows };
 
-  return { complaints, hygiene };
+  // Event Tracker → usage per event name (Juknis 2.10.4).
+  const evMap = new Map<string, number>();
+  for (const e of listEvents(user)) evMap.set(e.name, (evMap.get(e.name) ?? 0) + 1);
+  const events: OpsEventRow[] = [...evMap.entries()].map(([name, count]) => ({ name, count, up: count >= 2 })).sort((a, b) => b.count - a.count).slice(0, 10);
+
+  return { complaints, hygiene, events };
+}
+
+const hm = (iso?: string | null) => { try { return iso ? new Date(iso).toLocaleTimeString("id-ID", { hour: "2-digit", minute: "2-digit" }) : ""; } catch { return ""; } };
+
+/** Aktivitas Terkini: Divisi from Work Tracker (done tasks); Outlet auto-derived. */
+function loadActivity(user: UserProfile): OpsActivityFeed {
+  const divisi: OpsActivity[] = listTasks(user)
+    .filter((t) => t.status === "done")
+    .sort((a, b) => (b.completionDate ?? b.createdAt).localeCompare(a.completionDate ?? a.createdAt))
+    .slice(0, 6)
+    .map((t) => ({ who: t.picIds[0] ? userName(t.picIds[0]) : t.division, time: hm(t.completionDate ?? t.createdAt), desc: t.title, tone: "green" as const }));
+
+  const outlet: OpsActivity[] = [];
+  const today = ymd(new Date());
+  const checked = new Set(listHygiene(user).filter((h) => (h.date ?? "").slice(0, 10) === today).map((h) => h.outletId));
+  for (const o of visibleOutlets(user)) {
+    if (outlet.length >= 3) break;
+    if (!checked.has(o.id)) outlet.push({ who: o.name, time: "", desc: "SPV belum upload checklist kebersihan hari ini", tone: "red" });
+  }
+  for (const c of listComplaints(user).filter((c) => c.status === "open").slice(0, 3)) {
+    outlet.push({ who: outletName(c.outletId), time: hm(c.createdAt), desc: `Komplain baru: ${COMPLAINT_LABEL[c.category] ?? c.category}`, tone: "amber" });
+  }
+  return { divisi, outlet: outlet.slice(0, 6) };
 }
 
 const ymd = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
@@ -183,7 +220,7 @@ async function loadFinance(month: string): Promise<OpsFinance | null> {
 }
 
 function baseOpsDashboard(): OpsDashboardData {
-  return { configured: false, date: "", kpi: null, hourly: null, fraud: null, branches: [], finance: null, control: null, target: null, products: null, branchPerf: [], errors: [] };
+  return { configured: false, date: "", kpi: null, hourly: null, fraud: null, branches: [], finance: null, control: null, target: null, products: null, branchPerf: [], activity: null, settings: DEFAULT_SETTINGS, errors: [] };
 }
 
 /**
@@ -199,8 +236,10 @@ export async function getOpsDashboard(opts: { date?: string; user?: UserProfile 
   const month = ym(opts.date ? new Date(opts.date) : new Date());
   const finance = await loadFinance(month);
   const control = opts.user ? loadControl(opts.user) : null;
+  const activity = opts.user ? loadActivity(opts.user) : null;
   const branchPerf = await loadBranchPerf(month);
-  if (!gwgmanageConfigured()) return { ...baseOpsDashboard(), finance, control, branchPerf };
+  const settings = await getOpsSettings();
+  if (!gwgmanageConfigured()) return { ...baseOpsDashboard(), finance, control, branchPerf, activity, settings };
   let target: OpsTarget | null = null;
 
   const today = opts.date ? new Date(opts.date) : new Date();
@@ -251,5 +290,5 @@ export async function getOpsDashboard(opts: { date?: string; user?: UserProfile 
   if (!target) errors.push("Target");
   if (!products) errors.push("Produk");
 
-  return { configured: true, date: dToday, kpi, hourly, fraud, branches: brs, finance, control, target, products, branchPerf, errors };
+  return { configured: true, date: dToday, kpi, hourly, fraud, branches: brs, finance, control, target, products, branchPerf, activity, settings, errors };
 }
