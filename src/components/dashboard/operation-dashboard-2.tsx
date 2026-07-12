@@ -43,7 +43,7 @@ import { SegmentedTabs } from "@/components/ui/segmented-tabs";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import { ConcentricRings } from "@/components/dashboard/concentric-rings";
-import type { OpsControl, OpsDashboardData, OpsFinance, OpsFraud, OpsHourly } from "@/lib/data/ops-dashboard";
+import type { OpsControl, OpsDashboardData, OpsFinance, OpsFraud, OpsHourly, OpsTarget } from "@/lib/data/ops-dashboard";
 import { cn } from "@/lib/utils";
 
 /* ---------- palette (tone.ts) ---------- */
@@ -66,6 +66,7 @@ export function OperationDashboard2({ initial }: { initial: OpsDashboardData }) 
 
   const kpi = initial.kpi;
   const fin = initial.finance;
+  const t = initial.target;
   const nsDelta = kpi && kpi.netSalesPrev > 0 ? +(((kpi.netSales - kpi.netSalesPrev) / kpi.netSalesPrev) * 100).toFixed(1) : 0;
   // Laba Bersih = Net Sales − Pembelian − Beban Operasional (needs both ERP Net Sales & Finance input).
   const laba = kpi && fin ? kpi.netSales - fin.purchaseTotal - fin.expenses : null;
@@ -102,10 +103,10 @@ export function OperationDashboard2({ initial }: { initial: OpsDashboardData }) 
       <div className="grid items-start gap-4 lg:grid-cols-12">
         {/* LEFT rail — targets & produk */}
         <div className="min-w-0 space-y-4 lg:col-span-3">
-          <TargetGauge />
-          <ProgressCard title="Proyeksi Bulanan" pct={50} actual={300_000_000} target={600_000_000} />
-          <ProgressCard title="Target Harian" pct={50} actual={10_000_000} target={20_000_000} />
-          <WeeklyTarget />
+          <TargetGauge target={t} />
+          <ProgressCard title="Proyeksi Bulanan" live={!!t} pct={t ? Math.round((t.proyeksiBulanan / t.targetMonth) * 100) : 50} actual={t ? t.proyeksiBulanan : 300_000_000} target={t ? t.targetMonth : 600_000_000} />
+          <ProgressCard title="Target Harian" live={!!t} pct={t && t.targetHarian > 0 ? Math.round((t.todayActual / t.targetHarian) * 100) : 50} actual={t ? t.todayActual : 10_000_000} target={t ? t.targetHarian : 20_000_000} />
+          <WeeklyTarget target={t} />
           <ProdukCard />
         </div>
 
@@ -541,12 +542,16 @@ function AktivitasTerkini() {
 }
 
 /* ---------- Target Per Bulan (gauge) ---------- */
-function TargetGauge() {
-  const pct = 95.38, R = 52, circ = Math.PI * R;
+function TargetGauge({ target }: { target: OpsTarget | null }) {
+  const pct = target ? Math.min(100, target.attainmentPct) : 95.38;
+  const mom = target ? target.momPct : -5;
+  const realisasi = target ? target.realisasi : 12_400_000_000;
+  const tgt = target ? target.targetMonth : 13_000_000_000;
+  const R = 52, circ = Math.PI * R;
   const dash = (pct / 100) * circ;
   return (
     <Panel>
-      <Head title="Target Per Bulan" desc="Realisasi vs target bulan ini" />
+      <Head title="Target Per Bulan" desc="Realisasi vs target bulan ini" right={target ? <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500/12 px-1.5 py-0.5 text-[9px] font-semibold uppercase text-emerald-600 dark:text-emerald-400">live</span> : undefined} />
       <div className="relative mx-auto grid h-28 w-56 place-items-end">
         <svg viewBox="0 0 140 78" className="w-full">
           <defs>
@@ -557,11 +562,11 @@ function TargetGauge() {
         </svg>
         <div className="absolute inset-x-0 bottom-0 text-center">
           <p className="text-[10px] text-muted-foreground">Total Target</p>
-          <p className="text-2xl font-bold tabular-nums text-foreground">{pct}%</p>
-          <p className="text-[10px] font-medium text-red-500">-5% vs bulan lalu</p>
+          <p className="text-2xl font-bold tabular-nums text-foreground">{(target ? target.attainmentPct : pct).toFixed(2)}%</p>
+          <p className={cn("text-[10px] font-medium", mom >= 0 ? "text-emerald-500" : "text-red-500")}>{mom >= 0 ? "+" : ""}{mom}% vs bulan lalu</p>
         </div>
       </div>
-      <p className="mt-2 text-center text-[12px] font-semibold tabular-nums text-foreground">Rp12.400.000.000 <span className="text-muted-foreground">/ 13M</span></p>
+      <p className="mt-2 text-center text-[12px] font-semibold tabular-nums text-foreground">{rp(realisasi)} <span className="text-muted-foreground">/ {rp(tgt)}</span></p>
       <div className="mt-2 flex items-center justify-center gap-4 text-[11px] text-muted-foreground">
         <span className="flex items-center gap-1.5"><span className="size-2 rounded-full" style={{ background: C.blue }} /> Realisasi</span>
         <span className="flex items-center gap-1.5"><span className="size-2 rounded-full" style={{ background: C.blueLt }} /> Target</span>
@@ -569,10 +574,13 @@ function TargetGauge() {
     </Panel>
   );
 }
-function ProgressCard({ title, pct, actual, target }: { title: string; pct: number; actual: number; target: number }) {
+function ProgressCard({ title, pct, actual, target, live }: { title: string; pct: number; actual: number; target: number; live?: boolean }) {
   return (
     <Panel>
-      <div className="flex items-center justify-between"><h3 className="text-sm font-semibold text-foreground">{title}</h3><span className="text-lg font-bold tabular-nums text-foreground">{pct}%</span></div>
+      <div className="flex items-center justify-between">
+        <h3 className="flex items-center gap-1.5 text-sm font-semibold text-foreground">{title}{live && <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500/12 px-1.5 py-0.5 text-[9px] font-semibold uppercase text-emerald-600 dark:text-emerald-400">live</span>}</h3>
+        <span className="text-lg font-bold tabular-nums text-foreground">{pct}%</span>
+      </div>
       <p className="mt-3 text-[13px] font-semibold tabular-nums text-foreground">{rp(actual)} <span className="text-muted-foreground">/ {rp(target)}</span></p>
       <div className="mt-2"><Progress value={pct} tone="cyan" /></div>
       <div className="mt-2 flex items-center gap-4 text-[11px] text-muted-foreground">
@@ -582,22 +590,24 @@ function ProgressCard({ title, pct, actual, target }: { title: string; pct: numb
     </Panel>
   );
 }
-function WeeklyTarget() {
-  const weeks = [
-    { w: "Minggu I", a: 105_000_000, t: 210_000_000, p: 50 },
-    { w: "Minggu II", a: 15_000_000, t: 30_000_000, p: 50 },
-    { w: "Minggu III", a: 120_000_000, t: 240_000_000, p: 50 },
-    { w: "Minggu IV", a: 90_000_000, t: 240_000_000, p: 37.5 },
-    { w: "Minggu V", a: 60_000_000, t: 240_000_000, p: 25 },
-  ];
+function WeeklyTarget({ target }: { target: OpsTarget | null }) {
+  const weeks = target
+    ? target.weeks.map((w) => ({ w: w.label, a: w.actual, t: w.target, pct: w.target > 0 ? Math.round((w.actual / w.target) * 100) : 0, porsi: w.porsi }))
+    : [
+        { w: "Minggu I", a: 105_000_000, t: 210_000_000, pct: 50, porsi: 22 },
+        { w: "Minggu II", a: 15_000_000, t: 30_000_000, pct: 50, porsi: 22 },
+        { w: "Minggu III", a: 120_000_000, t: 240_000_000, pct: 50, porsi: 22 },
+        { w: "Minggu IV", a: 90_000_000, t: 240_000_000, pct: 38, porsi: 22 },
+        { w: "Minggu V", a: 60_000_000, t: 240_000_000, pct: 25, porsi: 12 },
+      ];
   return (
     <Panel>
-      <Head title="Target Mingguan" desc="Total Pengeluaran Rp120.000.000" />
+      <Head title="Target Mingguan" desc={target ? `Target bulan ${rp(target.targetMonth)}` : "Pembagian target per minggu"} right={target ? <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500/12 px-1.5 py-0.5 text-[9px] font-semibold uppercase text-emerald-600 dark:text-emerald-400">live</span> : undefined} />
       <div className="space-y-2.5">
         {weeks.map((w) => (
           <div key={w.w}>
-            <div className="flex items-center justify-between text-[12px]"><span className="font-medium text-foreground">{w.w}</span><span className="text-muted-foreground tabular-nums">{w.p}%</span></div>
-            <div className="mt-1"><Progress value={w.p} tone="cyan" /></div>
+            <div className="flex items-center justify-between text-[12px]"><span className="font-medium text-foreground">{w.w} <span className="text-[10px] text-muted-foreground">· porsi {w.porsi}%</span></span><span className="text-muted-foreground tabular-nums">{w.pct}%</span></div>
+            <div className="mt-1"><Progress value={w.pct} tone="cyan" /></div>
             <p className="mt-0.5 text-[10px] text-muted-foreground tabular-nums">{rp(w.a)} / {rp(w.t)}</p>
           </div>
         ))}

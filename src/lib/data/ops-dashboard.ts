@@ -1,6 +1,6 @@
 import "server-only";
 
-import { fetchBranches, fetchErpDashboard, fetchSalesHourly, gwgmanageConfigured } from "@/lib/integrations/gwgmanage";
+import { fetchBranches, fetchErpDashboard, fetchMenuPerformance, fetchSalesHourly, gwgmanageConfigured } from "@/lib/integrations/gwgmanage";
 import { sumExpenses, sumPurchases } from "@/lib/data/ops-finance";
 import { areaName, listComplaints, listHygiene, outletName, visibleOutlets } from "@/lib/data/store";
 import type { ComplaintCategory, UserProfile } from "@/lib/types";
@@ -29,6 +29,19 @@ export interface OpsHygieneRow { outlet: string; area: string; ok: boolean; supe
 export interface OpsHygiene { checkedToday: number; totalOutlets: number; rows: OpsHygieneRow[] }
 export interface OpsControl { complaints: OpsComplaint[]; hygiene: OpsHygiene | null }
 
+/** Target & projection (Juknis 2.1–2.3, computed from 3-month omzet history). */
+export interface OpsTargetWeek { label: string; target: number; actual: number; porsi: number }
+export interface OpsTarget {
+  targetMonth: number; // avg 3-month omzet × 115%
+  realisasi: number; // current-month omzet (MTD)
+  attainmentPct: number; // realisasi / targetMonth × 100
+  momPct: number; // realisasi vs previous month (for the −5% style badge)
+  targetHarian: number;
+  todayActual: number; // today's net sales
+  proyeksiBulanan: number; // rate/day × days-in-month
+  weeks: OpsTargetWeek[];
+}
+
 export interface OpsDashboardData {
   configured: boolean;
   date: string; // YYYY-MM-DD used
@@ -38,7 +51,57 @@ export interface OpsDashboardData {
   branches: OpsBranch[];
   finance: OpsFinance | null; // from our own Finance-input tables (independent of ERP)
   control: OpsControl | null; // from app Complaints + Hygiene (scoped to the user)
+  target: OpsTarget | null; // ERP omzet history (Juknis 2.1)
   errors: string[]; // human labels of sources that failed
+}
+
+const ROMAN = ["I", "II", "III", "IV", "V", "VI"];
+
+/** Total omzet of a month = Σ menu-performance amounts (proven ERP endpoint). */
+async function omzetOfMonth(month: string): Promise<number> {
+  const perf = await fetchMenuPerformance(month);
+  return perf.menus.reduce((a, m) => a + m.amount, 0);
+}
+
+/** Target Per Bulan / Harian / Mingguan + Proyeksi Bulanan (Juknis 2.1–2.3). */
+async function loadTarget(todayNetSales: number): Promise<OpsTarget | null> {
+  try {
+    const now = new Date();
+    const monthOf = (back: number) => ym(new Date(now.getFullYear(), now.getMonth() - back, 1));
+    const [o0, o1, o2, o3] = await Promise.all([omzetOfMonth(monthOf(0)), omzetOfMonth(monthOf(1)), omzetOfMonth(monthOf(2)), omzetOfMonth(monthOf(3))]);
+    const avg3 = (o1 + o2 + o3) / 3;
+    if (avg3 <= 0) return null; // not enough history (Juknis: min 3 bulan)
+
+    const targetMonth = avg3 * 1.15;
+    const realisasi = o0;
+    const daysInMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
+    const daysElapsed = now.getDate();
+    const targetHarian = targetMonth / daysInMonth;
+    const ratePerDay = daysElapsed > 0 ? realisasi / daysElapsed : 0;
+
+    const weeks: OpsTargetWeek[] = [];
+    let wi = 0;
+    for (let start = 1; start <= daysInMonth; start += 7) {
+      const end = Math.min(start + 6, daysInMonth);
+      const days = end - start + 1;
+      const elapsedInWeek = Math.max(0, Math.min(end, daysElapsed) - start + 1);
+      const target = targetHarian * days;
+      weeks.push({ label: `Minggu ${ROMAN[wi++]}`, target, actual: ratePerDay * elapsedInWeek, porsi: targetMonth > 0 ? +((target / targetMonth) * 100).toFixed(1) : 0 });
+    }
+
+    return {
+      targetMonth,
+      realisasi,
+      attainmentPct: targetMonth > 0 ? +((realisasi / targetMonth) * 100).toFixed(2) : 0,
+      momPct: o1 > 0 ? +(((realisasi - o1) / o1) * 100).toFixed(1) : 0,
+      targetHarian,
+      todayActual: todayNetSales,
+      proyeksiBulanan: ratePerDay * daysInMonth,
+      weeks,
+    };
+  } catch {
+    return null;
+  }
 }
 
 const COMPLAINT_LABEL: Record<ComplaintCategory, string> = {
@@ -84,7 +147,7 @@ async function loadFinance(month: string): Promise<OpsFinance | null> {
 }
 
 function baseOpsDashboard(): OpsDashboardData {
-  return { configured: false, date: "", kpi: null, hourly: null, fraud: null, branches: [], finance: null, control: null, errors: [] };
+  return { configured: false, date: "", kpi: null, hourly: null, fraud: null, branches: [], finance: null, control: null, target: null, errors: [] };
 }
 
 /**
@@ -100,6 +163,7 @@ export async function getOpsDashboard(opts: { date?: string; user?: UserProfile 
   const finance = await loadFinance(ym(opts.date ? new Date(opts.date) : new Date()));
   const control = opts.user ? loadControl(opts.user) : null;
   if (!gwgmanageConfigured()) return { ...baseOpsDashboard(), finance, control };
+  let target: OpsTarget | null = null;
 
   const today = opts.date ? new Date(opts.date) : new Date();
   const yest = new Date(today);
@@ -144,5 +208,8 @@ export async function getOpsDashboard(opts: { date?: string; user?: UserProfile 
   const brs: OpsBranch[] = branches.status === "fulfilled" ? branches.value.map((b) => ({ code: b.code, name: b.name })) : [];
   if (branches.status !== "fulfilled") errors.push("Cabang");
 
-  return { configured: true, date: dToday, kpi, hourly, fraud, branches: brs, finance, control, errors };
+  target = await loadTarget(kpi?.netSales ?? 0);
+  if (!target) errors.push("Target");
+
+  return { configured: true, date: dToday, kpi, hourly, fraud, branches: brs, finance, control, target, errors };
 }
