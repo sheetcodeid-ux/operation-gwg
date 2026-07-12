@@ -46,7 +46,7 @@ export default async function DashboardPage({
 
   // Dashboard 2 (operational/financial) — switchable on the same page.
   if (sp.view === "ops2") {
-    const opsData = await getOpsDashboard();
+    const opsData = await getOpsDashboard({ user });
     return (
       <div className="w-full">
         <PageHeader
