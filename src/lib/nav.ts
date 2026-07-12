@@ -10,6 +10,8 @@ export type MenuKey =
   | "complaints"
   | "outlets"
   | "reports"
+  | "op_beban"
+  | "op_pembelian"
   | "assessment"
   | "hpp_dash"
   | "hpp"
@@ -53,6 +55,8 @@ export const NAV_MENUS: Omit<NavItem, "section">[] = [
   { key: "hygiene", label: "Hygiene", href: "/hygiene", icon: "SprayCan" },
   { key: "complaints", label: "Complaints", href: "/complaints", icon: "MessageSquareWarning" },
   { key: "outlets", label: "Outlets", href: "/outlets", icon: "Store" },
+  { key: "op_beban", label: "Beban Operasional", href: "/operation/beban", icon: "Wallet" },
+  { key: "op_pembelian", label: "Pembelian", href: "/operation/pembelian", icon: "ShoppingCart" },
   { key: "reports", label: "Reports", href: "/reports", icon: "FileText" },
   { key: "assessment", label: "Assessment Golongan", href: "/assessment", icon: "Award" },
   { key: "hpp_dash", label: "Dashboard R&D", href: "/rnd/dashboard", icon: "ChartSpline" },
@@ -107,6 +111,8 @@ const OPERATION_FULL: MenuKey[] = [
   "hygiene",
   "complaints",
   "outlets",
+  "op_beban",
+  "op_pembelian",
   "reports",
 ];
 

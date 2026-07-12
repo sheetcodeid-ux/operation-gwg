@@ -24,6 +24,7 @@ import {
   SearchCheck,
   Settings2,
   ShieldCheck,
+  ShoppingCart,
   SprayCan,
   Store,
   Table2,
@@ -52,6 +53,7 @@ export const NAV_ICONS: Record<string, LucideIcon> = {
   Calculator,
   Table2,
   Package,
+  ShoppingCart,
   // Division (group) icons
   Briefcase,
   ShieldCheck,
