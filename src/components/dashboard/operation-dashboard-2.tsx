@@ -43,7 +43,7 @@ import { SegmentedTabs } from "@/components/ui/segmented-tabs";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import { ConcentricRings } from "@/components/dashboard/concentric-rings";
-import type { OpsControl, OpsDashboardData, OpsFinance, OpsFraud, OpsHourly, OpsProduct, OpsTarget } from "@/lib/data/ops-dashboard";
+import type { OpsBranchPerf, OpsControl, OpsDashboardData, OpsFinance, OpsFraud, OpsHourly, OpsProduct, OpsTarget } from "@/lib/data/ops-dashboard";
 import { cn } from "@/lib/utils";
 
 /* ---------- palette (tone.ts) ---------- */
@@ -120,7 +120,7 @@ export function OperationDashboard2({ initial }: { initial: OpsDashboardData }) 
           </div>
           <PenjualanChart hourly={initial.hourly} />
           <BebanChart />
-          <PerformaCabang />
+          <PerformaCabang data={initial.branchPerf} />
         </div>
 
         {/* RIGHT rail — distribusi, kontrol, rencana, aktivitas */}
@@ -328,22 +328,32 @@ function BebanChart({ className }: { className?: string }) {
 
 /* ---------- Performa Cabang (executive table, Juknis 2.8) ---------- */
 type SortDir = "asc" | "desc";
-function PerformaCabang({ className }: { className?: string }) {
-  const [tab, setTab] = React.useState("net");
+function PerformaCabang({ className, data }: { className?: string; data: OpsBranchPerf[] }) {
+  const [tab, setTab] = React.useState("beli"); // beli (real) | beban (real) | net (butuh omzet/cabang)
   const [q, setQ] = React.useState("");
   const [page, setPage] = React.useState(1);
   const [dir, setDir] = React.useState<SortDir>("desc");
   const per = 8;
 
+  const hasFinance = data.some((d) => d.pembelianCur || d.bebanCur || d.pembelianPrev || d.bebanPrev);
+
   const all = React.useMemo(() => {
+    if (tab !== "net" && hasFinance) {
+      return data.map((d, i) => {
+        const cur = tab === "beli" ? d.pembelianCur : d.bebanCur;
+        const prev = tab === "beli" ? d.pembelianPrev : d.bebanPrev;
+        const growth = prev > 0 ? +(((cur - prev) / prev) * 100).toFixed(2) : 0;
+        return { id: i + 1, name: d.name, area: d.area, prev, cur, growth };
+      });
+    }
+    // Net Sales tab (or no Finance input yet) — placeholder.
     const r = rand(99);
-    return Array.from({ length: 512 }, (_, i) => {
+    return Array.from({ length: 40 }, (_, i) => {
       const prev = Math.round(80_000_000 + r() * 60_000_000);
       const cur = Math.round(prev * (0.9 + r() * 0.3));
-      const growth = +(((cur - prev) / prev) * 100).toFixed(2);
-      return { id: i + 1, name: `Cabang ${String.fromCharCode(65 + (i % 26))}${Math.floor(i / 26) + 1}`, area: ["Kalimantan", "Jawa", "Bali"][i % 3], prev, cur, growth };
+      return { id: i + 1, name: `Cabang ${String.fromCharCode(65 + (i % 26))}${Math.floor(i / 26) + 1}`, area: ["Kalimantan", "Jawa", "Bali"][i % 3], prev, cur, growth: +(((cur - prev) / prev) * 100).toFixed(2) };
     });
-  }, []);
+  }, [data, tab, hasFinance]);
 
   const filtered = React.useMemo(() => {
     const s = all.filter((x) => x.name.toLowerCase().includes(q.toLowerCase()));
@@ -355,11 +365,21 @@ function PerformaCabang({ className }: { className?: string }) {
   const cur = Math.min(page, pages);
   const start = (cur - 1) * per;
   const rows = filtered.slice(start, start + per);
-  const colLabel = tab === "net" ? "Net Sales" : tab === "beli" ? "Pembelian" : "Laba Bersih";
+  const live = tab !== "net" && hasFinance;
 
   return (
     <Panel className={className}>
-      <Head title="Performa Cabang" desc={`Perbandingan ${colLabel.toLowerCase()} antar cabang`} right={<SegmentedTabs size="sm" value={tab} onChange={(v) => { setTab(v); setPage(1); }} items={[{ value: "net", label: "Net Sales" }, { value: "beli", label: "Pembelian" }, { value: "laba", label: "Laba Bersih" }]} />} />
+      <Head title="Performa Cabang" desc="Perbandingan antar cabang · bulan ini vs lalu" right={
+        <div className="flex items-center gap-1.5">
+          {live && <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500/12 px-1.5 py-0.5 text-[9px] font-semibold uppercase text-emerald-600 dark:text-emerald-400">live</span>}
+          <SegmentedTabs size="sm" value={tab} onChange={(v) => { setTab(v); setPage(1); }} items={[{ value: "beli", label: "Pembelian" }, { value: "beban", label: "Beban" }, { value: "net", label: "Net Sales" }]} />
+        </div>
+      } />
+      {tab === "net" && (
+        <p className="mb-3 rounded-lg border border-amber-500/25 bg-amber-500/[0.06] px-3 py-2 text-[11px] text-amber-700 dark:text-amber-400">
+          Net Sales per cabang butuh parameter cabang di API ERP (belum tersedia). Data contoh ditampilkan. Tab <b>Pembelian</b> & <b>Beban</b> sudah pakai data Finance asli.
+        </p>
+      )}
       <div className="relative mb-3 max-w-xs">
         <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
         <input value={q} onChange={(e) => { setQ(e.target.value); setPage(1); }} placeholder="Cari cabang…" className="w-full rounded-lg border border-border bg-transparent py-2 pl-9 pr-3 text-sm outline-none placeholder:text-muted-foreground" />
@@ -369,7 +389,7 @@ function PerformaCabang({ className }: { className?: string }) {
           <thead>
             <tr className="bg-muted/60 text-xs text-muted-foreground">
               <th className="sticky left-0 z-10 bg-muted/60 px-3 py-3 text-left font-medium">Cabang</th>
-              <th className="px-3 py-3 text-right font-medium">{tab === "beli" ? "Bulan Lalu" : "Target Lalu"}</th>
+              <th className="px-3 py-3 text-right font-medium">Bulan Lalu</th>
               <th className="px-3 py-3 text-right font-medium">Bulan Ini</th>
               <th className="px-3 py-3 text-right font-medium">
                 <button type="button" onClick={() => setDir((d) => (d === "asc" ? "desc" : "asc"))} className="ml-auto inline-flex items-center gap-1 hover:text-foreground">

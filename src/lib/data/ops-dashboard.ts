@@ -1,7 +1,7 @@
 import "server-only";
 
 import { fetchBranches, fetchErpDashboard, fetchMenuPerformance, fetchSalesHourly, gwgmanageConfigured } from "@/lib/integrations/gwgmanage";
-import { sumExpenses, sumPurchases } from "@/lib/data/ops-finance";
+import { expenseTotal, listExpenses, listOpOutlets, listPurchases, sumExpenses, sumPurchases } from "@/lib/data/ops-finance";
 import { areaName, listComplaints, listHygiene, outletName, visibleOutlets } from "@/lib/data/store";
 import type { ComplaintCategory, UserProfile } from "@/lib/types";
 
@@ -45,6 +45,27 @@ export interface OpsTarget {
 /** Produk (per-menu sales this month, from ERP menu-performance — Juknis 2.7). */
 export interface OpsProduct { name: string; category: string; qty: number; amount: number }
 
+/** Per-branch performance from our Finance input (Pembelian & Beban, this vs prev month). */
+export interface OpsBranchPerf { code: string; name: string; area: string; pembelianCur: number; pembelianPrev: number; bebanCur: number; bebanPrev: number }
+
+async function loadBranchPerf(month: string): Promise<OpsBranchPerf[]> {
+  const prev = ym(new Date(Number(month.slice(0, 4)), Number(month.slice(5, 7)) - 2, 1));
+  const [pCur, pPrev, eCur, ePrev] = await Promise.all([listPurchases(month), listPurchases(prev), listExpenses(month), listExpenses(prev)]);
+  const pcm = new Map(pCur.map((r) => [r.outletCode, r.warehouse + r.nonWarehouse]));
+  const ppm = new Map(pPrev.map((r) => [r.outletCode, r.warehouse + r.nonWarehouse]));
+  const ecm = new Map(eCur.map((r) => [r.outletCode, expenseTotal(r)]));
+  const epm = new Map(ePrev.map((r) => [r.outletCode, expenseTotal(r)]));
+  return listOpOutlets().map((o) => ({
+    code: o.code,
+    name: o.name,
+    area: o.area,
+    pembelianCur: pcm.get(o.code) ?? 0,
+    pembelianPrev: ppm.get(o.code) ?? 0,
+    bebanCur: ecm.get(o.code) ?? 0,
+    bebanPrev: epm.get(o.code) ?? 0,
+  }));
+}
+
 export interface OpsDashboardData {
   configured: boolean;
   date: string; // YYYY-MM-DD used
@@ -56,6 +77,7 @@ export interface OpsDashboardData {
   control: OpsControl | null; // from app Complaints + Hygiene (scoped to the user)
   target: OpsTarget | null; // ERP omzet history (Juknis 2.1)
   products: OpsProduct[] | null; // ERP menu-performance (Juknis 2.7)
+  branchPerf: OpsBranchPerf[]; // per-outlet Finance (Pembelian & Beban)
   errors: string[]; // human labels of sources that failed
 }
 
@@ -161,7 +183,7 @@ async function loadFinance(month: string): Promise<OpsFinance | null> {
 }
 
 function baseOpsDashboard(): OpsDashboardData {
-  return { configured: false, date: "", kpi: null, hourly: null, fraud: null, branches: [], finance: null, control: null, target: null, products: null, errors: [] };
+  return { configured: false, date: "", kpi: null, hourly: null, fraud: null, branches: [], finance: null, control: null, target: null, products: null, branchPerf: [], errors: [] };
 }
 
 /**
@@ -174,9 +196,11 @@ function baseOpsDashboard(): OpsDashboardData {
  * the rest — the component keeps its placeholder for anything that errored.
  */
 export async function getOpsDashboard(opts: { date?: string; user?: UserProfile } = {}): Promise<OpsDashboardData> {
-  const finance = await loadFinance(ym(opts.date ? new Date(opts.date) : new Date()));
+  const month = ym(opts.date ? new Date(opts.date) : new Date());
+  const finance = await loadFinance(month);
   const control = opts.user ? loadControl(opts.user) : null;
-  if (!gwgmanageConfigured()) return { ...baseOpsDashboard(), finance, control };
+  const branchPerf = await loadBranchPerf(month);
+  if (!gwgmanageConfigured()) return { ...baseOpsDashboard(), finance, control, branchPerf };
   let target: OpsTarget | null = null;
 
   const today = opts.date ? new Date(opts.date) : new Date();
@@ -227,5 +251,5 @@ export async function getOpsDashboard(opts: { date?: string; user?: UserProfile 
   if (!target) errors.push("Target");
   if (!products) errors.push("Produk");
 
-  return { configured: true, date: dToday, kpi, hourly, fraud, branches: brs, finance, control, target, products, errors };
+  return { configured: true, date: dToday, kpi, hourly, fraud, branches: brs, finance, control, target, products, branchPerf, errors };
 }
