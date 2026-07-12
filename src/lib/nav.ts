@@ -12,6 +12,7 @@ export type MenuKey =
   | "reports"
   | "op_beban"
   | "op_pembelian"
+  | "op_settings"
   | "assessment"
   | "hpp_dash"
   | "hpp"
@@ -57,6 +58,7 @@ export const NAV_MENUS: Omit<NavItem, "section">[] = [
   { key: "outlets", label: "Outlets", href: "/outlets", icon: "Store" },
   { key: "op_beban", label: "Beban Operasional", href: "/operation/beban", icon: "Wallet" },
   { key: "op_pembelian", label: "Pembelian", href: "/operation/pembelian", icon: "ShoppingCart" },
+  { key: "op_settings", label: "Pengaturan Threshold", href: "/operation/settings", icon: "Settings2" },
   { key: "reports", label: "Reports", href: "/reports", icon: "FileText" },
   { key: "assessment", label: "Assessment Golongan", href: "/assessment", icon: "Award" },
   { key: "hpp_dash", label: "Dashboard R&D", href: "/rnd/dashboard", icon: "ChartSpline" },
@@ -113,6 +115,7 @@ const OPERATION_FULL: MenuKey[] = [
   "outlets",
   "op_beban",
   "op_pembelian",
+  "op_settings",
   "reports",
 ];
 
