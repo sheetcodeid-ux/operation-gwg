@@ -1,6 +1,7 @@
 import "server-only";
 
 import { fetchBranches, fetchErpDashboard, fetchSalesHourly, gwgmanageConfigured } from "@/lib/integrations/gwgmanage";
+import { sumExpenses, sumPurchases } from "@/lib/data/ops-finance";
 
 export interface OpsKpi {
   netSales: number;
@@ -8,6 +9,13 @@ export interface OpsKpi {
   totalTransaksi: number;
   totalPelanggan: number;
   avgBill: number;
+}
+/** Finance-input aggregates for the current month (from op_expenses / op_purchases). */
+export interface OpsFinance {
+  expenses: number; // Beban Operasional total
+  purchaseWh: number;
+  purchaseNonWh: number;
+  purchaseTotal: number; // Pembelian total
 }
 export interface OpsHourly { x: string; hari: number; kemarin: number }
 export interface OpsFraud { name: string; value: number }
@@ -20,13 +28,27 @@ export interface OpsDashboardData {
   hourly: OpsHourly[] | null;
   fraud: OpsFraud[] | null;
   branches: OpsBranch[];
+  finance: OpsFinance | null; // from our own Finance-input tables (independent of ERP)
   errors: string[]; // human labels of sources that failed
 }
 
 const ymd = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 
-export function emptyOpsDashboard(): OpsDashboardData {
-  return { configured: false, date: "", kpi: null, hourly: null, fraud: null, branches: [], errors: [] };
+const ym = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+
+async function loadFinance(month: string): Promise<OpsFinance | null> {
+  try {
+    const [expenses, pur] = await Promise.all([sumExpenses(month), sumPurchases(month)]);
+    if (expenses === 0 && pur.total === 0) return null; // nothing input yet
+    return { expenses, purchaseWh: pur.warehouse, purchaseNonWh: pur.nonWarehouse, purchaseTotal: pur.total };
+  } catch {
+    return null;
+  }
+}
+
+export async function emptyOpsDashboard(): Promise<OpsDashboardData> {
+  const finance = await loadFinance(ym(new Date()));
+  return { configured: false, date: "", kpi: null, hourly: null, fraud: null, branches: [], finance, errors: [] };
 }
 
 /**
@@ -39,7 +61,8 @@ export function emptyOpsDashboard(): OpsDashboardData {
  * the rest — the component keeps its placeholder for anything that errored.
  */
 export async function getOpsDashboard(opts: { date?: string } = {}): Promise<OpsDashboardData> {
-  if (!gwgmanageConfigured()) return emptyOpsDashboard();
+  const finance = await loadFinance(ym(opts.date ? new Date(opts.date) : new Date()));
+  if (!gwgmanageConfigured()) return { ...(await emptyOpsDashboard()), finance };
 
   const today = opts.date ? new Date(opts.date) : new Date();
   const yest = new Date(today);
@@ -84,5 +107,5 @@ export async function getOpsDashboard(opts: { date?: string } = {}): Promise<Ops
   const brs: OpsBranch[] = branches.status === "fulfilled" ? branches.value.map((b) => ({ code: b.code, name: b.name })) : [];
   if (branches.status !== "fulfilled") errors.push("Cabang");
 
-  return { configured: true, date: dToday, kpi, hourly, fraud, branches: brs, errors };
+  return { configured: true, date: dToday, kpi, hourly, fraud, branches: brs, finance, errors };
 }

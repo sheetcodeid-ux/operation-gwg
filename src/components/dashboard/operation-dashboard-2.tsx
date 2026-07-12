@@ -43,7 +43,7 @@ import { SegmentedTabs } from "@/components/ui/segmented-tabs";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import { ConcentricRings } from "@/components/dashboard/concentric-rings";
-import type { OpsDashboardData, OpsFraud, OpsHourly } from "@/lib/data/ops-dashboard";
+import type { OpsDashboardData, OpsFinance, OpsFraud, OpsHourly } from "@/lib/data/ops-dashboard";
 import { cn } from "@/lib/utils";
 
 /* ---------- palette (tone.ts) ---------- */
@@ -65,7 +65,10 @@ export function OperationDashboard2({ initial }: { initial: OpsDashboardData }) 
   const [ca, setCa] = React.useState("all");
 
   const kpi = initial.kpi;
+  const fin = initial.finance;
   const nsDelta = kpi && kpi.netSalesPrev > 0 ? +(((kpi.netSales - kpi.netSalesPrev) / kpi.netSalesPrev) * 100).toFixed(1) : 0;
+  // Laba Bersih = Net Sales − Pembelian − Beban Operasional (needs both ERP Net Sales & Finance input).
+  const laba = kpi && fin ? kpi.netSales - fin.purchaseTotal - fin.expenses : null;
   const cabangOptions = [{ v: "all", l: "Semua Cabang" }, ...initial.branches.map((b) => ({ v: b.code, l: b.name }))];
 
   return (
@@ -110,9 +113,9 @@ export function OperationDashboard2({ initial }: { initial: OpsDashboardData }) 
         <div className="min-w-0 space-y-4 lg:col-span-6">
           <div className="grid grid-cols-2 gap-4">
             <KpiTile icon={Coins} label="Net Sales" value={kpi ? rp(kpi.netSales) : rp(100_000_000)} delta={kpi ? nsDelta : 2.45} live={!!kpi} />
-            <KpiTile icon={ShoppingCart} label="Pembelian" value={rp(100_000_000)} delta={2.45} />
-            <KpiTile icon={Wallet} label="Beban Operasional" value={rp(100_000_000)} delta={-2.45} positiveIsGood={false} />
-            <KpiTile icon={TrendingUp} label="Laba Bersih" value={rp(100_000_000)} delta={2.45} />
+            <KpiTile icon={ShoppingCart} label="Pembelian" value={fin ? rp(fin.purchaseTotal) : rp(100_000_000)} delta={2.45} live={!!fin} />
+            <KpiTile icon={Wallet} label="Beban Operasional" value={fin ? rp(fin.expenses) : rp(100_000_000)} delta={-2.45} positiveIsGood={false} live={!!fin} />
+            <KpiTile icon={TrendingUp} label="Laba Bersih" value={laba != null ? rp(laba) : rp(100_000_000)} delta={2.45} live={laba != null} />
           </div>
           <PenjualanChart hourly={initial.hourly} />
           <BebanChart />
@@ -123,7 +126,7 @@ export function OperationDashboard2({ initial }: { initial: OpsDashboardData }) 
         <div className="min-w-0 space-y-4 lg:col-span-3">
           <DistribusiMargin />
           <KontrolCard fraud={initial.fraud} />
-          <RencanaPengeluaran />
+          <RencanaPengeluaran fin={fin} netSales={kpi?.netSales ?? null} />
           <AktivitasTerkini />
         </div>
       </div>
@@ -618,15 +621,23 @@ function ProdukCard() {
 }
 
 /* ---------- Rencana Pengeluaran (Juknis 2.11) ---------- */
-function RencanaPengeluaran() {
-  const rows = [
-    { l: "Warehouse", a: 105_000_000, t: 210_000_000, actualPct: 25, limit: 30, icon: Boxes },
-    { l: "Non Warehouse", a: 15_000_000, t: 30_000_000, actualPct: 6, limit: 5, icon: PackageSearch },
-    { l: "Rasio Total", a: 120_000_000, t: 240_000_000, actualPct: 31, limit: 35, icon: Layers },
-  ];
+function RencanaPengeluaran({ fin, netSales }: { fin: OpsFinance | null; netSales: number | null }) {
+  const live = !!(fin && netSales && netSales > 0);
+  const pctOf = (v: number) => (live ? +((v / netSales!) * 100).toFixed(1) : 0);
+  const rows = live
+    ? [
+        { l: "Warehouse", a: fin!.purchaseWh, t: netSales! * 0.3, actualPct: pctOf(fin!.purchaseWh), limit: 30, icon: Boxes },
+        { l: "Non Warehouse", a: fin!.purchaseNonWh, t: netSales! * 0.05, actualPct: pctOf(fin!.purchaseNonWh), limit: 5, icon: PackageSearch },
+        { l: "Rasio Total", a: fin!.purchaseTotal, t: netSales! * 0.35, actualPct: pctOf(fin!.purchaseTotal), limit: 35, icon: Layers },
+      ]
+    : [
+        { l: "Warehouse", a: 105_000_000, t: 210_000_000, actualPct: 25, limit: 30, icon: Boxes },
+        { l: "Non Warehouse", a: 15_000_000, t: 30_000_000, actualPct: 6, limit: 5, icon: PackageSearch },
+        { l: "Rasio Total", a: 120_000_000, t: 240_000_000, actualPct: 31, limit: 35, icon: Layers },
+      ];
   return (
     <Panel>
-      <Head title="Rencana Pengeluaran" desc="Pembelian vs omset · ambang batas" />
+      <Head title="Rencana Pengeluaran" desc="Pembelian vs omset · ambang batas" right={live ? <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500/12 px-1.5 py-0.5 text-[9px] font-semibold uppercase text-emerald-600 dark:text-emerald-400">live</span> : undefined} />
       <div className="space-y-3.5">
         {rows.map((row) => {
           const over = row.actualPct > row.limit;
