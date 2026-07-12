@@ -79,44 +79,38 @@ export function OperationDashboard2() {
         </div>
       </div>
 
-      {/* KPI — 4 cards sejajar */}
-      <div className="grid grid-cols-2 gap-4 xl:grid-cols-4">
-        <KpiTile icon={Coins} label="Net Sales" value={rp(100_000_000)} delta={2.45} />
-        <KpiTile icon={ShoppingCart} label="Pembelian" value={rp(100_000_000)} delta={2.45} />
-        <KpiTile icon={Wallet} label="Beban Operasional" value={rp(100_000_000)} delta={-2.45} positiveIsGood={false} />
-        <KpiTile icon={TrendingUp} label="Laba Bersih" value={rp(100_000_000)} delta={2.45} />
-      </div>
+      {/* 3-rail layout exactly like the Figma: narrow-left · wide-middle · narrow-right.
+          Normal page flow (no freeze); columns align to top. */}
+      <div className="grid items-start gap-4 lg:grid-cols-12">
+        {/* LEFT rail — targets & produk */}
+        <div className="min-w-0 space-y-4 lg:col-span-3">
+          <TargetGauge />
+          <ProgressCard title="Proyeksi Bulanan" pct={50} actual={300_000_000} target={600_000_000} />
+          <ProgressCard title="Target Harian" pct={50} actual={10_000_000} target={20_000_000} />
+          <WeeklyTarget />
+          <ProdukCard />
+        </div>
 
-      {/* Row: Penjualan + Distribusi Margin */}
-      <div className="grid items-stretch gap-4 lg:grid-cols-3">
-        <PenjualanChart className="lg:col-span-2" period={period} />
-        <DistribusiMargin />
-      </div>
+        {/* MIDDLE rail — KPI 2×2, charts, table */}
+        <div className="min-w-0 space-y-4 lg:col-span-6">
+          <div className="grid grid-cols-2 gap-4">
+            <KpiTile icon={Coins} label="Net Sales" value={rp(100_000_000)} delta={2.45} />
+            <KpiTile icon={ShoppingCart} label="Pembelian" value={rp(100_000_000)} delta={2.45} />
+            <KpiTile icon={Wallet} label="Beban Operasional" value={rp(100_000_000)} delta={-2.45} positiveIsGood={false} />
+            <KpiTile icon={TrendingUp} label="Laba Bersih" value={rp(100_000_000)} delta={2.45} />
+          </div>
+          <PenjualanChart period={period} />
+          <BebanChart />
+          <PerformaCabang />
+        </div>
 
-      {/* Row: Beban Operasional + Kontrol */}
-      <div className="grid items-stretch gap-4 lg:grid-cols-3">
-        <BebanChart className="lg:col-span-2" />
-        <KontrolCard />
-      </div>
-
-      {/* Row: Performa Cabang (executive table) + Aktivitas Terkini */}
-      <div className="grid items-stretch gap-4 lg:grid-cols-3">
-        <PerformaCabang className="lg:col-span-2" />
-        <AktivitasTerkini />
-      </div>
-
-      {/* Row: Target Per Bulan + Target Mingguan + Produk */}
-      <div className="grid gap-4 lg:grid-cols-3">
-        <TargetGauge />
-        <WeeklyTarget />
-        <ProdukCard />
-      </div>
-
-      {/* Row: Proyeksi + Target Harian + Rencana Pengeluaran */}
-      <div className="grid gap-4 lg:grid-cols-3">
-        <ProgressCard title="Proyeksi Bulanan" pct={50} actual={300_000_000} target={600_000_000} />
-        <ProgressCard title="Target Harian" pct={50} actual={10_000_000} target={20_000_000} />
-        <RencanaPengeluaran />
+        {/* RIGHT rail — distribusi, kontrol, rencana, aktivitas */}
+        <div className="min-w-0 space-y-4 lg:col-span-3">
+          <DistribusiMargin />
+          <KontrolCard />
+          <RencanaPengeluaran />
+          <AktivitasTerkini />
+        </div>
       </div>
     </div>
   );
