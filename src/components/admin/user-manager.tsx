@@ -59,6 +59,7 @@ export interface UserRow {
   country: string | null;
   avatarUrl: string | null;
   department: string | null;
+  jabatan: string | null;
   grants: string[];
 }
 export interface OutletLite {
@@ -105,6 +106,16 @@ const rolesInDivision = (d: Division) => ROLES.filter((r) => ROLE_DIVISION[r] ==
 /** Merge + de-dupe department suggestions for the pickers. */
 const deptSuggestions = (extra: string[], current?: string) =>
   [...new Set([...HO_DEPARTMENTS, ...ALL_DIVISIONS, ...extra, ...(current ? [current] : [])].filter(Boolean))];
+/** Common job titles / sub-teams (GWG HO structure) — free-text still allowed. */
+const JABATAN_SUGGESTIONS = [
+  "Head",
+  "Finance", "Treasury", "Accounting & Verification", "Tax", "AR Staff", "AP Staff",
+  "Talent Acquisition", "L&D dan Comben", "Administration",
+  "Coordinator Area East", "Coordinator Area West", "System Support",
+  "Graphic Designer", "Photo/Video",
+  "Driver", "Warehouse Kering", "Warehouse Basah", "Packing & Helper", "Admin Penjualan", "Admin Pembelian",
+  "Expansion & Partnership", "Project & Asset Management", "Management Investasi",
+];
 const needsOutlets = (r: Role) => r === "area_coordinator" || r === "head_operation" || r === "pos_operation";
 const isMulti = (r: Role) => r === "area_coordinator";
 const fmtDate = (iso: string) => {
@@ -278,7 +289,10 @@ export function UserManager({
                     </div>
                   </td>
                   <td className="px-4 py-3 text-muted-foreground">{u.email}</td>
-                  <td className="px-4 py-3 text-muted-foreground">{userDivision(u)}</td>
+                  <td className="px-4 py-3">
+                    <p className="text-foreground">{userDivision(u)}</p>
+                    {u.jabatan && <p className="text-[11px] text-muted-foreground">{u.jabatan}</p>}
+                  </td>
                   <td className="px-4 py-3 whitespace-nowrap tabular-nums text-muted-foreground">{fmtDate(u.createdAt)}</td>
                   <td className="px-4 py-3 text-center">
                     <Badge tone={u.active ? "success" : "danger"} dot>
@@ -417,8 +431,10 @@ export function UserFormPanel({
   const [pwd, setPwd] = React.useState("");
   const [pwd2, setPwd2] = React.useState("");
   const [showPwd, setShowPwd] = React.useState(false);
-  // Department (free-text, creatable) and role (access) are chosen independently.
+  // Department (free-text, creatable), jabatan (job title), and role (access)
+  // are all chosen independently.
   const [department, setDepartment] = React.useState<string>(user?.department ?? prefill?.division ?? "");
+  const [jabatan, setJabatan] = React.useState<string>(user?.jabatan ?? "");
   const [role, setRole] = React.useState<Role>(user?.role ?? "member");
   const [selected, setSelected] = React.useState<string[]>(user?.outletIds ?? []);
   const [phone, setPhone] = React.useState(user?.phone ?? "");
@@ -429,6 +445,7 @@ export function UserFormPanel({
   const isEdit = mode === "edit";
   const name = `${first} ${last}`.trim();
   const deptListId = React.useId();
+  const jabatanListId = React.useId();
   const suggestions = deptSuggestions(departmentOptions, department);
 
   function onFile(e: React.ChangeEvent<HTMLInputElement>) {
@@ -448,7 +465,7 @@ export function UserFormPanel({
     if (pwd && pwd.length < 6) return toast.error("Password minimal 6 karakter.");
     if (pwd !== pwd2) return toast.error("Konfirmasi password tidak cocok.");
     start(async () => {
-      const contact = { phone: phone.trim() || null, country: country.trim() || null, avatarUrl: avatar, department: department.trim() || null };
+      const contact = { phone: phone.trim() || null, country: country.trim() || null, avatarUrl: avatar, department: department.trim() || null, jabatan: jabatan.trim() || null };
       const res = isEdit
         ? await updateUserAction({ id: user!.id, name, email, role, password: pwd || undefined, outletIds: selected, ...contact })
         : await createUserAction({ name, email, role, password: pwd, outletIds: selected, ...contact });
@@ -539,21 +556,29 @@ export function UserFormPanel({
               ))}
             </datalist>
           </Field>
-          <Field label="Jabatan / Role *">
-            <Combobox
-              portal
-              matchTriggerWidth
-              value={role}
-              onChange={(v) => {
-                setRole(v as Role);
-                setSelected([]);
-              }}
-              options={ALL_ROLES.map((r) => ({ value: r, label: ROLE_LABEL[r] }))}
-            />
+          <Field label="Jabatan">
+            <Input list={jabatanListId} value={jabatan} onChange={(e) => setJabatan(e.target.value)} placeholder="mis. Treasury, Driver…" />
+            <datalist id={jabatanListId}>
+              {JABATAN_SUGGESTIONS.map((j) => (
+                <option key={j} value={j} />
+              ))}
+            </datalist>
           </Field>
         </div>
+        <Field label="Role (Akses) *">
+          <Combobox
+            portal
+            matchTriggerWidth
+            value={role}
+            onChange={(v) => {
+              setRole(v as Role);
+              setSelected([]);
+            }}
+            options={ALL_ROLES.map((r) => ({ value: r, label: ROLE_LABEL[r] }))}
+          />
+        </Field>
         <p className="text-[11px] text-muted-foreground">
-          <b>Departement</b> = grup organisasi &amp; sidebar (boleh ketik baru). <b>Role</b> menentukan menu/akses; pilih <i>{ROLE_LABEL.member}</i> untuk staf umum.
+          <b>Departement</b> = grup organisasi (boleh ketik baru) · <b>Jabatan</b> = sub-tim/posisi · <b>Role</b> menentukan menu/akses (pilih <i>{ROLE_LABEL.member}</i> untuk staf umum).
         </p>
 
         {role && needsOutlets(role as Role) && <OutletPicker outlets={outlets} multi={isMulti(role as Role)} selected={selected} onChange={setSelected} />}

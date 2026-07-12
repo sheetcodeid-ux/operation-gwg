@@ -22,6 +22,7 @@ export async function createUser(input: {
   country?: string | null;
   avatarUrl?: string | null;
   department?: string | null;
+  jabatan?: string | null;
 }): Promise<UserProfile> {
   const user: UserProfile = {
     id: nextId(),
@@ -34,6 +35,7 @@ export async function createUser(input: {
     phone: input.phone ?? null,
     country: input.country ?? null,
     department: input.department ?? null,
+    jabatan: input.jabatan ?? null,
     active: true,
     createdAt: new Date().toISOString(),
   };
@@ -80,6 +82,7 @@ export function updateUser(
     country?: string | null;
     avatarUrl?: string | null;
     department?: string | null;
+    jabatan?: string | null;
     grants?: string[];
   },
 ) {
@@ -94,6 +97,7 @@ export function updateUser(
   if (patch.country !== undefined) user.country = patch.country;
   if (patch.avatarUrl !== undefined) user.avatarUrl = patch.avatarUrl;
   if (patch.department !== undefined) user.department = patch.department;
+  if (patch.jabatan !== undefined) user.jabatan = patch.jabatan;
   if (patch.grants !== undefined) user.grants = patch.grants;
   void saveUser(user);
 }

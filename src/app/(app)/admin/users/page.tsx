@@ -41,6 +41,7 @@ export default async function UsersPage({ searchParams }: { searchParams: Promis
     country: u.country ?? null,
     avatarUrl: u.avatarUrl ?? null,
     department: u.department ?? null,
+    jabatan: u.jabatan ?? null,
     grants: u.grants ?? [],
   }));
 

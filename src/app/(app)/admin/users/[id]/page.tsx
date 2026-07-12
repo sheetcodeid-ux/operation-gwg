@@ -48,6 +48,7 @@ export default async function UserDetailPage({ params }: { params: Promise<{ id:
     country: u.country ?? null,
     avatarUrl: u.avatarUrl ?? null,
     department: u.department ?? null,
+    jabatan: u.jabatan ?? null,
     grants: u.grants ?? [],
   };
 
