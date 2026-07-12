@@ -43,7 +43,7 @@ import { SegmentedTabs } from "@/components/ui/segmented-tabs";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import { ConcentricRings } from "@/components/dashboard/concentric-rings";
-import type { OpsDashboardData, OpsFinance, OpsFraud, OpsHourly } from "@/lib/data/ops-dashboard";
+import type { OpsControl, OpsDashboardData, OpsFinance, OpsFraud, OpsHourly } from "@/lib/data/ops-dashboard";
 import { cn } from "@/lib/utils";
 
 /* ---------- palette (tone.ts) ---------- */
@@ -125,7 +125,7 @@ export function OperationDashboard2({ initial }: { initial: OpsDashboardData }) 
         {/* RIGHT rail — distribusi, kontrol, rencana, aktivitas */}
         <div className="min-w-0 space-y-4 lg:col-span-3">
           <DistribusiMargin />
-          <KontrolCard fraud={initial.fraud} />
+          <KontrolCard fraud={initial.fraud} control={initial.control} />
           <RencanaPengeluaran fin={fin} netSales={kpi?.netSales ?? null} />
           <AktivitasTerkini />
         </div>
@@ -411,9 +411,11 @@ function PerformaCabang({ className }: { className?: string }) {
 }
 
 /* ---------- Kontrol (tabs + scrollable) ---------- */
-function KontrolCard({ fraud }: { fraud: OpsFraud[] | null }) {
+function KontrolCard({ fraud, control }: { fraud: OpsFraud[] | null; control: OpsControl | null }) {
   const [tab, setTab] = React.useState("fraud");
   const fraudRows = fraud && fraud.length > 0 ? fraud : [{ name: "Promosi", value: 21_000_000 }, { name: "Kompliment", value: 5_200_000 }, { name: "Refund", value: 420_000 }, { name: "Void", value: 420_000 }];
+  const complaints = control?.complaints ?? [];
+  const hygiene = control?.hygiene ?? null;
   return (
     <Panel>
       <Head title="Kontrol" desc="Pemantauan potensi kebocoran" right={fraud && fraud.length > 0 ? <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500/12 px-1.5 py-0.5 text-[9px] font-semibold uppercase text-emerald-600 dark:text-emerald-400">live</span> : undefined} />
@@ -431,30 +433,39 @@ function KontrolCard({ fraud }: { fraud: OpsFraud[] | null }) {
           </div>
         )}
         {tab === "complain" && (
-          <div className="space-y-2">
-            {[{ o: "Cattu A. Yani", k: "Service", s: "Open" }, { o: "Nordu Bengkayang", k: "Food Quality", s: "In Progress" }, { o: "Busari Desa", k: "Cleanliness", s: "Open" }, { o: "Cattu Canteen", k: "Price", s: "In Progress" }, { o: "Nordu Memambang", k: "Order Error", s: "Open" }].map((c, i) => (
-              <div key={i} className="rounded-lg border border-border/60 bg-muted/20 px-2.5 py-2">
-                <div className="flex items-center gap-2">
-                  <span className="min-w-0 flex-1 truncate text-[12px] font-medium text-foreground">{c.o}</span>
-                  <Badge tone={c.s === "Open" ? "danger" : "warning"}>{c.s}</Badge>
+          complaints.length === 0 ? (
+            <div className="grid place-items-center py-8 text-center text-[12px] text-muted-foreground"><span className="flex flex-col items-center gap-1.5"><CheckCircle2 className="size-5 text-emerald-500" /> Tidak ada komplain terbuka</span></div>
+          ) : (
+            <div className="space-y-2">
+              {complaints.map((c, i) => (
+                <div key={i} className="rounded-lg border border-border/60 bg-muted/20 px-2.5 py-2">
+                  <div className="flex items-center gap-2">
+                    <span className="min-w-0 flex-1 truncate text-[12px] font-medium text-foreground">{c.outlet}</span>
+                    <Badge tone={c.status === "Open" ? "danger" : "warning"}>{c.status}</Badge>
+                  </div>
+                  <p className="mt-0.5 truncate text-[11px] text-muted-foreground">{c.category} · {c.note}</p>
                 </div>
-                <p className="mt-0.5 text-[11px] text-muted-foreground">{c.k}</p>
-              </div>
-            ))}
-          </div>
+              ))}
+            </div>
+          )
         )}
         {tab === "bersih" && (
           <div className="space-y-2">
             <div className="flex items-center justify-between rounded-lg border border-border/60 bg-muted/20 px-2.5 py-2 text-[12px]">
-              <span className="text-muted-foreground">Sudah checklist hari ini</span><span className="font-semibold text-foreground">28 / 32 outlet</span>
+              <span className="text-muted-foreground">Sudah checklist hari ini</span>
+              <span className="font-semibold text-foreground">{hygiene ? `${hygiene.checkedToday} / ${hygiene.totalOutlets} outlet` : "—"}</span>
             </div>
-            {[{ o: "Cattu A. Yani", a: "Kitchen", ok: true }, { o: "Nordu Bengkayang", a: "Toilet", ok: false }, { o: "Busari Desa", a: "Dining Area", ok: true }, { o: "Cattu Sohor", a: "Bar", ok: true }].map((x, i) => (
-              <div key={i} className="flex items-center gap-2 rounded-lg border border-border/60 bg-muted/20 px-2.5 py-2 text-[12px]">
-                {x.ok ? <CheckCircle2 className="size-4 shrink-0 text-emerald-500" /> : <XCircle className="size-4 shrink-0 text-red-500" />}
-                <span className="min-w-0 flex-1 truncate text-foreground">{x.o}</span>
-                <span className="shrink-0 text-[11px] text-muted-foreground">{x.a}</span>
-              </div>
-            ))}
+            {(hygiene?.rows ?? []).length === 0 ? (
+              <div className="grid place-items-center py-6 text-center text-[12px] text-muted-foreground">Belum ada checklist</div>
+            ) : (
+              hygiene!.rows.map((x, i) => (
+                <div key={i} className="flex items-center gap-2 rounded-lg border border-border/60 bg-muted/20 px-2.5 py-2 text-[12px]">
+                  {x.ok ? <CheckCircle2 className="size-4 shrink-0 text-emerald-500" /> : <XCircle className="size-4 shrink-0 text-red-500" />}
+                  <span className="min-w-0 flex-1 truncate text-foreground">{x.outlet}</span>
+                  <span className="shrink-0 text-[11px] text-muted-foreground">{x.supervisor}</span>
+                </div>
+              ))
+            )}
           </div>
         )}
         {tab === "event" && (
