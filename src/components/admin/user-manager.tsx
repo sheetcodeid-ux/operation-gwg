@@ -4,6 +4,7 @@ import * as React from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
+  Building2,
   Check,
   Clock,
   Eye,
@@ -16,6 +17,7 @@ import {
   Pencil,
   Plus,
   RotateCcw,
+  Save,
   Search,
   Shield,
   ShieldCheck,
@@ -35,6 +37,7 @@ import {
   updateGrantsAction,
   updateUserAction,
 } from "@/lib/actions/users";
+import { deleteDepartmentAction, saveDepartmentAction } from "@/lib/actions/org-departments";
 import { useI18n } from "@/lib/i18n/provider";
 import { Avatar } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
@@ -69,6 +72,12 @@ export interface OutletLite {
   areaId: string;
   areaName: string;
 }
+/** Admin-managed department → jabatan taxonomy (from the DB). */
+export interface OrgDept {
+  id: string;
+  name: string;
+  jabatan: string[];
+}
 
 const ROLE_TONE: Record<Role, Tone> = {
   super_admin: "brand",
@@ -87,34 +96,38 @@ const ROLE_TONE: Record<Role, Tone> = {
   member: "neutral",
 };
 const ROLES = (Object.keys(ROLE_LABEL) as Role[]).filter((r) => r !== "member");
-/** All roles for the form dropdown — generic member first, then specific ones. */
-const ALL_ROLES: Role[] = ["member", ...ROLES];
 // Every sidebar division (built-in role-divisions + department-aligned ones).
 const ALL_DIVISIONS = builtInDivisions() as Division[];
-/** Head-Office departments (GWG org). Free-text is still allowed on top of these. */
-const HO_DEPARTMENTS = [
-  "Finance Accounting Tax",
-  "Human Capital",
-  "Operational",
-  "Creative Director",
-  "Supply Chain",
-  "Business Development",
-  "R&D",
-];
+/** Built-in GWG Head-Office structure: department → its jabatan (job titles /
+ *  sub-teams). Supervisor is NOT here — it stands by at the branches, not HO.
+ *  Admins can extend this via "Kelola Departemen"; those additions merge on top. */
+const HO_STRUCTURE: Record<string, string[]> = {
+  "Finance Accounting Tax": ["Head", "Finance", "Treasury", "Accounting & Verification", "Tax", "AR Staff", "AP Staff"],
+  "Human Capital": ["Head", "Talent Acquisition", "L&D dan Comben", "Administration"],
+  Operational: ["Head", "Coordinator Area East", "Coordinator Area West", "System Support"],
+  "Creative Director": ["Head", "Graphic Designer", "Photo/Video"],
+  "Supply Chain": ["Head", "Driver", "Warehouse Kering", "Warehouse Basah", "Packing & Helper", "Admin Penjualan", "Admin Pembelian"],
+  "Business Development": ["Head", "Expansion & Partnership", "Project & Asset Management", "Management Investasi"],
+  "R&D": ["Head"],
+};
+const HO_DEPARTMENTS = Object.keys(HO_STRUCTURE);
 // Roles a division exposes for manual pick (the generic `member` is auto-assigned).
 const rolesInDivision = (d: Division) => ROLES.filter((r) => ROLE_DIVISION[r] === d);
 /** Merge + de-dupe department suggestions for the pickers. */
 const deptSuggestions = (extra: string[], current?: string) =>
   [...new Set([...HO_DEPARTMENTS, ...ALL_DIVISIONS, ...extra, ...(current ? [current] : [])].filter(Boolean))];
-/** Common job titles / sub-teams (GWG HO structure) — free-text still allowed. */
-const JABATAN_SUGGESTIONS = [
-  "Head",
-  "Finance", "Treasury", "Accounting & Verification", "Tax", "AR Staff", "AP Staff",
-  "Talent Acquisition", "L&D dan Comben", "Administration",
-  "Coordinator Area East", "Coordinator Area West", "System Support",
-  "Graphic Designer", "Photo/Video",
-  "Driver", "Warehouse Kering", "Warehouse Basah", "Packing & Helper", "Admin Penjualan", "Admin Pembelian",
-  "Expansion & Partnership", "Project & Asset Management", "Management Investasi",
+/** Jabatan list for a department: built-in HO structure ∪ admin-managed taxonomy.
+ *  Falls back to every known jabatan when the department has none defined yet. */
+function jabatanFor(department: string, orgDepts: OrgDept[], current?: string): string[] {
+  const managed = orgDepts.find((d) => d.name === department)?.jabatan ?? [];
+  const specific = [...(HO_STRUCTURE[department] ?? []), ...managed];
+  const all = specific.length ? specific : allJabatan(orgDepts);
+  const uniq = [...new Set([...all, ...(current ? [current] : [])].filter(Boolean))];
+  return uniq;
+}
+/** Every jabatan known across built-in + managed departments (flat fallback). */
+const allJabatan = (orgDepts: OrgDept[]) => [
+  ...new Set([...Object.values(HO_STRUCTURE).flat(), ...orgDepts.flatMap((d) => d.jabatan)]),
 ];
 const needsOutlets = (r: Role) => r === "area_coordinator" || r === "head_operation" || r === "pos_operation";
 const isMulti = (r: Role) => r === "area_coordinator";
@@ -132,12 +145,15 @@ export function UserManager({
   outlets,
   navExtra,
   departmentOptions = [],
+  orgDepts = [],
   initialPrefill,
 }: {
   users: UserRow[];
   outlets: OutletLite[];
   navExtra?: NavExtra;
   departmentOptions?: string[];
+  /** Admin-managed department → jabatan taxonomy (feeds the Add User comboboxes). */
+  orgDepts?: OrgDept[];
   /** From "Buatkan Akun" on the Departemen page — opens the create form filled. */
   initialPrefill?: UserPrefill;
 }) {
@@ -146,6 +162,7 @@ export function UserManager({
   setNavExtras(navExtra ?? { divisions: [] });
   const router = useRouter();
   const [creating, setCreating] = React.useState(false);
+  const [managingDepts, setManagingDepts] = React.useState(false);
   const [prefill, setPrefill] = React.useState<UserPrefill | undefined>(undefined);
   const [editUser, setEditUser] = React.useState<UserRow | null>(null);
   const [rolesUser, setRolesUser] = React.useState<UserRow | null>(null);
@@ -196,9 +213,14 @@ export function UserManager({
           <h1 className="text-2xl font-semibold text-foreground">User Management</h1>
           <p className="mt-0.5 text-sm text-muted-foreground">Kelola akun pengguna dan hak aksesnya per divisi</p>
         </div>
-        <Button onClick={() => { setPrefill(undefined); setCreating(true); }}>
-          <Plus className="size-4" /> Add User
-        </Button>
+        <div className="flex flex-wrap items-center gap-2">
+          <Button variant="outline" onClick={() => setManagingDepts(true)}>
+            <Building2 className="size-4" /> Kelola Departemen
+          </Button>
+          <Button onClick={() => { setPrefill(undefined); setCreating(true); }}>
+            <Plus className="size-4" /> Add User
+          </Button>
+        </div>
       </div>
 
       {/* Stat cards — same model as the Operation dashboard KPI cards. */}
@@ -324,10 +346,11 @@ export function UserManager({
         </div>
       </div>
 
-      {creating && <UserFormPanel mode="create" outlets={outlets} prefill={prefill} departmentOptions={departmentOptions} onClose={() => { setCreating(false); setPrefill(undefined); }} />}
-      {editUser && <UserFormPanel mode="edit" user={editUser} outlets={outlets} departmentOptions={departmentOptions} onClose={() => setEditUser(null)} />}
+      {creating && <UserFormPanel mode="create" outlets={outlets} prefill={prefill} departmentOptions={departmentOptions} orgDepts={orgDepts} onClose={() => { setCreating(false); setPrefill(undefined); }} />}
+      {editUser && <UserFormPanel mode="edit" user={editUser} outlets={outlets} departmentOptions={departmentOptions} orgDepts={orgDepts} onClose={() => setEditUser(null)} />}
       {rolesUser && <AssignRolesPanel user={rolesUser} onClose={() => setRolesUser(null)} />}
       {accessUser && <AccessPanel user={accessUser} onClose={() => setAccessUser(null)} />}
+      {managingDepts && <DeptManagerPanel orgDepts={orgDepts} onClose={() => setManagingDepts(false)} />}
     </>
   );
 }
@@ -410,6 +433,7 @@ export function UserFormPanel({
   outlets,
   prefill,
   departmentOptions = [],
+  orgDepts = [],
   onClose,
 }: {
   mode: "create" | "edit";
@@ -417,6 +441,7 @@ export function UserFormPanel({
   outlets: OutletLite[];
   prefill?: UserPrefill;
   departmentOptions?: string[];
+  orgDepts?: OrgDept[];
   onClose: () => void;
 }) {
   const router = useRouter();
@@ -444,9 +469,22 @@ export function UserFormPanel({
 
   const isEdit = mode === "edit";
   const name = `${first} ${last}`.trim();
-  const deptListId = React.useId();
-  const jabatanListId = React.useId();
-  const suggestions = deptSuggestions(departmentOptions, department);
+  const deptOptions = React.useMemo(
+    () => deptSuggestions(departmentOptions, department).map((d) => ({ value: d, label: d })),
+    [departmentOptions, department],
+  );
+  // Jabatan choices follow the selected department (built-in HO + managed taxonomy).
+  const jabatanOptions = React.useMemo(
+    () => [{ value: "", label: "— Tanpa jabatan —" }, ...jabatanFor(department, orgDepts, jabatan).map((j) => ({ value: j, label: j }))],
+    [department, orgDepts, jabatan],
+  );
+  // Roles come from the sidebar: a department that maps to a division exposes that
+  // division's roles; otherwise only the generic member (kosong) is offered.
+  const roleOptions = React.useMemo(() => {
+    const list: Role[] = ["member", ...rolesInDivision(department as Division)];
+    if (role && !list.includes(role)) list.unshift(role); // keep current selection valid on edit
+    return list.map((r) => ({ value: r, label: ROLE_LABEL[r] }));
+  }, [department, role]);
 
   function onFile(e: React.ChangeEvent<HTMLInputElement>) {
     const f = e.target.files?.[0];
@@ -549,20 +587,34 @@ export function UserFormPanel({
 
         <div className="grid grid-cols-2 gap-3">
           <Field label="Departement *">
-            <Input list={deptListId} value={department} onChange={(e) => setDepartment(e.target.value)} placeholder="Pilih atau ketik departemen…" />
-            <datalist id={deptListId}>
-              {suggestions.map((d) => (
-                <option key={d} value={d} />
-              ))}
-            </datalist>
+            <Combobox
+              portal
+              matchTriggerWidth
+              value={department}
+              onChange={(v) => {
+                setDepartment(v);
+                // Reset jabatan (list changes) and drop a role that no longer fits.
+                setJabatan("");
+                if (role !== "member" && !rolesInDivision(v as Division).includes(role)) {
+                  setRole("member");
+                  setSelected([]);
+                }
+              }}
+              options={deptOptions}
+              placeholder="Pilih departemen…"
+              searchPlaceholder="Cari departemen…"
+            />
           </Field>
           <Field label="Jabatan">
-            <Input list={jabatanListId} value={jabatan} onChange={(e) => setJabatan(e.target.value)} placeholder="mis. Treasury, Driver…" />
-            <datalist id={jabatanListId}>
-              {JABATAN_SUGGESTIONS.map((j) => (
-                <option key={j} value={j} />
-              ))}
-            </datalist>
+            <Combobox
+              portal
+              matchTriggerWidth
+              value={jabatan}
+              onChange={setJabatan}
+              options={jabatanOptions}
+              placeholder="Pilih jabatan…"
+              searchPlaceholder="Cari jabatan…"
+            />
           </Field>
         </div>
         <Field label="Role (Akses) *">
@@ -574,11 +626,11 @@ export function UserFormPanel({
               setRole(v as Role);
               setSelected([]);
             }}
-            options={ALL_ROLES.map((r) => ({ value: r, label: ROLE_LABEL[r] }))}
+            options={roleOptions}
           />
         </Field>
         <p className="text-[11px] text-muted-foreground">
-          <b>Departement</b> = grup organisasi (boleh ketik baru) · <b>Jabatan</b> = sub-tim/posisi · <b>Role</b> menentukan menu/akses (pilih <i>{ROLE_LABEL.member}</i> untuk staf umum).
+          <b>Departement</b> &amp; <b>Jabatan</b> diambil dari daftar <i>Kelola Departemen</i> · <b>Role</b> otomatis mengikuti sidebar departemen (pilih <i>{ROLE_LABEL.member}</i> bila departemen belum punya menu di sidebar).
         </p>
 
         {role && needsOutlets(role as Role) && <OutletPicker outlets={outlets} multi={isMulti(role as Role)} selected={selected} onChange={setSelected} />}
@@ -763,6 +815,187 @@ export function AccessPanel({ user, onClose }: { user: UserRow; onClose: () => v
       <SlideOverFooter onClose={onClose} pending={pending}>
         <Button onClick={submit} disabled={pending}>
           {pending ? <Loader2 className="size-4 animate-spin" /> : <KeyRound className="size-4" />} Simpan Akses
+        </Button>
+      </SlideOverFooter>
+    </SlideOver>
+  );
+}
+
+/** "Kelola Departemen & Jabatan" — define a department and the jabatan under it.
+ *  Saved entries feed the Add User Departement/Jabatan comboboxes automatically. */
+function DeptManagerPanel({ orgDepts, onClose }: { orgDepts: OrgDept[]; onClose: () => void }) {
+  const router = useRouter();
+  const [pending, start] = React.useTransition();
+  const [name, setName] = React.useState("");
+  const [jabatan, setJabatan] = React.useState<string[]>([""]);
+
+  const trimmed = name.trim();
+  const isExisting = orgDepts.some((d) => d.name.trim().toLowerCase() === trimmed.toLowerCase());
+
+  const reset = () => {
+    setName("");
+    setJabatan([""]);
+  };
+  const loadDept = (d: OrgDept) => {
+    setName(d.name);
+    setJabatan(d.jabatan.length ? [...d.jabatan] : [""]);
+  };
+  const loadHO = (dep: string) => {
+    setName(dep);
+    setJabatan([...(HO_STRUCTURE[dep] ?? [""])]);
+  };
+  const setJab = (i: number, v: string) => setJabatan((a) => a.map((x, idx) => (idx === i ? v : x)));
+  const addJab = () => setJabatan((a) => [...a, ""]);
+  const removeJab = (i: number) => setJabatan((a) => (a.length > 1 ? a.filter((_, idx) => idx !== i) : [""]));
+
+  function save() {
+    if (!trimmed) {
+      toast.error("Nama departemen wajib diisi.");
+      return;
+    }
+    start(async () => {
+      const res = await saveDepartmentAction({ name: trimmed, jabatan });
+      if (res?.error) {
+        toast.error(res.error);
+        return;
+      }
+      toast.success(`Departemen "${trimmed}" disimpan`);
+      reset();
+      router.refresh();
+    });
+  }
+
+  function del(d: OrgDept) {
+    if (typeof window !== "undefined" && !window.confirm(`Hapus departemen "${d.name}" dari daftar?`)) return;
+    start(async () => {
+      const res = await deleteDepartmentAction(d.id);
+      if (res?.error) {
+        toast.error(res.error);
+        return;
+      }
+      toast.success("Departemen dihapus");
+      router.refresh();
+    });
+  }
+
+  return (
+    <SlideOver title="Kelola Departemen & Jabatan" subtitle="Tambah departemen lalu isi jabatannya — otomatis masuk ke Add User" onClose={onClose}>
+      <div className="flex-1 space-y-5 overflow-y-auto p-5">
+        {/* Builder */}
+        <div className="space-y-3 rounded-xl border border-border p-4">
+          <Field label="Nama Departemen *">
+            <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="mis. Finance Accounting Tax" />
+          </Field>
+          {isExisting && trimmed && (
+            <p className="text-[11px] text-amber-600 dark:text-amber-400">
+              Departemen ini sudah ada — menyimpan akan memperbarui daftar jabatannya.
+            </p>
+          )}
+
+          <div>
+            <Label>Jabatan</Label>
+            <div className="mt-1.5 space-y-2">
+              {jabatan.map((j, i) => (
+                <div key={i} className="flex items-center gap-2">
+                  <Input value={j} onChange={(e) => setJab(i, e.target.value)} placeholder={`Jabatan ${i + 1}, mis. Treasury`} />
+                  <button
+                    type="button"
+                    onClick={() => removeJab(i)}
+                    className="grid size-9 shrink-0 place-items-center rounded-lg border border-border text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+                    aria-label="Hapus jabatan"
+                  >
+                    <X className="size-4" />
+                  </button>
+                </div>
+              ))}
+            </div>
+            <Button type="button" variant="outline" size="sm" className="mt-2" onClick={addJab}>
+              <Plus className="size-4" /> Tambah Jabatan
+            </Button>
+          </div>
+
+          <div className="flex items-center gap-2 pt-1">
+            <Button onClick={save} disabled={pending}>
+              {pending ? <Loader2 className="size-4 animate-spin" /> : <Save className="size-4" />} Simpan Departemen
+            </Button>
+            {(trimmed || jabatan.some(Boolean)) && (
+              <Button variant="ghost" size="sm" onClick={reset} disabled={pending}>
+                Bersihkan
+              </Button>
+            )}
+          </div>
+        </div>
+
+        {/* Quick prefill from the built-in Head-Office structure */}
+        <div>
+          <Label>Struktur Head Office (klik untuk isi cepat)</Label>
+          <div className="mt-2 flex flex-wrap gap-2">
+            {HO_DEPARTMENTS.map((dep) => (
+              <button
+                key={dep}
+                type="button"
+                onClick={() => loadHO(dep)}
+                className="rounded-full border border-border px-3 py-1 text-xs text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+              >
+                {dep}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* Saved (admin-managed) departments */}
+        <div>
+          <Label>Departemen Tersimpan ({orgDepts.length})</Label>
+          {orgDepts.length === 0 ? (
+            <p className="mt-2 rounded-xl border border-dashed border-border px-3 py-6 text-center text-xs text-muted-foreground">
+              Belum ada departemen tambahan. Buat di atas — hasilnya langsung tampil di dropdown Add User.
+            </p>
+          ) : (
+            <div className="mt-2 space-y-2">
+              {orgDepts.map((d) => (
+                <div key={d.id} className="rounded-xl border border-border p-3">
+                  <div className="flex items-start justify-between gap-2">
+                    <p className="font-medium text-foreground">{d.name}</p>
+                    <div className="flex shrink-0 items-center gap-1">
+                      <button
+                        type="button"
+                        onClick={() => loadDept(d)}
+                        className="rounded-lg px-2 py-1 text-xs text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+                      >
+                        Muat
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => del(d)}
+                        disabled={pending}
+                        className="grid size-7 place-items-center rounded-lg text-red-600 transition-colors hover:bg-red-500/10 disabled:opacity-50 dark:text-red-400"
+                        aria-label="Hapus departemen"
+                      >
+                        <Trash2 className="size-3.5" />
+                      </button>
+                    </div>
+                  </div>
+                  {d.jabatan.length > 0 ? (
+                    <div className="mt-2 flex flex-wrap gap-1.5">
+                      {d.jabatan.map((j) => (
+                        <span key={j} className="rounded-full bg-muted px-2 py-0.5 text-[11px] text-muted-foreground">
+                          {j}
+                        </span>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="mt-1 text-[11px] text-muted-foreground">Belum ada jabatan.</p>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+
+      <SlideOverFooter onClose={onClose} pending={pending}>
+        <Button variant="outline" onClick={onClose}>
+          Selesai
         </Button>
       </SlideOverFooter>
     </SlideOver>
