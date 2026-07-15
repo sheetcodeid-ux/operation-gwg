@@ -30,7 +30,7 @@ export default async function AssessmentPage() {
   const evaluator = await getMyEvaluator();
   const isAdmin = user.role === "super_admin";
   const [orgExtra, schedule] = await Promise.all([getOrgExtra(), getAssessmentSchedule()]);
-  const allowed = canAccessAssessment({ role: user.role, jabatan: user.jabatan }, schedule);
+  const allowed = canAccessAssessment({ role: user.role, jabatan: user.jabatan, department: user.department }, schedule);
   const phase = assessmentPhase(schedule);
 
   return (

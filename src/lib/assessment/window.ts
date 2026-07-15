@@ -7,6 +7,7 @@ export type AssessmentPhase = "before" | "open" | "closed";
 export interface AccessUser {
   role: Role;
   jabatan?: string | null;
+  department?: string | null;
 }
 
 export function assessmentPhase(schedule: AssessmentSchedule, now: number = Date.now()): AssessmentPhase {
@@ -18,14 +19,22 @@ export function assessmentPhase(schedule: AssessmentSchedule, now: number = Date
 }
 
 /** A Head / Director / Legal — keeps assessment access after the window closes
- *  (they run the interviews). Director = super_admin. */
+ *  (they run the interviews). Detected by role OR by jabatan/department, since
+ *  most Head-Office accounts are generic `member` with their placement in the
+ *  department/jabatan fields. */
 export function isPrivilegedEvaluator(user: AccessUser): boolean {
+  const j = (user.jabatan ?? "").trim().toLowerCase();
+  const d = (user.department ?? "").trim().toLowerCase();
   return (
     user.role === "super_admin" ||
     user.role === "legal" ||
     user.role === "assessor" ||
     user.role.startsWith("head_") ||
-    (!!user.jabatan && /^\s*head\b/i.test(user.jabatan))
+    /^head\b/.test(j) ||
+    j === "director" ||
+    j === "legal" ||
+    d === "legal" ||
+    d === "management" // Director / Executive Assistant office
   );
 }
 

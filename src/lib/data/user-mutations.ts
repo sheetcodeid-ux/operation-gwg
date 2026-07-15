@@ -23,6 +23,7 @@ export async function createUser(input: {
   avatarUrl?: string | null;
   department?: string | null;
   jabatan?: string | null;
+  grants?: string[];
 }): Promise<UserProfile> {
   const user: UserProfile = {
     id: nextId(),
@@ -36,6 +37,7 @@ export async function createUser(input: {
     country: input.country ?? null,
     department: input.department ?? null,
     jabatan: input.jabatan ?? null,
+    grants: input.grants ?? [],
     active: true,
     createdAt: new Date().toISOString(),
   };

@@ -193,6 +193,22 @@ export function setNavExtras(extra: NavExtra) {
 /** The admin-defined divisions currently merged (for the management UI). */
 export const extraDivisions = (): NavExtraDivision[] => EXTRA_DIVISIONS;
 
+/** Every assignable sidebar division + its menus (built-in + admin-defined).
+ *  Used by the "Role (Akses)" picker in Add User: choosing a division grants
+ *  the user access to that sidebar's menus. */
+export function assignableDivisions(): { name: string; menus: MenuKey[] }[] {
+  return [
+    ...DIVISION_MENUS.map((d) => ({ name: d.division as string, menus: d.menus })),
+    ...EXTRA_DIVISIONS.map((d) => ({ name: d.name, menus: d.menus })),
+  ];
+}
+
+/** Per-user grants that unlock a whole sidebar division ("<div>:<menu>" each). */
+export function grantsForDivision(name: string): string[] {
+  const d = assignableDivisions().find((x) => x.name === name);
+  return d ? d.menus.map((m) => `${name}:${m}`) : [];
+}
+
 /** Build the NavItems for the admin-defined divisions (custom sidebar groups). */
 function extraNavItems(): NavItem[] {
   return EXTRA_DIVISIONS.flatMap((div) => {
