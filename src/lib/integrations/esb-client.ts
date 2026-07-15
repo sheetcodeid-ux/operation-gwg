@@ -53,6 +53,26 @@ function absorbCookies(jar: Map<string, string>, res: Response): number {
 }
 const cookieHeader = (jar: Map<string, string>) => [...jar].map(([k, v]) => `${k}=${v}`).join("; ");
 
+const decodeEntities = (s: string) =>
+  s.replace(/&amp;/g, "&").replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&quot;/g, '"').replace(/&#39;/g, "'");
+
+/** All <input name=value> pairs on a page (skips submit/button) — used to submit
+ *  the login form with EXACTLY the fields it expects (hidden csrf/challenge/…). */
+function parseInputs(html: string): Record<string, string> {
+  const out: Record<string, string> = {};
+  const re = /<input\b[^>]*>/gi;
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(html))) {
+    const tag = m[0];
+    const name = /\bname="([^"]*)"/.exec(tag)?.[1];
+    if (!name) continue;
+    const type = /\btype="([^"]*)"/.exec(tag)?.[1]?.toLowerCase();
+    if (type === "submit" || type === "button") continue;
+    out[name] = decodeEntities(/\bvalue="([^"]*)"/.exec(tag)?.[1] ?? "");
+  }
+  return out;
+}
+
 async function login(): Promise<Session> {
   if (!USER || !PASS) throw new Error("ESB credentials not configured");
   const jar = new Map<string, string>();
@@ -63,10 +83,16 @@ async function login(): Promise<Session> {
   const csrf = CSRF_META.exec(loginHtml)?.[1] ?? CSRF_INPUT.exec(loginHtml)?.[1];
   if (!csrf) throw new Error(`ESB: CSRF token not found (GET ${g.status}, setCookie=${nGet}, cookies=[${[...jar.keys()].join(",")}])`);
 
-  // Plain browser-style form POST (NOT XHR) so Yii performs the real login and
-  // returns the auth cookies via a 302 — an X-Requested-With here would trigger
-  // ajax validation only and set no session.
-  const body = new URLSearchParams({ "_csrf-esb-fnb-backend": csrf, username: USER, password: PASS, challengeToken: "" });
+  // Submit EXACTLY the login form's fields (every hidden input: csrf, challenge
+  // token, feature flags, …), overriding only the credentials — so nothing the
+  // server validates is missing. Plain browser-style POST (not XHR).
+  const fields = parseInputs(loginHtml);
+  const userKey = Object.keys(fields).find((k) => /username/i.test(k)) ?? "username";
+  const passKey = Object.keys(fields).find((k) => /password/i.test(k)) ?? "password";
+  fields[userKey] = USER;
+  fields[passKey] = PASS;
+  if (!fields["_csrf-esb-fnb-backend"]) fields["_csrf-esb-fnb-backend"] = csrf;
+  const body = new URLSearchParams(fields);
   const p = await fetch(`${BASE}/site/login`, {
     method: "POST",
     redirect: "manual",
@@ -89,9 +115,10 @@ async function login(): Promise<Session> {
     absorbCookies(jar, f);
   }
   if (!jar.has("_jwt-token") && !jar.has("_identity")) {
-    const snippet = pBody.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim().slice(0, 180);
+    const err = /class="[^"]*help-block[^"]*"[^>]*>([^<]+)</i.exec(pBody)?.[1]?.trim();
+    const snippet = pBody.replace(/<style[\s\S]*?<\/style>/gi, " ").replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim().slice(0, 160);
     throw new Error(
-      `ESB login failed [GET ${g.status} csrf=${csrf ? "y" : "n"} setCookieGET=${nGet}; POST ${p.status} loc=${loc ?? "-"} setCookiePOST=${nPost}; jar=[${[...jar.keys()].join(",")}]; body: ${snippet}]`,
+      `ESB login failed [POST ${p.status} loc=${loc ?? "-"} setCookiePOST=${nPost}; sent=[${Object.keys(fields).join(",")}]; err=${err ?? "-"}; body: ${snippet}]`,
     );
   }
 
