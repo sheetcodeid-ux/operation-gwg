@@ -33,8 +33,10 @@ export function FraudAnalysis({ initial, initialDate }: { initial: FraudReport; 
   const load = React.useCallback((p: FraudPeriod, d: string) => {
     start(async () => {
       const res = await fraudReportAction(p, d);
-      if ("error" in res) {
-        toast.error(res.error);
+      // A FraudReport can itself carry an `error` field, so discriminate on a
+      // required report field (configured) rather than the presence of `error`.
+      if (!("configured" in res)) {
+        toast.error((res as { error: string }).error);
         return;
       }
       setReport(res);
@@ -128,7 +130,13 @@ export function FraudAnalysis({ initial, initialDate }: { initial: FraudReport; 
       {!report.configured && (
         <div className="glass flex items-center gap-3 rounded-2xl border border-amber-500/30 bg-amber-500/5 p-4 text-sm">
           <AlertTriangle className="size-5 shrink-0 text-amber-500" />
-          <p>{report.error ?? "Integrasi POS belum aktif."} Data void/cancel diambil dari sistem POS — hubungi admin untuk mengaktifkan.</p>
+          <p>{report.error ?? "Integrasi belum aktif."} Data void/cancel diambil dari sistem POS/ESB — hubungi admin untuk mengaktifkan.</p>
+        </div>
+      )}
+      {report.configured && report.error && (
+        <div className="glass flex items-center gap-3 rounded-2xl border border-red-500/30 bg-red-500/5 p-4 text-sm">
+          <AlertTriangle className="size-5 shrink-0 text-red-500" />
+          <p><span className="font-medium text-foreground">Gagal memuat {report.source === "esb" ? "data ESB" : "data POS"}:</span> {report.error}</p>
         </div>
       )}
 

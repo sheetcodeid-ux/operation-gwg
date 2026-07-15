@@ -125,22 +125,23 @@ export async function getFraudReport(period: FraudPeriod, date: string): Promise
 
   // Prefer ESB — it gives real per-outlet nominal + order-level detail. Falls
   // back to the POS dashboard aggregate if ESB isn't configured or errors.
+  // ESB is authoritative when configured (order-level detail). Its errors are
+  // surfaced (not hidden behind a POS fallback) so misconfig is diagnosable.
   if (esbConfigured()) {
     try {
       const rows = await esbFetchCancelRows(r.from, r.to);
       return esbReport(period, r, rows);
     } catch (e) {
-      if (!gwgmanageConfigured()) {
-        return base(period, r, { configured: true, error: e instanceof Error ? e.message : "Gagal memuat data ESB." });
-      }
-      // else fall through to the POS aggregate below
+      return base(period, r, { configured: true, source: "esb", error: e instanceof Error ? e.message : "Gagal memuat data ESB." });
     }
   }
 
   if (!gwgmanageConfigured()) return base(period, r, { error: "Integrasi POS belum dikonfigurasi." });
 
   try {
-    const range = { dateFrom: r.from, dateTo: r.to };
+    // The POS dashboard takes period=daily&date for a single day; a range uses
+    // dateFrom/dateTo (weekly/monthly).
+    const range = r.from === r.to ? { date: r.from } : { dateFrom: r.from, dateTo: r.to };
     const [globalRes, branches] = await Promise.all([fetchErpDashboard(range), fetchBranches()]);
     const totalVoid = globalRes.totalVoid;
     const totalCancel = globalRes.totalCancelled;
