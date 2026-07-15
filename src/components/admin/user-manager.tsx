@@ -39,6 +39,7 @@ import {
   updateUserAction,
 } from "@/lib/actions/users";
 import { deleteDepartmentAction, saveDepartmentAction } from "@/lib/actions/org-departments";
+import { listCoordinatorOutlets, type AssignableOutlet } from "@/lib/actions/outlets";
 import { useI18n } from "@/lib/i18n/provider";
 import { Avatar } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
@@ -123,8 +124,6 @@ function jabatanFor(department: string, orgDepts: OrgDept[], current?: string): 
 const allJabatan = (orgDepts: OrgDept[]) => [
   ...new Set([...Object.values(HO_STRUCTURE).flat(), ...orgDepts.flatMap((d) => d.jabatan)]),
 ];
-const needsOutlets = (r: Role) => r === "area_coordinator" || r === "head_operation" || r === "pos_operation";
-const isMulti = (r: Role) => r === "area_coordinator";
 const fmtDate = (iso: string) => {
   const d = new Date(iso);
   return Number.isNaN(d.getTime()) ? "—" : d.toLocaleDateString("id-ID", { day: "numeric", month: "short", year: "numeric" });
@@ -492,9 +491,31 @@ export function UserFormPanel({
     reader.readAsDataURL(f);
   }
 
-  // Super Admin keeps its role on edit; everyone else is a generic member whose
-  // page access is driven entirely by the chosen sidebar division (grants).
-  const finalRole: Role = isEdit && user?.role === "super_admin" ? "super_admin" : "member";
+  // A Coordinator Area account (jabatan "Coordinator Area East/West") is scoped
+  // to specific outlets → it becomes the area_coordinator role with an outlet picker.
+  const isCoordinator = /coordinator\s*area/i.test(jabatan);
+  // Super Admin keeps its role on edit; a Coordinator Area is area_coordinator;
+  // everyone else is a generic member (access via the chosen sidebar division).
+  const finalRole: Role = isEdit && user?.role === "super_admin" ? "super_admin" : isCoordinator ? "area_coordinator" : "member";
+
+  // Outlets for the coordinator picker — sourced from the POS branches API,
+  // excluding outlets already held by another coordinator. Loaded lazily when
+  // the jabatan is a Coordinator Area.
+  const [coordOutlets, setCoordOutlets] = React.useState<AssignableOutlet[] | null>(null);
+  const [loadingOutlets, setLoadingOutlets] = React.useState(false);
+  React.useEffect(() => {
+    if (!isCoordinator || coordOutlets !== null) return;
+    let live = true;
+    setLoadingOutlets(true);
+    listCoordinatorOutlets(user?.id).then((res) => {
+      if (!live) return;
+      if ("outlets" in res) setCoordOutlets(res.outlets);
+      setLoadingOutlets(false);
+    });
+    return () => {
+      live = false;
+    };
+  }, [isCoordinator, coordOutlets, user?.id]);
 
   function submit() {
     if (!name) return toast.error("Nama depan wajib diisi.");
@@ -629,7 +650,14 @@ export function UserFormPanel({
           <b>Departement</b> &amp; <b>Jabatan</b> = penempatan organisasi (untuk assessment &amp; daftar nama). <b>Role (Akses)</b> = sidebar yang bisa dibuka — mis. pilih <i>Finance</i> agar bisa akses menu Finance. Tidak memengaruhi akses <b>Assessment</b> (semua akun HO tetap bisa).
         </p>
 
-        {finalRole !== "member" && needsOutlets(finalRole) && <OutletPicker outlets={outlets} multi={isMulti(finalRole)} selected={selected} onChange={setSelected} />}
+        {isCoordinator && (
+          <CoordinatorOutletPicker
+            outlets={coordOutlets ?? outlets.map((o) => ({ id: o.id, name: o.name }))}
+            loading={loadingOutlets && coordOutlets === null}
+            selected={selected}
+            onChange={setSelected}
+          />
+        )}
       </div>
 
       <SlideOverFooter onClose={onClose} pending={pending}>
@@ -1034,49 +1062,57 @@ function SlideOverFooter({ onClose, pending, children }: { onClose: () => void; 
   );
 }
 
-function OutletPicker({
+/** Multi-select outlets for a Coordinator Area. Options come from the POS
+ *  branches (via listCoordinatorOutlets); outlets already held by another
+ *  coordinator are excluded server-side, so what's shown is assignable. */
+function CoordinatorOutletPicker({
   outlets,
-  multi,
+  loading,
   selected,
   onChange,
 }: {
-  outlets: OutletLite[];
-  multi: boolean;
+  outlets: AssignableOutlet[];
+  loading: boolean;
   selected: string[];
   onChange: (ids: string[]) => void;
 }) {
   const [q, setQ] = React.useState("");
-  const filtered = outlets.filter(
-    (o) => o.name.toLowerCase().includes(q.toLowerCase()) || o.code.toLowerCase().includes(q.toLowerCase()),
-  );
-  function toggle(id: string) {
-    if (multi) onChange(selected.includes(id) ? selected.filter((x) => x !== id) : [...selected, id]);
-    else onChange([id]);
-  }
+  const filtered = outlets.filter((o) => o.name.toLowerCase().includes(q.toLowerCase()));
+  const toggle = (id: string) =>
+    onChange(selected.includes(id) ? selected.filter((x) => x !== id) : [...selected, id]);
   return (
-    <Field label={multi ? `Outlet Ditugaskan (${selected.length})` : "Outlet Ditugaskan"}>
+    <Field label={`Wilayah / Outlet Ditugaskan (${selected.length})`}>
+      <p className="mb-1.5 text-[11px] text-muted-foreground">
+        Outlet diambil dari sistem POS. Yang sudah dipegang koordinator lain tidak ditampilkan. Pilih 1 atau lebih.
+      </p>
       <Input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Cari outlet…" className="mb-2" />
       <div className="max-h-52 space-y-0.5 overflow-y-auto rounded-lg border border-border p-1">
-        {filtered.map((o) => {
-          const active = selected.includes(o.id);
-          return (
-            <button
-              key={o.id}
-              type="button"
-              onClick={() => toggle(o.id)}
-              className={cn(
-                "flex w-full items-center justify-between rounded-md px-2.5 py-1.5 text-left text-sm transition-colors",
-                active ? "bg-primary/15 text-foreground ring-1 ring-inset ring-primary/30" : "hover:bg-muted",
-              )}
-            >
-              <span className="truncate">
-                {o.name} <span className="text-muted-foreground">· {o.code}</span>
-              </span>
-              <span className="text-[11px] text-muted-foreground">{o.areaName}</span>
-            </button>
-          );
-        })}
-        {filtered.length === 0 && <p className="px-2 py-3 text-center text-xs text-muted-foreground">Tidak ada outlet</p>}
+        {loading ? (
+          <p className="flex items-center justify-center gap-2 px-2 py-4 text-center text-xs text-muted-foreground">
+            <Loader2 className="size-3.5 animate-spin" /> Memuat outlet dari POS…
+          </p>
+        ) : (
+          <>
+            {filtered.map((o) => {
+              const active = selected.includes(o.id);
+              return (
+                <button
+                  key={o.id}
+                  type="button"
+                  onClick={() => toggle(o.id)}
+                  className={cn(
+                    "flex w-full items-center justify-between rounded-md px-2.5 py-1.5 text-left text-sm transition-colors",
+                    active ? "bg-primary/15 text-foreground ring-1 ring-inset ring-primary/30" : "hover:bg-muted",
+                  )}
+                >
+                  <span className="truncate">{o.name}</span>
+                  {active && <Check className="size-4 shrink-0 text-primary" />}
+                </button>
+              );
+            })}
+            {filtered.length === 0 && <p className="px-2 py-3 text-center text-xs text-muted-foreground">Tidak ada outlet tersedia</p>}
+          </>
+        )}
       </div>
     </Field>
   );
