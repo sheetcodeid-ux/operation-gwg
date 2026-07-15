@@ -57,14 +57,16 @@ async function login(): Promise<Session> {
   const csrf = CSRF_META.exec(loginHtml)?.[1] ?? CSRF_INPUT.exec(loginHtml)?.[1];
   if (!csrf) throw new Error("ESB: CSRF token not found on login page");
 
+  // Plain browser-style form POST (NOT XHR) so Yii performs the real login and
+  // returns the auth cookies via a 302 — an X-Requested-With here would trigger
+  // ajax validation only and set no session.
   const body = new URLSearchParams({ "_csrf-esb-fnb-backend": csrf, username: USER, password: PASS, challengeToken: "" });
   const p = await fetch(`${BASE}/site/login`, {
     method: "POST",
     redirect: "manual",
     headers: {
       "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8",
-      "X-Requested-With": "XMLHttpRequest",
-      "X-Csrf-Token": csrf,
+      Accept: "text/html",
       Cookie: cookieHeader(jar),
       Referer: `${BASE}/site/login`,
     },
@@ -72,6 +74,15 @@ async function login(): Promise<Session> {
     cache: "no-store",
   });
   absorbCookies(jar, p);
+  // On success Yii 302-redirects; follow it once (with cookies) in case the auth
+  // cookies are only set on the redirected response.
+  if (!jar.has("_jwt-token") && !jar.has("_identity")) {
+    const loc = p.headers.get("location");
+    if (loc && (p.status === 301 || p.status === 302)) {
+      const f = await fetch(new URL(loc, BASE).toString(), { headers: { Cookie: cookieHeader(jar), Accept: "text/html" }, redirect: "manual", cache: "no-store" });
+      absorbCookies(jar, f);
+    }
+  }
   if (!jar.has("_jwt-token") && !jar.has("_identity")) {
     throw new Error("ESB login failed — check ESB_USERNAME / ESB_PASSWORD");
   }
