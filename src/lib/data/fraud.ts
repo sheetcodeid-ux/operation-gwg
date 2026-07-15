@@ -1,6 +1,8 @@
 import "server-only";
 
 import { fetchBranches, fetchErpDashboard, gwgmanageConfigured } from "@/lib/integrations/gwgmanage";
+import { esbConfigured, esbFetchCancelRows } from "@/lib/integrations/esb-client";
+import type { CancelDetailRow } from "@/lib/integrations/esb";
 
 /**
  * Fraud (Void & Cancel) analysis sourced from the POS dashboard endpoint.
@@ -25,19 +27,36 @@ export interface FraudOutletRow {
   voidAmount: number; // Rp
   cancelAmount: number; // Rp
 }
+/** A single void/cancel line-item (ESB order detail) for the drill-down. */
+export interface FraudOrder {
+  salesNumber: string;
+  menu: string;
+  category: string;
+  orderBy: string;
+  orderTime: string;
+  voidBy: string;
+  voidTime: string;
+  type: string; // Void | Cancel
+  notes: string;
+  qty: number;
+  total: number;
+}
 export interface FraudReport {
   configured: boolean;
   period: FraudPeriod;
   from: string;
   to: string;
   label: string;
+  source: "esb" | "pos"; // ESB = order-level detail; POS = dashboard aggregate
   totalVoid: number; // count
   totalCancel: number; // count
   totalVoidAmount: number; // Rp
   totalCancelAmount: number; // Rp
-  hasAmount: boolean; // POS returned Rp values (else show counts only)
+  hasAmount: boolean; // Rp values available (else show counts only)
   outlets: FraudOutletRow[];
   perOutletReliable: boolean;
+  /** ESB only: void/cancel orders per outlet name (drill-down detail). */
+  orders?: Record<string, FraudOrder[]>;
   error?: string;
 }
 
@@ -71,11 +90,53 @@ export function periodRange(period: FraudPeriod, date: string): { from: string; 
 }
 
 function base(period: FraudPeriod, r: { from: string; to: string; label: string }, extra: Partial<FraudReport> = {}): FraudReport {
-  return { configured: false, period, from: r.from, to: r.to, label: r.label, totalVoid: 0, totalCancel: 0, totalVoidAmount: 0, totalCancelAmount: 0, hasAmount: false, outlets: [], perOutletReliable: false, ...extra };
+  return { configured: false, period, from: r.from, to: r.to, label: r.label, source: "pos", totalVoid: 0, totalCancel: 0, totalVoidAmount: 0, totalCancelAmount: 0, hasAmount: false, outlets: [], perOutletReliable: false, ...extra };
+}
+
+/** Build the report from ESB order-level rows (real nominal + per-order detail). */
+function esbReport(period: FraudPeriod, r: { from: string; to: string; label: string }, rows: CancelDetailRow[]): FraudReport {
+  const agg = new Map<string, { void: number; cancel: number; voidAmount: number; cancelAmount: number }>();
+  const orders: Record<string, FraudOrder[]> = {};
+  let tv = 0, tc = 0, tva = 0, tca = 0;
+  for (const row of rows) {
+    const isVoid = /void/i.test(row.type);
+    const a = agg.get(row.branch) ?? { void: 0, cancel: 0, voidAmount: 0, cancelAmount: 0 };
+    if (isVoid) { a.void += 1; a.voidAmount += row.total; tv += 1; tva += row.total; }
+    else { a.cancel += 1; a.cancelAmount += row.total; tc += 1; tca += row.total; }
+    agg.set(row.branch, a);
+    (orders[row.branch] ??= []).push({
+      salesNumber: row.salesNumber, menu: row.menu, category: row.menuCategory,
+      orderBy: row.orderBy, orderTime: row.orderTime, voidBy: row.voidBy, voidTime: row.voidTime,
+      type: row.type, notes: row.notes, qty: row.qty, total: row.total,
+    });
+  }
+  const outlets: FraudOutletRow[] = [...agg.entries()]
+    .map(([name, a], i) => ({ branchId: i + 1, code: name, name, void: a.void, cancel: a.cancel, voidAmount: a.voidAmount, cancelAmount: a.cancelAmount }))
+    .sort((x, y) => y.voidAmount + y.cancelAmount - (x.voidAmount + x.cancelAmount));
+  return {
+    configured: true, period, from: r.from, to: r.to, label: r.label, source: "esb",
+    totalVoid: tv, totalCancel: tc, totalVoidAmount: tva, totalCancelAmount: tca,
+    hasAmount: true, outlets, perOutletReliable: true, orders,
+  };
 }
 
 export async function getFraudReport(period: FraudPeriod, date: string): Promise<FraudReport> {
   const r = periodRange(period, date);
+
+  // Prefer ESB — it gives real per-outlet nominal + order-level detail. Falls
+  // back to the POS dashboard aggregate if ESB isn't configured or errors.
+  if (esbConfigured()) {
+    try {
+      const rows = await esbFetchCancelRows(r.from, r.to);
+      return esbReport(period, r, rows);
+    } catch (e) {
+      if (!gwgmanageConfigured()) {
+        return base(period, r, { configured: true, error: e instanceof Error ? e.message : "Gagal memuat data ESB." });
+      }
+      // else fall through to the POS aggregate below
+    }
+  }
+
   if (!gwgmanageConfigured()) return base(period, r, { error: "Integrasi POS belum dikonfigurasi." });
 
   try {
@@ -119,7 +180,7 @@ export async function getFraudReport(period: FraudPeriod, date: string): Promise
       ? rows.filter((o) => score(o) > 0).sort((a, b) => score(b) - score(a))
       : [];
 
-    return { configured: true, period, from: r.from, to: r.to, label: r.label, totalVoid, totalCancel, totalVoidAmount, totalCancelAmount, hasAmount, outlets, perOutletReliable };
+    return { configured: true, period, from: r.from, to: r.to, label: r.label, source: "pos", totalVoid, totalCancel, totalVoidAmount, totalCancelAmount, hasAmount, outlets, perOutletReliable };
   } catch (e) {
     return base(period, r, { configured: true, error: e instanceof Error ? e.message : "Gagal memuat data POS." });
   }
