@@ -117,22 +117,24 @@ const OPERATION_FULL: MenuKey[] = [
   "reports",
 ];
 
-/** The exact menus each role can see (single source of truth for the sidebar). */
+/** The exact menus each role can see (single source of truth for the sidebar).
+ *  Assessment (kenaikan golongan) is a Head-Office feature: every role EXCEPT
+ *  supervisor (field staff at the branches) gets it. */
 export const ROLE_MENUS: Record<Role, MenuKey[]> = {
   super_admin: NAV_MENUS.map((m) => m.key), // everything, incl. admin menus
-  head_operation: OPERATION_FULL, // monitors every branch (no area scope)
-  area_coordinator: OPERATION_FULL, // same menus, scoped to their area
-  data_operation: ["work"],
-  pos_operation: ["work"],
-  admin_operation: ["work", "complaints"],
-  supervisor: ["hygiene", "complaints"], // their own branch only
-  head_bar_rnd: ["hpp_dash", "work", "hpp", "hpp_db", "hpp_bahan"],
-  bar_rnd: ["hpp_dash", "work", "hpp", "hpp_db", "hpp_bahan"],
-  kitchen_rnd: ["hpp_dash", "work", "hpp", "hpp_db", "hpp_bahan"],
-  coordinator_rnd: ["hpp_dash", "work", "hpp", "hpp_db", "hpp_bahan"],
+  head_operation: [...OPERATION_FULL, "assessment"], // monitors every branch (no area scope)
+  area_coordinator: [...OPERATION_FULL, "assessment"], // same menus, scoped to their area
+  data_operation: ["work", "assessment"],
+  pos_operation: ["work", "assessment"],
+  admin_operation: ["work", "complaints", "assessment"],
+  supervisor: ["hygiene", "complaints"], // field staff — NO assessment
+  head_bar_rnd: ["hpp_dash", "work", "hpp", "hpp_db", "hpp_bahan", "assessment"],
+  bar_rnd: ["hpp_dash", "work", "hpp", "hpp_db", "hpp_bahan", "assessment"],
+  kitchen_rnd: ["hpp_dash", "work", "hpp", "hpp_db", "hpp_bahan", "assessment"],
+  coordinator_rnd: ["hpp_dash", "work", "hpp", "hpp_db", "hpp_bahan", "assessment"],
   legal: ["work", "assessment"], // HRD — grade-promotion assessment
   assessor: ["assessment"], // division Head / evaluator — assessment only
-  member: [], // no role menus — access is entirely via their `department`
+  member: ["assessment"], // HO staff — assessment; other access via `department`
 };
 
 /** Menus shown per division in the Super Admin sidebar (all divisions listed). */

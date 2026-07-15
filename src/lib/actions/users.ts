@@ -14,8 +14,13 @@ import {
   updateUser,
 } from "@/lib/data/user-mutations";
 import { persistMessage } from "@/lib/data/persist";
+import { syncUserEmployee, unsyncUserEmployee } from "@/lib/data/org";
 import { createUserSchema, parseInput } from "@/lib/validation";
 import type { Role } from "@/lib/types";
+
+/** A head/evaluator position — surfaces in the assessment org as a Head. */
+const isHeadPosition = (role: Role, jabatan: string | null | undefined) =>
+  role === "assessor" || role.startsWith("head_") || (!!jabatan && /^\s*head\b/i.test(jabatan));
 
 function normalizeAssignment(role: Role, outletIds: string[]): { areaId: string | null; outletIds: string[] } {
   if (role === "area_coordinator") {
@@ -55,8 +60,9 @@ export async function createUserAction(input: CreateUserInput) {
     return { error: "Assign at least one outlet to the coordinator." };
 
   const { areaId, outletIds } = normalizeAssignment(clean.role, clean.outletIds);
+  let created;
   try {
-    await createUser({
+    created = await createUser({
       name: clean.name,
       email: clean.email,
       role: clean.role,
@@ -72,7 +78,16 @@ export async function createUserAction(input: CreateUserInput) {
   } catch (e) {
     return { error: persistMessage(e) };
   }
+  // Mirror into the assessment org so the name shows in the picker.
+  await syncUserEmployee({
+    userId: created.id,
+    department: input.department ?? null,
+    jabatan: input.jabatan ?? null,
+    name: created.name,
+    isHead: isHeadPosition(clean.role, input.jabatan),
+  });
   revalidatePath("/admin/users");
+  revalidatePath("/assessment");
   return { ok: true };
 }
 
@@ -115,7 +130,15 @@ export async function updateUserAction(input: UpdateUserInput) {
     ...(input.avatarUrl !== undefined ? { avatarUrl: input.avatarUrl } : {}),
   });
   if (input.password) resetUserPassword(input.id, input.password);
+  await syncUserEmployee({
+    userId: input.id,
+    department: input.department ?? null,
+    jabatan: input.jabatan ?? null,
+    name,
+    isHead: isHeadPosition(input.role, input.jabatan),
+  });
   revalidatePath("/admin/users");
+  revalidatePath("/assessment");
   return { ok: true };
 }
 
@@ -126,7 +149,15 @@ export async function assignRoleAction(userId: string, role: Role) {
   if (!user) return { error: "User not found." };
   const { areaId, outletIds } = normalizeAssignment(role, user.outletIds ?? []);
   updateUser(userId, { role, areaId, outletIds });
+  await syncUserEmployee({
+    userId,
+    department: user.department ?? null,
+    jabatan: user.jabatan ?? null,
+    name: user.name,
+    isHead: isHeadPosition(role, user.jabatan),
+  });
   revalidatePath("/admin/users");
+  revalidatePath("/assessment");
   return { ok: true };
 }
 
@@ -144,7 +175,9 @@ export async function deleteUserAction(userId: string) {
   if (!admin || !can(admin, "manage_users")) return { error: "Not authorized" };
   if (userId === admin.id) return { error: "You can't delete your own account." };
   await deleteUser(userId);
+  await unsyncUserEmployee(userId);
   revalidatePath("/admin/users");
+  revalidatePath("/assessment");
   return { ok: true };
 }
 
