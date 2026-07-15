@@ -90,9 +90,11 @@ export function Popover({
     <div
       ref={menuRef}
       className={cn(
-        "surface-solid z-50 origin-top rounded-xl p-1.5",
+        "surface-solid origin-top rounded-xl p-1.5",
         "animate-in fade-in-0 zoom-in-95 duration-150 ease-out",
-        portal ? "fixed" : cn("absolute mt-2 min-w-56", align === "end" ? "right-0" : "left-0"),
+        // Portalled menus must clear overlays like the SlideOver (z-[90]); the
+        // in-flow variant only needs to beat page content.
+        portal ? "fixed z-[120]" : cn("absolute z-50 mt-2 min-w-56", align === "end" ? "right-0" : "left-0"),
         contentClassName,
       )}
       style={portal && pos ? { top: pos.top, left: pos.left, ...(matchTriggerWidth ? { width: pos.width } : { minWidth: pos.width }) } : undefined}

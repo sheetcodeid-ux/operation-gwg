@@ -45,6 +45,7 @@ export interface CreateUserInput {
   avatarUrl?: string | null;
   department?: string | null;
   jabatan?: string | null;
+  grants?: string[];
 }
 
 export async function createUserAction(input: CreateUserInput) {
@@ -74,6 +75,7 @@ export async function createUserAction(input: CreateUserInput) {
       avatarUrl: input.avatarUrl ?? null,
       department: input.department ?? null,
       jabatan: input.jabatan ?? null,
+      grants: input.grants ?? [],
     });
   } catch (e) {
     return { error: persistMessage(e) };
@@ -103,6 +105,7 @@ export interface UpdateUserInput {
   avatarUrl?: string | null;
   department?: string | null;
   jabatan?: string | null;
+  grants?: string[];
 }
 
 export async function updateUserAction(input: UpdateUserInput) {
@@ -127,6 +130,7 @@ export async function updateUserAction(input: UpdateUserInput) {
     country: input.country ?? null,
     department: input.department ?? null,
     jabatan: input.jabatan ?? null,
+    ...(input.grants !== undefined ? { grants: input.grants } : {}),
     ...(input.avatarUrl !== undefined ? { avatarUrl: input.avatarUrl } : {}),
   });
   if (input.password) resetUserPassword(input.id, input.password);

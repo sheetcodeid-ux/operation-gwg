@@ -28,7 +28,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { ROLE_LABEL, type Tone } from "@/lib/constants";
-import { ROLE_DIVISION, accessibleMenuKeys, builtInDivisions, navAll, setNavExtras, type Division, type NavExtra } from "@/lib/nav";
+import { ROLE_DIVISION, accessibleMenuKeys, assignableDivisions, builtInDivisions, grantsForDivision, navAll, setNavExtras, type Division, type NavExtra } from "@/lib/nav";
 import { builtInStructure } from "@/lib/assessment/org";
 import type { Role } from "@/lib/types";
 import {
@@ -452,11 +452,13 @@ export function UserFormPanel({
   const [pwd, setPwd] = React.useState(mode === "create" ? "gwg12345" : "");
   const [pwd2, setPwd2] = React.useState(mode === "create" ? "gwg12345" : "");
   const [showPwd, setShowPwd] = React.useState(false);
-  // Department (free-text, creatable), jabatan (job title), and role (access)
-  // are all chosen independently.
+  // Department (org placement) + jabatan (job title) are org data. Access is a
+  // separate sidebar-division choice — picking one grants that sidebar's menus.
   const [department, setDepartment] = React.useState<string>(user?.department ?? prefill?.division ?? "");
   const [jabatan, setJabatan] = React.useState<string>(user?.jabatan ?? "");
-  const [role, setRole] = React.useState<Role>(user?.role ?? "member");
+  // Existing access div = the division of the user's first grant (grants are
+  // stored as "<Division>:<menu>"). Super Admin keeps full access regardless.
+  const [access, setAccess] = React.useState<string>(user?.grants?.[0]?.split(":")[0] ?? "");
   const [selected, setSelected] = React.useState<string[]>(user?.outletIds ?? []);
   const [phone, setPhone] = React.useState(user?.phone ?? "");
   const [country, setCountry] = React.useState(user?.country ?? "");
@@ -474,13 +476,13 @@ export function UserFormPanel({
     () => [{ value: "", label: "— Tanpa jabatan —" }, ...jabatanFor(department, orgDepts, jabatan).map((j) => ({ value: j, label: j }))],
     [department, orgDepts, jabatan],
   );
-  // Roles come from the sidebar: a department that maps to a division exposes that
-  // division's roles; otherwise only the generic member (kosong) is offered.
-  const roleOptions = React.useMemo(() => {
-    const list: Role[] = ["member", ...rolesInDivision(department as Division)];
-    if (role && !list.includes(role)) list.unshift(role); // keep current selection valid on edit
-    return list.map((r) => ({ value: r, label: ROLE_LABEL[r] }));
-  }, [department, role]);
+  // Role (Akses) = which sidebar the user can open. Options are the sidebar
+  // divisions; picking one grants that sidebar's menus. Assessment is separate
+  // (every HO account gets it) so this choice never locks the assessment.
+  const accessOptions = React.useMemo(
+    () => [{ value: "", label: "— Tanpa akses sidebar —" }, ...assignableDivisions().map((d) => ({ value: d.name, label: d.name }))],
+    [],
+  );
 
   function onFile(e: React.ChangeEvent<HTMLInputElement>) {
     const f = e.target.files?.[0];
@@ -490,19 +492,23 @@ export function UserFormPanel({
     reader.readAsDataURL(f);
   }
 
+  // Super Admin keeps its role on edit; everyone else is a generic member whose
+  // page access is driven entirely by the chosen sidebar division (grants).
+  const finalRole: Role = isEdit && user?.role === "super_admin" ? "super_admin" : "member";
+
   function submit() {
     if (!name) return toast.error("Nama depan wajib diisi.");
     if (!email) return toast.error("Email wajib diisi.");
     if (!department.trim()) return toast.error("Pilih atau ketik departemen.");
-    if (!role) return toast.error("Pilih role.");
     if (!isEdit && pwd.length < 6) return toast.error("Password minimal 6 karakter.");
     if (pwd && pwd.length < 6) return toast.error("Password minimal 6 karakter.");
     if (pwd !== pwd2) return toast.error("Konfirmasi password tidak cocok.");
     start(async () => {
-      const contact = { phone: phone.trim() || null, country: country.trim() || null, avatarUrl: avatar, department: department.trim() || null, jabatan: jabatan.trim() || null };
+      const grants = finalRole === "super_admin" ? undefined : grantsForDivision(access);
+      const contact = { phone: phone.trim() || null, country: country.trim() || null, avatarUrl: avatar, department: department.trim() || null, jabatan: jabatan.trim() || null, grants };
       const res = isEdit
-        ? await updateUserAction({ id: user!.id, name, email, role, password: pwd || undefined, outletIds: selected, ...contact })
-        : await createUserAction({ name, email, role, password: pwd, outletIds: selected, ...contact });
+        ? await updateUserAction({ id: user!.id, name, email, role: finalRole, password: pwd || undefined, outletIds: selected, ...contact })
+        : await createUserAction({ name, email, role: finalRole, password: pwd, outletIds: selected, ...contact });
       if (res?.error) {
         toast.error(res.error);
         return;
@@ -589,12 +595,7 @@ export function UserFormPanel({
               value={department}
               onChange={(v) => {
                 setDepartment(v);
-                // Reset jabatan (list changes) and drop a role that no longer fits.
-                setJabatan("");
-                if (role !== "member" && !rolesInDivision(v as Division).includes(role)) {
-                  setRole("member");
-                  setSelected([]);
-                }
+                setJabatan(""); // jabatan list depends on the department
               }}
               options={deptOptions}
               placeholder="Pilih departemen…"
@@ -613,23 +614,22 @@ export function UserFormPanel({
             />
           </Field>
         </div>
-        <Field label="Role (Akses) *">
+        <Field label="Role (Akses) — Sidebar">
           <Combobox
             portal
             matchTriggerWidth
-            value={role}
-            onChange={(v) => {
-              setRole(v as Role);
-              setSelected([]);
-            }}
-            options={roleOptions}
+            value={access}
+            onChange={setAccess}
+            options={accessOptions}
+            placeholder="Pilih sidebar…"
+            searchPlaceholder="Cari sidebar…"
           />
         </Field>
         <p className="text-[11px] text-muted-foreground">
-          <b>Departement</b> &amp; <b>Jabatan</b> diambil dari daftar <i>Kelola Departemen</i> · <b>Role</b> otomatis mengikuti sidebar departemen (pilih <i>{ROLE_LABEL.member}</i> bila departemen belum punya menu di sidebar).
+          <b>Departement</b> &amp; <b>Jabatan</b> = penempatan organisasi (untuk assessment &amp; daftar nama). <b>Role (Akses)</b> = sidebar yang bisa dibuka — mis. pilih <i>Finance</i> agar bisa akses menu Finance. Tidak memengaruhi akses <b>Assessment</b> (semua akun HO tetap bisa).
         </p>
 
-        {role && needsOutlets(role as Role) && <OutletPicker outlets={outlets} multi={isMulti(role as Role)} selected={selected} onChange={setSelected} />}
+        {finalRole !== "member" && needsOutlets(finalRole) && <OutletPicker outlets={outlets} multi={isMulti(finalRole)} selected={selected} onChange={setSelected} />}
       </div>
 
       <SlideOverFooter onClose={onClose} pending={pending}>
