@@ -29,6 +29,7 @@ import {
 import { toast } from "sonner";
 import { ROLE_LABEL, type Tone } from "@/lib/constants";
 import { ROLE_DIVISION, accessibleMenuKeys, builtInDivisions, navAll, setNavExtras, type Division, type NavExtra } from "@/lib/nav";
+import { builtInStructure } from "@/lib/assessment/org";
 import type { Role } from "@/lib/types";
 import {
   assignRoleAction,
@@ -99,17 +100,10 @@ const ROLES = (Object.keys(ROLE_LABEL) as Role[]).filter((r) => r !== "member");
 // Every sidebar division (built-in role-divisions + department-aligned ones).
 const ALL_DIVISIONS = builtInDivisions() as Division[];
 /** Built-in GWG Head-Office structure: department → its jabatan (job titles /
- *  sub-teams). Supervisor is NOT here — it stands by at the branches, not HO.
- *  Admins can extend this via "Kelola Departemen"; those additions merge on top. */
-const HO_STRUCTURE: Record<string, string[]> = {
-  "Finance Accounting Tax": ["Head", "Finance", "Treasury", "Accounting & Verification", "Tax", "AR Staff", "AP Staff"],
-  "Human Capital": ["Head", "Talent Acquisition", "L&D dan Comben", "Administration"],
-  Operational: ["Head", "Coordinator Area East", "Coordinator Area West", "System Support"],
-  "Creative Director": ["Head", "Graphic Designer", "Photo/Video"],
-  "Supply Chain": ["Head", "Driver", "Warehouse Kering", "Warehouse Basah", "Packing & Helper", "Admin Penjualan", "Admin Pembelian"],
-  "Business Development": ["Head", "Expansion & Partnership", "Project & Asset Management", "Management Investasi"],
-  "R&D": ["Head"],
-};
+ *  sub-teams), from the org chart (single source: lib/assessment/org.ts).
+ *  Supervisor is NOT here — it stands by at the branches, not HO. Admins can
+ *  extend this via "Kelola Departemen"; those additions merge on top. */
+const HO_STRUCTURE: Record<string, string[]> = builtInStructure();
 const HO_DEPARTMENTS = Object.keys(HO_STRUCTURE);
 // Roles a division exposes for manual pick (the generic `member` is auto-assigned).
 const rolesInDivision = (d: Division) => ROLES.filter((r) => ROLE_DIVISION[r] === d);
@@ -453,8 +447,10 @@ export function UserFormPanel({
   const [first, setFirst] = React.useState(initFirst);
   const [last, setLast] = React.useState(initLast);
   const [email, setEmail] = React.useState(user?.email ?? "");
-  const [pwd, setPwd] = React.useState("");
-  const [pwd2, setPwd2] = React.useState("");
+  // New accounts default to the shared password so they can be used immediately;
+  // admin can still change it before creating.
+  const [pwd, setPwd] = React.useState(mode === "create" ? "gwg12345" : "");
+  const [pwd2, setPwd2] = React.useState(mode === "create" ? "gwg12345" : "");
   const [showPwd, setShowPwd] = React.useState(false);
   // Department (free-text, creatable), jabatan (job title), and role (access)
   // are all chosen independently.

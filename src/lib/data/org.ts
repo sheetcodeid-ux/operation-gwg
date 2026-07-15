@@ -96,6 +96,44 @@ export async function deleteOrgEmployee(id: string): Promise<void> {
   await db().from("org_employees").delete().eq("id", id);
 }
 
+/** Stable org-employee id mirrored from a user account. */
+const userEmpId = (userId: string) => `emp_usr_${userId}`;
+
+/**
+ * Mirror a user account into the assessment org so its name shows in the
+ * Departemen → Jabatan → Nama picker. Idempotent (keyed by user id). When the
+ * account has no department/jabatan, any prior mirror is removed instead.
+ */
+export async function syncUserEmployee(input: {
+  userId: string;
+  department: string | null;
+  jabatan: string | null;
+  name: string;
+  isHead: boolean;
+}): Promise<void> {
+  const id = userEmpId(input.userId);
+  if (!input.department || !input.jabatan) {
+    await deleteOrgEmployee(id);
+    return;
+  }
+  const departmentId = orgDepartmentId(input.department);
+  const row = { id, department_id: departmentId, jabatan: input.jabatan, name: input.name, is_head: input.isHead };
+  if (!dbEnabled) {
+    memDepts.set(departmentId, { id: departmentId, name: input.department });
+    memEmps.set(id, row);
+    return;
+  }
+  // Ensure the department exists (nice name for non-built-in departments), then
+  // upsert the employee so repeated saves don't duplicate.
+  await db().from("org_departments").upsert({ id: departmentId, name: input.department });
+  await db().from("org_employees").upsert(row);
+}
+
+/** Remove a user's mirrored org-employee (on account delete). */
+export async function unsyncUserEmployee(userId: string): Promise<void> {
+  await deleteOrgEmployee(userEmpId(userId));
+}
+
 const slug = (s: string) =>
   s
     .toLowerCase()

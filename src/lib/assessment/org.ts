@@ -45,71 +45,127 @@ export function formatGolongan(golongan: string, level?: string): string {
 /** Assessment batches (spec §1.2). Append "Batch 3", … to extend. */
 export const BATCHES: string[] = ["Batch 1", "Batch 2"];
 
-/** Raw hierarchy — the single source of truth. Edit here to grow the org. */
+/**
+ * Raw hierarchy — the single source of truth (GWG Group HO org chart 2026).
+ * Departments → Jabatan. Employee NAMES are intentionally empty: people come
+ * from the User Management accounts (department + jabatan), mirrored in on
+ * account create/update. Edit here to change the department/jabatan structure.
+ */
 const ORG_RAW: { department: string; positions: { title: string; employees: string[] }[] }[] = [
   {
-    department: "Operations",
+    department: "Finance Accounting Tax",
     positions: [
-      { title: "Head Operation", employees: ["Muhammad Andi Wahyudi"] },
-      { title: "Data Operation", employees: ["Muhammad Lutfi Rijalul Fikri"] },
-      { title: "Data Operation POS", employees: ["Evan", "Adinda"] },
-      { title: "Coordinator Area", employees: ["Jayadi", "Wisnu", "Deo", "Poetri"] },
-      { title: "Admin Operation", employees: [] },
+      { title: "Head", employees: [] },
+      { title: "Finance", employees: [] },
+      { title: "Treasury", employees: [] },
+      { title: "Accounting & Verification", employees: [] },
+      { title: "AR Staff", employees: [] },
+      { title: "AP Staff", employees: [] },
+      { title: "Tax", employees: [] },
     ],
   },
   {
-    department: "Finance",
+    department: "Human Capital",
     positions: [
-      { title: "Head Finance", employees: ["Indah Puspita"] },
-      { title: "Finance", employees: ["Fetty", "Jihan", "Nisa", "Sri"] },
-      { title: "Pajak", employees: ["Samsul"] },
-      { title: "Accounting", employees: ["Bella"] },
+      { title: "Head", employees: [] },
+      { title: "Talent Acquisition", employees: [] },
+      { title: "L&D dan Comben", employees: [] },
+      { title: "Administration", employees: [] },
     ],
   },
   {
-    department: "Creative",
+    department: "Operational",
     positions: [
-      { title: "Head Creative", employees: ["Dhimas Satria"] },
-      { title: "Social Media", employees: ["Zia", "Via", "Dita"] },
-      { title: "Design Grafis", employees: ["Ricky", "Seka"] },
-      { title: "Marketing Communication", employees: ["Amanda"] },
+      { title: "Head", employees: [] },
+      { title: "Coordinator Area East", employees: [] },
+      { title: "Coordinator Area West", employees: [] },
+      { title: "System Support", employees: [] },
     ],
   },
   {
-    department: "Project Manager",
+    department: "Production",
     positions: [
-      { title: "Head Project Manager", employees: ["Putri"] },
-      { title: "Project Manager", employees: ["Qintan", "Tiffany"] },
-      { title: "Arsitek", employees: ["Arul", "Aan"] },
+      { title: "Head", employees: [] },
+      { title: "Demand", employees: [] },
+      { title: "Quality Assurance & Control", employees: [] },
+      { title: "Central Kitchen", employees: [] },
+      { title: "Bakery", employees: [] },
     ],
   },
   {
-    department: "Human Resources Development",
+    department: "Product Development & Quality",
     positions: [
-      { title: "Legal", employees: ["MT Adrianto"] },
-      { title: "HRD", employees: ["Dini Amalia"] },
+      { title: "Head", employees: [] },
+      { title: "Beverage Development", employees: [] },
+      { title: "Quality Assurance & Control", employees: [] },
+      { title: "Food Development", employees: [] },
+      { title: "Staff R&D Bar", employees: [] },
+      { title: "Staff R&D Kitchen", employees: [] },
+      { title: "Trainer R&D Bar", employees: [] },
+      { title: "Trainer R&D Kitchen", employees: [] },
     ],
   },
   {
-    department: "Auditor",
-    positions: [{ title: "Auditor", employees: ["Sonny", "Nita"] }],
-  },
-  {
-    department: "Sekretaris",
-    positions: [{ title: "Sekretaris", employees: ["Monica", "Maya"] }],
-  },
-  {
-    department: "Food & Beverage",
+    department: "Marketing Specialist",
     positions: [
-      { title: "Head Research and Development", employees: ["Andi"] },
-      { title: "Coordinator Food & Beverage", employees: ["Radika"] },
-      { title: "Research and Development Bar", employees: ["Abil", "Adam"] },
-      { title: "Research and Development Kitchen", employees: ["Mustadi", "Bagas"] },
+      { title: "Head", employees: [] },
+      { title: "Community & Customer Relation", employees: [] },
+      { title: "Digital Marketing", employees: [] },
+      { title: "Brand & Marketing Strategy", employees: [] },
+      { title: "Social Media", employees: [] },
     ],
+  },
+  {
+    department: "Creative Director",
+    positions: [
+      { title: "Head", employees: [] },
+      { title: "Graphic Designer", employees: [] },
+      { title: "Photo/Video", employees: [] },
+    ],
+  },
+  {
+    department: "Supply Chain",
+    positions: [
+      { title: "Head", employees: [] },
+      { title: "Driver", employees: [] },
+      { title: "Warehouse Kering", employees: [] },
+      { title: "Warehouse Basah", employees: [] },
+      { title: "Packing & Helper", employees: [] },
+      { title: "Admin Penjualan", employees: [] },
+      { title: "Admin Pembelian", employees: [] },
+    ],
+  },
+  {
+    department: "Procurement",
+    positions: [{ title: "Head", employees: [] }],
   },
   {
     department: "Business Development",
-    positions: [{ title: "Business Development", employees: ["Ilfiana"] }],
+    positions: [
+      { title: "Head", employees: [] },
+      { title: "Expansion & Partnership", employees: [] },
+      { title: "Project & Asset Management", employees: [] },
+      { title: "Management Investasi", employees: [] },
+    ],
+  },
+  {
+    department: "IT",
+    positions: [{ title: "Head", employees: [] }],
+  },
+  {
+    department: "Legal",
+    positions: [{ title: "Legal", employees: [] }],
+  },
+  {
+    department: "Internal Audit",
+    positions: [{ title: "Internal Audit", employees: [] }],
+  },
+  {
+    department: "Management",
+    positions: [
+      { title: "Director", employees: [] },
+      { title: "Executive Assistant", employees: [] },
+    ],
   },
 ];
 
@@ -220,6 +276,12 @@ export function setOrgExtras(extra: OrgExtra) {
 
 /** The full (merged) department list. */
 export const allDepartments = () => DEPARTMENTS;
+
+/** Built-in department → jabatan map (chart structure), for the User Management
+ *  Add User / Kelola Departemen pickers. Names are excluded — those come from
+ *  the user accounts. Derived from the base hierarchy so there's one source. */
+export const builtInStructure = (): Record<string, string[]> =>
+  Object.fromEntries(BASE_DEPARTMENTS.map((d) => [d.name, d.positions.map((p) => p.title)]));
 
 /** The pristine built-in (hardcoded) departments — never mutated. */
 export const builtInDepartments = () => BASE_DEPARTMENTS;
