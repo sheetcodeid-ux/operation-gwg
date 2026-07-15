@@ -91,12 +91,15 @@ export interface ErpDashboard {
   platform: { methodName: string; count: number; amount: number }[];
 }
 
-/** Overall store dashboard for a day (period=daily) or a range (dateFrom/dateTo). */
-export async function fetchErpDashboard(opts: { date?: string; dateFrom?: string; dateTo?: string }): Promise<ErpDashboard> {
+/** Overall store dashboard for a day (period=daily) or a range (dateFrom/dateTo).
+ *  Pass `branchId` to scope to one outlet (used by the fraud/void analysis; the
+ *  caller verifies whether the POS actually honours it). */
+export async function fetchErpDashboard(opts: { date?: string; dateFrom?: string; dateTo?: string; branchId?: number | string }): Promise<ErpDashboard> {
   const qs = new URLSearchParams();
   if (opts.date) { qs.set("period", "daily"); qs.set("date", opts.date); }
   if (opts.dateFrom) qs.set("dateFrom", opts.dateFrom);
   if (opts.dateTo) qs.set("dateTo", opts.dateTo);
+  if (opts.branchId !== undefined && opts.branchId !== "") qs.set("branchId", String(opts.branchId));
   const d = (await authedGet(`/api/reports/dashboard?${qs.toString()}`)) as Record<string, unknown>;
   const platform = Array.isArray(d.bebanPlatformPerMethod)
     ? (d.bebanPlatformPerMethod as Record<string, unknown>[]).map((p) => ({ methodName: String(p.methodName ?? ""), count: num(p.count), amount: num(p.amount) }))
