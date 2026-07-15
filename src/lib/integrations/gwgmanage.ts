@@ -85,10 +85,20 @@ export interface ErpDashboard {
   totalTransaksi: number;
   totalPelanggan: number;
   avgBill: number; // penjualanBersihPerTransaksi
-  totalVoid: number;
-  totalCancelled: number;
+  totalVoid: number; // count of void transactions
+  totalCancelled: number; // count of cancelled orders
+  voidAmount: number; // Rp value of voids (0 if the POS doesn't return it)
+  cancelAmount: number; // Rp value of cancels (0 if the POS doesn't return it)
   totalBebanPlatform: number;
   platform: { methodName: string; count: number; amount: number }[];
+}
+
+/** First numeric value among candidate keys (POS field naming varies). */
+function pickNum(d: Record<string, unknown>, keys: string[]): number {
+  for (const k of keys) {
+    if (d[k] !== undefined && d[k] !== null && !Number.isNaN(Number(d[k]))) return Number(d[k]);
+  }
+  return 0;
 }
 
 /** Overall store dashboard for a day (period=daily) or a range (dateFrom/dateTo).
@@ -113,6 +123,9 @@ export async function fetchErpDashboard(opts: { date?: string; dateFrom?: string
     avgBill: num(d.penjualanBersihPerTransaksi),
     totalVoid: num(d.totalVoid),
     totalCancelled: num(d.totalCancelled),
+    // Rp value of voids/cancels — POS field naming varies, so try known variants.
+    voidAmount: pickNum(d, ["totalVoidAmount", "voidAmount", "totalVoidNominal", "voidNominal", "nominalVoid", "totalNominalVoid", "voidValue", "totalVoidValue"]),
+    cancelAmount: pickNum(d, ["totalCancelledAmount", "cancelledAmount", "cancelAmount", "totalCancelAmount", "totalCancelledNominal", "cancelNominal", "nominalCancel", "totalNominalCancel", "cancelValue", "totalCancelledValue"]),
     totalBebanPlatform: num(d.totalBebanPlatform),
     platform,
   };
