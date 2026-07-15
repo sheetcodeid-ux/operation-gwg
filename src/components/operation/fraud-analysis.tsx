@@ -9,7 +9,7 @@ import { Combobox } from "@/components/ui/combobox";
 import { StatTile } from "@/components/ui/stat";
 import { cn, formatIDR } from "@/lib/utils";
 import { fraudReportAction, outletFraudDailyAction } from "@/lib/actions/fraud";
-import type { FraudDailyPoint, FraudPeriod, FraudReport } from "@/lib/data/fraud";
+import type { FraudDailyPoint, FraudOrder, FraudPeriod, FraudReport } from "@/lib/data/fraud";
 
 const PERIODS: { key: FraudPeriod; label: string }[] = [
   { key: "daily", label: "Harian" },
@@ -236,7 +236,11 @@ function OutletTable({ report, hasAmount }: { report: FraudReport; hasAmount: bo
                   {open && (
                     <tr className="border-b border-border/60 bg-muted/20">
                       <td colSpan={6} className="px-4 py-3">
-                        <OutletDetail branchId={o.branchId} from={report.from} to={report.to} hasAmount={hasAmount} />
+                        {report.source === "esb" ? (
+                          <EsbOrderDetail orders={report.orders?.[o.name] ?? []} />
+                        ) : (
+                          <OutletDetail branchId={o.branchId} from={report.from} to={report.to} hasAmount={hasAmount} />
+                        )}
                       </td>
                     </tr>
                   )}
@@ -290,6 +294,47 @@ function OutletDetail({ branchId, from, to, hasAmount }: { branchId: number; fro
           </div>
         ))}
       </div>
+    </div>
+  );
+}
+
+/** ESB order-level detail for one outlet — each void/cancel line item. */
+function EsbOrderDetail({ orders }: { orders: FraudOrder[] }) {
+  if (orders.length === 0) return <p className="py-2 text-xs text-muted-foreground">Tidak ada order void/cancel.</p>;
+  const sorted = [...orders].sort((a, b) => b.total - a.total);
+  return (
+    <div className="overflow-x-auto">
+      <p className="mb-2 text-xs font-medium text-muted-foreground">Detail order void/cancel ({orders.length})</p>
+      <table className="w-full min-w-[52rem] text-xs">
+        <thead>
+          <tr className="border-b border-border text-left text-[10px] uppercase tracking-wide text-muted-foreground">
+            <th className="px-2 py-1.5">No. Bill</th>
+            <th className="px-2 py-1.5">Menu</th>
+            <th className="px-2 py-1.5">Order By</th>
+            <th className="px-2 py-1.5">Void/Cancel By</th>
+            <th className="px-2 py-1.5">Waktu</th>
+            <th className="px-2 py-1.5 text-center">Tipe</th>
+            <th className="px-2 py-1.5">Alasan</th>
+            <th className="px-2 py-1.5 text-right">Total</th>
+          </tr>
+        </thead>
+        <tbody>
+          {sorted.map((o, i) => (
+            <tr key={`${o.salesNumber}-${i}`} className="border-b border-border/50">
+              <td className="px-2 py-1.5 font-mono text-[11px] text-muted-foreground">{o.salesNumber}</td>
+              <td className="px-2 py-1.5 text-foreground">{o.menu}</td>
+              <td className="px-2 py-1.5">{o.orderBy}</td>
+              <td className="px-2 py-1.5">{o.voidBy}</td>
+              <td className="px-2 py-1.5 whitespace-nowrap text-muted-foreground">{o.voidTime}</td>
+              <td className="px-2 py-1.5 text-center">
+                <Badge tone={/void/i.test(o.type) ? "danger" : "warning"}>{o.type}</Badge>
+              </td>
+              <td className="px-2 py-1.5 max-w-[16rem] truncate text-muted-foreground" title={o.notes}>{o.notes || "—"}</td>
+              <td className="px-2 py-1.5 text-right tabular-nums text-foreground">{formatIDR(o.total)}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
     </div>
   );
 }

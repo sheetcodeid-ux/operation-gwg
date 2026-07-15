@@ -28,8 +28,11 @@ export const esbConfigured = () => !!(USER && PASS);
 
 const CSRF_META = /name="csrf-token"\s+content="([^"]+)"/;
 const CSRF_INPUT = /"_csrf-esb-fnb-backend"\s+value="([^"]+)"/;
+// POST_USER_SESSION is a per-session anti-replay token embedded in the report
+// page (hidden input or a JS assignment) — echoed back in the report POST body.
+const POST_SESSION = /POST_USER_SESSION["']?\s*(?:value=|[:=])\s*["']([a-zA-Z0-9]+)["']/;
 
-type Session = { cookie: string; csrf: string; at: number };
+type Session = { cookie: string; csrf: string; postUserSession: string; at: number };
 let session: Session | null = null;
 const TTL_MS = 30 * 60 * 1000;
 
@@ -73,12 +76,14 @@ async function login(): Promise<Session> {
     throw new Error("ESB login failed — check ESB_USERNAME / ESB_PASSWORD");
   }
 
-  // Fresh CSRF token for the authenticated session (used as X-Csrf-Token header).
+  // Fresh CSRF + POST_USER_SESSION from the authenticated report page.
   const rp = await fetch(`${BASE}/report/report-cancel-menu-detail`, { headers: { Accept: "text/html", Cookie: cookieHeader(jar) }, cache: "no-store" });
   absorbCookies(jar, rp);
-  const csrf2 = CSRF_META.exec(await rp.text())?.[1] ?? csrf;
+  const rpHtml = await rp.text();
+  const csrf2 = CSRF_META.exec(rpHtml)?.[1] ?? csrf;
+  const postUserSession = POST_SESSION.exec(rpHtml)?.[1] ?? "";
 
-  return { cookie: cookieHeader(jar), csrf: csrf2, at: Date.now() };
+  return { cookie: cookieHeader(jar), csrf: csrf2, postUserSession, at: Date.now() };
 }
 
 async function ensureSession(): Promise<Session> {
@@ -87,8 +92,9 @@ async function ensureSession(): Promise<Session> {
   return session;
 }
 
-/** Authenticated form POST that re-logs in once on session expiry. */
-async function postForm(path: string, params: Record<string, string>): Promise<Response> {
+/** Authenticated form POST; body is built from the session so CSRF/POST_USER_
+ *  SESSION always match the session actually used (incl. after a re-login). */
+async function postForm(path: string, build: (s: Session) => Record<string, string>): Promise<Response> {
   const call = (s: Session) =>
     fetch(`${BASE}${path}`, {
       method: "POST",
@@ -100,7 +106,7 @@ async function postForm(path: string, params: Record<string, string>): Promise<R
         Cookie: s.cookie,
         Referer: `${BASE}/report/report-cancel-menu-detail`,
       },
-      body: new URLSearchParams(params),
+      body: new URLSearchParams(build(s)),
       cache: "no-store",
     });
   let res = await call(await ensureSession());
@@ -111,13 +117,40 @@ async function postForm(path: string, params: Record<string, string>): Promise<R
   return res;
 }
 
+/** YYYY-MM-DD → DD-MM-YYYY (the format the ESB report form expects). */
+const toEsbDate = (ymd: string) => {
+  const [y, m, d] = ymd.split("-");
+  return `${d}-${m}-${y}`;
+};
+
 /**
- * Step 1 — generate the Cancel/Void export for the given filters (date range,
- * branch, type, …). Returns the internal OSS file URL that step 2 reads.
- * Filter FIELD NAMES come from the ESB report form (report-cancel-menu-detail).
+ * Step 1 — generate the Cancel/Void export for a date range (YYYY-MM-DD, All
+ * Branch, Cancel+Void). Returns the internal OSS file URL that step 2 reads.
+ * Field names/values captured from the ESB report form.
  */
-export async function esbGenerateCancelExport(filters: Record<string, string>): Promise<string> {
-  const res = await postForm("/report/report-cancel-menu-detail", filters);
+async function generateExport(dateFromYmd: string, dateToYmd: string): Promise<string> {
+  const from = toEsbDate(dateFromYmd);
+  const to = toEsbDate(dateToYmd);
+  const P = "CancelMenuDetailReport";
+  const res = await postForm("/report/report-cancel-menu-detail", (s) => ({
+    "_csrf-esb-fnb-backend": s.csrf,
+    [`${P}[reportDate]`]: `${from} - ${to}`,
+    [`${P}[dateFrom]`]: from,
+    [`${P}[dateTo]`]: to,
+    [`${P}[salesNum]`]: "",
+    [`${P}[selectedBranchText]`]: "All Branch",
+    [`${P}[branchID]`]: "",
+    [`${P}[menuName]`]: "",
+    [`${P}[visitPurposeID]`]: "",
+    [`${P}[statusCancelFilter]`]: "all",
+    [`${P}[menuCategory]`]: "",
+    [`${P}[menuCategoryDetail]`]: "",
+    [`${P}[menuCode]`]: "",
+    [`${P}[typeVoid]`]: "Cancel / Void (Default)",
+    [`${P}[cancelNotes]`]: "",
+    [`${P}[isPreviewBill]`]: "1",
+    POST_USER_SESSION: s.postUserSession,
+  }));
   if (!res.ok) throw new Error(`ESB report-cancel-menu-detail failed (${res.status})`);
   const json = (await res.json()) as { status?: number; data?: string };
   if (!json?.data) throw new Error("ESB: export URL missing in report response");
@@ -125,27 +158,25 @@ export async function esbGenerateCancelExport(filters: Record<string, string>): 
 }
 
 /** Step 2 — read ONE page (0-indexed) of a generated export via the grid proxy. */
-export async function esbReadExportPage(url: string, page: number): Promise<CancelDetailReport> {
-  const res = await postForm("/report_service/main/get-data-report", { url, page: String(page) });
+async function readExportPage(url: string, page: number): Promise<CancelDetailReport> {
+  const res = await postForm("/report_service/main/get-data-report", () => ({ url, page: String(page) }));
   if (!res.ok) throw new Error(`ESB get-data-report failed (${res.status})`);
   const json = (await res.json()) as { code?: number; data?: string };
   return parseCancelDetailReport(json.data ?? "");
 }
 
-/** Read ALL pages of an export and concatenate the rows (50/page, capped). */
-export async function esbReadAllRows(url: string): Promise<CancelDetailRow[]> {
-  const first = await esbReadExportPage(url, 0);
+/**
+ * End-to-end: generate the Cancel/Void export for a date range and read every
+ * page (50 rows/page, capped at 40 pages ≈ 2000 line-items).
+ */
+export async function esbFetchCancelRows(dateFromYmd: string, dateToYmd: string): Promise<CancelDetailRow[]> {
+  const url = await generateExport(dateFromYmd, dateToYmd);
+  const first = await readExportPage(url, 0);
   const rows = [...first.rows];
   const pages = Math.min(40, Math.ceil(first.totalItems / 50));
   for (let p = 1; p < pages; p++) {
-    const r = await esbReadExportPage(url, p);
+    const r = await readExportPage(url, p);
     rows.push(...r.rows);
   }
   return rows;
-}
-
-/** End-to-end: generate the export for `filters`, then read every row. */
-export async function esbFetchCancelRows(filters: Record<string, string>): Promise<CancelDetailRow[]> {
-  const url = await esbGenerateCancelExport(filters);
-  return esbReadAllRows(url);
 }
