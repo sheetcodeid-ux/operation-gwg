@@ -203,12 +203,26 @@ async function generateExport(dateFromYmd: string, dateToYmd: string): Promise<s
   return json.data;
 }
 
-/** Step 2 — read ONE page (0-indexed) of a generated export via the grid proxy. */
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+/** Step 2 — read ONE page (0-indexed) of a generated export via the grid proxy.
+ *  The export is produced asynchronously, so a just-generated file can 404 for a
+ *  moment — retry a few times with a short delay before giving up. */
 async function readExportPage(url: string, page: number): Promise<CancelDetailReport> {
-  const res = await postForm("/report_service/main/get-data-report", () => ({ url, page: String(page) }));
-  if (!res.ok) throw new Error(`ESB get-data-report failed (${res.status})`);
-  const json = (await res.json()) as { code?: number; data?: string };
-  return parseCancelDetailReport(json.data ?? "");
+  for (let attempt = 0; attempt < 5; attempt++) {
+    const res = await postForm("/report_service/main/get-data-report", () => ({ url, page: String(page) }));
+    if (res.ok) {
+      const json = (await res.json()) as { code?: number; data?: string };
+      return parseCancelDetailReport(json.data ?? "");
+    }
+    if ((res.status === 404 || res.status === 425) && attempt < 4) {
+      await sleep(1500); // export still generating
+      continue;
+    }
+    const body = (await res.text().catch(() => "")).replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim().slice(0, 140);
+    throw new Error(`ESB get-data-report failed (${res.status}) url=…${decodeURIComponent(url).slice(-70)} body:${body}`);
+  }
+  throw new Error("ESB get-data-report: export not ready after retries");
 }
 
 /**
