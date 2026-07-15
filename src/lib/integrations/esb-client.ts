@@ -36,14 +36,20 @@ type Session = { cookie: string; csrf: string; postUserSession: string; at: numb
 let session: Session | null = null;
 const TTL_MS = 30 * 60 * 1000;
 
-function absorbCookies(jar: Map<string, string>, res: Response) {
-  // Node/undici exposes multiple Set-Cookie via getSetCookie().
-  const list = (res.headers as unknown as { getSetCookie?: () => string[] }).getSetCookie?.() ?? [];
+function absorbCookies(jar: Map<string, string>, res: Response): number {
+  // Node/undici exposes multiple Set-Cookie via getSetCookie(); fall back to the
+  // (possibly comma-joined) single header on runtimes that lack it.
+  let list = (res.headers as unknown as { getSetCookie?: () => string[] }).getSetCookie?.() ?? [];
+  if (list.length === 0) {
+    const single = res.headers.get("set-cookie");
+    if (single) list = single.split(/,(?=\s*[A-Za-z0-9_.-]+=)/);
+  }
   for (const c of list) {
     const kv = c.split(";")[0];
     const i = kv.indexOf("=");
     if (i > 0) jar.set(kv.slice(0, i).trim(), kv.slice(i + 1).trim());
   }
+  return list.length;
 }
 const cookieHeader = (jar: Map<string, string>) => [...jar].map(([k, v]) => `${k}=${v}`).join("; ");
 
@@ -52,10 +58,10 @@ async function login(): Promise<Session> {
   const jar = new Map<string, string>();
 
   const g = await fetch(`${BASE}/site/login`, { headers: { Accept: "text/html" }, cache: "no-store" });
-  absorbCookies(jar, g);
+  const nGet = absorbCookies(jar, g);
   const loginHtml = await g.text();
   const csrf = CSRF_META.exec(loginHtml)?.[1] ?? CSRF_INPUT.exec(loginHtml)?.[1];
-  if (!csrf) throw new Error("ESB: CSRF token not found on login page");
+  if (!csrf) throw new Error(`ESB: CSRF token not found (GET ${g.status}, setCookie=${nGet}, cookies=[${[...jar.keys()].join(",")}])`);
 
   // Plain browser-style form POST (NOT XHR) so Yii performs the real login and
   // returns the auth cookies via a 302 — an X-Requested-With here would trigger
@@ -73,18 +79,20 @@ async function login(): Promise<Session> {
     body,
     cache: "no-store",
   });
-  absorbCookies(jar, p);
+  const nPost = absorbCookies(jar, p);
+  const pBody = await p.text().catch(() => "");
   // On success Yii 302-redirects; follow it once (with cookies) in case the auth
   // cookies are only set on the redirected response.
-  if (!jar.has("_jwt-token") && !jar.has("_identity")) {
-    const loc = p.headers.get("location");
-    if (loc && (p.status === 301 || p.status === 302)) {
-      const f = await fetch(new URL(loc, BASE).toString(), { headers: { Cookie: cookieHeader(jar), Accept: "text/html" }, redirect: "manual", cache: "no-store" });
-      absorbCookies(jar, f);
-    }
+  const loc = p.headers.get("location");
+  if (!jar.has("_jwt-token") && !jar.has("_identity") && loc && (p.status === 301 || p.status === 302)) {
+    const f = await fetch(new URL(loc, BASE).toString(), { headers: { Cookie: cookieHeader(jar), Accept: "text/html" }, redirect: "manual", cache: "no-store" });
+    absorbCookies(jar, f);
   }
   if (!jar.has("_jwt-token") && !jar.has("_identity")) {
-    throw new Error("ESB login failed — check ESB_USERNAME / ESB_PASSWORD");
+    const snippet = pBody.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim().slice(0, 180);
+    throw new Error(
+      `ESB login failed [GET ${g.status} csrf=${csrf ? "y" : "n"} setCookieGET=${nGet}; POST ${p.status} loc=${loc ?? "-"} setCookiePOST=${nPost}; jar=[${[...jar.keys()].join(",")}]; body: ${snippet}]`,
+    );
   }
 
   // Fresh CSRF + POST_USER_SESSION from the authenticated report page.
