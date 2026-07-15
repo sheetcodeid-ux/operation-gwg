@@ -20,8 +20,10 @@ export interface FraudOutletRow {
   branchId: number;
   code: string;
   name: string;
-  void: number;
-  cancel: number;
+  void: number; // count
+  cancel: number; // count
+  voidAmount: number; // Rp
+  cancelAmount: number; // Rp
 }
 export interface FraudReport {
   configured: boolean;
@@ -29,8 +31,11 @@ export interface FraudReport {
   from: string;
   to: string;
   label: string;
-  totalVoid: number;
-  totalCancel: number;
+  totalVoid: number; // count
+  totalCancel: number; // count
+  totalVoidAmount: number; // Rp
+  totalCancelAmount: number; // Rp
+  hasAmount: boolean; // POS returned Rp values (else show counts only)
   outlets: FraudOutletRow[];
   perOutletReliable: boolean;
   error?: string;
@@ -64,7 +69,7 @@ export function periodRange(period: FraudPeriod, date: string): { from: string; 
 }
 
 function base(period: FraudPeriod, r: { from: string; to: string; label: string }, extra: Partial<FraudReport> = {}): FraudReport {
-  return { configured: false, period, from: r.from, to: r.to, label: r.label, totalVoid: 0, totalCancel: 0, outlets: [], perOutletReliable: false, ...extra };
+  return { configured: false, period, from: r.from, to: r.to, label: r.label, totalVoid: 0, totalCancel: 0, totalVoidAmount: 0, totalCancelAmount: 0, hasAmount: false, outlets: [], perOutletReliable: false, ...extra };
 }
 
 export async function getFraudReport(period: FraudPeriod, date: string): Promise<FraudReport> {
@@ -76,6 +81,9 @@ export async function getFraudReport(period: FraudPeriod, date: string): Promise
     const [globalRes, branches] = await Promise.all([fetchErpDashboard(range), fetchBranches()]);
     const totalVoid = globalRes.totalVoid;
     const totalCancel = globalRes.totalCancelled;
+    const totalVoidAmount = globalRes.voidAmount;
+    const totalCancelAmount = globalRes.cancelAmount;
+    const hasAmount = totalVoidAmount > 0 || totalCancelAmount > 0;
 
     // Per-branch (best effort). Skip entirely if there are no branches.
     const perBranch = await Promise.allSettled(
@@ -84,21 +92,32 @@ export async function getFraudReport(period: FraudPeriod, date: string): Promise
     const rows: FraudOutletRow[] = branches.map((b, i) => {
       const res = perBranch[i];
       const v = res.status === "fulfilled" ? res.value : null;
-      return { branchId: b.branchId || b.id, code: b.code, name: b.name, void: v?.totalVoid ?? 0, cancel: v?.totalCancelled ?? 0 };
+      return {
+        branchId: b.branchId || b.id,
+        code: b.code,
+        name: b.name,
+        void: v?.totalVoid ?? 0,
+        cancel: v?.totalCancelled ?? 0,
+        voidAmount: v?.voidAmount ?? 0,
+        cancelAmount: v?.cancelAmount ?? 0,
+      };
     });
 
+    // Score combines counts + amounts so the check works whichever the POS gives.
+    const score = (o: { void: number; cancel: number; voidAmount: number; cancelAmount: number }) =>
+      o.void + o.cancel + o.voidAmount + o.cancelAmount;
+    const globalScore = totalVoid + totalCancel + totalVoidAmount + totalCancelAmount;
     // Reliable only if the per-branch numbers PARTITION the total (sum ≈ global).
     // If branchId is ignored every branch echoes the global total → sum ≫ global.
-    const sum = rows.reduce((a, o) => a + o.void + o.cancel, 0);
-    const globalTotal = totalVoid + totalCancel;
-    const echoed = branches.length > 1 && rows.every((o) => o.void === totalVoid && o.cancel === totalCancel);
-    const perOutletReliable = branches.length > 0 && globalTotal > 0 && !echoed && sum <= globalTotal * 1.5;
+    const sum = rows.reduce((a, o) => a + score(o), 0);
+    const echoed = branches.length > 1 && rows.every((o) => o.void === totalVoid && o.cancel === totalCancel && o.voidAmount === totalVoidAmount && o.cancelAmount === totalCancelAmount);
+    const perOutletReliable = branches.length > 0 && globalScore > 0 && !echoed && sum <= globalScore * 1.5;
 
     const outlets = perOutletReliable
-      ? rows.filter((o) => o.void > 0 || o.cancel > 0).sort((a, b) => b.void + b.cancel - (a.void + a.cancel))
+      ? rows.filter((o) => score(o) > 0).sort((a, b) => score(b) - score(a))
       : [];
 
-    return { configured: true, period, from: r.from, to: r.to, label: r.label, totalVoid, totalCancel, outlets, perOutletReliable };
+    return { configured: true, period, from: r.from, to: r.to, label: r.label, totalVoid, totalCancel, totalVoidAmount, totalCancelAmount, hasAmount, outlets, perOutletReliable };
   } catch (e) {
     return base(period, r, { configured: true, error: e instanceof Error ? e.message : "Gagal memuat data POS." });
   }
@@ -109,6 +128,8 @@ export interface FraudDailyPoint {
   label: string;
   void: number;
   cancel: number;
+  voidAmount: number;
+  cancelAmount: number;
 }
 
 /** Per-day void/cancel for ONE outlet across the range (drill-down detail). */
@@ -120,6 +141,6 @@ export async function getOutletFraudDaily(branchId: number, from: string, to: st
   return days.map((day, i) => {
     const v = res[i].status === "fulfilled" ? (res[i] as PromiseFulfilledResult<Awaited<ReturnType<typeof fetchErpDashboard>>>).value : null;
     const dt = new Date(`${day}T00:00:00`);
-    return { date: day, label: `${dt.getDate()} ${MONTHS[dt.getMonth()].slice(0, 3)}`, void: v?.totalVoid ?? 0, cancel: v?.totalCancelled ?? 0 };
+    return { date: day, label: `${dt.getDate()} ${MONTHS[dt.getMonth()].slice(0, 3)}`, void: v?.totalVoid ?? 0, cancel: v?.totalCancelled ?? 0, voidAmount: v?.voidAmount ?? 0, cancelAmount: v?.cancelAmount ?? 0 };
   });
 }
