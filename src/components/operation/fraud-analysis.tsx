@@ -5,7 +5,7 @@ import { AlertTriangle, CheckCircle2, ChevronDown, Download, Loader2, ShieldAler
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Field, Input } from "@/components/ui/input";
+import { Combobox } from "@/components/ui/combobox";
 import { StatTile } from "@/components/ui/stat";
 import { cn, formatIDR } from "@/lib/utils";
 import { fraudReportAction, outletFraudDailyAction } from "@/lib/actions/fraud";
@@ -17,7 +17,9 @@ const PERIODS: { key: FraudPeriod; label: string }[] = [
   { key: "monthly", label: "Bulanan" },
 ];
 const PERIOD_LABEL: Record<FraudPeriod, string> = { daily: "Harian", weekly: "Mingguan", monthly: "Bulanan" };
+const MONTHS = ["Januari", "Februari", "Maret", "April", "Mei", "Juni", "Juli", "Agustus", "September", "Oktober", "November", "Desember"];
 const nf = (n: number) => n.toLocaleString("id-ID");
+const ymd = (y: number, m: number, d: number) => `${y}-${String(m + 1).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
 
 /** Value shown per metric: Rp nominal when the POS returns it, else the count. */
 const metricValue = (hasAmount: boolean, count: number, amount: number) => (hasAmount ? formatIDR(amount) : nf(count));
@@ -39,9 +41,39 @@ export function FraudAnalysis({ initial, initialDate }: { initial: FraudReport; 
     });
   }, []);
 
+  // Anchor pickers to the month/year of the initial (today's) date.
+  const anchor = React.useMemo(() => new Date(`${initialDate}T00:00:00`), [initialDate]);
+  const Y = anchor.getFullYear();
+  const M = anchor.getMonth();
+  const daysInMonth = new Date(Y, M + 1, 0).getDate();
+
+  const options = React.useMemo(() => {
+    if (period === "daily") return Array.from({ length: daysInMonth }, (_, i) => ({ value: ymd(Y, M, i + 1), label: `${i + 1} ${MONTHS[M]}` }));
+    if (period === "weekly") {
+      const n = Math.ceil(daysInMonth / 7);
+      return Array.from({ length: n }, (_, i) => {
+        const s = i * 7 + 1;
+        const e = Math.min(s + 6, daysInMonth);
+        return { value: ymd(Y, M, s), label: `Minggu ${i + 1} (${s}–${e} ${MONTHS[M].slice(0, 3)})` };
+      });
+    }
+    return Array.from({ length: 12 }, (_, m) => ({ value: ymd(Y, m, 1), label: `${MONTHS[m]} ${Y}` }));
+  }, [period, Y, M, daysInMonth]);
+
+  const defaultFor = React.useCallback(
+    (p: FraudPeriod) => {
+      if (p === "daily") return initialDate;
+      if (p === "weekly") return ymd(Y, M, Math.floor((anchor.getDate() - 1) / 7) * 7 + 1);
+      return ymd(Y, M, 1);
+    },
+    [initialDate, Y, M, anchor],
+  );
+
   const onPeriod = (p: FraudPeriod) => {
+    const d = defaultFor(p);
     setPeriod(p);
-    load(p, date);
+    setDate(d);
+    load(p, d);
   };
   const onDate = (d: string) => {
     setDate(d);
@@ -76,9 +108,10 @@ export function FraudAnalysis({ initial, initialDate }: { initial: FraudReport; 
               ))}
             </div>
           </div>
-          <Field label={period === "daily" ? "Tanggal" : period === "weekly" ? "Pilih tanggal (dalam minggu)" : "Pilih tanggal (dalam bulan)"}>
-            <Input type="date" value={date} onChange={(e) => onDate(e.target.value)} className="w-48" />
-          </Field>
+          <div>
+            <p className="mb-1.5 text-xs font-medium text-muted-foreground">{period === "daily" ? "Tanggal" : period === "weekly" ? "Minggu" : "Bulan"}</p>
+            <Combobox matchTriggerWidth searchable={false} value={date} onChange={onDate} options={options} className="w-52" />
+          </div>
           <div className="ml-auto flex items-center gap-2">
             {pending && <Loader2 className="size-4 animate-spin text-muted-foreground" />}
             <Button variant="outline" size="sm" onClick={() => downloadPdf(report)} disabled={!report.configured}>

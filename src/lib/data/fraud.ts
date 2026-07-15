@@ -52,16 +52,18 @@ export function periodRange(period: FraudPeriod, date: string): { from: string; 
     return { from: date, to: date, label: `${d.getDate()} ${MONTHS[d.getMonth()]} ${d.getFullYear()}` };
   }
   if (period === "weekly") {
-    const dow = (d.getDay() + 6) % 7; // Monday = 0
-    const mon = new Date(d);
-    mon.setDate(d.getDate() - dow);
-    const sun = new Date(mon);
-    sun.setDate(mon.getDate() + 6);
-    const sameMonth = mon.getMonth() === sun.getMonth();
-    const label = sameMonth
-      ? `${mon.getDate()}–${sun.getDate()} ${MONTHS[sun.getMonth()]} ${sun.getFullYear()}`
-      : `${mon.getDate()} ${MONTHS[mon.getMonth()]} – ${sun.getDate()} ${MONTHS[sun.getMonth()]} ${sun.getFullYear()}`;
-    return { from: ymd(mon), to: ymd(sun), label };
+    // Week-of-month blocks: Minggu 1 = 1–7, 2 = 8–14, … (last may be short).
+    const Y = d.getFullYear();
+    const M = d.getMonth();
+    const daysInMonth = new Date(Y, M + 1, 0).getDate();
+    const index = Math.floor((d.getDate() - 1) / 7);
+    const start = index * 7 + 1;
+    const end = Math.min(start + 6, daysInMonth);
+    return {
+      from: ymd(new Date(Y, M, start)),
+      to: ymd(new Date(Y, M, end)),
+      label: `Minggu ${index + 1} · ${start}–${end} ${MONTHS[M]} ${Y}`,
+    };
   }
   const first = new Date(d.getFullYear(), d.getMonth(), 1);
   const last = new Date(d.getFullYear(), d.getMonth() + 1, 0);
