@@ -1,6 +1,6 @@
 import "server-only";
 
-import { parseCancelDetailReport, type CancelDetailReport } from "./esb";
+import { parseCancelDetailReport, type CancelDetailReport, type CancelDetailRow } from "./esb";
 
 /**
  * Authenticated ESB (erp.esb.co.id) client — runs SERVER-SIDE only, logging in
@@ -87,15 +87,12 @@ async function ensureSession(): Promise<Session> {
   return session;
 }
 
-/**
- * POST the report grid endpoint with the given form params and parse the result.
- * Params are the report's filter/pagination fields (report id, date range,
- * branch, type, page) — the exact field names come from the ESB report form.
- */
-export async function esbGetDataReport(params: Record<string, string>): Promise<CancelDetailReport> {
+/** Authenticated form POST that re-logs in once on session expiry. */
+async function postForm(path: string, params: Record<string, string>): Promise<Response> {
   const call = (s: Session) =>
-    fetch(`${BASE}/report_service/main/get-data-report`, {
+    fetch(`${BASE}${path}`, {
       method: "POST",
+      redirect: "manual",
       headers: {
         "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8",
         "X-Requested-With": "XMLHttpRequest",
@@ -106,13 +103,49 @@ export async function esbGetDataReport(params: Record<string, string>): Promise<
       body: new URLSearchParams(params),
       cache: "no-store",
     });
-
   let res = await call(await ensureSession());
-  if (res.status === 401 || res.status === 403) {
-    session = null; // session expired → re-login once
+  if (res.status === 401 || res.status === 403 || res.status === 302) {
+    session = null; // expired → re-login once
     res = await call(await ensureSession());
   }
+  return res;
+}
+
+/**
+ * Step 1 — generate the Cancel/Void export for the given filters (date range,
+ * branch, type, …). Returns the internal OSS file URL that step 2 reads.
+ * Filter FIELD NAMES come from the ESB report form (report-cancel-menu-detail).
+ */
+export async function esbGenerateCancelExport(filters: Record<string, string>): Promise<string> {
+  const res = await postForm("/report/report-cancel-menu-detail", filters);
+  if (!res.ok) throw new Error(`ESB report-cancel-menu-detail failed (${res.status})`);
+  const json = (await res.json()) as { status?: number; data?: string };
+  if (!json?.data) throw new Error("ESB: export URL missing in report response");
+  return json.data;
+}
+
+/** Step 2 — read ONE page (0-indexed) of a generated export via the grid proxy. */
+export async function esbReadExportPage(url: string, page: number): Promise<CancelDetailReport> {
+  const res = await postForm("/report_service/main/get-data-report", { url, page: String(page) });
   if (!res.ok) throw new Error(`ESB get-data-report failed (${res.status})`);
   const json = (await res.json()) as { code?: number; data?: string };
   return parseCancelDetailReport(json.data ?? "");
+}
+
+/** Read ALL pages of an export and concatenate the rows (50/page, capped). */
+export async function esbReadAllRows(url: string): Promise<CancelDetailRow[]> {
+  const first = await esbReadExportPage(url, 0);
+  const rows = [...first.rows];
+  const pages = Math.min(40, Math.ceil(first.totalItems / 50));
+  for (let p = 1; p < pages; p++) {
+    const r = await esbReadExportPage(url, p);
+    rows.push(...r.rows);
+  }
+  return rows;
+}
+
+/** End-to-end: generate the export for `filters`, then read every row. */
+export async function esbFetchCancelRows(filters: Record<string, string>): Promise<CancelDetailRow[]> {
+  const url = await esbGenerateCancelExport(filters);
+  return esbReadAllRows(url);
 }
