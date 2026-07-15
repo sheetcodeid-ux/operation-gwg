@@ -27,8 +27,8 @@ function normalizeAssignment(role: Role, outletIds: string[]): { areaId: string 
     const areaId = outletIds.length ? getOutlet(outletIds[0])?.areaId ?? null : null;
     return { areaId, outletIds };
   }
-  // Branch is optional (single) for these; HQ roles get none.
-  if (role === "head_operation" || role === "pos_operation") {
+  // Single-branch roles: supervisor + these HQ-adjacent ops roles hold one outlet.
+  if (role === "head_operation" || role === "pos_operation" || role === "supervisor") {
     return { areaId: null, outletIds: outletIds.slice(0, 1) };
   }
   return { areaId: null, outletIds: [] };
@@ -59,6 +59,8 @@ export async function createUserAction(input: CreateUserInput) {
   if (emailExists(clean.email)) return { error: "Email already exists." };
   if (clean.role === "area_coordinator" && clean.outletIds.length === 0)
     return { error: "Assign at least one outlet to the coordinator." };
+  if (clean.role === "supervisor" && clean.outletIds.length === 0)
+    return { error: "Pilih 1 outlet untuk supervisor." };
 
   const { areaId, outletIds } = normalizeAssignment(clean.role, clean.outletIds);
   let created;

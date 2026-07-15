@@ -39,7 +39,7 @@ import {
   updateUserAction,
 } from "@/lib/actions/users";
 import { deleteDepartmentAction, saveDepartmentAction } from "@/lib/actions/org-departments";
-import { listCoordinatorOutlets, type AssignableOutlet } from "@/lib/actions/outlets";
+import { listAssignableOutlets, type AssignableOutlet } from "@/lib/actions/outlets";
 import { useI18n } from "@/lib/i18n/provider";
 import { Avatar } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
@@ -499,11 +499,23 @@ export function UserFormPanel({
   }
 
   // A Coordinator Area account (jabatan "Coordinator Area East/West") is scoped
-  // to specific outlets → it becomes the area_coordinator role with an outlet picker.
+  // to outlets → area_coordinator role, multi-outlet picker.
   const isCoordinator = /coordinator\s*area/i.test(jabatan);
-  // Super Admin keeps its role on edit; a Coordinator Area is area_coordinator;
-  // everyone else is a generic member (access via the chosen sidebar division).
-  const finalRole: Role = isEdit && user?.role === "super_admin" ? "super_admin" : isCoordinator ? "area_coordinator" : "member";
+  // A Supervisor (Role Akses = Supervisor, or jabatan mentions supervisor) holds
+  // exactly ONE outlet → supervisor role, single-outlet picker. Field staff, so
+  // no assessment access.
+  const isSupervisor = !isCoordinator && (access === "Supervisor" || /supervisor/i.test(jabatan));
+  // Super Admin keeps its role on edit; coordinator/supervisor get their scoped
+  // roles; everyone else is a generic member (access via the sidebar division).
+  const finalRole: Role =
+    isEdit && user?.role === "super_admin"
+      ? "super_admin"
+      : isCoordinator
+        ? "area_coordinator"
+        : isSupervisor
+          ? "supervisor"
+          : "member";
+  const needsOutletPicker = isCoordinator || isSupervisor;
   // Local outlets as an instant fallback shown while the picker loads from POS.
   const fallbackOutlets = React.useMemo(() => outlets.map((o) => ({ id: o.id, name: o.name })), [outlets]);
 
@@ -518,8 +530,8 @@ export function UserFormPanel({
       const grants = finalRole === "super_admin" ? undefined : grantsForDivision(access);
       const contact = { phone: phone.trim() || null, country: country.trim() || null, avatarUrl: avatar, department: department.trim() || null, jabatan: jabatan.trim() || null, grants };
       const res = isEdit
-        ? await updateUserAction({ id: user!.id, name, email, role: finalRole, password: pwd || undefined, outletIds: isCoordinator ? outletsRef.current : [], ...contact })
-        : await createUserAction({ name, email, role: finalRole, password: pwd, outletIds: isCoordinator ? outletsRef.current : [], ...contact });
+        ? await updateUserAction({ id: user!.id, name, email, role: finalRole, password: pwd || undefined, outletIds: needsOutletPicker ? outletsRef.current : [], ...contact })
+        : await createUserAction({ name, email, role: finalRole, password: pwd, outletIds: needsOutletPicker ? outletsRef.current : [], ...contact });
       if (res?.error) {
         toast.error(res.error);
         return;
@@ -640,8 +652,10 @@ export function UserFormPanel({
           <b>Departement</b> &amp; <b>Jabatan</b> = penempatan organisasi (untuk assessment &amp; daftar nama). <b>Role (Akses)</b> = sidebar yang bisa dibuka — mis. pilih <i>Finance</i> agar bisa akses menu Finance. Tidak memengaruhi akses <b>Assessment</b> (semua akun HO tetap bisa).
         </p>
 
-        {isCoordinator && (
-          <CoordinatorOutletPicker
+        {needsOutletPicker && (
+          <OutletAssignPicker
+            role={isSupervisor ? "supervisor" : "area_coordinator"}
+            single={isSupervisor}
             userId={user?.id}
             fallback={fallbackOutlets}
             defaultSelected={user?.outletIds ?? NO_OUTLETS}
@@ -1080,18 +1094,22 @@ const OutletRow = React.memo(function OutletRow({
 });
 
 /**
- * Multi-select outlets for a Coordinator Area. Self-contained: fetches the POS
- * branch list ONCE on mount, keeps its own selection state, and reports changes
- * up via a stable callback (a ref in the parent) — so picking an outlet never
- * re-renders the surrounding Add User form. Memoized so unrelated form edits
- * (typing name, etc.) don't re-render it either.
+ * Outlet picker for a Coordinator Area (multi) or Supervisor (single). Self-
+ * contained: fetches the POS branch list ONCE on mount, keeps its own selection
+ * state, and reports changes up via a stable callback (a ref in the parent) — so
+ * picking an outlet never re-renders the surrounding Add User form. Memoized so
+ * unrelated form edits (typing name, etc.) don't re-render it either.
  */
-const CoordinatorOutletPicker = React.memo(function CoordinatorOutletPicker({
+const OutletAssignPicker = React.memo(function OutletAssignPicker({
+  role,
+  single,
   userId,
   fallback,
   defaultSelected,
   onSelectedChange,
 }: {
+  role: "area_coordinator" | "supervisor";
+  single: boolean;
   userId?: string;
   fallback: AssignableOutlet[];
   defaultSelected: string[];
@@ -1099,27 +1117,34 @@ const CoordinatorOutletPicker = React.memo(function CoordinatorOutletPicker({
 }) {
   const [outlets, setOutlets] = React.useState<AssignableOutlet[] | null>(null);
   const [q, setQ] = React.useState("");
-  const [selected, setSelected] = React.useState<string[]>(defaultSelected);
+  // Single-outlet roles keep at most one selection even if seeded with more.
+  const [selected, setSelected] = React.useState<string[]>(single ? defaultSelected.slice(0, 1) : defaultSelected);
 
-  // Fetch the assignable POS outlets exactly once.
+  // Fetch the assignable POS outlets exactly once (per role).
   React.useEffect(() => {
     let live = true;
-    listCoordinatorOutlets(userId).then((res) => {
+    listAssignableOutlets(role, userId).then((res) => {
       if (live && "outlets" in res) setOutlets(res.outlets);
     });
     return () => {
       live = false;
     };
-  }, [userId]);
+  }, [role, userId]);
 
   // Report selection up (to the parent ref) whenever it changes.
   React.useEffect(() => {
     onSelectedChange(selected);
   }, [selected, onSelectedChange]);
 
-  const toggle = React.useCallback((id: string) => {
-    setSelected((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]));
-  }, []);
+  const toggle = React.useCallback(
+    (id: string) => {
+      setSelected((prev) => {
+        if (single) return prev[0] === id ? [] : [id]; // radio-style: one outlet
+        return prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id];
+      });
+    },
+    [single],
+  );
 
   const list = outlets ?? fallback;
   const loading = outlets === null;
@@ -1129,10 +1154,15 @@ const CoordinatorOutletPicker = React.memo(function CoordinatorOutletPicker({
     [list, q],
   );
 
+  const label = single ? "Outlet Ditugaskan (1 outlet)" : `Wilayah / Outlet Ditugaskan (${selected.length})`;
+  const hint = single
+    ? "Supervisor hanya memegang 1 outlet. Outlet diambil dari sistem POS; yang sudah dipegang supervisor lain tidak ditampilkan."
+    : "Outlet diambil dari sistem POS. Yang sudah dipegang koordinator lain tidak ditampilkan. Pilih 1 atau lebih.";
+
   return (
-    <Field label={`Wilayah / Outlet Ditugaskan (${selected.length})`}>
+    <Field label={label}>
       <p className="mb-1.5 text-[11px] text-muted-foreground">
-        Outlet diambil dari sistem POS. Yang sudah dipegang koordinator lain tidak ditampilkan. Pilih 1 atau lebih.
+        {hint}
         {loading && <span className="ml-1 inline-flex items-center gap-1 text-muted-foreground/80"><Loader2 className="size-3 animate-spin" /> memuat dari POS…</span>}
       </p>
       <Input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Cari outlet…" className="mb-2" />
