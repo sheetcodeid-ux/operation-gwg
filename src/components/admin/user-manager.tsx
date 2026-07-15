@@ -106,6 +106,8 @@ const ALL_DIVISIONS = builtInDivisions() as Division[];
  *  extend this via "Kelola Departemen"; those additions merge on top. */
 const HO_STRUCTURE: Record<string, string[]> = builtInStructure();
 const HO_DEPARTMENTS = Object.keys(HO_STRUCTURE);
+/** Stable empty array — avoids re-creating a new [] each render (memo-friendly). */
+const NO_OUTLETS: string[] = [];
 // Roles a division exposes for manual pick (the generic `member` is auto-assigned).
 const rolesInDivision = (d: Division) => ROLES.filter((r) => ROLE_DIVISION[r] === d);
 /** Merge + de-dupe department suggestions for the pickers. */
@@ -458,7 +460,12 @@ export function UserFormPanel({
   // Existing access div = the division of the user's first grant (grants are
   // stored as "<Division>:<menu>"). Super Admin keeps full access regardless.
   const [access, setAccess] = React.useState<string>(user?.grants?.[0]?.split(":")[0] ?? "");
-  const [selected, setSelected] = React.useState<string[]>(user?.outletIds ?? []);
+  // Coordinator outlet selection lives in a ref (updated by the isolated picker)
+  // so toggling an outlet never re-renders this heavy form. Read at submit.
+  const outletsRef = React.useRef<string[]>(user?.outletIds ?? NO_OUTLETS);
+  const handleOutlets = React.useCallback((ids: string[]) => {
+    outletsRef.current = ids;
+  }, []);
   const [phone, setPhone] = React.useState(user?.phone ?? "");
   const [country, setCountry] = React.useState(user?.country ?? "");
   const [avatar, setAvatar] = React.useState<string | null>(user?.avatarUrl ?? null);
@@ -497,25 +504,8 @@ export function UserFormPanel({
   // Super Admin keeps its role on edit; a Coordinator Area is area_coordinator;
   // everyone else is a generic member (access via the chosen sidebar division).
   const finalRole: Role = isEdit && user?.role === "super_admin" ? "super_admin" : isCoordinator ? "area_coordinator" : "member";
-
-  // Outlets for the coordinator picker — sourced from the POS branches API,
-  // excluding outlets already held by another coordinator. Loaded lazily when
-  // the jabatan is a Coordinator Area.
-  const [coordOutlets, setCoordOutlets] = React.useState<AssignableOutlet[] | null>(null);
-  const [loadingOutlets, setLoadingOutlets] = React.useState(false);
-  React.useEffect(() => {
-    if (!isCoordinator || coordOutlets !== null) return;
-    let live = true;
-    setLoadingOutlets(true);
-    listCoordinatorOutlets(user?.id).then((res) => {
-      if (!live) return;
-      if ("outlets" in res) setCoordOutlets(res.outlets);
-      setLoadingOutlets(false);
-    });
-    return () => {
-      live = false;
-    };
-  }, [isCoordinator, coordOutlets, user?.id]);
+  // Local outlets as an instant fallback shown while the picker loads from POS.
+  const fallbackOutlets = React.useMemo(() => outlets.map((o) => ({ id: o.id, name: o.name })), [outlets]);
 
   function submit() {
     if (!name) return toast.error("Nama depan wajib diisi.");
@@ -528,8 +518,8 @@ export function UserFormPanel({
       const grants = finalRole === "super_admin" ? undefined : grantsForDivision(access);
       const contact = { phone: phone.trim() || null, country: country.trim() || null, avatarUrl: avatar, department: department.trim() || null, jabatan: jabatan.trim() || null, grants };
       const res = isEdit
-        ? await updateUserAction({ id: user!.id, name, email, role: finalRole, password: pwd || undefined, outletIds: selected, ...contact })
-        : await createUserAction({ name, email, role: finalRole, password: pwd, outletIds: selected, ...contact });
+        ? await updateUserAction({ id: user!.id, name, email, role: finalRole, password: pwd || undefined, outletIds: isCoordinator ? outletsRef.current : [], ...contact })
+        : await createUserAction({ name, email, role: finalRole, password: pwd, outletIds: isCoordinator ? outletsRef.current : [], ...contact });
       if (res?.error) {
         toast.error(res.error);
         return;
@@ -652,10 +642,10 @@ export function UserFormPanel({
 
         {isCoordinator && (
           <CoordinatorOutletPicker
-            outlets={coordOutlets ?? outlets.map((o) => ({ id: o.id, name: o.name }))}
-            loading={loadingOutlets && coordOutlets === null}
-            selected={selected}
-            onChange={setSelected}
+            userId={user?.id}
+            fallback={fallbackOutlets}
+            defaultSelected={user?.outletIds ?? NO_OUTLETS}
+            onSelectedChange={handleOutlets}
           />
         )}
       </div>
@@ -1062,58 +1052,96 @@ function SlideOverFooter({ onClose, pending, children }: { onClose: () => void; 
   );
 }
 
-/** Multi-select outlets for a Coordinator Area. Options come from the POS
- *  branches (via listCoordinatorOutlets); outlets already held by another
- *  coordinator are excluded server-side, so what's shown is assignable. */
-function CoordinatorOutletPicker({
-  outlets,
-  loading,
-  selected,
-  onChange,
+/** One outlet row — memoized so toggling one item doesn't re-render the list. */
+const OutletRow = React.memo(function OutletRow({
+  id,
+  name,
+  active,
+  onToggle,
 }: {
-  outlets: AssignableOutlet[];
-  loading: boolean;
-  selected: string[];
-  onChange: (ids: string[]) => void;
+  id: string;
+  name: string;
+  active: boolean;
+  onToggle: (id: string) => void;
 }) {
+  return (
+    <button
+      type="button"
+      onClick={() => onToggle(id)}
+      className={cn(
+        "flex w-full items-center justify-between rounded-md px-2.5 py-1.5 text-left text-sm transition-colors",
+        active ? "bg-primary/15 text-foreground ring-1 ring-inset ring-primary/30" : "hover:bg-muted",
+      )}
+    >
+      <span className="truncate">{name}</span>
+      {active && <Check className="size-4 shrink-0 text-primary" />}
+    </button>
+  );
+});
+
+/**
+ * Multi-select outlets for a Coordinator Area. Self-contained: fetches the POS
+ * branch list ONCE on mount, keeps its own selection state, and reports changes
+ * up via a stable callback (a ref in the parent) — so picking an outlet never
+ * re-renders the surrounding Add User form. Memoized so unrelated form edits
+ * (typing name, etc.) don't re-render it either.
+ */
+const CoordinatorOutletPicker = React.memo(function CoordinatorOutletPicker({
+  userId,
+  fallback,
+  defaultSelected,
+  onSelectedChange,
+}: {
+  userId?: string;
+  fallback: AssignableOutlet[];
+  defaultSelected: string[];
+  onSelectedChange: (ids: string[]) => void;
+}) {
+  const [outlets, setOutlets] = React.useState<AssignableOutlet[] | null>(null);
   const [q, setQ] = React.useState("");
-  const filtered = outlets.filter((o) => o.name.toLowerCase().includes(q.toLowerCase()));
-  const toggle = (id: string) =>
-    onChange(selected.includes(id) ? selected.filter((x) => x !== id) : [...selected, id]);
+  const [selected, setSelected] = React.useState<string[]>(defaultSelected);
+
+  // Fetch the assignable POS outlets exactly once.
+  React.useEffect(() => {
+    let live = true;
+    listCoordinatorOutlets(userId).then((res) => {
+      if (live && "outlets" in res) setOutlets(res.outlets);
+    });
+    return () => {
+      live = false;
+    };
+  }, [userId]);
+
+  // Report selection up (to the parent ref) whenever it changes.
+  React.useEffect(() => {
+    onSelectedChange(selected);
+  }, [selected, onSelectedChange]);
+
+  const toggle = React.useCallback((id: string) => {
+    setSelected((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]));
+  }, []);
+
+  const list = outlets ?? fallback;
+  const loading = outlets === null;
+  const selectedSet = React.useMemo(() => new Set(selected), [selected]);
+  const filtered = React.useMemo(
+    () => list.filter((o) => o.name.toLowerCase().includes(q.toLowerCase())),
+    [list, q],
+  );
+
   return (
     <Field label={`Wilayah / Outlet Ditugaskan (${selected.length})`}>
       <p className="mb-1.5 text-[11px] text-muted-foreground">
         Outlet diambil dari sistem POS. Yang sudah dipegang koordinator lain tidak ditampilkan. Pilih 1 atau lebih.
+        {loading && <span className="ml-1 inline-flex items-center gap-1 text-muted-foreground/80"><Loader2 className="size-3 animate-spin" /> memuat dari POS…</span>}
       </p>
       <Input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Cari outlet…" className="mb-2" />
       <div className="max-h-52 space-y-0.5 overflow-y-auto rounded-lg border border-border p-1">
-        {loading ? (
-          <p className="flex items-center justify-center gap-2 px-2 py-4 text-center text-xs text-muted-foreground">
-            <Loader2 className="size-3.5 animate-spin" /> Memuat outlet dari POS…
-          </p>
-        ) : (
-          <>
-            {filtered.map((o) => {
-              const active = selected.includes(o.id);
-              return (
-                <button
-                  key={o.id}
-                  type="button"
-                  onClick={() => toggle(o.id)}
-                  className={cn(
-                    "flex w-full items-center justify-between rounded-md px-2.5 py-1.5 text-left text-sm transition-colors",
-                    active ? "bg-primary/15 text-foreground ring-1 ring-inset ring-primary/30" : "hover:bg-muted",
-                  )}
-                >
-                  <span className="truncate">{o.name}</span>
-                  {active && <Check className="size-4 shrink-0 text-primary" />}
-                </button>
-              );
-            })}
-            {filtered.length === 0 && <p className="px-2 py-3 text-center text-xs text-muted-foreground">Tidak ada outlet tersedia</p>}
-          </>
-        )}
+        {filtered.map((o) => (
+          <OutletRow key={o.id} id={o.id} name={o.name} active={selectedSet.has(o.id)} onToggle={toggle} />
+        ))}
+        {filtered.length === 0 && <p className="px-2 py-3 text-center text-xs text-muted-foreground">Tidak ada outlet tersedia</p>}
       </div>
     </Field>
   );
-}
+});
