@@ -11,13 +11,16 @@ export interface AssignableOutlet {
 }
 
 /**
- * Outlets a Coordinator Area may be assigned, sourced from the POS (gwgmanage
- * branches API) so new POS outlets show up automatically — falling back to the
- * local outlets table when the integration isn't configured/reachable. Outlets
- * already held by ANOTHER area coordinator are removed (exclusive assignment);
- * pass the edited user's id so their own current outlets stay selectable.
+ * Outlets a Coordinator Area / Supervisor may be assigned, sourced from the POS
+ * (gwgmanage branches API) so new POS outlets show up automatically — falling
+ * back to the local outlets table when the integration isn't configured/
+ * reachable. Outlets already held by ANOTHER user of the SAME role are removed
+ * (exclusive assignment): coordinators don't clash with coordinators, and
+ * supervisors don't clash with supervisors. Pass the edited user's id so their
+ * own current outlets stay selectable.
  */
-export async function listCoordinatorOutlets(
+export async function listAssignableOutlets(
+  role: "area_coordinator" | "supervisor" = "area_coordinator",
   excludeUserId?: string,
 ): Promise<{ ok: true; outlets: AssignableOutlet[]; source: "pos" | "local" } | { error: string }> {
   const admin = await getSessionUser();
@@ -41,10 +44,10 @@ export async function listCoordinatorOutlets(
     source = "local";
   }
 
-  // Exclude outlets already assigned to another coordinator.
+  // Exclude outlets already assigned to another user of the same role.
   const taken = new Set<string>();
   for (const u of getUsers()) {
-    if (u.role === "area_coordinator" && u.id !== excludeUserId) {
+    if (u.role === role && u.id !== excludeUserId) {
       for (const oid of u.outletIds ?? []) taken.add(oid);
     }
   }
