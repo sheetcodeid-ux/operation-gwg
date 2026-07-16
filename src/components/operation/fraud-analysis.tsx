@@ -187,7 +187,17 @@ function eachDay(from: string, to: string): Date[] {
   }
   return out;
 }
-const dmy = (d: Date) => `${String(d.getDate()).padStart(2, "0")}/${String(d.getMonth() + 1).padStart(2, "0")}/${d.getFullYear()}`;
+const dayIso = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+
+/** ESB "Cancel/Void Time" → YYYY-MM-DD. The grid emits DD-MM-YYYY (sometimes
+ *  with / or .), other exports use ISO — accept both so cells never go dark. */
+function dayKey(s: string): string {
+  const iso = /(\d{4})-(\d{2})-(\d{2})/.exec(s);
+  if (iso) return `${iso[1]}-${iso[2]}-${iso[3]}`;
+  const dmy = /(\d{1,2})[\/\-.](\d{1,2})[\/\-.](\d{4})/.exec(s);
+  if (dmy) return `${dmy[3]}-${dmy[2].padStart(2, "0")}-${dmy[1].padStart(2, "0")}`;
+  return "";
+}
 
 /** Matrix: outlets (rows) × days (columns), cell = Rp void/cancel that day.
  *  Rows are clickable to reveal the per-order detail (ESB). */
@@ -199,8 +209,10 @@ function FraudMatrix({ report }: { report: FraudReport }) {
     for (const o of report.outlets) {
       const dm = new Map<string, number>();
       for (const ord of report.orders?.[o.name] ?? []) {
-        const key = (ord.voidTime || "").slice(0, 10); // DD/MM/YYYY
-        dm.set(key, (dm.get(key) ?? 0) + ord.total);
+        // Prefer the void/cancel timestamp; fall back to the order time, then to
+        // the period start (single-day periods) so no nominal ever vanishes.
+        const key = dayKey(ord.voidTime) || dayKey(ord.orderTime) || (report.from === report.to ? report.from : "");
+        if (key) dm.set(key, (dm.get(key) ?? 0) + ord.total);
       }
       m.set(o.name, dm);
     }
@@ -220,7 +232,7 @@ function FraudMatrix({ report }: { report: FraudReport }) {
               <th className="sticky left-0 z-10 bg-background px-3 py-2 text-left font-medium">Outlet</th>
               <th className="bg-background px-3 py-2 text-right font-medium">Total</th>
               {days.map((d) => (
-                <th key={dmy(d)} className="px-2 py-2 text-center font-medium tabular-nums">
+                <th key={dayIso(d)} className="px-2 py-2 text-center font-medium tabular-nums">
                   <div>{String(d.getDate()).padStart(2, "0")}</div>
                   <div className="text-[9px] text-muted-foreground/70">{WD[d.getDay()]}</div>
                 </th>
@@ -238,9 +250,9 @@ function FraudMatrix({ report }: { report: FraudReport }) {
                     <td className="sticky left-0 z-10 max-w-[13rem] truncate bg-background px-3 py-2 font-medium text-foreground">{o.name}</td>
                     <td className="bg-background px-3 py-2 text-right font-semibold tabular-nums text-foreground">{formatIDRShort(total)}</td>
                     {days.map((d) => {
-                      const v = dm?.get(dmy(d)) ?? 0;
+                      const v = dm?.get(dayIso(d)) ?? 0;
                       return (
-                        <td key={dmy(d)} className={cn("whitespace-nowrap px-2 py-2 text-center tabular-nums", v > 0 ? "bg-red-500/10 font-medium text-red-600 dark:text-red-400" : "text-muted-foreground/40")}>
+                        <td key={dayIso(d)} className={cn("whitespace-nowrap px-2 py-2 text-center tabular-nums", v > 0 ? "bg-red-500/10 font-medium text-red-600 dark:text-red-400" : "text-muted-foreground/40")}>
                           {v > 0 ? formatIDRShort(v) : "–"}
                         </td>
                       );
