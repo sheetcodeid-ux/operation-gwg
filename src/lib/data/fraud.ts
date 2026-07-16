@@ -99,16 +99,21 @@ function base(period: FraudPeriod, r: { from: string; to: string; label: string 
 /** Build the report from ESB order-level rows (real nominal + per-order detail). */
 function esbReport(period: FraudPeriod, kind: FraudKind, r: { from: string; to: string; label: string }, res: EsbCancelResult): FraudReport {
   // The default export carries BOTH Void and Cancel rows — narrow here when a
-  // single type is requested. Delete Order is already its own export.
+  // single type is requested. Delete uses its own export when the ESB form
+  // offers a delete/remove Type Void option; otherwise the default export was
+  // fetched and deleted items are picked out by their type column.
   const rows =
     kind === "void" ? res.rows.filter((x) => /void/i.test(x.type))
     : kind === "cancel" ? res.rows.filter((x) => /cancel/i.test(x.type) && !/void/i.test(x.type))
+    : kind === "delete" && !res.typeVoidFound ? res.rows.filter((x) => /delete|remove/i.test(x.type))
     : res.rows;
   // Diagnose a silent 0: items>0 but nothing parsed ⇒ parser miss; tiny html ⇒
   // empty/blocked response. A genuine empty period stays clean.
   let diag: string | undefined;
   if (res.rows.length === 0 && res.totalItems > 0) diag = `ESB: 0/${res.totalItems} baris ter-parse (htmlLen=${res.rawLen})`;
   else if (res.rows.length === 0 && res.rawLen < 60) diag = `ESB: respons kosong (htmlLen=${res.rawLen})`;
+  else if (kind === "delete" && !res.typeVoidFound && rows.length === 0)
+    diag = `Form ESB tidak menyediakan filter Delete pada Type Void (opsi terdeteksi: ${res.typeVoidOptions.join(" | ") || "tidak terbaca"}) dan tidak ada baris bertipe delete/remove pada export default (${res.rows.length} baris).`;
   const agg = new Map<string, { void: number; cancel: number; voidAmount: number; cancelAmount: number }>();
   const orders: Record<string, FraudOrder[]> = {};
   let tv = 0, tc = 0, tva = 0, tca = 0;
