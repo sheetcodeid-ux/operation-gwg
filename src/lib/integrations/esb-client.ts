@@ -287,9 +287,15 @@ export async function esbFetchCancelRows(dateFromYmd: string, dateToYmd: string,
   const opts = (await ensureSession()).typeVoidOptions;
   const pick = (re: RegExp) => opts.find((o) => re.test(o.label) || re.test(o.value));
   const fallback = pick(/default/i)?.value ?? opts[0]?.value ?? "Cancel / Void (Default)";
-  const del = kind === "delete" ? pick(/delete|remove|hapus/i) : undefined;
-  const typeVoidFound = kind !== "delete" || !!del;
-  const url = await generateExport(dateFromYmd, dateToYmd, del?.value ?? fallback);
+  // Deleted items are "Removed Before Save" in ESB (verified from a live form
+  // capture) — prefer that exact option, then any delete/remove-ish label. An
+  // unknown value here made ESB drop the WHOLE filter set (dates included), so
+  // when the select couldn't be parsed we still send the VERIFIED literal, but
+  // report typeVoidFound=false so the caller keeps its type-column filter on.
+  const delOpt = kind === "delete" ? pick(/removed?\s*before\s*save/i) ?? pick(/delete|remove|hapus/i) : undefined;
+  const typeVoidFound = kind !== "delete" || !!delOpt;
+  const typeVoid = kind === "delete" ? delOpt?.value ?? "Removed Before Save" : fallback;
+  const url = await generateExport(dateFromYmd, dateToYmd, typeVoid);
   await pokeQueue(); // kick the queue worker before the first read
   const first = await readExportPage(url, 0, 16, true); // page 0 waits for the async export
   const rows = [...first.report.rows];

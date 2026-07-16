@@ -134,7 +134,9 @@ const kindGroup = (kind: FraudKind): FraudKindGroup => (kind === "delete" ? "del
 function filterKind<T extends { type: string }>(rows: T[], kind: FraudKind, deleteIsOwnExport: boolean): T[] {
   if (kind === "void") return rows.filter((x) => /void/i.test(x.type));
   if (kind === "cancel") return rows.filter((x) => /cancel/i.test(x.type) && !/void/i.test(x.type));
-  if (kind === "delete" && !deleteIsOwnExport) return rows.filter((x) => /delete|remove/i.test(x.type));
+  // Deleted items either say delete/remove in the type column or (in the
+  // delete-only grid, which has no type column) carry an empty type.
+  if (kind === "delete" && !deleteIsOwnExport) return rows.filter((x) => /delete|remove/i.test(x.type) || x.type.trim() === "");
   return rows;
 }
 
