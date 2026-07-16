@@ -23,6 +23,7 @@ export default async function FraudPage() {
   return (
     <div className="w-full">
       <PageHeader
+        className="mb-3"
         icon={ShieldAlert}
         title="Analisis Fraud — Void & Cancel"
         description="Pantau transaksi void, cancel & delete order per outlet (harian / mingguan / bulanan) dari data ESB. Lonjakan pada satu outlet menandakan potensi fraud."

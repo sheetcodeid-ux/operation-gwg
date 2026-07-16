@@ -1,14 +1,14 @@
 "use client";
 
 import * as React from "react";
-import { AlertTriangle, CheckCircle2, ChevronDown, Download, Loader2 } from "lucide-react";
+import { AlertTriangle, CheckCircle2, ChevronDown, Download, FileSpreadsheet, Loader2, X } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Combobox } from "@/components/ui/combobox";
 import { cn, formatIDR, formatIDRShort } from "@/lib/utils";
 import { fraudReportAction, fraudSyncAction, outletFraudDailyAction } from "@/lib/actions/fraud";
-import type { FraudDailyPoint, FraudKind, FraudOrder, FraudPeriod, FraudReport } from "@/lib/data/fraud";
+import type { FraudDailyPoint, FraudKind, FraudOrder, FraudOutletRow, FraudPeriod, FraudReport } from "@/lib/data/fraud";
 
 const PERIODS: { key: FraudPeriod; label: string }[] = [
   { key: "daily", label: "Harian" },
@@ -22,6 +22,8 @@ const MONTHS = ["Januari", "Februari", "Maret", "April", "Mei", "Juni", "Juli", 
 const nf = (n: number) => n.toLocaleString("id-ID");
 const ymd = (y: number, m: number, d: number) => `${y}-${String(m + 1).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
 
+type PdfTheme = "light" | "dark";
+
 /** Value shown per metric: Rp nominal when the POS returns it, else the count. */
 const metricValue = (hasAmount: boolean, count: number, amount: number) => (hasAmount ? formatIDR(amount) : nf(count));
 
@@ -30,6 +32,9 @@ export function FraudAnalysis({ initial, initialDate }: { initial: FraudReport; 
   const [date, setDate] = React.useState(initialDate);
   const [kind, setKind] = React.useState<FraudKind>(initial.kind ?? "all");
   const [report, setReport] = React.useState<FraudReport>(initial);
+  const [query, setQuery] = React.useState("");
+  const [pdfTheme, setPdfTheme] = React.useState<PdfTheme>("light");
+  const [detail, setDetail] = React.useState<FraudOutletRow | null>(null);
   const [pending, start] = React.useTransition();
   // Background ESB→DB sync: days left to pull for the current selection. The
   // seq guard cancels a running drain the moment the user changes selection.
@@ -135,14 +140,17 @@ export function FraudAnalysis({ initial, initialDate }: { initial: FraudReport; 
     const d = defaultFor(p);
     setPeriod(p);
     setDate(d);
+    setDetail(null);
     load(p, d, kind);
   };
   const onDate = (d: string) => {
     setDate(d);
+    setDetail(null);
     load(period, d, kind);
   };
   const onKind = (k: FraudKind) => {
     setKind(k);
+    setDetail(null);
     load(period, date, k);
   };
 
@@ -152,20 +160,20 @@ export function FraudAnalysis({ initial, initialDate }: { initial: FraudReport; 
   const hasData = totalCount + totalAmount > 0;
 
   return (
-    <div className="space-y-4">
-      {/* Controls */}
-      <div className="glass rounded-2xl border border-border p-4">
-        <div className="flex flex-wrap items-end gap-3">
+    <div className="space-y-3">
+      {/* Controls — one compact bar, wraps cleanly on mobile */}
+      <div className="glass rounded-2xl border border-border p-3.5">
+        <div className="flex flex-wrap items-end gap-x-3 gap-y-2.5">
           <div>
-            <p className="mb-1.5 text-xs font-medium text-muted-foreground">Periode</p>
-            <div className="inline-flex rounded-xl border border-border bg-muted/50 p-1">
+            <p className="mb-1 text-[11px] font-medium text-muted-foreground">Periode</p>
+            <div className="inline-flex rounded-xl border border-border bg-muted/50 p-0.5">
               {PERIODS.map((p) => (
                 <button
                   key={p.key}
                   type="button"
                   onClick={() => onPeriod(p.key)}
                   className={cn(
-                    "rounded-lg px-3.5 py-1.5 text-sm font-medium transition-colors",
+                    "rounded-lg px-3 py-1.5 text-sm font-medium transition-colors",
                     period === p.key ? "bg-background text-foreground shadow-sm ring-1 ring-border" : "text-muted-foreground hover:text-foreground",
                   )}
                 >
@@ -175,26 +183,46 @@ export function FraudAnalysis({ initial, initialDate }: { initial: FraudReport; 
             </div>
           </div>
           <div>
-            <p className="mb-1.5 text-xs font-medium text-muted-foreground">{period === "daily" ? "Tanggal" : period === "weekly" ? "Minggu" : "Bulan"}</p>
-            <Combobox matchTriggerWidth searchable={false} value={date} onChange={onDate} options={options} className="w-52" />
+            <p className="mb-1 text-[11px] font-medium text-muted-foreground">{period === "daily" ? "Tanggal" : period === "weekly" ? "Minggu" : "Bulan"}</p>
+            <Combobox matchTriggerWidth searchable={false} value={date} onChange={onDate} options={options} className="w-44" />
           </div>
           <div>
-            <p className="mb-1.5 text-xs font-medium text-muted-foreground">Tipe</p>
-            <Combobox matchTriggerWidth searchable={false} value={kind} onChange={(v) => onKind(v as FraudKind)} options={KIND_OPTIONS} className="w-44" />
+            <p className="mb-1 text-[11px] font-medium text-muted-foreground">Tipe</p>
+            <Combobox matchTriggerWidth searchable={false} value={kind} onChange={(v) => onKind(v as FraudKind)} options={KIND_OPTIONS} className="w-40" />
           </div>
-          <div className="ml-auto flex items-center gap-2">
+          <div className="min-w-36 flex-1">
+            <p className="mb-1 text-[11px] font-medium text-muted-foreground">Cari outlet</p>
+            <input
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder="Nama outlet…"
+              className="h-9 w-full rounded-xl border border-border bg-background px-3 text-sm outline-none placeholder:text-muted-foreground/60 focus:ring-2 focus:ring-ring"
+            />
+          </div>
+          <div className="flex items-center gap-2">
             {syncLeft > 0 && (
               <span className="inline-flex items-center gap-1.5 rounded-full border border-amber-500/30 bg-amber-500/10 px-2.5 py-1 text-xs font-medium text-amber-600 dark:text-amber-400">
-                <Loader2 className="size-3 animate-spin" /> Sinkron ESB · sisa {syncLeft} hari
+                <Loader2 className="size-3 animate-spin" /> Sinkron · sisa {syncLeft} hari
               </span>
             )}
             {pending && <Loader2 className="size-4 animate-spin text-muted-foreground" />}
-            <Button variant="outline" size="sm" onClick={() => downloadPdf(report)} disabled={!report.configured}>
-              <Download className="size-4" /> Download PDF
+            <Combobox
+              matchTriggerWidth
+              searchable={false}
+              value={pdfTheme}
+              onChange={(v) => setPdfTheme(v as PdfTheme)}
+              options={[{ value: "light", label: "PDF Terang" }, { value: "dark", label: "PDF Gelap" }]}
+              className="w-32"
+            />
+            <Button variant="outline" size="sm" onClick={() => downloadCsv(report)} disabled={!report.configured || report.source !== "esb"} title="Unduh matriks CSV (buka di Excel)">
+              <FileSpreadsheet className="size-4" /> CSV
+            </Button>
+            <Button variant="outline" size="sm" onClick={() => downloadPdf(report, pdfTheme)} disabled={!report.configured}>
+              <Download className="size-4" /> PDF
             </Button>
           </div>
         </div>
-        <p className="mt-3 text-sm">
+        <p className="mt-2 text-xs text-muted-foreground">
           Menampilkan <span className="font-semibold text-foreground">{KIND_LABEL[kind]}</span> · <span className="font-semibold text-foreground">{PERIOD_LABEL[period]}</span> · periode{" "}
           <span className="font-semibold text-foreground">{report.label}</span>
         </p>
@@ -230,7 +258,7 @@ export function FraudAnalysis({ initial, initialDate }: { initial: FraudReport; 
               </p>
             </div>
           ) : report.source === "esb" ? (
-            <FraudMatrix report={report} busy={pending} />
+            <FraudMatrix report={report} busy={pending} query={query} onOpenOutlet={setDetail} />
           ) : report.perOutletReliable ? (
             <OutletTable report={report} hasAmount={hasAmount} />
           ) : (
@@ -248,9 +276,13 @@ export function FraudAnalysis({ initial, initialDate }: { initial: FraudReport; 
           )}
 
           <p className="text-[11px] text-muted-foreground">
-            Angka = total nominal (Rp) {KIND_LABEL[report.kind]} per outlet per hari (dari ESB). Klik baris outlet untuk melihat detail order (no. bill, menu, kasir, jam, alasan) — kolom &ldquo;Oleh&rdquo; menunjukkan siapa yang melakukan void/cancel/delete.
+            Angka = total nominal (Rp, basis subtotal ESB) {KIND_LABEL[report.kind]} per outlet per hari. Klik baris outlet untuk membuka detail lengkap — siapa yang melakukan, kapan, menu apa, dan alasannya.
           </p>
         </>
+      )}
+
+      {detail && report.source === "esb" && (
+        <OutletDetailModal report={report} outlet={detail} pdfTheme={pdfTheme} onClose={() => setDetail(null)} />
       )}
     </div>
   );
@@ -279,6 +311,25 @@ function dayKey(s: string): string {
   return "";
 }
 
+/** Per-outlet-per-day nominal map: server-computed when available. */
+function useByOutlet(report: FraudReport) {
+  return React.useMemo(() => {
+    if (report.daily) {
+      return new Map(Object.entries(report.daily).map(([name, m]) => [name, new Map(Object.entries(m))]));
+    }
+    const m = new Map<string, Map<string, number>>();
+    for (const o of report.outlets) {
+      const dm = new Map<string, number>();
+      for (const ord of report.orders?.[o.name] ?? []) {
+        const key = dayKey(ord.voidTime) || dayKey(ord.orderTime) || (report.from === report.to ? report.from : "");
+        if (key) dm.set(key, (dm.get(key) ?? 0) + ord.total);
+      }
+      m.set(o.name, dm);
+    }
+    return m;
+  }, [report]);
+}
+
 /** Heat steps: ONE hue (red), light→dark by magnitude relative to the largest
  *  cell. Text stays on ink/red tokens; exact Rp rides on the title tooltip. */
 function heatClass(v: number, max: number): string {
@@ -291,41 +342,31 @@ function heatClass(v: number, max: number): string {
   return "bg-red-500/60 text-red-950 dark:text-red-50 font-semibold";
 }
 
-/** Matrix: outlets (rows) × days (columns), cell = Rp void/cancel that day as a
- *  one-hue heatmap. Rows expand to the per-order detail (ESB). */
-function FraudMatrix({ report, busy }: { report: FraudReport; busy?: boolean }) {
-  const [openId, setOpenId] = React.useState<number | null>(null);
+/** Matrix: outlets (rows) × days (columns), heat by nominal. Header, footer and
+ *  the outlet column stay frozen while the body scrolls in both directions. */
+function FraudMatrix({ report, busy, query, onOpenOutlet }: { report: FraudReport; busy?: boolean; query: string; onOpenOutlet: (o: FraudOutletRow) => void }) {
   const days = React.useMemo(() => eachDay(report.from, report.to), [report.from, report.to]);
-  const byOutlet = React.useMemo(() => {
-    // Server-side per-day aggregation covers ALL rows (orders may be capped);
-    // deriving from orders is only a fallback for older payloads.
-    if (report.daily) {
-      return new Map(Object.entries(report.daily).map(([name, m]) => [name, new Map(Object.entries(m))]));
-    }
-    const m = new Map<string, Map<string, number>>();
-    for (const o of report.outlets) {
-      const dm = new Map<string, number>();
-      for (const ord of report.orders?.[o.name] ?? []) {
-        // Prefer the void/cancel timestamp; fall back to the order time, then to
-        // the period start (single-day periods) so no nominal ever vanishes.
-        const key = dayKey(ord.voidTime) || dayKey(ord.orderTime) || (report.from === report.to ? report.from : "");
-        if (key) dm.set(key, (dm.get(key) ?? 0) + ord.total);
-      }
-      m.set(o.name, dm);
-    }
-    return m;
-  }, [report.daily, report.outlets, report.orders, report.from, report.to]);
+  const byOutlet = useByOutlet(report);
 
-  // Per-day column totals + the largest cell (heat scale reference).
+  const outlets = React.useMemo(() => {
+    const q = query.trim().toLowerCase();
+    return q ? report.outlets.filter((o) => o.name.toLowerCase().includes(q)) : report.outlets;
+  }, [report.outlets, query]);
+
+  // Per-day column totals + the largest cell (heat scale reference) + anomaly
+  // threshold (mean + 2σ of non-zero cells → ring highlight).
   const colTotals = React.useMemo(() => {
     const t = new Map<string, number>();
     for (const dm of byOutlet.values()) for (const [k, v] of dm) t.set(k, (t.get(k) ?? 0) + v);
     return t;
   }, [byOutlet]);
-  const maxCell = React.useMemo(() => {
-    let m = 0;
-    for (const dm of byOutlet.values()) for (const v of dm.values()) if (v > m) m = v;
-    return m;
+  const { maxCell, anomaly } = React.useMemo(() => {
+    const vals: number[] = [];
+    for (const dm of byOutlet.values()) for (const v of dm.values()) if (v > 0) vals.push(v);
+    const max = vals.length ? Math.max(...vals) : 0;
+    const mean = vals.length ? vals.reduce((a, b) => a + b, 0) / vals.length : 0;
+    const sd = vals.length ? Math.sqrt(vals.reduce((a, b) => a + (b - mean) ** 2, 0) / vals.length) : 0;
+    return { maxCell: max, anomaly: vals.length >= 8 ? mean + 2 * sd : Infinity };
   }, [byOutlet]);
 
   const grand = report.totalVoidAmount + report.totalCancelAmount;
@@ -333,11 +374,10 @@ function FraudMatrix({ report, busy }: { report: FraudReport; busy?: boolean }) 
   const maxRow = Math.max(1, ...report.outlets.map((o) => o.voidAmount + o.cancelAmount));
 
   return (
-    <div className={cn("glass overflow-hidden rounded-2xl border border-border transition-opacity", busy && "opacity-60")}>
+    <div className={cn("glass -mx-4 overflow-hidden border-y border-border transition-opacity sm:mx-0 sm:rounded-2xl sm:border", busy && "opacity-60")}>
       <div className="flex flex-wrap items-end justify-between gap-3 border-b border-border px-4 py-3">
         <div>
           <p className="text-sm font-semibold text-foreground">{KIND_LABEL[report.kind]} per Outlet per Hari — {report.label}</p>
-          <p className="mt-0.5 text-xs text-muted-foreground">Klik outlet untuk detail order. Arahkan kursor ke sel untuk nilai persis.</p>
           <div className="mt-1.5 flex items-center gap-1.5 text-[10px] text-muted-foreground">
             <span>Rendah</span>
             <span className="h-2.5 w-4 rounded-sm bg-red-500/10" />
@@ -346,6 +386,7 @@ function FraudMatrix({ report, busy }: { report: FraudReport; busy?: boolean }) 
             <span className="h-2.5 w-4 rounded-sm bg-red-500/45" />
             <span className="h-2.5 w-4 rounded-sm bg-red-500/60" />
             <span>Tinggi</span>
+            <span className="ml-2 inline-block size-2.5 rounded-sm ring-2 ring-inset ring-red-600" /> <span>= anomali (&gt; rata-rata + 2σ)</span>
           </div>
         </div>
         <div className="text-right">
@@ -353,14 +394,15 @@ function FraudMatrix({ report, busy }: { report: FraudReport; busy?: boolean }) 
           <p className="text-[11px] text-muted-foreground">{nf(txCount)} transaksi · {nf(report.outlets.length)} outlet</p>
         </div>
       </div>
-      <div className="overflow-x-auto">
+      {/* Frozen header + frozen outlet column + frozen footer; body scrolls */}
+      <div className="max-h-[72vh] overflow-auto overscroll-contain">
         <table className="w-full border-collapse text-xs">
           <thead>
-            <tr className="border-b border-border text-muted-foreground">
-              <th className="sticky left-0 z-10 bg-background px-3 py-2 text-left font-medium">Outlet</th>
-              <th className="bg-background px-3 py-2 text-right font-medium">Total</th>
+            <tr className="text-muted-foreground">
+              <th className="sticky left-0 top-0 z-30 border-b border-border bg-background px-3 py-2 text-left font-medium">Outlet</th>
+              <th className="sticky top-0 z-20 border-b border-border bg-background px-2.5 py-2 text-right font-medium">Total</th>
               {days.map((d) => (
-                <th key={dayIso(d)} className="px-2 py-2 text-center font-medium tabular-nums">
+                <th key={dayIso(d)} className="sticky top-0 z-20 border-b border-border bg-background px-2 py-1.5 text-center font-medium tabular-nums">
                   <div>{String(d.getDate()).padStart(2, "0")}</div>
                   <div className="text-[9px] text-muted-foreground/70">{WD[d.getDay()]}</div>
                 </th>
@@ -368,55 +410,53 @@ function FraudMatrix({ report, busy }: { report: FraudReport; busy?: boolean }) 
             </tr>
           </thead>
           <tbody>
-            {report.outlets.map((o) => {
+            {outlets.map((o) => {
               const dm = byOutlet.get(o.name);
               const total = o.voidAmount + o.cancelAmount;
-              const open = openId === o.branchId;
               return (
-                <React.Fragment key={o.branchId}>
-                  <tr className="cursor-pointer border-b border-border/50 transition-colors hover:bg-foreground/[0.04]" onClick={() => setOpenId(open ? null : o.branchId)}>
-                    <td className="sticky left-0 z-10 max-w-[13rem] bg-background px-3 py-2">
-                      <div className="flex items-center gap-1.5">
-                        <ChevronDown className={cn("size-3 shrink-0 text-muted-foreground transition-transform", open && "rotate-180")} />
-                        <span className="truncate font-medium text-foreground">{o.name}</span>
-                      </div>
-                      <div className="mt-1 ml-[18px] h-1 w-24 max-w-full overflow-hidden rounded-full bg-muted">
-                        <div className="h-full rounded-full bg-red-500/70" style={{ width: `${(total / maxRow) * 100}%` }} />
-                      </div>
-                    </td>
-                    <td title={formatIDR(total)} className="bg-background px-3 py-2 text-right font-semibold tabular-nums text-foreground">{formatIDRShort(total)}</td>
-                    {days.map((d) => {
-                      const v = dm?.get(dayIso(d)) ?? 0;
-                      return (
-                        <td
-                          key={dayIso(d)}
-                          title={v > 0 ? formatIDR(v) : undefined}
-                          className={cn("whitespace-nowrap px-2 py-2 text-center tabular-nums", heatClass(v, maxCell))}
-                        >
-                          {v > 0 ? formatIDRShort(v) : "–"}
-                        </td>
-                      );
-                    })}
-                  </tr>
-                  {open && (
-                    <tr className="border-b border-border/50 bg-muted/20">
-                      <td colSpan={days.length + 2} className="px-4 py-3">
-                        <EsbOrderDetail orders={report.orders?.[o.name] ?? []} totalCount={o.void + o.cancel} />
+                <tr key={o.branchId} className="cursor-pointer border-b border-border/50 transition-colors hover:bg-foreground/[0.04]" onClick={() => onOpenOutlet(o)}>
+                  <td className="sticky left-0 z-10 max-w-[11rem] bg-background px-3 py-1.5 sm:max-w-[14rem]">
+                    <span className="block truncate font-medium text-foreground">{o.name}</span>
+                    <span className="mt-1 block h-1 w-24 max-w-full overflow-hidden rounded-full bg-muted">
+                      <span className="block h-full rounded-full bg-red-500/70" style={{ width: `${(total / maxRow) * 100}%` }} />
+                    </span>
+                  </td>
+                  <td title={`${formatIDR(total)} · ${nf(o.void + o.cancel)} trx`} className="whitespace-nowrap px-2.5 py-1.5 text-right font-semibold tabular-nums text-foreground">
+                    {formatIDRShort(total)}
+                  </td>
+                  {days.map((d) => {
+                    const v = dm?.get(dayIso(d)) ?? 0;
+                    return (
+                      <td
+                        key={dayIso(d)}
+                        title={v > 0 ? formatIDR(v) : undefined}
+                        className={cn(
+                          "whitespace-nowrap px-2 py-1.5 text-center tabular-nums",
+                          heatClass(v, maxCell),
+                          v > anomaly && "ring-2 ring-inset ring-red-600",
+                        )}
+                      >
+                        {v > 0 ? formatIDRShort(v) : "–"}
                       </td>
-                    </tr>
-                  )}
-                </React.Fragment>
+                    );
+                  })}
+                </tr>
               );
             })}
+            {outlets.length === 0 && (
+              <tr>
+                <td colSpan={days.length + 2} className="px-4 py-8 text-center text-sm text-muted-foreground">Tidak ada outlet yang cocok dengan pencarian.</td>
+              </tr>
+            )}
           </tbody>
           <tfoot>
-            <tr className="border-t border-border bg-muted/30 font-medium text-foreground">
-              <td className="sticky left-0 z-10 bg-background px-3 py-2">Total per hari</td>
-              <td title={formatIDR(grand)} className="bg-background px-3 py-2 text-right font-bold tabular-nums">{formatIDRShort(grand)}</td>
+            <tr className="font-medium text-foreground">
+              <td className="sticky bottom-0 left-0 z-30 border-t border-border bg-background px-3 py-2">Total per hari</td>
+              <td title={formatIDR(grand)} className="sticky bottom-0 z-20 border-t border-border bg-background px-2.5 py-2 text-right font-bold tabular-nums">{formatIDRShort(grand)}</td>
               {days.map((d) => {
                 const v = colTotals.get(dayIso(d)) ?? 0;
                 return (
-                  <td key={dayIso(d)} title={v > 0 ? formatIDR(v) : undefined} className={cn("whitespace-nowrap px-2 py-2 text-center tabular-nums", v > 0 ? "text-foreground" : "text-muted-foreground/30")}>
+                  <td key={dayIso(d)} title={v > 0 ? formatIDR(v) : undefined} className={cn("sticky bottom-0 z-20 whitespace-nowrap border-t border-border bg-background px-2 py-2 text-center tabular-nums", v > 0 ? "text-foreground" : "text-muted-foreground/30")}>
                     {v > 0 ? formatIDRShort(v) : "–"}
                   </td>
                 );
@@ -428,6 +468,170 @@ function FraudMatrix({ report, busy }: { report: FraudReport; busy?: boolean }) 
     </div>
   );
 }
+
+/* ------------------------------ Detail modal ------------------------------ */
+
+/** Big detail dialog for one outlet: per-day breakdown, top actors, and the
+ *  full order list — with a per-outlet PDF export. */
+function OutletDetailModal({ report, outlet, pdfTheme, onClose }: { report: FraudReport; outlet: FraudOutletRow; pdfTheme: PdfTheme; onClose: () => void }) {
+  const byOutlet = useByOutlet(report);
+  const orders = report.orders?.[outlet.name] ?? [];
+  const total = outlet.voidAmount + outlet.cancelAmount;
+  const txCount = outlet.void + outlet.cancel;
+  const capped = txCount > orders.length;
+
+  const dailyRows = React.useMemo(() => {
+    const dm = byOutlet.get(outlet.name) ?? new Map<string, number>();
+    return eachDay(report.from, report.to)
+      .map((d) => ({ iso: dayIso(d), label: `${String(d.getDate()).padStart(2, "0")} ${MONTHS[d.getMonth()].slice(0, 3)}`, wd: WD[d.getDay()], v: dm.get(dayIso(d)) ?? 0 }))
+      .filter((x) => x.v > 0);
+  }, [byOutlet, outlet.name, report.from, report.to]);
+  const maxDaily = Math.max(1, ...dailyRows.map((x) => x.v));
+
+  // Lock page scroll while open; Esc closes.
+  React.useEffect(() => {
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    const onKey = (e: KeyboardEvent) => e.key === "Escape" && onClose();
+    window.addEventListener("keydown", onKey);
+    return () => {
+      document.body.style.overflow = prev;
+      window.removeEventListener("keydown", onKey);
+    };
+  }, [onClose]);
+
+  return (
+    <div className="fixed inset-0 z-[140] flex items-end justify-center p-0 sm:items-center sm:p-6" role="dialog" aria-modal="true">
+      <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
+      <div className="glass relative flex max-h-[92vh] w-full flex-col overflow-hidden rounded-t-2xl border border-border bg-background shadow-2xl sm:max-h-[86vh] sm:max-w-5xl sm:rounded-2xl">
+        <div className="flex flex-wrap items-center gap-3 border-b border-border px-4 py-3 sm:px-5">
+          <div className="min-w-0 flex-1">
+            <p className="truncate text-base font-semibold text-foreground">{outlet.name}</p>
+            <p className="text-xs text-muted-foreground">{KIND_LABEL[report.kind]} · {report.label}</p>
+          </div>
+          <div className="text-right">
+            <p className="text-lg font-bold tabular-nums text-foreground">{formatIDR(total)}</p>
+            <p className="text-[11px] text-muted-foreground">{nf(txCount)} transaksi</p>
+          </div>
+          <div className="flex items-center gap-2">
+            <Button variant="outline" size="sm" onClick={() => downloadPdf(report, pdfTheme, outlet)}>
+              <Download className="size-4" /> PDF Outlet
+            </Button>
+            <Button variant="ghost" size="sm" onClick={onClose} aria-label="Tutup">
+              <X className="size-4" />
+            </Button>
+          </div>
+        </div>
+
+        <div className="min-h-0 flex-1 space-y-5 overflow-y-auto px-4 py-4 sm:px-5">
+          {/* Per-day breakdown */}
+          {dailyRows.length > 1 && (
+            <section>
+              <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Per hari</p>
+              <div className="space-y-1">
+                {dailyRows.map((x) => (
+                  <div key={x.iso} className="flex items-center gap-2.5 text-xs">
+                    <span className="w-16 shrink-0 tabular-nums text-muted-foreground">{x.label} <span className="text-muted-foreground/50">{x.wd}</span></span>
+                    <span className="block h-2 flex-1 overflow-hidden rounded-full bg-muted">
+                      <span className="block h-full rounded-full bg-red-500/70" style={{ width: `${(x.v / maxDaily) * 100}%` }} />
+                    </span>
+                    <span className="w-24 shrink-0 text-right tabular-nums text-foreground">{formatIDR(x.v)}</span>
+                  </div>
+                ))}
+              </div>
+            </section>
+          )}
+
+          <TopActors orders={orders} />
+
+          <section>
+            <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+              Detail order ({capped ? `${nf(orders.length)} terbesar dari ${nf(txCount)}` : nf(orders.length)})
+            </p>
+            <OrdersTable orders={orders} />
+          </section>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/** Top 5 actors (the "Oleh" column) by nominal — the who-did-it summary. */
+function TopActors({ orders }: { orders: FraudOrder[] }) {
+  const actors = React.useMemo(() => {
+    const byActor = new Map<string, { count: number; total: number }>();
+    for (const o of orders) {
+      const who = o.voidBy || "(tidak tercatat)";
+      const a = byActor.get(who) ?? { count: 0, total: 0 };
+      a.count += 1;
+      a.total += o.total;
+      byActor.set(who, a);
+    }
+    return [...byActor.entries()].sort((x, y) => y[1].total - x[1].total).slice(0, 5);
+  }, [orders]);
+  if (actors.length === 0) return null;
+  const maxActor = Math.max(1, ...actors.map(([, a]) => a.total));
+  return (
+    <section>
+      <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Pelaku teratas (Oleh)</p>
+      <div className="space-y-1">
+        {actors.map(([who, a]) => (
+          <div key={who} className="flex items-center gap-2.5 text-xs">
+            <span className="w-36 shrink-0 truncate font-medium text-foreground" title={who}>{who}</span>
+            <span className="block h-1.5 w-28 shrink-0 overflow-hidden rounded-full bg-muted sm:w-48">
+              <span className="block h-full rounded-full bg-red-500/70" style={{ width: `${(a.total / maxActor) * 100}%` }} />
+            </span>
+            <span className="whitespace-nowrap tabular-nums text-muted-foreground">{nf(a.count)} trx · <span className="text-foreground">{formatIDR(a.total)}</span></span>
+          </div>
+        ))}
+      </div>
+    </section>
+  );
+}
+
+/** ESB order-level rows for one outlet. */
+function OrdersTable({ orders }: { orders: FraudOrder[] }) {
+  if (orders.length === 0) return <p className="py-2 text-xs text-muted-foreground">Tidak ada order pada periode ini.</p>;
+  const sorted = [...orders].sort((a, b) => b.total - a.total);
+  return (
+    <div className="overflow-x-auto rounded-xl border border-border">
+      <table className="w-full min-w-[52rem] text-xs">
+        <thead>
+          <tr className="border-b border-border bg-muted/40 text-left text-[10px] uppercase tracking-wide text-muted-foreground">
+            <th className="px-2.5 py-2">No. Bill</th>
+            <th className="px-2.5 py-2">Menu</th>
+            <th className="px-2.5 py-2">Order By</th>
+            <th className="px-2.5 py-2">Oleh</th>
+            <th className="px-2.5 py-2">Waktu</th>
+            <th className="px-2.5 py-2 text-center">Tipe</th>
+            <th className="px-2.5 py-2">Alasan</th>
+            <th className="px-2.5 py-2 text-right">Qty</th>
+            <th className="px-2.5 py-2 text-right">Nominal</th>
+          </tr>
+        </thead>
+        <tbody>
+          {sorted.map((o, i) => (
+            <tr key={`${o.salesNumber}-${i}`} className="border-b border-border/50 last:border-0">
+              <td className="px-2.5 py-1.5 font-mono text-[11px] text-muted-foreground">{o.salesNumber}</td>
+              <td className="px-2.5 py-1.5 text-foreground">{o.menu}</td>
+              <td className="px-2.5 py-1.5">{o.orderBy}</td>
+              <td className="px-2.5 py-1.5 font-medium text-foreground">{o.voidBy}</td>
+              <td className="whitespace-nowrap px-2.5 py-1.5 text-muted-foreground">{o.voidTime || o.orderTime}</td>
+              <td className="px-2.5 py-1.5 text-center">
+                <Badge tone={/void|delete/i.test(o.type) ? "danger" : "warning"}>{o.type || "Delete"}</Badge>
+              </td>
+              <td className="max-w-[16rem] truncate px-2.5 py-1.5 text-muted-foreground" title={o.notes}>{o.notes || "—"}</td>
+              <td className="px-2.5 py-1.5 text-right tabular-nums">{nf(o.qty)}</td>
+              <td className="px-2.5 py-1.5 text-right tabular-nums text-foreground">{formatIDR(o.total)}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+/* --------------------------- POS fallback table --------------------------- */
 
 function OutletTable({ report, hasAmount }: { report: FraudReport; hasAmount: boolean }) {
   const [openId, setOpenId] = React.useState<number | null>(null);
@@ -489,11 +693,7 @@ function OutletTable({ report, hasAmount }: { report: FraudReport; hasAmount: bo
                   {open && (
                     <tr className="border-b border-border/60 bg-muted/20">
                       <td colSpan={6} className="px-4 py-3">
-                        {report.source === "esb" ? (
-                          <EsbOrderDetail orders={report.orders?.[o.name] ?? []} totalCount={o.void + o.cancel} />
-                        ) : (
-                          <OutletDetail branchId={o.branchId} from={report.from} to={report.to} hasAmount={hasAmount} />
-                        )}
+                        <OutletDetail branchId={o.branchId} from={report.from} to={report.to} hasAmount={hasAmount} />
                       </td>
                     </tr>
                   )}
@@ -551,129 +751,166 @@ function OutletDetail({ branchId, from, to, hasAmount }: { branchId: number; fro
   );
 }
 
-/** ESB order-level detail for one outlet — each void/cancel line item, led by
- *  a "who did it" summary (grouped by the Oleh column). */
-function EsbOrderDetail({ orders, totalCount }: { orders: FraudOrder[]; totalCount?: number }) {
-  if (orders.length === 0) return <p className="py-2 text-xs text-muted-foreground">Tidak ada order void/cancel.</p>;
-  const sorted = [...orders].sort((a, b) => b.total - a.total);
-  const capped = totalCount !== undefined && totalCount > orders.length;
+/* ------------------------------ Exports (CSV/PDF) ------------------------------ */
 
-  // Group by actor (who voided/cancelled/deleted) — the fraud question.
-  const byActor = new Map<string, { count: number; total: number }>();
-  for (const o of orders) {
-    const who = o.voidBy || "(tidak tercatat)";
-    const a = byActor.get(who) ?? { count: 0, total: 0 };
-    a.count += 1;
-    a.total += o.total;
-    byActor.set(who, a);
+/** Matrix CSV (outlet × day + totals) — matches the on-screen numbers exactly,
+ *  so it can be reconciled against ESB recaps in Excel. */
+function downloadCsv(report: FraudReport) {
+  const days = eachDay(report.from, report.to);
+  const daily = report.daily ?? {};
+  const head = ["Outlet", ...days.map((d) => dayIso(d)), "Total"];
+  const lines = [head.join(";")];
+  const colTot = new Map<string, number>();
+  for (const o of report.outlets) {
+    const dm = daily[o.name] ?? {};
+    const cells = days.map((d) => {
+      const v = dm[dayIso(d)] ?? 0;
+      colTot.set(dayIso(d), (colTot.get(dayIso(d)) ?? 0) + v);
+      return String(Math.round(v));
+    });
+    lines.push([`"${o.name.replace(/"/g, '""')}"`, ...cells, String(Math.round(o.voidAmount + o.cancelAmount))].join(";"));
   }
-  const actors = [...byActor.entries()].sort((x, y) => y[1].total - x[1].total).slice(0, 5);
-  const maxActor = Math.max(1, ...actors.map(([, a]) => a.total));
-
-  return (
-    <div className="overflow-x-auto">
-      {actors.length > 0 && (
-        <div className="mb-3">
-          <p className="mb-1.5 text-xs font-medium text-muted-foreground">Pelaku teratas (Oleh)</p>
-          <div className="space-y-1">
-            {actors.map(([who, a]) => (
-              <div key={who} className="flex items-center gap-2 text-xs">
-                <span className="w-36 shrink-0 truncate font-medium text-foreground" title={who}>{who}</span>
-                <div className="h-1.5 w-32 shrink-0 overflow-hidden rounded-full bg-muted sm:w-48">
-                  <div className="h-full rounded-full bg-red-500/70" style={{ width: `${(a.total / maxActor) * 100}%` }} />
-                </div>
-                <span className="whitespace-nowrap tabular-nums text-muted-foreground">{nf(a.count)} trx · <span className="text-foreground">{formatIDR(a.total)}</span></span>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-      <p className="mb-2 text-xs font-medium text-muted-foreground">
-        Detail order ({capped ? `${nf(orders.length)} terbesar dari ${nf(totalCount)}` : nf(orders.length)})
-      </p>
-      <table className="w-full min-w-[52rem] text-xs">
-        <thead>
-          <tr className="border-b border-border text-left text-[10px] uppercase tracking-wide text-muted-foreground">
-            <th className="px-2 py-1.5">No. Bill</th>
-            <th className="px-2 py-1.5">Menu</th>
-            <th className="px-2 py-1.5">Order By</th>
-            <th className="px-2 py-1.5">Oleh</th>
-            <th className="px-2 py-1.5">Waktu</th>
-            <th className="px-2 py-1.5 text-center">Tipe</th>
-            <th className="px-2 py-1.5">Alasan</th>
-            <th className="px-2 py-1.5 text-right">Total</th>
-          </tr>
-        </thead>
-        <tbody>
-          {sorted.map((o, i) => (
-            <tr key={`${o.salesNumber}-${i}`} className="border-b border-border/50">
-              <td className="px-2 py-1.5 font-mono text-[11px] text-muted-foreground">{o.salesNumber}</td>
-              <td className="px-2 py-1.5 text-foreground">{o.menu}</td>
-              <td className="px-2 py-1.5">{o.orderBy}</td>
-              <td className="px-2 py-1.5">{o.voidBy}</td>
-              <td className="px-2 py-1.5 whitespace-nowrap text-muted-foreground">{o.voidTime}</td>
-              <td className="px-2 py-1.5 text-center">
-                <Badge tone={/void|delete/i.test(o.type) ? "danger" : "warning"}>{o.type || "Delete"}</Badge>
-              </td>
-              <td className="px-2 py-1.5 max-w-[16rem] truncate text-muted-foreground" title={o.notes}>{o.notes || "—"}</td>
-              <td className="px-2 py-1.5 text-right tabular-nums text-foreground">{formatIDR(o.total)}</td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
-  );
+  lines.push(["TOTAL", ...days.map((d) => String(Math.round(colTot.get(dayIso(d)) ?? 0))), String(Math.round(report.totalVoidAmount + report.totalCancelAmount))].join(";"));
+  const blob = new Blob(["﻿" + lines.join("\r\n")], { type: "text/csv;charset=utf-8" });
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = `fraud-${report.kind}-${report.from}-sd-${report.to}.csv`;
+  a.click();
+  URL.revokeObjectURL(a.href);
 }
 
-/** Build a clean, self-contained printable report and open the browser print
- *  dialog (Save as PDF). No external libraries needed. */
-function downloadPdf(report: FraudReport) {
-  const w = window.open("", "_blank", "width=900,height=1200");
+const esc = (s: string) => s.replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]!));
+
+/** Themed, branded print report (Save as PDF). Scope: all outlets, or one
+ *  outlet (daily breakdown + top actors + order detail). */
+function downloadPdf(report: FraudReport, theme: PdfTheme, outlet?: FraudOutletRow) {
+  const w = window.open("", "_blank", "width=980,height=1200");
   if (!w) {
     toast.error("Popup diblokir. Izinkan popup untuk mengunduh PDF.");
     return;
   }
-  const hasAmount = report.hasAmount;
-  const cell = (count: number, amount: number) => (hasAmount ? formatIDR(amount) : nf(count));
+  const dark = theme === "dark";
+  const C = dark
+    ? { bg: "#0b0f1a", card: "#121a2b", line: "#26314d", ink: "#e8edf7", mut: "#93a0b8", accent: "#f87171", chip: "#1a2338", logoBg: "#ffffff" }
+    : { bg: "#ffffff", card: "#f7f8fb", line: "#e5e8ef", ink: "#141824", mut: "#69738a", accent: "#dc2626", chip: "#eef1f6", logoBg: "#eef1f6" };
   const generated = new Date().toLocaleString("id-ID", { day: "numeric", month: "long", year: "numeric", hour: "2-digit", minute: "2-digit" });
-  const totalMain = cell(report.totalVoid + report.totalCancel, report.totalVoidAmount + report.totalCancelAmount);
-  const rows = report.perOutletReliable && report.outlets.length
-    ? report.outlets
-        .map(
-          (o, i) => `<tr${i === 0 ? ' class="top"' : ""}><td>${i + 1}</td><td>${esc(o.name)}</td><td class="n">${cell(o.void, o.voidAmount)}</td><td class="n">${cell(o.cancel, o.cancelAmount)}</td><td class="n b">${cell(o.void + o.cancel, o.voidAmount + o.cancelAmount)}</td></tr>`,
-        )
-        .join("")
-    : `<tr><td colspan="5" class="muted">Rincian per outlet belum tersedia dari API POS. Total gabungan: ${totalMain}.</td></tr>`;
-  const unit = hasAmount ? "(nilai Rp)" : "(jumlah transaksi)";
-  const html = `<!doctype html><html><head><meta charset="utf-8"><title>Laporan Fraud ${esc(report.label)}</title>
+  const logo = `${window.location.origin}/gwg.svg`;
+  const grand = report.totalVoidAmount + report.totalCancelAmount;
+  const txAll = report.totalVoid + report.totalCancel;
+
+  const days = eachDay(report.from, report.to);
+  const daily = report.daily ?? {};
+
+  let body = "";
+  if (!outlet) {
+    // ALL outlets: ranking table + per-day totals
+    const rows = report.outlets
+      .map((o, i) => {
+        const t = o.voidAmount + o.cancelAmount;
+        const pct = grand > 0 ? ((t / grand) * 100).toFixed(1).replace(".", ",") : "0";
+        return `<tr${i === 0 ? ' class="top"' : ""}><td>${i + 1}</td><td>${esc(o.name)}</td><td class="n">${nf(o.void + o.cancel)}</td><td class="n b">${formatIDR(t)}</td><td class="n">${pct}%</td></tr>`;
+      })
+      .join("");
+    const colTot = new Map<string, number>();
+    for (const m of Object.values(daily)) for (const [k, v] of Object.entries(m)) colTot.set(k, (colTot.get(k) ?? 0) + v);
+    const dayRows = days
+      .map((d) => ({ d, v: colTot.get(dayIso(d)) ?? 0 }))
+      .filter((x) => x.v > 0)
+      .map((x) => `<tr><td>${String(x.d.getDate()).padStart(2, "0")} ${MONTHS[x.d.getMonth()].slice(0, 3)} · ${WD[x.d.getDay()]}</td><td class="n b">${formatIDR(x.v)}</td></tr>`)
+      .join("");
+    body = `
+      <h2>Peringkat Outlet</h2>
+      <table><thead><tr><th>#</th><th>Outlet</th><th class="n">Trx</th><th class="n">Total</th><th class="n">% Kontribusi</th></tr></thead><tbody>${rows}</tbody></table>
+      ${dayRows ? `<h2>Total per Hari</h2><table class="half"><thead><tr><th>Tanggal</th><th class="n">Total</th></tr></thead><tbody>${dayRows}</tbody></table>` : ""}`;
+  } else {
+    // ONE outlet: daily breakdown + actors + order detail
+    const orders = report.orders?.[outlet.name] ?? [];
+    const dm = daily[outlet.name] ?? {};
+    const dayRows = days
+      .map((d) => ({ d, v: dm[dayIso(d)] ?? 0 }))
+      .filter((x) => x.v > 0)
+      .map((x) => `<tr><td>${String(x.d.getDate()).padStart(2, "0")} ${MONTHS[x.d.getMonth()].slice(0, 3)} · ${WD[x.d.getDay()]}</td><td class="n b">${formatIDR(x.v)}</td></tr>`)
+      .join("");
+    const byActor = new Map<string, { count: number; total: number }>();
+    for (const o of orders) {
+      const who = o.voidBy || "(tidak tercatat)";
+      const a = byActor.get(who) ?? { count: 0, total: 0 };
+      a.count += 1;
+      a.total += o.total;
+      byActor.set(who, a);
+    }
+    const actorRows = [...byActor.entries()]
+      .sort((x, y) => y[1].total - x[1].total)
+      .slice(0, 8)
+      .map(([who, a]) => `<tr><td>${esc(who)}</td><td class="n">${nf(a.count)}</td><td class="n b">${formatIDR(a.total)}</td></tr>`)
+      .join("");
+    const orderRows = [...orders]
+      .sort((a, b) => b.total - a.total)
+      .map((o) => `<tr><td class="mono">${esc(o.salesNumber)}</td><td>${esc(o.menu)}</td><td>${esc(o.voidBy)}</td><td>${esc(o.voidTime || o.orderTime)}</td><td>${esc(o.type || "Delete")}</td><td>${esc(o.notes || "—")}</td><td class="n">${nf(o.qty)}</td><td class="n b">${formatIDR(o.total)}</td></tr>`)
+      .join("");
+    const cappedNote = outlet.void + outlet.cancel > orders.length ? `<p class="note">Menampilkan ${nf(orders.length)} order terbesar dari total ${nf(outlet.void + outlet.cancel)} transaksi.</p>` : "";
+    body = `
+      ${dayRows ? `<h2>Per Hari</h2><table class="half"><thead><tr><th>Tanggal</th><th class="n">Total</th></tr></thead><tbody>${dayRows}</tbody></table>` : ""}
+      ${actorRows ? `<h2>Pelaku (Oleh)</h2><table class="half"><thead><tr><th>Nama</th><th class="n">Trx</th><th class="n">Total</th></tr></thead><tbody>${actorRows}</tbody></table>` : ""}
+      <h2>Detail Order</h2>${cappedNote}
+      <table class="small"><thead><tr><th>No. Bill</th><th>Menu</th><th>Oleh</th><th>Waktu</th><th>Tipe</th><th>Alasan</th><th class="n">Qty</th><th class="n">Nominal</th></tr></thead><tbody>${orderRows}</tbody></table>`;
+  }
+
+  const scopeTitle = outlet ? esc(outlet.name) : "Semua Outlet";
+  const scopeTotal = outlet ? outlet.voidAmount + outlet.cancelAmount : grand;
+  const scopeTx = outlet ? outlet.void + outlet.cancel : txAll;
+
+  const html = `<!doctype html><html><head><meta charset="utf-8"><title>Laporan Fraud — ${scopeTitle} — ${esc(report.label)}</title>
   <style>
-    *{box-sizing:border-box} body{font-family:-apple-system,Segoe UI,Roboto,Arial,sans-serif;color:#111;margin:32px;font-size:13px}
-    h1{font-size:20px;margin:0 0 2px} .sub{color:#666;margin:0 0 18px}
-    .row{display:flex;gap:12px;margin-bottom:18px}
-    .card{flex:1;border:1px solid #e5e5e5;border-radius:10px;padding:12px}
-    .card .lbl{font-size:11px;color:#666;text-transform:uppercase;letter-spacing:.04em} .card .val{font-size:20px;font-weight:700;margin-top:4px}
-    table{width:100%;border-collapse:collapse;margin-top:6px} th,td{padding:8px 10px;border-bottom:1px solid #eee;text-align:left}
-    th{font-size:11px;text-transform:uppercase;color:#666;letter-spacing:.04em} td.n{text-align:right;font-variant-numeric:tabular-nums} td.b{font-weight:700}
-    tr.top td{background:#fdecec} td.muted{color:#666;text-align:center;padding:20px}
-    .foot{margin-top:24px;color:#888;font-size:11px;border-top:1px solid #eee;padding-top:10px}
-    @media print{body{margin:12mm}}
+    * { box-sizing: border-box; -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
+    body { font-family: -apple-system, "Segoe UI", Roboto, Arial, sans-serif; background: ${C.bg}; color: ${C.ink}; margin: 0; font-size: 12.5px; }
+    .page { padding: 28px 32px; }
+    .head { display: flex; align-items: center; gap: 14px; border-bottom: 2px solid ${C.line}; padding-bottom: 14px; margin-bottom: 16px; }
+    .logo { width: 52px; height: 52px; border-radius: 12px; background: ${C.logoBg}; display: grid; place-items: center; }
+    .logo img { width: 38px; height: 38px; object-fit: contain; }
+    h1 { font-size: 18px; margin: 0; } .sub { color: ${C.mut}; margin: 2px 0 0; font-size: 12px; }
+    .chips { display: flex; gap: 10px; margin: 14px 0 18px; flex-wrap: wrap; }
+    .chip { background: ${C.chip}; border: 1px solid ${C.line}; border-radius: 10px; padding: 10px 14px; min-width: 150px; }
+    .chip .lbl { font-size: 10px; text-transform: uppercase; letter-spacing: .05em; color: ${C.mut}; }
+    .chip .val { font-size: 17px; font-weight: 700; margin-top: 3px; }
+    .chip .val.accent { color: ${C.accent}; }
+    h2 { font-size: 13px; text-transform: uppercase; letter-spacing: .04em; color: ${C.mut}; margin: 20px 0 8px; }
+    table { width: 100%; border-collapse: collapse; background: ${C.card}; border: 1px solid ${C.line}; border-radius: 10px; overflow: hidden; }
+    table.half { width: 60%; } table.small { font-size: 11px; }
+    th, td { padding: 7px 10px; border-bottom: 1px solid ${C.line}; text-align: left; }
+    thead th { font-size: 10px; text-transform: uppercase; letter-spacing: .05em; color: ${C.mut}; background: ${C.chip}; }
+    tbody tr:last-child td { border-bottom: none; }
+    td.n, th.n { text-align: right; font-variant-numeric: tabular-nums; } td.b { font-weight: 700; }
+    td.mono { font-family: ui-monospace, Menlo, monospace; font-size: 10.5px; color: ${C.mut}; }
+    tr.top td { background: ${dark ? "rgba(248,113,113,.12)" : "#fdecec"}; }
+    .note { color: ${C.mut}; font-size: 11px; margin: 4px 0 8px; }
+    .foot { margin-top: 22px; color: ${C.mut}; font-size: 10.5px; border-top: 1px solid ${C.line}; padding-top: 10px; display: flex; justify-content: space-between; gap: 12px; }
+    @media print { .page { padding: 10mm 12mm; } table.half { width: 70%; } }
   </style></head><body>
-    <h1>Laporan Analisis Fraud — Void &amp; Cancel</h1>
-    <p class="sub">GWG Group · Periode ${PERIOD_LABEL[report.period]}: <b>${esc(report.label)}</b> · Tipe: <b>${KIND_LABEL[report.kind]}</b> · Angka ${unit} · Dibuat ${esc(generated)}</p>
-    <div class="row">
-      <div class="card"><div class="lbl">Total ${hasAmount ? "Nominal" : "Kejadian"}</div><div class="val">${totalMain}</div></div>
-      <div class="card"><div class="lbl">Void</div><div class="val">${cell(report.totalVoid, report.totalVoidAmount)}</div></div>
-      <div class="card"><div class="lbl">Cancel</div><div class="val">${cell(report.totalCancel, report.totalCancelAmount)}</div></div>
+    <div class="page">
+      <div class="head">
+        <div class="logo"><img src="${logo}" alt="GWG"></div>
+        <div>
+          <h1>Laporan Analisis Fraud — ${esc(KIND_LABEL[report.kind])}</h1>
+          <p class="sub">GWG Group · ${scopeTitle} · Periode ${PERIOD_LABEL[report.period]}: <b>${esc(report.label)}</b> · Dibuat ${esc(generated)}</p>
+        </div>
+      </div>
+      <div class="chips">
+        <div class="chip"><div class="lbl">Total Nominal</div><div class="val accent">${formatIDR(scopeTotal)}</div></div>
+        <div class="chip"><div class="lbl">Transaksi</div><div class="val">${nf(scopeTx)}</div></div>
+        ${outlet ? "" : `<div class="chip"><div class="lbl">Outlet Terdampak</div><div class="val">${nf(report.outlets.length)}</div></div>`}
+        <div class="chip"><div class="lbl">Basis Angka</div><div class="val" style="font-size:13px">Subtotal (ESB)</div></div>
+      </div>
+      ${body}
+      <div class="foot">
+        <span>Sumber: ESB — angka berbasis subtotal, identik dengan recap ESB. Lonjakan pada satu outlet/pelaku menandakan potensi fraud.</span>
+        <span>Dibuat otomatis oleh Operation GWG</span>
+      </div>
     </div>
-    <table><thead><tr><th>#</th><th>Outlet</th><th style="text-align:right">Void</th><th style="text-align:right">Cancel</th><th style="text-align:right">Total</th></tr></thead>
-    <tbody>${rows}</tbody></table>
-    <p class="foot">Void/cancel diambil dari sistem POS. Lonjakan pada satu outlet menandakan potensi fraud dan perlu ditindaklanjuti. Dokumen dibuat otomatis oleh Operation GWG.</p>
   </body></html>`;
   w.document.open();
   w.document.write(html);
   w.document.close();
   w.focus();
-  setTimeout(() => w.print(), 350);
+  setTimeout(() => w.print(), 450);
 }
-
-const esc = (s: string) => s.replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]!));
