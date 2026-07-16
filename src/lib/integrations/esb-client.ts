@@ -411,7 +411,11 @@ export async function esbFetchNetSales(dateFromYmd: string, dateToYmd: string, b
     cache: "no-store",
   });
   if (!res.ok) throw new Error(`ESB highlight failed (${res.status})`);
-  const j = decodeAjax<{ currentSales?: string | number }>(await res.text());
-  if (!j || j.currentSales === undefined) throw new Error("ESB highlight: currentSales missing");
-  return typeof j.currentSales === "number" ? j.currentSales : parseIdrNumber(String(j.currentSales));
+  const j = decodeAjax<{ currentSales?: string | number | null }>(await res.text());
+  if (!j || typeof j !== "object") throw new Error("ESB highlight: respons tidak terbaca");
+  // A branch with zero activity in the range comes back WITHOUT currentSales —
+  // that is a legitimate 0, not an error.
+  const cs = j.currentSales;
+  if (cs === undefined || cs === null || cs === "") return 0;
+  return typeof cs === "number" ? cs : parseIdrNumber(String(cs));
 }
