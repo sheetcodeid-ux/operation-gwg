@@ -57,6 +57,62 @@ describe("extractReportData", () => {
   });
 });
 
+describe("parseCancelDetailReport header-aware column mapping", () => {
+  it("maps the Cancel/Void grid by its header labels", () => {
+    const html =
+      " Showing 1-2 of 2 items.\n<table><thead><tr>" +
+      '<th data-col-seq="0">#</th><th data-col-seq="1">Sales Number</th><th data-col-seq="2">Branch</th>' +
+      '<th data-col-seq="3">Menu</th><th data-col-seq="5">Menu Category</th><th data-col-seq="7">Order By</th>' +
+      '<th data-col-seq="8">Order Time</th><th data-col-seq="9">Cancel / Void By</th><th data-col-seq="10">Cancel / Void Time</th>' +
+      '<th data-col-seq="11">Cancel / Void</th><th data-col-seq="12">Cancel Notes</th><th data-col-seq="13">Qty</th>' +
+      '<th data-col-seq="14">Subtotal</th><th data-col-seq="15">Service Charge</th><th data-col-seq="16">Tax</th>' +
+      '<th data-col-seq="17">Total</th></tr></thead><tbody>' +
+      '<tr data-key="0"><td data-col-seq="1">SB1</td><td data-col-seq="2">Outlet A</td><td data-col-seq="3">TEH</td>' +
+      '<td data-col-seq="9">ANDI</td><td data-col-seq="10">16-07-2026 10:00:00</td><td data-col-seq="11">Void</td>' +
+      '<td data-col-seq="12">batal</td><td data-col-seq="13">2,00</td><td data-col-seq="14">20.000,00</td>' +
+      '<td data-col-seq="17">22.000,00</td></tr>' +
+      "</tbody></table>";
+    const r = parseCancelDetailReport(html);
+    expect(r.rows).toHaveLength(1);
+    expect(r.rows[0]).toMatchObject({
+      salesNumber: "SB1", branch: "Outlet A", menu: "TEH",
+      voidBy: "ANDI", voidTime: "16-07-2026 10:00:00", type: "Void", notes: "batal",
+      qty: 2, subtotal: 20000, total: 22000,
+    });
+  });
+
+  it("maps the Delete grid (different layout, no Total column) by headers", () => {
+    // The Delete export packs different columns into the same seq positions —
+    // exactly what shifted qty into "Oleh" and price into "Waktu" before.
+    const html =
+      " Showing 1-1 of 1 items.\n<table><thead><tr>" +
+      '<th data-col-seq="0">#</th><th data-col-seq="1">Sales Number</th><th data-col-seq="2">Branch</th>' +
+      '<th data-col-seq="3">Menu</th><th data-col-seq="4">Order By</th><th data-col-seq="5">Deleted By</th>' +
+      '<th data-col-seq="6">Deleted Time</th><th data-col-seq="7">Qty</th><th data-col-seq="8">Subtotal</th>' +
+      "</tr></thead><tbody>" +
+      '<tr data-key="0"><td data-col-seq="1">SB9</td><td data-col-seq="2">Nordu Bakes Samarinda</td>' +
+      '<td data-col-seq="3">ROTI</td><td data-col-seq="4">NORDADAMSMRD</td><td data-col-seq="5">BUDI</td>' +
+      '<td data-col-seq="6">14-07-2026 11:30:00</td><td data-col-seq="7">25,00</td><td data-col-seq="8">625.000,00</td></tr>' +
+      "</tbody></table>";
+    const r = parseCancelDetailReport(html);
+    expect(r.rows).toHaveLength(1);
+    expect(r.rows[0]).toMatchObject({
+      salesNumber: "SB9",
+      branch: "Nordu Bakes Samarinda",
+      menu: "ROTI",
+      orderBy: "NORDADAMSMRD",
+      voidBy: "BUDI", // who deleted
+      voidTime: "14-07-2026 11:30:00",
+      qty: 25,
+      subtotal: 625000,
+      total: 625000, // derived from Subtotal — no Total column in this grid
+    });
+    // Fields absent from this grid must be empty, never position-guessed.
+    expect(r.rows[0].type).toBe("");
+    expect(r.rows[0].notes).toBe("");
+  });
+});
+
 describe("parseIdrNumber", () => {
   it("parses Indonesian formatted numbers", () => {
     expect(parseIdrNumber("31.818,18")).toBeCloseTo(31818.18);

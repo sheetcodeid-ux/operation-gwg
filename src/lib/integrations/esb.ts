@@ -122,31 +122,72 @@ export function extractReportData(text: string, depth = 0): string {
 
 export function parseCancelDetailReport(dataHtml: string): CancelDetailReport {
   const rows: CancelDetailRow[] = [];
+
+  // Column layout DIFFERS between the Cancel/Void export and the Delete export,
+  // so resolve each field from the grid's <th> HEADER LABELS when present. The
+  // fixed data-col-seq positions (documented above) are only a fallback for
+  // grids whose headers can't be read. When headers ARE readable, a field whose
+  // label isn't found is treated as absent (-1) — never guessed by position.
+  const headers: Record<number, string> = {};
+  const thRe = /<th\b[^>]*\bdata-col-seq=["'](\d+)["'][^>]*>([\s\S]*?)<\/th>/gi;
+  let hm: RegExpExecArray | null;
+  while ((hm = thRe.exec(dataHtml))) headers[Number(hm[1])] = text(hm[2]);
+  const hasHeaders = Object.keys(headers).length > 0;
+  const idx = (re: RegExp, fallback: number) => {
+    const hit = Object.entries(headers).find(([, label]) => re.test(label));
+    return hit ? Number(hit[0]) : hasHeaders ? -1 : fallback;
+  };
+  const I = {
+    salesNumber: idx(/sales/i, 1),
+    branch: idx(/branch|outlet/i, 2),
+    menu: idx(/^menu(\s*name)?$/i, 3),
+    menuCode: idx(/^menu\s*code$/i, 4),
+    menuCategory: idx(/^menu\s*category$/i, 5),
+    menuCategoryDetail: idx(/category\s*detail/i, 6),
+    orderBy: idx(/^order\s*by$/i, 7),
+    orderTime: idx(/^order\s*(time|date)$/i, 8),
+    voidBy: idx(/(cancel|void|delete|remove)[^]*?by/i, 9),
+    voidTime: idx(/(cancel|void|delete|remove)[^]*?(time|date)/i, 10),
+    type: idx(/^(cancel\s*\/\s*void|cancel\/void|type|status)$/i, 11),
+    notes: idx(/note|reason/i, 12),
+    qty: idx(/^qty$/i, 13),
+    subtotal: idx(/^(sub\s*total|price|amount)$/i, 14),
+    serviceCharge: idx(/service/i, 15),
+    tax: idx(/^tax$/i, 16),
+    total: idx(/^total$/i, 17),
+  };
+
   // Tolerant of extra attributes / quote style on the <tr> (live grid differs
   // slightly from a minimal capture).
   const rowRe = /<tr\b[^>]*\bdata-key=["'][^"']*["'][^>]*>([\s\S]*?)<\/tr>/gi;
   let rm: RegExpExecArray | null;
   while ((rm = rowRe.exec(dataHtml))) {
     const c = cells(rm[1]);
-    if (c[1] === undefined && c[2] === undefined) continue;
+    if (c[I.salesNumber] === undefined && c[I.branch] === undefined) continue;
+    const qty = parseIdrNumber(c[I.qty] ?? "0");
+    const subtotal = parseIdrNumber(c[I.subtotal] ?? "0");
+    const serviceCharge = parseIdrNumber(c[I.serviceCharge] ?? "0");
+    const tax = parseIdrNumber(c[I.tax] ?? "0");
+    // Delete grids have no Total column — derive it so nominal never shows 0.
+    const total = parseIdrNumber(c[I.total] ?? "0") || subtotal + serviceCharge + tax;
     rows.push({
-      salesNumber: text(c[1] ?? ""),
-      branch: text(c[2] ?? ""),
-      menu: text(c[3] ?? ""),
-      menuCode: text(c[4] ?? ""),
-      menuCategory: text(c[5] ?? ""),
-      menuCategoryDetail: text(c[6] ?? ""),
-      orderBy: text(c[7] ?? ""),
-      orderTime: text(c[8] ?? ""),
-      voidBy: text(c[9] ?? ""),
-      voidTime: text(c[10] ?? ""),
-      type: text(c[11] ?? ""),
-      notes: text(c[12] ?? ""),
-      qty: parseIdrNumber(c[13] ?? "0"),
-      subtotal: parseIdrNumber(c[14] ?? "0"),
-      serviceCharge: parseIdrNumber(c[15] ?? "0"),
-      tax: parseIdrNumber(c[16] ?? "0"),
-      total: parseIdrNumber(c[17] ?? "0"),
+      salesNumber: text(c[I.salesNumber] ?? ""),
+      branch: text(c[I.branch] ?? ""),
+      menu: text(c[I.menu] ?? ""),
+      menuCode: text(c[I.menuCode] ?? ""),
+      menuCategory: text(c[I.menuCategory] ?? ""),
+      menuCategoryDetail: text(c[I.menuCategoryDetail] ?? ""),
+      orderBy: text(c[I.orderBy] ?? ""),
+      orderTime: text(c[I.orderTime] ?? ""),
+      voidBy: text(c[I.voidBy] ?? ""),
+      voidTime: text(c[I.voidTime] ?? ""),
+      type: text(c[I.type] ?? ""),
+      notes: text(c[I.notes] ?? ""),
+      qty,
+      subtotal,
+      serviceCharge,
+      tax,
+      total,
     });
   }
 
