@@ -144,7 +144,7 @@ function filterKind<T extends { type: string }>(rows: T[], kind: FraudKind, dele
 type AggRow = {
   branch: string; salesNumber: string; menu: string; menuCategory: string;
   orderBy: string; orderTime: string; voidBy: string; voidTime: string;
-  type: string; notes: string; qty: number; total: number;
+  type: string; notes: string; qty: number; subtotal?: number; total: number;
   /** DB rows carry the day bucket they were synced under (fallback day key). */
   day?: string;
 };
@@ -178,6 +178,10 @@ function base(period: FraudPeriod, r: { from: string; to: string; label: string 
   return { configured: false, period, kind: "all", from: r.from, to: r.to, label: r.label, source: "pos", totalVoid: 0, totalCancel: 0, totalVoidAmount: 0, totalCancelAmount: 0, hasAmount: false, outlets: [], perOutletReliable: false, ...extra };
 }
 
+/** The nominal a row contributes — SUBTOTAL, ESB's own recap basis (their
+ *  dashboard tiles and recap reports sum subtotals, not tax-inclusive totals). */
+const amountOf = (row: { subtotal?: number; total: number }) => row.subtotal || row.total;
+
 /** Aggregate ESB line-items (live or DB-cached) into a full FraudReport. */
 function aggregate(period: FraudPeriod, kind: FraudKind, r: { from: string; to: string; label: string }, rows: AggRow[]): FraudReport {
   const agg = new Map<string, { void: number; cancel: number; voidAmount: number; cancelAmount: number }>();
@@ -185,20 +189,23 @@ function aggregate(period: FraudPeriod, kind: FraudKind, r: { from: string; to: 
   const daily: Record<string, Record<string, number>> = {};
   let tv = 0, tc = 0, tva = 0, tca = 0;
   for (const row of rows) {
+    const amount = amountOf(row);
     const isVoid = /void/i.test(row.type);
     const a = agg.get(row.branch) ?? { void: 0, cancel: 0, voidAmount: 0, cancelAmount: 0 };
-    if (isVoid) { a.void += 1; a.voidAmount += row.total; tv += 1; tva += row.total; }
-    else { a.cancel += 1; a.cancelAmount += row.total; tc += 1; tca += row.total; }
+    if (isVoid) { a.void += 1; a.voidAmount += amount; tv += 1; tva += amount; }
+    else { a.cancel += 1; a.cancelAmount += amount; tc += 1; tca += amount; }
     agg.set(row.branch, a);
-    const day = dayKey(row.voidTime) || dayKey(row.orderTime) || row.day || (r.from === r.to ? r.from : "");
+    // DB rows carry the day ESB assigned them to (the export's own date filter)
+    // — trusting it keeps column totals identical to ESB's per-day recaps.
+    const day = row.day || dayKey(row.voidTime) || dayKey(row.orderTime) || (r.from === r.to ? r.from : "");
     if (day) {
       const d = (daily[row.branch] ??= {});
-      d[day] = (d[day] ?? 0) + row.total;
+      d[day] = (d[day] ?? 0) + amount;
     }
     (orders[row.branch] ??= []).push({
       salesNumber: row.salesNumber, menu: row.menu, category: row.menuCategory,
       orderBy: row.orderBy, orderTime: row.orderTime, voidBy: row.voidBy, voidTime: row.voidTime,
-      type: row.type, notes: row.notes, qty: row.qty, total: row.total,
+      type: row.type, notes: row.notes, qty: row.qty, total: amount,
     });
   }
   // Keep the client payload bounded: drill-down lists ship the largest orders;
@@ -267,10 +274,30 @@ export async function syncFraudDays(period: FraudPeriod, date: string, kind: Fra
   const queue = [...pending];
   const syncOne = async (day: string) => {
     const res = await esbFetchCancelRows(day, day, group === "delete" ? "delete" : "default");
-    // ESB does NOT always honour the export's date range (observed on Type
-    // Void = Deleted, which returns the whole history for any range). Bucket
-    // rows by their ACTUAL date and store only the requested day's bucket —
-    // stored data is valid no matter what ESB sent back.
+    const sumSub = (rows: typeof res.rows) => rows.reduce((a, x) => a + (x.subtotal || x.total), 0);
+    const expected = res.pageTotal?.subtotal ?? 0;
+    // Sanity: does the response actually cover ONLY the requested day? A valid
+    // Type Void filter respects the range; the pathological ignore-the-range
+    // case (seen with an invalid type value) spreads rows over many dates.
+    const dated = res.rows.map((x) => dayKey(x.voidTime) || dayKey(x.orderTime)).filter(Boolean);
+    const foreignDays = new Set(dated.filter((k) => k !== day));
+    const rangeIgnored = res.rows.length > 0 && foreignDays.size > 2 && dated.filter((k) => k !== day).length / dated.length > 0.3;
+
+    if (!rangeIgnored) {
+      // Trust ESB's own day filter: every returned row belongs to `day` (this
+      // matches ESB's recap exactly, cross-midnight voids included). Complete
+      // only when ALL pages were read AND our sum matches the export's own
+      // grand total (the grid summary row) within a rounding tolerance.
+      const sum = sumSub(res.rows);
+      const complete = res.readAll && (expected <= 0 || Math.abs(sum - expected) <= Math.max(2_000, expected * 0.005));
+      await replaceFraudDay(group, day, res.rows, res.totalItems, complete, expected);
+      synced += 1;
+      return;
+    }
+
+    // Pathological path: bucket rows by their actual date, store only this
+    // day's bucket, and — when the FULL export was read — finalize every
+    // still-queued day inside the response's span from the same response.
     const buckets = new Map<string, typeof res.rows>();
     for (const row of res.rows) {
       const k = dayKey(row.voidTime) || dayKey(row.orderTime) || day;
@@ -281,10 +308,6 @@ export async function syncFraudDays(period: FraudPeriod, date: string, kind: Fra
     await replaceFraudDay(group, day, buckets.get(day) ?? [], res.totalItems, res.readAll);
     synced += 1;
     if (!res.readAll) return;
-    // The FULL export was read, so every date between the oldest and newest
-    // row is fully covered — finalize every still-queued day in that span
-    // from the same response (one fetch can complete a whole month when ESB
-    // ignored the range; a range-respecting export has span == day, no-op).
     const respDays = [...buckets.keys()].sort();
     if (respDays.length === 0) return;
     const [minDay, maxDay] = [respDays[0], respDays[respDays.length - 1]];

@@ -215,12 +215,13 @@ async function generateExport(dateFromYmd: string, dateToYmd: string, typeVoid: 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 /** Poke the report queue (what the browser polls after generating) so ESB's
- *  worker advances the async export. Best-effort; errors are ignored. */
+ *  worker advances the async export. Path verified from a HAR capture:
+ *  GET /site/get-data-report-queue (DataTables-style). Best-effort. */
 async function pokeQueue(): Promise<void> {
   try {
     const s = await ensureSession();
     const qs = new URLSearchParams({ draw: "1", start: "0", length: "10", _: String(Date.now()) });
-    await fetch(`${BASE}/report_service/main/get-data-report-queue?${qs.toString()}`, {
+    await fetch(`${BASE}/site/get-data-report-queue?${qs.toString()}`, {
       headers: { "X-Requested-With": "XMLHttpRequest", "X-Csrf-Token": s.csrf, Cookie: s.cookie, Referer: `${BASE}/report/report-cancel-menu-detail`, Accept: "application/json" },
       cache: "no-store",
     });
@@ -261,6 +262,9 @@ export interface EsbCancelResult {
   rawLen: number; // length of the first page's HTML (0 ⇒ empty/blocked response)
   /** Every page of the export was read (rows cover ESB's full item count). */
   readAll: boolean;
+  /** The grid's summary row = GRAND totals of the WHOLE requested range
+   *  (verified: its subtotal equals ESB's dashboard tile) — self-validation. */
+  pageTotal: { qty: number; subtotal: number; tax: number; total: number } | null;
   /** false ⇒ the requested Type Void filter wasn't offered by the ESB form and
    *  the DEFAULT export was fetched instead — caller must filter rows by type. */
   typeVoidFound: boolean;
@@ -329,6 +333,7 @@ export function esbFetchCancelRows(dateFromYmd: string, dateToYmd: string, kind:
       totalItems: first.report.totalItems,
       rawLen: first.rawLen,
       readAll: rows.length >= first.report.totalItems,
+      pageTotal: first.report.pageTotal,
       typeVoidFound,
       typeVoidOptions: opts.map((o) => o.label || o.value),
     };
