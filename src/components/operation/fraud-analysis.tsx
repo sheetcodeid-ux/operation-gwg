@@ -1,13 +1,12 @@
 "use client";
 
 import * as React from "react";
-import { AlertTriangle, CheckCircle2, ChevronDown, Download, Loader2, ShieldAlert, XCircle } from "lucide-react";
+import { AlertTriangle, CheckCircle2, ChevronDown, Download, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Combobox } from "@/components/ui/combobox";
-import { StatTile } from "@/components/ui/stat";
-import { cn, formatIDR } from "@/lib/utils";
+import { cn, formatIDR, formatIDRShort } from "@/lib/utils";
 import { fraudReportAction, outletFraudDailyAction } from "@/lib/actions/fraud";
 import type { FraudDailyPoint, FraudOrder, FraudPeriod, FraudReport } from "@/lib/data/fraud";
 
@@ -142,21 +141,16 @@ export function FraudAnalysis({ initial, initialDate }: { initial: FraudReport; 
 
       {report.configured && (
         <>
-          {/* Summary */}
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-            <StatTile icon={ShieldAlert} label={hasAmount ? "Total Nominal" : "Total Kejadian"} value={metricValue(hasAmount, totalCount, totalAmount)} sub={hasAmount ? `${nf(totalCount)} transaksi (void+cancel)` : "Void + Cancel"} />
-            <StatTile icon={XCircle} label={hasAmount ? "Nominal Void" : "Void"} value={metricValue(hasAmount, report.totalVoid, report.totalVoidAmount)} sub={hasAmount ? `${nf(report.totalVoid)} transaksi void` : "Transaksi void"} />
-            <StatTile icon={XCircle} label={hasAmount ? "Nominal Cancel" : "Cancel"} value={metricValue(hasAmount, report.totalCancel, report.totalCancelAmount)} sub={hasAmount ? `${nf(report.totalCancel)} order cancel` : "Order dibatalkan"} />
-          </div>
-
           {!hasData ? (
             <div className="glass flex flex-col items-center gap-2 rounded-2xl border border-border px-6 py-12 text-center">
               <CheckCircle2 className="size-8 text-emerald-500" />
               <p className="text-base font-semibold text-foreground">Belum ada void / cancel pada periode ini</p>
               <p className="max-w-md text-sm text-muted-foreground">
-                Tidak ada transaksi void atau cancel dari POS untuk <span className="font-medium text-foreground">{report.label}</span>. Coba pilih tanggal/periode lain yang sudah ada transaksi.
+                Tidak ada transaksi void atau cancel untuk <span className="font-medium text-foreground">{report.label}</span>. Coba pilih tanggal/periode lain yang sudah ada transaksi.
               </p>
             </div>
+          ) : report.source === "esb" ? (
+            <FraudMatrix report={report} />
           ) : report.perOutletReliable ? (
             <OutletTable report={report} hasAmount={hasAmount} />
           ) : (
@@ -174,12 +168,97 @@ export function FraudAnalysis({ initial, initialDate }: { initial: FraudReport; 
           )}
 
           <p className="text-[11px] text-muted-foreground">
-            {hasAmount
-              ? "Angka adalah total nominal (Rp) void/cancel dari POS. Detail order per item (menu, kasir, no. bill) menyusul saat endpoint order POS tersedia."
-              : "Angka adalah jumlah transaksi void/cancel dari POS (nominal Rp menyusul bila endpoint POS menyediakannya). Detail order per item menyusul."}
+            Angka = total nominal (Rp) void/cancel per outlet per hari (dari ESB). Klik baris outlet untuk melihat detail order (no. bill, menu, kasir, jam, alasan).
           </p>
         </>
       )}
+    </div>
+  );
+}
+
+const WD = ["MIN", "SEN", "SEL", "RAB", "KAM", "JUM", "SAB"];
+function eachDay(from: string, to: string): Date[] {
+  const out: Date[] = [];
+  const d = new Date(`${from}T00:00:00`);
+  const end = new Date(`${to}T00:00:00`);
+  while (d <= end && out.length < 40) {
+    out.push(new Date(d));
+    d.setDate(d.getDate() + 1);
+  }
+  return out;
+}
+const dmy = (d: Date) => `${String(d.getDate()).padStart(2, "0")}/${String(d.getMonth() + 1).padStart(2, "0")}/${d.getFullYear()}`;
+
+/** Matrix: outlets (rows) × days (columns), cell = Rp void/cancel that day.
+ *  Rows are clickable to reveal the per-order detail (ESB). */
+function FraudMatrix({ report }: { report: FraudReport }) {
+  const [openId, setOpenId] = React.useState<number | null>(null);
+  const days = React.useMemo(() => eachDay(report.from, report.to), [report.from, report.to]);
+  const byOutlet = React.useMemo(() => {
+    const m = new Map<string, Map<string, number>>();
+    for (const o of report.outlets) {
+      const dm = new Map<string, number>();
+      for (const ord of report.orders?.[o.name] ?? []) {
+        const key = (ord.voidTime || "").slice(0, 10); // DD/MM/YYYY
+        dm.set(key, (dm.get(key) ?? 0) + ord.total);
+      }
+      m.set(o.name, dm);
+    }
+    return m;
+  }, [report.outlets, report.orders]);
+
+  return (
+    <div className="glass overflow-hidden rounded-2xl border border-border">
+      <div className="border-b border-border px-4 py-3">
+        <p className="text-sm font-semibold text-foreground">Void &amp; Cancel per Outlet per Hari — {report.label}</p>
+        <p className="text-xs text-muted-foreground">Nominal (Rp) void/cancel tiap outlet per tanggal. Sel merah = ada void/cancel. Klik outlet untuk detail order.</p>
+      </div>
+      <div className="overflow-x-auto">
+        <table className="w-full border-collapse text-xs">
+          <thead>
+            <tr className="border-b border-border text-muted-foreground">
+              <th className="sticky left-0 z-10 bg-background px-3 py-2 text-left font-medium">Outlet</th>
+              <th className="bg-background px-3 py-2 text-right font-medium">Total</th>
+              {days.map((d) => (
+                <th key={dmy(d)} className="px-2 py-2 text-center font-medium tabular-nums">
+                  <div>{String(d.getDate()).padStart(2, "0")}</div>
+                  <div className="text-[9px] text-muted-foreground/70">{WD[d.getDay()]}</div>
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {report.outlets.map((o) => {
+              const dm = byOutlet.get(o.name);
+              const total = o.voidAmount + o.cancelAmount;
+              const open = openId === o.branchId;
+              return (
+                <React.Fragment key={o.branchId}>
+                  <tr className="cursor-pointer border-b border-border/50 hover:bg-foreground/[0.04]" onClick={() => setOpenId(open ? null : o.branchId)}>
+                    <td className="sticky left-0 z-10 max-w-[13rem] truncate bg-background px-3 py-2 font-medium text-foreground">{o.name}</td>
+                    <td className="bg-background px-3 py-2 text-right font-semibold tabular-nums text-foreground">{formatIDRShort(total)}</td>
+                    {days.map((d) => {
+                      const v = dm?.get(dmy(d)) ?? 0;
+                      return (
+                        <td key={dmy(d)} className={cn("whitespace-nowrap px-2 py-2 text-center tabular-nums", v > 0 ? "bg-red-500/10 font-medium text-red-600 dark:text-red-400" : "text-muted-foreground/40")}>
+                          {v > 0 ? formatIDRShort(v) : "–"}
+                        </td>
+                      );
+                    })}
+                  </tr>
+                  {open && (
+                    <tr className="border-b border-border/50 bg-muted/20">
+                      <td colSpan={days.length + 2} className="px-4 py-3">
+                        <EsbOrderDetail orders={report.orders?.[o.name] ?? []} />
+                      </td>
+                    </tr>
+                  )}
+                </React.Fragment>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
     </div>
   );
 }
