@@ -8,7 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { Combobox } from "@/components/ui/combobox";
 import { cn, formatIDR, formatIDRShort } from "@/lib/utils";
 import { fraudReportAction, outletFraudDailyAction } from "@/lib/actions/fraud";
-import type { FraudDailyPoint, FraudOrder, FraudPeriod, FraudReport } from "@/lib/data/fraud";
+import type { FraudDailyPoint, FraudKind, FraudOrder, FraudPeriod, FraudReport } from "@/lib/data/fraud";
 
 const PERIODS: { key: FraudPeriod; label: string }[] = [
   { key: "daily", label: "Harian" },
@@ -16,6 +16,8 @@ const PERIODS: { key: FraudPeriod; label: string }[] = [
   { key: "monthly", label: "Bulanan" },
 ];
 const PERIOD_LABEL: Record<FraudPeriod, string> = { daily: "Harian", weekly: "Mingguan", monthly: "Bulanan" };
+const KIND_LABEL: Record<FraudKind, string> = { all: "Void + Cancel", void: "Void", cancel: "Cancel", delete: "Delete Order" };
+const KIND_OPTIONS = (Object.keys(KIND_LABEL) as FraudKind[]).map((k) => ({ value: k, label: KIND_LABEL[k] }));
 const MONTHS = ["Januari", "Februari", "Maret", "April", "Mei", "Juni", "Juli", "Agustus", "September", "Oktober", "November", "Desember"];
 const nf = (n: number) => n.toLocaleString("id-ID");
 const ymd = (y: number, m: number, d: number) => `${y}-${String(m + 1).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
@@ -26,12 +28,13 @@ const metricValue = (hasAmount: boolean, count: number, amount: number) => (hasA
 export function FraudAnalysis({ initial, initialDate }: { initial: FraudReport; initialDate: string }) {
   const [period, setPeriod] = React.useState<FraudPeriod>(initial.period);
   const [date, setDate] = React.useState(initialDate);
+  const [kind, setKind] = React.useState<FraudKind>(initial.kind ?? "all");
   const [report, setReport] = React.useState<FraudReport>(initial);
   const [pending, start] = React.useTransition();
 
-  const load = React.useCallback((p: FraudPeriod, d: string) => {
+  const load = React.useCallback((p: FraudPeriod, d: string, k: FraudKind) => {
     start(async () => {
-      const res = await fraudReportAction(p, d);
+      const res = await fraudReportAction(p, d, k);
       // A FraudReport can itself carry an `error` field, so discriminate on a
       // required report field (configured) rather than the presence of `error`.
       if (!("configured" in res)) {
@@ -74,11 +77,15 @@ export function FraudAnalysis({ initial, initialDate }: { initial: FraudReport; 
     const d = defaultFor(p);
     setPeriod(p);
     setDate(d);
-    load(p, d);
+    load(p, d, kind);
   };
   const onDate = (d: string) => {
     setDate(d);
-    load(period, d);
+    load(period, d, kind);
+  };
+  const onKind = (k: FraudKind) => {
+    setKind(k);
+    load(period, date, k);
   };
 
   const hasAmount = report.hasAmount;
@@ -113,6 +120,10 @@ export function FraudAnalysis({ initial, initialDate }: { initial: FraudReport; 
             <p className="mb-1.5 text-xs font-medium text-muted-foreground">{period === "daily" ? "Tanggal" : period === "weekly" ? "Minggu" : "Bulan"}</p>
             <Combobox matchTriggerWidth searchable={false} value={date} onChange={onDate} options={options} className="w-52" />
           </div>
+          <div>
+            <p className="mb-1.5 text-xs font-medium text-muted-foreground">Tipe</p>
+            <Combobox matchTriggerWidth searchable={false} value={kind} onChange={(v) => onKind(v as FraudKind)} options={KIND_OPTIONS} className="w-44" />
+          </div>
           <div className="ml-auto flex items-center gap-2">
             {pending && <Loader2 className="size-4 animate-spin text-muted-foreground" />}
             <Button variant="outline" size="sm" onClick={() => downloadPdf(report)} disabled={!report.configured}>
@@ -121,7 +132,7 @@ export function FraudAnalysis({ initial, initialDate }: { initial: FraudReport; 
           </div>
         </div>
         <p className="mt-3 text-sm">
-          Menampilkan <span className="font-semibold text-foreground">{PERIOD_LABEL[period]}</span> · periode{" "}
+          Menampilkan <span className="font-semibold text-foreground">{KIND_LABEL[kind]}</span> · <span className="font-semibold text-foreground">{PERIOD_LABEL[period]}</span> · periode{" "}
           <span className="font-semibold text-foreground">{report.label}</span>
         </p>
       </div>
@@ -144,9 +155,9 @@ export function FraudAnalysis({ initial, initialDate }: { initial: FraudReport; 
           {!hasData ? (
             <div className="glass flex flex-col items-center gap-2 rounded-2xl border border-border px-6 py-12 text-center">
               <CheckCircle2 className="size-8 text-emerald-500" />
-              <p className="text-base font-semibold text-foreground">Belum ada void / cancel pada periode ini</p>
+              <p className="text-base font-semibold text-foreground">Belum ada transaksi {KIND_LABEL[report.kind]} pada periode ini</p>
               <p className="max-w-md text-sm text-muted-foreground">
-                Tidak ada transaksi void atau cancel untuk <span className="font-medium text-foreground">{report.label}</span>. Coba pilih tanggal/periode lain yang sudah ada transaksi.
+                Tidak ada transaksi {KIND_LABEL[report.kind]} untuk <span className="font-medium text-foreground">{report.label}</span>. Coba pilih tanggal/periode/tipe lain yang sudah ada transaksi.
               </p>
             </div>
           ) : report.source === "esb" ? (
@@ -168,7 +179,7 @@ export function FraudAnalysis({ initial, initialDate }: { initial: FraudReport; 
           )}
 
           <p className="text-[11px] text-muted-foreground">
-            Angka = total nominal (Rp) void/cancel per outlet per hari (dari ESB). Klik baris outlet untuk melihat detail order (no. bill, menu, kasir, jam, alasan).
+            Angka = total nominal (Rp) {KIND_LABEL[report.kind]} per outlet per hari (dari ESB). Klik baris outlet untuk melihat detail order (no. bill, menu, kasir, jam, alasan) — kolom &ldquo;Oleh&rdquo; menunjukkan siapa yang melakukan void/cancel/delete.
           </p>
         </>
       )}
@@ -222,8 +233,8 @@ function FraudMatrix({ report }: { report: FraudReport }) {
   return (
     <div className="glass overflow-hidden rounded-2xl border border-border">
       <div className="border-b border-border px-4 py-3">
-        <p className="text-sm font-semibold text-foreground">Void &amp; Cancel per Outlet per Hari — {report.label}</p>
-        <p className="text-xs text-muted-foreground">Nominal (Rp) void/cancel tiap outlet per tanggal. Sel merah = ada void/cancel. Klik outlet untuk detail order.</p>
+        <p className="text-sm font-semibold text-foreground">{KIND_LABEL[report.kind]} per Outlet per Hari — {report.label}</p>
+        <p className="text-xs text-muted-foreground">Nominal (Rp) {KIND_LABEL[report.kind]} tiap outlet per tanggal. Sel merah = ada transaksi. Klik outlet untuk detail order.</p>
       </div>
       <div className="overflow-x-auto">
         <table className="w-full border-collapse text-xs">
@@ -414,7 +425,7 @@ function EsbOrderDetail({ orders }: { orders: FraudOrder[] }) {
             <th className="px-2 py-1.5">No. Bill</th>
             <th className="px-2 py-1.5">Menu</th>
             <th className="px-2 py-1.5">Order By</th>
-            <th className="px-2 py-1.5">Void/Cancel By</th>
+            <th className="px-2 py-1.5">Oleh</th>
             <th className="px-2 py-1.5">Waktu</th>
             <th className="px-2 py-1.5 text-center">Tipe</th>
             <th className="px-2 py-1.5">Alasan</th>
@@ -430,7 +441,7 @@ function EsbOrderDetail({ orders }: { orders: FraudOrder[] }) {
               <td className="px-2 py-1.5">{o.voidBy}</td>
               <td className="px-2 py-1.5 whitespace-nowrap text-muted-foreground">{o.voidTime}</td>
               <td className="px-2 py-1.5 text-center">
-                <Badge tone={/void/i.test(o.type) ? "danger" : "warning"}>{o.type}</Badge>
+                <Badge tone={/void|delete/i.test(o.type) ? "danger" : "warning"}>{o.type || "Delete"}</Badge>
               </td>
               <td className="px-2 py-1.5 max-w-[16rem] truncate text-muted-foreground" title={o.notes}>{o.notes || "—"}</td>
               <td className="px-2 py-1.5 text-right tabular-nums text-foreground">{formatIDR(o.total)}</td>
@@ -476,7 +487,7 @@ function downloadPdf(report: FraudReport) {
     @media print{body{margin:12mm}}
   </style></head><body>
     <h1>Laporan Analisis Fraud — Void &amp; Cancel</h1>
-    <p class="sub">GWG Group · Periode ${PERIOD_LABEL[report.period]}: <b>${esc(report.label)}</b> · Angka ${unit} · Dibuat ${esc(generated)}</p>
+    <p class="sub">GWG Group · Periode ${PERIOD_LABEL[report.period]}: <b>${esc(report.label)}</b> · Tipe: <b>${KIND_LABEL[report.kind]}</b> · Angka ${unit} · Dibuat ${esc(generated)}</p>
     <div class="row">
       <div class="card"><div class="lbl">Total ${hasAmount ? "Nominal" : "Kejadian"}</div><div class="val">${totalMain}</div></div>
       <div class="card"><div class="lbl">Void</div><div class="val">${cell(report.totalVoid, report.totalVoidAmount)}</div></div>

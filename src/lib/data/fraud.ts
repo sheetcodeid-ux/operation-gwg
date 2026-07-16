@@ -16,6 +16,9 @@ import { esbConfigured, esbFetchCancelRows, type EsbCancelResult } from "@/lib/i
  */
 
 export type FraudPeriod = "daily" | "weekly" | "monthly";
+/** Which transactions to show: void+cancel (default), one of them, or the
+ *  separate ESB "Delete Order" report (who removed orders before settle). */
+export type FraudKind = "all" | "void" | "cancel" | "delete";
 
 export interface FraudOutletRow {
   branchId: number;
@@ -43,6 +46,7 @@ export interface FraudOrder {
 export interface FraudReport {
   configured: boolean;
   period: FraudPeriod;
+  kind: FraudKind;
   from: string;
   to: string;
   label: string;
@@ -89,17 +93,22 @@ export function periodRange(period: FraudPeriod, date: string): { from: string; 
 }
 
 function base(period: FraudPeriod, r: { from: string; to: string; label: string }, extra: Partial<FraudReport> = {}): FraudReport {
-  return { configured: false, period, from: r.from, to: r.to, label: r.label, source: "pos", totalVoid: 0, totalCancel: 0, totalVoidAmount: 0, totalCancelAmount: 0, hasAmount: false, outlets: [], perOutletReliable: false, ...extra };
+  return { configured: false, period, kind: "all", from: r.from, to: r.to, label: r.label, source: "pos", totalVoid: 0, totalCancel: 0, totalVoidAmount: 0, totalCancelAmount: 0, hasAmount: false, outlets: [], perOutletReliable: false, ...extra };
 }
 
 /** Build the report from ESB order-level rows (real nominal + per-order detail). */
-function esbReport(period: FraudPeriod, r: { from: string; to: string; label: string }, res: EsbCancelResult): FraudReport {
-  const rows = res.rows;
+function esbReport(period: FraudPeriod, kind: FraudKind, r: { from: string; to: string; label: string }, res: EsbCancelResult): FraudReport {
+  // The default export carries BOTH Void and Cancel rows — narrow here when a
+  // single type is requested. Delete Order is already its own export.
+  const rows =
+    kind === "void" ? res.rows.filter((x) => /void/i.test(x.type))
+    : kind === "cancel" ? res.rows.filter((x) => /cancel/i.test(x.type) && !/void/i.test(x.type))
+    : res.rows;
   // Diagnose a silent 0: items>0 but nothing parsed ⇒ parser miss; tiny html ⇒
   // empty/blocked response. A genuine empty period stays clean.
   let diag: string | undefined;
-  if (rows.length === 0 && res.totalItems > 0) diag = `ESB: 0/${res.totalItems} baris ter-parse (htmlLen=${res.rawLen})`;
-  else if (rows.length === 0 && res.rawLen < 60) diag = `ESB: respons kosong (htmlLen=${res.rawLen})`;
+  if (res.rows.length === 0 && res.totalItems > 0) diag = `ESB: 0/${res.totalItems} baris ter-parse (htmlLen=${res.rawLen})`;
+  else if (res.rows.length === 0 && res.rawLen < 60) diag = `ESB: respons kosong (htmlLen=${res.rawLen})`;
   const agg = new Map<string, { void: number; cancel: number; voidAmount: number; cancelAmount: number }>();
   const orders: Record<string, FraudOrder[]> = {};
   let tv = 0, tc = 0, tva = 0, tca = 0;
@@ -119,13 +128,13 @@ function esbReport(period: FraudPeriod, r: { from: string; to: string; label: st
     .map(([name, a], i) => ({ branchId: i + 1, code: name, name, void: a.void, cancel: a.cancel, voidAmount: a.voidAmount, cancelAmount: a.cancelAmount }))
     .sort((x, y) => y.voidAmount + y.cancelAmount - (x.voidAmount + x.cancelAmount));
   return {
-    configured: true, period, from: r.from, to: r.to, label: r.label, source: "esb",
+    configured: true, period, kind, from: r.from, to: r.to, label: r.label, source: "esb",
     totalVoid: tv, totalCancel: tc, totalVoidAmount: tva, totalCancelAmount: tca,
     hasAmount: true, outlets, perOutletReliable: true, orders, error: diag,
   };
 }
 
-export async function getFraudReport(period: FraudPeriod, date: string): Promise<FraudReport> {
+export async function getFraudReport(period: FraudPeriod, date: string, kind: FraudKind = "all"): Promise<FraudReport> {
   const r = periodRange(period, date);
 
   // Prefer ESB — it gives real per-outlet nominal + order-level detail. Falls
@@ -134,14 +143,16 @@ export async function getFraudReport(period: FraudPeriod, date: string): Promise
   // surfaced (not hidden behind a POS fallback) so misconfig is diagnosable.
   if (esbConfigured()) {
     try {
-      const res = await esbFetchCancelRows(r.from, r.to);
-      return esbReport(period, r, res);
+      const res = await esbFetchCancelRows(r.from, r.to, kind === "delete" ? "delete" : "default");
+      return esbReport(period, kind, r, res);
     } catch (e) {
-      return base(period, r, { configured: true, source: "esb", error: e instanceof Error ? e.message : "Gagal memuat data ESB." });
+      return base(period, r, { configured: true, source: "esb", kind, error: e instanceof Error ? e.message : "Gagal memuat data ESB." });
     }
   }
 
-  if (!gwgmanageConfigured()) return base(period, r, { error: "Integrasi POS belum dikonfigurasi." });
+  // The POS dashboard has no delete-order data and no void/cancel split filter.
+  if (kind === "delete") return base(period, r, { configured: true, kind, error: "Data Delete Order hanya tersedia dari ESB — aktifkan integrasi ESB." });
+  if (!gwgmanageConfigured()) return base(period, r, { kind, error: "Integrasi POS belum dikonfigurasi." });
 
   try {
     // The POS dashboard takes period=daily&date for a single day; a range uses
@@ -186,9 +197,19 @@ export async function getFraudReport(period: FraudPeriod, date: string): Promise
       ? rows.filter((o) => score(o) > 0).sort((a, b) => score(b) - score(a))
       : [];
 
-    return { configured: true, period, from: r.from, to: r.to, label: r.label, source: "pos", totalVoid, totalCancel, totalVoidAmount, totalCancelAmount, hasAmount, outlets, perOutletReliable };
+    // POS can't split void vs cancel per request — zero the unselected metric.
+    const keepV = kind !== "cancel";
+    const keepC = kind !== "void";
+    return {
+      configured: true, period, kind, from: r.from, to: r.to, label: r.label, source: "pos",
+      totalVoid: keepV ? totalVoid : 0, totalCancel: keepC ? totalCancel : 0,
+      totalVoidAmount: keepV ? totalVoidAmount : 0, totalCancelAmount: keepC ? totalCancelAmount : 0,
+      hasAmount,
+      outlets: outlets.map((o) => ({ ...o, void: keepV ? o.void : 0, cancel: keepC ? o.cancel : 0, voidAmount: keepV ? o.voidAmount : 0, cancelAmount: keepC ? o.cancelAmount : 0 })),
+      perOutletReliable,
+    };
   } catch (e) {
-    return base(period, r, { configured: true, error: e instanceof Error ? e.message : "Gagal memuat data POS." });
+    return base(period, r, { configured: true, kind, error: e instanceof Error ? e.message : "Gagal memuat data POS." });
   }
 }
 
