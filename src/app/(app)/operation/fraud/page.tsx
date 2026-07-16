@@ -25,7 +25,7 @@ export default async function FraudPage() {
       <PageHeader
         icon={ShieldAlert}
         title="Analisis Fraud — Void & Cancel"
-        description="Pantau transaksi void & cancel per outlet (harian / mingguan / bulanan) dari data POS. Lonjakan pada satu outlet menandakan potensi fraud."
+        description="Pantau transaksi void & cancel per outlet (harian / mingguan / bulanan) dari data ESB. Lonjakan pada satu outlet menandakan potensi fraud."
       />
       <FraudAnalysis initial={initial} initialDate={today} />
     </div>
