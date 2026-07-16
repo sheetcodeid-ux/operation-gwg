@@ -161,34 +161,43 @@ export function parseCancelDetailReport(dataHtml: string): CancelDetailReport {
   // slightly from a minimal capture).
   const rowRe = /<tr\b[^>]*\bdata-key=["'][^"']*["'][^>]*>([\s\S]*?)<\/tr>/gi;
   let rm: RegExpExecArray | null;
+  // Krajee grids GROUP bill-level columns with rowspan: from the 2nd item of a
+  // bill onward those <td>s are simply absent from the row. An absent string
+  // cell therefore inherits the previous row's value (rowspan semantics) —
+  // skipping such rows lost ~58% of items in production. Numeric cells never
+  // inherit (that would double-count money); absent means 0.
+  let prev: CancelDetailRow | null = null;
   while ((rm = rowRe.exec(dataHtml))) {
     const c = cells(rm[1]);
-    if (c[I.salesNumber] === undefined && c[I.branch] === undefined) continue;
+    if (Object.keys(c).length === 0) continue; // no data cells at all — not an item row
+    const str = (idx: number, inherited: string) => (c[idx] === undefined ? inherited : text(c[idx]));
     const qty = parseIdrNumber(c[I.qty] ?? "0");
     const subtotal = parseIdrNumber(c[I.subtotal] ?? "0");
     const serviceCharge = parseIdrNumber(c[I.serviceCharge] ?? "0");
     const tax = parseIdrNumber(c[I.tax] ?? "0");
     // Delete grids have no Total column — derive it so nominal never shows 0.
     const total = parseIdrNumber(c[I.total] ?? "0") || subtotal + serviceCharge + tax;
-    rows.push({
-      salesNumber: text(c[I.salesNumber] ?? ""),
-      branch: text(c[I.branch] ?? ""),
-      menu: text(c[I.menu] ?? ""),
-      menuCode: text(c[I.menuCode] ?? ""),
-      menuCategory: text(c[I.menuCategory] ?? ""),
-      menuCategoryDetail: text(c[I.menuCategoryDetail] ?? ""),
-      orderBy: text(c[I.orderBy] ?? ""),
-      orderTime: text(c[I.orderTime] ?? ""),
-      voidBy: text(c[I.voidBy] ?? ""),
-      voidTime: text(c[I.voidTime] ?? ""),
-      type: text(c[I.type] ?? ""),
-      notes: text(c[I.notes] ?? ""),
+    const row: CancelDetailRow = {
+      salesNumber: str(I.salesNumber, prev?.salesNumber ?? ""),
+      branch: str(I.branch, prev?.branch ?? ""),
+      menu: str(I.menu, ""),
+      menuCode: str(I.menuCode, ""),
+      menuCategory: str(I.menuCategory, ""),
+      menuCategoryDetail: str(I.menuCategoryDetail, ""),
+      orderBy: str(I.orderBy, prev?.orderBy ?? ""),
+      orderTime: str(I.orderTime, prev?.orderTime ?? ""),
+      voidBy: str(I.voidBy, prev?.voidBy ?? ""),
+      voidTime: str(I.voidTime, prev?.voidTime ?? ""),
+      type: str(I.type, prev?.type ?? ""),
+      notes: str(I.notes, prev?.notes ?? ""),
       qty,
       subtotal,
       serviceCharge,
       tax,
       total,
-    });
+    };
+    rows.push(row);
+    prev = row;
   }
 
   const totalItems = Number(/of\s+([\d.]+)\s+items/i.exec(dataHtml)?.[1]?.replace(/\./g, "") ?? rows.length);
