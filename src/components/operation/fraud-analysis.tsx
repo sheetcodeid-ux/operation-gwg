@@ -22,6 +22,14 @@ const KIND_LABEL: Record<FraudKind, string> = { all: "Void + Cancel", void: "Voi
 const KIND_OPTIONS = (Object.keys(KIND_LABEL) as FraudKind[]).map((k) => ({ value: k, label: KIND_LABEL[k] }));
 const MONTHS = ["Januari", "Februari", "Maret", "April", "Mei", "Juni", "Juli", "Agustus", "September", "Oktober", "November", "Desember"];
 const nf = (n: number) => n.toLocaleString("id-ID");
+/** "SENDI" → "Sendi", "BUDI SANTOSO" → "Budi Santoso"; mixed codes with digits
+ *  (NORDKASMKS5) are left as-is. Display-only — filters keep the raw value. */
+function titleName(s: string): string {
+  return s
+    .split(/(\s+)/)
+    .map((w) => (/^[A-Z]{3,}$/.test(w) ? w[0] + w.slice(1).toLowerCase() : w))
+    .join("");
+}
 const ymd = (y: number, m: number, d: number) => `${y}-${String(m + 1).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
 
 type PdfTheme = "light" | "dark";
@@ -527,7 +535,7 @@ function InsightStrip({ report, prevReport, query, mode }: { report: FraudReport
               <span className="block text-[11px] text-muted-foreground">Outlet tertinggi{grand > 0 ? ` · ${(((top.voidAmount + top.cancelAmount) / (scoped ? fraudAmount : report.totalVoidAmount + report.totalCancelAmount)) * 100).toFixed(0)}%` : ""}</span>
               <span className="block truncate text-sm font-semibold text-foreground">{top.name}</span>
             </span>
-            <span className="shrink-0 text-sm font-semibold tabular-nums text-blue-600 dark:text-blue-400">{formatIDRShort(top.voidAmount + top.cancelAmount)}</span>
+            <span className="shrink-0 text-sm font-semibold tabular-nums text-foreground">{formatIDRShort(top.voidAmount + top.cancelAmount)}</span>
           </div>
         )}
         {peak && peak.current > 0 && (
@@ -537,7 +545,7 @@ function InsightStrip({ report, prevReport, query, mode }: { report: FraudReport
               <span className="block text-[11px] text-muted-foreground">{report.period === "daily" ? "Jam tertinggi" : "Hari tertinggi"}</span>
               <span className="block text-sm font-semibold text-foreground">{peak.title}</span>
             </span>
-            <span className="shrink-0 text-sm font-semibold tabular-nums text-blue-600 dark:text-blue-400">{trx ? `${nf(Math.round(peak.current))} trx` : formatIDRShort(peak.current)}</span>
+            <span className="shrink-0 text-sm font-semibold tabular-nums text-foreground">{trx ? `${nf(Math.round(peak.current))} trx` : formatIDRShort(peak.current)}</span>
           </div>
         )}
         {actors.length > 0 && (
@@ -548,8 +556,8 @@ function InsightStrip({ report, prevReport, query, mode }: { report: FraudReport
               <span className="mt-0.5 block space-y-0.5">
                 {actors.map((a) => (
                   <span key={a.name} className="flex items-baseline justify-between gap-2">
-                    <span className="truncate text-xs font-medium text-foreground">{a.name}</span>
-                    <span className="shrink-0 tabular-nums text-[11px] text-muted-foreground">{nf(a.count)} trx · <span className="text-violet-600 dark:text-violet-400">{formatIDRShort(a.total)}</span></span>
+                    <span className="truncate text-xs font-medium text-foreground">{titleName(a.name)}</span>
+                    <span className="shrink-0 tabular-nums text-[11px] text-muted-foreground">{nf(a.count)} trx · <span className="font-medium text-foreground">{formatIDRShort(a.total)}</span></span>
                   </span>
                 ))}
               </span>
@@ -647,21 +655,51 @@ function FraudMatrix({ report, busy, query, mode, onOpenOutlet }: { report: Frau
       </span>
     );
   const grandRatio = sales && sales.total > 0 ? ((report.totalVoidAmount + report.totalCancelAmount) / sales.total) * 100 : null;
+  const salesReady = !!sales && sales.ready && sales.total > 0;
+  // Status color per CELL: fraud that day vs the outlet's estimated omset that
+  // day (outlet period omset × the day's share of total omset). Falls back to
+  // the magnitude heat ramp until omset is synced.
+  const dayShare = React.useMemo(() => {
+    const m = new Map<string, number>();
+    if (!sales || !sales.ready || sales.total <= 0) return m;
+    for (const [d, v] of Object.entries(sales.perDay)) m.set(d, v / sales.total);
+    return m;
+  }, [sales]);
+  const cellStatusClass = (outletName: string, dayKeyIso: string, amount: number): string | null => {
+    if (!salesReady || amount <= 0) return null;
+    const outletOmset = sales!.perOutlet[outletName] ?? 0;
+    const est = outletOmset * (dayShare.get(dayKeyIso) ?? 0);
+    if (est <= 0) return null;
+    const r = (amount / est) * 100;
+    if (r >= 2) return "bg-red-500/15 font-semibold text-red-700 dark:text-red-300";
+    if (r >= 1) return "bg-amber-500/15 font-medium text-amber-700 dark:text-amber-300";
+    return "text-foreground/75";
+  };
 
   return (
     <div className={cn("glass -mx-4 overflow-hidden border-y border-border transition-opacity sm:mx-0 sm:rounded-2xl sm:border", busy && "opacity-60")}>
       <div className="flex flex-wrap items-end justify-between gap-3 border-b border-border px-4 py-3">
         <div>
           <p className="text-sm font-semibold text-foreground">{KIND_LABEL[report.kind]} per Outlet per Hari — {report.label}</p>
-          <div className="mt-1.5 flex items-center gap-1.5 text-[10px] text-muted-foreground">
-            <span>Rendah</span>
-            <span className="h-2.5 w-4 rounded-sm bg-blue-500/10" />
-            <span className="h-2.5 w-4 rounded-sm bg-blue-500/20" />
-            <span className="h-2.5 w-4 rounded-sm bg-blue-500/30" />
-            <span className="h-2.5 w-4 rounded-sm bg-blue-500/45" />
-            <span className="h-2.5 w-4 rounded-sm bg-blue-500/60" />
-            <span>Tinggi</span>
-            <span className="ml-2 inline-block size-2.5 rounded-sm ring-2 ring-inset ring-red-500" /> <span>merah = anomali (&gt; rata-rata + 2σ)</span>
+          <div className="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-[10px] text-muted-foreground">
+            {salesReady ? (
+              <>
+                <span>Status harian vs omset:</span>
+                <span className="rounded-sm px-1.5 py-0.5 text-foreground/75 ring-1 ring-border">Aman &lt;1%</span>
+                <span className="rounded-sm bg-amber-500/15 px-1.5 py-0.5 font-medium text-amber-700 dark:text-amber-300">Waspada ≥1%</span>
+                <span className="rounded-sm bg-red-500/15 px-1.5 py-0.5 font-semibold text-red-700 dark:text-red-300">Tinggi ≥2%</span>
+              </>
+            ) : (
+              <>
+                <span>Rendah</span>
+                <span className="h-2.5 w-4 rounded-sm bg-blue-500/10" />
+                <span className="h-2.5 w-4 rounded-sm bg-blue-500/25" />
+                <span className="h-2.5 w-4 rounded-sm bg-blue-500/45" />
+                <span className="h-2.5 w-4 rounded-sm bg-blue-500/60" />
+                <span>Tinggi</span>
+              </>
+            )}
+            <span className="ml-1 inline-block size-2.5 rounded-sm ring-2 ring-inset ring-red-500" /> <span>ring = anomali (&gt; rata-rata + 2σ)</span>
           </div>
         </div>
         <div className="text-right">
@@ -734,6 +772,8 @@ function FraudMatrix({ report, busy, query, mode, onOpenOutlet }: { report: Frau
                   </td>
                   {days.map((d) => {
                     const v = dm?.get(dayIso(d)) ?? 0;
+                    const amountV = byAmount.get(o.name)?.get(dayIso(d)) ?? 0;
+                    const status = cellStatusClass(o.name, dayIso(d), amountV);
                     return (
                       <td
                         key={dayIso(d)}
@@ -741,7 +781,7 @@ function FraudMatrix({ report, busy, query, mode, onOpenOutlet }: { report: Frau
                         onClick={v > 0 ? (e) => { e.stopPropagation(); onOpenOutlet(o, dayIso(d)); } : undefined}
                         className={cn(
                           "whitespace-nowrap px-2 py-1.5 text-center tabular-nums",
-                          heatClass(v, maxCell),
+                          status ?? heatClass(v, maxCell),
                           v > anomaly && "ring-2 ring-inset ring-red-600",
                         )}
                       >
@@ -886,7 +926,7 @@ function OutletDetailModal({ report, outlet, day, pdfTheme, onClose }: { report:
           <div className="grid grid-cols-2 gap-x-4 gap-y-3.5 p-4 sm:p-5 sm:pb-3 lg:grid-cols-4">
             <MiniStat icon={Banknote} label="Total Nominal" value={formatIDRShort(total)} sub={formatIDR(total)} />
             <MiniStat icon={ReceiptText} label="Transaksi" value={nf(txCount)} sub={`${nf(dailyRows.length)} hari aktif`} />
-            <MiniStat icon={UsersRound} label="Pelaku Terlibat" value={nf(actors.length)} sub={actors[0] ? `Teratas: ${actors[0][0]}` : undefined} />
+            <MiniStat icon={UsersRound} label="Pelaku Terlibat" value={nf(actors.length)} sub={actors[0] ? `Teratas: ${titleName(actors[0][0])}` : undefined} />
             <MiniStat icon={CalendarRange} label="Rata-rata / Hari" value={formatIDRShort(total / Math.max(1, dailyRows.length))} sub="pada hari aktif" />
             {(() => {
               const omset = report.sales?.perOutlet[outlet.name] ?? 0;
@@ -951,7 +991,7 @@ function OutletDetailModal({ report, outlet, day, pdfTheme, onClose }: { report:
                           {who.replace(/[^A-Za-z0-9]/g, "").slice(0, 2).toUpperCase() || "?"}
                         </span>
                         <span className="min-w-0 flex-1">
-                          <span className="block truncate text-xs font-medium text-foreground">{who}</span>
+                          <span className="block truncate text-xs font-medium text-foreground">{titleName(who)}</span>
                           <span className="block text-[10px] text-muted-foreground">{nf(a.count)} transaksi · {share.toFixed(0)}% dari outlet ini</span>
                         </span>
                         <span className="shrink-0 text-right">
@@ -985,7 +1025,7 @@ function OutletDetailModal({ report, outlet, day, pdfTheme, onClose }: { report:
                     onClick={() => setActorFilter(undefined)}
                     className="inline-flex items-center gap-1 rounded-full bg-violet-500/10 px-2.5 py-1 text-[11px] font-medium text-violet-600 transition-colors hover:bg-violet-500/20 dark:text-violet-400"
                   >
-                    <UsersRound className="size-3" /> {actorFilter} <X className="size-3" />
+                    <UsersRound className="size-3" /> {titleName(actorFilter)} <X className="size-3" />
                   </button>
                 )}
                 {filtered && (
@@ -1118,8 +1158,8 @@ function OrdersTable({ orders }: { orders: FraudOrder[] }) {
               <tr key={`${o.salesNumber}-${i}`} className="border-b border-border/50 transition-colors last:border-0 hover:bg-foreground/[0.03]">
                 <td className="px-2.5 py-1.5 font-mono text-[11px] text-muted-foreground">{o.salesNumber}</td>
                 <td className="px-2.5 py-1.5 text-foreground">{o.menu}</td>
-                <td className="px-2.5 py-1.5">{o.orderBy}</td>
-                <td className="px-2.5 py-1.5 font-medium text-foreground">{o.voidBy}</td>
+                <td className="px-2.5 py-1.5">{titleName(o.orderBy)}</td>
+                <td className="px-2.5 py-1.5 font-medium text-foreground">{titleName(o.voidBy)}</td>
                 <td className="whitespace-nowrap px-2.5 py-1.5 text-muted-foreground">{o.voidTime || o.orderTime}</td>
                 <td className="px-2.5 py-1.5 text-center">
                   <Badge tone={/void|delete/i.test(o.type) ? "danger" : "warning"}>{o.type || "Delete"}</Badge>
