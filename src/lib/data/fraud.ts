@@ -261,8 +261,9 @@ export async function syncFraudDays(period: FraudPeriod, date: string, kind: Fra
   const started = Date.now();
   let synced = 0;
   let error: string | undefined;
-  // Three days in flight at once: ESB generates exports in a queue, so the
-  // generation waits overlap and a batch finishes ~3× faster than serial.
+  // STRICTLY one day at a time: ESB serves a single export per session, and
+  // parallel day syncs made it hand back the wrong file (paired days sharing
+  // totalItems, ~40% rows kept — verified from fraud_sync bookkeeping).
   const queue = [...pending];
   const syncOne = async (day: string) => {
     const res = await esbFetchCancelRows(day, day, group === "delete" ? "delete" : "default");
@@ -296,19 +297,16 @@ export async function syncFraudDays(period: FraudPeriod, date: string, kind: Fra
       }
     }
   };
-  const worker = async () => {
-    while (queue.length > 0 && !error && Date.now() - started < budgetMs) {
-      const day = queue.shift()!;
-      try {
-        await syncOne(day);
-      } catch (e) {
-        // Stop the pool on the first failure (a persistent ESB issue would just
-        // burn time); the day stays pending and is retried on the next call.
-        error = e instanceof Error ? e.message : "Gagal sinkron data ESB.";
-      }
+  while (queue.length > 0 && !error && (synced === 0 || Date.now() - started < budgetMs)) {
+    const day = queue.shift()!;
+    try {
+      await syncOne(day);
+    } catch (e) {
+      // Stop on the first failure (a persistent ESB issue would just burn
+      // time); the day stays pending and is retried on the next call.
+      error = e instanceof Error ? e.message : "Gagal sinkron data ESB.";
     }
-  };
-  await Promise.all([worker(), worker(), worker()]);
+  }
   return { synced, remaining: pending.length - synced, error };
 }
 

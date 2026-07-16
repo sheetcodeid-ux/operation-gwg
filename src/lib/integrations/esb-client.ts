@@ -273,55 +273,64 @@ export interface EsbCancelResult {
 export type EsbExportKind = "default" | "delete";
 
 /**
+ * ESB serves ONE export per session at a time: concurrent generate/read calls
+ * make it hand back the WRONG file (verified in production — paired days got
+ * each other's exports and page reads returned ~40% foreign rows). Every
+ * export fetch therefore runs through this strict serial queue.
+ */
+let esbQueue: Promise<unknown> = Promise.resolve();
+function serialized<T>(fn: () => Promise<T>): Promise<T> {
+  const run = esbQueue.then(fn, fn);
+  esbQueue = run.catch(() => {});
+  return run;
+}
+
+/**
  * End-to-end: generate the Cancel/Void (or deleted-order) export for a date
- * range and read every page (50 rows/page, capped at 40 pages ≈ 2000
- * line-items). Returns diagnostic counts alongside the rows so a silent 0 can
- * be explained.
+ * range and read every page (50 rows/page, capped at 16.000 line-items).
+ * Returns diagnostic counts alongside the rows so a silent 0 can be explained.
  *
  * For kind "delete": the Type Void option is matched from the LIVE form
  * (anything named delete/remove). If the form has no such option, the DEFAULT
  * export is fetched instead with `typeVoidFound: false` so the caller can
  * filter rows by type — deleted items may ride along in the default report.
  */
-export async function esbFetchCancelRows(dateFromYmd: string, dateToYmd: string, kind: EsbExportKind = "default"): Promise<EsbCancelResult> {
-  const opts = (await ensureSession()).typeVoidOptions;
-  const pick = (re: RegExp) => opts.find((o) => re.test(o.label) || re.test(o.value));
-  const fallback = pick(/default/i)?.value ?? opts[0]?.value ?? "Cancel / Void (Default)";
-  // Deleted items are "Removed Before Save" in ESB (verified from a live form
-  // capture) — prefer that exact option, then any delete/remove-ish label. An
-  // unknown value here made ESB drop the WHOLE filter set (dates included), so
-  // when the select couldn't be parsed we still send the VERIFIED literal, but
-  // report typeVoidFound=false so the caller keeps its type-column filter on.
-  const delOpt = kind === "delete" ? pick(/removed?\s*before\s*save/i) ?? pick(/delete|remove|hapus/i) : undefined;
-  const typeVoidFound = kind !== "delete" || !!delOpt;
-  const typeVoid = kind === "delete" ? delOpt?.value ?? "Removed Before Save" : fallback;
-  const url = await generateExport(dateFromYmd, dateToYmd, typeVoid);
-  await pokeQueue(); // kick the queue worker before the first read
-  const first = await readExportPage(url, 0, 16, true); // page 0 waits for the async export
-  const rows = [...first.report.rows];
-  // A busy month across all outlets can run to thousands of line-items — read
-  // ALL pages (bounded at 10.000 rows), in parallel batches so it fits the
-  // function's time budget. A failed page is skipped, never fatal: the caller
-  // compares rows.length to totalItems and warns about any shortfall.
-  // Modest parallelism: ESB drops pages under heavier concurrency, and with
-  // the day-level DB cache a single sync only ever covers one day (~few pages).
-  // The generous page cap matters for exports whose date filter ESB ignores
-  // (observed on Type Void = Deleted) — reading everything lets the caller
-  // split the response into day buckets and finalize many days at once.
-  const pages = Math.min(320, Math.ceil(first.report.totalItems / 50));
-  const CONCURRENCY = 4;
-  for (let start = 1; start < pages; start += CONCURRENCY) {
-    const batch: Promise<{ report: CancelDetailReport; rawLen: number }>[] = [];
-    for (let p = start; p < Math.min(start + CONCURRENCY, pages); p++) batch.push(readExportPage(url, p, 6));
-    const settled = await Promise.allSettled(batch);
-    for (const s of settled) if (s.status === "fulfilled") rows.push(...s.value.report.rows);
-  }
-  return {
-    rows,
-    totalItems: first.report.totalItems,
-    rawLen: first.rawLen,
-    readAll: rows.length >= first.report.totalItems,
-    typeVoidFound,
-    typeVoidOptions: opts.map((o) => o.label || o.value),
-  };
+export function esbFetchCancelRows(dateFromYmd: string, dateToYmd: string, kind: EsbExportKind = "default"): Promise<EsbCancelResult> {
+  return serialized(async () => {
+    const opts = (await ensureSession()).typeVoidOptions;
+    const pick = (re: RegExp) => opts.find((o) => re.test(o.label) || re.test(o.value));
+    const fallback = pick(/default/i)?.value ?? opts[0]?.value ?? "Cancel / Void (Default)";
+    // Deleted items are "Removed Before Save" in ESB (verified from a live form
+    // capture) — prefer that exact option, then any delete/remove-ish label. An
+    // unknown value here made ESB drop the WHOLE filter set (dates included), so
+    // when the select couldn't be parsed we still send the VERIFIED literal, but
+    // report typeVoidFound=false so the caller keeps its type-column filter on.
+    const delOpt = kind === "delete" ? pick(/removed?\s*before\s*save/i) ?? pick(/delete|remove|hapus/i) : undefined;
+    const typeVoidFound = kind !== "delete" || !!delOpt;
+    const typeVoid = kind === "delete" ? delOpt?.value ?? "Removed Before Save" : fallback;
+    const url = await generateExport(dateFromYmd, dateToYmd, typeVoid);
+    await pokeQueue(); // kick the queue worker before the first read
+    const first = await readExportPage(url, 0, 16, true); // page 0 waits for the async export
+    const rows = [...first.report.rows];
+    // Pages are read STRICTLY one at a time — parallel reads made ESB shuffle
+    // pages between files (~60% loss in production). A failed page is skipped,
+    // never fatal: the caller compares rows.length to totalItems and warns.
+    const pages = Math.min(320, Math.ceil(first.report.totalItems / 50));
+    for (let p = 1; p < pages; p++) {
+      try {
+        const r = await readExportPage(url, p, 6);
+        rows.push(...r.report.rows);
+      } catch {
+        /* skipped page → readAll=false → caller retries the day later */
+      }
+    }
+    return {
+      rows,
+      totalItems: first.report.totalItems,
+      rawLen: first.rawLen,
+      readAll: rows.length >= first.report.totalItems,
+      typeVoidFound,
+      typeVoidOptions: opts.map((o) => o.label || o.value),
+    };
+  });
 }
