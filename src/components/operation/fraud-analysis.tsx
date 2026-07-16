@@ -149,6 +149,12 @@ export function FraudAnalysis({ initial, initialDate }: { initial: FraudReport; 
           <p><span className="font-medium text-foreground">Gagal memuat {report.source === "esb" ? "data ESB" : "data POS"}:</span> {report.error}</p>
         </div>
       )}
+      {report.configured && !report.error && report.warning && (
+        <div className="glass flex items-center gap-3 rounded-2xl border border-amber-500/30 bg-amber-500/5 p-4 text-sm">
+          <AlertTriangle className="size-5 shrink-0 text-amber-500" />
+          <p><span className="font-medium text-foreground">Data belum lengkap:</span> {report.warning}</p>
+        </div>
+      )}
 
       {report.configured && (
         <>
@@ -216,6 +222,11 @@ function FraudMatrix({ report }: { report: FraudReport }) {
   const [openId, setOpenId] = React.useState<number | null>(null);
   const days = React.useMemo(() => eachDay(report.from, report.to), [report.from, report.to]);
   const byOutlet = React.useMemo(() => {
+    // Server-side per-day aggregation covers ALL rows (orders may be capped);
+    // deriving from orders is only a fallback for older payloads.
+    if (report.daily) {
+      return new Map(Object.entries(report.daily).map(([name, m]) => [name, new Map(Object.entries(m))]));
+    }
     const m = new Map<string, Map<string, number>>();
     for (const o of report.outlets) {
       const dm = new Map<string, number>();
@@ -228,7 +239,7 @@ function FraudMatrix({ report }: { report: FraudReport }) {
       m.set(o.name, dm);
     }
     return m;
-  }, [report.outlets, report.orders]);
+  }, [report.daily, report.outlets, report.orders, report.from, report.to]);
 
   return (
     <div className="glass overflow-hidden rounded-2xl border border-border">
@@ -276,7 +287,7 @@ function FraudMatrix({ report }: { report: FraudReport }) {
                   {open && (
                     <tr className="border-b border-border/50 bg-muted/20">
                       <td colSpan={days.length + 2} className="px-4 py-3">
-                        <EsbOrderDetail orders={report.orders?.[o.name] ?? []} />
+                        <EsbOrderDetail orders={report.orders?.[o.name] ?? []} totalCount={o.void + o.cancel} />
                       </td>
                     </tr>
                   )}
@@ -351,7 +362,7 @@ function OutletTable({ report, hasAmount }: { report: FraudReport; hasAmount: bo
                     <tr className="border-b border-border/60 bg-muted/20">
                       <td colSpan={6} className="px-4 py-3">
                         {report.source === "esb" ? (
-                          <EsbOrderDetail orders={report.orders?.[o.name] ?? []} />
+                          <EsbOrderDetail orders={report.orders?.[o.name] ?? []} totalCount={o.void + o.cancel} />
                         ) : (
                           <OutletDetail branchId={o.branchId} from={report.from} to={report.to} hasAmount={hasAmount} />
                         )}
@@ -413,12 +424,15 @@ function OutletDetail({ branchId, from, to, hasAmount }: { branchId: number; fro
 }
 
 /** ESB order-level detail for one outlet — each void/cancel line item. */
-function EsbOrderDetail({ orders }: { orders: FraudOrder[] }) {
+function EsbOrderDetail({ orders, totalCount }: { orders: FraudOrder[]; totalCount?: number }) {
   if (orders.length === 0) return <p className="py-2 text-xs text-muted-foreground">Tidak ada order void/cancel.</p>;
   const sorted = [...orders].sort((a, b) => b.total - a.total);
+  const capped = totalCount !== undefined && totalCount > orders.length;
   return (
     <div className="overflow-x-auto">
-      <p className="mb-2 text-xs font-medium text-muted-foreground">Detail order void/cancel ({orders.length})</p>
+      <p className="mb-2 text-xs font-medium text-muted-foreground">
+        Detail order ({capped ? `${nf(orders.length)} terbesar dari ${nf(totalCount)}` : nf(orders.length)})
+      </p>
       <table className="w-full min-w-[52rem] text-xs">
         <thead>
           <tr className="border-b border-border text-left text-[10px] uppercase tracking-wide text-muted-foreground">
