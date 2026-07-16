@@ -1,8 +1,7 @@
 import "server-only";
 
 import { fetchBranches, fetchErpDashboard, gwgmanageConfigured } from "@/lib/integrations/gwgmanage";
-import { esbConfigured, esbFetchCancelRows } from "@/lib/integrations/esb-client";
-import type { CancelDetailRow } from "@/lib/integrations/esb";
+import { esbConfigured, esbFetchCancelRows, type EsbCancelResult } from "@/lib/integrations/esb-client";
 
 /**
  * Fraud (Void & Cancel) analysis sourced from the POS dashboard endpoint.
@@ -94,7 +93,13 @@ function base(period: FraudPeriod, r: { from: string; to: string; label: string 
 }
 
 /** Build the report from ESB order-level rows (real nominal + per-order detail). */
-function esbReport(period: FraudPeriod, r: { from: string; to: string; label: string }, rows: CancelDetailRow[]): FraudReport {
+function esbReport(period: FraudPeriod, r: { from: string; to: string; label: string }, res: EsbCancelResult): FraudReport {
+  const rows = res.rows;
+  // Diagnose a silent 0: items>0 but nothing parsed ⇒ parser miss; tiny html ⇒
+  // empty/blocked response. A genuine empty period stays clean.
+  let diag: string | undefined;
+  if (rows.length === 0 && res.totalItems > 0) diag = `ESB: 0/${res.totalItems} baris ter-parse (htmlLen=${res.rawLen})`;
+  else if (rows.length === 0 && res.rawLen < 60) diag = `ESB: respons kosong (htmlLen=${res.rawLen})`;
   const agg = new Map<string, { void: number; cancel: number; voidAmount: number; cancelAmount: number }>();
   const orders: Record<string, FraudOrder[]> = {};
   let tv = 0, tc = 0, tva = 0, tca = 0;
@@ -116,7 +121,7 @@ function esbReport(period: FraudPeriod, r: { from: string; to: string; label: st
   return {
     configured: true, period, from: r.from, to: r.to, label: r.label, source: "esb",
     totalVoid: tv, totalCancel: tc, totalVoidAmount: tva, totalCancelAmount: tca,
-    hasAmount: true, outlets, perOutletReliable: true, orders,
+    hasAmount: true, outlets, perOutletReliable: true, orders, error: diag,
   };
 }
 
@@ -129,8 +134,8 @@ export async function getFraudReport(period: FraudPeriod, date: string): Promise
   // surfaced (not hidden behind a POS fallback) so misconfig is diagnosable.
   if (esbConfigured()) {
     try {
-      const rows = await esbFetchCancelRows(r.from, r.to);
-      return esbReport(period, r, rows);
+      const res = await esbFetchCancelRows(r.from, r.to);
+      return esbReport(period, r, res);
     } catch (e) {
       return base(period, r, { configured: true, source: "esb", error: e instanceof Error ? e.message : "Gagal memuat data ESB." });
     }

@@ -63,7 +63,7 @@ export function parseIdrNumber(s: string): number {
 /** Extract the cells of one <tr> keyed by their data-col-seq. */
 function cells(rowHtml: string): Record<number, string> {
   const out: Record<number, string> = {};
-  const re = /<td[^>]*data-col-seq="(\d+)"[^>]*>([\s\S]*?)<\/td>/g;
+  const re = /<td\b[^>]*\bdata-col-seq=["'](\d+)["'][^>]*>([\s\S]*?)<\/td>/gi;
   let m: RegExpExecArray | null;
   while ((m = re.exec(rowHtml))) out[Number(m[1])] = m[2];
   return out;
@@ -71,7 +71,9 @@ function cells(rowHtml: string): Record<number, string> {
 
 export function parseCancelDetailReport(dataHtml: string): CancelDetailReport {
   const rows: CancelDetailRow[] = [];
-  const rowRe = /<tr data-key="\d+">([\s\S]*?)<\/tr>/g;
+  // Tolerant of extra attributes / quote style on the <tr> (live grid differs
+  // slightly from a minimal capture).
+  const rowRe = /<tr\b[^>]*\bdata-key=["'][^"']*["'][^>]*>([\s\S]*?)<\/tr>/gi;
   let rm: RegExpExecArray | null;
   while ((rm = rowRe.exec(dataHtml))) {
     const c = cells(rm[1]);
