@@ -1,6 +1,6 @@
 import "server-only";
 
-import { parseCancelDetailReport, type CancelDetailReport, type CancelDetailRow } from "./esb";
+import { extractReportData, parseCancelDetailReport, type CancelDetailReport, type CancelDetailRow } from "./esb";
 
 /**
  * Authenticated ESB (erp.esb.co.id) client — runs SERVER-SIDE only, logging in
@@ -205,32 +205,6 @@ async function generateExport(dateFromYmd: string, dateToYmd: string): Promise<s
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
-/** Extract the `data` HTML from a get-data-report response. ESB sometimes emits
- *  INVALID JSON (literal newlines inside the string), so fall back to a regex +
- *  manual unescape when JSON.parse fails. Returns "" when there's no data field
- *  (e.g. the {code:404,"try again later"} "still generating" response). */
-function extractReportData(text: string): string {
-  try {
-    const j = JSON.parse(text) as { data?: unknown };
-    if (typeof j.data === "string") return j.data;
-  } catch {
-    /* malformed JSON (literal newlines) — extract without regex backtracking */
-  }
-  const km = /"data"\s*:\s*"/.exec(text);
-  if (!km) return "";
-  const from = km.index + km[0].length;
-  const end = text.lastIndexOf('"'); // closing quote of the data value (trailing is just "})
-  if (end <= from) return "";
-  return text
-    .slice(from, end)
-    .replace(/\\r/g, "")
-    .replace(/\\n/g, "\n")
-    .replace(/\\t/g, " ")
-    .replace(/\\\//g, "/")
-    .replace(/\\"/g, '"')
-    .replace(/\\\\/g, "\\");
-}
-
 /** Poke the report queue (what the browser polls after generating) so ESB's
  *  worker advances the async export. Best-effort; errors are ignored. */
 async function pokeQueue(): Promise<void> {
@@ -254,9 +228,10 @@ async function readExportPage(url: string, page: number, maxAttempts = 22, poke 
   for (let attempt = 0; attempt < maxAttempts; attempt++) {
     const res = await postForm("/report_service/main/get-data-report", () => ({ url, page: String(page) }));
     // ESB signals "still generating" as HTTP 404 AND as a JSON body {code:404}
-    // with status 200, so inspect the body too before deciding it's ready.
+    // with status 200, so inspect the body too before deciding it's ready. The
+    // body can be double-encoded (\"code\":404), hence the optional backslash.
     const text = await res.text().catch(() => "");
-    if (res.ok && !/"code"\s*:\s*(404|425|202)/.test(text)) {
+    if (res.ok && !/\\?"code\\?"\s*:\s*(404|425|202)/.test(text)) {
       const data = extractReportData(text);
       if (data) return { report: parseCancelDetailReport(data), rawLen: data.length };
     }

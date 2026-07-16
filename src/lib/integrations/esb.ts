@@ -69,6 +69,57 @@ function cells(rowHtml: string): Record<number, string> {
   return out;
 }
 
+/** Decode one level of JSON-string escaping (\\ \" \/ \n \r \t) manually —
+ *  used when the payload is not valid JSON so JSON.parse can't do it. */
+function unescapeJsonString(s: string): string {
+  return s
+    .replace(/\\\\/g, "\u0000") // protect escaped backslashes first
+    .replace(/\\r/g, "")
+    .replace(/\\n/g, "\n")
+    .replace(/\\t/g, " ")
+    .replace(/\\\//g, "/")
+    .replace(/\\"/g, '"')
+    .replace(/\u0000/g, "\\");
+}
+
+/**
+ * Extract the `data` HTML from a get-data-report response. ESB is inconsistent:
+ *  - sometimes valid JSON  {code,data};
+ *  - sometimes INVALID JSON (literal newlines inside the data string);
+ *  - sometimes DOUBLE-ENCODED — the whole body is a JSON *string* containing
+ *    the {code,data} JSON ("{\"code\":200,\"data\":\"…\"}").
+ * Handles all three (recursively unwrapping up to 3 layers). Returns "" when
+ * there's no data field (e.g. the {code:404,"try again later"} response).
+ */
+export function extractReportData(text: string, depth = 0): string {
+  if (depth > 3) return "";
+  try {
+    const j = JSON.parse(text) as unknown;
+    if (typeof j === "string") return extractReportData(j, depth + 1); // double-encoded
+    const d = (j as { data?: unknown } | null)?.data;
+    if (typeof d === "string") return d;
+    if (j && typeof j === "object") return ""; // parsed fine, no data (e.g. code:404)
+  } catch {
+    /* malformed JSON — fall through to manual extraction */
+  }
+  // Malformed single-encoded: {"data":"…"} with raw newlines inside the string.
+  const km = /"data"\s*:\s*"/.exec(text);
+  if (km) {
+    const from = km.index + km[0].length;
+    const end = text.lastIndexOf('"'); // closing quote of the data value (trailing is just "})
+    if (end > from) return unescapeJsonString(text.slice(from, end));
+    return "";
+  }
+  // Malformed double-encoded: quoted body whose inner JSON is itself broken —
+  // visible as \"data\":\" . Strip the outer quotes, unescape once, recurse.
+  if (/\\"data\\"\s*:\s*\\"/.test(text)) {
+    const t = text.trim();
+    const body = t.startsWith('"') && t.endsWith('"') ? t.slice(1, -1) : t;
+    return extractReportData(unescapeJsonString(body), depth + 1);
+  }
+  return "";
+}
+
 export function parseCancelDetailReport(dataHtml: string): CancelDetailReport {
   const rows: CancelDetailRow[] = [];
   // Tolerant of extra attributes / quote style on the <tr> (live grid differs
