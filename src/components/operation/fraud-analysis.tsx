@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { AlertTriangle, ArrowDown, ArrowDownRight, ArrowUp, ArrowUpDown, ArrowUpRight, CalendarDays, CheckCircle2, ChevronDown, Clock, Download, FileSpreadsheet, Loader2, Minus, Percent, ReceiptText, Store, Users, Wallet, X } from "lucide-react";
+import { AlertTriangle, ArrowDown, ArrowDownRight, ArrowUp, ArrowUpDown, ArrowUpRight, Banknote, CalendarRange, CheckCircle2, ChevronDown, Clock4, Download, FileSpreadsheet, Loader2, Minus, Percent, ReceiptText, Store, UsersRound, X } from "lucide-react";
 import { toast } from "sonner";
 import { CategoryBarChart, ComboCompareChart } from "@/components/charts/charts";
 import { Button } from "@/components/ui/button";
@@ -505,13 +505,8 @@ function InsightStrip({ report, prevReport, query, mode }: { report: FraudReport
         <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Sorotan{scoped ? " (hasil pencarian)" : ""}</p>
         {ratio !== null && (
           <div className="flex items-center gap-2.5">
-            <span className={cn(
-              "grid size-8 shrink-0 place-items-center rounded-full",
-              ratioTone === "red" && "bg-red-500/10 text-red-600 dark:text-red-400",
-              ratioTone === "amber" && "bg-amber-500/10 text-amber-600 dark:text-amber-400",
-              ratioTone === "emerald" && "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400",
-            )}>
-              <Percent className="size-4" />
+            <span className={cn(ICON_CHIP, "size-8 rounded-lg")}>
+              <Percent className="size-4" strokeWidth={1.75} />
             </span>
             <span className="min-w-0 flex-1">
               <span className="block text-[11px] text-muted-foreground">{KIND_LABEL[report.kind]} {PERIOD_LABEL[report.period].toLowerCase()} terhadap omset</span>
@@ -527,7 +522,7 @@ function InsightStrip({ report, prevReport, query, mode }: { report: FraudReport
         )}
         {top && (
           <div className="flex items-center gap-2.5">
-            <span className="grid size-8 shrink-0 place-items-center rounded-full bg-blue-500/10 text-blue-600 dark:text-blue-400"><Store className="size-4" /></span>
+            <span className={cn(ICON_CHIP, "size-8 rounded-lg")}><Store className="size-4" strokeWidth={1.75} /></span>
             <span className="min-w-0 flex-1">
               <span className="block text-[11px] text-muted-foreground">Outlet tertinggi{grand > 0 ? ` · ${(((top.voidAmount + top.cancelAmount) / (scoped ? fraudAmount : report.totalVoidAmount + report.totalCancelAmount)) * 100).toFixed(0)}%` : ""}</span>
               <span className="block truncate text-sm font-semibold text-foreground">{top.name}</span>
@@ -537,7 +532,7 @@ function InsightStrip({ report, prevReport, query, mode }: { report: FraudReport
         )}
         {peak && peak.current > 0 && (
           <div className="flex items-center gap-2.5">
-            <span className="grid size-8 shrink-0 place-items-center rounded-full bg-amber-500/10 text-amber-600 dark:text-amber-400"><Clock className="size-4" /></span>
+            <span className={cn(ICON_CHIP, "size-8 rounded-lg")}><Clock4 className="size-4" strokeWidth={1.75} /></span>
             <span className="min-w-0 flex-1">
               <span className="block text-[11px] text-muted-foreground">{report.period === "daily" ? "Jam tertinggi" : "Hari tertinggi"}</span>
               <span className="block text-sm font-semibold text-foreground">{peak.title}</span>
@@ -547,7 +542,7 @@ function InsightStrip({ report, prevReport, query, mode }: { report: FraudReport
         )}
         {actors.length > 0 && (
           <div className="flex items-start gap-2.5">
-            <span className="grid size-8 shrink-0 place-items-center rounded-full bg-violet-500/10 text-violet-600 dark:text-violet-400"><Users className="size-4" /></span>
+            <span className={cn(ICON_CHIP, "size-8 rounded-lg")}><UsersRound className="size-4" strokeWidth={1.75} /></span>
             <span className="min-w-0 flex-1">
               <span className="block text-[11px] text-muted-foreground">Pelaku teratas</span>
               <span className="mt-0.5 block space-y-0.5">
@@ -865,7 +860,7 @@ function OutletDetailModal({ report, outlet, day, pdfTheme, onClose }: { report:
         <div className="flex items-start justify-between gap-3 border-b border-border p-4 sm:p-5">
           <div className="flex min-w-0 items-center gap-3">
             <div className="grid size-10 shrink-0 place-items-center rounded-xl bg-muted ring-1 ring-border">
-              <Store className="size-5 text-foreground/70" />
+              <Store className="size-5 text-foreground/70" strokeWidth={1.75} />
             </div>
             <div className="min-w-0">
               <h2 className="text-base font-semibold leading-snug text-foreground">{outlet.name}</h2>
@@ -889,15 +884,15 @@ function OutletDetailModal({ report, outlet, day, pdfTheme, onClose }: { report:
         <div className="min-h-0 flex-1 overflow-y-auto">
           {/* Ringkasan angka — pola baris ikon pastel khas dashboard (tanpa kartu) */}
           <div className="grid grid-cols-2 gap-x-4 gap-y-3.5 p-4 sm:p-5 sm:pb-3 lg:grid-cols-4">
-            <MiniStat icon={Wallet} tint="blue" label="Total Nominal" value={formatIDRShort(total)} sub={formatIDR(total)} />
-            <MiniStat icon={ReceiptText} tint="emerald" label="Transaksi" value={nf(txCount)} sub={`${nf(dailyRows.length)} hari aktif`} />
-            <MiniStat icon={Users} tint="violet" label="Pelaku Terlibat" value={nf(actors.length)} sub={actors[0] ? `Teratas: ${actors[0][0]}` : undefined} />
-            <MiniStat icon={CalendarDays} tint="amber" label="Rata-rata / Hari" value={formatIDRShort(total / Math.max(1, dailyRows.length))} sub="pada hari aktif" />
+            <MiniStat icon={Banknote} label="Total Nominal" value={formatIDRShort(total)} sub={formatIDR(total)} />
+            <MiniStat icon={ReceiptText} label="Transaksi" value={nf(txCount)} sub={`${nf(dailyRows.length)} hari aktif`} />
+            <MiniStat icon={UsersRound} label="Pelaku Terlibat" value={nf(actors.length)} sub={actors[0] ? `Teratas: ${actors[0][0]}` : undefined} />
+            <MiniStat icon={CalendarRange} label="Rata-rata / Hari" value={formatIDRShort(total / Math.max(1, dailyRows.length))} sub="pada hari aktif" />
             {(() => {
               const omset = report.sales?.perOutlet[outlet.name] ?? 0;
               if (omset <= 0) return null;
               const r = (total / omset) * 100;
-              return <MiniStat icon={Percent} tint="rose" label="% dari Omset" value={`${r.toFixed(2).replace(".", ",")}%`} sub={`omset ${formatIDRShort(omset)}`} />;
+              return <MiniStat icon={Percent} label="% dari Omset" value={`${r.toFixed(2).replace(".", ",")}%`} sub={`omset ${formatIDRShort(omset)}`} />;
             })()}
           </div>
 
@@ -914,7 +909,7 @@ function OutletDetailModal({ report, outlet, day, pdfTheme, onClose }: { report:
           {tab === "ringkasan" ? (
             <div className="space-y-3 p-4 sm:p-5">
               {/* Per Hari — chart panel (collapsible) */}
-              <CollapseSection icon={CalendarDays} tint="blue" title="Per Hari" summary={`${nf(dailyRows.length)} hari aktif`} defaultOpen>
+              <CollapseSection icon={CalendarRange} title="Per Hari" summary={`${nf(dailyRows.length)} hari aktif`} defaultOpen>
                 {dailyRows.length > 0 ? (
                   <>
                     <CategoryBarChart data={dailyRows.map((x) => ({ label: x.label, value: Math.round(x.v) }))} color="#3b82f6" height={150} angle={0} radius={4} maxBarSize={22} />
@@ -938,7 +933,7 @@ function OutletDetailModal({ report, outlet, day, pdfTheme, onClose }: { report:
               </CollapseSection>
 
               {/* Pelaku — ranked people list (collapsible, deliberately different) */}
-              <CollapseSection icon={Users} tint="violet" title="Pelaku (Oleh)" summary={`${nf(actors.length)} orang`} defaultOpen>
+              <CollapseSection icon={UsersRound} title="Pelaku (Oleh)" summary={`${nf(actors.length)} orang`} defaultOpen>
                 <div className="space-y-1">
                   {actors.map(([who, a], i) => {
                     const share = (a.total / actorSum) * 100;
@@ -950,8 +945,8 @@ function OutletDetailModal({ report, outlet, day, pdfTheme, onClose }: { report:
                         className="flex w-full items-center gap-3 rounded-xl px-2 py-1.5 text-left transition-colors hover:bg-foreground/[0.05]"
                       >
                         <span className={cn(
-                          "grid size-8 shrink-0 place-items-center rounded-full text-[11px] font-bold",
-                          i === 0 ? "bg-violet-500/15 text-violet-600 dark:text-violet-400" : "bg-muted text-muted-foreground",
+                          "grid size-8 shrink-0 place-items-center rounded-full text-[11px] font-bold ring-1 ring-border",
+                          i === 0 ? "bg-foreground text-background ring-0" : "bg-muted text-muted-foreground",
                         )}>
                           {who.replace(/[^A-Za-z0-9]/g, "").slice(0, 2).toUpperCase() || "?"}
                         </span>
@@ -981,7 +976,7 @@ function OutletDetailModal({ report, outlet, day, pdfTheme, onClose }: { report:
                     onClick={() => setDayFilter(undefined)}
                     className="inline-flex items-center gap-1 rounded-full bg-blue-500/10 px-2.5 py-1 text-[11px] font-medium text-blue-600 transition-colors hover:bg-blue-500/20 dark:text-blue-400"
                   >
-                    <CalendarDays className="size-3" /> {dayLabel(dayFilter)} <X className="size-3" />
+                    <CalendarRange className="size-3" /> {dayLabel(dayFilter)} <X className="size-3" />
                   </button>
                 )}
                 {actorFilter && (
@@ -990,7 +985,7 @@ function OutletDetailModal({ report, outlet, day, pdfTheme, onClose }: { report:
                     onClick={() => setActorFilter(undefined)}
                     className="inline-flex items-center gap-1 rounded-full bg-violet-500/10 px-2.5 py-1 text-[11px] font-medium text-violet-600 transition-colors hover:bg-violet-500/20 dark:text-violet-400"
                   >
-                    <Users className="size-3" /> {actorFilter} <X className="size-3" />
+                    <UsersRound className="size-3" /> {actorFilter} <X className="size-3" />
                   </button>
                 )}
                 {filtered && (
@@ -1018,7 +1013,7 @@ function OutletDetailModal({ report, outlet, day, pdfTheme, onClose }: { report:
 }
 
 /** Collapsible panel with a pastel icon chip — open/close per section. */
-function CollapseSection({ icon: Icon, tint, title, summary, defaultOpen, children }: { icon: React.ComponentType<{ className?: string }>; tint: keyof typeof MINI_TINTS; title: string; summary?: string; defaultOpen?: boolean; children: React.ReactNode }) {
+function CollapseSection({ icon: Icon, title, summary, defaultOpen, children }: { icon: React.ComponentType<{ className?: string; strokeWidth?: number }>; title: string; summary?: string; defaultOpen?: boolean; children: React.ReactNode }) {
   const [open, setOpen] = React.useState(defaultOpen ?? true);
   return (
     <div className="overflow-hidden rounded-2xl border border-border">
@@ -1028,8 +1023,8 @@ function CollapseSection({ icon: Icon, tint, title, summary, defaultOpen, childr
         aria-expanded={open}
         className="flex w-full items-center gap-2.5 px-4 py-3 text-left transition-colors hover:bg-foreground/[0.03]"
       >
-        <span className={cn("grid size-8 shrink-0 place-items-center rounded-full", MINI_TINTS[tint])}>
-          <Icon className="size-4" />
+        <span className={cn(ICON_CHIP, "size-8 rounded-lg")}>
+          <Icon className="size-4" strokeWidth={1.75} />
         </span>
         <span className="flex-1 text-sm font-semibold text-foreground">{title}</span>
         {summary && <span className="text-[11px] tabular-nums text-muted-foreground">{summary}</span>}
@@ -1040,20 +1035,14 @@ function CollapseSection({ icon: Icon, tint, title, summary, defaultOpen, childr
   );
 }
 
-/** Compact metric row — soft pastel icon circle + label + value, mirroring the
- *  dashboard's "Insights" list (deliberately NOT a card). */
-const MINI_TINTS = {
-  blue: "bg-blue-500/10 text-blue-600 dark:text-blue-400",
-  emerald: "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400",
-  violet: "bg-violet-500/10 text-violet-600 dark:text-violet-400",
-  amber: "bg-amber-500/10 text-amber-600 dark:text-amber-400",
-  rose: "bg-rose-500/10 text-rose-600 dark:text-rose-400",
-} as const;
-function MiniStat({ icon: Icon, tint, label, value, sub }: { icon: React.ComponentType<{ className?: string }>; tint: keyof typeof MINI_TINTS; label: string; value: React.ReactNode; sub?: string }) {
+/** Aniq-style neutral icon chip: soft gray square, monochrome thin-stroke
+ *  glyph — color is reserved for values and status, never the icon. */
+const ICON_CHIP = "grid shrink-0 place-items-center rounded-xl bg-muted ring-1 ring-border text-muted-foreground";
+function MiniStat({ icon: Icon, label, value, sub }: { icon: React.ComponentType<{ className?: string; strokeWidth?: number }>; label: string; value: React.ReactNode; sub?: string }) {
   return (
     <div className="flex min-w-0 items-center gap-2.5">
-      <div className={cn("grid size-9 shrink-0 place-items-center rounded-full", MINI_TINTS[tint])}>
-        <Icon className="size-4" />
+      <div className={cn(ICON_CHIP, "size-9")}>
+        <Icon className="size-4" strokeWidth={1.75} />
       </div>
       <div className="min-w-0">
         <p className="truncate text-[11px] text-muted-foreground">{label}</p>
