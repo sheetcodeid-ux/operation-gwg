@@ -32,7 +32,8 @@ const CSRF_INPUT = /"_csrf-esb-fnb-backend"\s+value="([^"]+)"/;
 // page (hidden input or a JS assignment) — echoed back in the report POST body.
 const POST_SESSION = /POST_USER_SESSION["']?\s*(?:value=|[:=])\s*["']([a-zA-Z0-9]+)["']/;
 
-type Session = { cookie: string; csrf: string; postUserSession: string; typeVoidOptions: string[]; at: number };
+type TypeVoidOption = { value: string; label: string };
+type Session = { cookie: string; csrf: string; postUserSession: string; typeVoidOptions: TypeVoidOption[]; at: number };
 let session: Session | null = null;
 const TTL_MS = 30 * 60 * 1000;
 
@@ -130,10 +131,12 @@ async function login(): Promise<Session> {
   const postUserSession = POST_SESSION.exec(rpHtml)?.[1] ?? "";
 
   // The report form's "Type Void" <select> options (e.g. "Cancel / Void
-  // (Default)", "Delete Order") — read from the live page so the exact values
-  // ESB expects are used instead of hardcoded guesses.
-  const typeVoidSel = /<select[^>]*name="CancelMenuDetailReport\[typeVoid\]"[\s\S]*?<\/select>/i.exec(rpHtml)?.[0] ?? "";
-  const typeVoidOptions = [...typeVoidSel.matchAll(/<option[^>]*value="([^"]+)"/gi)].map((m) => decodeEntities(m[1]));
+  // (Default)", "Deleted Item") — read value AND label from the live page so
+  // the exact values ESB expects are used instead of hardcoded guesses.
+  const typeVoidSel = /<select[^>]*name=["']CancelMenuDetailReport\[typeVoid\]["'][\s\S]*?<\/select>/i.exec(rpHtml)?.[0] ?? "";
+  const typeVoidOptions = [...typeVoidSel.matchAll(/<option[^>]*value=["']([^"']*)["'][^>]*>([\s\S]*?)<\/option>/gi)]
+    .map((m) => ({ value: decodeEntities(m[1]), label: decodeEntities(m[2].replace(/<[^>]+>/g, "")).trim() }))
+    .filter((o) => o.value);
 
   return { cookie: cookieHeader(jar), csrf: csrf2, postUserSession, typeVoidOptions, at: Date.now() };
 }
@@ -256,28 +259,35 @@ export interface EsbCancelResult {
   rows: CancelDetailRow[];
   totalItems: number; // from the grid's "Showing 1-N of X"
   rawLen: number; // length of the first page's HTML (0 ⇒ empty/blocked response)
+  /** false ⇒ the requested Type Void filter wasn't offered by the ESB form and
+   *  the DEFAULT export was fetched instead — caller must filter rows by type. */
+  typeVoidFound: boolean;
+  /** Type Void options detected on the ESB report form (for diagnostics). */
+  typeVoidOptions: string[];
 }
 
 /** Which ESB "Type Void" export to generate: the default Cancel+Void report,
- *  or the Delete Order report (orders removed before settle — shows who). */
+ *  or the deleted-order report (orders removed before settle — shows who). */
 export type EsbExportKind = "default" | "delete";
 
-/** Resolve the exact Type Void option value the live ESB form expects. Falls
- *  back to the known captured values if the select couldn't be parsed. */
-async function typeVoidValue(kind: EsbExportKind): Promise<string> {
-  const opts = (await ensureSession()).typeVoidOptions;
-  if (kind === "delete") return opts.find((o) => /delete/i.test(o)) ?? "Delete Order";
-  return opts.find((o) => /default/i.test(o)) ?? "Cancel / Void (Default)";
-}
-
 /**
- * End-to-end: generate the Cancel/Void (or Delete Order) export for a date
+ * End-to-end: generate the Cancel/Void (or deleted-order) export for a date
  * range and read every page (50 rows/page, capped at 40 pages ≈ 2000
  * line-items). Returns diagnostic counts alongside the rows so a silent 0 can
  * be explained.
+ *
+ * For kind "delete": the Type Void option is matched from the LIVE form
+ * (anything named delete/remove). If the form has no such option, the DEFAULT
+ * export is fetched instead with `typeVoidFound: false` so the caller can
+ * filter rows by type — deleted items may ride along in the default report.
  */
 export async function esbFetchCancelRows(dateFromYmd: string, dateToYmd: string, kind: EsbExportKind = "default"): Promise<EsbCancelResult> {
-  const url = await generateExport(dateFromYmd, dateToYmd, await typeVoidValue(kind));
+  const opts = (await ensureSession()).typeVoidOptions;
+  const pick = (re: RegExp) => opts.find((o) => re.test(o.label) || re.test(o.value));
+  const fallback = pick(/default/i)?.value ?? opts[0]?.value ?? "Cancel / Void (Default)";
+  const del = kind === "delete" ? pick(/delete|remove|hapus/i) : undefined;
+  const typeVoidFound = kind !== "delete" || !!del;
+  const url = await generateExport(dateFromYmd, dateToYmd, del?.value ?? fallback);
   await pokeQueue(); // kick the queue worker before the first read
   const first = await readExportPage(url, 0, 16, true); // page 0 waits for the async export
   const rows = [...first.report.rows];
@@ -286,5 +296,11 @@ export async function esbFetchCancelRows(dateFromYmd: string, dateToYmd: string,
     const r = await readExportPage(url, p, 4); // file is ready now — short retry
     rows.push(...r.report.rows);
   }
-  return { rows, totalItems: first.report.totalItems, rawLen: first.rawLen };
+  return {
+    rows,
+    totalItems: first.report.totalItems,
+    rawLen: first.rawLen,
+    typeVoidFound,
+    typeVoidOptions: opts.map((o) => o.label || o.value),
+  };
 }
