@@ -319,7 +319,11 @@ export function esbFetchCancelRows(dateFromYmd: string, dateToYmd: string, kind:
     // Pages are read STRICTLY one at a time — parallel reads made ESB shuffle
     // pages between files (~60% loss in production). A failed page is skipped,
     // never fatal: the caller compares rows.length to totalItems and warns.
-    const pages = Math.min(320, Math.ceil(first.report.totalItems / 50));
+    // Page size comes from the grid itself ("Showing 1-N of …"): the Delete
+    // grid pages 20 rows while Cancel/Void pages 50 — assuming 50 silently
+    // dropped ~58% of delete items (verified via fraud_sync bookkeeping).
+    const pageSize = Math.max(1, first.report.pageSize);
+    const pages = Math.min(Math.ceil(16_000 / pageSize), Math.ceil(first.report.totalItems / pageSize));
     for (let p = 1; p < pages; p++) {
       try {
         const r = await readExportPage(url, p, 6);
