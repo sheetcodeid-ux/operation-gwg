@@ -242,7 +242,7 @@ function esbReport(period: FraudPeriod, kind: FraudKind, r: { from: string; to: 
  * newest first, stopping near `budgetMs` so the call fits a serverless slot.
  * Returns how many days remain so the client can keep draining in background.
  */
-export async function syncFraudDays(period: FraudPeriod, date: string, kind: FraudKind, budgetMs = 35_000): Promise<{ synced: number; remaining: number; error?: string }> {
+export async function syncFraudDays(period: FraudPeriod, date: string, kind: FraudKind, budgetMs = 42_000): Promise<{ synced: number; remaining: number; error?: string }> {
   if (!fraudStoreEnabled() || !esbConfigured()) return { synced: 0, remaining: 0 };
   const r = periodRange(period, date);
   const group = kindGroup(kind);
@@ -252,19 +252,24 @@ export async function syncFraudDays(period: FraudPeriod, date: string, kind: Fra
   const started = Date.now();
   let synced = 0;
   let error: string | undefined;
-  for (const day of pending) {
-    if (synced > 0 && Date.now() - started > budgetMs) break;
-    try {
-      const res = await esbFetchCancelRows(day, day, group === "delete" ? "delete" : "default");
-      await replaceFraudDay(group, day, res.rows, res.totalItems);
-      synced += 1;
-    } catch (e) {
-      // Stop on the first failure (persistent ESB issue would just burn time);
-      // the day stays pending and is retried on the next call.
-      error = e instanceof Error ? e.message : "Gagal sinkron data ESB.";
-      break;
+  // Three days in flight at once: ESB generates exports in a queue, so the
+  // generation waits overlap and a batch finishes ~3× faster than serial.
+  const queue = [...pending];
+  const worker = async () => {
+    while (queue.length > 0 && !error && Date.now() - started < budgetMs) {
+      const day = queue.shift()!;
+      try {
+        const res = await esbFetchCancelRows(day, day, group === "delete" ? "delete" : "default");
+        await replaceFraudDay(group, day, res.rows, res.totalItems);
+        synced += 1;
+      } catch (e) {
+        // Stop the pool on the first failure (a persistent ESB issue would just
+        // burn time); the day stays pending and is retried on the next call.
+        error = e instanceof Error ? e.message : "Gagal sinkron data ESB.";
+      }
     }
-  }
+  };
+  await Promise.all([worker(), worker(), worker()]);
   return { synced, remaining: pending.length - synced, error };
 }
 
