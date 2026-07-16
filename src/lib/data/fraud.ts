@@ -2,6 +2,7 @@ import "server-only";
 
 import { fetchBranches, fetchErpDashboard, gwgmanageConfigured } from "@/lib/integrations/gwgmanage";
 import { esbConfigured, esbFetchCancelRows, type EsbCancelResult } from "@/lib/integrations/esb-client";
+import { fraudStoreEnabled, getFraudRows, getSyncStates, replaceFraudDay, type FraudKindGroup, type FraudSyncState } from "./fraud-store";
 
 /**
  * Fraud (Void & Cancel) analysis sourced from the POS dashboard endpoint.
@@ -66,6 +67,9 @@ export interface FraudReport {
   daily?: Record<string, Record<string, number>>;
   /** Data loaded but incomplete/soft issue — shown as an amber notice. */
   warning?: string;
+  /** DB-cache mode: days in range not yet synced from ESB. Non-empty tells the
+   *  client to kick background sync calls until it drains. */
+  pendingDays?: string[];
   error?: string;
 }
 
@@ -85,6 +89,61 @@ function dayKey(s: string): string {
  *  Aggregates (daily matrix, totals, counts) always use ALL rows. */
 const MAX_ORDERS_PER_OUTLET = 300;
 const MONTHS = ["Januari", "Februari", "Maret", "April", "Mei", "Juni", "Juli", "Agustus", "September", "Oktober", "November", "Desember"];
+
+/** Today in WIB (ESB's timezone), as YYYY-MM-DD. */
+const todayWib = () => new Date(Date.now() + 7 * 3_600_000).toISOString().slice(0, 10);
+
+/** Every YYYY-MM-DD in [from, to] (capped defensively at 62). */
+function eachYmd(from: string, to: string): string[] {
+  const out: string[] = [];
+  const d = new Date(`${from}T00:00:00`);
+  while (ymd(d) <= to && out.length < 62) {
+    out.push(ymd(d));
+    d.setDate(d.getDate() + 1);
+  }
+  return out;
+}
+
+/** How long a live day's sync stays fresh before it's re-pulled. */
+const SYNC_TTL_MS = 10 * 60 * 1000;
+
+/** Days in [from, to] that still need an ESB pull: never synced, incomplete,
+ *  or synced while the day was still running (WIB) and now older than the TTL.
+ *  Days synced AFTER they ended are final — never re-downloaded. */
+function pendingSyncDays(states: Map<string, FraudSyncState>, from: string, to: string): string[] {
+  const today = todayWib();
+  const out: string[] = [];
+  for (const day of eachYmd(from, to)) {
+    if (day > today) continue; // future — nothing to sync yet
+    const s = states.get(day);
+    if (!s) { out.push(day); continue; }
+    if (!s.complete) { out.push(day); continue; }
+    const syncedMs = Date.parse(s.syncedAt);
+    const dayEndMs = Date.parse(`${day}T17:00:00Z`); // = next 00:00 WIB
+    if (syncedMs < dayEndMs && Date.now() - syncedMs > SYNC_TTL_MS) out.push(day);
+  }
+  return out;
+}
+
+const kindGroup = (kind: FraudKind): FraudKindGroup => (kind === "delete" ? "delete" : "cv");
+
+/** Narrow rows to the requested kind. `deleteIsOwnExport` = the rows already
+ *  came from the Delete export (no further type filtering needed). */
+function filterKind<T extends { type: string }>(rows: T[], kind: FraudKind, deleteIsOwnExport: boolean): T[] {
+  if (kind === "void") return rows.filter((x) => /void/i.test(x.type));
+  if (kind === "cancel") return rows.filter((x) => /cancel/i.test(x.type) && !/void/i.test(x.type));
+  if (kind === "delete" && !deleteIsOwnExport) return rows.filter((x) => /delete|remove/i.test(x.type));
+  return rows;
+}
+
+/** One ESB line-item as consumed by the aggregator (live or DB-cached). */
+type AggRow = {
+  branch: string; salesNumber: string; menu: string; menuCategory: string;
+  orderBy: string; orderTime: string; voidBy: string; voidTime: string;
+  type: string; notes: string; qty: number; total: number;
+  /** DB rows carry the day bucket they were synced under (fallback day key). */
+  day?: string;
+};
 
 /** [from, to, label] for a period anchored on `date` (YYYY-MM-DD). */
 export function periodRange(period: FraudPeriod, date: string): { from: string; to: string; label: string } {
@@ -115,30 +174,8 @@ function base(period: FraudPeriod, r: { from: string; to: string; label: string 
   return { configured: false, period, kind: "all", from: r.from, to: r.to, label: r.label, source: "pos", totalVoid: 0, totalCancel: 0, totalVoidAmount: 0, totalCancelAmount: 0, hasAmount: false, outlets: [], perOutletReliable: false, ...extra };
 }
 
-/** Build the report from ESB order-level rows (real nominal + per-order detail). */
-function esbReport(period: FraudPeriod, kind: FraudKind, r: { from: string; to: string; label: string }, res: EsbCancelResult): FraudReport {
-  // The default export carries BOTH Void and Cancel rows — narrow here when a
-  // single type is requested. Delete uses its own export when the ESB form
-  // offers a delete/remove Type Void option; otherwise the default export was
-  // fetched and deleted items are picked out by their type column.
-  const rows =
-    kind === "void" ? res.rows.filter((x) => /void/i.test(x.type))
-    : kind === "cancel" ? res.rows.filter((x) => /cancel/i.test(x.type) && !/void/i.test(x.type))
-    : kind === "delete" && !res.typeVoidFound ? res.rows.filter((x) => /delete|remove/i.test(x.type))
-    : res.rows;
-  // Diagnose a silent 0: items>0 but nothing parsed ⇒ parser miss; tiny html ⇒
-  // empty/blocked response. A genuine empty period stays clean.
-  let diag: string | undefined;
-  if (res.rows.length === 0 && res.totalItems > 0) diag = `ESB: 0/${res.totalItems} baris ter-parse (htmlLen=${res.rawLen})`;
-  else if (res.rows.length === 0 && res.rawLen < 60) diag = `ESB: respons kosong (htmlLen=${res.rawLen})`;
-  else if (kind === "delete" && !res.typeVoidFound && rows.length === 0)
-    diag = `Form ESB tidak menyediakan filter Delete pada Type Void (opsi terdeteksi: ${res.typeVoidOptions.join(" | ") || "tidak terbaca"}) dan tidak ada baris bertipe delete/remove pada export default (${res.rows.length} baris).`;
-  // Incomplete read (ESB truncated/failed pages) must never pass silently —
-  // per-day nominal would quietly undercount, which is worse than an error.
-  let warning: string | undefined;
-  if (res.rows.length > 0 && res.rows.length < res.totalItems) {
-    warning = `Baru ${res.rows.length.toLocaleString("id-ID")} dari ${res.totalItems.toLocaleString("id-ID")} baris ESB yang terbaca — nominal periode ini bisa lebih kecil dari sebenarnya. Muat ulang halaman, atau pilih periode yang lebih pendek (mingguan/harian).`;
-  }
+/** Aggregate ESB line-items (live or DB-cached) into a full FraudReport. */
+function aggregate(period: FraudPeriod, kind: FraudKind, r: { from: string; to: string; label: string }, rows: AggRow[]): FraudReport {
   const agg = new Map<string, { void: number; cancel: number; voidAmount: number; cancelAmount: number }>();
   const orders: Record<string, FraudOrder[]> = {};
   const daily: Record<string, Record<string, number>> = {};
@@ -149,7 +186,7 @@ function esbReport(period: FraudPeriod, kind: FraudKind, r: { from: string; to: 
     if (isVoid) { a.void += 1; a.voidAmount += row.total; tv += 1; tva += row.total; }
     else { a.cancel += 1; a.cancelAmount += row.total; tc += 1; tca += row.total; }
     agg.set(row.branch, a);
-    const day = dayKey(row.voidTime) || dayKey(row.orderTime) || (r.from === r.to ? r.from : "");
+    const day = dayKey(row.voidTime) || dayKey(row.orderTime) || row.day || (r.from === r.to ? r.from : "");
     if (day) {
       const d = (daily[row.branch] ??= {});
       d[day] = (d[day] ?? 0) + row.total;
@@ -173,12 +210,85 @@ function esbReport(period: FraudPeriod, kind: FraudKind, r: { from: string; to: 
   return {
     configured: true, period, kind, from: r.from, to: r.to, label: r.label, source: "esb",
     totalVoid: tv, totalCancel: tc, totalVoidAmount: tva, totalCancelAmount: tca,
-    hasAmount: true, outlets, perOutletReliable: true, orders, daily, warning, error: diag,
+    hasAmount: true, outlets, perOutletReliable: true, orders, daily,
   };
+}
+
+/** Build the report from a LIVE ESB fetch (no DB cache). */
+function esbReport(period: FraudPeriod, kind: FraudKind, r: { from: string; to: string; label: string }, res: EsbCancelResult): FraudReport {
+  // The default export carries BOTH Void and Cancel rows — narrow here when a
+  // single type is requested. Delete uses its own export when the ESB form
+  // offers a delete/remove Type Void option; otherwise the default export was
+  // fetched and deleted items are picked out by their type column.
+  const rows = filterKind(res.rows, kind, res.typeVoidFound);
+  // Diagnose a silent 0: items>0 but nothing parsed ⇒ parser miss; tiny html ⇒
+  // empty/blocked response. A genuine empty period stays clean.
+  let diag: string | undefined;
+  if (res.rows.length === 0 && res.totalItems > 0) diag = `ESB: 0/${res.totalItems} baris ter-parse (htmlLen=${res.rawLen})`;
+  else if (res.rows.length === 0 && res.rawLen < 60) diag = `ESB: respons kosong (htmlLen=${res.rawLen})`;
+  else if (kind === "delete" && !res.typeVoidFound && rows.length === 0)
+    diag = `Form ESB tidak menyediakan filter Delete pada Type Void (opsi terdeteksi: ${res.typeVoidOptions.join(" | ") || "tidak terbaca"}) dan tidak ada baris bertipe delete/remove pada export default (${res.rows.length} baris).`;
+  // Incomplete read (ESB truncated/failed pages) must never pass silently —
+  // per-day nominal would quietly undercount, which is worse than an error.
+  let warning: string | undefined;
+  if (res.rows.length > 0 && res.rows.length < res.totalItems) {
+    warning = `Baru ${res.rows.length.toLocaleString("id-ID")} dari ${res.totalItems.toLocaleString("id-ID")} baris ESB yang terbaca — nominal periode ini bisa lebih kecil dari sebenarnya. Muat ulang halaman, atau pilih periode yang lebih pendek (mingguan/harian).`;
+  }
+  return { ...aggregate(period, kind, r, rows), warning, error: diag };
+}
+
+/**
+ * Sync missing/stale days of the requested period from ESB into the DB cache,
+ * newest first, stopping near `budgetMs` so the call fits a serverless slot.
+ * Returns how many days remain so the client can keep draining in background.
+ */
+export async function syncFraudDays(period: FraudPeriod, date: string, kind: FraudKind, budgetMs = 35_000): Promise<{ synced: number; remaining: number; error?: string }> {
+  if (!fraudStoreEnabled() || !esbConfigured()) return { synced: 0, remaining: 0 };
+  const r = periodRange(period, date);
+  const group = kindGroup(kind);
+  const states = await getSyncStates(group, r.from, r.to);
+  const pending = pendingSyncDays(states, r.from, r.to).sort().reverse(); // newest first
+  if (pending.length === 0) return { synced: 0, remaining: 0 };
+  const started = Date.now();
+  let synced = 0;
+  let error: string | undefined;
+  for (const day of pending) {
+    if (synced > 0 && Date.now() - started > budgetMs) break;
+    try {
+      const res = await esbFetchCancelRows(day, day, group === "delete" ? "delete" : "default");
+      await replaceFraudDay(group, day, res.rows, res.totalItems);
+      synced += 1;
+    } catch (e) {
+      // Stop on the first failure (persistent ESB issue would just burn time);
+      // the day stays pending and is retried on the next call.
+      error = e instanceof Error ? e.message : "Gagal sinkron data ESB.";
+      break;
+    }
+  }
+  return { synced, remaining: pending.length - synced, error };
 }
 
 export async function getFraudReport(period: FraudPeriod, date: string, kind: FraudKind = "all"): Promise<FraudReport> {
   const r = periodRange(period, date);
+
+  // DB-cache first: reports render instantly from synced rows; days not yet
+  // synced are reported via pendingDays so the client drains them in the
+  // background (syncFraudDays) instead of blocking this request on ESB.
+  if (fraudStoreEnabled() && esbConfigured()) {
+    try {
+      const group = kindGroup(kind);
+      const [rowsDb, states] = await Promise.all([getFraudRows(group, r.from, r.to), getSyncStates(group, r.from, r.to)]);
+      const pending = pendingSyncDays(states, r.from, r.to);
+      const report = aggregate(period, kind, r, filterKind(rowsDb, kind, group === "delete"));
+      report.pendingDays = pending;
+      if (pending.length > 0) {
+        report.warning = `${pending.length} hari dalam periode ini belum tersinkron dari ESB — data sedang diambil otomatis, angka akan bertambah sendiri.`;
+      }
+      return report;
+    } catch {
+      // DB hiccup — fall through to the live ESB path below.
+    }
+  }
 
   // Prefer ESB — it gives real per-outlet nominal + order-level detail. Falls
   // back to the POS dashboard aggregate if ESB isn't configured or errors.

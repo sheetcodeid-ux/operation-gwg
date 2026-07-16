@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Combobox } from "@/components/ui/combobox";
 import { cn, formatIDR, formatIDRShort } from "@/lib/utils";
-import { fraudReportAction, outletFraudDailyAction } from "@/lib/actions/fraud";
+import { fraudReportAction, fraudSyncAction, outletFraudDailyAction } from "@/lib/actions/fraud";
 import type { FraudDailyPoint, FraudKind, FraudOrder, FraudPeriod, FraudReport } from "@/lib/data/fraud";
 
 const PERIODS: { key: FraudPeriod; label: string }[] = [
@@ -31,10 +31,42 @@ export function FraudAnalysis({ initial, initialDate }: { initial: FraudReport; 
   const [kind, setKind] = React.useState<FraudKind>(initial.kind ?? "all");
   const [report, setReport] = React.useState<FraudReport>(initial);
   const [pending, start] = React.useTransition();
+  // Background ESB→DB sync: days left to pull for the current selection. The
+  // seq guard cancels a running drain the moment the user changes selection.
+  const [syncLeft, setSyncLeft] = React.useState(0);
+  const seqRef = React.useRef(0);
+
+  const refresh = React.useCallback(async (p: FraudPeriod, d: string, k: FraudKind, seq: number) => {
+    const res = await fraudReportAction(p, d, k);
+    if (seqRef.current !== seq) return;
+    if ("configured" in res) setReport(res);
+  }, []);
+
+  const drainSync = React.useCallback(
+    async (p: FraudPeriod, d: string, k: FraudKind, expected: number) => {
+      const seq = seqRef.current;
+      setSyncLeft(expected);
+      for (let i = 0; i < 40 && seqRef.current === seq; i++) {
+        const s = await fraudSyncAction(p, d, k);
+        if (seqRef.current !== seq) return;
+        if (!("synced" in s)) { toast.error(s.error); break; }
+        setSyncLeft(s.remaining);
+        await refresh(p, d, k, seq); // matrix fills in progressively
+        if (s.remaining === 0) break;
+        if (s.error) { toast.error(`Sinkron ESB terhenti: ${s.error}`); break; }
+        if (s.synced === 0) break; // no forward progress — stop looping
+      }
+      if (seqRef.current === seq) setSyncLeft(0);
+    },
+    [refresh],
+  );
 
   const load = React.useCallback((p: FraudPeriod, d: string, k: FraudKind) => {
+    const seq = ++seqRef.current;
+    setSyncLeft(0);
     start(async () => {
       const res = await fraudReportAction(p, d, k);
+      if (seqRef.current !== seq) return;
       // A FraudReport can itself carry an `error` field, so discriminate on a
       // required report field (configured) rather than the presence of `error`.
       if (!("configured" in res)) {
@@ -42,7 +74,18 @@ export function FraudAnalysis({ initial, initialDate }: { initial: FraudReport; 
         return;
       }
       setReport(res);
+      // DB served instantly; pull any missing days in the background.
+      if (res.pendingDays?.length) void drainSync(p, d, k, res.pendingDays.length);
     });
+  }, [drainSync]);
+
+  // Initial page load may also carry unsynced days — drain them right away.
+  React.useEffect(() => {
+    if (initial.pendingDays?.length) {
+      seqRef.current += 1;
+      void drainSync(initial.period, initialDate, initial.kind ?? "all", initial.pendingDays.length);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // Anchor pickers to the month/year of the initial (today's) date.
@@ -125,6 +168,11 @@ export function FraudAnalysis({ initial, initialDate }: { initial: FraudReport; 
             <Combobox matchTriggerWidth searchable={false} value={kind} onChange={(v) => onKind(v as FraudKind)} options={KIND_OPTIONS} className="w-44" />
           </div>
           <div className="ml-auto flex items-center gap-2">
+            {syncLeft > 0 && (
+              <span className="inline-flex items-center gap-1.5 rounded-full border border-amber-500/30 bg-amber-500/10 px-2.5 py-1 text-xs font-medium text-amber-600 dark:text-amber-400">
+                <Loader2 className="size-3 animate-spin" /> Sinkron ESB · sisa {syncLeft} hari
+              </span>
+            )}
             {pending && <Loader2 className="size-4 animate-spin text-muted-foreground" />}
             <Button variant="outline" size="sm" onClick={() => downloadPdf(report)} disabled={!report.configured}>
               <Download className="size-4" /> Download PDF
