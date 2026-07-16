@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { AlertTriangle, ArrowDown, ArrowDownRight, ArrowUp, ArrowUpDown, ArrowUpRight, CalendarDays, CheckCircle2, ChevronDown, Download, FileSpreadsheet, Loader2, Minus, ReceiptText, Store, Users, Wallet, X } from "lucide-react";
+import { AlertTriangle, ArrowDown, ArrowDownRight, ArrowUp, ArrowUpDown, ArrowUpRight, CalendarDays, CheckCircle2, ChevronDown, Clock, Download, FileSpreadsheet, Loader2, Minus, Percent, ReceiptText, Store, Users, Wallet, X } from "lucide-react";
 import { toast } from "sonner";
 import { CategoryBarChart, ComboCompareChart } from "@/components/charts/charts";
 import { Button } from "@/components/ui/button";
@@ -9,7 +9,7 @@ import { Badge } from "@/components/ui/badge";
 import { Combobox } from "@/components/ui/combobox";
 import { SegmentedTabs } from "@/components/ui/segmented-tabs";
 import { cn, formatIDR, formatIDRShort } from "@/lib/utils";
-import { fraudReportAction, fraudSyncAction, outletFraudDailyAction } from "@/lib/actions/fraud";
+import { fraudReportAction, fraudSyncAction, outletFraudDailyAction, salesSyncAction } from "@/lib/actions/fraud";
 import type { FraudDailyPoint, FraudKind, FraudOrder, FraudOutletRow, FraudPeriod, FraudReport } from "@/lib/data/fraud";
 
 const PERIODS: { key: FraudPeriod; label: string }[] = [
@@ -69,6 +69,28 @@ export function FraudAnalysis({ initial, initialDate }: { initial: FraudReport; 
     });
     return () => { live = false; };
   }, [period, date, kind]);
+
+  // Omset (net sales) for the period: synced on demand in the background so
+  // "% dari omset" fills in without blocking anything.
+  const [salesSyncing, setSalesSyncing] = React.useState(false);
+  React.useEffect(() => {
+    if (!report.sales || report.sales.ready) return;
+    const seq = seqRef.current;
+    let live = true;
+    setSalesSyncing(true);
+    (async () => {
+      for (let i = 0; i < 4 && live && seqRef.current === seq; i++) {
+        const s = await salesSyncAction(period, date);
+        if (!("synced" in s) || s.error || s.remaining === 0) break;
+      }
+      if (live && seqRef.current === seq) {
+        await refresh(period, date, kind, seq);
+        setSalesSyncing(false);
+      }
+    })();
+    return () => { live = false; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [report.sales?.ready, period, date, kind]);
   // Background ESB→DB sync: days left to pull for the current selection. The
   // seq guard cancels a running drain the moment the user changes selection.
   const [syncLeft, setSyncLeft] = React.useState(0);
@@ -224,6 +246,11 @@ export function FraudAnalysis({ initial, initialDate }: { initial: FraudReport; 
                 <Loader2 className="size-3 animate-spin" /> Sinkron · sisa {syncLeft} hari
               </span>
             )}
+            {salesSyncing && (
+              <span className="inline-flex items-center gap-1.5 rounded-full border border-emerald-500/30 bg-emerald-500/10 px-2.5 py-1 text-xs font-medium text-emerald-600 dark:text-emerald-400">
+                <Loader2 className="size-3 animate-spin" /> Omset
+              </span>
+            )}
             {pending && <Loader2 className="size-4 animate-spin text-muted-foreground" />}
             <SegmentedTabs size="sm" className="w-24" items={[{ value: "rp", label: "Rp" }, { value: "trx", label: "Trx" }]} value={mode} onChange={(v) => setMode(v as "rp" | "trx")} />
             <Combobox
@@ -280,7 +307,7 @@ export function FraudAnalysis({ initial, initialDate }: { initial: FraudReport; 
             </div>
           ) : report.source === "esb" ? (
             <>
-              <InsightStrip report={report} prevReport={prevReport} query={query} />
+              <InsightStrip report={report} prevReport={prevReport} query={query} mode={mode} />
               <FraudMatrix report={report} busy={pending} query={query} mode={mode} onOpenOutlet={(outlet, day) => setDetail({ outlet, day })} />
             </>
           ) : report.perOutletReliable ? (
@@ -357,7 +384,9 @@ function useByOutlet(report: FraudReport) {
  *  glowing blue line = current) with period-aware granularity — daily = hours
  *  1..24, weekly = 7 days, monthly = dates — and highlights that follow the
  *  outlet search (no match / empty = all outlets). */
-function InsightStrip({ report, prevReport, query }: { report: FraudReport; prevReport: FraudReport | null; query: string }) {
+function InsightStrip({ report, prevReport, query, mode }: { report: FraudReport; prevReport: FraudReport | null; query: string; mode: "rp" | "trx" }) {
+  const trx = mode === "trx";
+  const fmtVal = React.useCallback((n: number) => (trx ? `${nf(Math.round(n))} trx` : formatIDR(Math.round(n))), [trx]);
   const q = query.trim().toLowerCase();
   const matched = React.useMemo(
     () => (q ? report.outlets.filter((o) => o.name.toLowerCase().includes(q)) : report.outlets),
@@ -378,25 +407,24 @@ function InsightStrip({ report, prevReport, query }: { report: FraudReport; prev
 
   const chart = React.useMemo(() => {
     if (report.period === "daily") {
-      const cur = sumMap(report.hourly, scoped ? names : undefined);
-      const prev = sumMap(prevReport?.hourly); // previous day, all-outlet scope follows search too
-      const prevScoped = scoped ? sumMap(prevReport?.hourly, names) : prev;
+      const cur = sumMap(trx ? report.hourlyCount : report.hourly, scoped ? names : undefined);
+      const prevScoped = sumMap(trx ? prevReport?.hourlyCount : prevReport?.hourly, scoped ? names : undefined);
       return Array.from({ length: 24 }, (_, h) => {
         const k = String(h).padStart(2, "0");
         return { label: String(h + 1), title: `Jam ${k}:00`, current: cur.get(k) ?? 0, previous: prevScoped.get(k) ?? 0 };
       });
     }
     const days = eachDay(report.from, report.to);
-    const cur = sumMap(report.daily, scoped ? names : undefined);
+    const cur = sumMap(trx ? report.dailyCount : report.daily, scoped ? names : undefined);
     const prevDays = prevReport ? eachDay(prevReport.from, prevReport.to) : [];
-    const prev = sumMap(prevReport?.daily, scoped ? names : undefined);
+    const prev = sumMap(trx ? prevReport?.dailyCount : prevReport?.daily, scoped ? names : undefined);
     return days.map((d, i) => ({
       label: report.period === "weekly" ? String(i + 1) : String(d.getDate()),
       title: `${String(d.getDate()).padStart(2, "0")} ${MONTHS[d.getMonth()].slice(0, 3)} · ${WD[d.getDay()]}`,
       current: cur.get(dayIso(d)) ?? 0,
       previous: prevDays[i] ? prev.get(dayIso(prevDays[i])) ?? 0 : 0,
     }));
-  }, [report, prevReport, scoped, names, sumMap]);
+  }, [report, prevReport, scoped, names, sumMap, trx]);
 
   // Highlights follow the same scope.
   const grand = scoped ? matched.reduce((a, o) => a + o.voidAmount + o.cancelAmount, 0) : report.totalVoidAmount + report.totalCancelAmount;
@@ -421,6 +449,18 @@ function InsightStrip({ report, prevReport, query }: { report: FraudReport; prev
     }
     return [...byActor.entries()].map(([name, a]) => ({ name, ...a })).sort((x, y) => y.total - x.total).slice(0, 3);
   }, [scoped, names, report.actors, report.orders]);
+
+  // Rasio terhadap omset — always Rp-based regardless of the Rp/Trx toggle.
+  const fraudAmount = scoped ? matched.reduce((a, o) => a + o.voidAmount + o.cancelAmount, 0) : report.totalVoidAmount + report.totalCancelAmount;
+  const sales = report.sales;
+  const salesScope = sales
+    ? scoped
+      ? matched.reduce((a, o) => a + (sales.perOutlet[o.name] ?? 0), 0)
+      : sales.total
+    : 0;
+  const ratio = sales && salesScope > 0 ? (fraudAmount / salesScope) * 100 : null;
+  const ratioTone = ratio === null ? "muted" : ratio >= 2 ? "red" : ratio >= 1 ? "amber" : "emerald";
+  const ratioLabel = ratio === null ? null : ratio >= 2 ? "Tinggi" : ratio >= 1 ? "Waspada" : "Aman";
 
   const delta = prevGrand !== null && prevGrand > 0 ? ((grand - prevGrand) / prevGrand) * 100 : null;
   const deltaUp = delta !== null && delta > 1;
@@ -451,7 +491,7 @@ function InsightStrip({ report, prevReport, query }: { report: FraudReport; prev
             </span>
           )}
         </div>
-        <ComboCompareChart data={chart} height={168} />
+        <ComboCompareChart data={chart} height={168} valueFormatter={fmtVal} names={["Periode ini", `${prevLabel[0].toUpperCase()}${prevLabel.slice(1)}`]} />
         <div className="mt-1.5 flex flex-wrap items-center gap-4 text-[11px] text-muted-foreground">
           <span className="flex items-center gap-1.5">
             <span className="h-0.5 w-4 rounded-full bg-blue-500 shadow-[0_0_5px_rgba(59,130,246,0.6)]" /> Periode ini
@@ -461,34 +501,64 @@ function InsightStrip({ report, prevReport, query }: { report: FraudReport; prev
           </span>
         </div>
       </div>
-      <div className="space-y-2 border-t border-border pt-3 lg:border-l lg:border-t-0 lg:pl-4 lg:pt-0">
+      <div className="space-y-2.5 border-t border-border pt-3 lg:border-l lg:border-t-0 lg:pl-4 lg:pt-0">
         <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Sorotan{scoped ? " (hasil pencarian)" : ""}</p>
+        {ratio !== null && (
+          <div className="flex items-center gap-2.5">
+            <span className={cn(
+              "grid size-8 shrink-0 place-items-center rounded-full",
+              ratioTone === "red" && "bg-red-500/10 text-red-600 dark:text-red-400",
+              ratioTone === "amber" && "bg-amber-500/10 text-amber-600 dark:text-amber-400",
+              ratioTone === "emerald" && "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400",
+            )}>
+              <Percent className="size-4" />
+            </span>
+            <span className="min-w-0 flex-1">
+              <span className="block text-[11px] text-muted-foreground">{KIND_LABEL[report.kind]} {PERIOD_LABEL[report.period].toLowerCase()} terhadap omset</span>
+              <span className="block text-sm font-semibold tabular-nums text-foreground">{ratio.toFixed(2).replace(".", ",")}%</span>
+            </span>
+            <span className={cn(
+              "shrink-0 rounded-full px-2 py-0.5 text-[10px] font-semibold",
+              ratioTone === "red" && "bg-red-500/10 text-red-600 dark:text-red-400",
+              ratioTone === "amber" && "bg-amber-500/10 text-amber-600 dark:text-amber-400",
+              ratioTone === "emerald" && "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400",
+            )}>{ratioLabel}</span>
+          </div>
+        )}
         {top && (
-          <p className="text-sm">
-            <span className="text-muted-foreground">Outlet tertinggi:</span>{" "}
-            <span className="font-semibold text-foreground">{top.name}</span>{" "}
-            <span className="tabular-nums text-blue-600 dark:text-blue-400">{formatIDRShort(top.voidAmount + top.cancelAmount)}</span>
-            {grand > 0 && <span className="text-muted-foreground"> ({(((top.voidAmount + top.cancelAmount) / grand) * 100).toFixed(0)}%)</span>}
-          </p>
+          <div className="flex items-center gap-2.5">
+            <span className="grid size-8 shrink-0 place-items-center rounded-full bg-blue-500/10 text-blue-600 dark:text-blue-400"><Store className="size-4" /></span>
+            <span className="min-w-0 flex-1">
+              <span className="block text-[11px] text-muted-foreground">Outlet tertinggi{grand > 0 ? ` · ${(((top.voidAmount + top.cancelAmount) / (scoped ? fraudAmount : report.totalVoidAmount + report.totalCancelAmount)) * 100).toFixed(0)}%` : ""}</span>
+              <span className="block truncate text-sm font-semibold text-foreground">{top.name}</span>
+            </span>
+            <span className="shrink-0 text-sm font-semibold tabular-nums text-blue-600 dark:text-blue-400">{formatIDRShort(top.voidAmount + top.cancelAmount)}</span>
+          </div>
         )}
         {peak && peak.current > 0 && (
-          <p className="text-sm">
-            <span className="text-muted-foreground">{report.period === "daily" ? "Jam tertinggi:" : "Hari tertinggi:"}</span>{" "}
-            <span className="font-semibold text-foreground">{peak.title}</span>{" "}
-            <span className="tabular-nums text-blue-600 dark:text-blue-400">{formatIDRShort(peak.current)}</span>
-          </p>
+          <div className="flex items-center gap-2.5">
+            <span className="grid size-8 shrink-0 place-items-center rounded-full bg-amber-500/10 text-amber-600 dark:text-amber-400"><Clock className="size-4" /></span>
+            <span className="min-w-0 flex-1">
+              <span className="block text-[11px] text-muted-foreground">{report.period === "daily" ? "Jam tertinggi" : "Hari tertinggi"}</span>
+              <span className="block text-sm font-semibold text-foreground">{peak.title}</span>
+            </span>
+            <span className="shrink-0 text-sm font-semibold tabular-nums text-blue-600 dark:text-blue-400">{trx ? `${nf(Math.round(peak.current))} trx` : formatIDRShort(peak.current)}</span>
+          </div>
         )}
         {actors.length > 0 && (
-          <div className="text-sm">
-            <span className="text-muted-foreground">Pelaku teratas:</span>
-            <div className="mt-1 space-y-0.5">
-              {actors.map((a) => (
-                <p key={a.name} className="flex items-baseline justify-between gap-2">
-                  <span className="truncate font-medium text-foreground">{a.name}</span>
-                  <span className="shrink-0 tabular-nums text-xs text-muted-foreground">{nf(a.count)} trx · <span className="text-violet-600 dark:text-violet-400">{formatIDRShort(a.total)}</span></span>
-                </p>
-              ))}
-            </div>
+          <div className="flex items-start gap-2.5">
+            <span className="grid size-8 shrink-0 place-items-center rounded-full bg-violet-500/10 text-violet-600 dark:text-violet-400"><Users className="size-4" /></span>
+            <span className="min-w-0 flex-1">
+              <span className="block text-[11px] text-muted-foreground">Pelaku teratas</span>
+              <span className="mt-0.5 block space-y-0.5">
+                {actors.map((a) => (
+                  <span key={a.name} className="flex items-baseline justify-between gap-2">
+                    <span className="truncate text-xs font-medium text-foreground">{a.name}</span>
+                    <span className="shrink-0 tabular-nums text-[11px] text-muted-foreground">{nf(a.count)} trx · <span className="text-violet-600 dark:text-violet-400">{formatIDRShort(a.total)}</span></span>
+                  </span>
+                ))}
+              </span>
+            </span>
           </div>
         )}
       </div>
@@ -530,6 +600,13 @@ function FraudMatrix({ report, busy, query, mode, onOpenOutlet }: { report: Frau
     const q = query.trim().toLowerCase();
     const base = q ? report.outlets.filter((o) => o.name.toLowerCase().includes(q)) : [...report.outlets];
     if (sortKey === "name") return base.sort((a, b) => a.name.localeCompare(b.name, "id"));
+    if (sortKey === "ratio") {
+      const r = (o: FraudOutletRow) => {
+        const omset = report.sales?.perOutlet[o.name] ?? 0;
+        return omset > 0 ? (o.voidAmount + o.cancelAmount) / omset : -1;
+      };
+      return base.sort((a, b) => r(b) - r(a));
+    }
     if (sortKey !== "total") return base.sort((a, b) => (byOutlet.get(b.name)?.get(sortKey) ?? 0) - (byOutlet.get(a.name)?.get(sortKey) ?? 0));
     return base.sort((a, b) => rowTotal(b) - rowTotal(a));
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -555,6 +632,26 @@ function FraudMatrix({ report, busy, query, mode, onOpenOutlet }: { report: Frau
   const txCount = report.totalVoid + report.totalCancel;
   const maxRow = Math.max(1, ...report.outlets.map(rowTotal));
   const sortMark = (key: string) => (sortKey === key ? " ▾" : "");
+
+  // % of the outlet's own omset (always Rp-based) + warning tone thresholds.
+  const sales = report.sales;
+  const ratioOf = React.useCallback((o: FraudOutletRow): number | null => {
+    const omset = sales?.perOutlet[o.name] ?? 0;
+    return omset > 0 ? ((o.voidAmount + o.cancelAmount) / omset) * 100 : null;
+  }, [sales]);
+  const ratioCell = (r: number | null) =>
+    r === null ? (
+      <span className="text-muted-foreground/40">–</span>
+    ) : (
+      <span className={cn(
+        "inline-flex items-center gap-1 rounded-full px-1.5 py-0.5 font-medium tabular-nums",
+        r >= 2 ? "bg-red-500/10 text-red-600 dark:text-red-400" : r >= 1 ? "bg-amber-500/10 text-amber-600 dark:text-amber-400" : "text-muted-foreground",
+      )}>
+        {r >= 1 && <span className="size-1.5 rounded-full bg-current" />}
+        {r.toFixed(2).replace(".", ",")}%
+      </span>
+    );
+  const grandRatio = sales && sales.total > 0 ? ((report.totalVoidAmount + report.totalCancelAmount) / sales.total) * 100 : null;
 
   return (
     <div className={cn("glass -mx-4 overflow-hidden border-y border-border transition-opacity sm:mx-0 sm:rounded-2xl sm:border", busy && "opacity-60")}>
@@ -599,6 +696,13 @@ function FraudMatrix({ report, busy, query, mode, onOpenOutlet }: { report: Frau
               >
                 Total{sortMark("total")}
               </th>
+              <th
+                className="sticky top-0 z-20 cursor-pointer select-none border-b border-border bg-background px-2 py-2.5 text-right font-medium hover:text-foreground"
+                title="Fraud sebagai persen dari omset outlet — urutkan"
+                onClick={() => setSortKey(sortKey === "ratio" ? "total" : "ratio")}
+              >
+                % Omset{sortMark("ratio")}
+              </th>
               {days.map((d) => (
                 <th
                   key={dayIso(d)}
@@ -630,6 +734,9 @@ function FraudMatrix({ report, busy, query, mode, onOpenOutlet }: { report: Frau
                   <td title={`${formatIDR(o.voidAmount + o.cancelAmount)} · ${nf(o.void + o.cancel)} trx`} className="whitespace-nowrap px-2.5 py-1.5 text-right font-semibold tabular-nums text-foreground">
                     {fmtCell(total)}
                   </td>
+                  <td className="whitespace-nowrap px-2 py-1.5 text-right text-[11px]" title={sales?.perOutlet[o.name] ? `Omset: ${formatIDR(sales.perOutlet[o.name])}` : "Omset belum tersinkron"}>
+                    {ratioCell(ratioOf(o))}
+                  </td>
                   {days.map((d) => {
                     const v = dm?.get(dayIso(d)) ?? 0;
                     return (
@@ -652,7 +759,7 @@ function FraudMatrix({ report, busy, query, mode, onOpenOutlet }: { report: Frau
             })}
             {outlets.length === 0 && (
               <tr>
-                <td colSpan={days.length + 2} className="px-4 py-8 text-center text-sm text-muted-foreground">Tidak ada outlet yang cocok dengan pencarian.</td>
+                <td colSpan={days.length + 3} className="px-4 py-8 text-center text-sm text-muted-foreground">Tidak ada outlet yang cocok dengan pencarian.</td>
               </tr>
             )}
           </tbody>
@@ -660,6 +767,7 @@ function FraudMatrix({ report, busy, query, mode, onOpenOutlet }: { report: Frau
             <tr className="font-medium text-foreground">
               <td className="sticky bottom-0 left-0 z-30 border-t border-border bg-background px-3 py-2">Total per hari</td>
               <td title={fmtFull(grand)} className="sticky bottom-0 z-20 border-t border-border bg-background px-2.5 py-2 text-right font-bold tabular-nums">{fmtCell(grand)}</td>
+              <td className="sticky bottom-0 z-20 whitespace-nowrap border-t border-border bg-background px-2 py-2 text-right text-[11px]">{ratioCell(grandRatio)}</td>
               {days.map((d) => {
                 const v = colTotals.get(dayIso(d)) ?? 0;
                 return (
@@ -785,6 +893,12 @@ function OutletDetailModal({ report, outlet, day, pdfTheme, onClose }: { report:
             <MiniStat icon={ReceiptText} tint="emerald" label="Transaksi" value={nf(txCount)} sub={`${nf(dailyRows.length)} hari aktif`} />
             <MiniStat icon={Users} tint="violet" label="Pelaku Terlibat" value={nf(actors.length)} sub={actors[0] ? `Teratas: ${actors[0][0]}` : undefined} />
             <MiniStat icon={CalendarDays} tint="amber" label="Rata-rata / Hari" value={formatIDRShort(total / Math.max(1, dailyRows.length))} sub="pada hari aktif" />
+            {(() => {
+              const omset = report.sales?.perOutlet[outlet.name] ?? 0;
+              if (omset <= 0) return null;
+              const r = (total / omset) * 100;
+              return <MiniStat icon={Percent} tint="rose" label="% dari Omset" value={`${r.toFixed(2).replace(".", ",")}%`} sub={`omset ${formatIDRShort(omset)}`} />;
+            })()}
           </div>
 
           <div className="px-4 sm:px-5">
@@ -933,6 +1047,7 @@ const MINI_TINTS = {
   emerald: "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400",
   violet: "bg-violet-500/10 text-violet-600 dark:text-violet-400",
   amber: "bg-amber-500/10 text-amber-600 dark:text-amber-400",
+  rose: "bg-rose-500/10 text-rose-600 dark:text-rose-400",
 } as const;
 function MiniStat({ icon: Icon, tint, label, value, sub }: { icon: React.ComponentType<{ className?: string }>; tint: keyof typeof MINI_TINTS; label: string; value: React.ReactNode; sub?: string }) {
   return (

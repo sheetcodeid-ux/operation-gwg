@@ -144,10 +144,16 @@ export function ComboCompareChart({
   data,
   height = 260,
   weekendLabels,
+  names = ["Current", "Previous"],
+  valueFormatter,
 }: {
   data: { label: string; current: number; previous: number }[];
   height?: number;
   weekendLabels?: Set<string>;
+  /** [current, previous] tooltip/legend names. */
+  names?: [string, string];
+  /** Format tooltip values (e.g. Rp) — defaults to the raw number. */
+  valueFormatter?: (v: number) => string;
 }) {
   return (
     <ResponsiveContainer width="100%" height={height}>
@@ -165,13 +171,21 @@ export function ComboCompareChart({
         <CartesianGrid strokeDasharray="3 3" stroke={GRID} vertical={false} />
         <XAxis dataKey="label" tickLine={false} axisLine={false} minTickGap={4} height={28} tick={<CompareTick weekendLabels={weekendLabels} />} />
         <YAxis tick={AXIS} tickLine={false} axisLine={false} allowDecimals={false} width={32} />
-        <Tooltip contentStyle={tooltipStyle} cursor={{ fill: "rgba(255,255,255,0.04)" }} />
-        <Area type="monotone" dataKey="current" stroke="none" fill="url(#cmpArea)" />
-        <Bar dataKey="previous" name="Previous" fill="url(#cmpBar)" radius={[4, 4, 0, 0]} maxBarSize={26} />
+        <Tooltip
+          contentStyle={tooltipStyle}
+          wrapperStyle={{ zIndex: 40 }}
+          allowEscapeViewBox={{ x: false, y: true }}
+          cursor={{ fill: "rgba(255,255,255,0.04)" }}
+          formatter={(v, name) => [valueFormatter && v !== undefined ? valueFormatter(Number(v)) : (v as number | string), name as string]}
+        />
+        {/* tooltipType="none": the shaded area duplicates the line's dataKey and
+            must not add a second "current" row to the tooltip. */}
+        <Area type="monotone" dataKey="current" stroke="none" fill="url(#cmpArea)" tooltipType="none" />
+        <Bar dataKey="previous" name={names[1]} fill="url(#cmpBar)" radius={[4, 4, 0, 0]} maxBarSize={26} />
         <Line
           type="monotone"
           dataKey="current"
-          name="Current"
+          name={names[0]}
           stroke="#3b82f6"
           strokeWidth={2.5}
           dot={{ r: 2.5, fill: "#3b82f6", strokeWidth: 0 }}

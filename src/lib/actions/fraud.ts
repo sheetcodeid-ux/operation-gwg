@@ -2,7 +2,7 @@
 
 import { getSessionUser } from "@/lib/auth";
 import { canOpenMenu } from "@/lib/nav";
-import { getFraudReport, getOutletFraudDaily, syncFraudDays, type FraudDailyPoint, type FraudKind, type FraudPeriod, type FraudReport } from "@/lib/data/fraud";
+import { getFraudReport, getOutletFraudDaily, syncFraudDays, syncSalesPeriod, type FraudDailyPoint, type FraudKind, type FraudPeriod, type FraudReport } from "@/lib/data/fraud";
 
 async function guard() {
   const user = await getSessionUser();
@@ -26,4 +26,11 @@ export async function outletFraudDailyAction(branchId: number, from: string, to:
 export async function fraudSyncAction(period: FraudPeriod, date: string, kind: FraudKind): Promise<{ synced: number; remaining: number; error?: string } | { error: string }> {
   if (!(await guard())) return { error: "Not authorized" };
   return syncFraudDays(period, date, kind);
+}
+
+/** Pull per-outlet omset (net sales) for the period into the cache — fast
+ *  highlight calls; final periods are cached forever. */
+export async function salesSyncAction(period: FraudPeriod, date: string): Promise<{ synced: number; remaining: number; error?: string } | { error: string }> {
+  if (!(await guard())) return { error: "Not authorized" };
+  return syncSalesPeriod(period, date);
 }
