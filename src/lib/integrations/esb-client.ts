@@ -208,12 +208,13 @@ const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 /** Step 2 — read ONE page (0-indexed) of a generated export via the grid proxy.
  *  The export is produced asynchronously, so a just-generated file can 404 for a
  *  moment — retry a few times with a short delay before giving up. */
-async function readExportPage(url: string, page: number): Promise<CancelDetailReport> {
+async function readExportPage(url: string, page: number): Promise<{ report: CancelDetailReport; rawLen: number }> {
   for (let attempt = 0; attempt < 5; attempt++) {
     const res = await postForm("/report_service/main/get-data-report", () => ({ url, page: String(page) }));
     if (res.ok) {
       const json = (await res.json()) as { code?: number; data?: string };
-      return parseCancelDetailReport(json.data ?? "");
+      const data = json.data ?? "";
+      return { report: parseCancelDetailReport(data), rawLen: data.length };
     }
     if ((res.status === 404 || res.status === 425) && attempt < 4) {
       await sleep(1500); // export still generating
@@ -225,18 +226,25 @@ async function readExportPage(url: string, page: number): Promise<CancelDetailRe
   throw new Error("ESB get-data-report: export not ready after retries");
 }
 
+export interface EsbCancelResult {
+  rows: CancelDetailRow[];
+  totalItems: number; // from the grid's "Showing 1-N of X"
+  rawLen: number; // length of the first page's HTML (0 ⇒ empty/blocked response)
+}
+
 /**
  * End-to-end: generate the Cancel/Void export for a date range and read every
- * page (50 rows/page, capped at 40 pages ≈ 2000 line-items).
+ * page (50 rows/page, capped at 40 pages ≈ 2000 line-items). Returns diagnostic
+ * counts alongside the rows so a silent 0 can be explained.
  */
-export async function esbFetchCancelRows(dateFromYmd: string, dateToYmd: string): Promise<CancelDetailRow[]> {
+export async function esbFetchCancelRows(dateFromYmd: string, dateToYmd: string): Promise<EsbCancelResult> {
   const url = await generateExport(dateFromYmd, dateToYmd);
   const first = await readExportPage(url, 0);
-  const rows = [...first.rows];
-  const pages = Math.min(40, Math.ceil(first.totalItems / 50));
+  const rows = [...first.report.rows];
+  const pages = Math.min(40, Math.ceil(first.report.totalItems / 50));
   for (let p = 1; p < pages; p++) {
     const r = await readExportPage(url, p);
-    rows.push(...r.rows);
+    rows.push(...r.report.rows);
   }
-  return rows;
+  return { rows, totalItems: first.report.totalItems, rawLen: first.rawLen };
 }
