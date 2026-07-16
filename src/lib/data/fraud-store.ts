@@ -154,3 +154,31 @@ export async function replaceFraudDay(kind: FraudKindGroup, day: string, rows: C
   });
   if (up.error) throw new Error(`DB fraud_sync upsert: ${up.error.message}`);
 }
+
+/* ------------------------------ Sales (omset) ------------------------------ */
+
+export interface SalesDay { day: string; netSales: number; syncedAt: string }
+
+export async function getSalesDaily(from: string, to: string): Promise<SalesDay[]> {
+  const { data, error } = await db().from("sales_daily").select("day,net_sales,synced_at").gte("day", from).lte("day", to);
+  if (error) throw new Error(`DB sales_daily: ${error.message}`);
+  return ((data ?? []) as { day: string; net_sales: number | string; synced_at: string }[]).map((r) => ({ day: r.day, netSales: Number(r.net_sales) || 0, syncedAt: r.synced_at }));
+}
+
+export async function upsertSalesDay(day: string, netSales: number): Promise<void> {
+  const { error } = await db().from("sales_daily").upsert({ day, net_sales: netSales, synced_at: new Date().toISOString() });
+  if (error) throw new Error(`DB sales_daily upsert: ${error.message}`);
+}
+
+export interface SalesPeriodRow { branch: string; netSales: number; syncedAt: string }
+
+export async function getSalesPeriod(from: string, to: string): Promise<SalesPeriodRow[]> {
+  const { data, error } = await db().from("sales_period").select("branch,net_sales,synced_at").eq("date_from", from).eq("date_to", to);
+  if (error) throw new Error(`DB sales_period: ${error.message}`);
+  return ((data ?? []) as { branch: string; net_sales: number | string; synced_at: string }[]).map((r) => ({ branch: r.branch, netSales: Number(r.net_sales) || 0, syncedAt: r.synced_at }));
+}
+
+export async function upsertSalesPeriod(from: string, to: string, branch: string, netSales: number): Promise<void> {
+  const { error } = await db().from("sales_period").upsert({ branch, date_from: from, date_to: to, net_sales: netSales, synced_at: new Date().toISOString() });
+  if (error) throw new Error(`DB sales_period upsert: ${error.message}`);
+}

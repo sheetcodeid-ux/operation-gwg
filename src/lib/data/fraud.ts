@@ -1,8 +1,8 @@
 import "server-only";
 
 import { fetchBranches, fetchErpDashboard, gwgmanageConfigured } from "@/lib/integrations/gwgmanage";
-import { esbConfigured, esbFetchCancelRows, type EsbCancelResult } from "@/lib/integrations/esb-client";
-import { fraudStoreEnabled, getFraudRows, getSyncStates, replaceFraudDay, type FraudKindGroup, type FraudSyncState } from "./fraud-store";
+import { esbConfigured, esbFetchCancelRows, esbFetchNetSales, esbListBranches, type EsbCancelResult } from "@/lib/integrations/esb-client";
+import { fraudStoreEnabled, getFraudRows, getSalesDaily, getSalesPeriod, getSyncStates, replaceFraudDay, upsertSalesDay, upsertSalesPeriod, type FraudKindGroup, type FraudSyncState } from "./fraud-store";
 
 /**
  * Fraud (Void & Cancel) analysis sourced from the POS dashboard endpoint.
@@ -69,6 +69,8 @@ export interface FraudReport {
   dailyCount?: Record<string, Record<string, number>>;
   /** ESB only, daily period: outlet name → hour "00".."23" → nominal. */
   hourly?: Record<string, Record<string, number>>;
+  /** ESB only, daily period: outlet name → hour → transaction count. */
+  hourlyCount?: Record<string, Record<string, number>>;
   /** ESB only: top actors ("Oleh") across ALL outlets, from the FULL row set
    *  (exact — not derived from the capped drill-down lists). */
   actors?: { name: string; count: number; total: number }[];
@@ -77,6 +79,10 @@ export interface FraudReport {
   /** DB-cache mode: days in range not yet synced from ESB. Non-empty tells the
    *  client to kick background sync calls until it drains. */
   pendingDays?: string[];
+  /** Net sales (omset) context for the SAME range: grand total, per outlet and
+   *  per day — powers the "% dari omset" analysis. ready=false → the client
+   *  should trigger salesSyncAction in the background. */
+  sales?: { total: number; perOutlet: Record<string, number>; perDay: Record<string, number>; ready: boolean };
   error?: string;
 }
 
@@ -196,6 +202,7 @@ function aggregate(period: FraudPeriod, kind: FraudKind, r: { from: string; to: 
   const daily: Record<string, Record<string, number>> = {};
   const dailyCount: Record<string, Record<string, number>> = {};
   const hourly: Record<string, Record<string, number>> = {};
+  const hourlyCount: Record<string, Record<string, number>> = {};
   const byActor = new Map<string, { count: number; total: number }>();
   let tv = 0, tc = 0, tva = 0, tca = 0;
   for (const row of rows) {
@@ -220,6 +227,8 @@ function aggregate(period: FraudPeriod, kind: FraudKind, r: { from: string; to: 
         const h = String(Math.min(23, Number(hm[1]))).padStart(2, "0");
         const H = (hourly[row.branch] ??= {});
         H[h] = (H[h] ?? 0) + amount;
+        const HC = (hourlyCount[row.branch] ??= {});
+        HC[h] = (HC[h] ?? 0) + 1;
       }
     }
     const who = row.voidBy || "(tidak tercatat)";
@@ -252,6 +261,7 @@ function aggregate(period: FraudPeriod, kind: FraudKind, r: { from: string; to: 
     totalVoid: tv, totalCancel: tc, totalVoidAmount: tva, totalCancelAmount: tca,
     hasAmount: true, outlets, perOutletReliable: true, orders, daily, dailyCount, actors,
     hourly: period === "daily" ? hourly : undefined,
+    hourlyCount: period === "daily" ? hourlyCount : undefined,
   };
 }
 
@@ -369,6 +379,78 @@ export async function syncFraudRange(from: string, to: string, kind: FraudKind, 
   return { synced, remaining: pending.length - synced, error };
 }
 
+const SALES_TTL_MS = 60 * 60 * 1000;
+/** A sales figure is FINAL once synced after its range ended (WIB); a live
+ *  range stays fresh for an hour. */
+function salesFresh(syncedAt: string, toDay: string): boolean {
+  const syncedMs = Date.parse(syncedAt);
+  const endMs = Date.parse(`${toDay}T17:00:00Z`); // next 00:00 WIB
+  if (syncedMs >= endMs) return true;
+  return Date.now() - syncedMs < SALES_TTL_MS;
+}
+
+/** Cron engine: keep the all-outlet daily omset filled over [from, to]. */
+export async function syncSalesDaily(from: string, to: string, budgetMs = 20_000): Promise<{ synced: number; remaining: number }> {
+  if (!fraudStoreEnabled() || !esbConfigured()) return { synced: 0, remaining: 0 };
+  const have = new Map((await getSalesDaily(from, to)).map((r) => [r.day, r]));
+  const today = todayWib();
+  const pending = eachYmd(from, to)
+    .filter((d) => d <= today)
+    .filter((d) => {
+      const r = have.get(d);
+      return !r || !salesFresh(r.syncedAt, d);
+    })
+    .sort()
+    .reverse();
+  const started = Date.now();
+  let synced = 0;
+  for (const day of pending) {
+    if (synced > 0 && Date.now() - started > budgetMs) break;
+    try {
+      await upsertSalesDay(day, await esbFetchNetSales(day, day));
+      synced += 1;
+    } catch {
+      break; // transient ESB issue — retry next run
+    }
+  }
+  return { synced, remaining: pending.length - synced };
+}
+
+/** On-demand engine: per-branch omset for ONE period (fast highlight calls,
+ *  small parallelism). '' = all-outlet total for the same range. */
+export async function syncSalesPeriod(period: FraudPeriod, date: string, budgetMs = 40_000): Promise<{ synced: number; remaining: number; error?: string }> {
+  if (!fraudStoreEnabled() || !esbConfigured()) return { synced: 0, remaining: 0 };
+  const r = periodRange(period, date);
+  const have = new Map((await getSalesPeriod(r.from, r.to)).map((x) => [x.branch, x]));
+  const fresh = (b: string) => {
+    const row = have.get(b);
+    return !!row && salesFresh(row.syncedAt, r.to);
+  };
+  let targets: { id: string; name: string }[];
+  try {
+    targets = [{ id: "", name: "" }, ...(await esbListBranches()).map((b) => ({ id: b.id, name: b.name }))];
+  } catch (e) {
+    return { synced: 0, remaining: 1, error: e instanceof Error ? e.message : "Gagal memuat daftar cabang ESB." };
+  }
+  const queue = targets.filter((t) => !fresh(t.name));
+  const started = Date.now();
+  let synced = 0;
+  let error: string | undefined;
+  const worker = async () => {
+    while (queue.length > 0 && !error && Date.now() - started < budgetMs) {
+      const t = queue.shift()!;
+      try {
+        await upsertSalesPeriod(r.from, r.to, t.name, await esbFetchNetSales(r.from, r.to, t.id));
+        synced += 1;
+      } catch (e) {
+        error = e instanceof Error ? e.message : "Gagal sinkron omset.";
+      }
+    }
+  };
+  await Promise.all([worker(), worker(), worker()]);
+  return { synced, remaining: queue.length, error };
+}
+
 export async function getFraudReport(period: FraudPeriod, date: string, kind: FraudKind = "all"): Promise<FraudReport> {
   const r = periodRange(period, date);
 
@@ -382,6 +464,22 @@ export async function getFraudReport(period: FraudPeriod, date: string, kind: Fr
       const pending = pendingSyncDays(states, r.from, r.to);
       const report = aggregate(period, kind, r, filterKind(rowsDb, kind, group === "delete"));
       report.pendingDays = pending;
+      try {
+        const [periodRows, dailyRows] = await Promise.all([getSalesPeriod(r.from, r.to), getSalesDaily(r.from, r.to)]);
+        const perOutlet: Record<string, number> = {};
+        let allRow: { netSales: number; syncedAt: string } | undefined;
+        let outletsFresh = 0;
+        for (const row of periodRows) {
+          if (row.branch === "") { allRow = row; continue; }
+          perOutlet[row.branch] = row.netSales;
+          if (salesFresh(row.syncedAt, r.to)) outletsFresh += 1;
+        }
+        const perDay: Record<string, number> = {};
+        for (const d of dailyRows) perDay[d.day] = d.netSales;
+        const total = allRow?.netSales ?? Object.values(perDay).reduce((a, b) => a + b, 0);
+        const ready = !!allRow && salesFresh(allRow.syncedAt, r.to) && outletsFresh > 0;
+        report.sales = { total, perOutlet, perDay, ready };
+      } catch { /* omset optional — report stays usable without it */ }
       if (pending.length > 0) {
         report.warning = `${pending.length} hari dalam periode ini belum tersinkron dari ESB — data sedang diambil otomatis, angka akan bertambah sendiri.`;
       }

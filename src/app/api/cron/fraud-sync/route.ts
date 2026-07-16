@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { syncFraudRange } from "@/lib/data/fraud";
+import { syncFraudRange, syncSalesDaily, syncSalesPeriod } from "@/lib/data/fraud";
 import { getAppConfig } from "@/lib/data/app-config";
 
 /**
@@ -61,6 +61,23 @@ export async function GET(req: Request) {
       results[`backfill:${kind}`] = await syncFraudRange(ymdWib(HORIZON_DAYS), ymdWib(2), kind, Math.min(left() - 4_000, 22_000));
     } catch (e) {
       results[`backfill:${kind}`] = { error: e instanceof Error ? e.message : "failed" };
+    }
+  }
+
+  // Phase 3 — omset context: all-outlet daily sales over the horizon, plus a
+  // fresh per-branch snapshot for today so % dari omset is ready when opened.
+  if (left() > 6_000) {
+    try {
+      results["sales:daily"] = await syncSalesDaily(ymdWib(HORIZON_DAYS), ymdWib(0), Math.min(left() - 4_000, 14_000));
+    } catch (e) {
+      results["sales:daily"] = { error: e instanceof Error ? e.message : "failed" };
+    }
+  }
+  if (left() > 6_000) {
+    try {
+      results["sales:today"] = await syncSalesPeriod("daily", ymdWib(0), Math.min(left() - 3_000, 12_000));
+    } catch (e) {
+      results["sales:today"] = { error: e instanceof Error ? e.message : "failed" };
     }
   }
 

@@ -1,6 +1,6 @@
 import "server-only";
 
-import { extractReportData, parseCancelDetailReport, type CancelDetailReport, type CancelDetailRow } from "./esb";
+import { extractReportData, parseCancelDetailReport, parseIdrNumber, type CancelDetailReport, type CancelDetailRow } from "./esb";
 
 /**
  * Authenticated ESB (erp.esb.co.id) client — runs SERVER-SIDE only, logging in
@@ -342,4 +342,76 @@ export function esbFetchCancelRows(dateFromYmd: string, dateToYmd: string, kind:
       typeVoidOptions: opts.map((o) => o.label || o.value),
     };
   });
+}
+
+/* ------------------------- Sales (omset) highlight ------------------------- */
+
+
+/** Decode ESB's ajax JSON, which is usually a JSON-encoded STRING of JSON. */
+function decodeAjax<T>(text: string): T | null {
+  try {
+    const once = JSON.parse(text) as unknown;
+    if (typeof once === "string") return JSON.parse(once) as T;
+    return once as T;
+  } catch {
+    return null;
+  }
+}
+
+let companyIds: string[] | null = null;
+/** company IDs the dashboard posts with every highlight call — parsed once
+ *  from the sales-dashboard page (e.g. companyID[]=12370). */
+async function getCompanyIds(): Promise<string[]> {
+  if (companyIds) return companyIds;
+  try {
+    const s = await ensureSession();
+    const res = await fetch(`${BASE}/sales-dashboard`, { headers: { Accept: "text/html", Cookie: s.cookie }, cache: "no-store" });
+    const html = await res.text();
+    const ids = new Set<string>();
+    for (const m of html.matchAll(/companyID(?:\[\]|%5B%5D)?["']?\s*(?:value=|[:=,]\s*)["']?(\d{3,10})/g)) ids.add(m[1]);
+    companyIds = [...ids].slice(0, 5);
+  } catch {
+    companyIds = [];
+  }
+  return companyIds;
+}
+
+export interface EsbBranch { id: string; name: string }
+
+/** Branch list as the dashboard sees it (branchID ↔ branchName). */
+export async function esbListBranches(): Promise<EsbBranch[]> {
+  const s = await ensureSession();
+  const body = new URLSearchParams();
+  for (const c of await getCompanyIds()) body.append("companyID[]", c);
+  body.append("brandID", "");
+  const res = await fetch(`${BASE}/branch/get-multi-company-branch`, {
+    method: "POST",
+    headers: { "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8", "X-Requested-With": "XMLHttpRequest", "X-Csrf-Token": s.csrf, Cookie: s.cookie, Referer: `${BASE}/sales-dashboard` },
+    body,
+    cache: "no-store",
+  });
+  const list = decodeAjax<{ branchID: string; branchName: string }[]>(await res.text()) ?? [];
+  return list.map((b) => ({ id: b.branchID, name: b.branchName }));
+}
+
+/** Net sales (omset) for a date range, optionally for ONE branch — the number
+ *  behind the dashboard's NET SALES tile (get-today-highlight). */
+export async function esbFetchNetSales(dateFromYmd: string, dateToYmd: string, branchId = ""): Promise<number> {
+  const s = await ensureSession();
+  const body = new URLSearchParams();
+  body.append("branchID", branchId);
+  body.append("brandID", "");
+  body.append("reportDateStart", toEsbDate(dateFromYmd));
+  body.append("reportDateEnd", toEsbDate(dateToYmd));
+  for (const c of await getCompanyIds()) body.append("companyID[]", c);
+  const res = await fetch(`${BASE}/sales-dashboard/get-today-highlight`, {
+    method: "POST",
+    headers: { "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8", "X-Requested-With": "XMLHttpRequest", "X-Csrf-Token": s.csrf, Cookie: s.cookie, Referer: `${BASE}/sales-dashboard` },
+    body,
+    cache: "no-store",
+  });
+  if (!res.ok) throw new Error(`ESB highlight failed (${res.status})`);
+  const j = decodeAjax<{ currentSales?: string | number }>(await res.text());
+  if (!j || j.currentSales === undefined) throw new Error("ESB highlight: currentSales missing");
+  return typeof j.currentSales === "number" ? j.currentSales : parseIdrNumber(String(j.currentSales));
 }
