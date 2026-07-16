@@ -259,6 +259,8 @@ export interface EsbCancelResult {
   rows: CancelDetailRow[];
   totalItems: number; // from the grid's "Showing 1-N of X"
   rawLen: number; // length of the first page's HTML (0 ⇒ empty/blocked response)
+  /** Every page of the export was read (rows cover ESB's full item count). */
+  readAll: boolean;
   /** false ⇒ the requested Type Void filter wasn't offered by the ESB form and
    *  the DEFAULT export was fetched instead — caller must filter rows by type. */
   typeVoidFound: boolean;
@@ -297,7 +299,10 @@ export async function esbFetchCancelRows(dateFromYmd: string, dateToYmd: string,
   // compares rows.length to totalItems and warns about any shortfall.
   // Modest parallelism: ESB drops pages under heavier concurrency, and with
   // the day-level DB cache a single sync only ever covers one day (~few pages).
-  const pages = Math.min(200, Math.ceil(first.report.totalItems / 50));
+  // The generous page cap matters for exports whose date filter ESB ignores
+  // (observed on Type Void = Deleted) — reading everything lets the caller
+  // split the response into day buckets and finalize many days at once.
+  const pages = Math.min(320, Math.ceil(first.report.totalItems / 50));
   const CONCURRENCY = 4;
   for (let start = 1; start < pages; start += CONCURRENCY) {
     const batch: Promise<{ report: CancelDetailReport; rawLen: number }>[] = [];
@@ -309,6 +314,7 @@ export async function esbFetchCancelRows(dateFromYmd: string, dateToYmd: string,
     rows,
     totalItems: first.report.totalItems,
     rawLen: first.rawLen,
+    readAll: rows.length >= first.report.totalItems,
     typeVoidFound,
     typeVoidOptions: opts.map((o) => o.label || o.value),
   };
