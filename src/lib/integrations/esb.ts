@@ -37,6 +37,9 @@ export interface CancelDetailRow {
 export interface CancelDetailReport {
   rows: CancelDetailRow[];
   totalItems: number; // from "Showing 1-50 of N items"
+  /** Rows per page, from "Showing 1-N of …" — VARIES per grid (Cancel/Void
+   *  pages 50 rows, the Delete grid only 20). Never assume. */
+  pageSize: number;
   pageTotal: { qty: number; subtotal: number; tax: number; total: number } | null;
 }
 
@@ -201,6 +204,10 @@ export function parseCancelDetailReport(dataHtml: string): CancelDetailReport {
   }
 
   const totalItems = Number(/of\s+([\d.]+)\s+items/i.exec(dataHtml)?.[1]?.replace(/\./g, "") ?? rows.length);
+  // "Showing 1-20 of 716 items" → 20 rows/page. Fall back to the parsed row
+  // count (a full first page equals the page size on multi-page grids).
+  const showingTo = Number(/Showing\s+[\d.]+\s*-\s*([\d.]+)\s+of/i.exec(dataHtml)?.[1]?.replace(/\./g, "") ?? 0);
+  const pageSize = showingTo > 0 ? showingTo : Math.max(rows.length, 1);
 
   // Page summary row (kv-page-summary): last 5 right-aligned cells = qty..total.
   let pageTotal: CancelDetailReport["pageTotal"] = null;
@@ -213,5 +220,5 @@ export function parseCancelDetailReport(dataHtml: string): CancelDetailReport {
     }
   }
 
-  return { rows, totalItems, pageTotal };
+  return { rows, totalItems, pageSize, pageTotal };
 }

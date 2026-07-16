@@ -147,6 +147,14 @@ describe("parseCancelDetailReport rowspan grouping", () => {
   });
 });
 
+describe("page size detection", () => {
+  it("reads rows-per-page from the Showing banner (varies per grid)", () => {
+    expect(parseCancelDetailReport(" Showing 1-20 of 716 items.\n<table></table>").pageSize).toBe(20);
+    expect(parseCancelDetailReport(" Showing 1-50 of 275 items.\n<table></table>").pageSize).toBe(50);
+    expect(parseCancelDetailReport(" Showing 1-1.020 of 2.000 items.\n<table></table>").pageSize).toBe(1020);
+  });
+});
+
 describe("parseIdrNumber", () => {
   it("parses Indonesian formatted numbers", () => {
     expect(parseIdrNumber("31.818,18")).toBeCloseTo(31818.18);
