@@ -435,6 +435,7 @@ export async function syncSalesPeriod(period: FraudPeriod, date: string, budgetM
   const queue = targets.filter((t) => !fresh(t.name));
   const started = Date.now();
   let synced = 0;
+  let failures = 0;
   let error: string | undefined;
   const worker = async () => {
     while (queue.length > 0 && !error && Date.now() - started < budgetMs) {
@@ -443,7 +444,9 @@ export async function syncSalesPeriod(period: FraudPeriod, date: string, budgetM
         await upsertSalesPeriod(r.from, r.to, t.name, await esbFetchNetSales(r.from, r.to, t.id));
         synced += 1;
       } catch (e) {
-        error = e instanceof Error ? e.message : "Gagal sinkron omset.";
+        // One flaky branch must not sink the rest — only bail after several.
+        failures += 1;
+        if (failures >= 5) error = e instanceof Error ? e.message : "Gagal sinkron omset.";
       }
     }
   };
