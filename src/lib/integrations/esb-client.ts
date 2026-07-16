@@ -205,10 +205,25 @@ async function generateExport(dateFromYmd: string, dateToYmd: string): Promise<s
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
+/** Poke the report queue (what the browser polls after generating) so ESB's
+ *  worker advances the async export. Best-effort; errors are ignored. */
+async function pokeQueue(): Promise<void> {
+  try {
+    const s = await ensureSession();
+    const qs = new URLSearchParams({ draw: "1", start: "0", length: "10", _: String(Date.now()) });
+    await fetch(`${BASE}/report_service/main/get-data-report-queue?${qs.toString()}`, {
+      headers: { "X-Requested-With": "XMLHttpRequest", "X-Csrf-Token": s.csrf, Cookie: s.cookie, Referer: `${BASE}/report/report-cancel-menu-detail`, Accept: "application/json" },
+      cache: "no-store",
+    });
+  } catch {
+    /* best effort */
+  }
+}
+
 /** Step 2 — read ONE page (0-indexed) of a generated export via the grid proxy.
  *  The export is produced asynchronously, so a just-generated file can 404 for a
  *  moment — retry a few times with a short delay before giving up. */
-async function readExportPage(url: string, page: number, maxAttempts = 14): Promise<{ report: CancelDetailReport; rawLen: number }> {
+async function readExportPage(url: string, page: number, maxAttempts = 22, poke = false): Promise<{ report: CancelDetailReport; rawLen: number }> {
   let last = "";
   for (let attempt = 0; attempt < maxAttempts; attempt++) {
     const res = await postForm("/report_service/main/get-data-report", () => ({ url, page: String(page) }));
@@ -222,6 +237,7 @@ async function readExportPage(url: string, page: number, maxAttempts = 14): Prom
     }
     last = text.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim().slice(0, 140);
     if (attempt < maxAttempts - 1) {
+      if (poke) await pokeQueue(); // advance the async worker like the browser does
       await sleep(2000); // export still generating — "try again later"
       continue;
     }
@@ -243,7 +259,8 @@ export interface EsbCancelResult {
  */
 export async function esbFetchCancelRows(dateFromYmd: string, dateToYmd: string): Promise<EsbCancelResult> {
   const url = await generateExport(dateFromYmd, dateToYmd);
-  const first = await readExportPage(url, 0); // page 0 waits for the async export
+  await pokeQueue(); // kick the queue worker before the first read
+  const first = await readExportPage(url, 0, 22, true); // page 0 waits for the async export
   const rows = [...first.report.rows];
   const pages = Math.min(40, Math.ceil(first.report.totalItems / 50));
   for (let p = 1; p < pages; p++) {
