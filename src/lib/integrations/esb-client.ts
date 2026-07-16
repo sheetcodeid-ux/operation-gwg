@@ -295,11 +295,13 @@ export async function esbFetchCancelRows(dateFromYmd: string, dateToYmd: string,
   // ALL pages (bounded at 10.000 rows), in parallel batches so it fits the
   // function's time budget. A failed page is skipped, never fatal: the caller
   // compares rows.length to totalItems and warns about any shortfall.
+  // Modest parallelism: ESB drops pages under heavier concurrency, and with
+  // the day-level DB cache a single sync only ever covers one day (~few pages).
   const pages = Math.min(200, Math.ceil(first.report.totalItems / 50));
-  const CONCURRENCY = 8;
+  const CONCURRENCY = 4;
   for (let start = 1; start < pages; start += CONCURRENCY) {
     const batch: Promise<{ report: CancelDetailReport; rawLen: number }>[] = [];
-    for (let p = start; p < Math.min(start + CONCURRENCY, pages); p++) batch.push(readExportPage(url, p, 4));
+    for (let p = start; p < Math.min(start + CONCURRENCY, pages); p++) batch.push(readExportPage(url, p, 6));
     const settled = await Promise.allSettled(batch);
     for (const s of settled) if (s.status === "fulfilled") rows.push(...s.value.report.rows);
   }

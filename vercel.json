@@ -1,0 +1,8 @@
+{
+  "crons": [
+    {
+      "path": "/api/cron/fraud-sync",
+      "schedule": "30 21 * * *"
+    }
+  ]
+}
