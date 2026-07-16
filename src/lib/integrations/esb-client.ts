@@ -205,6 +205,28 @@ async function generateExport(dateFromYmd: string, dateToYmd: string): Promise<s
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
+/** Extract the `data` HTML from a get-data-report response. ESB sometimes emits
+ *  INVALID JSON (literal newlines inside the string), so fall back to a regex +
+ *  manual unescape when JSON.parse fails. Returns "" when there's no data field
+ *  (e.g. the {code:404,"try again later"} "still generating" response). */
+function extractReportData(text: string): string {
+  try {
+    const j = JSON.parse(text) as { data?: unknown };
+    if (typeof j.data === "string") return j.data;
+  } catch {
+    /* malformed JSON — handled below */
+  }
+  const m = /"data"\s*:\s*"([\s\S]*?)"\s*\}\s*$/.exec(text.trim());
+  if (!m) return "";
+  return m[1]
+    .replace(/\\r/g, "")
+    .replace(/\\n/g, "\n")
+    .replace(/\\t/g, " ")
+    .replace(/\\\//g, "/")
+    .replace(/\\"/g, '"')
+    .replace(/\\\\/g, "\\");
+}
+
 /** Poke the report queue (what the browser polls after generating) so ESB's
  *  worker advances the async export. Best-effort; errors are ignored. */
 async function pokeQueue(): Promise<void> {
@@ -231,8 +253,7 @@ async function readExportPage(url: string, page: number, maxAttempts = 22, poke 
     // with status 200, so inspect the body too before deciding it's ready.
     const text = await res.text().catch(() => "");
     if (res.ok && !/"code"\s*:\s*(404|425|202)/.test(text)) {
-      let data = "";
-      try { data = (JSON.parse(text) as { data?: string }).data ?? ""; } catch { data = ""; }
+      const data = extractReportData(text);
       if (data) return { report: parseCancelDetailReport(data), rawLen: data.length };
     }
     last = text.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim().slice(0, 140);
@@ -260,7 +281,7 @@ export interface EsbCancelResult {
 export async function esbFetchCancelRows(dateFromYmd: string, dateToYmd: string): Promise<EsbCancelResult> {
   const url = await generateExport(dateFromYmd, dateToYmd);
   await pokeQueue(); // kick the queue worker before the first read
-  const first = await readExportPage(url, 0, 22, true); // page 0 waits for the async export
+  const first = await readExportPage(url, 0, 16, true); // page 0 waits for the async export
   const rows = [...first.report.rows];
   const pages = Math.min(40, Math.ceil(first.report.totalItems / 50));
   for (let p = 1; p < pages; p++) {
