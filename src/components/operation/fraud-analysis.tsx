@@ -1,9 +1,9 @@
 "use client";
 
 import * as React from "react";
-import { AlertTriangle, ArrowDownRight, ArrowUpRight, CalendarDays, CheckCircle2, ChevronDown, Download, FileSpreadsheet, Loader2, Minus, ReceiptText, Store, Users, Wallet, X } from "lucide-react";
-import { Bar, BarChart, Cell, ResponsiveContainer, Tooltip as ChartTooltip, XAxis } from "recharts";
+import { AlertTriangle, ArrowDown, ArrowDownRight, ArrowUp, ArrowUpDown, ArrowUpRight, CalendarDays, CheckCircle2, ChevronDown, Download, FileSpreadsheet, Loader2, Minus, ReceiptText, Store, Users, Wallet, X } from "lucide-react";
 import { toast } from "sonner";
+import { CategoryBarChart, ComboCompareChart } from "@/components/charts/charts";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Combobox } from "@/components/ui/combobox";
@@ -38,7 +38,7 @@ export function FraudAnalysis({ initial, initialDate }: { initial: FraudReport; 
   const [mode, setMode] = React.useState<"rp" | "trx">("rp");
   const [pdfTheme, setPdfTheme] = React.useState<PdfTheme>("light");
   const [detail, setDetail] = React.useState<{ outlet: FraudOutletRow; day?: string } | null>(null);
-  const [prevTotal, setPrevTotal] = React.useState<number | null>(null);
+  const [prevReport, setPrevReport] = React.useState<FraudReport | null>(null);
   const [pending, start] = React.useTransition();
 
   // Remember the PDF theme across visits.
@@ -55,7 +55,7 @@ export function FraudAnalysis({ initial, initialDate }: { initial: FraudReport; 
   // sync). Skipped when the previous period isn't fully synced yet.
   React.useEffect(() => {
     let live = true;
-    setPrevTotal(null);
+    setPrevReport(null);
     const dt = new Date(`${date}T00:00:00`);
     if (period === "daily") dt.setDate(dt.getDate() - 1);
     else if (period === "weekly") dt.setDate(dt.getDate() - 7);
@@ -64,7 +64,7 @@ export function FraudAnalysis({ initial, initialDate }: { initial: FraudReport; 
     fraudReportAction(period, prevDate, kind).then((res) => {
       if (!live) return;
       if ("configured" in res && res.configured && res.source === "esb" && !res.pendingDays?.length) {
-        setPrevTotal(res.totalVoidAmount + res.totalCancelAmount);
+        setPrevReport(res);
       }
     });
     return () => { live = false; };
@@ -203,11 +203,11 @@ export function FraudAnalysis({ initial, initialDate }: { initial: FraudReport; 
           </div>
           <div className="shrink-0">
             <p className="mb-1 text-[11px] font-medium text-muted-foreground">{period === "daily" ? "Tanggal" : period === "weekly" ? "Minggu" : "Bulan"}</p>
-            <Combobox matchTriggerWidth searchable={false} value={date} onChange={onDate} options={options} className="w-44" />
+            <Combobox portal matchTriggerWidth searchable={false} value={date} onChange={onDate} options={options} className="w-44" />
           </div>
           <div className="shrink-0">
             <p className="mb-1 text-[11px] font-medium text-muted-foreground">Tipe</p>
-            <Combobox matchTriggerWidth searchable={false} value={kind} onChange={(v) => onKind(v as FraudKind)} options={KIND_OPTIONS} className="w-40" />
+            <Combobox portal matchTriggerWidth searchable={false} value={kind} onChange={(v) => onKind(v as FraudKind)} options={KIND_OPTIONS} className="w-40" />
           </div>
           <div className="w-44 shrink-0 sm:w-auto sm:min-w-36 sm:flex-1">
             <p className="mb-1 text-[11px] font-medium text-muted-foreground">Cari outlet</p>
@@ -227,6 +227,7 @@ export function FraudAnalysis({ initial, initialDate }: { initial: FraudReport; 
             {pending && <Loader2 className="size-4 animate-spin text-muted-foreground" />}
             <SegmentedTabs size="sm" className="w-24" items={[{ value: "rp", label: "Rp" }, { value: "trx", label: "Trx" }]} value={mode} onChange={(v) => setMode(v as "rp" | "trx")} />
             <Combobox
+              portal
               matchTriggerWidth
               searchable={false}
               value={pdfTheme}
@@ -279,7 +280,7 @@ export function FraudAnalysis({ initial, initialDate }: { initial: FraudReport; 
             </div>
           ) : report.source === "esb" ? (
             <>
-              <InsightStrip report={report} prevTotal={prevTotal} />
+              <InsightStrip report={report} prevReport={prevReport} query={query} />
               <FraudMatrix report={report} busy={pending} query={query} mode={mode} onOpenOutlet={(outlet, day) => setDetail({ outlet, day })} />
             </>
           ) : report.perOutletReliable ? (
@@ -298,9 +299,6 @@ export function FraudAnalysis({ initial, initialDate }: { initial: FraudReport; 
             </div>
           )}
 
-          <p className="text-[11px] text-muted-foreground">
-            Angka = total nominal (Rp, basis subtotal ESB) {KIND_LABEL[report.kind]} per outlet per hari. Klik baris outlet untuk membuka detail lengkap — siapa yang melakukan, kapan, menu apa, dan alasannya.
-          </p>
         </>
       )}
 
@@ -355,30 +353,89 @@ function useByOutlet(report: FraudReport) {
 
 /* ------------------------------ Insight strip ------------------------------ */
 
-/** Trend of the period (per-day totals), delta vs the previous period, and
- *  auto-generated takeaways: top outlet, worst day, top actors (server-exact). */
-function InsightStrip({ report, prevTotal }: { report: FraudReport; prevTotal: number | null }) {
-  const days = React.useMemo(() => eachDay(report.from, report.to), [report.from, report.to]);
-  const chart = React.useMemo(() => {
-    const t = new Map<string, number>();
-    for (const m of Object.values(report.daily ?? {})) for (const [k, v] of Object.entries(m)) t.set(k, (t.get(k) ?? 0) + v);
-    return days.map((d) => ({ key: dayIso(d), label: String(d.getDate()).padStart(2, "0"), wd: WD[d.getDay()], v: t.get(dayIso(d)) ?? 0 }));
-  }, [report.daily, days]);
-  const grand = report.totalVoidAmount + report.totalCancelAmount;
-  const worst = chart.reduce((a, b) => (b.v > a.v ? b : a), chart[0] ?? { key: "", label: "", wd: "", v: 0 });
-  const maxV = Math.max(1, ...chart.map((c) => c.v));
-  const top = report.outlets[0];
-  const actors = report.actors ?? [];
+/** Dashboard-style trend (ComboCompareChart: gray bars = previous period,
+ *  glowing blue line = current) with period-aware granularity — daily = hours
+ *  1..24, weekly = 7 days, monthly = dates — and highlights that follow the
+ *  outlet search (no match / empty = all outlets). */
+function InsightStrip({ report, prevReport, query }: { report: FraudReport; prevReport: FraudReport | null; query: string }) {
+  const q = query.trim().toLowerCase();
+  const matched = React.useMemo(
+    () => (q ? report.outlets.filter((o) => o.name.toLowerCase().includes(q)) : report.outlets),
+    [report.outlets, q],
+  );
+  const scoped = q.length > 0 && matched.length > 0 && matched.length < report.outlets.length;
+  const names = React.useMemo(() => new Set((scoped ? matched : report.outlets).map((o) => o.name)), [scoped, matched, report.outlets]);
 
-  const delta = prevTotal !== null && prevTotal > 0 ? ((grand - prevTotal) / prevTotal) * 100 : null;
+  // Sum a per-outlet map over the scoped outlets, keyed by hour/date.
+  const sumMap = React.useCallback((src: Record<string, Record<string, number>> | undefined, scope?: Set<string>) => {
+    const t = new Map<string, number>();
+    for (const [name, m] of Object.entries(src ?? {})) {
+      if (scope && !scope.has(name)) continue;
+      for (const [k, v] of Object.entries(m)) t.set(k, (t.get(k) ?? 0) + v);
+    }
+    return t;
+  }, []);
+
+  const chart = React.useMemo(() => {
+    if (report.period === "daily") {
+      const cur = sumMap(report.hourly, scoped ? names : undefined);
+      const prev = sumMap(prevReport?.hourly); // previous day, all-outlet scope follows search too
+      const prevScoped = scoped ? sumMap(prevReport?.hourly, names) : prev;
+      return Array.from({ length: 24 }, (_, h) => {
+        const k = String(h).padStart(2, "0");
+        return { label: String(h + 1), title: `Jam ${k}:00`, current: cur.get(k) ?? 0, previous: prevScoped.get(k) ?? 0 };
+      });
+    }
+    const days = eachDay(report.from, report.to);
+    const cur = sumMap(report.daily, scoped ? names : undefined);
+    const prevDays = prevReport ? eachDay(prevReport.from, prevReport.to) : [];
+    const prev = sumMap(prevReport?.daily, scoped ? names : undefined);
+    return days.map((d, i) => ({
+      label: report.period === "weekly" ? String(i + 1) : String(d.getDate()),
+      title: `${String(d.getDate()).padStart(2, "0")} ${MONTHS[d.getMonth()].slice(0, 3)} · ${WD[d.getDay()]}`,
+      current: cur.get(dayIso(d)) ?? 0,
+      previous: prevDays[i] ? prev.get(dayIso(prevDays[i])) ?? 0 : 0,
+    }));
+  }, [report, prevReport, scoped, names, sumMap]);
+
+  // Highlights follow the same scope.
+  const grand = scoped ? matched.reduce((a, o) => a + o.voidAmount + o.cancelAmount, 0) : report.totalVoidAmount + report.totalCancelAmount;
+  const prevGrand = prevReport
+    ? scoped
+      ? prevReport.outlets.filter((o) => names.has(o.name)).reduce((a, o) => a + o.voidAmount + o.cancelAmount, 0)
+      : prevReport.totalVoidAmount + prevReport.totalCancelAmount
+    : null;
+  const top = (scoped ? [...matched] : report.outlets).sort((a, b) => b.voidAmount + b.cancelAmount - (a.voidAmount + a.cancelAmount))[0];
+  const peak = chart.reduce((a, b) => (b.current > a.current ? b : a), chart[0] ?? { label: "", title: "", current: 0, previous: 0 });
+  const actors = React.useMemo(() => {
+    if (!scoped) return (report.actors ?? []).slice(0, 3);
+    const byActor = new Map<string, { count: number; total: number }>();
+    for (const name of names) {
+      for (const o of report.orders?.[name] ?? []) {
+        const who = o.voidBy || "(tidak tercatat)";
+        const a = byActor.get(who) ?? { count: 0, total: 0 };
+        a.count += 1;
+        a.total += o.total;
+        byActor.set(who, a);
+      }
+    }
+    return [...byActor.entries()].map(([name, a]) => ({ name, ...a })).sort((x, y) => y.total - x.total).slice(0, 3);
+  }, [scoped, names, report.actors, report.orders]);
+
+  const delta = prevGrand !== null && prevGrand > 0 ? ((grand - prevGrand) / prevGrand) * 100 : null;
   const deltaUp = delta !== null && delta > 1;
   const deltaDown = delta !== null && delta < -1;
+  const prevLabel = report.period === "daily" ? "kemarin" : report.period === "weekly" ? "minggu lalu" : "bulan lalu";
+  const unitLabel = report.period === "daily" ? "per jam (1\u201324)" : report.period === "weekly" ? "hari ke-1\u20137" : "per tanggal";
 
   return (
-    <div className="glass grid gap-4 rounded-2xl border border-border p-4 lg:grid-cols-[1fr_minmax(16rem,22rem)]">
+    <div className="glass grid gap-4 rounded-2xl border border-border p-4 lg:grid-cols-[1fr_minmax(16rem,21rem)]">
       <div className="min-w-0">
-        <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
-          <p className="text-sm font-semibold text-foreground">Tren Harian — {KIND_LABEL[report.kind]}</p>
+        <div className="mb-1 flex flex-wrap items-center justify-between gap-2">
+          <div>
+            <p className="text-sm font-semibold text-foreground">Tren — {KIND_LABEL[report.kind]}{scoped ? ` · ${matched.length === 1 ? matched[0].name : `${matched.length} outlet`}` : ""}</p>
+            <p className="text-[11px] text-muted-foreground">{unitLabel} · vs {prevLabel}</p>
+          </div>
           {delta !== null && (
             <span
               className={cn(
@@ -387,45 +444,25 @@ function InsightStrip({ report, prevTotal }: { report: FraudReport; prevTotal: n
                 deltaDown && "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400",
                 !deltaUp && !deltaDown && "bg-muted text-muted-foreground",
               )}
-              title={`Periode sebelumnya: ${formatIDR(prevTotal!)}`}
+              title={`${prevLabel[0].toUpperCase()}${prevLabel.slice(1)}: ${formatIDR(prevGrand!)}`}
             >
               {deltaUp ? <ArrowUpRight className="size-3.5" /> : deltaDown ? <ArrowDownRight className="size-3.5" /> : <Minus className="size-3.5" />}
-              {`${Math.abs(delta).toFixed(1).replace(".", ",")}% vs periode sebelumnya`}
+              {`${Math.abs(delta).toFixed(1).replace(".", ",")}% vs ${prevLabel}`}
             </span>
           )}
         </div>
-        {chart.length > 1 ? (
-          <div className="h-28 w-full">
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={chart} margin={{ top: 4, right: 4, bottom: 0, left: 4 }} barCategoryGap="22%">
-                <XAxis dataKey="label" tickLine={false} axisLine={false} interval="preserveStartEnd" tick={{ fontSize: 10, fill: "var(--muted-foreground, #888)" }} />
-                <ChartTooltip
-                  cursor={{ fill: "rgba(127,127,127,0.08)" }}
-                  content={({ active, payload }) => {
-                    if (!active || !payload?.length) return null;
-                    const p = payload[0].payload as (typeof chart)[number];
-                    return (
-                      <div className="rounded-lg border border-border bg-background px-2.5 py-1.5 text-xs shadow-md">
-                        <p className="font-medium text-foreground">{p.label} · {p.wd}</p>
-                        <p className="tabular-nums text-blue-600 dark:text-blue-400">{formatIDR(p.v)}</p>
-                      </div>
-                    );
-                  }}
-                />
-                <Bar dataKey="v" radius={[4, 4, 0, 0]} isAnimationActive={false}>
-                  {chart.map((c) => (
-                    <Cell key={c.key} fill="#3b82f6" fillOpacity={c.v === 0 ? 0.12 : 0.35 + 0.65 * (c.v / maxV)} />
-                  ))}
-                </Bar>
-              </BarChart>
-            </ResponsiveContainer>
-          </div>
-        ) : (
-          <p className="py-6 text-sm text-muted-foreground">Periode satu hari — pilih mingguan/bulanan untuk melihat tren.</p>
-        )}
+        <ComboCompareChart data={chart} height={168} />
+        <div className="mt-1.5 flex flex-wrap items-center gap-4 text-[11px] text-muted-foreground">
+          <span className="flex items-center gap-1.5">
+            <span className="h-0.5 w-4 rounded-full bg-blue-500 shadow-[0_0_5px_rgba(59,130,246,0.6)]" /> Periode ini
+          </span>
+          <span className="flex items-center gap-1.5">
+            <span className="size-2.5 rounded-sm bg-gradient-to-b from-slate-300 to-slate-500" /> {prevLabel[0].toUpperCase()}{prevLabel.slice(1)}
+          </span>
+        </div>
       </div>
       <div className="space-y-2 border-t border-border pt-3 lg:border-l lg:border-t-0 lg:pl-4 lg:pt-0">
-        <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Sorotan</p>
+        <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Sorotan{scoped ? " (hasil pencarian)" : ""}</p>
         {top && (
           <p className="text-sm">
             <span className="text-muted-foreground">Outlet tertinggi:</span>{" "}
@@ -434,21 +471,21 @@ function InsightStrip({ report, prevTotal }: { report: FraudReport; prevTotal: n
             {grand > 0 && <span className="text-muted-foreground"> ({(((top.voidAmount + top.cancelAmount) / grand) * 100).toFixed(0)}%)</span>}
           </p>
         )}
-        {worst && worst.v > 0 && chart.length > 1 && (
+        {peak && peak.current > 0 && (
           <p className="text-sm">
-            <span className="text-muted-foreground">Hari tertinggi:</span>{" "}
-            <span className="font-semibold text-foreground">{worst.label} ({worst.wd})</span>{" "}
-            <span className="tabular-nums text-blue-600 dark:text-blue-400">{formatIDRShort(worst.v)}</span>
+            <span className="text-muted-foreground">{report.period === "daily" ? "Jam tertinggi:" : "Hari tertinggi:"}</span>{" "}
+            <span className="font-semibold text-foreground">{peak.title}</span>{" "}
+            <span className="tabular-nums text-blue-600 dark:text-blue-400">{formatIDRShort(peak.current)}</span>
           </p>
         )}
         {actors.length > 0 && (
           <div className="text-sm">
             <span className="text-muted-foreground">Pelaku teratas:</span>
             <div className="mt-1 space-y-0.5">
-              {actors.slice(0, 3).map((a) => (
+              {actors.map((a) => (
                 <p key={a.name} className="flex items-baseline justify-between gap-2">
                   <span className="truncate font-medium text-foreground">{a.name}</span>
-                  <span className="shrink-0 tabular-nums text-xs text-muted-foreground">{nf(a.count)} trx · <span className="text-blue-600 dark:text-blue-400">{formatIDRShort(a.total)}</span></span>
+                  <span className="shrink-0 tabular-nums text-xs text-muted-foreground">{nf(a.count)} trx · <span className="text-violet-600 dark:text-violet-400">{formatIDRShort(a.total)}</span></span>
                 </p>
               ))}
             </div>
@@ -547,9 +584,9 @@ function FraudMatrix({ report, busy, query, mode, onOpenOutlet }: { report: Frau
       <div className="max-h-[72vh] overflow-auto overscroll-contain">
         <table className="w-full border-collapse text-xs">
           <thead>
-            <tr className="text-muted-foreground">
+            <tr className="text-[10px] uppercase tracking-wide text-muted-foreground">
               <th
-                className="sticky left-0 top-0 z-30 cursor-pointer select-none border-b border-border bg-background px-3 py-2 text-left font-medium hover:text-foreground"
+                className="sticky left-0 top-0 z-30 cursor-pointer select-none border-b border-border bg-background px-3 py-2.5 text-left font-medium hover:text-foreground"
                 title="Urutkan berdasarkan nama"
                 onClick={() => setSortKey(sortKey === "name" ? "total" : "name")}
               >
@@ -641,7 +678,7 @@ function FraudMatrix({ report, busy, query, mode, onOpenOutlet }: { report: Frau
 
 /* ------------------------------ Detail modal ------------------------------ */
 
-/** Big detail dialog for one outlet — built from the app's own design system
+/** Big detail dialog for one outlet — the app's own design system
  *  (surface-solid panel, pastel MiniStat rows, SegmentedTabs, Sheet header). */
 function OutletDetailModal({ report, outlet, day, pdfTheme, onClose }: { report: FraudReport; outlet: FraudOutletRow; day?: string; pdfTheme: PdfTheme; onClose: () => void }) {
   const byOutlet = useByOutlet(report);
@@ -649,18 +686,16 @@ function OutletDetailModal({ report, outlet, day, pdfTheme, onClose }: { report:
   const [dayFilter, setDayFilter] = React.useState<string | undefined>(day);
   const [actorFilter, setActorFilter] = React.useState<string | undefined>(undefined);
   const [q, setQ] = React.useState("");
-  const [visible, setVisible] = React.useState(60);
 
   const allOrders = React.useMemo(() => report.orders?.[outlet.name] ?? [], [report.orders, outlet.name]);
   const orders = React.useMemo(() => {
     let list = allOrders;
     if (dayFilter) list = list.filter((o) => (dayKey(o.voidTime) || dayKey(o.orderTime)) === dayFilter);
     if (actorFilter) list = list.filter((o) => (o.voidBy || "(tidak tercatat)") === actorFilter);
-    const s = q.trim().toLowerCase();
-    if (s) list = list.filter((o) => [o.menu, o.voidBy, o.orderBy, o.salesNumber, o.notes].some((f) => f.toLowerCase().includes(s)));
-    return [...list].sort((a, b) => b.total - a.total); // largest first — pagination pages by size
+    const sq = q.trim().toLowerCase();
+    if (sq) list = list.filter((o) => [o.menu, o.voidBy, o.orderBy, o.salesNumber, o.notes].some((f) => f.toLowerCase().includes(sq)));
+    return list;
   }, [allOrders, dayFilter, actorFilter, q]);
-  React.useEffect(() => setVisible(60), [dayFilter, actorFilter, q]);
   const filtered = Boolean(dayFilter || actorFilter || q.trim());
   const filteredSum = React.useMemo(() => orders.reduce((a, o) => a + o.total, 0), [orders]);
 
@@ -675,10 +710,10 @@ function OutletDetailModal({ report, outlet, day, pdfTheme, onClose }: { report:
   const dailyRows = React.useMemo(() => {
     const dm = byOutlet.get(outlet.name) ?? new Map<string, number>();
     return eachDay(report.from, report.to)
-      .map((d) => ({ iso: dayIso(d), label: `${String(d.getDate()).padStart(2, "0")} ${MONTHS[d.getMonth()].slice(0, 3)}`, wd: WD[d.getDay()], v: dm.get(dayIso(d)) ?? 0 }))
+      .map((d) => ({ iso: dayIso(d), label: String(d.getDate()).padStart(2, "0"), full: `${String(d.getDate()).padStart(2, "0")} ${MONTHS[d.getMonth()].slice(0, 3)}`, wd: WD[d.getDay()], v: dm.get(dayIso(d)) ?? 0 }))
       .filter((x) => x.v > 0);
   }, [byOutlet, outlet.name, report.from, report.to]);
-  const maxDaily = Math.max(1, ...dailyRows.map((x) => x.v));
+  const topDays = React.useMemo(() => [...dailyRows].sort((a, b) => b.v - a.v).slice(0, 3), [dailyRows]);
 
   const actors = React.useMemo(() => {
     const byActor = new Map<string, { count: number; total: number }>();
@@ -691,7 +726,7 @@ function OutletDetailModal({ report, outlet, day, pdfTheme, onClose }: { report:
     }
     return [...byActor.entries()].sort((x, y) => y[1].total - x[1].total);
   }, [allOrders]);
-  const maxActor = Math.max(1, ...actors.map(([, a]) => a.total));
+  const actorSum = Math.max(1, actors.reduce((a, [, x]) => a + x.total, 0));
 
   // Lock page scroll while open; Esc closes.
   React.useEffect(() => {
@@ -705,6 +740,10 @@ function OutletDetailModal({ report, outlet, day, pdfTheme, onClose }: { report:
     };
   }, [onClose]);
 
+  const openDay = (iso: string) => {
+    setDayFilter(iso);
+    setTab("order");
+  };
   const openActor = (name: string) => {
     setActorFilter(actorFilter === name ? undefined : name);
     setTab("order");
@@ -759,59 +798,65 @@ function OutletDetailModal({ report, outlet, day, pdfTheme, onClose }: { report:
           </div>
 
           {tab === "ringkasan" ? (
-            <div className="grid gap-3 p-4 sm:p-5 lg:grid-cols-2">
-              {/* Per-day panel */}
-              <div className="rounded-2xl border border-border bg-card/50">
-                <div className="border-b border-border px-4 py-2.5">
-                  <p className="text-sm font-semibold text-foreground">Per Hari</p>
-                  <p className="text-[11px] text-muted-foreground">Klik tanggal untuk melihat order hari itu.</p>
+            <div className="space-y-3 p-4 sm:p-5">
+              {/* Per Hari — chart panel (collapsible) */}
+              <CollapseSection icon={CalendarDays} tint="blue" title="Per Hari" summary={`${nf(dailyRows.length)} hari aktif`} defaultOpen>
+                {dailyRows.length > 0 ? (
+                  <>
+                    <CategoryBarChart data={dailyRows.map((x) => ({ label: x.label, value: Math.round(x.v) }))} color="#3b82f6" height={150} angle={0} radius={4} maxBarSize={22} />
+                    <div className="mt-2 flex flex-wrap items-center gap-1.5">
+                      <span className="text-[11px] text-muted-foreground">Tertinggi:</span>
+                      {topDays.map((x) => (
+                        <button
+                          key={x.iso}
+                          type="button"
+                          onClick={() => openDay(x.iso)}
+                          className="inline-flex items-center gap-1 rounded-full bg-blue-500/10 px-2.5 py-1 text-[11px] font-medium text-blue-600 transition-colors hover:bg-blue-500/20 dark:text-blue-400"
+                        >
+                          {x.full} · {formatIDRShort(x.v)}
+                        </button>
+                      ))}
+                    </div>
+                  </>
+                ) : (
+                  <p className="py-2 text-xs text-muted-foreground">Tidak ada transaksi.</p>
+                )}
+              </CollapseSection>
+
+              {/* Pelaku — ranked people list (collapsible, deliberately different) */}
+              <CollapseSection icon={Users} tint="violet" title="Pelaku (Oleh)" summary={`${nf(actors.length)} orang`} defaultOpen>
+                <div className="space-y-1">
+                  {actors.map(([who, a], i) => {
+                    const share = (a.total / actorSum) * 100;
+                    return (
+                      <button
+                        type="button"
+                        key={who}
+                        onClick={() => openActor(who)}
+                        className="flex w-full items-center gap-3 rounded-xl px-2 py-1.5 text-left transition-colors hover:bg-foreground/[0.05]"
+                      >
+                        <span className={cn(
+                          "grid size-8 shrink-0 place-items-center rounded-full text-[11px] font-bold",
+                          i === 0 ? "bg-violet-500/15 text-violet-600 dark:text-violet-400" : "bg-muted text-muted-foreground",
+                        )}>
+                          {who.replace(/[^A-Za-z0-9]/g, "").slice(0, 2).toUpperCase() || "?"}
+                        </span>
+                        <span className="min-w-0 flex-1">
+                          <span className="block truncate text-xs font-medium text-foreground">{who}</span>
+                          <span className="block text-[10px] text-muted-foreground">{nf(a.count)} transaksi · {share.toFixed(0)}% dari outlet ini</span>
+                        </span>
+                        <span className="shrink-0 text-right">
+                          <span className="block text-xs font-semibold tabular-nums text-foreground">{formatIDRShort(a.total)}</span>
+                          <span className="mt-1 block h-1 w-16 overflow-hidden rounded-full bg-muted">
+                            <span className="block h-full rounded-full bg-violet-500/70" style={{ width: `${share}%` }} />
+                          </span>
+                        </span>
+                      </button>
+                    );
+                  })}
+                  {actors.length === 0 && <p className="py-2 text-xs text-muted-foreground">Tidak ada data pelaku.</p>}
                 </div>
-                <div className="max-h-72 space-y-0.5 overflow-y-auto p-2.5">
-                  {dailyRows.map((x) => (
-                    <button
-                      type="button"
-                      key={x.iso}
-                      onClick={() => { setDayFilter(x.iso); setTab("order"); }}
-                      className="flex w-full items-center gap-2.5 rounded-lg px-1.5 py-1 text-left text-xs transition-colors hover:bg-foreground/[0.05]"
-                    >
-                      <span className="w-16 shrink-0 tabular-nums text-muted-foreground">{x.label} <span className="text-muted-foreground/50">{x.wd}</span></span>
-                      <span className="block h-2 flex-1 overflow-hidden rounded-full bg-muted">
-                        <span className="block h-full rounded-full bg-blue-500/70" style={{ width: `${(x.v / maxDaily) * 100}%` }} />
-                      </span>
-                      <span className="w-24 shrink-0 text-right tabular-nums text-foreground">{formatIDR(x.v)}</span>
-                    </button>
-                  ))}
-                  {dailyRows.length === 0 && <p className="px-1.5 py-3 text-xs text-muted-foreground">Tidak ada transaksi.</p>}
-                </div>
-              </div>
-              {/* Actors panel */}
-              <div className="rounded-2xl border border-border bg-card/50">
-                <div className="border-b border-border px-4 py-2.5">
-                  <p className="text-sm font-semibold text-foreground">Pelaku (Oleh)</p>
-                  <p className="text-[11px] text-muted-foreground">Klik nama untuk mengaudit order orang itu.</p>
-                </div>
-                <div className="max-h-72 space-y-0.5 overflow-y-auto p-2.5">
-                  {actors.map(([who, a], i) => (
-                    <button
-                      type="button"
-                      key={who}
-                      onClick={() => openActor(who)}
-                      className="flex w-full items-center gap-2.5 rounded-lg px-1.5 py-1 text-left text-xs transition-colors hover:bg-foreground/[0.05]"
-                    >
-                      <span className={cn(
-                        "grid size-5 shrink-0 place-items-center rounded-md text-[10px] font-bold tabular-nums",
-                        i === 0 ? "bg-blue-500/15 text-blue-600 dark:text-blue-400" : "bg-muted text-muted-foreground",
-                      )}>{i + 1}</span>
-                      <span className="w-32 shrink-0 truncate font-medium text-foreground" title={who}>{who}</span>
-                      <span className="block h-1.5 flex-1 overflow-hidden rounded-full bg-muted">
-                        <span className="block h-full rounded-full bg-blue-500/70" style={{ width: `${(a.total / maxActor) * 100}%` }} />
-                      </span>
-                      <span className="shrink-0 whitespace-nowrap tabular-nums text-muted-foreground">{nf(a.count)} · <span className="text-foreground">{formatIDRShort(a.total)}</span></span>
-                    </button>
-                  ))}
-                  {actors.length === 0 && <p className="px-1.5 py-3 text-xs text-muted-foreground">Tidak ada data pelaku.</p>}
-                </div>
-              </div>
+              </CollapseSection>
             </div>
           ) : (
             <div className="space-y-2.5 p-4 sm:p-5">
@@ -829,7 +874,7 @@ function OutletDetailModal({ report, outlet, day, pdfTheme, onClose }: { report:
                   <button
                     type="button"
                     onClick={() => setActorFilter(undefined)}
-                    className="inline-flex items-center gap-1 rounded-full bg-blue-500/10 px-2.5 py-1 text-[11px] font-medium text-blue-600 transition-colors hover:bg-blue-500/20 dark:text-blue-400"
+                    className="inline-flex items-center gap-1 rounded-full bg-violet-500/10 px-2.5 py-1 text-[11px] font-medium text-violet-600 transition-colors hover:bg-violet-500/20 dark:text-violet-400"
                   >
                     <Users className="size-3" /> {actorFilter} <X className="size-3" />
                   </button>
@@ -840,27 +885,43 @@ function OutletDetailModal({ report, outlet, day, pdfTheme, onClose }: { report:
                   </span>
                 )}
                 {!filtered && capped && (
-                  <span className="text-[11px] text-muted-foreground">Menampilkan {nf(allOrders.length)} order terbesar dari {nf(txCount)} transaksi.</span>
+                  <span className="text-[11px] text-muted-foreground">{nf(allOrders.length)} order terbesar dari {nf(txCount)} transaksi.</span>
                 )}
                 <input
                   value={q}
                   onChange={(e) => setQ(e.target.value)}
-                  placeholder="Cari menu / pelaku / no. bill / alasan…"
+                  placeholder="Cari menu / pelaku / no. bill…"
                   className="ml-auto h-9 w-full rounded-xl border border-border bg-background px-3 text-xs outline-none placeholder:text-muted-foreground/60 focus:ring-2 focus:ring-ring sm:w-72"
                 />
               </div>
-              <OrdersTable orders={orders.slice(0, visible)} />
-              {orders.length > visible && (
-                <div className="flex justify-center pt-1">
-                  <Button variant="outline" size="sm" onClick={() => setVisible((v) => v + 60)}>
-                    Muat lebih banyak ({nf(orders.length - visible)} lagi)
-                  </Button>
-                </div>
-              )}
+              <OrdersTable orders={orders} />
             </div>
           )}
         </div>
       </div>
+    </div>
+  );
+}
+
+/** Collapsible panel with a pastel icon chip — open/close per section. */
+function CollapseSection({ icon: Icon, tint, title, summary, defaultOpen, children }: { icon: React.ComponentType<{ className?: string }>; tint: keyof typeof MINI_TINTS; title: string; summary?: string; defaultOpen?: boolean; children: React.ReactNode }) {
+  const [open, setOpen] = React.useState(defaultOpen ?? true);
+  return (
+    <div className="overflow-hidden rounded-2xl border border-border">
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        aria-expanded={open}
+        className="flex w-full items-center gap-2.5 px-4 py-3 text-left transition-colors hover:bg-foreground/[0.03]"
+      >
+        <span className={cn("grid size-8 shrink-0 place-items-center rounded-full", MINI_TINTS[tint])}>
+          <Icon className="size-4" />
+        </span>
+        <span className="flex-1 text-sm font-semibold text-foreground">{title}</span>
+        {summary && <span className="text-[11px] tabular-nums text-muted-foreground">{summary}</span>}
+        <ChevronDown className={cn("size-4 text-muted-foreground transition-transform", open && "rotate-180")} />
+      </button>
+      {open && <div className="border-t border-border px-4 py-3">{children}</div>}
     </div>
   );
 }
@@ -888,44 +949,92 @@ function MiniStat({ icon: Icon, tint, label, value, sub }: { icon: React.Compone
   );
 }
 
-/** ESB order-level rows for one outlet. */
+type OrderSortKey = "total" | "qty" | "time" | "menu" | "who";
+
+/** ESB order rows — sortable columns (app-table style arrows) + incremental
+ *  "load more" so long lists stay light. */
 function OrdersTable({ orders }: { orders: FraudOrder[] }) {
-  if (orders.length === 0) return <p className="py-2 text-xs text-muted-foreground">Tidak ada order pada periode ini.</p>;
-  const sorted = [...orders].sort((a, b) => b.total - a.total);
+  const [sortKey, setSortKey] = React.useState<OrderSortKey>("total");
+  const [dir, setDir] = React.useState<"asc" | "desc">("desc");
+  const [visible, setVisible] = React.useState(60);
+  React.useEffect(() => setVisible(60), [orders]);
+
+  const sorted = React.useMemo(() => {
+    const val = (o: FraudOrder): string | number => {
+      if (sortKey === "total") return o.total;
+      if (sortKey === "qty") return o.qty;
+      if (sortKey === "menu") return o.menu.toLowerCase();
+      if (sortKey === "who") return (o.voidBy || "").toLowerCase();
+      const t = o.voidTime || o.orderTime;
+      return `${dayKey(t)} ${/\d{1,2}:\d{2}(:\d{2})?/.exec(t)?.[0] ?? ""}`;
+    };
+    const m = dir === "asc" ? 1 : -1;
+    return [...orders].sort((a, b) => {
+      const x = val(a), y = val(b);
+      return (x < y ? -1 : x > y ? 1 : 0) * m;
+    });
+  }, [orders, sortKey, dir]);
+
+  const toggle = (key: OrderSortKey) => {
+    if (sortKey === key) setDir((d) => (d === "desc" ? "asc" : "desc"));
+    else {
+      setSortKey(key);
+      setDir(key === "menu" || key === "who" ? "asc" : "desc");
+    }
+  };
+  const SortTh = ({ k, children, className }: { k: OrderSortKey; children: React.ReactNode; className?: string }) => (
+    <th className={cn("px-2.5 py-2", className)}>
+      <button type="button" onClick={() => toggle(k)} className="inline-flex items-center gap-1 uppercase tracking-wide hover:text-foreground">
+        {children}
+        {sortKey === k ? (dir === "desc" ? <ArrowDown className="size-3" /> : <ArrowUp className="size-3" />) : <ArrowUpDown className="size-3 opacity-40" />}
+      </button>
+    </th>
+  );
+
+  if (orders.length === 0) return <p className="py-2 text-xs text-muted-foreground">Tidak ada order pada filter ini.</p>;
   return (
-    <div className="overflow-x-auto rounded-xl border border-border">
-      <table className="w-full min-w-[52rem] text-xs">
-        <thead>
-          <tr className="border-b border-border bg-muted/40 text-left text-[10px] uppercase tracking-wide text-muted-foreground">
-            <th className="px-2.5 py-2">No. Bill</th>
-            <th className="px-2.5 py-2">Menu</th>
-            <th className="px-2.5 py-2">Order By</th>
-            <th className="px-2.5 py-2">Oleh</th>
-            <th className="px-2.5 py-2">Waktu</th>
-            <th className="px-2.5 py-2 text-center">Tipe</th>
-            <th className="px-2.5 py-2">Alasan</th>
-            <th className="px-2.5 py-2 text-right">Qty</th>
-            <th className="px-2.5 py-2 text-right">Nominal</th>
-          </tr>
-        </thead>
-        <tbody>
-          {sorted.map((o, i) => (
-            <tr key={`${o.salesNumber}-${i}`} className="border-b border-border/50 last:border-0">
-              <td className="px-2.5 py-1.5 font-mono text-[11px] text-muted-foreground">{o.salesNumber}</td>
-              <td className="px-2.5 py-1.5 text-foreground">{o.menu}</td>
-              <td className="px-2.5 py-1.5">{o.orderBy}</td>
-              <td className="px-2.5 py-1.5 font-medium text-foreground">{o.voidBy}</td>
-              <td className="whitespace-nowrap px-2.5 py-1.5 text-muted-foreground">{o.voidTime || o.orderTime}</td>
-              <td className="px-2.5 py-1.5 text-center">
-                <Badge tone={/void|delete/i.test(o.type) ? "danger" : "warning"}>{o.type || "Delete"}</Badge>
-              </td>
-              <td className="max-w-[16rem] truncate px-2.5 py-1.5 text-muted-foreground" title={o.notes}>{o.notes || "—"}</td>
-              <td className="px-2.5 py-1.5 text-right tabular-nums">{nf(o.qty)}</td>
-              <td className="px-2.5 py-1.5 text-right tabular-nums text-foreground">{formatIDR(o.total)}</td>
+    <div className="overflow-hidden rounded-xl border border-border">
+      <div className="overflow-x-auto">
+        <table className="w-full min-w-[52rem] text-xs">
+          <thead>
+            <tr className="border-b border-border bg-muted/50 text-left text-[10px] text-muted-foreground">
+              <th className="px-2.5 py-2 uppercase tracking-wide">No. Bill</th>
+              <SortTh k="menu">Menu</SortTh>
+              <th className="px-2.5 py-2 uppercase tracking-wide">Order By</th>
+              <SortTh k="who">Oleh</SortTh>
+              <SortTh k="time">Waktu</SortTh>
+              <th className="px-2.5 py-2 text-center uppercase tracking-wide">Tipe</th>
+              <th className="px-2.5 py-2 uppercase tracking-wide">Alasan</th>
+              <SortTh k="qty" className="text-right">Qty</SortTh>
+              <SortTh k="total" className="text-right">Nominal</SortTh>
             </tr>
-          ))}
-        </tbody>
-      </table>
+          </thead>
+          <tbody>
+            {sorted.slice(0, visible).map((o, i) => (
+              <tr key={`${o.salesNumber}-${i}`} className="border-b border-border/50 transition-colors last:border-0 hover:bg-foreground/[0.03]">
+                <td className="px-2.5 py-1.5 font-mono text-[11px] text-muted-foreground">{o.salesNumber}</td>
+                <td className="px-2.5 py-1.5 text-foreground">{o.menu}</td>
+                <td className="px-2.5 py-1.5">{o.orderBy}</td>
+                <td className="px-2.5 py-1.5 font-medium text-foreground">{o.voidBy}</td>
+                <td className="whitespace-nowrap px-2.5 py-1.5 text-muted-foreground">{o.voidTime || o.orderTime}</td>
+                <td className="px-2.5 py-1.5 text-center">
+                  <Badge tone={/void|delete/i.test(o.type) ? "danger" : "warning"}>{o.type || "Delete"}</Badge>
+                </td>
+                <td className="max-w-[16rem] truncate px-2.5 py-1.5 text-muted-foreground" title={o.notes}>{o.notes || "—"}</td>
+                <td className="px-2.5 py-1.5 text-right tabular-nums">{nf(o.qty)}</td>
+                <td className="px-2.5 py-1.5 text-right tabular-nums text-foreground">{formatIDR(o.total)}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      {sorted.length > visible && (
+        <div className="flex justify-center border-t border-border py-2">
+          <Button variant="ghost" size="sm" onClick={() => setVisible((v) => v + 60)}>
+            Muat lebih banyak ({nf(sorted.length - visible)} lagi)
+          </Button>
+        </div>
+      )}
     </div>
   );
 }
