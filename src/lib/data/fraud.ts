@@ -289,11 +289,17 @@ function esbReport(period: FraudPeriod, kind: FraudKind, r: { from: string; to: 
  * Returns how many days remain so the client can keep draining in background.
  */
 export async function syncFraudDays(period: FraudPeriod, date: string, kind: FraudKind, budgetMs = 42_000): Promise<{ synced: number; remaining: number; error?: string }> {
-  if (!fraudStoreEnabled() || !esbConfigured()) return { synced: 0, remaining: 0 };
   const r = periodRange(period, date);
+  return syncFraudRange(r.from, r.to, kind, budgetMs);
+}
+
+/** Same as syncFraudDays but over an arbitrary [from, to] range — the engine
+ *  behind the hourly server-side sync that backfills history unattended. */
+export async function syncFraudRange(from: string, to: string, kind: FraudKind, budgetMs = 42_000): Promise<{ synced: number; remaining: number; error?: string }> {
+  if (!fraudStoreEnabled() || !esbConfigured()) return { synced: 0, remaining: 0 };
   const group = kindGroup(kind);
-  const states = await getSyncStates(group, r.from, r.to);
-  const pending = pendingSyncDays(states, r.from, r.to).sort().reverse(); // newest first
+  const states = await getSyncStates(group, from, to);
+  const pending = pendingSyncDays(states, from, to).sort().reverse(); // newest first
   if (pending.length === 0) return { synced: 0, remaining: 0 };
   const started = Date.now();
   let synced = 0;
