@@ -111,8 +111,9 @@ export async function getSyncStates(kind: FraudKindGroup, from: string, to: stri
 }
 
 /** Replace one day's rows atomically-enough (delete → insert chunks) and record
- *  the sync state. `complete` = every ESB item for that day was read. */
-export async function replaceFraudDay(kind: FraudKindGroup, day: string, rows: CancelDetailRow[], totalItems: number): Promise<void> {
+ *  the sync state. `complete` is the CALLER's judgement (e.g. the whole export
+ *  was read) — rows may legitimately be a filtered subset of the export. */
+export async function replaceFraudDay(kind: FraudKindGroup, day: string, rows: CancelDetailRow[], totalItems: number, complete: boolean): Promise<void> {
   const del = await db().from("fraud_orders").delete().eq("kind", kind).eq("day", day);
   if (del.error) throw new Error(`DB fraud_orders delete: ${del.error.message}`);
   const payload = rows.map((r) => ({
@@ -141,7 +142,7 @@ export async function replaceFraudDay(kind: FraudKindGroup, day: string, rows: C
     day,
     total_items: totalItems,
     rows_read: rows.length,
-    complete: rows.length >= totalItems,
+    complete,
     synced_at: new Date().toISOString(),
   });
   if (up.error) throw new Error(`DB fraud_sync upsert: ${up.error.message}`);

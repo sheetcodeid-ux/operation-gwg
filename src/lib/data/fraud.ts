@@ -117,8 +117,10 @@ function pendingSyncDays(states: Map<string, FraudSyncState>, from: string, to: 
     if (day > today) continue; // future — nothing to sync yet
     const s = states.get(day);
     if (!s) { out.push(day); continue; }
-    if (!s.complete) { out.push(day); continue; }
     const syncedMs = Date.parse(s.syncedAt);
+    // Incomplete days retry, but only after the TTL — a persistently capped
+    // ESB export must not spin the background drain in a tight loop.
+    if (!s.complete) { if (Date.now() - syncedMs > SYNC_TTL_MS) out.push(day); continue; }
     const dayEndMs = Date.parse(`${day}T17:00:00Z`); // = next 00:00 WIB
     if (syncedMs < dayEndMs && Date.now() - syncedMs > SYNC_TTL_MS) out.push(day);
   }
@@ -220,7 +222,12 @@ function esbReport(period: FraudPeriod, kind: FraudKind, r: { from: string; to: 
   // single type is requested. Delete uses its own export when the ESB form
   // offers a delete/remove Type Void option; otherwise the default export was
   // fetched and deleted items are picked out by their type column.
-  const rows = filterKind(res.rows, kind, res.typeVoidFound);
+  // Discard rows dated outside the requested range — ESB doesn't always honour
+  // the export's date filter (whole history observed on Type Void = Deleted).
+  const rows = filterKind(res.rows, kind, res.typeVoidFound).filter((row) => {
+    const k = dayKey(row.voidTime) || dayKey(row.orderTime);
+    return !k || (k >= r.from && k <= r.to);
+  });
   // Diagnose a silent 0: items>0 but nothing parsed ⇒ parser miss; tiny html ⇒
   // empty/blocked response. A genuine empty period stays clean.
   let diag: string | undefined;
@@ -255,13 +262,43 @@ export async function syncFraudDays(period: FraudPeriod, date: string, kind: Fra
   // Three days in flight at once: ESB generates exports in a queue, so the
   // generation waits overlap and a batch finishes ~3× faster than serial.
   const queue = [...pending];
+  const syncOne = async (day: string) => {
+    const res = await esbFetchCancelRows(day, day, group === "delete" ? "delete" : "default");
+    // ESB does NOT always honour the export's date range (observed on Type
+    // Void = Deleted, which returns the whole history for any range). Bucket
+    // rows by their ACTUAL date and store only the requested day's bucket —
+    // stored data is valid no matter what ESB sent back.
+    const buckets = new Map<string, typeof res.rows>();
+    for (const row of res.rows) {
+      const k = dayKey(row.voidTime) || dayKey(row.orderTime) || day;
+      const b = buckets.get(k) ?? [];
+      b.push(row);
+      buckets.set(k, b);
+    }
+    await replaceFraudDay(group, day, buckets.get(day) ?? [], res.totalItems, res.readAll);
+    synced += 1;
+    if (!res.readAll) return;
+    // The FULL export was read, so every date between the oldest and newest
+    // row is fully covered — finalize every still-queued day in that span
+    // from the same response (one fetch can complete a whole month when ESB
+    // ignored the range; a range-respecting export has span == day, no-op).
+    const respDays = [...buckets.keys()].sort();
+    if (respDays.length === 0) return;
+    const [minDay, maxDay] = [respDays[0], respDays[respDays.length - 1]];
+    for (let i = queue.length - 1; i >= 0; i--) {
+      const other = queue[i];
+      if (other >= minDay && other <= maxDay) {
+        queue.splice(i, 1);
+        await replaceFraudDay(group, other, buckets.get(other) ?? [], res.totalItems, true);
+        synced += 1;
+      }
+    }
+  };
   const worker = async () => {
     while (queue.length > 0 && !error && Date.now() - started < budgetMs) {
       const day = queue.shift()!;
       try {
-        const res = await esbFetchCancelRows(day, day, group === "delete" ? "delete" : "default");
-        await replaceFraudDay(group, day, res.rows, res.totalItems);
-        synced += 1;
+        await syncOne(day);
       } catch (e) {
         // Stop the pool on the first failure (a persistent ESB issue would just
         // burn time); the day stays pending and is retried on the next call.
