@@ -29,6 +29,7 @@ export interface StoredFraudRow {
   type: string;
   notes: string;
   qty: number;
+  subtotal: number; // ESB's recap basis — aggregates use subtotal || total
   total: number;
 }
 
@@ -55,6 +56,7 @@ interface OrderRow {
   type: string;
   notes: string;
   qty: number | string;
+  subtotal: number | string;
   total: number | string;
 }
 
@@ -65,7 +67,7 @@ export async function getFraudRows(kind: FraudKindGroup, from: string, to: strin
   for (let offset = 0; ; offset += PAGE) {
     const { data, error } = await db()
       .from("fraud_orders")
-      .select("day,branch,sales_number,menu,menu_category,order_by,order_time,void_by,void_time,type,notes,qty,total")
+      .select("day,branch,sales_number,menu,menu_category,order_by,order_time,void_by,void_time,type,notes,qty,subtotal,total")
       .eq("kind", kind)
       .gte("day", from)
       .lte("day", to)
@@ -86,6 +88,7 @@ export async function getFraudRows(kind: FraudKindGroup, from: string, to: strin
         type: r.type,
         notes: r.notes,
         qty: Number(r.qty) || 0,
+        subtotal: Number(r.subtotal) || 0,
         total: Number(r.total) || 0,
       });
     }
@@ -112,8 +115,9 @@ export async function getSyncStates(kind: FraudKindGroup, from: string, to: stri
 
 /** Replace one day's rows atomically-enough (delete → insert chunks) and record
  *  the sync state. `complete` is the CALLER's judgement (e.g. the whole export
- *  was read) — rows may legitimately be a filtered subset of the export. */
-export async function replaceFraudDay(kind: FraudKindGroup, day: string, rows: CancelDetailRow[], totalItems: number, complete: boolean): Promise<void> {
+ *  was read AND its grand total matched) — rows may legitimately be a filtered
+ *  subset of the export. `expectedSubtotal` = the export's own grand total. */
+export async function replaceFraudDay(kind: FraudKindGroup, day: string, rows: CancelDetailRow[], totalItems: number, complete: boolean, expectedSubtotal = 0): Promise<void> {
   const del = await db().from("fraud_orders").delete().eq("kind", kind).eq("day", day);
   if (del.error) throw new Error(`DB fraud_orders delete: ${del.error.message}`);
   const payload = rows.map((r) => ({
@@ -130,6 +134,7 @@ export async function replaceFraudDay(kind: FraudKindGroup, day: string, rows: C
     type: r.type,
     notes: r.notes,
     qty: r.qty,
+    subtotal: r.subtotal,
     total: r.total,
   }));
   const CHUNK = 500;
@@ -143,6 +148,8 @@ export async function replaceFraudDay(kind: FraudKindGroup, day: string, rows: C
     total_items: totalItems,
     rows_read: rows.length,
     complete,
+    expected_subtotal: expectedSubtotal,
+    synced_subtotal: rows.reduce((a, r) => a + (r.subtotal || r.total), 0),
     synced_at: new Date().toISOString(),
   });
   if (up.error) throw new Error(`DB fraud_sync upsert: ${up.error.message}`);
