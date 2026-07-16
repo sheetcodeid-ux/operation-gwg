@@ -214,11 +214,15 @@ function extractReportData(text: string): string {
     const j = JSON.parse(text) as { data?: unknown };
     if (typeof j.data === "string") return j.data;
   } catch {
-    /* malformed JSON — handled below */
+    /* malformed JSON (literal newlines) — extract without regex backtracking */
   }
-  const m = /"data"\s*:\s*"([\s\S]*?)"\s*\}\s*$/.exec(text.trim());
-  if (!m) return "";
-  return m[1]
+  const km = /"data"\s*:\s*"/.exec(text);
+  if (!km) return "";
+  const from = km.index + km[0].length;
+  const end = text.lastIndexOf('"'); // closing quote of the data value (trailing is just "})
+  if (end <= from) return "";
+  return text
+    .slice(from, end)
     .replace(/\\r/g, "")
     .replace(/\\n/g, "\n")
     .replace(/\\t/g, " ")
