@@ -1,12 +1,14 @@
 "use client";
 
 import * as React from "react";
-import { AlertTriangle, ArrowDownRight, ArrowUpRight, CheckCircle2, ChevronDown, Download, FileSpreadsheet, Loader2, Minus, X } from "lucide-react";
+import { AlertTriangle, ArrowDownRight, ArrowUpRight, CalendarDays, CheckCircle2, ChevronDown, Download, FileSpreadsheet, Loader2, Minus, ReceiptText, Store, Users, Wallet, X } from "lucide-react";
 import { Bar, BarChart, Cell, ResponsiveContainer, Tooltip as ChartTooltip, XAxis } from "recharts";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Combobox } from "@/components/ui/combobox";
+import { SegmentedTabs } from "@/components/ui/segmented-tabs";
+import { StatTile } from "@/components/ui/stat";
 import { cn, formatIDR, formatIDRShort } from "@/lib/utils";
 import { fraudReportAction, fraudSyncAction, outletFraudDailyAction } from "@/lib/actions/fraud";
 import type { FraudDailyPoint, FraudKind, FraudOrder, FraudOutletRow, FraudPeriod, FraudReport } from "@/lib/data/fraud";
@@ -198,21 +200,7 @@ export function FraudAnalysis({ initial, initialDate }: { initial: FraudReport; 
         <div className="flex flex-wrap items-end gap-x-3 gap-y-2.5">
           <div>
             <p className="mb-1 text-[11px] font-medium text-muted-foreground">Periode</p>
-            <div className="inline-flex rounded-xl border border-border bg-muted/50 p-0.5">
-              {PERIODS.map((p) => (
-                <button
-                  key={p.key}
-                  type="button"
-                  onClick={() => onPeriod(p.key)}
-                  className={cn(
-                    "rounded-lg px-3 py-1.5 text-sm font-medium transition-colors",
-                    period === p.key ? "bg-background text-foreground shadow-sm ring-1 ring-border" : "text-muted-foreground hover:text-foreground",
-                  )}
-                >
-                  {p.label}
-                </button>
-              ))}
-            </div>
+            <SegmentedTabs size="sm" className="w-64" items={PERIODS.map((p) => ({ value: p.key, label: p.label }))} value={period} onChange={(v) => onPeriod(v as FraudPeriod)} />
           </div>
           <div>
             <p className="mb-1 text-[11px] font-medium text-muted-foreground">{period === "daily" ? "Tanggal" : period === "weekly" ? "Minggu" : "Bulan"}</p>
@@ -238,21 +226,7 @@ export function FraudAnalysis({ initial, initialDate }: { initial: FraudReport; 
               </span>
             )}
             {pending && <Loader2 className="size-4 animate-spin text-muted-foreground" />}
-            <div className="inline-flex rounded-xl border border-border bg-muted/50 p-0.5" title="Tampilkan nominal (Rp) atau jumlah transaksi">
-              {(["rp", "trx"] as const).map((m) => (
-                <button
-                  key={m}
-                  type="button"
-                  onClick={() => setMode(m)}
-                  className={cn(
-                    "rounded-lg px-2.5 py-1.5 text-xs font-medium transition-colors",
-                    mode === m ? "bg-background text-foreground shadow-sm ring-1 ring-border" : "text-muted-foreground hover:text-foreground",
-                  )}
-                >
-                  {m === "rp" ? "Rp" : "Trx"}
-                </button>
-              ))}
-            </div>
+            <SegmentedTabs size="sm" className="w-24" items={[{ value: "rp", label: "Rp" }, { value: "trx", label: "Trx" }]} value={mode} onChange={(v) => setMode(v as "rp" | "trx")} />
             <Combobox
               matchTriggerWidth
               searchable={false}
@@ -667,22 +641,29 @@ function FraudMatrix({ report, busy, query, mode, onOpenOutlet }: { report: Frau
 
 /* ------------------------------ Detail modal ------------------------------ */
 
-/** Big detail dialog for one outlet: per-day breakdown, top actors, and the
- *  full order list — with a per-outlet PDF export. */
+/** Big detail dialog for one outlet — built from the app's own design system
+ *  (surface-solid panel, StatTile metrics, SegmentedTabs, Sheet-style header). */
 function OutletDetailModal({ report, outlet, day, pdfTheme, onClose }: { report: FraudReport; outlet: FraudOutletRow; day?: string; pdfTheme: PdfTheme; onClose: () => void }) {
   const byOutlet = useByOutlet(report);
+  const [tab, setTab] = React.useState<"ringkasan" | "order">(day ? "order" : "ringkasan");
   const [dayFilter, setDayFilter] = React.useState<string | undefined>(day);
+  const [actorFilter, setActorFilter] = React.useState<string | undefined>(undefined);
   const [q, setQ] = React.useState("");
+  const [visible, setVisible] = React.useState(60);
+
   const allOrders = React.useMemo(() => report.orders?.[outlet.name] ?? [], [report.orders, outlet.name]);
   const orders = React.useMemo(() => {
     let list = allOrders;
     if (dayFilter) list = list.filter((o) => (dayKey(o.voidTime) || dayKey(o.orderTime)) === dayFilter);
+    if (actorFilter) list = list.filter((o) => (o.voidBy || "(tidak tercatat)") === actorFilter);
     const s = q.trim().toLowerCase();
     if (s) list = list.filter((o) => [o.menu, o.voidBy, o.orderBy, o.salesNumber, o.notes].some((f) => f.toLowerCase().includes(s)));
-    return list;
-  }, [allOrders, dayFilter, q]);
-  const filtered = Boolean(dayFilter || q.trim());
+    return [...list].sort((a, b) => b.total - a.total); // largest first — pagination pages by size
+  }, [allOrders, dayFilter, actorFilter, q]);
+  React.useEffect(() => setVisible(60), [dayFilter, actorFilter, q]);
+  const filtered = Boolean(dayFilter || actorFilter || q.trim());
   const filteredSum = React.useMemo(() => orders.reduce((a, o) => a + o.total, 0), [orders]);
+
   const total = outlet.voidAmount + outlet.cancelAmount;
   const txCount = outlet.void + outlet.cancel;
   const capped = txCount > allOrders.length;
@@ -699,6 +680,19 @@ function OutletDetailModal({ report, outlet, day, pdfTheme, onClose }: { report:
   }, [byOutlet, outlet.name, report.from, report.to]);
   const maxDaily = Math.max(1, ...dailyRows.map((x) => x.v));
 
+  const actors = React.useMemo(() => {
+    const byActor = new Map<string, { count: number; total: number }>();
+    for (const o of allOrders) {
+      const who = o.voidBy || "(tidak tercatat)";
+      const a = byActor.get(who) ?? { count: 0, total: 0 };
+      a.count += 1;
+      a.total += o.total;
+      byActor.set(who, a);
+    }
+    return [...byActor.entries()].sort((x, y) => y[1].total - x[1].total);
+  }, [allOrders]);
+  const maxActor = Math.max(1, ...actors.map(([, a]) => a.total));
+
   // Lock page scroll while open; Esc closes.
   React.useEffect(() => {
     const prev = document.body.style.overflow;
@@ -711,120 +705,163 @@ function OutletDetailModal({ report, outlet, day, pdfTheme, onClose }: { report:
     };
   }, [onClose]);
 
+  const openActor = (name: string) => {
+    setActorFilter(actorFilter === name ? undefined : name);
+    setTab("order");
+  };
+
   return (
     <div className="fixed inset-0 z-[140] flex items-end justify-center p-0 sm:items-center sm:p-6" role="dialog" aria-modal="true">
-      <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
-      <div className="glass relative flex max-h-[92vh] w-full flex-col overflow-hidden rounded-t-2xl border border-border bg-background shadow-2xl sm:max-h-[86vh] sm:max-w-5xl sm:rounded-2xl">
-        <div className="flex flex-wrap items-center gap-3 border-b border-border px-4 py-3 sm:px-5">
-          <div className="min-w-0 flex-1">
-            <p className="truncate text-base font-semibold text-foreground">{outlet.name}</p>
-            <p className="text-xs text-muted-foreground">{KIND_LABEL[report.kind]} · {report.label}</p>
+      <div className="animate-overlay-in absolute inset-0 bg-black/65 backdrop-blur-sm" onClick={onClose} />
+      <div className="animate-pop-in surface-solid relative flex max-h-[94vh] w-full flex-col overflow-hidden rounded-t-2xl sm:max-h-[88vh] sm:max-w-5xl sm:rounded-2xl">
+        {/* Sheet-style header */}
+        <div className="flex items-start justify-between gap-3 border-b border-border p-4 sm:p-5">
+          <div className="flex min-w-0 items-center gap-3">
+            <div className="grid size-10 shrink-0 place-items-center rounded-xl bg-muted ring-1 ring-border">
+              <Store className="size-5 text-foreground/70" />
+            </div>
+            <div className="min-w-0">
+              <h2 className="text-base font-semibold leading-snug text-foreground">{outlet.name}</h2>
+              <p className="mt-0.5 text-xs text-muted-foreground">{KIND_LABEL[report.kind]} · {report.label}</p>
+            </div>
           </div>
-          <div className="text-right">
-            <p className="text-lg font-bold tabular-nums text-foreground">{formatIDR(total)}</p>
-            <p className="text-[11px] text-muted-foreground">{nf(txCount)} transaksi</p>
-          </div>
-          <div className="flex items-center gap-2">
+          <div className="flex shrink-0 items-center gap-2">
             <Button variant="outline" size="sm" onClick={() => downloadPdf(report, pdfTheme, outlet)}>
-              <Download className="size-4" /> PDF Outlet
+              <Download className="size-4" /> <span className="hidden sm:inline">PDF Outlet</span><span className="sm:hidden">PDF</span>
             </Button>
-            <Button variant="ghost" size="sm" onClick={onClose} aria-label="Tutup">
+            <button
+              onClick={onClose}
+              aria-label="Tutup"
+              className="grid size-8 shrink-0 place-items-center rounded-lg text-muted-foreground hover:bg-muted/50 hover:text-foreground"
+            >
               <X className="size-4" />
-            </Button>
+            </button>
           </div>
         </div>
 
-        <div className="min-h-0 flex-1 space-y-5 overflow-y-auto px-4 py-4 sm:px-5">
-          {/* Per-day breakdown — click a day to filter the order list below */}
-          {dailyRows.length > 1 && (
-            <section>
-              <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Per hari <span className="normal-case text-muted-foreground/60">(klik untuk filter)</span></p>
-              <div className="space-y-1">
-                {dailyRows.map((x) => (
+        <div className="min-h-0 flex-1 overflow-y-auto">
+          {/* KPI tiles — the app's dashboard StatTile */}
+          <div className="grid grid-cols-2 gap-2.5 p-4 sm:p-5 sm:pb-3 lg:grid-cols-4">
+            <StatTile icon={Wallet} label="Total Nominal" value={formatIDRShort(total)} sub={formatIDR(total)} />
+            <StatTile icon={ReceiptText} label="Transaksi" value={nf(txCount)} sub={`${nf(dailyRows.length)} hari aktif`} />
+            <StatTile icon={Users} label="Pelaku Terlibat" value={nf(actors.length)} sub={actors[0] ? `Teratas: ${actors[0][0]}` : undefined} />
+            <StatTile icon={CalendarDays} label="Rata-rata / Hari" value={formatIDRShort(total / Math.max(1, dailyRows.length))} sub="pada hari aktif" />
+          </div>
+
+          <div className="px-4 sm:px-5">
+            <SegmentedTabs
+              size="sm"
+              className="w-full sm:w-80"
+              items={[{ value: "ringkasan", label: "Ringkasan" }, { value: "order", label: `Order (${nf(filtered ? orders.length : allOrders.length)})` }]}
+              value={tab}
+              onChange={(v) => setTab(v as "ringkasan" | "order")}
+            />
+          </div>
+
+          {tab === "ringkasan" ? (
+            <div className="grid gap-3 p-4 sm:p-5 lg:grid-cols-2">
+              {/* Per-day panel */}
+              <div className="rounded-2xl border border-border bg-card/50">
+                <div className="border-b border-border px-4 py-2.5">
+                  <p className="text-sm font-semibold text-foreground">Per Hari</p>
+                  <p className="text-[11px] text-muted-foreground">Klik tanggal untuk melihat order hari itu.</p>
+                </div>
+                <div className="max-h-72 space-y-0.5 overflow-y-auto p-2.5">
+                  {dailyRows.map((x) => (
+                    <button
+                      type="button"
+                      key={x.iso}
+                      onClick={() => { setDayFilter(x.iso); setTab("order"); }}
+                      className="flex w-full items-center gap-2.5 rounded-lg px-1.5 py-1 text-left text-xs transition-colors hover:bg-foreground/[0.05]"
+                    >
+                      <span className="w-16 shrink-0 tabular-nums text-muted-foreground">{x.label} <span className="text-muted-foreground/50">{x.wd}</span></span>
+                      <span className="block h-2 flex-1 overflow-hidden rounded-full bg-muted">
+                        <span className="block h-full rounded-full bg-red-500/70" style={{ width: `${(x.v / maxDaily) * 100}%` }} />
+                      </span>
+                      <span className="w-24 shrink-0 text-right tabular-nums text-foreground">{formatIDR(x.v)}</span>
+                    </button>
+                  ))}
+                  {dailyRows.length === 0 && <p className="px-1.5 py-3 text-xs text-muted-foreground">Tidak ada transaksi.</p>}
+                </div>
+              </div>
+              {/* Actors panel */}
+              <div className="rounded-2xl border border-border bg-card/50">
+                <div className="border-b border-border px-4 py-2.5">
+                  <p className="text-sm font-semibold text-foreground">Pelaku (Oleh)</p>
+                  <p className="text-[11px] text-muted-foreground">Klik nama untuk mengaudit order orang itu.</p>
+                </div>
+                <div className="max-h-72 space-y-0.5 overflow-y-auto p-2.5">
+                  {actors.map(([who, a], i) => (
+                    <button
+                      type="button"
+                      key={who}
+                      onClick={() => openActor(who)}
+                      className="flex w-full items-center gap-2.5 rounded-lg px-1.5 py-1 text-left text-xs transition-colors hover:bg-foreground/[0.05]"
+                    >
+                      <span className={cn(
+                        "grid size-5 shrink-0 place-items-center rounded-md text-[10px] font-bold tabular-nums",
+                        i === 0 ? "bg-red-500/15 text-red-600 dark:text-red-400" : "bg-muted text-muted-foreground",
+                      )}>{i + 1}</span>
+                      <span className="w-32 shrink-0 truncate font-medium text-foreground" title={who}>{who}</span>
+                      <span className="block h-1.5 flex-1 overflow-hidden rounded-full bg-muted">
+                        <span className="block h-full rounded-full bg-red-500/70" style={{ width: `${(a.total / maxActor) * 100}%` }} />
+                      </span>
+                      <span className="shrink-0 whitespace-nowrap tabular-nums text-muted-foreground">{nf(a.count)} · <span className="text-foreground">{formatIDRShort(a.total)}</span></span>
+                    </button>
+                  ))}
+                  {actors.length === 0 && <p className="px-1.5 py-3 text-xs text-muted-foreground">Tidak ada data pelaku.</p>}
+                </div>
+              </div>
+            </div>
+          ) : (
+            <div className="space-y-2.5 p-4 sm:p-5">
+              <div className="flex flex-wrap items-center gap-2">
+                {dayFilter && (
                   <button
                     type="button"
-                    key={x.iso}
-                    onClick={() => setDayFilter(dayFilter === x.iso ? undefined : x.iso)}
-                    className={cn(
-                      "flex w-full items-center gap-2.5 rounded-md px-1 py-0.5 text-left text-xs transition-colors hover:bg-foreground/[0.04]",
-                      dayFilter === x.iso && "bg-red-500/10 ring-1 ring-inset ring-red-500/40",
-                    )}
+                    onClick={() => setDayFilter(undefined)}
+                    className="inline-flex items-center gap-1 rounded-full bg-red-500/10 px-2.5 py-1 text-[11px] font-medium text-red-600 transition-colors hover:bg-red-500/20 dark:text-red-400"
                   >
-                    <span className="w-16 shrink-0 tabular-nums text-muted-foreground">{x.label} <span className="text-muted-foreground/50">{x.wd}</span></span>
-                    <span className="block h-2 flex-1 overflow-hidden rounded-full bg-muted">
-                      <span className="block h-full rounded-full bg-red-500/70" style={{ width: `${(x.v / maxDaily) * 100}%` }} />
-                    </span>
-                    <span className="w-24 shrink-0 text-right tabular-nums text-foreground">{formatIDR(x.v)}</span>
+                    <CalendarDays className="size-3" /> {dayLabel(dayFilter)} <X className="size-3" />
                   </button>
-                ))}
+                )}
+                {actorFilter && (
+                  <button
+                    type="button"
+                    onClick={() => setActorFilter(undefined)}
+                    className="inline-flex items-center gap-1 rounded-full bg-red-500/10 px-2.5 py-1 text-[11px] font-medium text-red-600 transition-colors hover:bg-red-500/20 dark:text-red-400"
+                  >
+                    <Users className="size-3" /> {actorFilter} <X className="size-3" />
+                  </button>
+                )}
+                {filtered && (
+                  <span className="text-[11px] tabular-nums text-muted-foreground">
+                    Σ <span className="font-semibold text-foreground">{formatIDR(filteredSum)}</span> · {nf(orders.length)} order
+                  </span>
+                )}
+                {!filtered && capped && (
+                  <span className="text-[11px] text-muted-foreground">Menampilkan {nf(allOrders.length)} order terbesar dari {nf(txCount)} transaksi.</span>
+                )}
+                <input
+                  value={q}
+                  onChange={(e) => setQ(e.target.value)}
+                  placeholder="Cari menu / pelaku / no. bill / alasan…"
+                  className="ml-auto h-9 w-full rounded-xl border border-border bg-background px-3 text-xs outline-none placeholder:text-muted-foreground/60 focus:ring-2 focus:ring-ring sm:w-72"
+                />
               </div>
-            </section>
-          )}
-
-          <TopActors orders={orders} />
-
-          <section>
-            <div className="mb-2 flex flex-wrap items-center gap-2">
-              <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                Detail order ({capped && !filtered ? `${nf(allOrders.length)} terbesar dari ${nf(txCount)}` : nf(orders.length)})
-              </p>
-              {dayFilter && (
-                <button
-                  type="button"
-                  onClick={() => setDayFilter(undefined)}
-                  className="inline-flex items-center gap-1 rounded-full bg-red-500/10 px-2 py-0.5 text-[11px] font-medium text-red-600 hover:bg-red-500/20 dark:text-red-400"
-                >
-                  {dayLabel(dayFilter)} <X className="size-3" />
-                </button>
+              <OrdersTable orders={orders.slice(0, visible)} />
+              {orders.length > visible && (
+                <div className="flex justify-center pt-1">
+                  <Button variant="outline" size="sm" onClick={() => setVisible((v) => v + 60)}>
+                    Muat lebih banyak ({nf(orders.length - visible)} lagi)
+                  </Button>
+                </div>
               )}
-              {filtered && (
-                <span className="text-[11px] tabular-nums text-muted-foreground">Σ terfilter: <span className="font-semibold text-foreground">{formatIDR(filteredSum)}</span></span>
-              )}
-              <input
-                value={q}
-                onChange={(e) => setQ(e.target.value)}
-                placeholder="Cari menu / pelaku / no. bill…"
-                className="ml-auto h-8 w-full rounded-lg border border-border bg-background px-2.5 text-xs outline-none placeholder:text-muted-foreground/60 focus:ring-2 focus:ring-ring sm:w-60"
-              />
             </div>
-            <OrdersTable orders={orders} />
-          </section>
+          )}
         </div>
       </div>
     </div>
-  );
-}
-
-/** Top 5 actors (the "Oleh" column) by nominal — the who-did-it summary. */
-function TopActors({ orders }: { orders: FraudOrder[] }) {
-  const actors = React.useMemo(() => {
-    const byActor = new Map<string, { count: number; total: number }>();
-    for (const o of orders) {
-      const who = o.voidBy || "(tidak tercatat)";
-      const a = byActor.get(who) ?? { count: 0, total: 0 };
-      a.count += 1;
-      a.total += o.total;
-      byActor.set(who, a);
-    }
-    return [...byActor.entries()].sort((x, y) => y[1].total - x[1].total).slice(0, 5);
-  }, [orders]);
-  if (actors.length === 0) return null;
-  const maxActor = Math.max(1, ...actors.map(([, a]) => a.total));
-  return (
-    <section>
-      <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Pelaku teratas (Oleh)</p>
-      <div className="space-y-1">
-        {actors.map(([who, a]) => (
-          <div key={who} className="flex items-center gap-2.5 text-xs">
-            <span className="w-36 shrink-0 truncate font-medium text-foreground" title={who}>{who}</span>
-            <span className="block h-1.5 w-28 shrink-0 overflow-hidden rounded-full bg-muted sm:w-48">
-              <span className="block h-full rounded-full bg-red-500/70" style={{ width: `${(a.total / maxActor) * 100}%` }} />
-            </span>
-            <span className="whitespace-nowrap tabular-nums text-muted-foreground">{nf(a.count)} trx · <span className="text-foreground">{formatIDR(a.total)}</span></span>
-          </div>
-        ))}
-      </div>
-    </section>
   );
 }
 
