@@ -7,7 +7,9 @@ import { NextResponse, type NextRequest } from "next/server";
  * Demo mode keys off the `gwg_uid` cookie; Supabase mode keys off the
  * `sb-*-auth-token` cookies set by @supabase/ssr.
  */
-const PUBLIC_PATHS = ["/login"];
+// /api/cron/* authenticates itself (CRON_SECRET / DB token) — the scheduler
+// has no browser session, so the auth gate must not redirect it to /login.
+const PUBLIC_PATHS = ["/login", "/api/cron/"];
 
 function hasSession(req: NextRequest): boolean {
   if (req.cookies.get("gwg_uid")) return true;
@@ -31,7 +33,7 @@ export function proxy(req: NextRequest) {
   }
 
   // Authenticated users hitting login -> dashboard
-  if (authed && isPublic) {
+  if (authed && pathname.startsWith("/login")) {
     const url = req.nextUrl.clone();
     url.pathname = "/dashboard";
     url.search = "";
