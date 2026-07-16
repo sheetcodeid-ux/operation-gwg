@@ -65,6 +65,11 @@ export interface FraudReport {
   /** ESB only: outlet name → YYYY-MM-DD → nominal, computed server-side from
    *  ALL rows (authoritative for the matrix even when `orders` is capped). */
   daily?: Record<string, Record<string, number>>;
+  /** ESB only: outlet name → YYYY-MM-DD → transaction count (full row set). */
+  dailyCount?: Record<string, Record<string, number>>;
+  /** ESB only: top actors ("Oleh") across ALL outlets, from the FULL row set
+   *  (exact — not derived from the capped drill-down lists). */
+  actors?: { name: string; count: number; total: number }[];
   /** Data loaded but incomplete/soft issue — shown as an amber notice. */
   warning?: string;
   /** DB-cache mode: days in range not yet synced from ESB. Non-empty tells the
@@ -187,6 +192,8 @@ function aggregate(period: FraudPeriod, kind: FraudKind, r: { from: string; to: 
   const agg = new Map<string, { void: number; cancel: number; voidAmount: number; cancelAmount: number }>();
   const orders: Record<string, FraudOrder[]> = {};
   const daily: Record<string, Record<string, number>> = {};
+  const dailyCount: Record<string, Record<string, number>> = {};
+  const byActor = new Map<string, { count: number; total: number }>();
   let tv = 0, tc = 0, tva = 0, tca = 0;
   for (const row of rows) {
     const amount = amountOf(row);
@@ -201,13 +208,24 @@ function aggregate(period: FraudPeriod, kind: FraudKind, r: { from: string; to: 
     if (day) {
       const d = (daily[row.branch] ??= {});
       d[day] = (d[day] ?? 0) + amount;
+      const c = (dailyCount[row.branch] ??= {});
+      c[day] = (c[day] ?? 0) + 1;
     }
+    const who = row.voidBy || "(tidak tercatat)";
+    const act = byActor.get(who) ?? { count: 0, total: 0 };
+    act.count += 1;
+    act.total += amount;
+    byActor.set(who, act);
     (orders[row.branch] ??= []).push({
       salesNumber: row.salesNumber, menu: row.menu, category: row.menuCategory,
       orderBy: row.orderBy, orderTime: row.orderTime, voidBy: row.voidBy, voidTime: row.voidTime,
       type: row.type, notes: row.notes, qty: row.qty, total: amount,
     });
   }
+  const actors = [...byActor.entries()]
+    .map(([name, a]) => ({ name, count: a.count, total: a.total }))
+    .sort((x, y) => y.total - x.total)
+    .slice(0, 10);
   // Keep the client payload bounded: drill-down lists ship the largest orders;
   // matrix/totals above are already computed from the full row set.
   for (const name of Object.keys(orders)) {
@@ -221,7 +239,7 @@ function aggregate(period: FraudPeriod, kind: FraudKind, r: { from: string; to: 
   return {
     configured: true, period, kind, from: r.from, to: r.to, label: r.label, source: "esb",
     totalVoid: tv, totalCancel: tc, totalVoidAmount: tva, totalCancelAmount: tca,
-    hasAmount: true, outlets, perOutletReliable: true, orders, daily,
+    hasAmount: true, outlets, perOutletReliable: true, orders, daily, dailyCount, actors,
   };
 }
 

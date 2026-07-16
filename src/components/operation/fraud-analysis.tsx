@@ -1,7 +1,8 @@
 "use client";
 
 import * as React from "react";
-import { AlertTriangle, CheckCircle2, ChevronDown, Download, FileSpreadsheet, Loader2, X } from "lucide-react";
+import { AlertTriangle, ArrowDownRight, ArrowUpRight, CheckCircle2, ChevronDown, Download, FileSpreadsheet, Loader2, Minus, X } from "lucide-react";
+import { Bar, BarChart, Cell, ResponsiveContainer, Tooltip as ChartTooltip, XAxis } from "recharts";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -33,9 +34,40 @@ export function FraudAnalysis({ initial, initialDate }: { initial: FraudReport; 
   const [kind, setKind] = React.useState<FraudKind>(initial.kind ?? "all");
   const [report, setReport] = React.useState<FraudReport>(initial);
   const [query, setQuery] = React.useState("");
+  const [mode, setMode] = React.useState<"rp" | "trx">("rp");
   const [pdfTheme, setPdfTheme] = React.useState<PdfTheme>("light");
-  const [detail, setDetail] = React.useState<FraudOutletRow | null>(null);
+  const [detail, setDetail] = React.useState<{ outlet: FraudOutletRow; day?: string } | null>(null);
+  const [prevTotal, setPrevTotal] = React.useState<number | null>(null);
   const [pending, start] = React.useTransition();
+
+  // Remember the PDF theme across visits.
+  React.useEffect(() => {
+    const t = window.localStorage.getItem("fraud.pdfTheme");
+    if (t === "dark" || t === "light") setPdfTheme(t);
+  }, []);
+  const choosePdfTheme = (t: PdfTheme) => {
+    setPdfTheme(t);
+    try { window.localStorage.setItem("fraud.pdfTheme", t); } catch { /* private mode */ }
+  };
+
+  // Previous-period total for the delta chip (DB read only — never triggers a
+  // sync). Skipped when the previous period isn't fully synced yet.
+  React.useEffect(() => {
+    let live = true;
+    setPrevTotal(null);
+    const dt = new Date(`${date}T00:00:00`);
+    if (period === "daily") dt.setDate(dt.getDate() - 1);
+    else if (period === "weekly") dt.setDate(dt.getDate() - 7);
+    else { dt.setMonth(dt.getMonth() - 1); dt.setDate(1); }
+    const prevDate = ymd(dt.getFullYear(), dt.getMonth(), dt.getDate());
+    fraudReportAction(period, prevDate, kind).then((res) => {
+      if (!live) return;
+      if ("configured" in res && res.configured && res.source === "esb" && !res.pendingDays?.length) {
+        setPrevTotal(res.totalVoidAmount + res.totalCancelAmount);
+      }
+    });
+    return () => { live = false; };
+  }, [period, date, kind]);
   // Background ESB→DB sync: days left to pull for the current selection. The
   // seq guard cancels a running drain the moment the user changes selection.
   const [syncLeft, setSyncLeft] = React.useState(0);
@@ -206,11 +238,26 @@ export function FraudAnalysis({ initial, initialDate }: { initial: FraudReport; 
               </span>
             )}
             {pending && <Loader2 className="size-4 animate-spin text-muted-foreground" />}
+            <div className="inline-flex rounded-xl border border-border bg-muted/50 p-0.5" title="Tampilkan nominal (Rp) atau jumlah transaksi">
+              {(["rp", "trx"] as const).map((m) => (
+                <button
+                  key={m}
+                  type="button"
+                  onClick={() => setMode(m)}
+                  className={cn(
+                    "rounded-lg px-2.5 py-1.5 text-xs font-medium transition-colors",
+                    mode === m ? "bg-background text-foreground shadow-sm ring-1 ring-border" : "text-muted-foreground hover:text-foreground",
+                  )}
+                >
+                  {m === "rp" ? "Rp" : "Trx"}
+                </button>
+              ))}
+            </div>
             <Combobox
               matchTriggerWidth
               searchable={false}
               value={pdfTheme}
-              onChange={(v) => setPdfTheme(v as PdfTheme)}
+              onChange={(v) => choosePdfTheme(v as PdfTheme)}
               options={[{ value: "light", label: "PDF Terang" }, { value: "dark", label: "PDF Gelap" }]}
               className="w-32"
             />
@@ -258,7 +305,10 @@ export function FraudAnalysis({ initial, initialDate }: { initial: FraudReport; 
               </p>
             </div>
           ) : report.source === "esb" ? (
-            <FraudMatrix report={report} busy={pending} query={query} onOpenOutlet={setDetail} />
+            <>
+              <InsightStrip report={report} prevTotal={prevTotal} />
+              <FraudMatrix report={report} busy={pending} query={query} mode={mode} onOpenOutlet={(outlet, day) => setDetail({ outlet, day })} />
+            </>
           ) : report.perOutletReliable ? (
             <OutletTable report={report} hasAmount={hasAmount} />
           ) : (
@@ -282,7 +332,7 @@ export function FraudAnalysis({ initial, initialDate }: { initial: FraudReport; 
       )}
 
       {detail && report.source === "esb" && (
-        <OutletDetailModal report={report} outlet={detail} pdfTheme={pdfTheme} onClose={() => setDetail(null)} />
+        <OutletDetailModal report={report} outlet={detail.outlet} day={detail.day} pdfTheme={pdfTheme} onClose={() => setDetail(null)} />
       )}
     </div>
   );
@@ -330,6 +380,112 @@ function useByOutlet(report: FraudReport) {
   }, [report]);
 }
 
+/* ------------------------------ Insight strip ------------------------------ */
+
+/** Trend of the period (per-day totals), delta vs the previous period, and
+ *  auto-generated takeaways: top outlet, worst day, top actors (server-exact). */
+function InsightStrip({ report, prevTotal }: { report: FraudReport; prevTotal: number | null }) {
+  const days = React.useMemo(() => eachDay(report.from, report.to), [report.from, report.to]);
+  const chart = React.useMemo(() => {
+    const t = new Map<string, number>();
+    for (const m of Object.values(report.daily ?? {})) for (const [k, v] of Object.entries(m)) t.set(k, (t.get(k) ?? 0) + v);
+    return days.map((d) => ({ key: dayIso(d), label: String(d.getDate()).padStart(2, "0"), wd: WD[d.getDay()], v: t.get(dayIso(d)) ?? 0 }));
+  }, [report.daily, days]);
+  const grand = report.totalVoidAmount + report.totalCancelAmount;
+  const worst = chart.reduce((a, b) => (b.v > a.v ? b : a), chart[0] ?? { key: "", label: "", wd: "", v: 0 });
+  const maxV = Math.max(1, ...chart.map((c) => c.v));
+  const top = report.outlets[0];
+  const actors = report.actors ?? [];
+
+  const delta = prevTotal !== null && prevTotal > 0 ? ((grand - prevTotal) / prevTotal) * 100 : null;
+  const deltaUp = delta !== null && delta > 1;
+  const deltaDown = delta !== null && delta < -1;
+
+  return (
+    <div className="glass grid gap-4 rounded-2xl border border-border p-4 lg:grid-cols-[1fr_minmax(16rem,22rem)]">
+      <div className="min-w-0">
+        <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+          <p className="text-sm font-semibold text-foreground">Tren Harian — {KIND_LABEL[report.kind]}</p>
+          {delta !== null && (
+            <span
+              className={cn(
+                "inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-semibold",
+                deltaUp && "bg-red-500/10 text-red-600 dark:text-red-400",
+                deltaDown && "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400",
+                !deltaUp && !deltaDown && "bg-muted text-muted-foreground",
+              )}
+              title={`Periode sebelumnya: ${formatIDR(prevTotal!)}`}
+            >
+              {deltaUp ? <ArrowUpRight className="size-3.5" /> : deltaDown ? <ArrowDownRight className="size-3.5" /> : <Minus className="size-3.5" />}
+              {`${Math.abs(delta).toFixed(1).replace(".", ",")}% vs periode sebelumnya`}
+            </span>
+          )}
+        </div>
+        {chart.length > 1 ? (
+          <div className="h-28 w-full">
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={chart} margin={{ top: 4, right: 4, bottom: 0, left: 4 }} barCategoryGap="22%">
+                <XAxis dataKey="label" tickLine={false} axisLine={false} interval="preserveStartEnd" tick={{ fontSize: 10, fill: "var(--muted-foreground, #888)" }} />
+                <ChartTooltip
+                  cursor={{ fill: "rgba(127,127,127,0.08)" }}
+                  content={({ active, payload }) => {
+                    if (!active || !payload?.length) return null;
+                    const p = payload[0].payload as (typeof chart)[number];
+                    return (
+                      <div className="rounded-lg border border-border bg-background px-2.5 py-1.5 text-xs shadow-md">
+                        <p className="font-medium text-foreground">{p.label} · {p.wd}</p>
+                        <p className="tabular-nums text-red-600 dark:text-red-400">{formatIDR(p.v)}</p>
+                      </div>
+                    );
+                  }}
+                />
+                <Bar dataKey="v" radius={[4, 4, 0, 0]} isAnimationActive={false}>
+                  {chart.map((c) => (
+                    <Cell key={c.key} fill="#ef4444" fillOpacity={c.v === 0 ? 0.12 : 0.35 + 0.65 * (c.v / maxV)} />
+                  ))}
+                </Bar>
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+        ) : (
+          <p className="py-6 text-sm text-muted-foreground">Periode satu hari — pilih mingguan/bulanan untuk melihat tren.</p>
+        )}
+      </div>
+      <div className="space-y-2 border-t border-border pt-3 lg:border-l lg:border-t-0 lg:pl-4 lg:pt-0">
+        <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Sorotan</p>
+        {top && (
+          <p className="text-sm">
+            <span className="text-muted-foreground">Outlet tertinggi:</span>{" "}
+            <span className="font-semibold text-foreground">{top.name}</span>{" "}
+            <span className="tabular-nums text-red-600 dark:text-red-400">{formatIDRShort(top.voidAmount + top.cancelAmount)}</span>
+            {grand > 0 && <span className="text-muted-foreground"> ({(((top.voidAmount + top.cancelAmount) / grand) * 100).toFixed(0)}%)</span>}
+          </p>
+        )}
+        {worst && worst.v > 0 && chart.length > 1 && (
+          <p className="text-sm">
+            <span className="text-muted-foreground">Hari tertinggi:</span>{" "}
+            <span className="font-semibold text-foreground">{worst.label} ({worst.wd})</span>{" "}
+            <span className="tabular-nums text-red-600 dark:text-red-400">{formatIDRShort(worst.v)}</span>
+          </p>
+        )}
+        {actors.length > 0 && (
+          <div className="text-sm">
+            <span className="text-muted-foreground">Pelaku teratas:</span>
+            <div className="mt-1 space-y-0.5">
+              {actors.slice(0, 3).map((a) => (
+                <p key={a.name} className="flex items-baseline justify-between gap-2">
+                  <span className="truncate font-medium text-foreground">{a.name}</span>
+                  <span className="shrink-0 tabular-nums text-xs text-muted-foreground">{nf(a.count)} trx · <span className="text-red-600 dark:text-red-400">{formatIDRShort(a.total)}</span></span>
+                </p>
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 /** Heat steps: ONE hue (red), light→dark by magnitude relative to the largest
  *  cell. Text stays on ink/red tokens; exact Rp rides on the title tooltip. */
 function heatClass(v: number, max: number): string {
@@ -344,14 +500,29 @@ function heatClass(v: number, max: number): string {
 
 /** Matrix: outlets (rows) × days (columns), heat by nominal. Header, footer and
  *  the outlet column stay frozen while the body scrolls in both directions. */
-function FraudMatrix({ report, busy, query, onOpenOutlet }: { report: FraudReport; busy?: boolean; query: string; onOpenOutlet: (o: FraudOutletRow) => void }) {
+function FraudMatrix({ report, busy, query, mode, onOpenOutlet }: { report: FraudReport; busy?: boolean; query: string; mode: "rp" | "trx"; onOpenOutlet: (o: FraudOutletRow, day?: string) => void }) {
   const days = React.useMemo(() => eachDay(report.from, report.to), [report.from, report.to]);
-  const byOutlet = useByOutlet(report);
+  const byAmount = useByOutlet(report);
+  const byCount = React.useMemo(
+    () => new Map(Object.entries(report.dailyCount ?? {}).map(([name, m]) => [name, new Map(Object.entries(m))])),
+    [report.dailyCount],
+  );
+  const trx = mode === "trx" && byCount.size > 0;
+  const byOutlet = trx ? byCount : byAmount;
+  const fmtCell = (v: number) => (trx ? nf(v) : formatIDRShort(v));
+  const fmtFull = (v: number) => (trx ? `${nf(v)} transaksi` : formatIDR(v));
+  const rowTotal = (o: FraudOutletRow) => (trx ? o.void + o.cancel : o.voidAmount + o.cancelAmount);
 
+  // Sort: by grand total (default), by name, or by a specific day's value.
+  const [sortKey, setSortKey] = React.useState<"total" | "name" | string>("total");
   const outlets = React.useMemo(() => {
     const q = query.trim().toLowerCase();
-    return q ? report.outlets.filter((o) => o.name.toLowerCase().includes(q)) : report.outlets;
-  }, [report.outlets, query]);
+    const base = q ? report.outlets.filter((o) => o.name.toLowerCase().includes(q)) : [...report.outlets];
+    if (sortKey === "name") return base.sort((a, b) => a.name.localeCompare(b.name, "id"));
+    if (sortKey !== "total") return base.sort((a, b) => (byOutlet.get(b.name)?.get(sortKey) ?? 0) - (byOutlet.get(a.name)?.get(sortKey) ?? 0));
+    return base.sort((a, b) => rowTotal(b) - rowTotal(a));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [report.outlets, query, sortKey, byOutlet, trx]);
 
   // Per-day column totals + the largest cell (heat scale reference) + anomaly
   // threshold (mean + 2σ of non-zero cells → ring highlight).
@@ -369,9 +540,10 @@ function FraudMatrix({ report, busy, query, onOpenOutlet }: { report: FraudRepor
     return { maxCell: max, anomaly: vals.length >= 8 ? mean + 2 * sd : Infinity };
   }, [byOutlet]);
 
-  const grand = report.totalVoidAmount + report.totalCancelAmount;
+  const grand = trx ? report.totalVoid + report.totalCancel : report.totalVoidAmount + report.totalCancelAmount;
   const txCount = report.totalVoid + report.totalCancel;
-  const maxRow = Math.max(1, ...report.outlets.map((o) => o.voidAmount + o.cancelAmount));
+  const maxRow = Math.max(1, ...report.outlets.map(rowTotal));
+  const sortMark = (key: string) => (sortKey === key ? " ▾" : "");
 
   return (
     <div className={cn("glass -mx-4 overflow-hidden border-y border-border transition-opacity sm:mx-0 sm:rounded-2xl sm:border", busy && "opacity-60")}>
@@ -390,20 +562,43 @@ function FraudMatrix({ report, busy, query, onOpenOutlet }: { report: FraudRepor
           </div>
         </div>
         <div className="text-right">
-          <p className="text-lg font-bold tabular-nums text-foreground">{formatIDR(grand)}</p>
-          <p className="text-[11px] text-muted-foreground">{nf(txCount)} transaksi · {nf(report.outlets.length)} outlet</p>
+          <p className="text-lg font-bold tabular-nums text-foreground">{trx ? `${nf(grand)} transaksi` : formatIDR(grand)}</p>
+          <p className="text-[11px] text-muted-foreground">
+            {trx ? formatIDR(report.totalVoidAmount + report.totalCancelAmount) : `${nf(txCount)} transaksi`} · {nf(report.outlets.length)} outlet
+          </p>
         </div>
       </div>
-      {/* Frozen header + frozen outlet column + frozen footer; body scrolls */}
+      {/* Frozen header + frozen outlet column + frozen footer; body scrolls.
+          Header cells are clickable to sort (name / total / one day). */}
       <div className="max-h-[72vh] overflow-auto overscroll-contain">
         <table className="w-full border-collapse text-xs">
           <thead>
             <tr className="text-muted-foreground">
-              <th className="sticky left-0 top-0 z-30 border-b border-border bg-background px-3 py-2 text-left font-medium">Outlet</th>
-              <th className="sticky top-0 z-20 border-b border-border bg-background px-2.5 py-2 text-right font-medium">Total</th>
+              <th
+                className="sticky left-0 top-0 z-30 cursor-pointer select-none border-b border-border bg-background px-3 py-2 text-left font-medium hover:text-foreground"
+                title="Urutkan berdasarkan nama"
+                onClick={() => setSortKey(sortKey === "name" ? "total" : "name")}
+              >
+                Outlet{sortMark("name")}
+              </th>
+              <th
+                className="sticky top-0 z-20 cursor-pointer select-none border-b border-border bg-background px-2.5 py-2 text-right font-medium hover:text-foreground"
+                title="Urutkan berdasarkan total"
+                onClick={() => setSortKey("total")}
+              >
+                Total{sortMark("total")}
+              </th>
               {days.map((d) => (
-                <th key={dayIso(d)} className="sticky top-0 z-20 border-b border-border bg-background px-2 py-1.5 text-center font-medium tabular-nums">
-                  <div>{String(d.getDate()).padStart(2, "0")}</div>
+                <th
+                  key={dayIso(d)}
+                  className={cn(
+                    "sticky top-0 z-20 cursor-pointer select-none border-b border-border bg-background px-2 py-1.5 text-center font-medium tabular-nums hover:text-foreground",
+                    sortKey === dayIso(d) && "text-foreground",
+                  )}
+                  title="Urutkan outlet berdasarkan hari ini"
+                  onClick={() => setSortKey(sortKey === dayIso(d) ? "total" : dayIso(d))}
+                >
+                  <div>{String(d.getDate()).padStart(2, "0")}{sortMark(dayIso(d))}</div>
                   <div className="text-[9px] text-muted-foreground/70">{WD[d.getDay()]}</div>
                 </th>
               ))}
@@ -412,7 +607,7 @@ function FraudMatrix({ report, busy, query, onOpenOutlet }: { report: FraudRepor
           <tbody>
             {outlets.map((o) => {
               const dm = byOutlet.get(o.name);
-              const total = o.voidAmount + o.cancelAmount;
+              const total = rowTotal(o);
               return (
                 <tr key={o.branchId} className="cursor-pointer border-b border-border/50 transition-colors hover:bg-foreground/[0.04]" onClick={() => onOpenOutlet(o)}>
                   <td className="sticky left-0 z-10 max-w-[11rem] bg-background px-3 py-1.5 sm:max-w-[14rem]">
@@ -421,22 +616,23 @@ function FraudMatrix({ report, busy, query, onOpenOutlet }: { report: FraudRepor
                       <span className="block h-full rounded-full bg-red-500/70" style={{ width: `${(total / maxRow) * 100}%` }} />
                     </span>
                   </td>
-                  <td title={`${formatIDR(total)} · ${nf(o.void + o.cancel)} trx`} className="whitespace-nowrap px-2.5 py-1.5 text-right font-semibold tabular-nums text-foreground">
-                    {formatIDRShort(total)}
+                  <td title={`${formatIDR(o.voidAmount + o.cancelAmount)} · ${nf(o.void + o.cancel)} trx`} className="whitespace-nowrap px-2.5 py-1.5 text-right font-semibold tabular-nums text-foreground">
+                    {fmtCell(total)}
                   </td>
                   {days.map((d) => {
                     const v = dm?.get(dayIso(d)) ?? 0;
                     return (
                       <td
                         key={dayIso(d)}
-                        title={v > 0 ? formatIDR(v) : undefined}
+                        title={v > 0 ? `${fmtFull(v)} — klik untuk detail hari ini` : undefined}
+                        onClick={v > 0 ? (e) => { e.stopPropagation(); onOpenOutlet(o, dayIso(d)); } : undefined}
                         className={cn(
                           "whitespace-nowrap px-2 py-1.5 text-center tabular-nums",
                           heatClass(v, maxCell),
                           v > anomaly && "ring-2 ring-inset ring-red-600",
                         )}
                       >
-                        {v > 0 ? formatIDRShort(v) : "–"}
+                        {v > 0 ? fmtCell(v) : "–"}
                       </td>
                     );
                   })}
@@ -452,12 +648,12 @@ function FraudMatrix({ report, busy, query, onOpenOutlet }: { report: FraudRepor
           <tfoot>
             <tr className="font-medium text-foreground">
               <td className="sticky bottom-0 left-0 z-30 border-t border-border bg-background px-3 py-2">Total per hari</td>
-              <td title={formatIDR(grand)} className="sticky bottom-0 z-20 border-t border-border bg-background px-2.5 py-2 text-right font-bold tabular-nums">{formatIDRShort(grand)}</td>
+              <td title={fmtFull(grand)} className="sticky bottom-0 z-20 border-t border-border bg-background px-2.5 py-2 text-right font-bold tabular-nums">{fmtCell(grand)}</td>
               {days.map((d) => {
                 const v = colTotals.get(dayIso(d)) ?? 0;
                 return (
-                  <td key={dayIso(d)} title={v > 0 ? formatIDR(v) : undefined} className={cn("sticky bottom-0 z-20 whitespace-nowrap border-t border-border bg-background px-2 py-2 text-center tabular-nums", v > 0 ? "text-foreground" : "text-muted-foreground/30")}>
-                    {v > 0 ? formatIDRShort(v) : "–"}
+                  <td key={dayIso(d)} title={v > 0 ? fmtFull(v) : undefined} className={cn("sticky bottom-0 z-20 whitespace-nowrap border-t border-border bg-background px-2 py-2 text-center tabular-nums", v > 0 ? "text-foreground" : "text-muted-foreground/30")}>
+                    {v > 0 ? fmtCell(v) : "–"}
                   </td>
                 );
               })}
@@ -473,12 +669,27 @@ function FraudMatrix({ report, busy, query, onOpenOutlet }: { report: FraudRepor
 
 /** Big detail dialog for one outlet: per-day breakdown, top actors, and the
  *  full order list — with a per-outlet PDF export. */
-function OutletDetailModal({ report, outlet, pdfTheme, onClose }: { report: FraudReport; outlet: FraudOutletRow; pdfTheme: PdfTheme; onClose: () => void }) {
+function OutletDetailModal({ report, outlet, day, pdfTheme, onClose }: { report: FraudReport; outlet: FraudOutletRow; day?: string; pdfTheme: PdfTheme; onClose: () => void }) {
   const byOutlet = useByOutlet(report);
-  const orders = report.orders?.[outlet.name] ?? [];
+  const [dayFilter, setDayFilter] = React.useState<string | undefined>(day);
+  const [q, setQ] = React.useState("");
+  const allOrders = React.useMemo(() => report.orders?.[outlet.name] ?? [], [report.orders, outlet.name]);
+  const orders = React.useMemo(() => {
+    let list = allOrders;
+    if (dayFilter) list = list.filter((o) => (dayKey(o.voidTime) || dayKey(o.orderTime)) === dayFilter);
+    const s = q.trim().toLowerCase();
+    if (s) list = list.filter((o) => [o.menu, o.voidBy, o.orderBy, o.salesNumber, o.notes].some((f) => f.toLowerCase().includes(s)));
+    return list;
+  }, [allOrders, dayFilter, q]);
+  const filtered = Boolean(dayFilter || q.trim());
+  const filteredSum = React.useMemo(() => orders.reduce((a, o) => a + o.total, 0), [orders]);
   const total = outlet.voidAmount + outlet.cancelAmount;
   const txCount = outlet.void + outlet.cancel;
-  const capped = txCount > orders.length;
+  const capped = txCount > allOrders.length;
+  const dayLabel = (iso: string) => {
+    const d = new Date(`${iso}T00:00:00`);
+    return `${String(d.getDate()).padStart(2, "0")} ${MONTHS[d.getMonth()].slice(0, 3)}`;
+  };
 
   const dailyRows = React.useMemo(() => {
     const dm = byOutlet.get(outlet.name) ?? new Map<string, number>();
@@ -524,19 +735,27 @@ function OutletDetailModal({ report, outlet, pdfTheme, onClose }: { report: Frau
         </div>
 
         <div className="min-h-0 flex-1 space-y-5 overflow-y-auto px-4 py-4 sm:px-5">
-          {/* Per-day breakdown */}
+          {/* Per-day breakdown — click a day to filter the order list below */}
           {dailyRows.length > 1 && (
             <section>
-              <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Per hari</p>
+              <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Per hari <span className="normal-case text-muted-foreground/60">(klik untuk filter)</span></p>
               <div className="space-y-1">
                 {dailyRows.map((x) => (
-                  <div key={x.iso} className="flex items-center gap-2.5 text-xs">
+                  <button
+                    type="button"
+                    key={x.iso}
+                    onClick={() => setDayFilter(dayFilter === x.iso ? undefined : x.iso)}
+                    className={cn(
+                      "flex w-full items-center gap-2.5 rounded-md px-1 py-0.5 text-left text-xs transition-colors hover:bg-foreground/[0.04]",
+                      dayFilter === x.iso && "bg-red-500/10 ring-1 ring-inset ring-red-500/40",
+                    )}
+                  >
                     <span className="w-16 shrink-0 tabular-nums text-muted-foreground">{x.label} <span className="text-muted-foreground/50">{x.wd}</span></span>
                     <span className="block h-2 flex-1 overflow-hidden rounded-full bg-muted">
                       <span className="block h-full rounded-full bg-red-500/70" style={{ width: `${(x.v / maxDaily) * 100}%` }} />
                     </span>
                     <span className="w-24 shrink-0 text-right tabular-nums text-foreground">{formatIDR(x.v)}</span>
-                  </div>
+                  </button>
                 ))}
               </div>
             </section>
@@ -545,9 +764,29 @@ function OutletDetailModal({ report, outlet, pdfTheme, onClose }: { report: Frau
           <TopActors orders={orders} />
 
           <section>
-            <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-              Detail order ({capped ? `${nf(orders.length)} terbesar dari ${nf(txCount)}` : nf(orders.length)})
-            </p>
+            <div className="mb-2 flex flex-wrap items-center gap-2">
+              <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                Detail order ({capped && !filtered ? `${nf(allOrders.length)} terbesar dari ${nf(txCount)}` : nf(orders.length)})
+              </p>
+              {dayFilter && (
+                <button
+                  type="button"
+                  onClick={() => setDayFilter(undefined)}
+                  className="inline-flex items-center gap-1 rounded-full bg-red-500/10 px-2 py-0.5 text-[11px] font-medium text-red-600 hover:bg-red-500/20 dark:text-red-400"
+                >
+                  {dayLabel(dayFilter)} <X className="size-3" />
+                </button>
+              )}
+              {filtered && (
+                <span className="text-[11px] tabular-nums text-muted-foreground">Σ terfilter: <span className="font-semibold text-foreground">{formatIDR(filteredSum)}</span></span>
+              )}
+              <input
+                value={q}
+                onChange={(e) => setQ(e.target.value)}
+                placeholder="Cari menu / pelaku / no. bill…"
+                className="ml-auto h-8 w-full rounded-lg border border-border bg-background px-2.5 text-xs outline-none placeholder:text-muted-foreground/60 focus:ring-2 focus:ring-ring sm:w-60"
+              />
+            </div>
             <OrdersTable orders={orders} />
           </section>
         </div>
