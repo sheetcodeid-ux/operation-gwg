@@ -8,7 +8,6 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Combobox } from "@/components/ui/combobox";
 import { SegmentedTabs } from "@/components/ui/segmented-tabs";
-import { StatTile } from "@/components/ui/stat";
 import { cn, formatIDR, formatIDRShort } from "@/lib/utils";
 import { fraudReportAction, fraudSyncAction, outletFraudDailyAction } from "@/lib/actions/fraud";
 import type { FraudDailyPoint, FraudKind, FraudOrder, FraudOutletRow, FraudPeriod, FraudReport } from "@/lib/data/fraud";
@@ -197,20 +196,20 @@ export function FraudAnalysis({ initial, initialDate }: { initial: FraudReport; 
     <div className="space-y-3">
       {/* Controls — one compact bar, wraps cleanly on mobile */}
       <div className="glass rounded-2xl border border-border p-3.5">
-        <div className="flex flex-wrap items-end gap-x-3 gap-y-2.5">
-          <div>
+        <div className="flex items-end gap-3 overflow-x-auto pb-0.5 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden sm:flex-wrap sm:overflow-visible">
+          <div className="shrink-0">
             <p className="mb-1 text-[11px] font-medium text-muted-foreground">Periode</p>
             <SegmentedTabs size="sm" className="w-64" items={PERIODS.map((p) => ({ value: p.key, label: p.label }))} value={period} onChange={(v) => onPeriod(v as FraudPeriod)} />
           </div>
-          <div>
+          <div className="shrink-0">
             <p className="mb-1 text-[11px] font-medium text-muted-foreground">{period === "daily" ? "Tanggal" : period === "weekly" ? "Minggu" : "Bulan"}</p>
             <Combobox matchTriggerWidth searchable={false} value={date} onChange={onDate} options={options} className="w-44" />
           </div>
-          <div>
+          <div className="shrink-0">
             <p className="mb-1 text-[11px] font-medium text-muted-foreground">Tipe</p>
             <Combobox matchTriggerWidth searchable={false} value={kind} onChange={(v) => onKind(v as FraudKind)} options={KIND_OPTIONS} className="w-40" />
           </div>
-          <div className="min-w-36 flex-1">
+          <div className="w-44 shrink-0 sm:w-auto sm:min-w-36 sm:flex-1">
             <p className="mb-1 text-[11px] font-medium text-muted-foreground">Cari outlet</p>
             <input
               value={query}
@@ -219,7 +218,7 @@ export function FraudAnalysis({ initial, initialDate }: { initial: FraudReport; 
               className="h-9 w-full rounded-xl border border-border bg-background px-3 text-sm outline-none placeholder:text-muted-foreground/60 focus:ring-2 focus:ring-ring"
             />
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex shrink-0 items-center gap-2">
             {syncLeft > 0 && (
               <span className="inline-flex items-center gap-1.5 rounded-full border border-amber-500/30 bg-amber-500/10 px-2.5 py-1 text-xs font-medium text-amber-600 dark:text-amber-400">
                 <Loader2 className="size-3 animate-spin" /> Sinkron · sisa {syncLeft} hari
@@ -408,14 +407,14 @@ function InsightStrip({ report, prevTotal }: { report: FraudReport; prevTotal: n
                     return (
                       <div className="rounded-lg border border-border bg-background px-2.5 py-1.5 text-xs shadow-md">
                         <p className="font-medium text-foreground">{p.label} · {p.wd}</p>
-                        <p className="tabular-nums text-red-600 dark:text-red-400">{formatIDR(p.v)}</p>
+                        <p className="tabular-nums text-blue-600 dark:text-blue-400">{formatIDR(p.v)}</p>
                       </div>
                     );
                   }}
                 />
                 <Bar dataKey="v" radius={[4, 4, 0, 0]} isAnimationActive={false}>
                   {chart.map((c) => (
-                    <Cell key={c.key} fill="#ef4444" fillOpacity={c.v === 0 ? 0.12 : 0.35 + 0.65 * (c.v / maxV)} />
+                    <Cell key={c.key} fill="#3b82f6" fillOpacity={c.v === 0 ? 0.12 : 0.35 + 0.65 * (c.v / maxV)} />
                   ))}
                 </Bar>
               </BarChart>
@@ -431,7 +430,7 @@ function InsightStrip({ report, prevTotal }: { report: FraudReport; prevTotal: n
           <p className="text-sm">
             <span className="text-muted-foreground">Outlet tertinggi:</span>{" "}
             <span className="font-semibold text-foreground">{top.name}</span>{" "}
-            <span className="tabular-nums text-red-600 dark:text-red-400">{formatIDRShort(top.voidAmount + top.cancelAmount)}</span>
+            <span className="tabular-nums text-blue-600 dark:text-blue-400">{formatIDRShort(top.voidAmount + top.cancelAmount)}</span>
             {grand > 0 && <span className="text-muted-foreground"> ({(((top.voidAmount + top.cancelAmount) / grand) * 100).toFixed(0)}%)</span>}
           </p>
         )}
@@ -439,7 +438,7 @@ function InsightStrip({ report, prevTotal }: { report: FraudReport; prevTotal: n
           <p className="text-sm">
             <span className="text-muted-foreground">Hari tertinggi:</span>{" "}
             <span className="font-semibold text-foreground">{worst.label} ({worst.wd})</span>{" "}
-            <span className="tabular-nums text-red-600 dark:text-red-400">{formatIDRShort(worst.v)}</span>
+            <span className="tabular-nums text-blue-600 dark:text-blue-400">{formatIDRShort(worst.v)}</span>
           </p>
         )}
         {actors.length > 0 && (
@@ -449,7 +448,7 @@ function InsightStrip({ report, prevTotal }: { report: FraudReport; prevTotal: n
               {actors.slice(0, 3).map((a) => (
                 <p key={a.name} className="flex items-baseline justify-between gap-2">
                   <span className="truncate font-medium text-foreground">{a.name}</span>
-                  <span className="shrink-0 tabular-nums text-xs text-muted-foreground">{nf(a.count)} trx · <span className="text-red-600 dark:text-red-400">{formatIDRShort(a.total)}</span></span>
+                  <span className="shrink-0 tabular-nums text-xs text-muted-foreground">{nf(a.count)} trx · <span className="text-blue-600 dark:text-blue-400">{formatIDRShort(a.total)}</span></span>
                 </p>
               ))}
             </div>
@@ -460,16 +459,17 @@ function InsightStrip({ report, prevTotal }: { report: FraudReport; prevTotal: n
   );
 }
 
-/** Heat steps: ONE hue (red), light→dark by magnitude relative to the largest
- *  cell. Text stays on ink/red tokens; exact Rp rides on the title tooltip. */
+/** Heat steps: ONE hue (blue — the app's data accent), light→dark by magnitude
+ *  relative to the largest cell. Red is reserved for the anomaly ring only.
+ *  Exact Rp rides on the title tooltip. */
 function heatClass(v: number, max: number): string {
   if (v <= 0 || max <= 0) return "text-muted-foreground/30";
   const t = v / max;
-  if (t <= 0.15) return "bg-red-500/10 text-red-700 dark:text-red-300";
-  if (t <= 0.35) return "bg-red-500/20 text-red-700 dark:text-red-200";
-  if (t <= 0.6) return "bg-red-500/30 text-red-800 dark:text-red-100";
-  if (t <= 0.85) return "bg-red-500/45 text-red-950 dark:text-red-50 font-semibold";
-  return "bg-red-500/60 text-red-950 dark:text-red-50 font-semibold";
+  if (t <= 0.15) return "bg-blue-500/10 text-blue-700 dark:text-blue-300";
+  if (t <= 0.35) return "bg-blue-500/20 text-blue-700 dark:text-blue-200";
+  if (t <= 0.6) return "bg-blue-500/30 text-blue-800 dark:text-blue-100";
+  if (t <= 0.85) return "bg-blue-500/45 text-blue-950 dark:text-blue-50 font-semibold";
+  return "bg-blue-500/60 text-blue-950 dark:text-blue-50 font-semibold";
 }
 
 /** Matrix: outlets (rows) × days (columns), heat by nominal. Header, footer and
@@ -526,13 +526,13 @@ function FraudMatrix({ report, busy, query, mode, onOpenOutlet }: { report: Frau
           <p className="text-sm font-semibold text-foreground">{KIND_LABEL[report.kind]} per Outlet per Hari — {report.label}</p>
           <div className="mt-1.5 flex items-center gap-1.5 text-[10px] text-muted-foreground">
             <span>Rendah</span>
-            <span className="h-2.5 w-4 rounded-sm bg-red-500/10" />
-            <span className="h-2.5 w-4 rounded-sm bg-red-500/20" />
-            <span className="h-2.5 w-4 rounded-sm bg-red-500/30" />
-            <span className="h-2.5 w-4 rounded-sm bg-red-500/45" />
-            <span className="h-2.5 w-4 rounded-sm bg-red-500/60" />
+            <span className="h-2.5 w-4 rounded-sm bg-blue-500/10" />
+            <span className="h-2.5 w-4 rounded-sm bg-blue-500/20" />
+            <span className="h-2.5 w-4 rounded-sm bg-blue-500/30" />
+            <span className="h-2.5 w-4 rounded-sm bg-blue-500/45" />
+            <span className="h-2.5 w-4 rounded-sm bg-blue-500/60" />
             <span>Tinggi</span>
-            <span className="ml-2 inline-block size-2.5 rounded-sm ring-2 ring-inset ring-red-600" /> <span>= anomali (&gt; rata-rata + 2σ)</span>
+            <span className="ml-2 inline-block size-2.5 rounded-sm ring-2 ring-inset ring-red-500" /> <span>merah = anomali (&gt; rata-rata + 2σ)</span>
           </div>
         </div>
         <div className="text-right">
@@ -587,7 +587,7 @@ function FraudMatrix({ report, busy, query, mode, onOpenOutlet }: { report: Frau
                   <td className="sticky left-0 z-10 max-w-[11rem] bg-background px-3 py-1.5 sm:max-w-[14rem]">
                     <span className="block truncate font-medium text-foreground">{o.name}</span>
                     <span className="mt-1 block h-1 w-24 max-w-full overflow-hidden rounded-full bg-muted">
-                      <span className="block h-full rounded-full bg-red-500/70" style={{ width: `${(total / maxRow) * 100}%` }} />
+                      <span className="block h-full rounded-full bg-blue-500/70" style={{ width: `${(total / maxRow) * 100}%` }} />
                     </span>
                   </td>
                   <td title={`${formatIDR(o.voidAmount + o.cancelAmount)} · ${nf(o.void + o.cancel)} trx`} className="whitespace-nowrap px-2.5 py-1.5 text-right font-semibold tabular-nums text-foreground">
@@ -642,7 +642,7 @@ function FraudMatrix({ report, busy, query, mode, onOpenOutlet }: { report: Frau
 /* ------------------------------ Detail modal ------------------------------ */
 
 /** Big detail dialog for one outlet — built from the app's own design system
- *  (surface-solid panel, StatTile metrics, SegmentedTabs, Sheet-style header). */
+ *  (surface-solid panel, pastel MiniStat rows, SegmentedTabs, Sheet header). */
 function OutletDetailModal({ report, outlet, day, pdfTheme, onClose }: { report: FraudReport; outlet: FraudOutletRow; day?: string; pdfTheme: PdfTheme; onClose: () => void }) {
   const byOutlet = useByOutlet(report);
   const [tab, setTab] = React.useState<"ringkasan" | "order">(day ? "order" : "ringkasan");
@@ -740,12 +740,12 @@ function OutletDetailModal({ report, outlet, day, pdfTheme, onClose }: { report:
         </div>
 
         <div className="min-h-0 flex-1 overflow-y-auto">
-          {/* KPI tiles — the app's dashboard StatTile */}
-          <div className="grid grid-cols-2 gap-2.5 p-4 sm:p-5 sm:pb-3 lg:grid-cols-4">
-            <StatTile icon={Wallet} label="Total Nominal" value={formatIDRShort(total)} sub={formatIDR(total)} />
-            <StatTile icon={ReceiptText} label="Transaksi" value={nf(txCount)} sub={`${nf(dailyRows.length)} hari aktif`} />
-            <StatTile icon={Users} label="Pelaku Terlibat" value={nf(actors.length)} sub={actors[0] ? `Teratas: ${actors[0][0]}` : undefined} />
-            <StatTile icon={CalendarDays} label="Rata-rata / Hari" value={formatIDRShort(total / Math.max(1, dailyRows.length))} sub="pada hari aktif" />
+          {/* Ringkasan angka — pola baris ikon pastel khas dashboard (tanpa kartu) */}
+          <div className="grid grid-cols-2 gap-x-4 gap-y-3.5 p-4 sm:p-5 sm:pb-3 lg:grid-cols-4">
+            <MiniStat icon={Wallet} tint="blue" label="Total Nominal" value={formatIDRShort(total)} sub={formatIDR(total)} />
+            <MiniStat icon={ReceiptText} tint="emerald" label="Transaksi" value={nf(txCount)} sub={`${nf(dailyRows.length)} hari aktif`} />
+            <MiniStat icon={Users} tint="violet" label="Pelaku Terlibat" value={nf(actors.length)} sub={actors[0] ? `Teratas: ${actors[0][0]}` : undefined} />
+            <MiniStat icon={CalendarDays} tint="amber" label="Rata-rata / Hari" value={formatIDRShort(total / Math.max(1, dailyRows.length))} sub="pada hari aktif" />
           </div>
 
           <div className="px-4 sm:px-5">
@@ -776,7 +776,7 @@ function OutletDetailModal({ report, outlet, day, pdfTheme, onClose }: { report:
                     >
                       <span className="w-16 shrink-0 tabular-nums text-muted-foreground">{x.label} <span className="text-muted-foreground/50">{x.wd}</span></span>
                       <span className="block h-2 flex-1 overflow-hidden rounded-full bg-muted">
-                        <span className="block h-full rounded-full bg-red-500/70" style={{ width: `${(x.v / maxDaily) * 100}%` }} />
+                        <span className="block h-full rounded-full bg-blue-500/70" style={{ width: `${(x.v / maxDaily) * 100}%` }} />
                       </span>
                       <span className="w-24 shrink-0 text-right tabular-nums text-foreground">{formatIDR(x.v)}</span>
                     </button>
@@ -800,11 +800,11 @@ function OutletDetailModal({ report, outlet, day, pdfTheme, onClose }: { report:
                     >
                       <span className={cn(
                         "grid size-5 shrink-0 place-items-center rounded-md text-[10px] font-bold tabular-nums",
-                        i === 0 ? "bg-red-500/15 text-red-600 dark:text-red-400" : "bg-muted text-muted-foreground",
+                        i === 0 ? "bg-blue-500/15 text-blue-600 dark:text-blue-400" : "bg-muted text-muted-foreground",
                       )}>{i + 1}</span>
                       <span className="w-32 shrink-0 truncate font-medium text-foreground" title={who}>{who}</span>
                       <span className="block h-1.5 flex-1 overflow-hidden rounded-full bg-muted">
-                        <span className="block h-full rounded-full bg-red-500/70" style={{ width: `${(a.total / maxActor) * 100}%` }} />
+                        <span className="block h-full rounded-full bg-blue-500/70" style={{ width: `${(a.total / maxActor) * 100}%` }} />
                       </span>
                       <span className="shrink-0 whitespace-nowrap tabular-nums text-muted-foreground">{nf(a.count)} · <span className="text-foreground">{formatIDRShort(a.total)}</span></span>
                     </button>
@@ -820,7 +820,7 @@ function OutletDetailModal({ report, outlet, day, pdfTheme, onClose }: { report:
                   <button
                     type="button"
                     onClick={() => setDayFilter(undefined)}
-                    className="inline-flex items-center gap-1 rounded-full bg-red-500/10 px-2.5 py-1 text-[11px] font-medium text-red-600 transition-colors hover:bg-red-500/20 dark:text-red-400"
+                    className="inline-flex items-center gap-1 rounded-full bg-blue-500/10 px-2.5 py-1 text-[11px] font-medium text-blue-600 transition-colors hover:bg-blue-500/20 dark:text-blue-400"
                   >
                     <CalendarDays className="size-3" /> {dayLabel(dayFilter)} <X className="size-3" />
                   </button>
@@ -829,7 +829,7 @@ function OutletDetailModal({ report, outlet, day, pdfTheme, onClose }: { report:
                   <button
                     type="button"
                     onClick={() => setActorFilter(undefined)}
-                    className="inline-flex items-center gap-1 rounded-full bg-red-500/10 px-2.5 py-1 text-[11px] font-medium text-red-600 transition-colors hover:bg-red-500/20 dark:text-red-400"
+                    className="inline-flex items-center gap-1 rounded-full bg-blue-500/10 px-2.5 py-1 text-[11px] font-medium text-blue-600 transition-colors hover:bg-blue-500/20 dark:text-blue-400"
                   >
                     <Users className="size-3" /> {actorFilter} <X className="size-3" />
                   </button>
@@ -860,6 +860,29 @@ function OutletDetailModal({ report, outlet, day, pdfTheme, onClose }: { report:
             </div>
           )}
         </div>
+      </div>
+    </div>
+  );
+}
+
+/** Compact metric row — soft pastel icon circle + label + value, mirroring the
+ *  dashboard's "Insights" list (deliberately NOT a card). */
+const MINI_TINTS = {
+  blue: "bg-blue-500/10 text-blue-600 dark:text-blue-400",
+  emerald: "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400",
+  violet: "bg-violet-500/10 text-violet-600 dark:text-violet-400",
+  amber: "bg-amber-500/10 text-amber-600 dark:text-amber-400",
+} as const;
+function MiniStat({ icon: Icon, tint, label, value, sub }: { icon: React.ComponentType<{ className?: string }>; tint: keyof typeof MINI_TINTS; label: string; value: React.ReactNode; sub?: string }) {
+  return (
+    <div className="flex min-w-0 items-center gap-2.5">
+      <div className={cn("grid size-9 shrink-0 place-items-center rounded-full", MINI_TINTS[tint])}>
+        <Icon className="size-4" />
+      </div>
+      <div className="min-w-0">
+        <p className="truncate text-[11px] text-muted-foreground">{label}</p>
+        <p className="truncate text-sm font-semibold tabular-nums text-foreground">{value}</p>
+        {sub && <p className="truncate text-[10px] text-muted-foreground/70">{sub}</p>}
       </div>
     </div>
   );
@@ -950,7 +973,7 @@ function OutletTable({ report, hasAmount }: { report: FraudReport; hasAmount: bo
                         {i === 0 && total > 0 && <Badge tone="danger">Tertinggi</Badge>}
                       </div>
                       <div className="mt-1 h-1.5 w-40 max-w-full overflow-hidden rounded-full bg-muted">
-                        <div className="h-full rounded-full bg-red-500/70" style={{ width: `${(total / max) * 100}%` }} />
+                        <div className="h-full rounded-full bg-blue-500/70" style={{ width: `${(total / max) * 100}%` }} />
                       </div>
                     </td>
                     <td className="px-4 py-3 text-right tabular-nums">
@@ -1014,7 +1037,7 @@ function OutletDetail({ branchId, from, to, hasAmount }: { branchId: number; fro
           <div key={d.date} className="flex items-center gap-3 text-xs">
             <span className="w-14 shrink-0 tabular-nums text-muted-foreground">{d.label}</span>
             <div className="h-2 flex-1 overflow-hidden rounded-full bg-muted">
-              <div className="h-full rounded-full bg-red-500/70" style={{ width: `${(val(d) / max) * 100}%` }} />
+              <div className="h-full rounded-full bg-blue-500/70" style={{ width: `${(val(d) / max) * 100}%` }} />
             </div>
             <span className="w-40 shrink-0 text-right tabular-nums">
               <span className="text-foreground">V {metricValue(hasAmount, d.void, d.voidAmount)}</span>
@@ -1067,8 +1090,8 @@ function downloadPdf(report: FraudReport, theme: PdfTheme, outlet?: FraudOutletR
   }
   const dark = theme === "dark";
   const C = dark
-    ? { bg: "#0b0f1a", card: "#121a2b", line: "#26314d", ink: "#e8edf7", mut: "#93a0b8", accent: "#f87171", chip: "#1a2338", logoBg: "#ffffff" }
-    : { bg: "#ffffff", card: "#f7f8fb", line: "#e5e8ef", ink: "#141824", mut: "#69738a", accent: "#dc2626", chip: "#eef1f6", logoBg: "#eef1f6" };
+    ? { bg: "#0b0f1a", card: "#121a2b", line: "#26314d", ink: "#e8edf7", mut: "#93a0b8", accent: "#60a5fa", chip: "#1a2338", logoBg: "#ffffff" }
+    : { bg: "#ffffff", card: "#f7f8fb", line: "#e5e8ef", ink: "#141824", mut: "#69738a", accent: "#2563eb", chip: "#eef1f6", logoBg: "#eef1f6" };
   const generated = new Date().toLocaleString("id-ID", { day: "numeric", month: "long", year: "numeric", hour: "2-digit", minute: "2-digit" });
   const logo = `${window.location.origin}/gwg.svg`;
   const grand = report.totalVoidAmount + report.totalCancelAmount;
@@ -1158,7 +1181,7 @@ function downloadPdf(report: FraudReport, theme: PdfTheme, outlet?: FraudOutletR
     tbody tr:last-child td { border-bottom: none; }
     td.n, th.n { text-align: right; font-variant-numeric: tabular-nums; } td.b { font-weight: 700; }
     td.mono { font-family: ui-monospace, Menlo, monospace; font-size: 10.5px; color: ${C.mut}; }
-    tr.top td { background: ${dark ? "rgba(248,113,113,.12)" : "#fdecec"}; }
+    tr.top td { background: ${dark ? "rgba(96,165,250,.14)" : "#e8f0fe"}; }
     .note { color: ${C.mut}; font-size: 11px; margin: 4px 0 8px; }
     .foot { margin-top: 22px; color: ${C.mut}; font-size: 10.5px; border-top: 1px solid ${C.line}; padding-top: 10px; display: flex; justify-content: space-between; gap: 12px; }
     @media print { .page { padding: 10mm 12mm; } table.half { width: 70%; } }
