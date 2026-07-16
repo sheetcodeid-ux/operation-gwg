@@ -113,6 +113,40 @@ describe("parseCancelDetailReport header-aware column mapping", () => {
   });
 });
 
+describe("parseCancelDetailReport rowspan grouping", () => {
+  it("inherits bill-level columns on continuation rows instead of dropping them", () => {
+    // Krajee groups bill columns with rowspan: the 2nd+ item of a bill has NO
+    // sales-number/branch/by/time cells. Those rows must inherit, not vanish.
+    const html =
+      " Showing 1-3 of 3 items.\n<table><thead><tr>" +
+      '<th data-col-seq="1">Sales Number</th><th data-col-seq="2">Branch</th><th data-col-seq="3">Menu</th>' +
+      '<th data-col-seq="5">Deleted By</th><th data-col-seq="6">Deleted Time</th>' +
+      '<th data-col-seq="7">Qty</th><th data-col-seq="8">Subtotal</th>' +
+      "</tr></thead><tbody>" +
+      '<tr data-key="0"><td data-col-seq="1" rowspan="2">SB1</td><td data-col-seq="2" rowspan="2">Outlet A</td>' +
+      '<td data-col-seq="3">KOPI</td><td data-col-seq="5" rowspan="2">BUDI</td><td data-col-seq="6" rowspan="2">01-07-2026 10:00:00</td>' +
+      '<td data-col-seq="7">1,00</td><td data-col-seq="8">15.000,00</td></tr>' +
+      '<tr data-key="1"><td data-col-seq="3">ROTI</td><td data-col-seq="7">2,00</td><td data-col-seq="8">50.000,00</td></tr>' +
+      '<tr data-key="2"><td data-col-seq="1">SB2</td><td data-col-seq="2">Outlet B</td><td data-col-seq="3">TEH</td>' +
+      '<td data-col-seq="5">ANI</td><td data-col-seq="6">01-07-2026 11:00:00</td><td data-col-seq="7">1,00</td><td data-col-seq="8">10.000,00</td></tr>' +
+      "</tbody></table>";
+    const r = parseCancelDetailReport(html);
+    expect(r.rows).toHaveLength(3); // continuation row is kept
+    expect(r.rows[1]).toMatchObject({
+      salesNumber: "SB1", // inherited
+      branch: "Outlet A", // inherited
+      voidBy: "BUDI", // inherited
+      voidTime: "01-07-2026 10:00:00", // inherited
+      menu: "ROTI", // own value
+      qty: 2,
+      total: 50000, // own money — never inherited
+    });
+    expect(r.rows[2]).toMatchObject({ salesNumber: "SB2", branch: "Outlet B", voidBy: "ANI", menu: "TEH", total: 10000 });
+    // Grand total counts every item exactly once.
+    expect(r.rows.reduce((a, x) => a + x.total, 0)).toBe(75000);
+  });
+});
+
 describe("parseIdrNumber", () => {
   it("parses Indonesian formatted numbers", () => {
     expect(parseIdrNumber("31.818,18")).toBeCloseTo(31818.18);
