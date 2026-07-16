@@ -67,6 +67,8 @@ export interface FraudReport {
   daily?: Record<string, Record<string, number>>;
   /** ESB only: outlet name → YYYY-MM-DD → transaction count (full row set). */
   dailyCount?: Record<string, Record<string, number>>;
+  /** ESB only, daily period: outlet name → hour "00".."23" → nominal. */
+  hourly?: Record<string, Record<string, number>>;
   /** ESB only: top actors ("Oleh") across ALL outlets, from the FULL row set
    *  (exact — not derived from the capped drill-down lists). */
   actors?: { name: string; count: number; total: number }[];
@@ -193,6 +195,7 @@ function aggregate(period: FraudPeriod, kind: FraudKind, r: { from: string; to: 
   const orders: Record<string, FraudOrder[]> = {};
   const daily: Record<string, Record<string, number>> = {};
   const dailyCount: Record<string, Record<string, number>> = {};
+  const hourly: Record<string, Record<string, number>> = {};
   const byActor = new Map<string, { count: number; total: number }>();
   let tv = 0, tc = 0, tva = 0, tca = 0;
   for (const row of rows) {
@@ -210,6 +213,14 @@ function aggregate(period: FraudPeriod, kind: FraudKind, r: { from: string; to: 
       d[day] = (d[day] ?? 0) + amount;
       const c = (dailyCount[row.branch] ??= {});
       c[day] = (c[day] ?? 0) + 1;
+    }
+    if (period === "daily") {
+      const hm = /(\d{1,2}):\d{2}/.exec(row.voidTime || row.orderTime);
+      if (hm) {
+        const h = String(Math.min(23, Number(hm[1]))).padStart(2, "0");
+        const H = (hourly[row.branch] ??= {});
+        H[h] = (H[h] ?? 0) + amount;
+      }
     }
     const who = row.voidBy || "(tidak tercatat)";
     const act = byActor.get(who) ?? { count: 0, total: 0 };
@@ -240,6 +251,7 @@ function aggregate(period: FraudPeriod, kind: FraudKind, r: { from: string; to: 
     configured: true, period, kind, from: r.from, to: r.to, label: r.label, source: "esb",
     totalVoid: tv, totalCancel: tc, totalVoidAmount: tva, totalCancelAmount: tca,
     hasAmount: true, outlets, perOutletReliable: true, orders, daily, dailyCount, actors,
+    hourly: period === "daily" ? hourly : undefined,
   };
 }
 
