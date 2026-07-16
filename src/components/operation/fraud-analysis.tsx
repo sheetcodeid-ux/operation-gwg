@@ -248,11 +248,15 @@ function FraudMatrix({ report }: { report: FraudReport }) {
                 <React.Fragment key={o.branchId}>
                   <tr className="cursor-pointer border-b border-border/50 hover:bg-foreground/[0.04]" onClick={() => setOpenId(open ? null : o.branchId)}>
                     <td className="sticky left-0 z-10 max-w-[13rem] truncate bg-background px-3 py-2 font-medium text-foreground">{o.name}</td>
-                    <td className="bg-background px-3 py-2 text-right font-semibold tabular-nums text-foreground">{formatIDRShort(total)}</td>
+                    <td title={formatIDR(total)} className="bg-background px-3 py-2 text-right font-semibold tabular-nums text-foreground">{formatIDRShort(total)}</td>
                     {days.map((d) => {
                       const v = dm?.get(dayIso(d)) ?? 0;
                       return (
-                        <td key={dayIso(d)} className={cn("whitespace-nowrap px-2 py-2 text-center tabular-nums", v > 0 ? "bg-red-500/10 font-medium text-red-600 dark:text-red-400" : "text-muted-foreground/40")}>
+                        <td
+                          key={dayIso(d)}
+                          title={v > 0 ? formatIDR(v) : undefined}
+                          className={cn("whitespace-nowrap px-2 py-2 text-center tabular-nums", v > 0 ? "bg-red-500/10 font-medium text-red-600 dark:text-red-400" : "text-muted-foreground/40")}
+                        >
                           {v > 0 ? formatIDRShort(v) : "–"}
                         </td>
                       );
