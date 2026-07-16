@@ -58,13 +58,32 @@ export interface FraudReport {
   hasAmount: boolean; // Rp values available (else show counts only)
   outlets: FraudOutletRow[];
   perOutletReliable: boolean;
-  /** ESB only: void/cancel orders per outlet name (drill-down detail). */
+  /** ESB only: void/cancel orders per outlet name (drill-down detail; per
+   *  outlet the list is capped — `outlets[].void+cancel` carries true counts). */
   orders?: Record<string, FraudOrder[]>;
+  /** ESB only: outlet name → YYYY-MM-DD → nominal, computed server-side from
+   *  ALL rows (authoritative for the matrix even when `orders` is capped). */
+  daily?: Record<string, Record<string, number>>;
+  /** Data loaded but incomplete/soft issue — shown as an amber notice. */
+  warning?: string;
   error?: string;
 }
 
 const pad = (n: number) => String(n).padStart(2, "0");
 const ymd = (d: Date) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+
+/** ESB timestamp → YYYY-MM-DD (accepts DD-MM-YYYY, DD/MM/YYYY, ISO). */
+function dayKey(s: string): string {
+  const iso = /(\d{4})-(\d{2})-(\d{2})/.exec(s);
+  if (iso) return `${iso[1]}-${iso[2]}-${iso[3]}`;
+  const dmy = /(\d{1,2})[\/\-.](\d{1,2})[\/\-.](\d{4})/.exec(s);
+  if (dmy) return `${dmy[3]}-${dmy[2].padStart(2, "0")}-${dmy[1].padStart(2, "0")}`;
+  return "";
+}
+
+/** Cap for the per-outlet drill-down list sent to the client (largest first).
+ *  Aggregates (daily matrix, totals, counts) always use ALL rows. */
+const MAX_ORDERS_PER_OUTLET = 300;
 const MONTHS = ["Januari", "Februari", "Maret", "April", "Mei", "Juni", "Juli", "Agustus", "September", "Oktober", "November", "Desember"];
 
 /** [from, to, label] for a period anchored on `date` (YYYY-MM-DD). */
@@ -114,8 +133,15 @@ function esbReport(period: FraudPeriod, kind: FraudKind, r: { from: string; to: 
   else if (res.rows.length === 0 && res.rawLen < 60) diag = `ESB: respons kosong (htmlLen=${res.rawLen})`;
   else if (kind === "delete" && !res.typeVoidFound && rows.length === 0)
     diag = `Form ESB tidak menyediakan filter Delete pada Type Void (opsi terdeteksi: ${res.typeVoidOptions.join(" | ") || "tidak terbaca"}) dan tidak ada baris bertipe delete/remove pada export default (${res.rows.length} baris).`;
+  // Incomplete read (ESB truncated/failed pages) must never pass silently —
+  // per-day nominal would quietly undercount, which is worse than an error.
+  let warning: string | undefined;
+  if (res.rows.length > 0 && res.rows.length < res.totalItems) {
+    warning = `Baru ${res.rows.length.toLocaleString("id-ID")} dari ${res.totalItems.toLocaleString("id-ID")} baris ESB yang terbaca — nominal periode ini bisa lebih kecil dari sebenarnya. Muat ulang halaman, atau pilih periode yang lebih pendek (mingguan/harian).`;
+  }
   const agg = new Map<string, { void: number; cancel: number; voidAmount: number; cancelAmount: number }>();
   const orders: Record<string, FraudOrder[]> = {};
+  const daily: Record<string, Record<string, number>> = {};
   let tv = 0, tc = 0, tva = 0, tca = 0;
   for (const row of rows) {
     const isVoid = /void/i.test(row.type);
@@ -123,11 +149,23 @@ function esbReport(period: FraudPeriod, kind: FraudKind, r: { from: string; to: 
     if (isVoid) { a.void += 1; a.voidAmount += row.total; tv += 1; tva += row.total; }
     else { a.cancel += 1; a.cancelAmount += row.total; tc += 1; tca += row.total; }
     agg.set(row.branch, a);
+    const day = dayKey(row.voidTime) || dayKey(row.orderTime) || (r.from === r.to ? r.from : "");
+    if (day) {
+      const d = (daily[row.branch] ??= {});
+      d[day] = (d[day] ?? 0) + row.total;
+    }
     (orders[row.branch] ??= []).push({
       salesNumber: row.salesNumber, menu: row.menu, category: row.menuCategory,
       orderBy: row.orderBy, orderTime: row.orderTime, voidBy: row.voidBy, voidTime: row.voidTime,
       type: row.type, notes: row.notes, qty: row.qty, total: row.total,
     });
+  }
+  // Keep the client payload bounded: drill-down lists ship the largest orders;
+  // matrix/totals above are already computed from the full row set.
+  for (const name of Object.keys(orders)) {
+    if (orders[name].length > MAX_ORDERS_PER_OUTLET) {
+      orders[name] = orders[name].sort((a, b) => b.total - a.total).slice(0, MAX_ORDERS_PER_OUTLET);
+    }
   }
   const outlets: FraudOutletRow[] = [...agg.entries()]
     .map(([name, a], i) => ({ branchId: i + 1, code: name, name, void: a.void, cancel: a.cancel, voidAmount: a.voidAmount, cancelAmount: a.cancelAmount }))
@@ -135,7 +173,7 @@ function esbReport(period: FraudPeriod, kind: FraudKind, r: { from: string; to: 
   return {
     configured: true, period, kind, from: r.from, to: r.to, label: r.label, source: "esb",
     totalVoid: tv, totalCancel: tc, totalVoidAmount: tva, totalCancelAmount: tca,
-    hasAmount: true, outlets, perOutletReliable: true, orders, error: diag,
+    hasAmount: true, outlets, perOutletReliable: true, orders, daily, warning, error: diag,
   };
 }
 

@@ -291,10 +291,17 @@ export async function esbFetchCancelRows(dateFromYmd: string, dateToYmd: string,
   await pokeQueue(); // kick the queue worker before the first read
   const first = await readExportPage(url, 0, 16, true); // page 0 waits for the async export
   const rows = [...first.report.rows];
-  const pages = Math.min(40, Math.ceil(first.report.totalItems / 50));
-  for (let p = 1; p < pages; p++) {
-    const r = await readExportPage(url, p, 4); // file is ready now — short retry
-    rows.push(...r.report.rows);
+  // A busy month across all outlets can run to thousands of line-items — read
+  // ALL pages (bounded at 10.000 rows), in parallel batches so it fits the
+  // function's time budget. A failed page is skipped, never fatal: the caller
+  // compares rows.length to totalItems and warns about any shortfall.
+  const pages = Math.min(200, Math.ceil(first.report.totalItems / 50));
+  const CONCURRENCY = 8;
+  for (let start = 1; start < pages; start += CONCURRENCY) {
+    const batch: Promise<{ report: CancelDetailReport; rawLen: number }>[] = [];
+    for (let p = start; p < Math.min(start + CONCURRENCY, pages); p++) batch.push(readExportPage(url, p, 4));
+    const settled = await Promise.allSettled(batch);
+    for (const s of settled) if (s.status === "fulfilled") rows.push(...s.value.report.rows);
   }
   return {
     rows,
