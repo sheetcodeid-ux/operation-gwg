@@ -32,7 +32,7 @@ const CSRF_INPUT = /"_csrf-esb-fnb-backend"\s+value="([^"]+)"/;
 // page (hidden input or a JS assignment) — echoed back in the report POST body.
 const POST_SESSION = /POST_USER_SESSION["']?\s*(?:value=|[:=])\s*["']([a-zA-Z0-9]+)["']/;
 
-type Session = { cookie: string; csrf: string; postUserSession: string; at: number };
+type Session = { cookie: string; csrf: string; postUserSession: string; typeVoidOptions: string[]; at: number };
 let session: Session | null = null;
 const TTL_MS = 30 * 60 * 1000;
 
@@ -129,7 +129,13 @@ async function login(): Promise<Session> {
   const csrf2 = CSRF_META.exec(rpHtml)?.[1] ?? csrf;
   const postUserSession = POST_SESSION.exec(rpHtml)?.[1] ?? "";
 
-  return { cookie: cookieHeader(jar), csrf: csrf2, postUserSession, at: Date.now() };
+  // The report form's "Type Void" <select> options (e.g. "Cancel / Void
+  // (Default)", "Delete Order") — read from the live page so the exact values
+  // ESB expects are used instead of hardcoded guesses.
+  const typeVoidSel = /<select[^>]*name="CancelMenuDetailReport\[typeVoid\]"[\s\S]*?<\/select>/i.exec(rpHtml)?.[0] ?? "";
+  const typeVoidOptions = [...typeVoidSel.matchAll(/<option[^>]*value="([^"]+)"/gi)].map((m) => decodeEntities(m[1]));
+
+  return { cookie: cookieHeader(jar), csrf: csrf2, postUserSession, typeVoidOptions, at: Date.now() };
 }
 
 async function ensureSession(): Promise<Session> {
@@ -171,10 +177,10 @@ const toEsbDate = (ymd: string) => {
 
 /**
  * Step 1 — generate the Cancel/Void export for a date range (YYYY-MM-DD, All
- * Branch, Cancel+Void). Returns the internal OSS file URL that step 2 reads.
- * Field names/values captured from the ESB report form.
+ * Branch) with the given Type Void filter value. Returns the internal OSS file
+ * URL that step 2 reads. Field names/values captured from the ESB report form.
  */
-async function generateExport(dateFromYmd: string, dateToYmd: string): Promise<string> {
+async function generateExport(dateFromYmd: string, dateToYmd: string, typeVoid: string): Promise<string> {
   const from = toEsbDate(dateFromYmd);
   const to = toEsbDate(dateToYmd);
   const P = "CancelMenuDetailReport";
@@ -192,7 +198,7 @@ async function generateExport(dateFromYmd: string, dateToYmd: string): Promise<s
     [`${P}[menuCategory]`]: "",
     [`${P}[menuCategoryDetail]`]: "",
     [`${P}[menuCode]`]: "",
-    [`${P}[typeVoid]`]: "Cancel / Void (Default)",
+    [`${P}[typeVoid]`]: typeVoid,
     [`${P}[cancelNotes]`]: "",
     [`${P}[isPreviewBill]`]: "1",
     POST_USER_SESSION: s.postUserSession,
@@ -252,13 +258,26 @@ export interface EsbCancelResult {
   rawLen: number; // length of the first page's HTML (0 ⇒ empty/blocked response)
 }
 
+/** Which ESB "Type Void" export to generate: the default Cancel+Void report,
+ *  or the Delete Order report (orders removed before settle — shows who). */
+export type EsbExportKind = "default" | "delete";
+
+/** Resolve the exact Type Void option value the live ESB form expects. Falls
+ *  back to the known captured values if the select couldn't be parsed. */
+async function typeVoidValue(kind: EsbExportKind): Promise<string> {
+  const opts = (await ensureSession()).typeVoidOptions;
+  if (kind === "delete") return opts.find((o) => /delete/i.test(o)) ?? "Delete Order";
+  return opts.find((o) => /default/i.test(o)) ?? "Cancel / Void (Default)";
+}
+
 /**
- * End-to-end: generate the Cancel/Void export for a date range and read every
- * page (50 rows/page, capped at 40 pages ≈ 2000 line-items). Returns diagnostic
- * counts alongside the rows so a silent 0 can be explained.
+ * End-to-end: generate the Cancel/Void (or Delete Order) export for a date
+ * range and read every page (50 rows/page, capped at 40 pages ≈ 2000
+ * line-items). Returns diagnostic counts alongside the rows so a silent 0 can
+ * be explained.
  */
-export async function esbFetchCancelRows(dateFromYmd: string, dateToYmd: string): Promise<EsbCancelResult> {
-  const url = await generateExport(dateFromYmd, dateToYmd);
+export async function esbFetchCancelRows(dateFromYmd: string, dateToYmd: string, kind: EsbExportKind = "default"): Promise<EsbCancelResult> {
+  const url = await generateExport(dateFromYmd, dateToYmd, await typeVoidValue(kind));
   await pokeQueue(); // kick the queue worker before the first read
   const first = await readExportPage(url, 0, 16, true); // page 0 waits for the async export
   const rows = [...first.report.rows];
