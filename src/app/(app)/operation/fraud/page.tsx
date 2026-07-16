@@ -8,6 +8,8 @@ import { PageHeader } from "@/components/ui/page-header";
 import { FraudAnalysis } from "@/components/operation/fraud-analysis";
 
 export const metadata: Metadata = { title: "Analisis Fraud — Void & Cancel" };
+// ESB generates the export asynchronously — allow the server room to poll for it.
+export const maxDuration = 60;
 
 const ymd = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 

@@ -208,20 +208,24 @@ const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 /** Step 2 — read ONE page (0-indexed) of a generated export via the grid proxy.
  *  The export is produced asynchronously, so a just-generated file can 404 for a
  *  moment — retry a few times with a short delay before giving up. */
-async function readExportPage(url: string, page: number): Promise<{ report: CancelDetailReport; rawLen: number }> {
-  for (let attempt = 0; attempt < 5; attempt++) {
+async function readExportPage(url: string, page: number, maxAttempts = 14): Promise<{ report: CancelDetailReport; rawLen: number }> {
+  let last = "";
+  for (let attempt = 0; attempt < maxAttempts; attempt++) {
     const res = await postForm("/report_service/main/get-data-report", () => ({ url, page: String(page) }));
-    if (res.ok) {
-      const json = (await res.json()) as { code?: number; data?: string };
-      const data = json.data ?? "";
-      return { report: parseCancelDetailReport(data), rawLen: data.length };
+    // ESB signals "still generating" as HTTP 404 AND as a JSON body {code:404}
+    // with status 200, so inspect the body too before deciding it's ready.
+    const text = await res.text().catch(() => "");
+    if (res.ok && !/"code"\s*:\s*(404|425|202)/.test(text)) {
+      let data = "";
+      try { data = (JSON.parse(text) as { data?: string }).data ?? ""; } catch { data = ""; }
+      if (data) return { report: parseCancelDetailReport(data), rawLen: data.length };
     }
-    if ((res.status === 404 || res.status === 425) && attempt < 4) {
-      await sleep(1500); // export still generating
+    last = text.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim().slice(0, 140);
+    if (attempt < maxAttempts - 1) {
+      await sleep(2000); // export still generating — "try again later"
       continue;
     }
-    const body = (await res.text().catch(() => "")).replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim().slice(0, 140);
-    throw new Error(`ESB get-data-report failed (${res.status}) url=…${decodeURIComponent(url).slice(-70)} body:${body}`);
+    throw new Error(`ESB get-data-report failed (${res.status}) url=…${decodeURIComponent(url).slice(-60)} body:${last}`);
   }
   throw new Error("ESB get-data-report: export not ready after retries");
 }
@@ -239,11 +243,11 @@ export interface EsbCancelResult {
  */
 export async function esbFetchCancelRows(dateFromYmd: string, dateToYmd: string): Promise<EsbCancelResult> {
   const url = await generateExport(dateFromYmd, dateToYmd);
-  const first = await readExportPage(url, 0);
+  const first = await readExportPage(url, 0); // page 0 waits for the async export
   const rows = [...first.report.rows];
   const pages = Math.min(40, Math.ceil(first.report.totalItems / 50));
   for (let p = 1; p < pages; p++) {
-    const r = await readExportPage(url, p);
+    const r = await readExportPage(url, p, 4); // file is ready now — short retry
     rows.push(...r.report.rows);
   }
   return { rows, totalItems: first.report.totalItems, rawLen: first.rawLen };
