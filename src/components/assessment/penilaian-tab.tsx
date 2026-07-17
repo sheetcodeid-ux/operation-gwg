@@ -16,10 +16,11 @@ import { useAssessment } from "./context";
 import { CascadingPicker } from "./cascading-picker";
 import { Banner, Card, ScoreOptions, ScrollRow, SectionLabel } from "./parts";
 
-const ACCENT: Record<EvaluatorKey, "sky" | "emerald" | "violet"> = { al: "sky", hc: "emerald", dir: "violet" };
+const ACCENT: Record<EvaluatorKey, "sky" | "emerald" | "violet" | "amber"> = { al: "sky", hc: "emerald", peer: "amber", dir: "violet" };
 const TAB_ACTIVE: Record<EvaluatorKey, string> = {
   al: "border-sky-500/60 bg-sky-500/10",
   hc: "border-brand-500/60 bg-brand-500/10",
+  peer: "border-amber-500/60 bg-amber-500/10",
   dir: "border-violet-500/60 bg-violet-500/10",
 };
 

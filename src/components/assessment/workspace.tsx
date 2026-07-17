@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import { BookOpen, ClipboardList, GaugeCircle, Mic, ScrollText, Sparkles } from "lucide-react";
-import { ASSESSMENT_ROLES, EVALUATOR_TO_ROLE, canSeeTab, type AssessmentRole, type TabKey } from "@/lib/assessment/access";
+import { ASSESSMENT_ROLES, canSeeTab, type AssessmentRole, type TabKey } from "@/lib/assessment/access";
 import type { EvaluatorIdentity } from "@/lib/assessment/session";
 import { setOrgExtras, type OrgExtra } from "@/lib/assessment/org";
 import { cn } from "@/lib/utils";
@@ -25,12 +25,17 @@ const TABS: { key: TabKey; label: string; short: string; icon: typeof BookOpen }
 ];
 
 export function AssessmentWorkspace({
+  initialRole,
+  scopeDepartmentId,
   evaluator,
   isAdmin,
   viewerName,
   showSample,
   orgExtra,
 }: {
+  /** Viewpoint resolved server-side from the roster (never a silent fallback). */
+  initialRole: AssessmentRole;
+  scopeDepartmentId?: string;
   evaluator: EvaluatorIdentity | null;
   isAdmin: boolean;
   viewerName: string;
@@ -42,10 +47,9 @@ export function AssessmentWorkspace({
   // is discardable) so the module-level org state is refreshed *before* any child
   // picker reads departmentOptions(). Empty extras ⇒ identical to the built-in.
   setOrgExtras(orgExtra ?? { departments: [], employees: [] });
-  // Viewpoint is derived from the login: a registered evaluator lands on their
-  // own view (Atasan/HC/Director); Super Admin defaults to Director but keeps
-  // the manual switcher; anyone else who can reach the page falls back to HR.
-  const initialRole: AssessmentRole = evaluator ? EVALUATOR_TO_ROLE[evaluator.evaluatorKey] : isAdmin ? "director" : "hr";
+  // scopeDepartmentId narrows a Head/peer to their assigned candidates — wired
+  // into the candidate picker & submit checks in the peer-scoring increment.
+  void scopeDepartmentId;
   return (
     <AssessmentProvider initialRole={initialRole} canSwitchRole={isAdmin} evaluator={evaluator} showSample={showSample}>
       <WorkspaceInner viewerName={viewerName} />
@@ -88,7 +92,7 @@ function WorkspaceInner({ viewerName }: { viewerName: string }) {
             searchable={false}
             value={a.role}
             onChange={(v) => a.setRole(v as typeof a.role)}
-            options={ASSESSMENT_ROLES.map((r) => ({ value: r.value, label: r.label }))}
+            options={ASSESSMENT_ROLES.filter((r) => r.value !== "none").map((r) => ({ value: r.value, label: r.label }))}
             className="w-full sm:w-72"
           />
         </div>

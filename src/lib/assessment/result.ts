@@ -95,7 +95,7 @@ export interface ResultInput {
   financialImpact: boolean;
 }
 
-const EV_LABEL: Record<EvaluatorKey, string> = { al: "Atasan Langsung", hc: "HC / Human Capital", dir: "Director" };
+const EV_LABEL: Record<EvaluatorKey, string> = { al: "Atasan Langsung", hc: "HC / Human Capital", peer: "Rekan Sejawat", dir: "Director" };
 
 /** Reduce raw assessment state into every derived dashboard figure. */
 export function computeResult(input: ResultInput): ResultBundle {

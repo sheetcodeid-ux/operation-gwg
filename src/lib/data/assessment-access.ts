@@ -1,0 +1,51 @@
+import "server-only";
+
+import { listAssignments, listRoster } from "./assessment-roster";
+import { orgDepartmentId } from "@/lib/assessment/org";
+import type { AssessmentRole } from "@/lib/assessment/access";
+
+/** The resolved assessment access for a signed-in user (plain data, safe to
+ *  pass to the client workspace). */
+export interface AssessmentAccess {
+  role: AssessmentRole;
+  /** Division a Head assesses ("" = all divisions, for HC/Director). */
+  scopeDepartmentId: string;
+  /** Participant user-ids this user reviews as a Rekan Sejawat. */
+  peerFor: string[];
+  /** Participant user-ids this user is the Atasan (Penilai 1) for. */
+  atasanFor: string[];
+  /** True when this account is itself a participant (dinilai). */
+  isParticipant: boolean;
+}
+
+/**
+ * Derive a user's viewpoint from the roster + assignments — the single source of
+ * truth. Priority: Director > HC > Head/Atasan > Rekan Sejawat > Karyawan > none.
+ * Super Admin always resolves to Director (full access) for administration.
+ */
+export async function resolveAssessmentAccess(user: {
+  id: string;
+  role: string;
+  department?: string | null;
+}): Promise<AssessmentAccess> {
+  const [roster, assignments] = await Promise.all([listRoster(), listAssignments()]);
+  const entry = roster.find((r) => r.userId === user.id && r.active) ?? null;
+  const peerFor = assignments.filter((a) => a.peerUserIds.includes(user.id)).map((a) => a.participantUserId);
+  const atasanFor = assignments.filter((a) => a.atasanUserId === user.id).map((a) => a.participantUserId);
+  const isParticipant =
+    entry?.role === "karyawan" || assignments.some((a) => a.participantUserId === user.id);
+
+  const base = { peerFor, atasanFor, isParticipant };
+
+  // Super Admin = administrator → full Director view.
+  if (user.role === "super_admin") return { role: "director", scopeDepartmentId: "", ...base };
+  if (entry?.role === "director") return { role: "director", scopeDepartmentId: "", ...base };
+  if (entry?.role === "hc") return { role: "hr", scopeDepartmentId: "", ...base };
+  if (entry?.role === "head" || atasanFor.length > 0) {
+    const scope = entry?.scopeDepartmentId || (user.department ? orgDepartmentId(user.department) : "");
+    return { role: "atasan", scopeDepartmentId: scope, ...base };
+  }
+  if (peerFor.length > 0) return { role: "peer", scopeDepartmentId: "", ...base };
+  if (entry?.role === "karyawan") return { role: "karyawan", scopeDepartmentId: "", ...base };
+  return { role: "none", scopeDepartmentId: "", ...base };
+}
