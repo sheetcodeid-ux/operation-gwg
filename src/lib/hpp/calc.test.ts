@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { calcHpp, priceTiers, projection, sensitivity, type HppInput } from "./calc";
+import { calcHpp, foodCostStatus, priceTiers, projection, sensitivity, type HppInput } from "./calc";
 
 // "kopi susu gula aren" from the reference screenshot.
 const input: HppInput = {
@@ -55,5 +55,20 @@ describe("HPP engine (matches reference screenshot)", () => {
     const s = sensitivity(r.variableCost, r.fixedAlloc, 0, 22000);
     expect(s.newHpp).toBe(12965);
     expect(s.deltaHpp).toBe(0);
+  });
+});
+
+describe("foodCostStatus vs costing-policy target", () => {
+  it("uses category defaults when no target given (35% food / 25% bev)", () => {
+    expect(foodCostStatus(0.34, "makanan").tone).toBe("good");
+    expect(foodCostStatus(0.36, "makanan").tone).toBe("warn");
+    expect(foodCostStatus(0.24, "minuman").tone).toBe("good"); // ≤25% target
+    expect(foodCostStatus(0.30, "minuman").tone).toBe("warn"); // above 25%
+  });
+
+  it("respects a custom brand target (e.g. Beverage 28%)", () => {
+    expect(foodCostStatus(0.27, "minuman", 0.28).tone).toBe("good");
+    expect(foodCostStatus(0.29, "minuman", 0.28).tone).toBe("warn");
+    expect(foodCostStatus(0.71, "makanan", 0.35).tone).toBe("bad"); // >70% over cost
   });
 });

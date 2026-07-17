@@ -7,6 +7,7 @@ import {
   BarChart3,
   Boxes,
   Calculator,
+  CalendarDays,
   Check,
   ChevronsUpDown,
   Coffee,
@@ -61,6 +62,10 @@ import { HPP_STATUS_META, STATUS_PILL } from "@/lib/hpp/status";
 import { downloadCsv, toCsv } from "@/lib/csv";
 import { Button } from "@/components/ui/button";
 import { UMP_2026 } from "@/lib/hpp/ump";
+
+/** UMP provinces sorted highest-first — the top one is the recommended standar
+ *  (kebijakan MoM: skala tertinggi untuk seluruh brand). */
+const UMP_SORTED = [...UMP_2026].sort((a, b) => b.ump - a.ump);
 import { Field, Input, Label } from "@/components/ui/input";
 import { StatTile } from "@/components/ui/stat";
 import { Combobox } from "@/components/ui/combobox";
@@ -118,16 +123,21 @@ function NumInput({ value, onChange, className, placeholder }: { value: number; 
 
 export type IngredientOption = { id: string; name: string; buyPrice: number; buyQty: number; buyUnit: string };
 
+/** Client-safe costing policy (target food-cost % per category). */
+export type PolicyOption = { scope: string; foodPct: number; bevPct: number };
+
 export function HppCalculator({
   initialHistory,
   canEdit,
   ingredients = [],
   autoLoadId,
+  policies = [{ scope: "default", foodPct: 35, bevPct: 25 }],
 }: {
   initialHistory: HppRecord[];
   canEdit: boolean;
   ingredients?: IngredientOption[];
   autoLoadId?: string;
+  policies?: PolicyOption[];
 }) {
   const router = useRouter();
   const [saving, startSave] = React.useTransition();
@@ -144,7 +154,7 @@ export function HppCalculator({
   const [totalUnitsAll, setTotalUnitsAll] = React.useState(1000);
   const [wastePct, setWastePct] = React.useState(5); // waste normal ≤5% (GWG)
   const [btkl, setBtkl] = React.useState(0); // BTKL dapur/bar / bulan
-  const [umpProv, setUmpProv] = React.useState(""); // referensi UMP BPS 2026
+  const [umpProv, setUmpProv] = React.useState(UMP_SORTED[0]?.prov ?? ""); // default: UMP tertinggi (rekomendasi)
   const [umpStaff, setUmpStaff] = React.useState(1);
   const [fixed, setFixed] = React.useState<FixedItem[]>([]);
   const [useClass, setUseClass] = React.useState(false); // Sistem Class Nordu
@@ -180,7 +190,14 @@ export function HppCalculator({
   const sens = React.useMemo(() => sensitivity(variableCost, fixedAlloc, sensPct / 100, price), [variableCost, fixedAlloc, sensPct, price]);
   const proj = React.useMemo(() => projection(variableCost, base.totalFixed, price, targetProfit), [variableCost, base.totalFixed, price, targetProfit]);
   const fc = foodCostPct(variableCost, price);
-  const fcStatus = foodCostStatus(fc, category);
+  // Target food-cost % from costing policy: brand override wins, else default.
+  const policy = React.useMemo(() => {
+    const def = policies.find((p) => p.scope === "default") ?? { scope: "default", foodPct: 35, bevPct: 25 };
+    return policies.find((p) => p.scope === brand) ?? def;
+  }, [policies, brand]);
+  const targetFc = (category === "minuman" ? policy.bevPct : policy.foodPct) / 100;
+  const policyCustom = policy.scope === brand;
+  const fcStatus = foodCostStatus(fc, category, targetFc);
   const series = React.useMemo(
     () => bepSeries(price, variableCost, base.totalFixed, Math.max(proj.targetUnit, proj.bepUnit) * 1.05 || 100),
     [price, variableCost, base.totalFixed, proj.targetUnit, proj.bepUnit],
@@ -272,7 +289,7 @@ export function HppCalculator({
       ["  BTKL / Bulan (dapur/bar)", Math.round(btkl)],
       ["Harga Jual Pilihan (tanpa pajak)", Math.round(price)],
       ["Harga After-tax (referensi, PBJT 10%)", Math.round(price * 1.1)],
-      ["Food cost %", `${(fc * 100).toFixed(1)}% (${foodCostStatus(fc, category).label})`],
+      ["Food cost %", `${(fc * 100).toFixed(1)}% · target ≤${(targetFc * 100).toFixed(0)}% (${fcStatus.label})`],
       ["Margin Kontribusi / unit", Math.round(proj.contribution)],
       ["BEP (unit)", proj.bepUnit],
       ["Target Jual / Bulan", proj.targetUnit],
@@ -555,7 +572,7 @@ export function HppCalculator({
                   matchTriggerWidth
                   value={umpProv}
                   onChange={setUmpProv}
-                  options={UMP_2026.map((u) => ({ value: u.prov, label: `${u.prov} — Rp ${u.ump.toLocaleString("id-ID")}` }))}
+                  options={UMP_SORTED.map((u, i) => ({ value: u.prov, label: `${u.prov} — Rp ${u.ump.toLocaleString("id-ID")}${i === 0 ? " · Tertinggi (rekomendasi)" : ""}` }))}
                   searchPlaceholder="Cari provinsi…"
                 />
               </div>
@@ -660,9 +677,13 @@ export function HppCalculator({
                 fcStatus.tone === "bad" && "bg-red-500/12 text-red-600 dark:text-red-400",
               )}
             >
-              Food cost {(fc * 100).toFixed(1)}% · {fcStatus.label}
+              Food cost {(fc * 100).toFixed(1)}% · target ≤{(targetFc * 100).toFixed(0)}% · {fcStatus.label}
             </span>
           </div>
+          <p className="-mt-1 mb-2 text-[10px] text-muted-foreground">
+            Target food cost {category === "minuman" ? "minuman" : "makanan"} {(targetFc * 100).toFixed(0)}% —{" "}
+            {policyCustom ? <span className="font-medium text-primary">kustom {brand}</span> : "kebijakan default perusahaan"}.
+          </p>
           <p className="mb-3 text-[11px] text-muted-foreground">
             Margin ideal {brand} {(brandBand.idealLow * 100).toFixed(0)}–{(brandBand.idealHigh * 100).toFixed(0)}% · food cost{" "}
             {category === "minuman" ? "minuman 25–35%" : "makanan ≤35%"} · over cost bila &gt;70%.
@@ -764,9 +785,19 @@ export function HppCalculator({
         </div>
         )}
 
-        {/* Target & projection */}
-        <div className="glass rounded-2xl border border-border p-5">
-          <p className="mb-3 text-sm font-semibold text-foreground">Target &amp; Proyeksi Penjualan</p>
+        {/* Target & projection — compact Fraud-style stat row (not dominant) */}
+        <div className="glass rounded-2xl border border-border p-4">
+          <div className="mb-3 flex items-center justify-between gap-2">
+            <p className="text-sm font-semibold text-foreground">Target &amp; Proyeksi Penjualan</p>
+            <span
+              className={cn(
+                "shrink-0 rounded-full px-2 py-0.5 text-[10px] font-semibold",
+                proj.netProfit >= targetProfit ? "bg-emerald-500/12 text-emerald-600 dark:text-emerald-400" : "bg-amber-500/12 text-amber-600 dark:text-amber-400",
+              )}
+            >
+              {proj.netProfit >= targetProfit ? "Target tercapai" : "Di bawah target"}
+            </span>
+          </div>
           <div className="grid grid-cols-2 gap-2">
             <Field label="Target Laba Bersih / Bulan">
               <NumInput value={targetProfit} onChange={setTargetProfit} placeholder="Rp" />
@@ -775,13 +806,18 @@ export function HppCalculator({
               <NumInput value={price} onChange={setChosenPrice} placeholder="Rp" />
             </Field>
           </div>
-          <div className="mt-3 grid grid-cols-2 gap-3">
-            <StatTile icon={BarChart3} label="Target Jual / Hari" value={`${proj.perDay} pcs`} />
-            <StatTile icon={BarChart3} label="Total Jual / Bulan" value={`${proj.targetUnit.toLocaleString("id-ID")} pcs`} />
-            <StatTile icon={TrendingUp} label="Potensi Omzet / Bulan" value={rp(proj.omzet)} />
-            <StatTile icon={Boxes} label="Total Biaya Produksi / Bln" value={rp(proj.totalProdCost)} />
-            <StatTile icon={Boxes} label="Total Biaya Tetap / Bln" value={rp(proj.totalFixed)} />
-            <StatTile icon={TrendingUp} label="Proyeksi Laba Bersih / Bln" value={rp(proj.netProfit)} sub={proj.netProfit >= targetProfit ? "target tercapai" : "di bawah target"} />
+          <div className="mt-3 grid grid-cols-2 gap-x-4 gap-y-3 sm:grid-cols-3">
+            <ProjStat icon={CalendarDays} label="Target / Hari" value={`${proj.perDay} pcs`} />
+            <ProjStat icon={BarChart3} label="Target / Bulan" value={`${proj.targetUnit.toLocaleString("id-ID")} pcs`} />
+            <ProjStat icon={TrendingUp} label="Potensi Omzet" value={rp(proj.omzet)} />
+            <ProjStat icon={Boxes} label="Biaya Produksi" value={rp(proj.totalProdCost)} />
+            <ProjStat icon={Boxes} label="Biaya Tetap" value={rp(proj.totalFixed)} />
+            <ProjStat
+              icon={TrendingUp}
+              label="Laba Bersih"
+              value={rp(proj.netProfit)}
+              tone={proj.netProfit >= targetProfit ? "good" : "warn"}
+            />
           </div>
         </div>
 
@@ -975,6 +1011,25 @@ function Mini({ label, value, sub, tone }: { label: string; value: string; sub?:
       <p className="truncate text-[10px] font-medium uppercase tracking-wide text-muted-foreground">{label}</p>
       <p className={cn("mt-0.5 truncate text-sm font-semibold tabular-nums", color)}>{value}</p>
       {sub && <p className="truncate text-[10px] text-muted-foreground">{sub}</p>}
+    </div>
+  );
+}
+
+/** Compact metric row (Fraud-page style): neutral icon chip + label + value.
+ *  Deliberately small so the projection block never dominates the page. */
+function ProjStat({ icon: Icon, label, value, tone }: { icon: LucideIcon; label: string; value: string; tone?: "good" | "warn" }) {
+  return (
+    <div className="flex min-w-0 items-center gap-2.5">
+      <div className="grid size-8 shrink-0 place-items-center rounded-lg bg-muted text-muted-foreground ring-1 ring-border">
+        <Icon className="size-4" strokeWidth={1.75} />
+      </div>
+      <div className="min-w-0">
+        <p className="truncate text-[10px] text-muted-foreground">{label}</p>
+        <p className={cn(
+          "truncate text-sm font-semibold tabular-nums",
+          tone === "good" ? "text-emerald-600 dark:text-emerald-400" : tone === "warn" ? "text-amber-600 dark:text-amber-400" : "text-foreground",
+        )}>{value}</p>
+      </div>
     </div>
   );
 }
