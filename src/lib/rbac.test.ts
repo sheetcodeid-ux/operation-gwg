@@ -43,8 +43,9 @@ describe("RBAC capabilities", () => {
 describe("menu access matrix", () => {
   it("gives R&D roles Work Tracker + full HPP suite (Kalkulator/Database/Bahan)", () => {
     for (const r of ["bar_rnd", "kitchen_rnd", "head_bar_rnd", "coordinator_rnd"] as const) {
-      // Every non-supervisor role also gets Assessment (org-wide requirement).
-      expect(ROLE_MENUS[r]).toEqual(["hpp_dash", "work", "hpp", "hpp_db", "hpp_bahan", "assessment"]);
+      // Every non-supervisor role also gets Assessment (org-wide requirement);
+      // hpp_price = Referensi Harga & HPP (ESB price vs HPP).
+      expect(ROLE_MENUS[r]).toEqual(["hpp_dash", "work", "hpp", "hpp_db", "hpp_bahan", "hpp_price", "assessment"]);
     }
   });
 
