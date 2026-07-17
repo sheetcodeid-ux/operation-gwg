@@ -430,11 +430,6 @@ export async function esbFetchNetSales(dateFromYmd: string, dateToYmd: string, b
 
 import { parseMenuRecapReport, type MenuRecapRow } from "./esb";
 
-export interface EsbMenuResult {
-  rows: MenuRecapRow[];
-  totalItems: number;
-  readAll: boolean;
-}
 
 /**
  * Fetch the Sales Menu Recapitulation for a date range — the ESB product
@@ -442,9 +437,18 @@ export interface EsbMenuResult {
  * the cancel export (ESB serves one export per session). Field names verified
  * from a live HAR capture (SalesMenuRecapReport).
  */
-export function esbFetchMenuRecap(dateFromYmd: string, dateToYmd: string, budgetMs = 48_000): Promise<EsbMenuResult> {
+export interface EsbMenuExport {
+  url: string; // OSS export URL — reusable across calls until it expires
+  totalItems: number;
+  pageSize: number;
+  firstRows: MenuRecapRow[]; // page 0 (already read while waiting for generation)
+}
+
+/** Generate the Sales Menu Recap export and read page 0 (waits for the async
+ *  generation, which is slow for this ~2.5k-row report). Returns the OSS url so
+ *  the caller can resume reading later pages across separate invocations. */
+export function esbGenerateMenuRecap(dateFromYmd: string, dateToYmd: string): Promise<EsbMenuExport> {
   return serialized(async () => {
-    const started = Date.now();
     await ensureSession();
     const from = toEsbDate(dateFromYmd);
     const to = toEsbDate(dateToYmd);
@@ -475,18 +479,27 @@ export function esbFetchMenuRecap(dateFromYmd: string, dateToYmd: string, budget
     if (!json?.data) throw new Error("ESB: menu-recap export URL missing");
     const url = json.data;
     await pokeQueue();
-    const first = parseMenuRecapReport(await readExportPageRaw(url, 0, 16, true));
-    const rows = [...first.rows];
-    const pages = Math.min(Math.ceil(30_000 / Math.max(1, first.pageSize)), Math.ceil(first.totalItems / Math.max(1, first.pageSize)));
-    let stoppedEarly = false;
-    for (let p = 1; p < pages; p++) {
-      if (Date.now() - started > budgetMs) { stoppedEarly = true; break; }
+    // The export can take ~45s to generate — poll patiently on page 0.
+    const first = parseMenuRecapReport(await readExportPageRaw(url, 0, 26, true));
+    return { url, totalItems: first.totalItems, pageSize: Math.max(1, first.pageSize), firstRows: first.rows };
+  });
+}
+
+/** Read a contiguous range of already-generated pages [fromPage, …) within a
+ *  time budget. Returns the rows read and the next page to resume from. */
+export function esbReadMenuPages(url: string, fromPage: number, totalPages: number, budgetMs = 45_000): Promise<{ rows: MenuRecapRow[]; nextPage: number; done: boolean }> {
+  return serialized(async () => {
+    const started = Date.now();
+    const rows: MenuRecapRow[] = [];
+    let p = fromPage;
+    for (; p < totalPages; p++) {
+      if (Date.now() - started > budgetMs) break;
       try {
         rows.push(...parseMenuRecapReport(await readExportPageRaw(url, p, 4)).rows);
       } catch {
-        /* skipped page → readAll=false → caller retries later */
+        break; // export page expired/failed — caller regenerates next run
       }
     }
-    return { rows, totalItems: first.totalItems, readAll: !stoppedEarly && rows.length >= first.totalItems };
+    return { rows, nextPage: p, done: p >= totalPages };
   });
 }
