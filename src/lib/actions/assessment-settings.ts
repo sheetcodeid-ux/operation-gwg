@@ -7,6 +7,7 @@ import {
   saveAssignment,
   saveRosterEntry,
   removeRosterEntry,
+  deleteAssignment,
   type RosterRole,
 } from "@/lib/data/assessment-roster";
 import type { UserProfile } from "@/lib/types";
@@ -31,6 +32,9 @@ export async function saveRosterEntryAction(input: {
       scopeDepartmentId: input.scopeDepartmentId ?? "",
       active: input.active ?? true,
     });
+    // Atasan/peer assignment only applies to a Karyawan participant — drop it
+    // when the account becomes a Head/HC/Director so no stale participant lingers.
+    if (input.role !== "karyawan") await deleteAssignment(input.userId);
     revalidatePath("/assessment/settings");
     revalidatePath("/assessment");
     return { ok: true };
@@ -43,6 +47,7 @@ export async function removeRosterEntryAction(userId: string) {
   if (!(await canManage())) return { error: "Hanya Admin yang dapat mengatur assessment." };
   try {
     await removeRosterEntry(userId);
+    await deleteAssignment(userId);
     revalidatePath("/assessment/settings");
     revalidatePath("/assessment");
     return { ok: true };

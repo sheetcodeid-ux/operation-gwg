@@ -14,6 +14,7 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/input";
 import { useAssessment } from "./context";
 import { CascadingPicker } from "./cascading-picker";
+import { AssessmentQueue } from "./assessment-queue";
 import { Banner, Card, ScoreOptions, ScrollRow, SectionLabel } from "./parts";
 
 const ACCENT: Record<EvaluatorKey, "sky" | "emerald" | "violet" | "amber"> = { al: "sky", hc: "emerald", peer: "amber", dir: "violet" };
@@ -64,13 +65,16 @@ export function PenilaianTab() {
         )}
       </Banner>
 
-      <SectionLabel>Pilih Karyawan yang Dinilai</SectionLabel>
+      {/* Queue of assigned participants (Atasan/HC/Director) — one click to start. */}
+      {locked && <AssessmentQueue verb="dinilai" />}
+
+      <SectionLabel>{locked ? "Atau Pilih Manual" : "Pilih Karyawan yang Dinilai"}</SectionLabel>
       <Card>
         <CascadingPicker />
         {a.resolved.nama && (
-          <p className="mt-3 text-xs text-muted-foreground">
-            Menilai: <span className="font-medium text-foreground">{a.resolved.nama}</span> · {a.resolved.jabatan} ·{" "}
-            {a.resolved.departemen}
+          <p className="mt-3 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+            <span>Menilai: <span className="font-medium text-foreground">{a.resolved.nama}</span> · {a.resolved.jabatan} · {a.resolved.departemen}</span>
+            <button type="button" onClick={a.resetCandidate} className="rounded-md border border-border px-1.5 py-0.5 text-[11px] font-medium text-muted-foreground hover:text-foreground">Ganti / Kembali ke antrian</button>
           </p>
         )}
       </Card>
@@ -254,9 +258,14 @@ function MySaveBar({ activeKey }: { activeKey: EvaluatorKey }) {
       )}
       {msg && <p className={cn("text-center text-xs", saved ? "text-brand-600 dark:text-brand-400" : "text-muted-foreground")}>{msg}</p>}
       {saved && (
-        <Button variant="outline" className="h-11 w-full" onClick={a.continueToInterview}>
-          Lanjut ke Interview <ArrowRight className="size-4" />
-        </Button>
+        <div className="flex flex-wrap gap-2">
+          <Button variant="outline" className="h-11 flex-1" onClick={a.resetCandidate}>
+            Selesai — Nilai Berikutnya
+          </Button>
+          <Button variant="outline" className="h-11 flex-1" onClick={a.continueToInterview}>
+            Ke Interview <ArrowRight className="size-4" />
+          </Button>
+        </div>
       )}
     </div>
   );

@@ -223,6 +223,8 @@ export interface OrgExtra {
 }
 
 export const orgDepartmentId = (name: string) => `dep_${slug(name)}`;
+/** Position id inside a department, matching how BASE/merged ids are built. */
+export const orgPositionId = (departmentName: string, jabatan: string) => `${orgDepartmentId(departmentName)}__pos_${slug(jabatan)}`;
 
 function buildMerged(base: Department[], extra: OrgExtra): Department[] {
   const byId = new Map<string, Department>();

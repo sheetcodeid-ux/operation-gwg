@@ -16,7 +16,7 @@ import {
   type ParamKey,
   type ParamScores,
 } from "@/lib/assessment/config";
-import { formatGolongan, getDepartment, getEmployee, getPosition } from "@/lib/assessment/org";
+import { BATCHES, formatGolongan, getDepartment, getEmployee, getPosition, orgDepartmentId, orgPositionId } from "@/lib/assessment/org";
 import type { AssessmentRole, TabKey } from "@/lib/assessment/access";
 import { canSeeTab, TAB_ACCESS } from "@/lib/assessment/access";
 import type { EvaluatorIdentity, SessionSeed, SessionState } from "@/lib/assessment/session";
@@ -88,6 +88,10 @@ interface AssessmentState {
   setPosition: (id: string) => void;
   setEmployee: (id: string) => void;
   patchCandidate: (patch: Partial<Candidate>) => void;
+  /** Quick-pick a participant from the evaluator queue (fills who + batch). */
+  pickParticipant: (userId: string, department: string, jabatan: string) => void;
+  /** Clear the current candidate + scores (return to the queue). */
+  resetCandidate: () => void;
   identityComplete: boolean;
 
   /** Official evaluators for the selected position (3, or Director-only). */
@@ -266,6 +270,27 @@ export function AssessmentProvider({
   const setEmployee = React.useCallback((id: string) => setCandidate((c) => ({ ...c, employeeId: id })), []);
   const patchCandidate = React.useCallback((patch: Partial<Candidate>) => setCandidate((c) => ({ ...c, ...patch })), []);
 
+  // Quick-pick a participant from the evaluator's queue: fill dept/position/name
+  // (and a default batch) so the session opens immediately — golongan/tujuan can
+  // be completed by HC later. `userId` maps to the mirrored org employee id.
+  const pickParticipant = React.useCallback((userId: string, department: string, jabatan: string) => {
+    setCandidate((c) => ({
+      ...c,
+      departmentId: orgDepartmentId(department),
+      positionId: orgPositionId(department, jabatan),
+      employeeId: `emp_usr_${userId}`,
+      batch: c.batch || BATCHES[0],
+    }));
+  }, []);
+
+  // Clear the current candidate + local scores → back to the queue (reset ke 0).
+  const resetCandidate = React.useCallback(() => {
+    setCandidate({ ...EMPTY_CANDIDATE });
+    setScores(emptyEvaluatorScores());
+    setEvaluatorNotes({});
+    setSession(null);
+  }, []);
+
   const toggleSyarat = React.useCallback((id: number, v: boolean) => setSyarat((s) => ({ ...s, [id]: v })), []);
   const pickSelf = React.useCallback((key: ParamKey, value: number) => setSelf((s) => ({ ...s, [key]: value })), []);
   const pickScore = React.useCallback(
@@ -298,14 +323,11 @@ export function AssessmentProvider({
   const continueToInterview = React.useCallback(() => flowTo("interview"), [flowTo]);
   const finishInterview = React.useCallback(() => flowTo("dashboard"), [flowTo]);
 
+  // Enough to open a session and start scoring: who + batch. Golongan/tujuan/NIK
+  // are for the decision record and can be completed later (by HC), so they don't
+  // block scoring — this makes the queue quick-pick a single click.
   const identityComplete =
-    !!candidate.departmentId &&
-    !!candidate.positionId &&
-    !!candidate.employeeId &&
-    candidate.nik.trim().length > 0 &&
-    !!candidate.golongan &&
-    !!candidate.golonganTujuan &&
-    !!candidate.batch;
+    !!candidate.departmentId && !!candidate.positionId && !!candidate.employeeId && !!candidate.batch;
 
   const syaratPassed = syarat[1] && syarat[2] && syarat[3];
   const selfComplete = PARAMETERS.every((p) => !!self[p.key]);
@@ -417,6 +439,8 @@ export function AssessmentProvider({
     setPosition,
     setEmployee,
     patchCandidate,
+    pickParticipant,
+    resetCandidate,
     identityComplete,
     activeEvaluators,
     penilaianComplete,

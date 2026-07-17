@@ -46,6 +46,8 @@ export async function resolveAssessmentAccess(user: {
     return { role: "atasan", scopeDepartmentId: scope, ...base };
   }
   if (peerFor.length > 0) return { role: "peer", scopeDepartmentId: "", ...base };
-  if (entry?.role === "karyawan") return { role: "karyawan", scopeDepartmentId: "", ...base };
+  // A participant — from a roster `karyawan` entry OR simply from having an
+  // assignment (atasan/peers set for them). Either way they get the 3-tab view.
+  if (isParticipant) return { role: "karyawan", scopeDepartmentId: "", ...base };
   return { role: "none", scopeDepartmentId: "", ...base };
 }

@@ -101,6 +101,14 @@ export async function listAssignments(): Promise<Assignment[]> {
   }
 }
 
+export async function deleteAssignment(participantUserId: string): Promise<void> {
+  if (!dbEnabled) {
+    memAssign.delete(participantUserId);
+    return;
+  }
+  await db().from("assessment_assignments").delete().eq("participant_user_id", participantUserId);
+}
+
 export async function saveAssignment(input: Assignment): Promise<void> {
   const rec: Assignment = {
     participantUserId: input.participantUserId,

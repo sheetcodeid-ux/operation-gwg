@@ -32,6 +32,7 @@ export function AssessmentWorkspace({
   evaluator,
   isAdmin,
   canManage = false,
+  isParticipant = false,
   viewerName,
   showSample,
   orgExtra,
@@ -43,6 +44,8 @@ export function AssessmentWorkspace({
   isAdmin: boolean;
   /** Admin-only: shows the Pengaturan entry in the tab row. */
   canManage?: boolean;
+  /** This account is also a participant (dinilai) → gets the Syarat & SA tab too. */
+  isParticipant?: boolean;
   viewerName: string;
   showSample: boolean;
   orgExtra?: OrgExtra;
@@ -57,17 +60,20 @@ export function AssessmentWorkspace({
   void scopeDepartmentId;
   return (
     <AssessmentProvider initialRole={initialRole} canSwitchRole={isAdmin} evaluator={evaluator} showSample={showSample}>
-      <WorkspaceInner viewerName={viewerName} canManage={canManage} />
+      <WorkspaceInner viewerName={viewerName} canManage={canManage} isParticipant={isParticipant} />
     </AssessmentProvider>
   );
 }
 
-function WorkspaceInner({ viewerName, canManage }: { viewerName: string; canManage: boolean }) {
+function WorkspaceInner({ viewerName, canManage, isParticipant }: { viewerName: string; canManage: boolean; isParticipant: boolean }) {
   const a = useAssessment();
-  const tabs = TABS.filter((t) => canSeeTab(a.role, t.key));
+  // A participant who is ALSO an evaluator (e.g. Rekan Sejawat) keeps the Syarat
+  // & Self-Assessment tab on top of their evaluator tabs → the 4-tab case.
+  const canSee = (t: TabKey) => canSeeTab(a.role, t) || (isParticipant && t === "syarat");
+  const tabs = TABS.filter((t) => canSee(t.key));
   const roleDef = ASSESSMENT_ROLES.find((r) => r.value === a.role)!;
   // Content is rendered from the access-checked tab, never a raw drifted value.
-  const activeTab: TabKey = canSeeTab(a.role, a.tab) ? a.tab : tabs[0].key;
+  const activeTab: TabKey = canSee(a.tab) ? a.tab : tabs[0].key;
 
   // Every tab change lands at the top of the new page. Button-driven steps
   // (Simpan & Lanjut / Selesai) glide up smoothly (paired with the fade-up);
