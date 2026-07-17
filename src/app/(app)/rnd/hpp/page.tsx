@@ -10,6 +10,7 @@ import { canVerifyHpp } from "@/lib/hpp/access";
 import { PageHeader } from "@/components/ui/page-header";
 import { listCostingPolicies } from "@/lib/data/costing-policy";
 import { listEsbMenus } from "@/lib/data/esb-menu";
+import { listOverheadTemplates } from "@/lib/data/overhead-template";
 import { BRANDS } from "@/lib/hpp/calc";
 import { HppCalculator, type IngredientOption } from "@/components/hpp/hpp-calculator";
 import { HppGuide, type GuideStats } from "@/components/hpp/hpp-guide";
@@ -28,7 +29,14 @@ export default async function HppPage({ searchParams }: { searchParams: Promise<
     user.department === "Food & Beverage";
   if (!canEdit) redirect("/dashboard");
 
-  const [history, rawIngredients, policies, esbMenusRaw] = await Promise.all([listHpp(), listIngredients(), listCostingPolicies(), listEsbMenus()]);
+  const [history, rawIngredients, policies, esbMenusRaw, templatesRaw] = await Promise.all([
+    listHpp(),
+    listIngredients(),
+    listCostingPolicies(),
+    listEsbMenus(),
+    listOverheadTemplates(),
+  ]);
+  const templates = templatesRaw.map((t) => ({ id: t.id, name: t.name, brand: t.brand, items: t.items }));
   const policyOptions = policies.map((p) => ({
     scope: p.scope,
     foodPct: p.foodPct,
@@ -69,7 +77,7 @@ export default async function HppPage({ searchParams }: { searchParams: Promise<
       />
       <HppGuide stats={guideStats} canVerify={canVerify} />
       <CostingPolicyEditor initial={policyOptions} brands={[...BRANDS]} canEdit={canVerify} />
-      <HppCalculator initialHistory={history} canEdit={canEdit} ingredients={ingredients} autoLoadId={edit} policies={policyOptions} esbMenus={esbMenus} />
+      <HppCalculator initialHistory={history} canEdit={canEdit} ingredients={ingredients} autoLoadId={edit} policies={policyOptions} esbMenus={esbMenus} templates={templates} />
     </div>
   );
 }

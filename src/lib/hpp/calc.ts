@@ -31,10 +31,18 @@ export interface VariableItem {
   ingredientId?: string;
 }
 
+/** Overhead nature: `fixed` = tetap tiap bulan (mis. sewa alat, langganan);
+ *  `variable` = operasional yang ikut volume produksi (mis. gas, listrik, air).
+ *  Keduanya dialokasikan per produk dengan cara yang sama (bulanan ÷ unit) —
+ *  pemisahan ini untuk kejelasan & pelaporan, bukan mengubah rumus HPP. */
+export type OverheadKind = "fixed" | "variable";
+
 export interface FixedItem {
   id: string;
   name: string;
   monthly: number; // Rp / month
+  /** Klasifikasi overhead (default `fixed` bila tidak diisi — kompatibel mundur). */
+  kind?: OverheadKind;
 }
 
 /** Bagi Rata = split across every product; Produk Ini Saja = all to this one. */
