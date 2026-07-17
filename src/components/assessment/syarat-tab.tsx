@@ -2,16 +2,14 @@
 
 import { ArrowRight, Check, MessageSquare, Star, TriangleAlert, X } from "lucide-react";
 import { PARAMETERS, SYARAT_UTAMA } from "@/lib/assessment/config";
-import { BATCHES, GOLONGAN, GOLONGAN_LEVELS, golonganHasLevel } from "@/lib/assessment/org";
+import { BATCHES, GOLONGAN } from "@/lib/assessment/org";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Field, Input } from "@/components/ui/input";
 import { useAssessment } from "./context";
-import { CascadingPicker } from "./cascading-picker";
 import { Banner, Card, Dropdown, ScoreOptions, ScrollRow, SectionLabel } from "./parts";
 
 const golonganOptions = GOLONGAN.map((g) => ({ value: g, label: g }));
-const levelOptions = GOLONGAN_LEVELS.map((l) => ({ value: l, label: `Level ${l}` }));
 const batchOptions = BATCHES.map((b) => ({ value: b, label: b }));
 
 /** Tab ②: verify the 3 hard requirements, capture identity, and self-assessment. */
@@ -70,49 +68,31 @@ export function SyaratTab() {
 
       <SectionLabel>② Identitas Karyawan</SectionLabel>
       <Card>
-        {/* Departemen → Jabatan → Nama (cascading). */}
-        <CascadingPicker />
+        {/* Identity is the signed-in participant themselves — no picking. */}
+        <div className="rounded-xl border border-border bg-muted/20 p-3">
+          <p className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">Peserta (Anda)</p>
+          <p className="mt-0.5 text-sm font-semibold text-foreground">{a.viewer.name || "—"}</p>
+          <p className="text-xs text-muted-foreground">{[a.viewer.jabatan, a.viewer.department].filter(Boolean).join(" · ") || "—"}</p>
+        </div>
 
         <div className="mt-3">
           <ScrollRow cols={2}>
             <Field label="NIK / ID Karyawan">
-              <Input
-                value={a.candidate.nik}
-                onChange={(e) => a.patchCandidate({ nik: e.target.value })}
-                placeholder="Contoh: EMP-2019-0123"
-              />
+              <Input value={a.selfId.nik} onChange={(e) => a.patchSelfId({ nik: e.target.value })} placeholder="Contoh: EMP-2019-0123" />
             </Field>
-            <Dropdown
-              label="Batch"
-              value={a.candidate.batch}
-              onChange={(v) => a.patchCandidate({ batch: v })}
-              options={batchOptions}
-              placeholder="Pilih batch…"
-            />
+            <Dropdown label="Batch" value={a.selfId.batch} onChange={(v) => a.patchSelfId({ batch: v })} options={batchOptions} placeholder="Pilih batch…" />
           </ScrollRow>
         </div>
 
         <div className="mt-3 grid gap-3 sm:grid-cols-2">
-          <GolonganField
-            label="Golongan Saat Ini"
-            value={a.candidate.golongan}
-            level={a.candidate.golonganLevel}
-            onValue={(v) => a.patchCandidate({ golongan: v, golonganLevel: "" })}
-            onLevel={(v) => a.patchCandidate({ golonganLevel: v })}
-          />
-          <GolonganField
-            label="Golongan Tujuan"
-            value={a.candidate.golonganTujuan}
-            level={a.candidate.golonganTujuanLevel}
-            onValue={(v) => a.patchCandidate({ golonganTujuan: v, golonganTujuanLevel: "" })}
-            onLevel={(v) => a.patchCandidate({ golonganTujuanLevel: v })}
-          />
+          <Dropdown label="Golongan Saat Ini" value={a.selfId.golongan} onChange={(v) => a.patchSelfId({ golongan: v })} options={golonganOptions} placeholder="Pilih golongan…" />
+          <Dropdown label="Golongan Tujuan" value={a.selfId.golonganTujuan} onChange={(v) => a.patchSelfId({ golonganTujuan: v })} options={golonganOptions} placeholder="Pilih golongan…" />
         </div>
 
-        {a.resolved.isHead && (
+        {(a.viewer.jabatan ?? "").toLowerCase().startsWith("head") && (
           <div className="mt-4">
             <Banner tone="violet" icon={<Star className="size-4" />}>
-              Jabatan <strong>Head</strong> — dinilai langsung oleh <strong>Director</strong> (1 penilai resmi).
+              Jabatan <strong>Head</strong> — sebagai peserta Anda dinilai oleh <strong>Director (60%)</strong> &amp; <strong>HC (40%)</strong>.
             </Banner>
           </div>
         )}
@@ -144,29 +124,6 @@ export function SyaratTab() {
   );
 }
 
-/** Grade dropdown that reveals a Level 1–5 selector for Staff/Supervisor/Manager. */
-function GolonganField({
-  label,
-  value,
-  level,
-  onValue,
-  onLevel,
-}: {
-  label: string;
-  value: string;
-  level: string;
-  onValue: (v: string) => void;
-  onLevel: (v: string) => void;
-}) {
-  const leveled = golonganHasLevel(value);
-  return (
-    <div className={cn("grid gap-3", leveled ? "grid-cols-[1fr_9rem]" : "grid-cols-1")}>
-      <Dropdown label={label} value={value} onChange={onValue} options={golonganOptions} placeholder="Pilih golongan…" />
-      {leveled && <Dropdown label="Level" value={level} onChange={onLevel} options={levelOptions} placeholder="Level…" />}
-    </div>
-  );
-}
-
 function ContinueGate() {
   const a = useAssessment();
   const canProceed = a.role !== "karyawan";
@@ -179,8 +136,8 @@ function ContinueGate() {
             {canProceed ? "Melanjutkan ke halaman Penilaian." : "Penilaian dilakukan oleh Atasan Langsung, HR, atau Director."}
           </Banner>
         )}
-        <Button className="h-12 w-full text-base" onClick={a.saveAndContinue}>
-          {canProceed ? "Simpan & Lanjut ke Penilaian" : "Simpan Assessment"}
+        <Button className="h-12 w-full text-base" onClick={a.saveAndContinue} disabled={a.selfBusy}>
+          {canProceed ? "Simpan & Lanjut ke Penilaian" : "Simpan Self Assessment"}
           <ArrowRight className="size-5" />
         </Button>
       </div>
@@ -189,7 +146,7 @@ function ContinueGate() {
 
   const missing: string[] = [];
   if (!a.syaratPassed) missing.push("centang 3 syarat utama");
-  if (!a.identityComplete) missing.push("lengkapi identitas karyawan");
+  if (!a.selfIdentityComplete) missing.push("lengkapi golongan saat ini, golongan tujuan & batch");
   if (!a.selfComplete) missing.push("isi seluruh Self Assessment");
   if (!a.visited.has("panduan")) missing.push("buka tab Panduan");
   if (!a.visited.has("referensi")) missing.push("buka tab Referensi");

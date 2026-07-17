@@ -21,6 +21,23 @@ import type { AssessmentRole, TabKey } from "@/lib/assessment/access";
 import { canSeeTab, TAB_ACCESS } from "@/lib/assessment/access";
 import type { EvaluatorIdentity, SessionSeed, SessionState } from "@/lib/assessment/session";
 import { openSession, submitMyEvaluation, updateSessionShared } from "@/lib/actions/assessment";
+import { getMySelf, saveMySelfAssessmentAction } from "@/lib/actions/assessment-self";
+
+/** The signed-in viewer's own identity — used to auto-fill their Self Assessment. */
+export interface Viewer {
+  userId: string;
+  name: string;
+  department: string | null;
+  jabatan: string | null;
+}
+/** Self-assessment promotion identity (kept separate from the evaluator candidate). */
+export interface SelfIdentity {
+  golongan: string;
+  golonganTujuan: string;
+  batch: string;
+  nik: string;
+}
+const EMPTY_SELF_ID: SelfIdentity = { golongan: "", golonganTujuan: "", batch: "", nik: "" };
 
 /** Cascading identity: department → position → employee, plus the manual fields. */
 export interface Candidate {
@@ -109,6 +126,16 @@ interface AssessmentState {
   pickSelf: (key: ParamKey, value: number) => void;
   selfComplete: boolean;
 
+  /** The signed-in viewer (for auto-identifying their own Self Assessment). */
+  viewer: Viewer;
+  /** The viewer's own promotion identity (self flow, not the evaluator candidate). */
+  selfId: SelfIdentity;
+  patchSelfId: (patch: Partial<SelfIdentity>) => void;
+  selfIdentityComplete: boolean;
+  /** Persist the viewer's Self Assessment to their own session. */
+  saveMySelf: () => Promise<{ ok: boolean; error?: string }>;
+  selfBusy: boolean;
+
   /** All prerequisites (spec §2) met → show "Simpan & Lanjut ke Penilaian". */
   readyForPenilaian: boolean;
   saved: boolean;
@@ -154,12 +181,14 @@ export function AssessmentProvider({
   canSwitchRole = true,
   evaluator = null,
   showSample = true,
+  viewer = { userId: "", name: "", department: null, jabatan: null },
 }: {
   children: React.ReactNode;
   initialRole?: AssessmentRole;
   canSwitchRole?: boolean;
   evaluator?: EvaluatorIdentity | null;
   showSample?: boolean;
+  viewer?: Viewer;
 }) {
   const [role, setRoleState] = React.useState<AssessmentRole>(initialRole);
   const [tab, setTabState] = React.useState<TabKey>("panduan");
@@ -169,7 +198,30 @@ export function AssessmentProvider({
   const [candidate, setCandidate] = React.useState<Candidate>({ ...EMPTY_CANDIDATE });
   const [syarat, setSyarat] = React.useState<Record<number, boolean>>({ 1: false, 2: false, 3: false });
   const [self, setSelf] = React.useState<ParamScores>({});
+  const [selfId, setSelfId] = React.useState<SelfIdentity>({ ...EMPTY_SELF_ID });
+  const patchSelfId = React.useCallback((patch: Partial<SelfIdentity>) => setSelfId((s) => ({ ...s, ...patch })), []);
+  const [selfBusy, setSelfBusy] = React.useState(false);
   const [saved, setSaved] = React.useState(false);
+
+  // Load the viewer's saved Self Assessment (identity + scores) once, so it
+  // survives across devices/sessions — not just localStorage.
+  React.useEffect(() => {
+    if (!viewer.userId) return;
+    let live = true;
+    getMySelf().then((r) => {
+      if (!live || !r) return;
+      if (Object.keys(r.selfScores).length) setSelf(r.selfScores);
+      setSelfId((s) => ({
+        golongan: r.identity.golongan || s.golongan,
+        golonganTujuan: r.identity.golonganTujuan || s.golonganTujuan,
+        batch: r.identity.batch || s.batch,
+        nik: r.identity.nik || s.nik,
+      }));
+      if (r.submitted) setSaved(true);
+    });
+    return () => { live = false; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [viewer.userId]);
   const [scores, setScores] = React.useState<EvaluatorScores>(emptyEvaluatorScores());
   const [interview, setInterview] = React.useState<DimensionScores>({});
   const [ivNote, setIvNote] = React.useState("");
@@ -331,8 +383,9 @@ export function AssessmentProvider({
 
   const syaratPassed = syarat[1] && syarat[2] && syarat[3];
   const selfComplete = PARAMETERS.every((p) => !!self[p.key]);
+  const selfIdentityComplete = !!selfId.golongan && !!selfId.golonganTujuan && !!selfId.batch;
   const readyForPenilaian =
-    syaratPassed && identityComplete && selfComplete && visited.has("panduan") && visited.has("referensi");
+    syaratPassed && selfIdentityComplete && selfComplete && visited.has("panduan") && visited.has("referensi");
 
   // Open (find-or-create) the server session once a logged-in evaluator has a
   // full candidate selected, then poll so other evaluators' progress shows up.
@@ -414,11 +467,25 @@ export function AssessmentProvider({
     [evaluator, session, self, ivNote, financialImpact],
   );
 
+  const saveMySelf = React.useCallback(async (): Promise<{ ok: boolean; error?: string }> => {
+    setSelfBusy(true);
+    try {
+      const res = await saveMySelfAssessmentAction({ selfScores: self, ...selfId });
+      if (res.ok) setSaved(true);
+      return res;
+    } catch {
+      return { ok: false, error: "Gagal menyimpan Self Assessment." };
+    } finally {
+      setSelfBusy(false);
+    }
+  }, [self, selfId]);
+
   const saveAndContinue = React.useCallback(() => {
-    setSaved(true);
-    // Karyawan may not access Penilaian (spec §3) — only advance when allowed.
-    if (canSeeTab(role, "penilaian")) flowTo("penilaian");
-  }, [role, flowTo]);
+    // Persist the viewer's own Self Assessment, then (evaluators) go to Penilaian.
+    void saveMySelf().then(() => {
+      if (canSeeTab(role, "penilaian")) flowTo("penilaian");
+    });
+  }, [role, flowTo, saveMySelf]);
 
   const value: AssessmentState = {
     role,
@@ -452,6 +519,12 @@ export function AssessmentProvider({
     self,
     pickSelf,
     selfComplete,
+    viewer,
+    selfId,
+    patchSelfId,
+    selfIdentityComplete,
+    saveMySelf,
+    selfBusy,
     readyForPenilaian,
     saved,
     saveAndContinue,

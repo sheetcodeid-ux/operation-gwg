@@ -303,13 +303,17 @@ export async function saveEvaluation(input: EvaluationInput): Promise<Evaluation
 /** Update session-level (shared) fields: self-assessment, interview note, etc. */
 export async function updateSessionMeta(
   sessionId: string,
-  patch: Partial<{ selfScores: ParamScores; financialImpact: boolean; ivNote: string; status: string }>,
+  patch: Partial<{ selfScores: ParamScores; financialImpact: boolean; ivNote: string; status: string; golongan: string; golonganTujuan: string; batch: string; nik: string }>,
 ): Promise<void> {
   const row: any = { updated_at: nowIso() };
   if (patch.selfScores !== undefined) row.self_scores = patch.selfScores;
   if (patch.financialImpact !== undefined) row.financial_impact = patch.financialImpact;
   if (patch.ivNote !== undefined) row.iv_note = patch.ivNote;
   if (patch.status !== undefined) row.status = patch.status;
+  if (patch.golongan !== undefined) row.golongan = patch.golongan;
+  if (patch.golonganTujuan !== undefined) row.golongan_tujuan = patch.golonganTujuan;
+  if (patch.batch !== undefined) row.batch = patch.batch;
+  if (patch.nik !== undefined) row.nik = patch.nik;
 
   if (!dbEnabled) {
     const s = memSessions.get(sessionId);

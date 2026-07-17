@@ -33,6 +33,7 @@ export function AssessmentWorkspace({
   isAdmin,
   canManage = false,
   isParticipant = false,
+  viewer,
   viewerName,
   showSample,
   orgExtra,
@@ -46,6 +47,8 @@ export function AssessmentWorkspace({
   canManage?: boolean;
   /** This account is also a participant (dinilai) → gets the Syarat & SA tab too. */
   isParticipant?: boolean;
+  /** The signed-in viewer's identity (for their own Self Assessment). */
+  viewer: { userId: string; name: string; department: string | null; jabatan: string | null };
   viewerName: string;
   showSample: boolean;
   orgExtra?: OrgExtra;
@@ -59,7 +62,7 @@ export function AssessmentWorkspace({
   // into the candidate picker & submit checks in the peer-scoring increment.
   void scopeDepartmentId;
   return (
-    <AssessmentProvider initialRole={initialRole} canSwitchRole={isAdmin} evaluator={evaluator} showSample={showSample}>
+    <AssessmentProvider initialRole={initialRole} canSwitchRole={isAdmin} evaluator={evaluator} showSample={showSample} viewer={viewer}>
       <WorkspaceInner viewerName={viewerName} canManage={canManage} isParticipant={isParticipant} />
     </AssessmentProvider>
   );

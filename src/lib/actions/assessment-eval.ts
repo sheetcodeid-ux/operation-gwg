@@ -34,6 +34,11 @@ export async function getMyAssessmentTargets(): Promise<EvalTarget[]> {
   const me = await resolveEvaluatorFromRoster(user.id);
   if (!me) return [];
 
+  // An Atasan with the default scope assesses their OWN division — mirror the
+  // fallback used by the access layer so their queue isn't empty.
+  const myDept = getUser(user.id)?.department ?? null;
+  const alScope = me.scopeDepartmentId || (myDept ? orgDepartmentId(myDept) : "");
+
   const [roster, assigns] = await Promise.all([listRoster(), listAssignments()]);
   const pidSet = new Set<string>();
   // Karyawan AND Heads are participants (Heads are assessed by HC + Director).
@@ -53,7 +58,7 @@ export async function getMyAssessmentTargets(): Promise<EvalTarget[]> {
     if (me.evaluatorKey === "al") {
       const assign = assigns.find((a) => a.participantUserId === pid);
       const assigned = assign?.atasanUserId === user.id;
-      const inScope = me.scopeDepartmentId ? orgDepartmentId(acc.department ?? "") === me.scopeDepartmentId : false;
+      const inScope = alScope ? orgDepartmentId(acc.department ?? "") === alScope : false;
       if (!assigned && !inScope) continue;
     }
     pending.push({ pid, name: acc.name, department: acc.department ?? "", jabatan, head });
