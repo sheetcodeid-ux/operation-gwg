@@ -125,6 +125,8 @@ export type IngredientOption = { id: string; name: string; buyPrice: number; buy
 
 /** Client-safe costing policy (target food-cost % per category). */
 export type PolicyOption = { scope: string; foodPct: number; bevPct: number };
+/** Client-safe ESB catalog entry for the product picker. */
+export type EsbMenuOption = { menu: string; foodBev: "makanan" | "minuman"; qty30d: number; unitPrice: number };
 
 export function HppCalculator({
   initialHistory,
@@ -132,17 +134,23 @@ export function HppCalculator({
   ingredients = [],
   autoLoadId,
   policies = [{ scope: "default", foodPct: 35, bevPct: 25 }],
+  esbMenus = [],
 }: {
   initialHistory: HppRecord[];
   canEdit: boolean;
   ingredients?: IngredientOption[];
   autoLoadId?: string;
   policies?: PolicyOption[];
+  esbMenus?: EsbMenuOption[];
 }) {
   const router = useRouter();
   const [saving, startSave] = React.useTransition();
 
   const [name, setName] = React.useState("");
+  // Product source: pick from the ESB catalog, or enter a new/manual product.
+  const [manualProduct, setManualProduct] = React.useState(esbMenus.length === 0);
+  const [targetCustom, setTargetCustom] = React.useState(false);
+  const [esbTargetRec, setEsbTargetRec] = React.useState<number | null>(null);
   const [image, setImage] = React.useState<string | null>(null);
   const [category, setCategory] = React.useState<"makanan" | "minuman">("minuman");
   const [brand, setBrand] = React.useState<Brand>("Nordu");
@@ -198,6 +206,19 @@ export function HppCalculator({
   const targetFc = (category === "minuman" ? policy.bevPct : policy.foodPct) / 100;
   const policyCustom = policy.scope === brand;
   const fcStatus = foodCostStatus(fc, category, targetFc);
+  // Pick an ESB catalog product: fill name + category, and recommend the
+  // monthly sales target from the last-30-day qty (avg/day × 30 ≈ the 30d total).
+  const pickEsbProduct = React.useCallback((menuName: string) => {
+    setName(menuName);
+    const m = esbMenus.find((x) => x.menu === menuName);
+    if (!m) return;
+    setCategory(m.foodBev);
+    const rec = Math.max(1, Math.round(m.qty30d));
+    setEsbTargetRec(rec);
+    setTargetSales(rec);
+    setTargetCustom(false);
+  }, [esbMenus]);
+
   const series = React.useMemo(
     () => bepSeries(price, variableCost, base.totalFixed, Math.max(proj.targetUnit, proj.bepUnit) * 1.05 || 100),
     [price, variableCost, base.totalFixed, proj.targetUnit, proj.bepUnit],
@@ -228,6 +249,9 @@ export function HppCalculator({
 
   function reset() {
     setName("");
+    setManualProduct(esbMenus.length === 0);
+    setEsbTargetRec(null);
+    setTargetCustom(false);
     setImage(null);
     setCategory("minuman");
     setBrand("Nordu");
@@ -304,6 +328,9 @@ export function HppCalculator({
 
   function loadRecord(r: HppRecord) {
     setName(r.name);
+    setManualProduct(true); // editing a saved product — keep its name as-is
+    setEsbTargetRec(null);
+    setTargetCustom(false);
     setImage(r.imageUrl);
     setCategory(r.category === "makanan" ? "makanan" : "minuman");
     setBrand((BRANDS as string[]).includes(r.brand) ? (r.brand as Brand) : "Nordu");
@@ -341,9 +368,38 @@ export function HppCalculator({
           <p className="mb-3 flex items-center gap-2 text-sm font-semibold text-foreground">
             <Boxes className="size-4 text-muted-foreground" /> Data Produk
           </p>
-          <Field label="Nama Produk">
-            <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="mis. Kopi Susu Gula Aren" />
-          </Field>
+          <div>
+            <div className="mb-1.5 flex items-center justify-between gap-2">
+              <Label>Nama Produk</Label>
+              {esbMenus.length > 0 && (
+                <div className="inline-flex rounded-lg border border-border bg-muted/50 p-0.5 text-[11px]">
+                  <button type="button" onClick={() => setManualProduct(false)} className={cn("rounded-md px-2 py-0.5 font-medium transition-colors", !manualProduct ? "bg-background text-foreground shadow-sm ring-1 ring-border" : "text-muted-foreground")}>Dari ESB</button>
+                  <button type="button" onClick={() => setManualProduct(true)} className={cn("rounded-md px-2 py-0.5 font-medium transition-colors", manualProduct ? "bg-background text-foreground shadow-sm ring-1 ring-border" : "text-muted-foreground")}>Baru / Manual</button>
+                </div>
+              )}
+            </div>
+            {manualProduct || esbMenus.length === 0 ? (
+              <>
+                <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="mis. Kopi Susu Gula Aren" />
+                {esbMenus.length > 0 && <p className="mt-1 text-[11px] text-amber-600 dark:text-amber-400">Produk baru — belum ada di ESB. Isi target penjualan manual.</p>}
+              </>
+            ) : (
+              <>
+                <Combobox
+                  portal
+                  matchTriggerWidth
+                  value={name}
+                  onChange={pickEsbProduct}
+                  options={esbMenus
+                    .filter((m) => m.foodBev === category)
+                    .map((m) => ({ value: m.menu, label: `${m.menu}${m.unitPrice > 0 ? ` · Rp ${m.unitPrice.toLocaleString("id-ID")}` : ""}` }))}
+                  searchPlaceholder="Cari produk ESB…"
+                  placeholder="Pilih produk dari ESB…"
+                />
+                <p className="mt-1 text-[11px] text-muted-foreground">Daftar produk {category === "minuman" ? "Beverage" : "Food"} dari ESB. Target penjualan direkomendasikan dari 30 hari terakhir.</p>
+              </>
+            )}
+          </div>
 
           <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
             <div>
@@ -538,9 +594,19 @@ export function HppCalculator({
             ]}
           />
           <div className="mt-2 grid grid-cols-2 gap-2">
-            <Field label="Target Penjualan Produk Ini (unit/bln)">
-              <NumInput value={targetSales} onChange={setTargetSales} placeholder="1000" />
-            </Field>
+            <div>
+              <div className="mb-1 flex flex-wrap items-center gap-1.5">
+                <Label>Target Penjualan Produk Ini (unit/bln)</Label>
+                {esbTargetRec != null && !targetCustom && (
+                  <span className="rounded-full bg-emerald-500/12 px-1.5 py-0.5 text-[9px] font-semibold text-emerald-600 dark:text-emerald-400">Rekomendasi ESB</span>
+                )}
+                {esbTargetRec != null && targetCustom && (
+                  <button type="button" onClick={() => { setTargetSales(esbTargetRec); setTargetCustom(false); }} className="rounded-full bg-muted px-1.5 py-0.5 text-[9px] font-semibold text-muted-foreground hover:text-foreground">Custom · pakai rekomendasi ({esbTargetRec.toLocaleString("id-ID")})</button>
+                )}
+              </div>
+              <NumInput value={targetSales} onChange={(v) => { setTargetSales(v); if (esbTargetRec != null) setTargetCustom(true); }} placeholder="1000" />
+              {esbTargetRec != null && !targetCustom && <p className="mt-1 text-[10px] text-muted-foreground">Dari penjualan 30 hari terakhir ESB (~{Math.round(esbTargetRec / 30)}/hari).</p>}
+            </div>
             {allocMode === "even" && (
               <Field label="Total Unit Semua Produk (unit/bln)">
                 <NumInput value={totalUnitsAll} onChange={setTotalUnitsAll} placeholder="1000" />
