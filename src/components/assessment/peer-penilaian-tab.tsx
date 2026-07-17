@@ -89,7 +89,7 @@ export function PeerPenilaianTab() {
           </div>
         </Card>
 
-        <div className="space-y-3">
+        <div className={cn("space-y-3", active.submitted && "pointer-events-none opacity-70")}>
           {PARAMETERS.map((p) => (
             <Card key={p.key} className="p-0">
               <div className="flex items-center justify-between gap-3 border-b border-border px-4 py-3">
@@ -100,7 +100,7 @@ export function PeerPenilaianTab() {
                 <span className="shrink-0 rounded-full bg-muted px-2.5 py-1 text-xs font-semibold text-foreground ring-1 ring-border">Bobot {p.weight}%</span>
               </div>
               <div className="p-3 sm:p-4">
-                <ScoreOptions options={p.options} value={scores[p.key]} onPick={(v) => setScores((s) => ({ ...s, [p.key]: v }))} accent="amber" />
+                <ScoreOptions options={p.options} value={scores[p.key]} onPick={(v) => { if (!active.submitted) setScores((s) => ({ ...s, [p.key]: v })); }} accent="amber" />
               </div>
             </Card>
           ))}
@@ -108,22 +108,27 @@ export function PeerPenilaianTab() {
 
         <div>
           <SectionLabel>Catatan (opsional)</SectionLabel>
-          <Textarea value={note} onChange={(e) => setNote(e.target.value)} placeholder="Contoh konkret yang mendukung penilaian…" rows={3} />
+          <Textarea value={note} disabled={active.submitted} onChange={(e) => setNote(e.target.value)} placeholder="Contoh konkret yang mendukung penilaian…" rows={3} />
         </div>
 
-        {active.submitted && (
-          <Banner tone="success" icon={<CheckCircle2 className="size-4" />}>Penilaian Anda sudah terkirim. Anda masih bisa memperbaruinya selama periode assessment terbuka.</Banner>
+        {active.submitted ? (
+          <>
+            <Banner tone="success" icon={<CheckCircle2 className="size-4" />}>Penilaian Anda sudah <strong>dikirim &amp; dikunci</strong> — tidak dapat diedit lagi.</Banner>
+            <Button variant="outline" className="w-full" onClick={() => setActiveId(null)}>Selesai — Kembali ke Daftar</Button>
+          </>
+        ) : (
+          <>
+            <div className="flex flex-wrap gap-2">
+              <Button onClick={() => save(true)} disabled={busy || !complete} className="flex-1">
+                {busy ? <Loader2 className="size-4 animate-spin" /> : <Send className="size-4" />} Kirim &amp; Kunci
+              </Button>
+              <Button variant="outline" onClick={() => save(false)} disabled={busy}>
+                Simpan Draft
+              </Button>
+            </div>
+            {!complete && <p className="text-center text-[11px] text-muted-foreground">Lengkapi keenam parameter untuk mengirim. Setelah dikirim tidak bisa diedit.</p>}
+          </>
         )}
-
-        <div className="flex flex-wrap gap-2">
-          <Button onClick={() => save(true)} disabled={busy || !complete} className="flex-1">
-            {busy ? <Loader2 className="size-4 animate-spin" /> : <Send className="size-4" />} {active.submitted ? "Perbarui & Kirim" : "Kirim Penilaian"}
-          </Button>
-          <Button variant="outline" onClick={() => save(false)} disabled={busy}>
-            Simpan Draft
-          </Button>
-        </div>
-        {!complete && <p className="text-center text-[11px] text-muted-foreground">Lengkapi keenam parameter untuk mengirim.</p>}
       </div>
     );
   }

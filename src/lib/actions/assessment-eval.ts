@@ -36,38 +36,42 @@ export async function getMyAssessmentTargets(): Promise<EvalTarget[]> {
 
   const [roster, assigns] = await Promise.all([listRoster(), listAssignments()]);
   const pidSet = new Set<string>();
-  for (const r of roster) if (r.role === "karyawan") pidSet.add(r.userId);
+  // Karyawan AND Heads are participants (Heads are assessed by HC + Director).
+  for (const r of roster) if (r.role === "karyawan" || r.role === "head") pidSet.add(r.userId);
   for (const a of assigns) pidSet.add(a.participantUserId);
 
-  const out: EvalTarget[] = [];
+  // First pass — decide which participants this evaluator is responsible for
+  // (cheap, no DB), then batch-load the sessions for just those.
+  const pending: { pid: string; name: string; department: string; jabatan: string; head: boolean }[] = [];
   for (const pid of pidSet) {
     const acc = getUser(pid);
     if (!acc) continue;
     const jabatan = acc.jabatan ?? "";
     const head = isHeadPos(jabatan);
-    // Which columns assess this participant.
     const assessedBy: EvaluatorKey[] = head ? ["dir", "hc"] : ["al", "hc"];
     if (!assessedBy.includes(me.evaluatorKey)) continue;
-    // An Atasan only assesses participants explicitly assigned to them or inside
-    // their scope division.
     if (me.evaluatorKey === "al") {
       const assign = assigns.find((a) => a.participantUserId === pid);
       const assigned = assign?.atasanUserId === user.id;
       const inScope = me.scopeDepartmentId ? orgDepartmentId(acc.department ?? "") === me.scopeDepartmentId : false;
       if (!assigned && !inScope) continue;
     }
-    const session = await getSessionByParticipant(pid);
-    const row = session?.evaluations.find((e) => e.evaluatorKey === me.evaluatorKey);
-    out.push({
-      participantUserId: pid,
-      name: acc.name,
-      department: acc.department ?? "",
-      jabatan,
-      isHead: head,
+    pending.push({ pid, name: acc.name, department: acc.department ?? "", jabatan, head });
+  }
+
+  const sessions = await Promise.all(pending.map((p) => getSessionByParticipant(p.pid)));
+  const out: EvalTarget[] = pending.map((p, i) => {
+    const row = sessions[i]?.evaluations.find((e) => e.evaluatorKey === me.evaluatorKey);
+    return {
+      participantUserId: p.pid,
+      name: p.name,
+      department: p.department,
+      jabatan: p.jabatan,
+      isHead: p.head,
       mineFilled: row ? evaluatorFilled(row.scores) : 0,
       mineSubmitted: !!row?.submitted,
-      sessionOpen: !!session,
-    });
-  }
+      sessionOpen: !!sessions[i],
+    };
+  });
   return out.sort((a, b) => a.name.localeCompare(b.name));
 }

@@ -1,7 +1,6 @@
 "use client";
 
 import * as React from "react";
-import Link from "next/link";
 import { BookOpen, ClipboardList, GaugeCircle, Mic, ScrollText, Settings2, Sparkles } from "lucide-react";
 import { ASSESSMENT_ROLES, canSeeTab, type AssessmentRole, type TabKey } from "@/lib/assessment/access";
 import type { EvaluatorIdentity } from "@/lib/assessment/session";
@@ -16,6 +15,7 @@ import { PeerPenilaianTab } from "./peer-penilaian-tab";
 import { InterviewTab } from "./interview-tab";
 import { DashboardTab } from "./dashboard-tab";
 import { ReferensiTab } from "./referensi-tab";
+import { SettingsPanel } from "./settings-panel";
 
 const TABS: { key: TabKey; label: string; short: string; icon: typeof BookOpen }[] = [
   { key: "panduan", label: "Panduan", short: "Panduan", icon: BookOpen },
@@ -67,6 +67,8 @@ export function AssessmentWorkspace({
 
 function WorkspaceInner({ viewerName, canManage, isParticipant }: { viewerName: string; canManage: boolean; isParticipant: boolean }) {
   const a = useAssessment();
+  // Pengaturan is an in-workspace panel (instant), not a route — no navigation lag.
+  const [showSettings, setShowSettings] = React.useState(false);
   // A participant who is ALSO an evaluator (e.g. Rekan Sejawat) keeps the Syarat
   // & Self-Assessment tab on top of their evaluator tabs → the 4-tab case.
   const canSee = (t: TabKey) => canSeeTab(a.role, t) || (isParticipant && t === "syarat");
@@ -126,13 +128,13 @@ function WorkspaceInner({ viewerName, canManage, isParticipant }: { viewerName: 
           style={{ minWidth: "100%" }}
         >
           {tabs.map((t) => {
-            const active = t.key === activeTab;
+            const active = t.key === activeTab && !showSettings;
             const Icon = t.icon;
             return (
               <button
                 key={t.key}
                 type="button"
-                onClick={() => a.setTab(t.key)}
+                onClick={() => { setShowSettings(false); a.setTab(t.key); }}
                 aria-pressed={active}
                 className={cn(
                   "inline-flex flex-1 items-center justify-center gap-1.5 whitespace-nowrap rounded-lg px-3 py-1.5 text-sm font-medium transition-colors",
@@ -145,20 +147,28 @@ function WorkspaceInner({ viewerName, canManage, isParticipant }: { viewerName: 
               </button>
             );
           })}
-          {/* Admin-only: Pengaturan sits at the far end of the row (scroll to reach). */}
+          {/* Admin-only: Pengaturan sits at the far end — instant in-workspace panel. */}
           {canManage && (
-            <Link
-              href="/assessment/settings"
-              className="inline-flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-lg border-l border-border pl-3 pr-3 py-1.5 text-sm font-medium text-muted-foreground transition-colors hover:bg-muted/60 hover:text-foreground"
+            <button
+              type="button"
+              onClick={() => setShowSettings(true)}
+              aria-pressed={showSettings}
+              className={cn(
+                "inline-flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-lg border-l border-border pl-3 pr-3 py-1.5 text-sm font-medium transition-colors",
+                showSettings ? "bg-background text-foreground shadow-md ring-1 ring-border" : "text-muted-foreground hover:bg-muted/60 hover:text-foreground",
+              )}
             >
               <Settings2 className="size-4" />
               <span>Pengaturan</span>
-            </Link>
+            </button>
           )}
         </div>
       </div>
 
       {/* Entrance animation only for button-driven navigation, not manual clicks. */}
+      {showSettings ? (
+        <SettingsPanel />
+      ) : (
       <div key={activeTab} className={a.entrance ? "animate-fade-up" : undefined}>
         {activeTab === "panduan" && <PanduanTab />}
         {activeTab === "syarat" && <SyaratTab />}
@@ -167,6 +177,7 @@ function WorkspaceInner({ viewerName, canManage, isParticipant }: { viewerName: 
         {activeTab === "dashboard" && <DashboardTab />}
         {activeTab === "referensi" && <ReferensiTab />}
       </div>
+      )}
     </>
   );
 }

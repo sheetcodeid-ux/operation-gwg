@@ -61,6 +61,12 @@ function reportEvaluators(r: AssessmentRecord): EvaluatorBreakdown[] {
 }
 
 /** Build a fully self-contained, print-ready HTML document for a report. */
+/** GWG mark, no box. The header band is dark in both modes → render it white. */
+function bandLogo(): string {
+  const origin = typeof window !== "undefined" ? window.location.origin : "";
+  return `<img src="${origin}/gwg.svg" alt="GWG" style="height:40px;width:auto;filter:brightness(0) invert(1)"/>`;
+}
+
 function buildReportHtml(r: AssessmentRecord, mode: ReportMode): string {
   const t = THEME[mode];
   const hasil = HASIL_META[r.hasil];
@@ -114,7 +120,7 @@ function buildReportHtml(r: AssessmentRecord, mode: ReportMode): string {
 </style></head><body>
   <div class="sheet">
     <div class="band">
-      <div><h1>Laporan Hasil Assessment Kenaikan Golongan</h1><p>Operational System · Human Resources Development</p></div>
+      <div style="display:flex;align-items:center;gap:14px">${bandLogo()}<div><h1>Laporan Hasil Assessment Kenaikan Golongan</h1><p>Good Will Grow · Human Capital</p></div></div>
       <div style="text-align:right"><p style="opacity:0.85;font-size:12px">${r.batch}</p><p>${fmtDate(r.tanggal)}</p></div>
     </div>
     <div class="body">
@@ -376,7 +382,7 @@ function buildFullReportHtml(record: AssessmentRecord, b: ResultBundle, mode: Re
 </style></head><body>
   <div class="sheet">
     <div class="band">
-      <div><h1>Laporan Lengkap Assessment Kenaikan Golongan</h1><p>Operational System · Human Resources Development</p></div>
+      <div style="display:flex;align-items:center;gap:14px">${bandLogo()}<div><h1>Laporan Lengkap Assessment Kenaikan Golongan</h1><p>Good Will Grow · Human Capital</p></div></div>
       <div style="text-align:right"><p style="opacity:0.85;font-size:12px">${record.batch}</p><p>${fmtDate(record.tanggal)}</p></div>
     </div>
     <div class="body">

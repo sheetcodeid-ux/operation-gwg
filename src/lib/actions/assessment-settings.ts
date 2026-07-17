@@ -3,7 +3,12 @@
 import { revalidatePath } from "next/cache";
 import { getSessionUser } from "@/lib/auth";
 import { persistMessage } from "@/lib/data/persist";
+import { getUsers } from "@/lib/data/store";
+import { getOrgExtra } from "@/lib/data/org";
+import { allDepartments, setOrgExtras } from "@/lib/assessment/org";
 import {
+  listAssignments,
+  listRoster,
   saveAssignment,
   saveRosterEntry,
   removeRosterEntry,
@@ -16,6 +21,22 @@ import type { UserProfile } from "@/lib/types";
 async function canManage(): Promise<UserProfile | null> {
   const user = await getSessionUser();
   return user && user.role === "super_admin" ? user : null;
+}
+
+/** Everything the settings panel needs — fetched on demand so the Pengaturan tab
+ *  opens instantly (client-side) instead of a full route navigation. */
+export async function getAssessmentSettingsData() {
+  if (!(await canManage())) return null;
+  setOrgExtras(await getOrgExtra());
+  const [roster, assignments] = await Promise.all([listRoster(), listAssignments()]);
+  const accounts = getUsers()
+    .filter((u) => u.active)
+    .map((u) => ({ id: u.id, name: u.name, email: u.email, department: u.department ?? null, jabatan: u.jabatan ?? null }))
+    .sort((a, b) => a.name.localeCompare(b.name));
+  const departments = allDepartments().map((d) => ({ value: d.id, label: d.name }));
+  const initialRoster = Object.fromEntries(roster.map((r) => [r.userId, { role: r.role, scopeDepartmentId: r.scopeDepartmentId }]));
+  const initialAssignments = Object.fromEntries(assignments.map((a) => [a.participantUserId, { atasanUserId: a.atasanUserId, peerUserIds: a.peerUserIds }]));
+  return { accounts, departments, initialRoster, initialAssignments };
 }
 
 export async function saveRosterEntryAction(input: {

@@ -32,8 +32,10 @@ export async function resolveAssessmentAccess(user: {
   const entry = roster.find((r) => r.userId === user.id && r.active) ?? null;
   const peerFor = assignments.filter((a) => a.peerUserIds.includes(user.id)).map((a) => a.participantUserId);
   const atasanFor = assignments.filter((a) => a.atasanUserId === user.id).map((a) => a.participantUserId);
+  // Heads are assessed too (by HC + Director), so they also fill Syarat & Self
+  // Assessment — they count as participants.
   const isParticipant =
-    entry?.role === "karyawan" || assignments.some((a) => a.participantUserId === user.id);
+    entry?.role === "karyawan" || entry?.role === "head" || assignments.some((a) => a.participantUserId === user.id);
 
   const base = { peerFor, atasanFor, isParticipant };
 

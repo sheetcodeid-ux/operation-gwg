@@ -48,6 +48,9 @@ export function PenilaianTab() {
 
   // A logged-in evaluator whose column isn't required for this position.
   const notMyCandidate = locked && !evaluators.some((e) => e.key === myKey);
+  // Once submitted, an evaluator's column is final — locked, no edits (integrity).
+  const myRow = a.session?.evaluations.find((x) => x.evaluatorKey === active);
+  const myLocked = locked && !!myRow?.submitted;
 
   return (
     <div className="space-y-4">
@@ -92,6 +95,12 @@ export function PenilaianTab() {
       ) : null}
 
       {locked && !notMyCandidate && <EvaluatorProgress activeKey={active} />}
+
+      {myLocked && (
+        <Banner tone="success" icon={<CheckCircle2 className="size-4" />}>
+          Penilaian Anda sudah <strong>dikirim &amp; dikunci</strong> — tidak dapat diedit lagi. Ini menjaga integritas keputusan.
+        </Banner>
+      )}
 
       {!locked && (
         <>
@@ -141,7 +150,7 @@ export function PenilaianTab() {
             </div>
           </Card>
 
-          <div className="space-y-3">
+          <div className={cn("space-y-3", myLocked && "pointer-events-none opacity-70")}>
             {PARAMETERS.map((p) => {
               const value = scores[p.key];
               return (
@@ -153,7 +162,7 @@ export function PenilaianTab() {
                     </span>
                   </div>
                   <p className="mb-2.5 text-xs leading-relaxed text-muted-foreground">Sumber: {p.source}</p>
-                  <ScoreOptions options={p.options} value={value} onPick={(v) => a.pickScore(active, p.key, v)} accent={ACCENT[active]} />
+                  <ScoreOptions options={p.options} value={value} onPick={(v) => { if (!myLocked) a.pickScore(active, p.key, v); }} accent={ACCENT[active]} />
                   {value ? (
                     <p className="mt-2 text-right text-xs text-muted-foreground">
                       Kontribusi skor:{" "}
@@ -170,6 +179,7 @@ export function PenilaianTab() {
             <p className="mb-2 text-xs text-muted-foreground">Opsional — catatan kualitatif yang tampil di Dashboard sebagai bukti pendukung.</p>
             <Textarea
               rows={3}
+              disabled={myLocked}
               value={a.evaluatorNotes[active] ?? ""}
               onChange={(e) => a.setEvaluatorNote(active, e.target.value)}
               placeholder="Contoh: konsisten melampaui target, inisiatif tinggi, perlu penguatan pada presentasi ke manajemen…"
@@ -247,26 +257,29 @@ function MySaveBar({ activeKey }: { activeKey: EvaluatorKey }) {
     setMsg(res.ok ? "Penilaian Anda tersimpan." : res.error ?? "Gagal menyimpan.");
   };
 
+  // Submitted = final & locked: no re-submit, only move on.
+  if (saved) {
+    return (
+      <div className="flex flex-wrap gap-2">
+        <Button variant="outline" className="h-11 flex-1" onClick={a.resetCandidate}>
+          Selesai — Nilai Berikutnya
+        </Button>
+        <Button variant="outline" className="h-11 flex-1" onClick={a.continueToInterview}>
+          Ke Interview <ArrowRight className="size-4" />
+        </Button>
+      </div>
+    );
+  }
   return (
     <div className="space-y-2">
       <Button className="h-12 w-full text-base" onClick={onSave} disabled={!complete || a.sessionBusy}>
         {a.sessionBusy ? <Loader2 className="size-5 animate-spin" /> : <CheckCircle2 className="size-5" />}
-        {saved ? "Perbarui Penilaian Saya" : "Simpan Penilaian Saya"}
+        Kirim &amp; Kunci Penilaian
       </Button>
       {!complete && (
-        <p className="text-center text-xs text-muted-foreground">Lengkapi 6 parameter dulu untuk menyimpan.</p>
+        <p className="text-center text-xs text-muted-foreground">Lengkapi 6 parameter dulu. Setelah dikirim, penilaian tidak dapat diedit.</p>
       )}
-      {msg && <p className={cn("text-center text-xs", saved ? "text-brand-600 dark:text-brand-400" : "text-muted-foreground")}>{msg}</p>}
-      {saved && (
-        <div className="flex flex-wrap gap-2">
-          <Button variant="outline" className="h-11 flex-1" onClick={a.resetCandidate}>
-            Selesai — Nilai Berikutnya
-          </Button>
-          <Button variant="outline" className="h-11 flex-1" onClick={a.continueToInterview}>
-            Ke Interview <ArrowRight className="size-4" />
-          </Button>
-        </div>
-      )}
+      {msg && <p className="text-center text-xs text-muted-foreground">{msg}</p>}
     </div>
   );
 }
