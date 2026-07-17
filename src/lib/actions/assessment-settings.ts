@@ -15,6 +15,7 @@ import {
   deleteAssignment,
   type RosterRole,
 } from "@/lib/data/assessment-roster";
+import { getReportSignatories, listSignatures, saveSignature } from "@/lib/data/assessment-signature";
 import type { UserProfile } from "@/lib/types";
 
 /** Who may edit the assessment settings: Super Admin only (owner decision). */
@@ -28,7 +29,7 @@ async function canManage(): Promise<UserProfile | null> {
 export async function getAssessmentSettingsData() {
   if (!(await canManage())) return null;
   setOrgExtras(await getOrgExtra());
-  const [roster, assignments] = await Promise.all([listRoster(), listAssignments()]);
+  const [roster, assignments, signatures] = await Promise.all([listRoster(), listAssignments(), listSignatures()]);
   const accounts = getUsers()
     .filter((u) => u.active)
     .map((u) => ({ id: u.id, name: u.name, email: u.email, department: u.department ?? null, jabatan: u.jabatan ?? null }))
@@ -36,7 +37,29 @@ export async function getAssessmentSettingsData() {
   const departments = allDepartments().map((d) => ({ value: d.id, label: d.name }));
   const initialRoster = Object.fromEntries(roster.map((r) => [r.userId, { role: r.role, scopeDepartmentId: r.scopeDepartmentId }]));
   const initialAssignments = Object.fromEntries(assignments.map((a) => [a.participantUserId, { atasanUserId: a.atasanUserId, peerUserIds: a.peerUserIds }]));
-  return { accounts, departments, initialRoster, initialAssignments };
+  return { accounts, departments, initialRoster, initialAssignments, initialSignatures: signatures };
+}
+
+/** Save one signatory's TTD (name + optional signature image data URL). Admin only. */
+export async function saveSignatureAction(input: { userId: string; name: string; image: string | null }) {
+  if (!(await canManage())) return { error: "Hanya Admin yang dapat mengatur assessment." };
+  try {
+    // Guard against oversized images (keep the row sane).
+    if (input.image && input.image.length > 600_000) return { error: "Gambar TTD terlalu besar (maks ±400 KB). Kompres dulu." };
+    await saveSignature(input.userId, input.name, input.image);
+    revalidatePath("/assessment");
+    return { ok: true };
+  } catch (e) {
+    return { error: persistMessage(e) };
+  }
+}
+
+/** The HC & Director signatories (name + TTD image) for the printed report. Any
+ *  signed-in user may read these to render the PDF. */
+export async function getReportSignatoriesAction() {
+  const user = await getSessionUser();
+  if (!user) return { hc: null, director: null };
+  return getReportSignatories();
 }
 
 export async function saveRosterEntryAction(input: {

@@ -10,6 +10,7 @@ import {
   saveRosterEntryAction,
   removeRosterEntryAction,
   saveAssignmentAction,
+  saveSignatureAction,
 } from "@/lib/actions/assessment-settings";
 import type { RosterRole } from "@/lib/data/assessment-roster";
 
@@ -17,6 +18,7 @@ export type AccountOption = { id: string; name: string; email: string; departmen
 export type DeptOption = { value: string; label: string };
 type RosterMap = Record<string, { role: RosterRole; scopeDepartmentId: string }>;
 type AssignMap = Record<string, { atasanUserId: string | null; peerUserIds: string[] }>;
+type SigMap = Record<string, { name: string; image: string | null }>;
 
 type RoleChoice = RosterRole | "none";
 const ROLE_OPTS: { value: RoleChoice; label: string }[] = [
@@ -41,14 +43,17 @@ export function AssessmentSettings({
   departments,
   initialRoster,
   initialAssignments,
+  initialSignatures = {},
 }: {
   accounts: AccountOption[];
   departments: DeptOption[];
   initialRoster: RosterMap;
   initialAssignments: AssignMap;
+  initialSignatures?: SigMap;
 }) {
   const [roster, setRoster] = React.useState<RosterMap>(initialRoster);
   const [assign, setAssign] = React.useState<AssignMap>(initialAssignments);
+  const [sigs, setSigs] = React.useState<SigMap>(initialSignatures);
   const [q, setQ] = React.useState("");
   const [busy, setBusy] = React.useState<string | null>(null);
   const [openDept, setOpenDept] = React.useState<string | null>(null);
@@ -131,6 +136,20 @@ export function AssessmentSettings({
     void persistAssign(participantId, { ...cur, peerUserIds: cur.peerUserIds.filter((p) => p !== peerId) });
   }
 
+  async function persistSig(userId: string, name: string, image: string | null) {
+    setSigs((s) => ({ ...s, [userId]: { name, image } }));
+    const res = await saveSignatureAction({ userId, name, image });
+    if (res?.error) toast.error(res.error); else toast.success("TTD disimpan");
+  }
+  function onSigFile(userId: string, name: string, e: React.ChangeEvent<HTMLInputElement>) {
+    const f = e.target.files?.[0];
+    if (!f) return;
+    const reader = new FileReader();
+    reader.onload = () => { void persistSig(userId, name, typeof reader.result === "string" ? reader.result : null); };
+    reader.readAsDataURL(f);
+    e.target.value = "";
+  }
+
   const registeredCount = accounts.filter((a) => roleOf(a.id) !== "none").length;
 
   function renderAccount(a: AccountOption) {
@@ -198,6 +217,32 @@ export function AssessmentSettings({
                 )}
               </div>
             </div>
+          </div>
+        )}
+
+        {/* TTD — untuk penandatangan PDF (Head, HC, Director). */}
+        {(role === "head" || role === "hc" || role === "director") && (
+          <div className="mt-2 border-t border-border/60 pt-2">
+            <p className="mb-1.5 text-[11px] font-medium text-muted-foreground">Tanda Tangan (auto ke PDF)</p>
+            <div className="flex flex-wrap items-center gap-2">
+              <Input
+                defaultValue={sigs[a.id]?.name ?? a.name}
+                onBlur={(e) => persistSig(a.id, e.target.value.trim() || a.name, sigs[a.id]?.image ?? null)}
+                placeholder="Nama penandatangan"
+                className="h-9 flex-1 sm:max-w-52"
+              />
+              <label className="inline-flex cursor-pointer items-center gap-1.5 rounded-lg border border-border px-2.5 py-1.5 text-[11px] font-medium text-muted-foreground hover:text-foreground">
+                {sigs[a.id]?.image ? "Ganti TTD" : "Unggah TTD"}
+                <input type="file" accept="image/*" className="hidden" onChange={(e) => onSigFile(a.id, sigs[a.id]?.name ?? a.name, e)} />
+              </label>
+            </div>
+            {sigs[a.id]?.image && (
+              <div className="mt-2 flex items-center gap-2">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img src={sigs[a.id]!.image!} alt="TTD" className="h-10 rounded bg-white object-contain px-1 ring-1 ring-border" />
+                <button type="button" onClick={() => persistSig(a.id, sigs[a.id]?.name ?? a.name, null)} className="text-[11px] font-medium text-red-500 hover:text-red-600">Hapus TTD</button>
+              </div>
+            )}
           </div>
         )}
       </div>

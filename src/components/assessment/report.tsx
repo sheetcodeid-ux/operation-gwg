@@ -6,11 +6,14 @@ import { HASIL_META, type AssessmentRecord, type EvaluatorBreakdown } from "@/li
 import { DIRECTOR_ONLY_POSITIONS, type EvaluatorKey } from "@/lib/assessment/config";
 import type { ResultBundle } from "@/lib/assessment/result";
 import { DIRECTOR_NAME, HR_NAME } from "@/lib/assessment/access";
+import { getReportSignatoriesAction } from "@/lib/actions/assessment-settings";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
 
 type ReportMode = "terang" | "gelap";
+type Sig = { name: string; image: string | null } | null;
+export type Signatories = { hc: Sig; director: Sig };
 
 const THEME: Record<ReportMode, { bg: string; card: string; text: string; sub: string; border: string; band: string; bandText: string; accent: string }> = {
   terang: {
@@ -67,7 +70,17 @@ function bandLogo(): string {
   return `<img src="${origin}/gwg.svg" alt="GWG" style="height:40px;width:auto;filter:brightness(0) invert(1)"/>`;
 }
 
-function buildReportHtml(r: AssessmentRecord, mode: ReportMode): string {
+/** Signature block — optional TTD image above the name line. */
+function signBlock(t: (typeof THEME)[ReportMode], title: string, name: string, image: string | null): string {
+  return `
+    <div style="text-align:center;flex:1">
+      <div style="color:${t.sub};font-size:11px;margin-bottom:${image ? "4px" : "44px"}">${title}</div>
+      ${image ? `<img src="${image}" alt="ttd" style="height:46px;object-fit:contain;display:block;margin:0 auto 2px"/>` : ""}
+      <div style="border-top:1px solid ${t.text};margin:0 8px;padding-top:6px;color:${t.text};font-size:12px;font-weight:600">${name}</div>
+    </div>`;
+}
+
+function buildReportHtml(r: AssessmentRecord, mode: ReportMode, sg?: Signatories): string {
   const t = THEME[mode];
   const hasil = HASIL_META[r.hasil];
   const hasilColor = HASIL_COLOR[hasil.tone];
@@ -90,12 +103,6 @@ function buildReportHtml(r: AssessmentRecord, mode: ReportMode): string {
     </div>`,
     )
     .join("");
-
-  const sign = (title: string, name: string) => `
-    <div style="text-align:center;flex:1">
-      <div style="color:${t.sub};font-size:11px;margin-bottom:44px">${title}</div>
-      <div style="border-top:1px solid ${t.text};margin:0 8px;padding-top:6px;color:${t.text};font-size:12px;font-weight:600">${name}</div>
-    </div>`;
 
   return `<!doctype html><html lang="id"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -149,9 +156,9 @@ function buildReportHtml(r: AssessmentRecord, mode: ReportMode): string {
       <div style="color:${t.text};font-size:13px;line-height:1.6;padding:4px 0">${r.decision}</div>
 
       <div class="signs">
-        ${sign("Penilai", r.penilai.split(",")[0].trim())}
-        ${sign("Human Resource", HR_NAME)}
-        ${sign("Director", DIRECTOR_NAME)}
+        ${signBlock(t, "Penilai", r.penilai.split(",")[0].trim(), null)}
+        ${signBlock(t, "Human Capital", sg?.hc?.name || HR_NAME, sg?.hc?.image ?? null)}
+        ${signBlock(t, "Director", sg?.director?.name || DIRECTOR_NAME, sg?.director?.image ?? null)}
       </div>
 
       <div class="foot"><span>Dokumen ini dihasilkan otomatis oleh Sistem Assessment GWG.</span><span>Dicetak: ${today}</span></div>
@@ -172,15 +179,18 @@ function ReportModalShell({
   onOpenChange: (v: boolean) => void;
   title: string;
   description?: string;
-  buildHtml: (mode: ReportMode) => string;
+  buildHtml: (mode: ReportMode, sg: Signatories) => string;
 }) {
   const [mode, setMode] = React.useState<ReportMode | null>(null);
+  const [sg, setSg] = React.useState<Signatories>({ hc: null, director: null });
 
   React.useEffect(() => {
-    if (!open) setMode(null);
+    if (!open) { setMode(null); return; }
+    // Load the configured TTD (HC & Director) once the dialog opens.
+    getReportSignatoriesAction().then((s) => setSg(s as Signatories)).catch(() => {});
   }, [open]);
 
-  const html = mode ? buildHtml(mode) : "";
+  const html = mode ? buildHtml(mode, sg) : "";
 
   function print() {
     if (!html) return;
@@ -261,7 +271,7 @@ export function ReportModal({ record, open, onOpenChange }: { record: Assessment
       onOpenChange={onOpenChange}
       title="Report Assessment"
       description={record ? `${record.name} · ${record.jabatan}` : undefined}
-      buildHtml={(mode) => (record ? buildReportHtml(record, mode) : "")}
+      buildHtml={(mode, sg) => (record ? buildReportHtml(record, mode, sg) : "")}
     />
   );
 }
@@ -302,7 +312,7 @@ function radarSvg(points: { short: string; value: number }[], t: (typeof THEME)[
 const SHORT: Record<string, string> = { kpi: "KPI", att: "Attitude", loy: "Loyalitas", skl: "Skill", kon: "Kontrib.", msk: "Masa" };
 
 /** Build a comprehensive, print-ready HTML report of the whole dashboard result. */
-function buildFullReportHtml(record: AssessmentRecord, b: ResultBundle, mode: ReportMode): string {
+function buildFullReportHtml(record: AssessmentRecord, b: ResultBundle, mode: ReportMode, sg?: Signatories): string {
   const t = THEME[mode];
   const hasilColor = HASIL_COLOR[b.decisionTone] ?? HASIL_COLOR.wait;
   const today = fmtDate(new Date().toISOString());
@@ -353,11 +363,6 @@ function buildFullReportHtml(record: AssessmentRecord, b: ResultBundle, mode: Re
   }
 
   const radar = radarSvg(b.params.map((p) => ({ short: SHORT[p.key] ?? p.title, value: p.avgPct })), t);
-  const sign = (title: string, name: string) => `
-    <div style="text-align:center;flex:1">
-      <div style="color:${t.sub};font-size:11px;margin-bottom:44px">${title}</div>
-      <div style="border-top:1px solid ${t.text};margin:0 8px;padding-top:6px;color:${t.text};font-size:12px;font-weight:600">${name}</div>
-    </div>`;
 
   return `<!doctype html><html lang="id"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Laporan Lengkap — ${record.name}</title>
@@ -418,7 +423,7 @@ function buildFullReportHtml(record: AssessmentRecord, b: ResultBundle, mode: Re
       <div class="sec-title">Rekomendasi Tindak Lanjut</div>
       <ul style="list-style:none">${recos}</ul>
 
-      <div class="signs">${sign("Penilai", record.penilai.split(",")[0].trim())}${sign("Human Resource", HR_NAME)}${sign("Director", DIRECTOR_NAME)}</div>
+      <div class="signs">${signBlock(t, "Penilai", record.penilai.split(",")[0].trim(), null)}${signBlock(t, "Human Capital", sg?.hc?.name || HR_NAME, sg?.hc?.image ?? null)}${signBlock(t, "Director", sg?.director?.name || DIRECTOR_NAME, sg?.director?.image ?? null)}</div>
       <div class="foot"><span>Dokumen ini dihasilkan otomatis oleh Sistem Assessment GWG.</span><span>Dicetak: ${today}</span></div>
     </div>
   </div>
@@ -438,7 +443,7 @@ export function DashboardReportButton({ record, bundle }: { record: AssessmentRe
         onOpenChange={setOpen}
         title="Cetak Laporan Lengkap"
         description={`${record.name} · ${record.jabatan}`}
-        buildHtml={(mode) => buildFullReportHtml(record, bundle, mode)}
+        buildHtml={(mode, sg) => buildFullReportHtml(record, bundle, mode, sg)}
       />
     </>
   );
