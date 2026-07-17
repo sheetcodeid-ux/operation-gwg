@@ -60,6 +60,7 @@ import type { HppRecord } from "@/lib/data/hpp";
 import { HPP_STATUS_META, STATUS_PILL } from "@/lib/hpp/status";
 import { downloadCsv, toCsv } from "@/lib/csv";
 import { Button } from "@/components/ui/button";
+import { UMP_2026 } from "@/lib/hpp/ump";
 import { Field, Input, Label } from "@/components/ui/input";
 import { StatTile } from "@/components/ui/stat";
 import { Combobox } from "@/components/ui/combobox";
@@ -143,6 +144,8 @@ export function HppCalculator({
   const [totalUnitsAll, setTotalUnitsAll] = React.useState(1000);
   const [wastePct, setWastePct] = React.useState(5); // waste normal ≤5% (GWG)
   const [btkl, setBtkl] = React.useState(0); // BTKL dapur/bar / bulan
+  const [umpProv, setUmpProv] = React.useState(""); // referensi UMP BPS 2026
+  const [umpStaff, setUmpStaff] = React.useState(1);
   const [fixed, setFixed] = React.useState<FixedItem[]>([]);
   const [useClass, setUseClass] = React.useState(false); // Sistem Class Nordu
 
@@ -495,7 +498,7 @@ export function HppCalculator({
             </div>
             {wastePct > 5 && (
               <p className="mt-2 flex items-center gap-1.5 rounded-lg bg-amber-500/10 px-2 py-1.5 text-[11px] font-medium text-amber-600 dark:text-amber-400">
-                <AlertTriangle className="size-3.5 shrink-0" /> Waste {wastePct}% melebihi batas normal 5% — catat kelebihannya sebagai waste abnormal (beban operasional terpisah).
+                <AlertTriangle className="size-3.5 shrink-0" /> Waste {wastePct}% melebihi batas normal 5% — hanya menu berbahan mudah rusak (mis. nasi telur) yang boleh standar lebih tinggi; kelebihan lain dicatat sebagai waste abnormal (beban operasional terpisah, di luar HPP).
               </p>
             )}
           </div>
@@ -541,6 +544,39 @@ export function HppCalculator({
               <div className="w-32 shrink-0">
                 <NumInput value={btkl} onChange={setBtkl} placeholder="Rp/bln" />
               </div>
+            </div>
+            {/* Referensi UMP 2026 (BPS, lampiran makalah) — kebijakan MoM:
+                BTKL memakai kualifikasi standar skala tertinggi. */}
+            <div className="mt-2.5 flex flex-wrap items-end gap-2 border-t border-border/60 pt-2.5">
+              <div className="min-w-40 flex-1">
+                <p className="mb-1 text-[10px] font-medium uppercase tracking-wide text-muted-foreground">Referensi UMP 2026 (BPS)</p>
+                <Combobox
+                  portal
+                  matchTriggerWidth
+                  value={umpProv}
+                  onChange={setUmpProv}
+                  options={UMP_2026.map((u) => ({ value: u.prov, label: `${u.prov} — Rp ${u.ump.toLocaleString("id-ID")}` }))}
+                  searchPlaceholder="Cari provinsi…"
+                />
+              </div>
+              <div className="w-20 shrink-0">
+                <p className="mb-1 text-[10px] font-medium uppercase tracking-wide text-muted-foreground">Staf</p>
+                <NumInput value={umpStaff} onChange={setUmpStaff} placeholder="1" />
+              </div>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  const u = UMP_2026.find((x) => x.prov === umpProv);
+                  if (!u) return toast.error("Pilih provinsi dulu.");
+                  setBtkl(Math.round(u.ump * Math.max(1, umpStaff)));
+                  toast.success(`BTKL diisi dari UMP ${u.prov} × ${Math.max(1, umpStaff)} staf`);
+                }}
+              >
+                Terapkan
+              </Button>
+              <p className="w-full text-[10px] text-muted-foreground">Standar skala tertinggi berlaku untuk seluruh brand (MoM Juni 2026).</p>
             </div>
           </div>
 

@@ -81,6 +81,66 @@ export function HppGuide({ stats, canVerify }: { stats: GuideStats; canVerify: b
             ))}
           </div>
 
+          {/* Kebijakan resmi — makalah final (MoM 19/22/25 & 29 Juni 2026) */}
+          <div className="rounded-xl border border-border bg-muted/20 p-3">
+            <p className="mb-2 text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+              Kebijakan Final Sistem HPP · MoM 19/22/25 &amp; 29 Juni 2026
+            </p>
+            <div className="grid gap-3 lg:grid-cols-2">
+              <div className="overflow-x-auto">
+                <p className="mb-1 text-[11px] font-semibold text-foreground">Formula Resmi (7 Langkah)</p>
+                <table className="w-full min-w-[18rem] text-[11px]">
+                  <tbody>
+                    {[
+                      ["1. HPP Dasar", "Bahan baku (harga tertinggi wilayah)"],
+                      ["2. + Bahan Baku", "Komposisi penyusun menu"],
+                      ["3. + BTKL", "Tenaga kerja langsung dapur/bar"],
+                      ["4. + Overhead", "Listrik + gas + waste 5% + lain-lain"],
+                      ["5. + Packing", "Kemasan primer (setara HPP dasar)"],
+                      ["6. = Total HPP", "Sebelum harga jual"],
+                      ["7. Harga Jual", "Total HPP + % margin · tanpa pajak"],
+                    ].map(([a, b]) => (
+                      <tr key={a} className="border-b border-border/50 last:border-0">
+                        <td className="whitespace-nowrap py-1 pr-3 font-medium text-foreground">{a}</td>
+                        <td className="py-1 text-muted-foreground">{b}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              <div className="overflow-x-auto">
+                <p className="mb-1 text-[11px] font-semibold text-foreground">Target per Brand</p>
+                <table className="w-full min-w-[18rem] text-[11px]">
+                  <thead>
+                    <tr className="border-b border-border text-left text-[10px] uppercase tracking-wide text-muted-foreground">
+                      <th className="py-1 pr-3">Brand</th>
+                      <th className="py-1 pr-3">HPP Target</th>
+                      <th className="py-1">Margin</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {[
+                      ["Nordu Coffee", "60–65%", "35–40% (Class 1/2/3: +Rp5.000/class)"],
+                      ["Cattu", "≤65%", "min 35% — tanpa menu di bawahnya"],
+                      ["Busari", "65–70%", "30–35%"],
+                      ["Bar / Minuman", "Food cost 25–35%", "≥30% · after-tax tidak ditampilkan"],
+                    ].map(([a, b, c]) => (
+                      <tr key={a} className="border-b border-border/50 last:border-0">
+                        <td className="whitespace-nowrap py-1 pr-3 font-medium text-foreground">{a}</td>
+                        <td className="whitespace-nowrap py-1 pr-3 text-muted-foreground">{b}</td>
+                        <td className="py-1 text-muted-foreground">{c}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+                <p className="mt-1.5 text-[10px] text-muted-foreground">
+                  Ketentuan lain: PBJT &amp; sewa bangunan di luar HPP/overhead · waste normal maks 5% (diukur real, abnormal = beban terpisah) ·
+                  HPP &gt;70% = over cost wajib evaluasi · foto produk wajib sebelum diajukan · update HPP bila bahan naik &gt;5% · BTKL standar skala tertinggi (ref. UMP BPS 2026).
+                </p>
+              </div>
+            </div>
+          </div>
+
           {/* Live team status */}
           <div>
             <p className="mb-1.5 text-[11px] font-medium uppercase tracking-wide text-muted-foreground">Status tim saat ini</p>

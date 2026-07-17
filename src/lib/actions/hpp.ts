@@ -35,6 +35,9 @@ export async function submitHppAction(id: string) {
   if (!allowed(user)) return { error: "Not authorized" };
   const rec = await getHpp(id);
   if (!rec) return { error: "Data tidak ditemukan." };
+  // Keputusan Final #10 (MoM Juni 2026): database + foto produk WAJIB untuk
+  // identifikasi & verifikasi tim F&B — tanpa foto tidak bisa diajukan.
+  if (!rec.imageUrl) return { error: `Foto produk wajib disertakan sebelum diajukan (Keputusan Final #10). Edit "${rec.name}" dan tambahkan foto.` };
   await setHppStatus(id, "submitted", null, null);
   // Signal tim F&B (surfaced in the topbar bell for F&B / admin only).
   await saveNotification({
@@ -55,11 +58,20 @@ export async function bulkSubmitHppAction(ids: string[]) {
   const user = await getSessionUser();
   if (!allowed(user)) return { error: "Not authorized" };
   let n = 0;
+  let skippedNoPhoto = 0;
   for (const id of ids) {
     const rec = await getHpp(id);
     if (!rec || (rec.status !== "draft" && rec.status !== "rejected")) continue;
+    // Keputusan Final #10: foto produk wajib — lewati yang belum berfoto.
+    if (!rec.imageUrl) {
+      skippedNoPhoto++;
+      continue;
+    }
     await setHppStatus(id, "submitted", null, null);
     n++;
+  }
+  if (n === 0 && skippedNoPhoto > 0) {
+    return { error: `${skippedNoPhoto} menu belum punya foto produk — foto wajib sebelum diajukan (Keputusan Final #10).` };
   }
   if (n > 0) {
     await saveNotification({
