@@ -95,7 +95,7 @@ export interface ResultInput {
   financialImpact: boolean;
 }
 
-const EV_LABEL: Record<EvaluatorKey, string> = { al: "Atasan Langsung", hc: "HC / Human Capital", dir: "Director" };
+const EV_LABEL: Record<EvaluatorKey, string> = { al: "Atasan Langsung", hc: "HC / Human Capital", peer: "Rekan Sejawat", dir: "Director" };
 
 /** Reduce raw assessment state into every derived dashboard figure. */
 export function computeResult(input: ResultInput): ResultBundle {
@@ -363,7 +363,7 @@ export function sessionToEnriched(s: SessionState): EnrichedRecord {
     jabatan: s.jabatan,
     golongan: s.golongan || "—",
     golonganTujuan: s.golonganTujuan || "—",
-    penilai: s.directorOnly ? "Director" : "Atasan, HC, Director",
+    penilai: s.directorOnly ? "Director" : "Atasan, HC, Rekan Sejawat",
     status,
     hasil: TONE_TO_HASIL[bundle.decisionTone],
     finalScore: bundle.final,

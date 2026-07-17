@@ -5,12 +5,15 @@ import { useRouter } from "next/navigation";
 import {
   AlertTriangle,
   BarChart3,
+  BookmarkPlus,
   Boxes,
   Calculator,
   CalendarDays,
   Check,
   ChevronsUpDown,
   Coffee,
+  FileStack,
+  Gauge,
   History,
   ImagePlus,
   Layers,
@@ -53,9 +56,11 @@ import {
   type AllocMode,
   type Brand,
   type FixedItem,
+  type OverheadKind,
   type VariableItem,
 } from "@/lib/hpp/calc";
 import { saveHppAction, deleteHppAction } from "@/lib/actions/hpp";
+import { saveOverheadTemplateAction, deleteOverheadTemplateAction } from "@/lib/actions/overhead-template";
 import type { HppRecord } from "@/lib/data/hpp";
 import { HPP_STATUS_META, STATUS_PILL } from "@/lib/hpp/status";
 import { downloadCsv, toCsv } from "@/lib/csv";
@@ -81,7 +86,7 @@ const COUNT = ["pcs"];
 const ALL_UNITS = [...MASS, ...VOL, ...COUNT];
 
 const emptyVar = (): VariableItem => ({ id: uid(), name: "", takaran: 0, takaranUnit: "g", buyPrice: 0, buyQty: 1, buyUnit: "kg" });
-const emptyFixed = (): FixedItem => ({ id: uid(), name: "", monthly: 0 });
+const emptyFixed = (kind: OverheadKind = "fixed"): FixedItem => ({ id: uid(), name: "", monthly: 0, kind });
 
 /** Small inline unit select (native-styled, matches inputs). */
 function UnitSelect({ value, onChange }: { value: string; onChange: (v: string) => void }) {
@@ -126,6 +131,8 @@ export type IngredientOption = { id: string; name: string; buyPrice: number; buy
 export type PolicyOption = { scope: string; foodPct: number; bevPct: number; foodMarginMin: number; foodMarginMax: number; bevMarginMin: number; bevMarginMax: number };
 /** Client-safe ESB catalog entry for the product picker. */
 export type EsbMenuOption = { menu: string; foodBev: "makanan" | "minuman"; qty30d: number; unitPrice: number };
+/** Client-safe reusable overhead template (applying only pre-fills the form). */
+export type OverheadTemplateOption = { id: string; name: string; brand: string | null; items: { name: string; monthly: number; kind: OverheadKind }[] };
 
 export function HppCalculator({
   initialHistory,
@@ -134,6 +141,7 @@ export function HppCalculator({
   autoLoadId,
   policies = [{ scope: "default", foodPct: 35, bevPct: 25, foodMarginMin: 35, foodMarginMax: 50, bevMarginMin: 60, bevMarginMax: 100 }],
   esbMenus = [],
+  templates = [],
 }: {
   initialHistory: HppRecord[];
   canEdit: boolean;
@@ -141,9 +149,12 @@ export function HppCalculator({
   autoLoadId?: string;
   policies?: PolicyOption[];
   esbMenus?: EsbMenuOption[];
+  templates?: OverheadTemplateOption[];
 }) {
   const router = useRouter();
   const [saving, startSave] = React.useTransition();
+  const [savingTpl, startSaveTpl] = React.useTransition();
+  const [appliedTpl, setAppliedTpl] = React.useState<{ id: string; name: string } | null>(null);
 
   const [name, setName] = React.useState("");
   // Product source: pick from the ESB catalog, or enter a new/manual product.
@@ -242,6 +253,58 @@ export function HppCalculator({
     [ingredients],
   );
   const setFix = (id: string, patch: Partial<FixedItem>) => setFixed((f) => f.map((x) => (x.id === id ? { ...x, ...patch } : x)));
+  const addFixed = (kind: OverheadKind) => setFixed((f) => [...f, emptyFixed(kind)]);
+  // Two logical overhead groups (kebijakan MoM): Tetap vs Variabel/Operasional.
+  // Legacy rows without a kind are treated as Tetap (backward compatible).
+  const fixedTetap = React.useMemo(() => fixed.filter((f) => (f.kind ?? "fixed") === "fixed"), [fixed]);
+  const fixedVar = React.useMemo(() => fixed.filter((f) => f.kind === "variable"), [fixed]);
+
+  // ---- overhead templates (reusable, editable after applying) ----
+  const applyTemplate = (id: string) => {
+    const t = templates.find((x) => x.id === id);
+    if (!t) return;
+    setFixed(t.items.map((it) => ({ id: uid(), name: it.name, monthly: it.monthly, kind: it.kind === "variable" ? "variable" : "fixed" })));
+    setAppliedTpl({ id: t.id, name: t.name });
+    toast.success(`Template "${t.name}" diterapkan — nilai masih bisa diedit.`);
+  };
+  function saveAsTemplate() {
+    const items = fixed
+      .filter((f) => f.name.trim())
+      .map((f) => ({ name: f.name.trim(), monthly: Math.max(0, Math.round(f.monthly || 0)), kind: (f.kind ?? "fixed") as OverheadKind }));
+    if (items.length === 0) {
+      toast.error("Belum ada biaya overhead untuk disimpan sebagai template.");
+      return;
+    }
+    const nm = typeof window !== "undefined" ? window.prompt("Nama template overhead:", appliedTpl?.name ?? "") : null;
+    if (nm == null) return;
+    if (!nm.trim()) {
+      toast.error("Nama template wajib diisi.");
+      return;
+    }
+    startSaveTpl(async () => {
+      const res = await saveOverheadTemplateAction({ name: nm.trim(), brand, items });
+      if (res?.error) {
+        toast.error(res.error);
+        return;
+      }
+      setAppliedTpl(res.id ? { id: res.id, name: nm.trim() } : null);
+      toast.success(`Template "${nm.trim()}" disimpan.`);
+      router.refresh();
+    });
+  }
+  function removeTemplate(id: string, label: string) {
+    if (typeof window !== "undefined" && !window.confirm(`Hapus template "${label}"?`)) return;
+    startSaveTpl(async () => {
+      const res = await deleteOverheadTemplateAction(id);
+      if (res?.error) {
+        toast.error(res.error);
+        return;
+      }
+      if (appliedTpl?.id === id) setAppliedTpl(null);
+      toast.success("Template dihapus.");
+      router.refresh();
+    });
+  }
 
   function onImage(e: React.ChangeEvent<HTMLInputElement>) {
     const f = e.target.files?.[0];
@@ -263,6 +326,7 @@ export function HppCalculator({
     setYieldPcs(1);
     setVariables([]);
     setFixed([]);
+    setAppliedTpl(null);
     setAllocMode("product");
     setTargetSales(1000);
     setWastePct(5);
@@ -667,31 +731,83 @@ export function HppCalculator({
             </div>
           </div>
 
-          <div className="mt-3 space-y-2">
-            {fixed.map((f) => (
-              <div key={f.id} className="flex items-center gap-2">
-                <Input value={f.name} onChange={(e) => setFix(f.id, { name: e.target.value })} placeholder="Nama biaya (mis. Listrik, Gas & Air)" className="flex-1" />
-                <div className="w-32 shrink-0">
-                  <NumInput value={f.monthly} onChange={(n) => setFix(f.id, { monthly: n })} placeholder="Rp/bln" />
-                </div>
-                <button
-                  type="button"
-                  onClick={() => setFixed((x) => x.filter((i) => i.id !== f.id))}
-                  className="grid size-8 shrink-0 place-items-center rounded-lg text-muted-foreground hover:bg-red-500/10 hover:text-red-500"
-                  title="Hapus biaya"
-                >
-                  <Trash2 className="size-4" />
-                </button>
+          {/* Overhead templates — save a common set once, apply to any product.
+              Applying only pre-fills the rows below; every value stays editable. */}
+          <div className="mt-3 rounded-xl border border-dashed border-border bg-muted/20 p-3">
+            <div className="flex flex-wrap items-center gap-2">
+              <div className="flex min-w-0 flex-1 items-center gap-2">
+                <FileStack className="size-4 shrink-0 text-muted-foreground" />
+                {templates.length > 0 ? (
+                  <div className="min-w-0 flex-1">
+                    <Combobox
+                      portal
+                      matchTriggerWidth
+                      value={appliedTpl?.id ?? ""}
+                      onChange={applyTemplate}
+                      options={templates.map((t) => ({ value: t.id, label: t.name, hint: `${t.items.length} biaya` }))}
+                      placeholder="Terapkan template overhead…"
+                      searchPlaceholder="Cari template…"
+                    />
+                  </div>
+                ) : (
+                  <p className="min-w-0 flex-1 text-[11px] text-muted-foreground">Belum ada template. Susun overhead lalu simpan sebagai template agar bisa dipakai ulang.</p>
+                )}
               </div>
-            ))}
+              {canEdit && (
+                <Button type="button" variant="outline" size="sm" onClick={saveAsTemplate} disabled={savingTpl}>
+                  {savingTpl ? <Loader2 className="size-4 animate-spin" /> : <BookmarkPlus className="size-4" />} Simpan Template
+                </Button>
+              )}
+            </div>
+            {appliedTpl && (
+              <div className="mt-2 flex items-center gap-2 border-t border-border/60 pt-2 text-[11px]">
+                <span className="rounded-full bg-primary/10 px-2 py-0.5 font-semibold text-primary">Template: {appliedTpl.name}</span>
+                <span className="text-muted-foreground">nilai bisa diedit bebas</span>
+                {canEdit && (
+                  <button
+                    type="button"
+                    onClick={() => removeTemplate(appliedTpl.id, appliedTpl.name)}
+                    disabled={savingTpl}
+                    className="ml-auto inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-muted-foreground hover:text-red-500 disabled:opacity-50"
+                    title="Hapus template ini"
+                  >
+                    <Trash2 className="size-3.5" /> Hapus template
+                  </button>
+                )}
+              </div>
+            )}
           </div>
-          <button
-            type="button"
-            onClick={() => setFixed((f) => [...f, emptyFixed()])}
-            className="mt-2 flex w-full items-center justify-center gap-2 rounded-xl border border-dashed border-border py-2.5 text-sm font-medium text-muted-foreground transition-colors hover:border-primary/40 hover:text-foreground"
-          >
-            <Plus className="size-4" /> Tambah Biaya
-          </button>
+
+          {/* Overhead Tetap — biaya bulanan yang relatif stabil (sewa alat, langganan). */}
+          <OverheadGroup
+            icon={Boxes}
+            title="Overhead Tetap"
+            desc="Biaya bulanan yang stabil (mis. sewa alat, langganan, perawatan)."
+            items={fixedTetap}
+            total={fixedTetap.reduce((s, f) => s + (f.monthly || 0), 0)}
+            placeholder="Nama biaya (mis. Sewa Alat, Langganan)"
+            addLabel="Tambah Overhead Tetap"
+            onAdd={() => addFixed("fixed")}
+            onName={(id, v) => setFix(id, { name: v })}
+            onMonthly={(id, n) => setFix(id, { monthly: n })}
+            onRemove={(id) => setFixed((x) => x.filter((i) => i.id !== id))}
+          />
+
+          {/* Overhead Variabel / Operasional — ikut volume produksi (gas, listrik, air). */}
+          <OverheadGroup
+            icon={Gauge}
+            title="Overhead Variabel / Operasional"
+            desc="Ikut volume produksi (mis. gas, listrik, air)."
+            items={fixedVar}
+            total={fixedVar.reduce((s, f) => s + (f.monthly || 0), 0)}
+            placeholder="Nama biaya (mis. Gas, Listrik, Air)"
+            addLabel="Tambah Overhead Variabel"
+            onAdd={() => addFixed("variable")}
+            onName={(id, v) => setFix(id, { name: v })}
+            onMonthly={(id, n) => setFix(id, { monthly: n })}
+            onRemove={(id) => setFixed((x) => x.filter((i) => i.id !== id))}
+            className="mt-3"
+          />
         </div>
       </div>
 
@@ -1059,6 +1175,74 @@ function Segmented({
           </button>
         );
       })}
+    </div>
+  );
+}
+
+/** One overhead category (Tetap or Variabel) — labelled rows + subtotal + add. */
+function OverheadGroup({
+  icon: Icon,
+  title,
+  desc,
+  items,
+  total,
+  placeholder,
+  addLabel,
+  onAdd,
+  onName,
+  onMonthly,
+  onRemove,
+  className,
+}: {
+  icon: LucideIcon;
+  title: string;
+  desc: string;
+  items: FixedItem[];
+  total: number;
+  placeholder: string;
+  addLabel: string;
+  onAdd: () => void;
+  onName: (id: string, v: string) => void;
+  onMonthly: (id: string, n: number) => void;
+  onRemove: (id: string) => void;
+  className?: string;
+}) {
+  return (
+    <div className={cn("rounded-xl border border-border bg-muted/20 p-3", className)}>
+      <div className="flex items-center justify-between gap-2">
+        <p className="flex min-w-0 items-center gap-2 text-xs font-medium text-foreground">
+          <Icon className="size-4 shrink-0 text-muted-foreground" /> <span className="min-w-0 truncate">{title}</span>
+        </p>
+        <span className="shrink-0 rounded-full bg-muted px-2 py-0.5 text-[10px] font-semibold text-muted-foreground tabular-nums">{rp(total)}/bln</span>
+      </div>
+      <p className="mt-0.5 text-[11px] text-muted-foreground">{desc}</p>
+      {items.length > 0 && (
+        <div className="mt-2 space-y-2">
+          {items.map((f) => (
+            <div key={f.id} className="flex items-center gap-2">
+              <Input value={f.name} onChange={(e) => onName(f.id, e.target.value)} placeholder={placeholder} className="flex-1" />
+              <div className="w-32 shrink-0">
+                <NumInput value={f.monthly} onChange={(n) => onMonthly(f.id, n)} placeholder="Rp/bln" />
+              </div>
+              <button
+                type="button"
+                onClick={() => onRemove(f.id)}
+                className="grid size-8 shrink-0 place-items-center rounded-lg text-muted-foreground hover:bg-red-500/10 hover:text-red-500"
+                title="Hapus biaya"
+              >
+                <Trash2 className="size-4" />
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+      <button
+        type="button"
+        onClick={onAdd}
+        className="mt-2 flex w-full items-center justify-center gap-2 rounded-lg border border-dashed border-border py-2 text-xs font-medium text-muted-foreground transition-colors hover:border-primary/40 hover:text-foreground"
+      >
+        <Plus className="size-3.5" /> {addLabel}
+      </button>
     </div>
   );
 }

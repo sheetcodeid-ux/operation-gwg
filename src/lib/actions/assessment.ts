@@ -6,10 +6,10 @@ import {
   getOrCreateSession,
   getSession,
   listSessions,
-  resolveEvaluator,
   saveEvaluation,
   updateSessionMeta,
 } from "@/lib/data/assessment";
+import { resolveEvaluatorFromRoster as resolveEvaluator } from "@/lib/data/assessment-roster";
 import type { EvaluatorIdentity, SessionSeed, SessionState } from "@/lib/assessment/session";
 import type { DimensionScores, IvRecValue, ParamScores } from "@/lib/assessment/config";
 

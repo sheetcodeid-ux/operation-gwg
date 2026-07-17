@@ -8,7 +8,15 @@
  * drop-in (persist these shapes; the scoring stays identical).
  */
 
-export type EvaluatorKey = "al" | "hc" | "dir";
+/**
+ * Official evaluator columns.
+ *   al   — Atasan Langsung / Kepala Departemen (Penilai 1, 40%)
+ *   hc   — HC / Human Capital               (Penilai 2, 35%)
+ *   peer — Rekan Sejawat, rata-rata 5 orang (Penilai 3, 25%)   ← revisi Juli 2026
+ *   dir  — Director; hanya untuk posisi director-only (Head/Legal/BizDev) @100%.
+ * The normal trio is [al, hc, peer]; `dir` is used only on the director-only path.
+ */
+export type EvaluatorKey = "al" | "hc" | "peer" | "dir";
 export type ParamKey = "kpi" | "att" | "loy" | "skl" | "kon" | "msk";
 export type DimensionKey = "kont" | "visi" | "siap" | "komit";
 
@@ -42,7 +50,8 @@ export interface Evaluator {
  */
 export const DIRECTOR_ONLY_POSITIONS = ["Legal", "Business Development", "Sekretaris"];
 
-/** The three official evaluators and their weight toward the final score. */
+/** The three official evaluators and their weight toward the final score
+ *  (revisi Juli 2026: Penilai 3 = Rekan Sejawat, menggantikan Director). */
 export const EVALUATORS: Evaluator[] = [
   {
     key: "al",
@@ -59,13 +68,26 @@ export const EVALUATORS: Evaluator[] = [
     note: "Diisi berdasarkan data sistem HR (absensi, SP, tes kompetensi) dan verifikasi dokumen pendukung.",
   },
   {
-    key: "dir",
+    key: "peer",
     no: 3,
-    name: "Director",
+    name: "Rekan Sejawat",
     weight: 25,
-    note: "Diisi berdasarkan pertimbangan strategis dan dampak kontribusi karyawan terhadap perusahaan secara keseluruhan.",
+    note: "Rata-rata penilaian dari 5 rekan sejawat (peer review) berdasarkan interaksi & pengalaman kerja sehari-hari. Ditunjuk oleh atasan bersama HC; diisi independen tanpa berkoordinasi.",
   },
 ];
+
+/**
+ * Director evaluator — used ONLY for director-only positions (division Heads,
+ * Legal, Business Development) where the Director is the sole assessor (100%).
+ * On the normal path the Director does not fill scores (revisi Juli 2026).
+ */
+export const DIRECTOR_EVALUATOR: Evaluator = {
+  key: "dir",
+  no: 1,
+  name: "Director",
+  weight: 100,
+  note: "Diisi berdasarkan pertimbangan strategis dan dampak kontribusi karyawan terhadap perusahaan secara keseluruhan.",
+};
 
 /** The six scored parameters. Weights sum to 100 within each evaluator. */
 export const PARAMETERS: Parameter[] = [
@@ -309,8 +331,8 @@ export const FLOW_STEPS: { no: number; title: string; desc: string }[] = [
   { no: 2, title: "Self Assessment", desc: "Karyawan menilai diri sendiri secara jujur sebagai bahan kalibrasi." },
   { no: 3, title: "Penilaian Atasan Langsung", desc: "Penilai 1 (bobot 40%) mengisi 6 parameter berdasarkan observasi langsung." },
   { no: 4, title: "Penilaian HC", desc: "Penilai 2 (bobot 35%) mengisi berdasarkan data sistem HR." },
-  { no: 5, title: "Penilaian Director", desc: "Penilai 3 (bobot 25%) mengisi berdasarkan pertimbangan strategis." },
-  { no: 6, title: "Interview Akhir", desc: "HC/Director memverifikasi kontribusi & kesiapan lewat 4 dimensi interview." },
+  { no: 5, title: "Penilaian Rekan Sejawat", desc: "Penilai 3 (bobot 25%) — rata-rata penilaian 5 rekan sejawat berdasarkan interaksi kerja sehari-hari." },
+  { no: 6, title: "Interview Akhir", desc: "HC memverifikasi kontribusi & kesiapan lewat 4 dimensi interview." },
   { no: 7, title: "Dashboard Final", desc: "Skor agregat dihitung, gap antar penilai dianalisis, keputusan final direkomendasikan." },
 ];
 
@@ -340,8 +362,7 @@ const PARAM_BY_KEY = new Map(PARAMETERS.map((p) => [p.key, p]));
  */
 export function evaluatorsFor(pos: { isHead: boolean; title: string } | null | undefined): Evaluator[] {
   if (pos && (pos.isHead || DIRECTOR_ONLY_POSITIONS.includes(pos.title))) {
-    const dir = EVALUATORS.find((e) => e.key === "dir")!;
-    return [{ ...dir, weight: 100 }];
+    return [{ ...DIRECTOR_EVALUATOR }];
   }
   return EVALUATORS;
 }
@@ -414,5 +435,5 @@ export function paramContribution(key: ParamKey, value: number | undefined): num
 }
 
 export function emptyEvaluatorScores(): EvaluatorScores {
-  return { al: {}, hc: {}, dir: {} };
+  return { al: {}, hc: {}, peer: {}, dir: {} };
 }

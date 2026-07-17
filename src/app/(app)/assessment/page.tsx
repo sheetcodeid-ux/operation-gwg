@@ -1,5 +1,6 @@
-import { Award, Clock, Lock } from "lucide-react";
+import { Award, Clock, Lock, Settings2, UserX } from "lucide-react";
 import type { Metadata } from "next";
+import Link from "next/link";
 import { redirect } from "next/navigation";
 import { getSessionUser } from "@/lib/auth";
 import { canSeeMenu, hasMenuGrant } from "@/lib/nav";
@@ -7,6 +8,7 @@ import { getMyEvaluator } from "@/lib/actions/assessment";
 import { dbEnabled } from "@/lib/data/db";
 import { getOrgExtra } from "@/lib/data/org";
 import { getAssessmentSchedule } from "@/lib/data/assessment-schedule";
+import { resolveAssessmentAccess } from "@/lib/data/assessment-access";
 import { assessmentPhase, canAccessAssessment } from "@/lib/assessment/window";
 import { PageHeader } from "@/components/ui/page-header";
 import { AssessmentWorkspace } from "@/components/assessment/workspace";
@@ -21,31 +23,62 @@ const fmt = (iso: string | null) =>
 
 export default async function AssessmentPage() {
   const user = (await getSessionUser())!;
-  // Role's own menu OR an explicit per-user grant (incl. custom divisions).
-  // Supervisor has no assessment menu → blocked here.
-  if (!canSeeMenu(user.role, "assessment") && !hasMenuGrant(user.grants, "assessment")) redirect("/dashboard");
+  // Viewpoint is derived from the assessment ROSTER settings — the single source
+  // of truth. An account that isn't in the roster (and isn't assigned as a
+  // peer/atasan) gets no access, fixing the old full-HR-fallback bug.
+  const access = await resolveAssessmentAccess({ id: user.id, role: user.role, department: user.department });
+  const inRoster = access.role !== "none";
+  // Can navigate here via role menu / grant, or by being in the roster.
+  if (!canSeeMenu(user.role, "assessment") && !hasMenuGrant(user.grants, "assessment") && !inRoster) redirect("/dashboard");
 
-  // Role viewpoint comes from the signed-in identity: registered evaluators land
-  // on their own view; only Super Admin keeps the manual switcher.
+  // Session-scoring identity (al/hc/dir) — only Heads/HC/Director; peers use the
+  // peer-review path. Super Admin keeps the manual viewpoint switcher.
   const evaluator = await getMyEvaluator();
   const isAdmin = user.role === "super_admin";
+  const canManage = isAdmin || access.role === "hr" || access.role === "director";
   const [orgExtra, schedule] = await Promise.all([getOrgExtra(), getAssessmentSchedule()]);
-  const allowed = canAccessAssessment({ role: user.role, jabatan: user.jabatan, department: user.department }, schedule);
+  const windowOpen = canAccessAssessment({ role: user.role, jabatan: user.jabatan, department: user.department }, schedule);
+  const allowed = windowOpen && inRoster;
   const phase = assessmentPhase(schedule);
 
   return (
     <div className="w-full">
-      <PageHeader
-        icon={Award}
-        title="Assessment Kenaikan Golongan"
-        description="Sistem penilaian kenaikan golongan HRD — multi-penilai, self assessment, interview & keputusan final"
-      />
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <PageHeader
+          icon={Award}
+          title="Assessment Kenaikan Golongan"
+          description="Sistem penilaian kenaikan golongan HRD — multi-penilai, self assessment, interview & keputusan final"
+        />
+        {canManage && (
+          <Link
+            href="/assessment/settings"
+            className="mt-1 inline-flex shrink-0 items-center gap-2 rounded-xl border border-border bg-muted/40 px-3 py-2 text-sm font-medium text-foreground transition-colors hover:bg-muted"
+          >
+            <Settings2 className="size-4" /> Pengaturan
+          </Link>
+        )}
+      </div>
 
       {isAdmin && <ScheduleEditor initial={schedule} />}
 
       {allowed ? (
         /* In production (DB live) show only real sessions; sample data is demo-only. */
-        <AssessmentWorkspace evaluator={evaluator} isAdmin={isAdmin} viewerName={user.name} showSample={!dbEnabled} orgExtra={orgExtra} />
+        <AssessmentWorkspace initialRole={access.role} scopeDepartmentId={access.scopeDepartmentId} evaluator={evaluator} isAdmin={isAdmin} viewerName={user.name} showSample={!dbEnabled} orgExtra={orgExtra} />
+      ) : !inRoster ? (
+        <div className="glass mt-2 flex flex-col items-center gap-3 rounded-2xl border border-border px-6 py-16 text-center">
+          <div className="grid size-12 place-items-center rounded-full bg-muted text-muted-foreground">
+            <UserX className="size-6" />
+          </div>
+          <p className="text-lg font-semibold text-foreground">Akun belum terdaftar di assessment</p>
+          <p className="max-w-md text-sm text-muted-foreground">
+            Akun Anda belum didaftarkan sebagai peserta atau penilai. Hubungi Human Capital / Admin untuk didaftarkan di <span className="font-medium text-foreground">Pengaturan Assessment</span>.
+          </p>
+          {canManage && (
+            <Link href="/assessment/settings" className="mt-1 inline-flex items-center gap-2 rounded-xl border border-border bg-muted/40 px-3 py-2 text-sm font-medium text-foreground hover:bg-muted">
+              <Settings2 className="size-4" /> Buka Pengaturan
+            </Link>
+          )}
+        </div>
       ) : (
         <div className="glass mt-2 flex flex-col items-center gap-3 rounded-2xl border border-border px-6 py-16 text-center">
           <div className="grid size-12 place-items-center rounded-full bg-muted text-muted-foreground">
