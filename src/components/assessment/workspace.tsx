@@ -11,6 +11,7 @@ import { AssessmentProvider, useAssessment } from "./context";
 import { PanduanTab } from "./panduan-tab";
 import { SyaratTab } from "./syarat-tab";
 import { PenilaianTab } from "./penilaian-tab";
+import { PeerPenilaianTab } from "./peer-penilaian-tab";
 import { InterviewTab } from "./interview-tab";
 import { DashboardTab } from "./dashboard-tab";
 import { ReferensiTab } from "./referensi-tab";
@@ -141,7 +142,7 @@ function WorkspaceInner({ viewerName }: { viewerName: string }) {
       <div key={activeTab} className={a.entrance ? "animate-fade-up" : undefined}>
         {activeTab === "panduan" && <PanduanTab />}
         {activeTab === "syarat" && <SyaratTab />}
-        {activeTab === "penilaian" && <PenilaianTab />}
+        {activeTab === "penilaian" && (a.role === "peer" ? <PeerPenilaianTab /> : <PenilaianTab />)}
         {activeTab === "interview" && <InterviewTab />}
         {activeTab === "dashboard" && <DashboardTab />}
         {activeTab === "referensi" && <ReferensiTab />}

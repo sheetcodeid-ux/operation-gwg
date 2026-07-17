@@ -363,7 +363,7 @@ export function sessionToEnriched(s: SessionState): EnrichedRecord {
     jabatan: s.jabatan,
     golongan: s.golongan || "—",
     golonganTujuan: s.golonganTujuan || "—",
-    penilai: s.directorOnly ? "Director" : "Atasan, HC, Director",
+    penilai: s.directorOnly ? "Director" : "Atasan, HC, Rekan Sejawat",
     status,
     hasil: TONE_TO_HASIL[bundle.decisionTone],
     finalScore: bundle.final,

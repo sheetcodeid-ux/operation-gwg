@@ -37,6 +37,8 @@ export interface SessionState {
   id: string;
   batch: string;
   nik: string;
+  /** Participant's User Management account id (links assignments → session). */
+  participantUserId: string;
   employeeName: string;
   jabatan: string;
   departmentId: string;
@@ -57,6 +59,8 @@ export interface SessionState {
 export interface SessionSeed {
   batch: string;
   nik: string;
+  /** Participant's User Management account id, when the candidate is an account. */
+  participantUserId?: string;
   employeeName: string;
   jabatan: string;
   departmentId: string;

@@ -9,6 +9,7 @@ import type {
   SessionState,
 } from "../assessment/session";
 import type { DimensionScores, EvaluatorKey, IvRecValue, ParamScores } from "../assessment/config";
+import { aggregatePeerScores, listPeerReviews } from "./assessment-roster";
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
@@ -27,6 +28,7 @@ const sessionFromRow = (r: any, evals: EvaluationState[]): SessionState => ({
   id: r.id,
   batch: r.batch ?? "",
   nik: r.nik ?? "",
+  participantUserId: r.participant_user_id ?? "",
   employeeName: r.employee_name ?? "",
   jabatan: r.jabatan ?? "",
   departmentId: r.department_id ?? "",
@@ -84,16 +86,50 @@ export async function resolveEvaluator(userId: string): Promise<EvaluatorIdentit
 
 /* ---------------- session reads ---------------- */
 
+/** Synthesize the Penilai 3 (Rekan Sejawat) column from the averaged, submitted
+ *  peer reviews. Returns null when no peer has reviewed yet. */
+async function peerEvaluation(sessionId: string): Promise<EvaluationState | null> {
+  const reviews = await listPeerReviews(sessionId);
+  if (reviews.length === 0) return null;
+  const { scores, submittedCount } = aggregatePeerScores(reviews);
+  return {
+    evaluatorKey: "peer",
+    evaluatorUserId: null,
+    scores,
+    note: submittedCount > 0 ? `Rata-rata ${submittedCount} rekan sejawat` : "Menunggu rekan sejawat",
+    interview: {},
+    ivVote: null,
+    submitted: submittedCount > 0,
+    submittedAt: null,
+    updatedAt: new Date().toISOString(),
+  };
+}
+
 async function loadEvaluations(sessionId: string): Promise<EvaluationState[]> {
+  let official: EvaluationState[];
   if (!dbEnabled) {
     const s = memSessions.get(sessionId);
-    return s ? [...s.evals.values()].map(evaluationFromRow) : [];
+    official = s ? [...s.evals.values()].map(evaluationFromRow) : [];
+  } else {
+    const { data } = await db().from("assessment_evaluations").select("*").eq("session_id", sessionId);
+    official = (data ?? []).map(evaluationFromRow);
   }
-  const { data } = await db()
-    .from("assessment_evaluations")
-    .select("*")
-    .eq("session_id", sessionId);
-  return (data ?? []).map(evaluationFromRow);
+  // Peer (Penilai 3) never lives in assessment_evaluations — it's the average of
+  // the per-reviewer rows. Drop any stray 'peer' row and inject the aggregate.
+  const rest = official.filter((e) => e.evaluatorKey !== "peer");
+  const peer = await peerEvaluation(sessionId);
+  return peer ? [...rest, peer] : rest;
+}
+
+/** Find a session by the participant's account id (read-only, no create). */
+export async function getSessionByParticipant(participantUserId: string): Promise<SessionState | null> {
+  if (!participantUserId) return null;
+  if (!dbEnabled) {
+    for (const { row } of memSessions.values()) if (row.participant_user_id === participantUserId) return sessionFromRow(row, await loadEvaluations(row.id));
+    return null;
+  }
+  const { data } = await db().from("assessment_sessions").select("*").eq("participant_user_id", participantUserId).maybeSingle();
+  return data ? sessionFromRow(data, await loadEvaluations(data.id)) : null;
 }
 
 export async function getSession(id: string): Promise<SessionState | null> {
@@ -109,15 +145,19 @@ export async function getSession(id: string): Promise<SessionState | null> {
 /** Find the session for an employee in a batch, if one exists. */
 async function findSessionRow(seed: SessionSeed): Promise<any | null> {
   if (!dbEnabled) {
+    // Prefer the participant account link (one active session per participant),
+    // else fall back to the name + department + batch identity.
+    if (seed.participantUserId) {
+      for (const { row } of memSessions.values()) if (row.participant_user_id === seed.participantUserId) return row;
+    }
     for (const { row } of memSessions.values()) {
-      if (
-        row.employee_name === seed.employeeName &&
-        row.department_id === seed.departmentId &&
-        row.batch === seed.batch
-      )
-        return row;
+      if (row.employee_name === seed.employeeName && row.department_id === seed.departmentId && row.batch === seed.batch) return row;
     }
     return null;
+  }
+  if (seed.participantUserId) {
+    const { data } = await db().from("assessment_sessions").select("*").eq("participant_user_id", seed.participantUserId).maybeSingle();
+    if (data) return data;
   }
   const { data } = await db()
     .from("assessment_sessions")
@@ -132,13 +172,36 @@ async function findSessionRow(seed: SessionSeed): Promise<any | null> {
 /** Find-or-create the session for a candidate + batch. */
 export async function getOrCreateSession(seed: SessionSeed, createdBy: string | null): Promise<SessionState> {
   const existing = await findSessionRow(seed);
-  if (existing) return sessionFromRow(existing, await loadEvaluations(existing.id));
+  if (existing) {
+    // Fill any empty identity fields from a richer seed — e.g. a peer opened the
+    // session first (minimal identity), then HC selects the same participant and
+    // provides golongan/batch/nik. Never overwrites values already set.
+    const patch: any = {};
+    if (seed.participantUserId && !existing.participant_user_id) patch.participant_user_id = seed.participantUserId;
+    if (seed.batch && !existing.batch) patch.batch = seed.batch;
+    if (seed.nik && !existing.nik) patch.nik = seed.nik;
+    if (seed.jabatan && !existing.jabatan) patch.jabatan = seed.jabatan;
+    if (seed.golongan && !existing.golongan) patch.golongan = seed.golongan;
+    if (seed.golonganTujuan && !existing.golongan_tujuan) patch.golongan_tujuan = seed.golonganTujuan;
+    if (seed.departmentName && !existing.department_name) patch.department_name = seed.departmentName;
+    if (Object.keys(patch).length) {
+      Object.assign(existing, patch);
+      if (!dbEnabled) {
+        const mem = memSessions.get(existing.id);
+        if (mem) mem.row = { ...mem.row, ...patch };
+      } else {
+        await db().from("assessment_sessions").update(patch).eq("id", existing.id);
+      }
+    }
+    return sessionFromRow(existing, await loadEvaluations(existing.id));
+  }
 
   const id = newId();
   const row = {
     id,
     batch: seed.batch,
     nik: seed.nik,
+    participant_user_id: seed.participantUserId ?? null,
     employee_name: seed.employeeName,
     jabatan: seed.jabatan,
     department_id: seed.departmentId,

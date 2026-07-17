@@ -321,9 +321,13 @@ export function AssessmentProvider({
       return;
     }
     let cancelled = false;
+    // Mirrored accounts carry an org-employee id of `emp_usr_<userId>` — extract
+    // it so the session links to the participant's account (peers find it by id).
+    const participantUserId = candidate.employeeId.startsWith("emp_usr_") ? candidate.employeeId.slice("emp_usr_".length) : undefined;
     const seed: SessionSeed = {
       batch: candidate.batch,
       nik: candidate.nik,
+      participantUserId,
       employeeName: resolved.nama,
       jabatan: resolved.jabatan,
       departmentId: candidate.departmentId,
