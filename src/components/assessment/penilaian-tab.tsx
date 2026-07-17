@@ -41,7 +41,7 @@ export function PenilaianTab() {
         : evaluators[0].key;
   const evaluator = evaluators.find((e) => e.key === active)!;
 
-  const scores = a.scores[active];
+  const scores = a.scores[active] ?? {};
   const score = evaluatorScore(scores);
   const filled = evaluatorFilled(scores);
 

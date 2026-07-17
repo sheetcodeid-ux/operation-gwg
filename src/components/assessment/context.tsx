@@ -190,7 +190,9 @@ export function AssessmentProvider({
         if (d.candidate) setCandidate({ ...EMPTY_CANDIDATE, ...d.candidate });
         if (d.syarat) setSyarat(d.syarat);
         if (d.self) setSelf(d.self);
-        if (d.scores) setScores(d.scores);
+        // Merge onto a full empty set so a draft saved under the OLD evaluator
+        // model (al/hc/dir, no `peer`) can't leave a column undefined → crash.
+        if (d.scores) setScores({ ...emptyEvaluatorScores(), ...d.scores });
         if (d.interview) setInterview(d.interview);
         if (typeof d.ivNote === "string") setIvNote(d.ivNote);
         if (d.ivVotes) setIvVotes(d.ivVotes);

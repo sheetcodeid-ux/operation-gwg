@@ -6,7 +6,6 @@ import { getUsers } from "@/lib/data/store";
 import { getOrgExtra } from "@/lib/data/org";
 import { allDepartments, setOrgExtras } from "@/lib/assessment/org";
 import { listAssignments, listRoster } from "@/lib/data/assessment-roster";
-import { resolveAssessmentAccess } from "@/lib/data/assessment-access";
 import { PageHeader } from "@/components/ui/page-header";
 import { AssessmentSettings, type AccountOption } from "@/components/assessment/settings";
 
@@ -15,9 +14,8 @@ export const metadata: Metadata = { title: "Pengaturan Assessment" };
 /** Who may open the settings: Super Admin, HC, or Director. */
 export default async function AssessmentSettingsPage() {
   const user = (await getSessionUser())!;
-  const access = await resolveAssessmentAccess({ id: user.id, role: user.role, department: user.department });
-  const canManage = user.role === "super_admin" || access.role === "hr" || access.role === "director";
-  if (!canManage) redirect("/assessment");
+  // Admin-only (owner decision).
+  if (user.role !== "super_admin") redirect("/assessment");
 
   setOrgExtras(await getOrgExtra());
   const [roster, assignments] = await Promise.all([listRoster(), listAssignments()]);

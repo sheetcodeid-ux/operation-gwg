@@ -45,8 +45,8 @@ export interface Evaluator {
 }
 
 /**
- * Positions assessed by a single official evaluator — the Director (100%).
- * Heads of every division fall here too (see `evaluatorsFor`).
+ * Positions assessed by the Head panel (Director 60% + HC 40%) instead of the
+ * standard trio. Division Heads fall here too (see `evaluatorsFor`).
  */
 export const DIRECTOR_ONLY_POSITIONS = ["Legal", "Business Development", "Sekretaris"];
 
@@ -76,18 +76,29 @@ export const EVALUATORS: Evaluator[] = [
   },
 ];
 
-/**
- * Director evaluator — used ONLY for director-only positions (division Heads,
- * Legal, Business Development) where the Director is the sole assessor (100%).
- * On the normal path the Director does not fill scores (revisi Juli 2026).
- */
 export const DIRECTOR_EVALUATOR: Evaluator = {
   key: "dir",
   no: 1,
   name: "Director",
-  weight: 100,
-  note: "Diisi berdasarkan pertimbangan strategis dan dampak kontribusi karyawan terhadap perusahaan secara keseluruhan.",
+  weight: 60,
+  note: "Diisi berdasarkan pertimbangan strategis dan dampak kontribusi Head terhadap perusahaan secara keseluruhan.",
 };
+
+/**
+ * Evaluator panel for a division Head (and Legal / Business Development):
+ * assessed directly by the Director (60%) and HC (40%) — there is no Atasan
+ * Langsung or Rekan Sejawat above a Head (kebijakan owner, Juli 2026).
+ */
+export const HEAD_EVALUATORS: Evaluator[] = [
+  DIRECTOR_EVALUATOR,
+  {
+    key: "hc",
+    no: 2,
+    name: "HC / Human Capital",
+    weight: 40,
+    note: "Diisi berdasarkan data sistem HR (absensi, SP, tes kompetensi) dan verifikasi dokumen pendukung.",
+  },
+];
 
 /** The six scored parameters. Weights sum to 100 within each evaluator. */
 export const PARAMETERS: Parameter[] = [
@@ -362,7 +373,7 @@ const PARAM_BY_KEY = new Map(PARAMETERS.map((p) => [p.key, p]));
  */
 export function evaluatorsFor(pos: { isHead: boolean; title: string } | null | undefined): Evaluator[] {
   if (pos && (pos.isHead || DIRECTOR_ONLY_POSITIONS.includes(pos.title))) {
-    return [{ ...DIRECTOR_EVALUATOR }];
+    return HEAD_EVALUATORS.map((e) => ({ ...e }));
   }
   return EVALUATORS;
 }
@@ -373,7 +384,8 @@ export function isDirectorOnly(pos: { isHead: boolean; title: string } | null | 
 }
 
 /** An evaluator's 0–100 score from their six parameter picks (blank = 0). */
-export function evaluatorScore(scores: ParamScores): number {
+export function evaluatorScore(scores: ParamScores | undefined): number {
+  if (!scores) return 0;
   let total = 0;
   for (const p of PARAMETERS) {
     const v = scores[p.key];
@@ -384,7 +396,8 @@ export function evaluatorScore(scores: ParamScores): number {
 }
 
 /** How many of an evaluator's parameters have been filled. */
-export function evaluatorFilled(scores: ParamScores): number {
+export function evaluatorFilled(scores: ParamScores | undefined): number {
+  if (!scores) return 0;
   return PARAMETERS.filter((p) => !!scores[p.key]).length;
 }
 

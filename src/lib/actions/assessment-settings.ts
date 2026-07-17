@@ -3,7 +3,6 @@
 import { revalidatePath } from "next/cache";
 import { getSessionUser } from "@/lib/auth";
 import { persistMessage } from "@/lib/data/persist";
-import { resolveAssessmentAccess } from "@/lib/data/assessment-access";
 import {
   saveAssignment,
   saveRosterEntry,
@@ -12,13 +11,10 @@ import {
 } from "@/lib/data/assessment-roster";
 import type { UserProfile } from "@/lib/types";
 
-/** Who may edit the assessment settings: Super Admin, HC, or Director. */
+/** Who may edit the assessment settings: Super Admin only (owner decision). */
 async function canManage(): Promise<UserProfile | null> {
   const user = await getSessionUser();
-  if (!user) return null;
-  if (user.role === "super_admin") return user;
-  const access = await resolveAssessmentAccess({ id: user.id, role: user.role, department: user.department });
-  return access.role === "hr" || access.role === "director" ? user : null;
+  return user && user.role === "super_admin" ? user : null;
 }
 
 export async function saveRosterEntryAction(input: {
@@ -27,7 +23,7 @@ export async function saveRosterEntryAction(input: {
   scopeDepartmentId?: string;
   active?: boolean;
 }) {
-  if (!(await canManage())) return { error: "Hanya Admin / HC / Director yang dapat mengatur assessment." };
+  if (!(await canManage())) return { error: "Hanya Admin yang dapat mengatur assessment." };
   try {
     await saveRosterEntry({
       userId: input.userId,
@@ -44,7 +40,7 @@ export async function saveRosterEntryAction(input: {
 }
 
 export async function removeRosterEntryAction(userId: string) {
-  if (!(await canManage())) return { error: "Hanya Admin / HC / Director yang dapat mengatur assessment." };
+  if (!(await canManage())) return { error: "Hanya Admin yang dapat mengatur assessment." };
   try {
     await removeRosterEntry(userId);
     revalidatePath("/assessment/settings");
@@ -60,7 +56,7 @@ export async function saveAssignmentAction(input: {
   atasanUserId: string | null;
   peerUserIds: string[];
 }) {
-  if (!(await canManage())) return { error: "Hanya Admin / HC / Director yang dapat mengatur assessment." };
+  if (!(await canManage())) return { error: "Hanya Admin yang dapat mengatur assessment." };
   try {
     await saveAssignment(input);
     revalidatePath("/assessment/settings");

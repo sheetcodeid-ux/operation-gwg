@@ -35,7 +35,9 @@ export default async function AssessmentPage() {
   // peer-review path. Super Admin keeps the manual viewpoint switcher.
   const evaluator = await getMyEvaluator();
   const isAdmin = user.role === "super_admin";
-  const canManage = isAdmin || access.role === "hr" || access.role === "director";
+  // Pengaturan is Admin-only (owner decision) — HC/Director can assess but not
+  // reconfigure who takes part.
+  const canManage = isAdmin;
   const [orgExtra, schedule] = await Promise.all([getOrgExtra(), getAssessmentSchedule()]);
   const windowOpen = canAccessAssessment({ role: user.role, jabatan: user.jabatan, department: user.department }, schedule);
   const allowed = windowOpen && inRoster;
@@ -43,27 +45,17 @@ export default async function AssessmentPage() {
 
   return (
     <div className="w-full">
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <PageHeader
-          icon={Award}
-          title="Assessment Kenaikan Golongan"
-          description="Sistem penilaian kenaikan golongan HRD — multi-penilai, self assessment, interview & keputusan final"
-        />
-        {canManage && (
-          <Link
-            href="/assessment/settings"
-            className="mt-1 inline-flex shrink-0 items-center gap-2 rounded-xl border border-border bg-muted/40 px-3 py-2 text-sm font-medium text-foreground transition-colors hover:bg-muted"
-          >
-            <Settings2 className="size-4" /> Pengaturan
-          </Link>
-        )}
-      </div>
+      <PageHeader
+        icon={Award}
+        title="Assessment Kenaikan Golongan"
+        description="Sistem penilaian kenaikan golongan HRD — multi-penilai, self assessment, interview & keputusan final"
+      />
 
       {isAdmin && <ScheduleEditor initial={schedule} />}
 
       {allowed ? (
         /* In production (DB live) show only real sessions; sample data is demo-only. */
-        <AssessmentWorkspace initialRole={access.role} scopeDepartmentId={access.scopeDepartmentId} evaluator={evaluator} isAdmin={isAdmin} viewerName={user.name} showSample={!dbEnabled} orgExtra={orgExtra} />
+        <AssessmentWorkspace initialRole={access.role} scopeDepartmentId={access.scopeDepartmentId} evaluator={evaluator} isAdmin={isAdmin} canManage={canManage} viewerName={user.name} showSample={!dbEnabled} orgExtra={orgExtra} />
       ) : !inRoster ? (
         <div className="glass mt-2 flex flex-col items-center gap-3 rounded-2xl border border-border px-6 py-16 text-center">
           <div className="grid size-12 place-items-center rounded-full bg-muted text-muted-foreground">

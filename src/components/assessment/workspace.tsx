@@ -1,7 +1,8 @@
 "use client";
 
 import * as React from "react";
-import { BookOpen, ClipboardList, GaugeCircle, Mic, ScrollText, Sparkles } from "lucide-react";
+import Link from "next/link";
+import { BookOpen, ClipboardList, GaugeCircle, Mic, ScrollText, Settings2, Sparkles } from "lucide-react";
 import { ASSESSMENT_ROLES, canSeeTab, type AssessmentRole, type TabKey } from "@/lib/assessment/access";
 import type { EvaluatorIdentity } from "@/lib/assessment/session";
 import { setOrgExtras, type OrgExtra } from "@/lib/assessment/org";
@@ -30,6 +31,7 @@ export function AssessmentWorkspace({
   scopeDepartmentId,
   evaluator,
   isAdmin,
+  canManage = false,
   viewerName,
   showSample,
   orgExtra,
@@ -39,6 +41,8 @@ export function AssessmentWorkspace({
   scopeDepartmentId?: string;
   evaluator: EvaluatorIdentity | null;
   isAdmin: boolean;
+  /** Admin-only: shows the Pengaturan entry in the tab row. */
+  canManage?: boolean;
   viewerName: string;
   showSample: boolean;
   orgExtra?: OrgExtra;
@@ -53,12 +57,12 @@ export function AssessmentWorkspace({
   void scopeDepartmentId;
   return (
     <AssessmentProvider initialRole={initialRole} canSwitchRole={isAdmin} evaluator={evaluator} showSample={showSample}>
-      <WorkspaceInner viewerName={viewerName} />
+      <WorkspaceInner viewerName={viewerName} canManage={canManage} />
     </AssessmentProvider>
   );
 }
 
-function WorkspaceInner({ viewerName }: { viewerName: string }) {
+function WorkspaceInner({ viewerName, canManage }: { viewerName: string; canManage: boolean }) {
   const a = useAssessment();
   const tabs = TABS.filter((t) => canSeeTab(a.role, t.key));
   const roleDef = ASSESSMENT_ROLES.find((r) => r.value === a.role)!;
@@ -135,6 +139,16 @@ function WorkspaceInner({ viewerName }: { viewerName: string }) {
               </button>
             );
           })}
+          {/* Admin-only: Pengaturan sits at the far end of the row (scroll to reach). */}
+          {canManage && (
+            <Link
+              href="/assessment/settings"
+              className="inline-flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-lg border-l border-border pl-3 pr-3 py-1.5 text-sm font-medium text-muted-foreground transition-colors hover:bg-muted/60 hover:text-foreground"
+            >
+              <Settings2 className="size-4" />
+              <span>Pengaturan</span>
+            </Link>
+          )}
         </div>
       </div>
 
