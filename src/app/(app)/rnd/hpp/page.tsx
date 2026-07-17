@@ -8,8 +8,11 @@ import { listIngredients } from "@/lib/data/hpp-ingredients";
 import { foodCostPct } from "@/lib/hpp/calc";
 import { canVerifyHpp } from "@/lib/hpp/access";
 import { PageHeader } from "@/components/ui/page-header";
+import { listCostingPolicies } from "@/lib/data/costing-policy";
+import { BRANDS } from "@/lib/hpp/calc";
 import { HppCalculator, type IngredientOption } from "@/components/hpp/hpp-calculator";
 import { HppGuide, type GuideStats } from "@/components/hpp/hpp-guide";
+import { CostingPolicyEditor } from "@/components/hpp/costing-policy-editor";
 
 export const metadata: Metadata = { title: "Kalkulator HPP" };
 
@@ -24,7 +27,8 @@ export default async function HppPage({ searchParams }: { searchParams: Promise<
     user.department === "Food & Beverage";
   if (!canEdit) redirect("/dashboard");
 
-  const [history, rawIngredients] = await Promise.all([listHpp(), listIngredients()]);
+  const [history, rawIngredients, policies] = await Promise.all([listHpp(), listIngredients(), listCostingPolicies()]);
+  const policyOptions = policies.map((p) => ({ scope: p.scope, foodPct: p.foodPct, bevPct: p.bevPct }));
   const ingredients: IngredientOption[] = rawIngredients.map((i) => ({
     id: i.id,
     name: i.name,
@@ -54,7 +58,8 @@ export default async function HppPage({ searchParams }: { searchParams: Promise<
         description="Harga Pokok Produksi R&D — hitung biaya, saran harga jual, BEP & proyeksi laba"
       />
       <HppGuide stats={guideStats} canVerify={canVerify} />
-      <HppCalculator initialHistory={history} canEdit={canEdit} ingredients={ingredients} autoLoadId={edit} />
+      <CostingPolicyEditor initial={policyOptions} brands={[...BRANDS]} canEdit={canVerify} />
+      <HppCalculator initialHistory={history} canEdit={canEdit} ingredients={ingredients} autoLoadId={edit} policies={policyOptions} />
     </div>
   );
 }

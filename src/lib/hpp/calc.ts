@@ -206,17 +206,18 @@ export function foodCostPct(variableCost: number, price: number): number {
 
 export type CostTone = "good" | "warn" | "bad";
 
-/** Food-cost health per GWG policy: makanan ideal ≤35%, minuman ideal 25–35%,
- *  >70% = over cost (wajib evaluasi). Returns a tone + short label. */
-export function foodCostStatus(fc: number, category: "makanan" | "minuman"): { tone: CostTone; label: string } {
+/** Food-cost health vs the costing policy target. `targetPct` is the target
+ *  food cost for this (brand, category) as a fraction (e.g. 0.35). Defaults to
+ *  35% makanan / 25% minuman when no policy is supplied. >70% = over cost.
+ *  A small tolerance above target counts as "sedikit di atas" (warn), not bad. */
+export function foodCostStatus(fc: number, category: "makanan" | "minuman", targetPct?: number): { tone: CostTone; label: string } {
   const pct = fc * 100;
+  const target = (targetPct ?? (category === "minuman" ? 0.25 : 0.35)) * 100;
   if (pct <= 0) return { tone: "warn", label: "Isi harga & bahan" };
   if (pct > 70) return { tone: "bad", label: "Over cost (>70%)" };
-  const idealMin = category === "minuman" ? 25 : 0;
-  const idealMax = 35;
-  if (pct < idealMin) return { tone: "good", label: "Sangat efisien" };
-  if (pct <= idealMax) return { tone: "good", label: "Ideal" };
-  return { tone: "warn", label: "Perlu evaluasi (>35%)" };
+  if (pct <= target) return { tone: "good", label: `Sesuai target (≤${target.toFixed(0)}%)` };
+  if (pct <= target + 5) return { tone: "warn", label: `Sedikit di atas target (${target.toFixed(0)}%)` };
+  return { tone: "warn", label: `Perlu evaluasi (>${target.toFixed(0)}%)` };
 }
 
 /** Waste cost = wastePct of raw-material (variable) cost — GWG waste normal ≤5%. */
