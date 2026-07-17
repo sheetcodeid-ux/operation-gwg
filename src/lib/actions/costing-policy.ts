@@ -8,11 +8,20 @@ import { deleteCostingPolicy, saveCostingPolicy } from "@/lib/data/costing-polic
 
 /** Only the HPP verifier (R&D Head / Super Admin) may change costing policy —
  *  it is a company-wide baseline, not a per-user preference. */
-export async function saveCostingPolicyAction(input: { scope: string; foodPct: number; bevPct: number }) {
+export async function saveCostingPolicyAction(input: {
+  scope: string;
+  foodPct: number;
+  bevPct: number;
+  foodMarginMin: number;
+  foodMarginMax: number;
+  bevMarginMin: number;
+  bevMarginMax: number;
+}) {
   const user = await getSessionUser();
   if (!user || !canVerifyHpp(user)) return { error: "Hanya Head R&D / Admin yang dapat mengubah kebijakan costing." };
   try {
-    await saveCostingPolicy(input.scope, input.foodPct, input.bevPct);
+    const { scope, ...rest } = input;
+    await saveCostingPolicy(scope, rest);
     revalidatePath("/rnd/hpp");
     return { ok: true };
   } catch (e) {

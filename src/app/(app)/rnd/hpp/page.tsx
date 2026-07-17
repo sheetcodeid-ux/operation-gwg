@@ -29,7 +29,15 @@ export default async function HppPage({ searchParams }: { searchParams: Promise<
   if (!canEdit) redirect("/dashboard");
 
   const [history, rawIngredients, policies, esbMenusRaw] = await Promise.all([listHpp(), listIngredients(), listCostingPolicies(), listEsbMenus()]);
-  const policyOptions = policies.map((p) => ({ scope: p.scope, foodPct: p.foodPct, bevPct: p.bevPct }));
+  const policyOptions = policies.map((p) => ({
+    scope: p.scope,
+    foodPct: p.foodPct,
+    bevPct: p.bevPct,
+    foodMarginMin: p.foodMarginMin,
+    foodMarginMax: p.foodMarginMax,
+    bevMarginMin: p.bevMarginMin,
+    bevMarginMax: p.bevMarginMax,
+  }));
   const esbMenus = esbMenusRaw.map((m) => ({ menu: m.menu, foodBev: m.foodBev, qty30d: m.qty30d, unitPrice: m.unitPrice }));
   const ingredients: IngredientOption[] = rawIngredients.map((i) => ({
     id: i.id,
