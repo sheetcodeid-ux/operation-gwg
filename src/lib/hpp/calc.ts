@@ -112,20 +112,45 @@ export const BRAND_MARGIN: Record<Brand, { min: number; idealLow: number; idealH
   "Lesung Pipi": { min: 0.3, idealLow: 0.35, idealHigh: 0.4 },
 };
 
-/** Three price suggestions from HPP + margin bands. Brand-aware when given a
- *  brand (uses that brand's band, floor 30%); otherwise generic 30/40/48%. */
-export function priceTiers(hpp: number, brand?: Brand): PriceTier[] {
-  const band = brand ? BRAND_MARGIN[brand] : null;
-  const margins = band
-    ? { kompetitif: Math.max(0.3, band.min), standar: band.idealHigh, premium: Math.min(0.6, band.idealHigh + 0.08) }
-    : { kompetitif: 0.3, standar: 0.4, premium: 0.48 };
+/** A settable selling-price margin band per category (fractions 0..1). */
+export interface MarginBand {
+  min: number;
+  max: number;
+}
+
+/**
+ * Three price suggestions from HPP + a margin band. The suggestions START at
+ * the band minimum (Minimal), the midpoint (Ideal), and the maximum
+ * (Maksimal) — e.g. beverage 60–100% ⇒ 60% / 80% / 100%.
+ *
+ * `band` (from the costing policy per category) wins when given; otherwise it
+ * falls back to the brand band, then a generic 30/40/48%.
+ */
+export function priceTiers(hpp: number, brand?: Brand, band?: MarginBand): PriceTier[] {
+  let min: number, mid: number, max: number;
+  if (band && band.max > 0) {
+    min = band.min;
+    max = Math.max(band.min, band.max);
+    mid = (min + max) / 2;
+  } else if (brand) {
+    const b = BRAND_MARGIN[brand];
+    min = Math.max(0.3, b.min);
+    mid = b.idealHigh;
+    max = Math.min(0.6, b.idealHigh + 0.08);
+  } else {
+    min = 0.3; mid = 0.4; max = 0.48;
+  }
   const defs: Omit<PriceTier, "price" | "profit" | "margin">[] = [
-    { key: "kompetitif", label: "Kompetitif", targetMargin: margins.kompetitif, note: "Margin minimum brand — untuk menarik pelanggan." },
-    { key: "standar", label: "Standar", targetMargin: margins.standar, note: "Margin ideal brand dengan keuntungan sehat." },
-    { key: "premium", label: "Premium", targetMargin: margins.premium, note: "Harga lebih tinggi, didukung kualitas bahan & branding unggul." },
+    { key: "kompetitif", label: "Minimal", targetMargin: min, note: "Harga pada margin minimum — untuk menarik pelanggan." },
+    { key: "standar", label: "Ideal", targetMargin: mid, note: "Margin tengah — keuntungan sehat & wajar." },
+    { key: "premium", label: "Maksimal", targetMargin: max, note: "Harga pada margin maksimum band." },
   ];
   return defs.map((d) => {
-    const price = hpp > 0 ? roundPrice(hpp / (1 - d.targetMargin)) : 0;
+    // A 100% GPM implies an infinite price (price = HPP ÷ 0), so cap the margin
+    // used for pricing at 90% (already price = 10× HPP). The band max may still
+    // read 100% as an aspiration; the computed price stays finite & sensible.
+    const m = Math.min(0.9, d.targetMargin);
+    const price = hpp > 0 ? roundPrice(hpp / (1 - m)) : 0;
     const profit = price - hpp;
     const margin = price > 0 ? profit / price : 0;
     return { ...d, price, profit, margin };

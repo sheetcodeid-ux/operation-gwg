@@ -40,6 +40,18 @@ describe("HPP engine (matches reference screenshot)", () => {
     expect(Math.round(p.margin * 1000) / 10).toBe(48.1);
   });
 
+  it("price tiers follow a settable margin band (beverage 60–100%)", () => {
+    const [min, mid, max] = priceTiers(r.hpp, undefined, { min: 0.6, max: 1.0 });
+    // Suggestions start at the band minimum, midpoint, then maximum.
+    expect(min.margin).toBeGreaterThanOrEqual(0.6);
+    expect(min.margin).toBeLessThan(0.62);
+    expect(Math.round(mid.margin * 100)).toBe(80); // midpoint of 60–100
+    expect(max.margin).toBeGreaterThanOrEqual(0.89); // 100% capped to 90% (finite price)
+    expect(max.margin).toBeLessThan(0.91);
+    expect(min.price).toBeLessThan(mid.price);
+    expect(mid.price).toBeLessThan(max.price);
+  });
+
   it("projects BEP, target units and net profit at Rp 22.000 / target Rp 10jt", () => {
     const proj = projection(r.variableCost, r.totalFixed, 22000, 10_000_000);
     expect(proj.contribution).toBe(13785);

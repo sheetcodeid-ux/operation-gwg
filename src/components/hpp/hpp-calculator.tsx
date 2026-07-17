@@ -38,7 +38,6 @@ import {
   YAxis,
 } from "recharts";
 import {
-  BRAND_MARGIN,
   BRANDS,
   UNITS,
   bepSeries,
@@ -123,8 +122,8 @@ function NumInput({ value, onChange, className, placeholder }: { value: number; 
 
 export type IngredientOption = { id: string; name: string; buyPrice: number; buyQty: number; buyUnit: string };
 
-/** Client-safe costing policy (target food-cost % per category). */
-export type PolicyOption = { scope: string; foodPct: number; bevPct: number };
+/** Client-safe costing policy (food-cost target + selling margin band per category). */
+export type PolicyOption = { scope: string; foodPct: number; bevPct: number; foodMarginMin: number; foodMarginMax: number; bevMarginMin: number; bevMarginMax: number };
 /** Client-safe ESB catalog entry for the product picker. */
 export type EsbMenuOption = { menu: string; foodBev: "makanan" | "minuman"; qty30d: number; unitPrice: number };
 
@@ -133,7 +132,7 @@ export function HppCalculator({
   canEdit,
   ingredients = [],
   autoLoadId,
-  policies = [{ scope: "default", foodPct: 35, bevPct: 25 }],
+  policies = [{ scope: "default", foodPct: 35, bevPct: 25, foodMarginMin: 35, foodMarginMax: 50, bevMarginMin: 60, bevMarginMax: 100 }],
   esbMenus = [],
 }: {
   initialHistory: HppRecord[];
@@ -192,17 +191,22 @@ export function HppCalculator({
   const fixedAlloc = base.fixedAlloc;
   const hpp = variableCost + fixedAlloc;
 
-  const tiers = React.useMemo(() => priceTiers(hpp, brand), [hpp, brand]);
-  const brandBand = BRAND_MARGIN[brand];
-  const price = chosenPrice || tiers[1]?.price || 0; // default: Standar
+  // Costing policy for this brand (override wins, else default).
+  const policy = React.useMemo(() => {
+    const fallback = { scope: "default", foodPct: 35, bevPct: 25, foodMarginMin: 35, foodMarginMax: 50, bevMarginMin: 60, bevMarginMax: 100 };
+    const def = policies.find((p) => p.scope === "default") ?? fallback;
+    return policies.find((p) => p.scope === brand) ?? def;
+  }, [policies, brand]);
+  // Selling-price margin band per category — drives the price suggestions.
+  const marginBand = React.useMemo(
+    () => (category === "minuman" ? { min: policy.bevMarginMin / 100, max: policy.bevMarginMax / 100 } : { min: policy.foodMarginMin / 100, max: policy.foodMarginMax / 100 }),
+    [policy, category],
+  );
+  const tiers = React.useMemo(() => priceTiers(hpp, brand, marginBand), [hpp, brand, marginBand]);
+  const price = chosenPrice || tiers[0]?.price || 0; // default: Minimal (start di margin minimum)
   const sens = React.useMemo(() => sensitivity(variableCost, fixedAlloc, sensPct / 100, price), [variableCost, fixedAlloc, sensPct, price]);
   const proj = React.useMemo(() => projection(variableCost, base.totalFixed, price, targetProfit), [variableCost, base.totalFixed, price, targetProfit]);
   const fc = foodCostPct(variableCost, price);
-  // Target food-cost % from costing policy: brand override wins, else default.
-  const policy = React.useMemo(() => {
-    const def = policies.find((p) => p.scope === "default") ?? { scope: "default", foodPct: 35, bevPct: 25 };
-    return policies.find((p) => p.scope === brand) ?? def;
-  }, [policies, brand]);
   const targetFc = (category === "minuman" ? policy.bevPct : policy.foodPct) / 100;
   const policyCustom = policy.scope === brand;
   const fcStatus = foodCostStatus(fc, category, targetFc);
@@ -751,8 +755,9 @@ export function HppCalculator({
             {policyCustom ? <span className="font-medium text-primary">kustom {brand}</span> : "kebijakan default perusahaan"}.
           </p>
           <p className="mb-3 text-[11px] text-muted-foreground">
-            Margin ideal {brand} {(brandBand.idealLow * 100).toFixed(0)}–{(brandBand.idealHigh * 100).toFixed(0)}% · food cost{" "}
-            {category === "minuman" ? "minuman 25–35%" : "makanan ≤35%"} · over cost bila &gt;70%.
+            Saran harga pakai band margin {category === "minuman" ? "minuman" : "makanan"}{" "}
+            <span className="font-medium text-foreground">{(marginBand.min * 100).toFixed(0)}–{(marginBand.max * 100).toFixed(0)}%</span>
+            {policyCustom ? <span className="text-primary"> (kustom {brand})</span> : ""} · mulai dari margin minimum · atur di Kebijakan Costing.
           </p>
           {fcStatus.tone === "bad" && (
             <p className="mb-3 flex items-center gap-1.5 rounded-lg bg-red-500/10 px-2 py-1.5 text-[11px] font-medium text-red-600 dark:text-red-400">
