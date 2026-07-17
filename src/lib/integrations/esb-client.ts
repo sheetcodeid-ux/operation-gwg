@@ -230,10 +230,10 @@ async function pokeQueue(): Promise<void> {
   }
 }
 
-/** Step 2 — read ONE page (0-indexed) of a generated export via the grid proxy.
+/** Read ONE page (0-indexed) of a generated export and return its raw grid HTML.
  *  The export is produced asynchronously, so a just-generated file can 404 for a
  *  moment — retry a few times with a short delay before giving up. */
-async function readExportPage(url: string, page: number, maxAttempts = 22, poke = false): Promise<{ report: CancelDetailReport; rawLen: number }> {
+async function readExportPageRaw(url: string, page: number, maxAttempts = 22, poke = false): Promise<string> {
   let last = "";
   for (let attempt = 0; attempt < maxAttempts; attempt++) {
     const res = await postForm("/report_service/main/get-data-report", () => ({ url, page: String(page) }));
@@ -243,7 +243,7 @@ async function readExportPage(url: string, page: number, maxAttempts = 22, poke 
     const text = await res.text().catch(() => "");
     if (res.ok && !/\\?"code\\?"\s*:\s*(404|425|202)/.test(text)) {
       const data = extractReportData(text);
-      if (data) return { report: parseCancelDetailReport(data), rawLen: data.length };
+      if (data) return data;
     }
     last = text.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim().slice(0, 140);
     if (attempt < maxAttempts - 1) {
@@ -254,6 +254,12 @@ async function readExportPage(url: string, page: number, maxAttempts = 22, poke 
     throw new Error(`ESB get-data-report failed (${res.status}) url=…${decodeURIComponent(url).slice(-60)} body:${last}`);
   }
   throw new Error("ESB get-data-report: export not ready after retries");
+}
+
+/** Step 2 for the Cancel/Void grid — read one page and parse it. */
+async function readExportPage(url: string, page: number, maxAttempts = 22, poke = false): Promise<{ report: CancelDetailReport; rawLen: number }> {
+  const data = await readExportPageRaw(url, page, maxAttempts, poke);
+  return { report: parseCancelDetailReport(data), rawLen: data.length };
 }
 
 export interface EsbCancelResult {
@@ -418,4 +424,69 @@ export async function esbFetchNetSales(dateFromYmd: string, dateToYmd: string, b
   const cs = j.currentSales;
   if (cs === undefined || cs === null || cs === "") return 0;
   return typeof cs === "number" ? cs : parseIdrNumber(String(cs));
+}
+
+/* -------------------- Sales Menu Recapitulation (catalog) -------------------- */
+
+import { parseMenuRecapReport, type MenuRecapRow } from "./esb";
+
+export interface EsbMenuResult {
+  rows: MenuRecapRow[];
+  totalItems: number;
+  readAll: boolean;
+}
+
+/**
+ * Fetch the Sales Menu Recapitulation for a date range — the ESB product
+ * catalog with qty sold and unit price. Serialized through the same queue as
+ * the cancel export (ESB serves one export per session). Field names verified
+ * from a live HAR capture (SalesMenuRecapReport).
+ */
+export function esbFetchMenuRecap(dateFromYmd: string, dateToYmd: string, budgetMs = 48_000): Promise<EsbMenuResult> {
+  return serialized(async () => {
+    const started = Date.now();
+    await ensureSession();
+    const from = toEsbDate(dateFromYmd);
+    const to = toEsbDate(dateToYmd);
+    const P = "SalesMenuRecapReport";
+    const res = await postForm("/report/report-sales-menu-recap", (s) => ({
+      "_csrf-esb-fnb-backend": s.csrf,
+      [`${P}[language]`]: "en",
+      [`${P}[reportDate]`]: `${from} - ${to}`,
+      [`${P}[dateFrom]`]: from,
+      [`${P}[dateTo]`]: to,
+      [`${P}[selectedBranchText]`]: "All Branch",
+      [`${P}[branchID]`]: "",
+      [`${P}[menuName]`]: "",
+      [`${P}[memberCode]`]: "",
+      [`${P}[visitPurposeID]`]: "",
+      [`${P}[salesType]`]: "",
+      [`${P}[salesType][]`]: "Sales",
+      [`${P}[menuCategory]`]: "",
+      [`${P}[menuCategoryDetail]`]: "",
+      [`${P}[menuCode]`]: "",
+      [`${P}[showZeroValue]`]: "1",
+      [`${P}[salesMenuRecapMode]`]: "raw",
+      [`${P}[tagName]`]: "",
+      POST_USER_SESSION: s.postUserSession,
+    }));
+    if (!res.ok) throw new Error(`ESB report-sales-menu-recap failed (${res.status})`);
+    const json = (await res.json()) as { status?: number; data?: string };
+    if (!json?.data) throw new Error("ESB: menu-recap export URL missing");
+    const url = json.data;
+    await pokeQueue();
+    const first = parseMenuRecapReport(await readExportPageRaw(url, 0, 16, true));
+    const rows = [...first.rows];
+    const pages = Math.min(Math.ceil(30_000 / Math.max(1, first.pageSize)), Math.ceil(first.totalItems / Math.max(1, first.pageSize)));
+    let stoppedEarly = false;
+    for (let p = 1; p < pages; p++) {
+      if (Date.now() - started > budgetMs) { stoppedEarly = true; break; }
+      try {
+        rows.push(...parseMenuRecapReport(await readExportPageRaw(url, p, 4)).rows);
+      } catch {
+        /* skipped page → readAll=false → caller retries later */
+      }
+    }
+    return { rows, totalItems: first.totalItems, readAll: !stoppedEarly && rows.length >= first.totalItems };
+  });
 }

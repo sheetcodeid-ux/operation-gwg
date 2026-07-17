@@ -155,3 +155,18 @@ export async function reviewHppAction(id: string, decision: "verified" | "reject
   revalidateHpp();
   return { ok: true };
 }
+
+/** Manually trigger an ESB menu-catalog sync (verifier only). Used by the
+ *  Referensi Harga & HPP page's refresh button; the cron also runs it. */
+export async function syncEsbMenuAction() {
+  const user = await getSessionUser();
+  if (!canVerify(user)) return { error: "Hanya Head R&D / Admin yang dapat menyinkron katalog ESB." };
+  try {
+    const { syncEsbMenus } = await import("@/lib/data/esb-menu");
+    const res = await syncEsbMenus();
+    revalidateHpp();
+    return { ok: true, ...res };
+  } catch (e) {
+    return { error: e instanceof Error ? e.message : "Gagal sinkron katalog ESB." };
+  }
+}

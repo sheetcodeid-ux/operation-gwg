@@ -19,6 +19,7 @@ export type MenuKey =
   | "hpp"
   | "hpp_db"
   | "hpp_bahan"
+  | "hpp_price"
   | "users"
   | "audit";
 
@@ -66,6 +67,7 @@ export const NAV_MENUS: Omit<NavItem, "section">[] = [
   { key: "hpp", label: "Kalkulator HPP", href: "/rnd/hpp", icon: "Calculator" },
   { key: "hpp_db", label: "Database HPP", href: "/rnd/hpp/rekap", icon: "Table2" },
   { key: "hpp_bahan", label: "Master Bahan Baku", href: "/rnd/hpp/bahan", icon: "Package" },
+  { key: "hpp_price", label: "Referensi Harga & HPP", href: "/rnd/hpp/price", icon: "Scale" },
   { key: "users", label: "User Management", href: "/admin/users", icon: "Users" },
   { key: "audit", label: "Audit Logs", href: "/admin/audit", icon: "ScrollText" },
 ];
@@ -131,10 +133,10 @@ export const ROLE_MENUS: Record<Role, MenuKey[]> = {
   pos_operation: ["work", "assessment"],
   admin_operation: ["work", "complaints", "assessment"],
   supervisor: ["hygiene", "complaints"], // field staff — NO assessment
-  head_bar_rnd: ["hpp_dash", "work", "hpp", "hpp_db", "hpp_bahan", "assessment"],
-  bar_rnd: ["hpp_dash", "work", "hpp", "hpp_db", "hpp_bahan", "assessment"],
-  kitchen_rnd: ["hpp_dash", "work", "hpp", "hpp_db", "hpp_bahan", "assessment"],
-  coordinator_rnd: ["hpp_dash", "work", "hpp", "hpp_db", "hpp_bahan", "assessment"],
+  head_bar_rnd: ["hpp_dash", "work", "hpp", "hpp_db", "hpp_bahan", "hpp_price", "assessment"],
+  bar_rnd: ["hpp_dash", "work", "hpp", "hpp_db", "hpp_bahan", "hpp_price", "assessment"],
+  kitchen_rnd: ["hpp_dash", "work", "hpp", "hpp_db", "hpp_bahan", "hpp_price", "assessment"],
+  coordinator_rnd: ["hpp_dash", "work", "hpp", "hpp_db", "hpp_bahan", "hpp_price", "assessment"],
   legal: ["work", "assessment"], // HRD — grade-promotion assessment
   assessor: ["assessment"], // division Head / evaluator — assessment only
   member: ["assessment"], // HO staff — assessment; other access via `department`
@@ -144,7 +146,7 @@ export const ROLE_MENUS: Record<Role, MenuKey[]> = {
 const DIVISION_MENUS: { division: Division; menus: MenuKey[] }[] = [
   { division: "Operation", menus: OPERATION_FULL },
   { division: "Supervisor", menus: ["hygiene", "complaints"] },
-  { division: "R&D", menus: ["hpp_dash", "work", "hpp", "hpp_db", "hpp_bahan"] },
+  { division: "R&D", menus: ["hpp_dash", "work", "hpp", "hpp_db", "hpp_bahan", "hpp_price"] },
   { division: "Human Capital", menus: ["work", "assessment"] },
   // New department-aligned divisions — Work Tracker only for now.
   { division: "Finance", menus: ["work"] },

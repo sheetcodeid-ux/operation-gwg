@@ -222,3 +222,80 @@ export function parseCancelDetailReport(dataHtml: string): CancelDetailReport {
 
   return { rows, totalItems, pageSize, pageTotal };
 }
+
+/* -------------------- Sales Menu Recapitulation report -------------------- */
+
+export interface MenuRecapRow {
+  category: string; // Menu Category
+  categoryDetail: string; // Menu Category Detail
+  menu: string; // Menu name
+  menuCode: string;
+  qty: number;
+  unitPrice: number; // pre-tax unit price — comparable to HPP harga jual (tanpa pajak)
+  grandTotal: number; // incl tax
+}
+
+export interface MenuRecapReport {
+  rows: MenuRecapRow[];
+  totalItems: number;
+  pageSize: number;
+}
+
+/** Parse the Sales Menu Recapitulation grid (header-aware, rowspan-tolerant).
+ *  Columns (verified from HAR): 2 Category, 3 Category Detail, 4 Menu,
+ *  7 Menu Code, 11 Qty, 12 Unit Price, 20 Grand Total. */
+export function parseMenuRecapReport(dataHtml: string): MenuRecapReport {
+  const headers: Record<number, string> = {};
+  const thRe = /<th\b[^>]*\bdata-col-seq=["'](\d+)["'][^>]*>([\s\S]*?)<\/th>/gi;
+  let hm: RegExpExecArray | null;
+  while ((hm = thRe.exec(dataHtml))) headers[Number(hm[1])] = text(hm[2]);
+  const hasHeaders = Object.keys(headers).length > 0;
+  const idx = (re: RegExp, fallback: number) => {
+    const hit = Object.entries(headers).find(([, label]) => re.test(label));
+    return hit ? Number(hit[0]) : hasHeaders ? -1 : fallback;
+  };
+  const I = {
+    category: idx(/^menu\s*category$/i, 2),
+    categoryDetail: idx(/category\s*detail/i, 3),
+    menu: idx(/^menu$/i, 4),
+    menuCode: idx(/^menu\s*code$/i, 7),
+    qty: idx(/^qty$/i, 11),
+    unitPrice: idx(/unit\s*price/i, 12),
+    grandTotal: idx(/grand\s*total/i, 20),
+  };
+
+  const rows: MenuRecapRow[] = [];
+  const rowRe = /<tr\b[^>]*\bdata-key=["'][^"']*["'][^>]*>([\s\S]*?)<\/tr>/gi;
+  let rm: RegExpExecArray | null;
+  let prev: MenuRecapRow | null = null;
+  while ((rm = rowRe.exec(dataHtml))) {
+    const c = cells(rm[1]);
+    if (Object.keys(c).length === 0) continue;
+    const str = (i: number, inherited: string) => (c[i] === undefined ? inherited : text(c[i]));
+    const row: MenuRecapRow = {
+      category: str(I.category, prev?.category ?? ""),
+      categoryDetail: str(I.categoryDetail, prev?.categoryDetail ?? ""),
+      menu: str(I.menu, prev?.menu ?? ""),
+      menuCode: str(I.menuCode, prev?.menuCode ?? ""),
+      qty: parseIdrNumber(c[I.qty] ?? "0"),
+      unitPrice: parseIdrNumber(c[I.unitPrice] ?? "0"),
+      grandTotal: parseIdrNumber(c[I.grandTotal] ?? "0"),
+    };
+    if (!row.menu) continue; // skip summary/blank rows
+    rows.push(row);
+    prev = row;
+  }
+
+  const totalItems = Number(/of\s+([\d.]+)\s+items/i.exec(dataHtml)?.[1]?.replace(/\./g, "") ?? rows.length);
+  const showingTo = Number(/Showing\s+[\d.]+\s*-\s*([\d.]+)\s+of/i.exec(dataHtml)?.[1]?.replace(/\./g, "") ?? 0);
+  const pageSize = showingTo > 0 ? showingTo : Math.max(rows.length, 1);
+  return { rows, totalItems, pageSize };
+}
+
+/** Classify an ESB menu category as food or beverage (heuristic on category
+ *  text — beverage keywords win, else food). */
+export function classifyMenuCategory(category: string, detail = ""): "makanan" | "minuman" {
+  const s = `${category} ${detail}`.toLowerCase();
+  if (/(beverage|drink|minuman|coffee|kopi|\btea\b|\bteh\b|juice|jus|milk|susu|frappe|latte|espresso|non[- ]?coffee|mocktail|smoothie|boba)/.test(s)) return "minuman";
+  return "makanan";
+}

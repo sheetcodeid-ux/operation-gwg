@@ -43,6 +43,19 @@ export async function GET(req: Request) {
   const left = () => 52_000 - (Date.now() - started);
   const results: Record<string, unknown> = {};
 
+  // Dedicated job: ESB product catalog sync (menu-recap is ~124 pages, needs a
+  // full budget; scheduled on its own hourly pg_cron with ?job=menu). Resumable
+  // upsert — a partial run converges over a few hours.
+  if (new URL(req.url).searchParams.get("job") === "menu") {
+    try {
+      const { syncEsbMenus } = await import("@/lib/data/esb-menu");
+      results["menu"] = await syncEsbMenus(30, 50_000);
+    } catch (e) {
+      results["menu"] = { error: e instanceof Error ? e.message : "failed" };
+    }
+    return NextResponse.json({ ok: true, tookMs: Date.now() - started, results });
+  }
+
   // Phase 1 — keep the live window fresh (yesterday + today, both kinds).
   for (const kind of ["all", "delete"] as const) {
     try {
