@@ -1,4 +1,4 @@
-import type { Metadata, Viewport } from "next";
+import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import { Toaster } from "sonner";
 import { ThemeProvider } from "@/components/theme-provider";
@@ -21,12 +21,6 @@ export const metadata: Metadata = {
   },
   description:
     "Internal operational command center for monitoring 50 outlets across 5 areas: hospitality, hygiene, work, events, and complaints.",
-  applicationName: "Operation GWG",
-  appleWebApp: { capable: true, title: "Operation GWG", statusBarStyle: "default" },
-};
-
-export const viewport: Viewport = {
-  themeColor: "#0e186c",
 };
 
 export default function RootLayout({
