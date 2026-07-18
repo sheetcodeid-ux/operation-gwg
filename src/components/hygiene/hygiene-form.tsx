@@ -49,15 +49,27 @@ const todayLocal = () => {
 const SECTIONS = Object.keys(HYGIENE_SECTIONS) as HygieneSection[];
 const RATINGS = Object.keys(HYGIENE_RATING_META) as HygieneRating[];
 
-type Ratings = Record<HygieneSection, Record<string, HygieneRating>>;
+type Ratings = Record<HygieneSection, Record<string, HygieneRating | undefined>>;
 
-function defaultRatings(): Ratings {
+/** Start with no rating selected — the inspector must choose each one. */
+function emptyRatings(): Ratings {
   const r = {} as Ratings;
-  for (const sec of SECTIONS) {
-    r[sec] = {};
-    for (const item of HYGIENE_SECTIONS[sec].items) r[sec][item.key] = "good";
-  }
+  for (const sec of SECTIONS) r[sec] = {};
   return r;
+}
+
+/** Number of items rated / total, overall or for one section. */
+function ratedOf(ratings: Ratings, sec?: HygieneSection) {
+  const secs = sec ? [sec] : SECTIONS;
+  let rated = 0;
+  let total = 0;
+  for (const s of secs) {
+    for (const item of HYGIENE_SECTIONS[s].items) {
+      total += 1;
+      if (ratings[s][item.key]) rated += 1;
+    }
+  }
+  return { rated, total };
 }
 
 export function NewAuditButton({ outlets }: { outlets: { id: string; name: string }[] }) {
@@ -83,25 +95,31 @@ function HygieneForm({ outlets }: { outlets: { id: string; name: string }[] }) {
   const [date, setDate] = useState(todayLocal());
   const [shift, setShift] = useState("Morning");
   const [inspectorName, setInspectorName] = useState("");
-  const [ratings, setRatings] = useState<Ratings>(defaultRatings);
+  const [ratings, setRatings] = useState<Ratings>(emptyRatings);
   const [findings, setFindings] = useState<string[]>([]);
   const [findingDraft, setFindingDraft] = useState("");
   const [openSection, setOpenSection] = useState<HygieneSection>("front");
   const [photos, setPhotos] = useState<Record<string, CapturedPhoto[]>>({});
   const outletName = outlets.find((o) => o.id === outletId)?.name;
 
-  const score = useMemo(() => {
+  const { score, rated, total } = useMemo(() => {
     let sum = 0;
-    let count = 0;
+    let rated = 0;
+    let total = 0;
     for (const sec of SECTIONS) {
       for (const item of HYGIENE_SECTIONS[sec].items) {
-        sum += HYGIENE_RATING_META[ratings[sec][item.key]].score;
-        count += 1;
+        total += 1;
+        const r = ratings[sec][item.key];
+        if (r) {
+          sum += HYGIENE_RATING_META[r].score;
+          rated += 1;
+        }
       }
     }
-    return count ? Math.round((sum / count) * 10) / 10 : 0;
+    return { score: rated ? Math.round((sum / rated) * 10) / 10 : 0, rated, total };
   }, [ratings]);
 
+  const complete = rated === total;
   const isClean = score >= 70;
 
   function setRating(sec: HygieneSection, key: string, value: HygieneRating) {
@@ -115,11 +133,24 @@ function HygieneForm({ outlets }: { outlets: { id: string; name: string }[] }) {
   }
 
   function submit() {
+    // Require every item to be rated (no blank penilaian).
+    if (!complete) {
+      const firstIncomplete = SECTIONS.find((sec) => ratedOf(ratings, sec).rated < ratedOf(ratings, sec).total);
+      if (firstIncomplete) setOpenSection(firstIncomplete);
+      toast.error(`Penilaian belum lengkap — masih ada ${total - rated} item belum dinilai.`);
+      return;
+    }
     // Require min photos per documentation area (camera + timestamp).
     const missing = HYGIENE_PHOTO_GROUPS.filter((g) => (photos[g]?.length ?? 0) < MIN_PHOTOS);
     if (missing.length > 0) {
       toast.error(`Minimal ${MIN_PHOTOS} foto per area. Kurang: ${missing.join(", ")}.`);
       return;
+    }
+    // All items rated → build a fully-typed ratings object for the action.
+    const fullRatings = {} as Record<HygieneSection, Record<string, HygieneRating>>;
+    for (const sec of SECTIONS) {
+      fullRatings[sec] = {};
+      for (const item of HYGIENE_SECTIONS[sec].items) fullRatings[sec][item.key] = ratings[sec][item.key]!;
     }
     startTransition(async () => {
       // Upload attached photos to Supabase Storage first (permanent URLs).
@@ -150,7 +181,7 @@ function HygieneForm({ outlets }: { outlets: { id: string; name: string }[] }) {
         }
       }
 
-      const res = await createHygieneAction({ outletId, shift, inspectorName, ratings, findings, isClean, photos: uploaded, date: new Date(`${date}T12:00:00`).toISOString() });
+      const res = await createHygieneAction({ outletId, shift, inspectorName, ratings: fullRatings, findings, isClean, photos: uploaded, date: new Date(`${date}T12:00:00`).toISOString() });
       if (res?.error) {
         toast.error(res.error);
         return;
@@ -189,13 +220,20 @@ function HygieneForm({ outlets }: { outlets: { id: string; name: string }[] }) {
       </div>
 
       <div className="my-4 flex items-center gap-3 rounded-xl border border-border bg-muted/30 p-3">
-        <ScoreRing value={score} size={56} stroke={5} label="Higiene" />
+        <ScoreRing value={complete ? score : 0} size={56} stroke={5} label="Higiene" />
         <div className="flex-1">
           <p className="text-sm font-medium text-foreground">Skor kebersihan langsung</p>
-          <p className="text-xs text-muted-foreground">Dihitung otomatis dari enam area.</p>
+          <p className="text-xs text-muted-foreground">
+            {complete ? "Dihitung otomatis dari enam area." : `${rated}/${total} item dinilai — lengkapi semua.`}
+          </p>
         </div>
-        <span className={cn("rounded-full px-2.5 py-1 text-xs font-medium", isClean ? TONE_PILL.success : TONE_PILL.danger)}>
-          {isClean ? "Outlet Bersih" : "Perlu Perhatian"}
+        <span
+          className={cn(
+            "rounded-full px-2.5 py-1 text-xs font-medium",
+            !complete ? TONE_PILL.warning : isClean ? TONE_PILL.success : TONE_PILL.danger,
+          )}
+        >
+          {!complete ? "Belum lengkap" : isClean ? "Outlet Bersih" : "Perlu Perhatian"}
         </span>
       </div>
 
@@ -203,6 +241,8 @@ function HygieneForm({ outlets }: { outlets: { id: string; name: string }[] }) {
         {SECTIONS.map((sec) => {
           const meta = HYGIENE_SECTIONS[sec];
           const open = openSection === sec;
+          const secProgress = ratedOf(ratings, sec);
+          const secDone = secProgress.rated === secProgress.total;
           return (
             <div key={sec} className="overflow-hidden rounded-xl border border-border">
               <button
@@ -217,7 +257,19 @@ function HygieneForm({ outlets }: { outlets: { id: string; name: string }[] }) {
                     <p className="text-[10px] uppercase tracking-wide text-muted-foreground">{meta.subtitle}</p>
                   </div>
                 </div>
-                <ChevronDown className={cn("size-4 text-muted-foreground transition-transform", open && "rotate-180")} />
+                <div className="flex items-center gap-2">
+                  <span
+                    className={cn(
+                      "rounded-full px-2 py-0.5 text-[10px] font-bold tabular-nums",
+                      secDone
+                        ? "bg-brand-500/12 text-brand-600 dark:text-brand-400"
+                        : "bg-amber-500/15 text-amber-600 dark:text-amber-400",
+                    )}
+                  >
+                    {secProgress.rated}/{secProgress.total}
+                  </span>
+                  <ChevronDown className={cn("size-4 text-muted-foreground transition-transform", open && "rotate-180")} />
+                </div>
               </button>
               {open && (
                 <div className="space-y-2 p-3">

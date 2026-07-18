@@ -4,7 +4,7 @@ import * as React from "react";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { type ColumnDef } from "@tanstack/react-table";
-import { Camera, Trash2 } from "lucide-react";
+import { Camera, ChevronDown, Trash2, X } from "lucide-react";
 import { toast } from "sonner";
 import { deleteHygieneAction } from "@/lib/actions/hygiene";
 import type { Attachment } from "@/lib/types";
@@ -15,7 +15,7 @@ import { Combobox } from "@/components/ui/combobox";
 import { DataTable } from "@/components/ui/data-table";
 import { Dialog, DialogContent, DialogTrigger } from "@/components/ui/dialog";
 import { MonthFilter, monthKey, monthOptions } from "@/components/work/division-filter";
-import { formatDate } from "@/lib/utils";
+import { cn, formatDate } from "@/lib/utils";
 
 export interface HygieneRow {
   id: string;
@@ -32,6 +32,86 @@ export interface HygieneRow {
   photos: Attachment[];
 }
 
+
+/** Documentation gallery: photos grouped by area, collapsible, 3-per-row,
+ *  with a clean framed lightbox on click (instead of the raw storage URL). */
+function AuditPhotoGallery({ photos, caption }: { photos: Attachment[]; caption: string }) {
+  const groups = React.useMemo(() => {
+    const map = new Map<string, Attachment[]>();
+    for (const p of photos) {
+      const key = p.name?.trim() || "Lainnya";
+      if (!map.has(key)) map.set(key, []);
+      map.get(key)!.push(p);
+    }
+    return Array.from(map, ([label, items]) => ({ label, items }));
+  }, [photos]);
+
+  const [collapsed, setCollapsed] = React.useState<Record<string, boolean>>({});
+  const [active, setActive] = React.useState<Attachment | null>(null);
+
+  return (
+    <div className="max-h-[72vh] space-y-2 overflow-y-auto p-4">
+      {groups.map(({ label, items }) => {
+        const open = !collapsed[label];
+        return (
+          <div key={label} className="overflow-hidden rounded-xl border border-border">
+            <button
+              type="button"
+              onClick={() => setCollapsed((c) => ({ ...c, [label]: open }))}
+              className="flex w-full items-center justify-between gap-2 bg-muted/30 px-3 py-2.5 text-left hover:bg-muted/50"
+            >
+              <div className="flex items-center gap-2">
+                <Camera className="size-4 text-muted-foreground" />
+                <span className="text-sm font-medium text-foreground">{label}</span>
+                <span className="rounded-full bg-muted px-1.5 py-0.5 text-[10px] font-bold tabular-nums text-muted-foreground">{items.length}</span>
+              </div>
+              <ChevronDown className={cn("size-4 text-muted-foreground transition-transform", open && "rotate-180")} />
+            </button>
+            {open && (
+              <div className="grid grid-cols-3 gap-2 p-3">
+                {items.map((p) => (
+                  <button
+                    key={p.id}
+                    type="button"
+                    onClick={() => setActive(p)}
+                    className="group relative aspect-square w-full overflow-hidden rounded-lg ring-1 ring-border transition-transform hover:scale-[1.02]"
+                  >
+                    <Image src={p.url} alt={p.name} fill sizes="(max-width: 640px) 33vw, 180px" className="object-cover" />
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+        );
+      })}
+
+      {active && (
+        <div
+          className="fixed inset-0 z-[100] flex items-center justify-center bg-black/85 p-4 backdrop-blur-sm"
+          onClick={() => setActive(null)}
+        >
+          <button
+            type="button"
+            onClick={() => setActive(null)}
+            className="absolute right-4 top-4 grid size-9 place-items-center rounded-full bg-white/10 text-white transition-colors hover:bg-white/20"
+            aria-label="Tutup"
+          >
+            <X className="size-5" />
+          </button>
+          <div className="flex max-h-full max-w-3xl flex-col items-center gap-3" onClick={(e) => e.stopPropagation()}>
+            <div className="overflow-hidden rounded-2xl bg-black ring-1 ring-white/15 shadow-2xl">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src={active.url} alt={active.name} className="max-h-[78vh] w-auto object-contain" />
+            </div>
+            <p className="text-center text-xs text-white/70">
+              <span className="font-medium text-white/90">{active.name}</span> · {caption}
+            </p>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
 
 export function HygieneExplorer({ rows, outlets, canDelete = false }: { rows: HygieneRow[]; outlets: { id: string; name: string }[]; canDelete?: boolean }) {
   const router = useRouter();
@@ -99,22 +179,7 @@ export function HygieneExplorer({ rows, outlets, canDelete = false }: { rows: Hy
                 </button>
               </DialogTrigger>
               <DialogContent title="Dokumentasi Audit" description={`${row.original.outlet} · ${formatDate(row.original.date)}`} align="center" className="max-w-2xl">
-                <div className="grid max-h-[70vh] grid-cols-2 gap-2 overflow-y-auto p-5 sm:grid-cols-3">
-                  {photos.map((p) => (
-                    <a key={p.id} href={p.url} target="_blank" rel="noreferrer" className="group block">
-                      <div className="relative aspect-square w-full overflow-hidden rounded-lg ring-1 ring-border transition-opacity group-hover:opacity-90">
-                        <Image
-                          src={p.url}
-                          alt={p.name}
-                          fill
-                          sizes="(max-width: 640px) 33vw, 200px"
-                          className="object-cover"
-                        />
-                      </div>
-                      <p className="mt-1 truncate text-[11px] text-muted-foreground">{p.name}</p>
-                    </a>
-                  ))}
-                </div>
+                <AuditPhotoGallery photos={photos} caption={`${row.original.outlet} · ${formatDate(row.original.date)}`} />
               </DialogContent>
             </Dialog>
           );
