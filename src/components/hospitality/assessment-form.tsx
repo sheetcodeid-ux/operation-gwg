@@ -26,14 +26,38 @@ const todayLocal = () => {
   return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
 };
 
+/** Start unrated (0 = belum dinilai) — the supervisor must score each item. */
 function emptyScores(): Scores {
   const s = {} as Scores;
   for (const cat of CATS) {
     s[cat] = {};
-    for (const item of HOSPITALITY_CHECKLISTS[cat].items) s[cat][item.key] = 4;
+    for (const item of HOSPITALITY_CHECKLISTS[cat].items) s[cat][item.key] = 0;
   }
   return s;
 }
+
+/** Number of items scored / total, overall or for one category. */
+function scoredOf(scores: Scores, cat?: HospitalityCategory) {
+  const cats = cat ? [cat] : CATS;
+  let scored = 0;
+  let total = 0;
+  for (const c of cats) {
+    for (const item of HOSPITALITY_CHECKLISTS[c].items) {
+      total += 1;
+      if (scores[c][item.key] > 0) scored += 1;
+    }
+  }
+  return { scored, total };
+}
+
+/** Colour ramp for the 1–5 scale: 1 red → 5 emerald (never all-black). */
+const SCORE_TONE: Record<number, string> = {
+  1: "bg-red-500 text-white ring-1 ring-inset ring-red-500/30 shadow-sm",
+  2: "bg-orange-500 text-white ring-1 ring-inset ring-orange-500/30 shadow-sm",
+  3: "bg-amber-500 text-white ring-1 ring-inset ring-amber-500/30 shadow-sm",
+  4: "bg-lime-500 text-white ring-1 ring-inset ring-lime-500/30 shadow-sm",
+  5: "bg-emerald-500 text-white ring-1 ring-inset ring-emerald-500/30 shadow-sm",
+};
 
 export function NewAssessmentButton({
   outlets,
@@ -84,17 +108,24 @@ function AssessmentForm({
   const [scores, setScores] = useState<Scores>(emptyScores);
   const [openCat, setOpenCat] = useState<HospitalityCategory>(CATS[0]);
 
-  const overall = useMemo(() => {
+  const { overall, scored, total } = useMemo(() => {
     let sum = 0;
-    let count = 0;
+    let scored = 0;
+    let total = 0;
     for (const cat of CATS) {
       for (const item of HOSPITALITY_CHECKLISTS[cat].items) {
-        sum += scores[cat][item.key];
-        count += 1;
+        total += 1;
+        const v = scores[cat][item.key];
+        if (v > 0) {
+          sum += v;
+          scored += 1;
+        }
       }
     }
-    return count ? Math.round((sum / (count * 5)) * 1000) / 10 : 0;
+    return { overall: scored ? Math.round((sum / (scored * 5)) * 1000) / 10 : 0, scored, total };
   }, [scores]);
+
+  const complete = scored === total;
 
   function setScore(cat: HospitalityCategory, key: string, value: number) {
     setScores((prev) => ({ ...prev, [cat]: { ...prev[cat], [key]: value } }));
@@ -103,6 +134,12 @@ function AssessmentForm({
   function submit() {
     if (!staffName.trim()) {
       toast.error("Nama staff wajib diisi.");
+      return;
+    }
+    if (!complete) {
+      const firstIncomplete = CATS.find((cat) => scoredOf(scores, cat).scored < scoredOf(scores, cat).total);
+      if (firstIncomplete) setOpenCat(firstIncomplete);
+      toast.error(`Penilaian belum lengkap — masih ada ${total - scored} item belum dinilai.`);
       return;
     }
     startTransition(async () => {
@@ -153,10 +190,25 @@ function AssessmentForm({
         <ScoreRing value={overall} size={56} stroke={5} label="Skor" />
         <div className="flex-1">
           <p className="text-sm font-medium text-foreground">Skor hospitality langsung</p>
-          <p className="text-xs text-muted-foreground">Dihitung otomatis dari seluruh item (1–5).</p>
+          <p className="text-xs text-muted-foreground">
+            {complete ? "Dihitung otomatis dari seluruh item (1–5)." : `${scored}/${total} item dinilai — lengkapi semua.`}
+          </p>
         </div>
-        <span className={cn("rounded-full px-2.5 py-1 text-xs font-medium", overall >= 85 ? TONE_PILL.success : overall >= 70 ? TONE_PILL.cyan : overall >= 55 ? TONE_PILL.warning : TONE_PILL.danger)}>
-          {overall >= 85 ? "Sangat Baik" : overall >= 70 ? "Baik" : overall >= 55 ? "Cukup" : "Perlu Perhatian"}
+        <span
+          className={cn(
+            "rounded-full px-2.5 py-1 text-xs font-medium",
+            !complete
+              ? TONE_PILL.warning
+              : overall >= 85
+                ? TONE_PILL.success
+                : overall >= 70
+                  ? TONE_PILL.cyan
+                  : overall >= 55
+                    ? TONE_PILL.warning
+                    : TONE_PILL.danger,
+          )}
+        >
+          {!complete ? "Belum lengkap" : overall >= 85 ? "Sangat Baik" : overall >= 70 ? "Baik" : overall >= 55 ? "Cukup" : "Perlu Perhatian"}
         </span>
       </div>
 
@@ -164,6 +216,8 @@ function AssessmentForm({
         {CATS.map((cat) => {
           const open = openCat === cat;
           const meta = HOSPITALITY_CHECKLISTS[cat];
+          const catProgress = scoredOf(scores, cat);
+          const catDone = catProgress.scored === catProgress.total;
           return (
             <div key={cat} className="overflow-hidden rounded-xl border border-border">
               <button
@@ -175,7 +229,19 @@ function AssessmentForm({
                   <ConciergeBell className="size-4 text-muted-foreground" />
                   <p className="text-sm font-medium text-foreground">{meta.label}</p>
                 </div>
-                <ChevronDown className={cn("size-4 text-muted-foreground transition-transform", open && "rotate-180")} />
+                <div className="flex items-center gap-2">
+                  <span
+                    className={cn(
+                      "rounded-full px-2 py-0.5 text-[10px] font-bold tabular-nums",
+                      catDone
+                        ? "bg-brand-500/12 text-brand-600 dark:text-brand-400"
+                        : "bg-amber-500/15 text-amber-600 dark:text-amber-400",
+                    )}
+                  >
+                    {catProgress.scored}/{catProgress.total}
+                  </span>
+                  <ChevronDown className={cn("size-4 text-muted-foreground transition-transform", open && "rotate-180")} />
+                </div>
               </button>
               {open && (
                 <div className="space-y-1.5 p-3">
@@ -217,10 +283,8 @@ function ScoreSelect({ value, onChange }: { value: number; onChange: (v: number)
           type="button"
           onClick={() => onChange(n)}
           className={cn(
-            "size-7 rounded-md text-xs font-medium tabular-nums transition-all",
-            value === n
-              ? "bg-primary text-primary-foreground shadow-sm"
-              : "bg-muted/50 text-muted-foreground hover:bg-muted hover:text-foreground",
+            "size-7 rounded-md text-xs font-semibold tabular-nums transition-all",
+            value === n ? SCORE_TONE[n] : "bg-muted/50 text-muted-foreground hover:bg-muted hover:text-foreground",
           )}
         >
           {n}

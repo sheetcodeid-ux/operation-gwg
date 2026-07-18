@@ -220,7 +220,7 @@ function HygieneForm({ outlets }: { outlets: { id: string; name: string }[] }) {
       </div>
 
       <div className="my-4 flex items-center gap-3 rounded-xl border border-border bg-muted/30 p-3">
-        <ScoreRing value={complete ? score : 0} size={56} stroke={5} label="Higiene" />
+        <ScoreRing value={score} size={56} stroke={5} label="Higiene" />
         <div className="flex-1">
           <p className="text-sm font-medium text-foreground">Skor kebersihan langsung</p>
           <p className="text-xs text-muted-foreground">
