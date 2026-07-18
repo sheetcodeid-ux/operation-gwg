@@ -12,7 +12,7 @@ export default function manifest(): MetadataRoute.Manifest {
     description: "Sistem operasional internal GWG Group.",
     start_url: "/",
     display: "standalone",
-    background_color: "#ffffff",
+    background_color: "#0e186c",
     theme_color: "#ffffff",
     icons: [
       { src: "/icon-192.png", sizes: "192x192", type: "image/png", purpose: "any" },
