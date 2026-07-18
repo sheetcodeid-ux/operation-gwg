@@ -28,7 +28,7 @@ const isHeadPos = (jabatan: string) => jabatan.toLowerCase().startsWith("head") 
  *   HC (hc)      → everyone (Penilai 2 on both panels)
  *   Director (dir) → Heads / director-only positions
  */
-export async function getMyAssessmentTargets(): Promise<EvalTarget[]> {
+export async function getMyAssessmentTargets(mode: "penilaian" | "interview" = "penilaian"): Promise<EvalTarget[]> {
   const user = await getSessionUser();
   if (!user) return [];
   const me = await resolveEvaluatorFromRoster(user.id);
@@ -67,14 +67,21 @@ export async function getMyAssessmentTargets(): Promise<EvalTarget[]> {
   const sessions = await Promise.all(pending.map((p) => getSessionByParticipant(p.pid)));
   const out: EvalTarget[] = pending.map((p, i) => {
     const row = sessions[i]?.evaluations.find((e) => e.evaluatorKey === me.evaluatorKey);
+    // "Done" is per STEP: Penilaian = all 6 params scored; Interview = 4 dimensions
+    // + a recommendation. The two share the row's `submitted` flag, so we derive
+    // completion from content instead — otherwise a scored candidate wrongly shows
+    // as done in the Interview queue.
+    const penilaianFilled = row ? evaluatorFilled(row.scores) : 0;
+    const ivFilled = row ? Object.values(row.interview ?? {}).filter((v) => !!v).length : 0;
+    const done = mode === "interview" ? ivFilled >= 4 && !!row?.ivVote : penilaianFilled === 6;
     return {
       participantUserId: p.pid,
       name: p.name,
       department: p.department,
       jabatan: p.jabatan,
       isHead: p.head,
-      mineFilled: row ? evaluatorFilled(row.scores) : 0,
-      mineSubmitted: !!row?.submitted,
+      mineFilled: mode === "interview" ? ivFilled : penilaianFilled,
+      mineSubmitted: done,
       sessionOpen: !!sessions[i],
     };
   });

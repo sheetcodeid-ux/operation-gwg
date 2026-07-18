@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { CheckCircle2, ChevronDown, ChevronRight, Circle, Clock, ListChecks, Lock } from "lucide-react";
+import { CheckCircle2, ChevronDown, ChevronRight, ListChecks, Lock } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 export interface QueueItem {
@@ -9,23 +9,23 @@ export interface QueueItem {
   name: string;
   department: string;
   jabatan: string;
-  filled: number; // 0..6
+  filled?: number; // retained for callers; not shown
   submitted: boolean;
   isHead?: boolean;
 }
 
-/** Two collapsible sections — "Antrian" (belum selesai) and "Selesai" (terkunci).
- *  Selesai items open read-only. Keeps the evaluator/peer view tidy. */
+const initials = (name: string) =>
+  name.trim().split(/\s+/).slice(0, 2).map((w) => w[0]?.toUpperCase() ?? "").join("") || "?";
+
+/** Two collapsible sections — "Antrian" (belum) and "Selesai" (terkunci). */
 export function AssessmentQueueList({
   items,
   selectedId,
   onPick,
-  verb = "dinilai",
 }: {
   items: QueueItem[];
   selectedId: string;
   onPick: (item: QueueItem) => void;
-  verb?: string;
 }) {
   const pending = items.filter((t) => !t.submitted);
   const done = items.filter((t) => t.submitted);
@@ -33,30 +33,34 @@ export function AssessmentQueueList({
   const [openDone, setOpenDone] = React.useState(false);
 
   return (
-    <div className="space-y-2">
+    <div className="space-y-2.5">
       <Section
         icon={ListChecks}
-        label={`Antrian — pilih siapa yang ${verb}`}
+        label="Antrian"
         count={pending.length}
         tone="pending"
         open={openPending}
         onToggle={() => setOpenPending((v) => !v)}
-        empty="Semua sudah dinilai — tidak ada antrian tersisa. 🎉"
       >
-        {pending.map((t) => (
-          <Row key={t.id} item={t} active={selectedId === t.id} onClick={() => onPick(t)} />
-        ))}
+        {pending.length === 0 ? (
+          <div className="grid place-items-center gap-1 px-3 py-8 text-center">
+            <CheckCircle2 className="size-6 text-brand-500" />
+            <p className="text-xs font-medium text-foreground">Semua sudah dinilai</p>
+            <p className="text-[11px] text-muted-foreground">Tidak ada yang tersisa di antrian.</p>
+          </div>
+        ) : (
+          pending.map((t) => <Row key={t.id} item={t} active={selectedId === t.id} onClick={() => onPick(t)} />)
+        )}
       </Section>
 
       {done.length > 0 && (
         <Section
           icon={CheckCircle2}
-          label="Selesai (terkunci)"
+          label="Selesai"
           count={done.length}
           tone="done"
           open={openDone}
           onToggle={() => setOpenDone((v) => !v)}
-          empty=""
         >
           {done.map((t) => (
             <Row key={t.id} item={t} active={selectedId === t.id} onClick={() => onPick(t)} locked />
@@ -74,7 +78,6 @@ function Section({
   tone,
   open,
   onToggle,
-  empty,
   children,
 }: {
   icon: typeof ListChecks;
@@ -83,35 +86,29 @@ function Section({
   tone: "pending" | "done";
   open: boolean;
   onToggle: () => void;
-  empty: string;
   children: React.ReactNode;
 }) {
+  const done = tone === "done";
   return (
-    <div className="overflow-hidden rounded-xl border border-border">
+    <div className={cn("overflow-hidden rounded-2xl border", done ? "border-brand-500/25" : "border-border")}>
       <button
         type="button"
         onClick={onToggle}
-        className="flex w-full items-center justify-between gap-2 bg-muted/30 px-3 py-2.5 text-left transition-colors hover:bg-muted/50"
+        className={cn(
+          "flex w-full items-center justify-between gap-2 px-3.5 py-3 text-left transition-colors",
+          done ? "bg-brand-500/[0.06] hover:bg-brand-500/10" : "bg-muted/40 hover:bg-muted/60",
+        )}
       >
-        <span className="flex min-w-0 items-center gap-2">
-          <Icon className={cn("size-4 shrink-0", tone === "done" ? "text-brand-500" : "text-muted-foreground")} />
-          <span className="truncate text-sm font-semibold text-foreground">{label}</span>
-          <span
-            className={cn(
-              "shrink-0 rounded-full px-1.5 py-0.5 text-[10px] font-semibold",
-              tone === "done" ? "bg-brand-500/12 text-brand-600 dark:text-brand-400" : "bg-muted text-muted-foreground",
-            )}
-          >
-            {count}
+        <span className="flex min-w-0 items-center gap-2.5">
+          <span className={cn("grid size-8 shrink-0 place-items-center rounded-xl ring-1", done ? "bg-brand-500/12 text-brand-600 ring-brand-500/25 dark:text-brand-400" : "bg-background text-muted-foreground ring-border")}>
+            <Icon className="size-4" />
           </span>
+          <span className="text-sm font-semibold text-foreground">{label}</span>
+          <span className={cn("rounded-full px-2 py-0.5 text-[11px] font-bold tabular-nums", done ? "bg-brand-500/15 text-brand-600 dark:text-brand-400" : "bg-foreground/10 text-foreground")}>{count}</span>
         </span>
-        <ChevronDown className={cn("size-4 shrink-0 text-muted-foreground transition-transform", open && "rotate-180")} />
+        <ChevronDown className={cn("size-4 shrink-0 text-muted-foreground transition-transform duration-200", open && "rotate-180")} />
       </button>
-      {open && (
-        <div className="divide-y divide-border">
-          {count === 0 ? <p className="px-3 py-4 text-center text-[11px] text-muted-foreground">{empty}</p> : children}
-        </div>
-      )}
+      {open && <div className="divide-y divide-border/70 border-t border-border/70">{children}</div>}
     </div>
   );
 }
@@ -122,35 +119,30 @@ function Row({ item, active, onClick, locked }: { item: QueueItem; active: boole
       type="button"
       onClick={onClick}
       className={cn(
-        "flex w-full items-center gap-3 p-3 text-left transition-colors",
-        active ? "bg-brand-500/5" : "hover:bg-muted/40",
+        "group flex w-full items-center gap-3 px-3.5 py-3 text-left transition-all",
+        active ? "bg-brand-500/[0.07]" : "hover:bg-muted/40 hover:pl-4",
       )}
     >
       <span
         className={cn(
-          "grid size-9 shrink-0 place-items-center rounded-full ring-1",
-          locked
-            ? "bg-brand-500/12 text-brand-600 ring-brand-500/25 dark:text-brand-400"
-            : item.filled > 0
-              ? "bg-amber-500/12 text-amber-600 ring-amber-500/25 dark:text-amber-400"
-              : "bg-muted text-muted-foreground ring-border",
+          "grid size-10 shrink-0 place-items-center rounded-full text-xs font-bold text-white shadow-sm ring-2 ring-background",
+          locked ? "bg-gradient-to-br from-emerald-500 to-brand-500" : "bg-gradient-to-br from-sky-500 to-indigo-500",
         )}
       >
-        {locked ? <CheckCircle2 className="size-4" /> : item.filled > 0 ? <Clock className="size-4" /> : <Circle className="size-4" />}
+        {locked ? <CheckCircle2 className="size-5" /> : initials(item.name)}
       </span>
       <div className="min-w-0 flex-1">
-        <p className="flex items-center gap-1.5 truncate text-sm font-medium text-foreground">
+        <p className="flex items-center gap-1.5 truncate text-sm font-semibold text-foreground">
           {item.name}
           {item.isHead && <span className="rounded bg-violet-500/12 px-1.5 py-0.5 text-[9px] font-semibold text-violet-600 dark:text-violet-400">Head</span>}
         </p>
         <p className="truncate text-[11px] text-muted-foreground">{[item.department, item.jabatan].filter(Boolean).join(" · ") || "—"}</p>
       </div>
       {locked ? (
-        <span className="inline-flex shrink-0 items-center gap-1 text-[11px] font-medium text-brand-600 dark:text-brand-400"><Lock className="size-3" /> Terkunci</span>
+        <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-brand-500/12 px-2 py-1 text-[10px] font-semibold text-brand-600 dark:text-brand-400"><Lock className="size-3" /> Terkunci</span>
       ) : (
-        <span className="shrink-0 text-[11px] font-medium text-muted-foreground">{item.filled > 0 ? `Draft ${item.filled}/6` : "Belum"}</span>
+        <ChevronRight className="size-4 shrink-0 text-muted-foreground transition-transform group-hover:translate-x-0.5" />
       )}
-      {!locked && <ChevronRight className="size-4 shrink-0 text-muted-foreground" />}
     </button>
   );
 }

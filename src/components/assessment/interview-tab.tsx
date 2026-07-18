@@ -33,7 +33,7 @@ export function InterviewTab() {
         karyawan lebih dulu. Durasi ideal 30–45 menit. Hasil interview memverifikasi & memperkuat bukti — bukan pengganti skor.
       </Banner>
 
-      <AssessmentQueue verb="diinterview" />
+      <AssessmentQueue mode="interview" />
 
       <SectionLabel>Atau Pilih Manual</SectionLabel>
       <Card>

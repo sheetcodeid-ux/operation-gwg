@@ -69,7 +69,7 @@ export function PenilaianTab() {
       </Banner>
 
       {/* Queue of assigned participants (Atasan/HC/Director) — one click to start. */}
-      {locked && <AssessmentQueue verb="dinilai" />}
+      {locked && <AssessmentQueue mode="penilaian" />}
 
       <SectionLabel>{locked ? "Atau Pilih Manual" : "Pilih Karyawan yang Dinilai"}</SectionLabel>
       <Card>

@@ -150,7 +150,6 @@ export function PeerPenilaianTab() {
         <AssessmentQueueList
           items={targets.map<QueueItem>((t) => ({ id: t.participantUserId, name: t.name, department: t.department, jabatan: t.jabatan, filled: t.filled, submitted: t.submitted }))}
           selectedId={activeId ?? ""}
-          verb="dinilai"
           onPick={(it) => { const t = targets.find((x) => x.participantUserId === it.id); if (t) open(t); }}
         />
       )}
