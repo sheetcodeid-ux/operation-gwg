@@ -93,7 +93,9 @@ export function hasGlobalScope(role: Role): boolean {
 export function scopeOutlets(user: UserProfile, outlets: Outlet[]): Outlet[] {
   if (hasGlobalScope(user.role)) return outlets;
   const ids = new Set(user.outletIds ?? []);
-  if (ids.size) return outlets.filter((o) => ids.has(o.id));
+  // Assigned outletIds may hold the app id OR the POS branch code (assignments
+  // historically stored the code), so match on either.
+  if (ids.size) return outlets.filter((o) => ids.has(o.id) || ids.has(o.code));
   // Supervisor: only the outlet(s) they supervise (their own branch).
   if (user.role === "supervisor") return outlets.filter((o) => o.supervisorId === user.id);
   // Legacy area-based fallback for coordinators.

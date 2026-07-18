@@ -26,9 +26,19 @@ export async function listAssignableOutlets(
   const admin = await getSessionUser();
   if (!admin || !can(admin, "manage_users")) return { error: "Not authorized" };
 
-  let all: AssignableOutlet[] = [];
+  // Use the APP's outlets as the source of truth so an assigned id matches what
+  // the operational modules (Hygiene/Hospitality/Dashboard) read via
+  // scopeOutlets. Assigning a POS-only id (a branch code) would scope to nothing.
+  // POS is only a fallback when the app has no outlets synced yet.
+  const appOutlets = getOutlets();
+  // POS code → app id, so a "taken" outlet held by its POS code still excludes
+  // the matching app outlet (older assignments stored the branch code).
+  const codeToId = new Map<string, string>();
+  for (const o of appOutlets) if (o.code) codeToId.set(o.code, o.id);
+
+  let all: AssignableOutlet[] = appOutlets.map((o) => ({ id: o.id, name: o.name }));
   let source: "pos" | "local" = "local";
-  if (gwgmanageConfigured()) {
+  if (all.length === 0 && gwgmanageConfigured()) {
     try {
       const branches = await fetchBranches();
       all = branches
@@ -39,16 +49,14 @@ export async function listAssignableOutlets(
       all = [];
     }
   }
-  if (all.length === 0) {
-    all = getOutlets().map((o) => ({ id: o.id, name: o.name }));
-    source = "local";
-  }
 
-  // Exclude outlets already assigned to another user of the same role.
+  // Exclude outlets already assigned to another user of the same role. An
+  // assignment may store the app id or the POS code, so normalise both to the
+  // app id before comparing.
   const taken = new Set<string>();
   for (const u of getUsers()) {
     if (u.role === role && u.id !== excludeUserId) {
-      for (const oid of u.outletIds ?? []) taken.add(oid);
+      for (const oid of u.outletIds ?? []) taken.add(codeToId.get(oid) ?? oid);
     }
   }
 
