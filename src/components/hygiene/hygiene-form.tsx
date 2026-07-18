@@ -220,18 +220,18 @@ function HygieneForm({ outlets }: { outlets: { id: string; name: string }[] }) {
                 <ChevronDown className={cn("size-4 text-muted-foreground transition-transform", open && "rotate-180")} />
               </button>
               {open && (
-                <div className="space-y-1.5 p-3">
+                <div className="space-y-2 p-3">
                   {meta.items.map((item) => (
-                    <div key={item.key} className="flex items-center justify-between gap-2">
-                      <span className="text-sm text-foreground/80">{item.label}</span>
-                      <div className="flex gap-1">
+                    <div key={item.key} className="space-y-1.5">
+                      <span className="block text-sm text-foreground/80">{item.label}</span>
+                      <div className="grid grid-cols-4 gap-1">
                         {RATINGS.map((r) => (
                           <button
                             key={r}
                             type="button"
                             onClick={() => setRating(sec, item.key, r)}
                             className={cn(
-                              "rounded-md px-2 py-1 text-[11px] font-medium transition-all",
+                              "flex min-h-[34px] items-center justify-center rounded-md px-1 text-center text-[11px] font-medium leading-tight transition-all",
                               ratings[sec][item.key] === r
                                 ? TONE_PILL[HYGIENE_RATING_META[r].tone]
                                 : "bg-muted/50 text-muted-foreground hover:bg-muted",

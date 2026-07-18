@@ -47,9 +47,9 @@ export const ROLE_PERMISSIONS: Record<Role, Permission[]> = {
     "create_work_task",
     "create_event",
   ],
+  // Coordinator Area only reviews/monitors their outlets — Hygiene &
+  // Hospitality entry is the Supervisor's job, so no create perms for those.
   area_coordinator: [
-    "create_hospitality",
-    "create_hygiene",
     "create_work_task",
     "create_event",
     "manage_complaint",

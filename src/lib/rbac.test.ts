@@ -25,10 +25,13 @@ describe("RBAC capabilities", () => {
     expect(can(adminOps, "create_hospitality")).toBe(false);
   });
 
-  it("lets area_coordinator create operational data but not manage users", () => {
+  it("lets area_coordinator manage work but not hygiene/hospitality entry or users", () => {
     const ac = byRole("area_coordinator");
-    expect(can(ac, "create_hospitality")).toBe(true);
-    expect(can(ac, "create_hygiene")).toBe(true);
+    // Coordinators review outlets; Hygiene/Hospitality entry is the Supervisor's job.
+    expect(can(ac, "create_hospitality")).toBe(false);
+    expect(can(ac, "create_hygiene")).toBe(false);
+    expect(can(ac, "create_work_task")).toBe(true);
+    expect(can(ac, "manage_complaint")).toBe(true);
     expect(can(ac, "manage_users")).toBe(false);
   });
 
