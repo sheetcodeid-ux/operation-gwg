@@ -48,6 +48,15 @@ const todayLocal = () => {
 
 const SECTIONS = Object.keys(HYGIENE_SECTIONS) as HygieneSection[];
 const RATINGS = Object.keys(HYGIENE_RATING_META) as HygieneRating[];
+// Compact codes + solid colours so the four levels fit inline (label left,
+// buttons right) without overlapping on a phone. A legend keeps them clear.
+const RATING_SHORT: Record<HygieneRating, string> = { excellent: "SB", good: "B", fair: "C", poor: "K" };
+const RATING_BG: Record<HygieneRating, string> = {
+  excellent: "bg-emerald-500",
+  good: "bg-sky-500",
+  fair: "bg-amber-500",
+  poor: "bg-red-500",
+};
 
 type Ratings = Record<HygieneSection, Record<string, HygieneRating | undefined>>;
 
@@ -237,6 +246,15 @@ function HygieneForm({ outlets }: { outlets: { id: string; name: string }[] }) {
         </span>
       </div>
 
+      <div className="mb-3 flex flex-wrap items-center gap-x-3 gap-y-1.5">
+        {RATINGS.map((r) => (
+          <span key={r} className="inline-flex items-center gap-1.5 text-[11px] text-muted-foreground">
+            <span className={cn("grid size-4 place-items-center rounded text-[9px] font-bold text-white", RATING_BG[r])}>{RATING_SHORT[r]}</span>
+            {HYGIENE_RATING_META[r].label}
+          </span>
+        ))}
+      </div>
+
       <div className="space-y-2">
         {SECTIONS.map((sec) => {
           const meta = HYGIENE_SECTIONS[sec];
@@ -274,22 +292,24 @@ function HygieneForm({ outlets }: { outlets: { id: string; name: string }[] }) {
               {open && (
                 <div className="space-y-2 p-3">
                   {meta.items.map((item) => (
-                    <div key={item.key} className="space-y-1.5">
-                      <span className="block text-sm text-foreground/80">{item.label}</span>
-                      <div className="grid grid-cols-4 gap-1">
+                    <div key={item.key} className="flex items-center justify-between gap-3">
+                      <span className="min-w-0 flex-1 text-sm text-foreground/80">{item.label}</span>
+                      <div className="flex shrink-0 gap-1">
                         {RATINGS.map((r) => (
                           <button
                             key={r}
                             type="button"
+                            title={HYGIENE_RATING_META[r].label}
+                            aria-label={HYGIENE_RATING_META[r].label}
                             onClick={() => setRating(sec, item.key, r)}
                             className={cn(
-                              "flex min-h-[34px] items-center justify-center rounded-md px-1 text-center text-[11px] font-medium leading-tight transition-all",
+                              "h-8 min-w-8 rounded-md px-1.5 text-[11px] font-semibold tabular-nums transition-all",
                               ratings[sec][item.key] === r
-                                ? TONE_PILL[HYGIENE_RATING_META[r].tone]
-                                : "bg-muted/50 text-muted-foreground hover:bg-muted",
+                                ? cn(RATING_BG[r], "text-white shadow-sm")
+                                : "bg-muted/50 text-muted-foreground hover:bg-muted hover:text-foreground",
                             )}
                           >
-                            {HYGIENE_RATING_META[r].label}
+                            {RATING_SHORT[r]}
                           </button>
                         ))}
                       </div>
