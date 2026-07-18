@@ -1,7 +1,7 @@
 import { CircleCheck, ClipboardCheck, SprayCan, TriangleAlert } from "lucide-react";
 import type { Metadata } from "next";
 import { getSessionUser } from "@/lib/auth";
-import { areaName, listHygiene, outletName, visibleOutlets } from "@/lib/data/store";
+import { listHygiene, outletCoordinatorName, outletName, visibleOutlets } from "@/lib/data/store";
 import { can } from "@/lib/rbac";
 import { PageHeader } from "@/components/ui/page-header";
 import { StatTile } from "@/components/ui/stat";
@@ -21,7 +21,7 @@ export default async function HygienePage() {
     outletId: a.outletId,
     outlet: outletName(a.outletId),
     areaId: a.areaId,
-    area: areaName(a.areaId),
+    area: outletCoordinatorName(a.outletId),
     shift: a.shift,
     inspector: a.inspectorName,
     date: a.date,

@@ -57,6 +57,21 @@ export function outletName(id: string): string {
 export function areaName(id: string): string {
   return getArea(id)?.name ?? "—";
 }
+/**
+ * Area Coordinator responsible for an outlet, derived from User Management
+ * assignments (a coordinator's outletIds may hold the app id OR the POS code).
+ * This is the source of truth for coverage, so it stays in sync with what the
+ * admin actually assigned — unlike the legacy `areas` table.
+ */
+export function outletCoordinatorName(outletId: string): string {
+  const code = getOutlet(outletId)?.code;
+  const coord = getUsers().find(
+    (u) =>
+      u.role === "area_coordinator" &&
+      (u.outletIds ?? []).some((oid) => oid === outletId || (code != null && oid === code)),
+  );
+  return coord?.name ?? "—";
+}
 export function userName(id: string): string {
   return getUser(id)?.name ?? "—";
 }

@@ -69,7 +69,7 @@ export function HospitalityExplorer({ rows, outlets, canDelete = false }: { rows
         ),
       },
       { accessorKey: "outlet", header: "Outlet", cell: ({ getValue }) => <span className="text-foreground/80">{getValue<string>()}</span> },
-      { accessorKey: "area", header: "Area", cell: ({ getValue }) => <span className="text-muted-foreground">{getValue<string>()}</span> },
+      { accessorKey: "area", header: "Koordinator", cell: ({ getValue }) => <span className="text-muted-foreground">{getValue<string>()}</span> },
       { accessorKey: "assessor", header: "Supervisor", cell: ({ getValue }) => <span className="text-foreground/80">{getValue<string>()}</span> },
       {
         accessorKey: "score",
@@ -111,7 +111,7 @@ export function HospitalityExplorer({ rows, outlets, canDelete = false }: { rows
     <Card>
       <CardHeader>
         <CardTitle>Assessments</CardTitle>
-        <CardDescription>Kunjungan Coordinator Area · {scoped.length} catatan</CardDescription>
+        <CardDescription>Kunjungan Supervisor · {scoped.length} catatan</CardDescription>
       </CardHeader>
       <CardContent>
         <DataTable

@@ -1,7 +1,7 @@
 import { ClipboardList, ConciergeBell, Star, Store, TriangleAlert, Users } from "lucide-react";
 import type { Metadata } from "next";
 import { getSessionUser } from "@/lib/auth";
-import { areaName, getUsers, listHospitality, outletName, userName, visibleOutlets } from "@/lib/data/store";
+import { getUsers, listHospitality, outletCoordinatorName, outletName, userName, visibleOutlets } from "@/lib/data/store";
 import { can } from "@/lib/rbac";
 import { PageHeader } from "@/components/ui/page-header";
 import { StatTile } from "@/components/ui/stat";
@@ -30,7 +30,7 @@ export default async function HospitalityPage() {
     outletId: a.outletId,
     outlet: outletName(a.outletId),
     areaId: a.areaId,
-    area: areaName(a.areaId),
+    area: outletCoordinatorName(a.outletId),
     assessor: userName(a.assessorId),
     date: a.date,
     score: a.overallScore,
