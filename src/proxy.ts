@@ -9,7 +9,10 @@ import { NextResponse, type NextRequest } from "next/server";
  */
 // /api/cron/* authenticates itself (CRON_SECRET / DB token) — the scheduler
 // has no browser session, so the auth gate must not redirect it to /login.
-const PUBLIC_PATHS = ["/login", "/api/cron/"];
+// The PWA manifest and service worker MUST be publicly fetchable (unauthenticated),
+// otherwise the browser can't read the manifest / register the SW and the app
+// stops being installable.
+const PUBLIC_PATHS = ["/login", "/api/cron/", "/manifest.webmanifest", "/sw.js"];
 
 function hasSession(req: NextRequest): boolean {
   if (req.cookies.get("gwg_uid")) return true;
