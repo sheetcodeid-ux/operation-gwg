@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { ArrowLeft, CheckCircle2, ChevronRight, Circle, Clock, Loader2, Send, Star, Users } from "lucide-react";
+import { ArrowLeft, CheckCircle2, Loader2, Send, Star, Users } from "lucide-react";
 import { PARAMETERS, evaluatorScore, type ParamKey, type ParamScores } from "@/lib/assessment/config";
 import { getMyPeerTargets, submitMyPeerReview, type PeerTarget } from "@/lib/actions/assessment-peer";
 import { toast } from "sonner";
@@ -9,6 +9,7 @@ import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/input";
 import { Banner, Card, ScoreOptions, SectionLabel } from "./parts";
+import { AssessmentQueueList, type QueueItem } from "./queue-list";
 
 /** Penilaian tab for a Rekan Sejawat (Penilai 3): score only the participants
  *  the settings assigned to this reviewer. Each peer submits independently; the
@@ -146,31 +147,12 @@ export function PeerPenilaianTab() {
           <p className="max-w-sm text-xs text-muted-foreground">Anda belum ditetapkan sebagai rekan sejawat penilai siapa pun. Hubungi HC bila ini keliru.</p>
         </Card>
       ) : (
-        <div className="space-y-2">
-          {targets.map((t) => (
-            <button
-              key={t.participantUserId}
-              type="button"
-              onClick={() => open(t)}
-              className="flex w-full items-center gap-3 rounded-xl border border-border bg-muted/20 p-3 text-left transition-colors hover:bg-muted/40"
-            >
-              <span className={cn(
-                "grid size-9 shrink-0 place-items-center rounded-full ring-1",
-                t.submitted ? "bg-brand-500/12 text-brand-600 ring-brand-500/25 dark:text-brand-400" : t.filled > 0 ? "bg-amber-500/12 text-amber-600 ring-amber-500/25 dark:text-amber-400" : "bg-muted text-muted-foreground ring-border",
-              )}>
-                {t.submitted ? <CheckCircle2 className="size-4" /> : t.filled > 0 ? <Clock className="size-4" /> : <Circle className="size-4" />}
-              </span>
-              <div className="min-w-0 flex-1">
-                <p className="truncate text-sm font-medium text-foreground">{t.name}</p>
-                <p className="truncate text-[11px] text-muted-foreground">{[t.department, t.jabatan].filter(Boolean).join(" · ") || "—"}</p>
-              </div>
-              <span className="shrink-0 text-[11px] font-medium text-muted-foreground">
-                {t.submitted ? "Terkirim" : t.filled > 0 ? `Draft ${t.filled}/6` : "Belum dinilai"}
-              </span>
-              <ChevronRight className="size-4 shrink-0 text-muted-foreground" />
-            </button>
-          ))}
-        </div>
+        <AssessmentQueueList
+          items={targets.map<QueueItem>((t) => ({ id: t.participantUserId, name: t.name, department: t.department, jabatan: t.jabatan, filled: t.filled, submitted: t.submitted }))}
+          selectedId={activeId ?? ""}
+          verb="dinilai"
+          onPick={(it) => { const t = targets.find((x) => x.participantUserId === it.id); if (t) open(t); }}
+        />
       )}
     </div>
   );

@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { Building2, ChevronDown, Loader2, Search, ShieldCheck, UserCog, Users, X } from "lucide-react";
+import { AlertCircle, Building2, CheckCircle2, ChevronDown, ListFilter, Loader2, PenLine, Search, ShieldCheck, UserCog, Users, X } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { Combobox } from "@/components/ui/combobox";
@@ -36,7 +36,20 @@ const ROLE_BADGE: Record<RoleChoice, string> = {
   director: "bg-violet-500/12 text-violet-600 ring-violet-500/25 dark:text-violet-400",
 };
 const ROLE_SHORT: Record<RoleChoice, string> = { none: "—", karyawan: "Karyawan", head: "Atasan", hc: "HC", director: "Director" };
+const ROLE_DOT: Record<RoleChoice, string> = { none: "bg-muted-foreground/40", karyawan: "bg-sky-500", head: "bg-amber-500", hc: "bg-brand-500", director: "bg-violet-500" };
 const NO_DEPT = "Tanpa Divisi";
+
+type Filter = "all" | "karyawan" | "head" | "pengurus" | "none";
+const FILTER_OPTS: { value: Filter; label: string }[] = [
+  { value: "all", label: "Semua" },
+  { value: "karyawan", label: "Peserta" },
+  { value: "head", label: "Atasan" },
+  { value: "pengurus", label: "HC/Director" },
+  { value: "none", label: "Belum terdaftar" },
+];
+
+const initials = (name: string) =>
+  name.trim().split(/\s+/).slice(0, 2).map((w) => w[0]?.toUpperCase() ?? "").join("") || "?";
 
 export function AssessmentSettings({
   accounts,
@@ -55,10 +68,30 @@ export function AssessmentSettings({
   const [assign, setAssign] = React.useState<AssignMap>(initialAssignments);
   const [sigs, setSigs] = React.useState<SigMap>(initialSignatures);
   const [q, setQ] = React.useState("");
+  const [filter, setFilter] = React.useState<Filter>("all");
   const [busy, setBusy] = React.useState<string | null>(null);
   const [openDept, setOpenDept] = React.useState<string | null>(null);
 
   const roleOf = React.useCallback((id: string): RoleChoice => roster[id]?.role ?? "none", [roster]);
+  // A Karyawan is "ready" when both an Atasan and ≥1 Rekan Sejawat are assigned.
+  const isReady = React.useCallback(
+    (id: string): boolean | null => {
+      const role = roster[id]?.role;
+      if (role === "karyawan") { const cur = assign[id]; return !!cur?.atasanUserId && (cur?.peerUserIds.length ?? 0) > 0; }
+      if (role === "head" || role === "hc" || role === "director") return true;
+      return null; // not registered / n/a
+    },
+    [roster, assign],
+  );
+  const matchesFilter = React.useCallback(
+    (id: string) => {
+      const r = roleOf(id);
+      if (filter === "all") return true;
+      if (filter === "pengurus") return r === "hc" || r === "director";
+      return r === filter;
+    },
+    [filter, roleOf],
+  );
   const nameById = React.useMemo(() => Object.fromEntries(accounts.map((a) => [a.id, a.name])), [accounts]);
   const headOptions = React.useMemo(
     () => accounts.filter((a) => roster[a.id]?.role === "head").map((a) => ({ value: a.id, label: a.name, hint: a.department ?? undefined })),
@@ -151,21 +184,29 @@ export function AssessmentSettings({
   }
 
   const registeredCount = accounts.filter((a) => roleOf(a.id) !== "none").length;
+  const karyawanCount = accounts.filter((a) => roleOf(a.id) === "karyawan").length;
+  const readyKaryawan = accounts.filter((a) => roleOf(a.id) === "karyawan" && isReady(a.id) === true).length;
 
   function renderAccount(a: AccountOption) {
     const role = roleOf(a.id);
     const cur = assign[a.id] ?? { atasanUserId: null, peerUserIds: [] };
     const peerOptions = accounts.filter((x) => x.id !== a.id && !cur.peerUserIds.includes(x.id)).map((x) => ({ value: x.id, label: x.name, hint: x.department ?? undefined }));
+    const ready = isReady(a.id);
     return (
-      <div key={a.id} className="p-3">
+      <div key={a.id} className="p-3 transition-colors hover:bg-muted/15">
         <div className="flex flex-wrap items-center gap-2">
-          <div className="min-w-0 flex-1">
-            <div className="flex items-center gap-2">
-              <p className="truncate text-sm font-medium text-foreground">{a.name}</p>
-              <span className={cn("shrink-0 rounded-full px-2 py-0.5 text-[10px] font-semibold ring-1", ROLE_BADGE[role])}>{ROLE_SHORT[role]}</span>
-              {busy === a.id && <Loader2 className="size-3.5 animate-spin text-muted-foreground" />}
+          <div className="flex min-w-0 flex-1 items-center gap-2.5">
+            <span className={cn("grid size-9 shrink-0 place-items-center rounded-full text-[11px] font-bold text-white", role === "none" ? "bg-muted-foreground/50" : ROLE_DOT[role])}>{initials(a.name)}</span>
+            <div className="min-w-0">
+              <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
+                <p className="truncate text-sm font-medium text-foreground">{a.name}</p>
+                <span className={cn("shrink-0 rounded-full px-2 py-0.5 text-[10px] font-semibold ring-1", ROLE_BADGE[role])}>{ROLE_SHORT[role]}</span>
+                {ready === true && <span className="inline-flex shrink-0 items-center gap-0.5 text-[10px] font-medium text-brand-600 dark:text-brand-400"><CheckCircle2 className="size-3" /> Siap</span>}
+                {ready === false && <span className="inline-flex shrink-0 items-center gap-0.5 text-[10px] font-medium text-amber-600 dark:text-amber-400"><AlertCircle className="size-3" /> Perlu diatur</span>}
+                {busy === a.id && <Loader2 className="size-3.5 animate-spin text-muted-foreground" />}
+              </div>
+              <p className="truncate text-[11px] text-muted-foreground">{a.jabatan || a.email}</p>
             </div>
-            <p className="truncate text-[11px] text-muted-foreground">{a.jabatan || a.email}</p>
           </div>
           <div className="w-full sm:w-52">
             <Combobox portal matchTriggerWidth searchable={false} value={role} onChange={(v) => changeRole(a.id, v as RoleChoice)} options={ROLE_OPTS.map((r) => ({ value: r.value, label: r.label }))} />
@@ -256,7 +297,8 @@ export function AssessmentSettings({
         <span className="flex items-center gap-2 text-sm font-semibold text-foreground"><ShieldCheck className="size-4 text-muted-foreground" /> Ringkasan</span>
         <Stat label="Total akun" value={accounts.length} />
         <Stat label="Terdaftar" value={registeredCount} />
-        <Stat label="Peserta" value={accounts.filter((a) => roleOf(a.id) === "karyawan").length} />
+        <Stat label="Peserta" value={karyawanCount} />
+        <Stat label="Peserta siap" value={readyKaryawan} tone={karyawanCount > 0 && readyKaryawan === karyawanCount ? "good" : readyKaryawan > 0 ? "warn" : undefined} />
         <Stat label="Atasan/Head" value={accounts.filter((a) => roleOf(a.id) === "head").length} />
         <Stat label="HC/Director" value={accounts.filter((a) => roleOf(a.id) === "hc" || roleOf(a.id) === "director").length} />
       </div>
@@ -269,22 +311,41 @@ export function AssessmentSettings({
         <p className="mb-3 text-[11px] text-muted-foreground">
           Data akun dari User Management, dikelompokkan per divisi (Head di atas). Klik divisi untuk membuka — membuka satu divisi menutup yang lain. Peran menentukan tampilan yang dilihat akun; <span className="font-medium">Belum terdaftar</span> = tidak bisa membuka Assessment.
         </p>
-        <div className="relative mb-3">
+        <div className="relative mb-2.5">
           <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
           <Input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Cari nama, email, jabatan…" className="pl-9" />
+        </div>
+        <div className="mb-3 flex flex-wrap items-center gap-1.5">
+          <ListFilter className="size-3.5 text-muted-foreground" />
+          {FILTER_OPTS.map((f) => (
+            <button
+              key={f.value}
+              type="button"
+              onClick={() => setFilter(f.value)}
+              className={cn(
+                "rounded-full px-2.5 py-1 text-[11px] font-medium ring-1 transition-colors",
+                filter === f.value ? "bg-foreground text-background ring-transparent" : "bg-muted/40 text-muted-foreground ring-border hover:text-foreground",
+              )}
+            >
+              {f.label}
+            </button>
+          ))}
         </div>
 
         <div className="space-y-2">
           {grouped.map(([dept, list]) => {
-            const matches = searching ? list.filter(matchQuery) : list;
-            if (searching && matches.length === 0) return null;
-            const open = searching || openDept === dept;
+            const expand = searching || filter !== "all";
+            const matches = (searching ? list.filter(matchQuery) : list).filter((a) => matchesFilter(a.id));
+            if (matches.length === 0) return null;
+            const open = expand || openDept === dept;
             const registered = list.filter((a) => roleOf(a.id) !== "none").length;
+            const karyawan = list.filter((a) => roleOf(a.id) === "karyawan");
+            const readyN = karyawan.filter((a) => isReady(a.id) === true).length;
             return (
               <div key={dept} className="overflow-hidden rounded-xl border border-border">
                 <button
                   type="button"
-                  onClick={() => !searching && setOpenDept(open && openDept === dept ? null : dept)}
+                  onClick={() => !expand && setOpenDept(open && openDept === dept ? null : dept)}
                   className="flex w-full items-center justify-between gap-2 bg-muted/30 px-3 py-2.5 text-left transition-colors hover:bg-muted/50"
                 >
                   <span className="flex min-w-0 items-center gap-2">
@@ -293,11 +354,16 @@ export function AssessmentSettings({
                     <span className="shrink-0 rounded-full bg-muted px-1.5 py-0.5 text-[10px] font-semibold text-muted-foreground">{list.length}</span>
                   </span>
                   <span className="flex shrink-0 items-center gap-2 text-[11px] text-muted-foreground">
-                    {registered > 0 && <span>{registered} terdaftar</span>}
+                    {karyawan.length > 0 && (
+                      <span className={cn("hidden rounded-full px-1.5 py-0.5 font-semibold sm:inline", readyN === karyawan.length ? "bg-brand-500/12 text-brand-600 dark:text-brand-400" : "bg-amber-500/12 text-amber-600 dark:text-amber-400")}>
+                        {readyN}/{karyawan.length} siap
+                      </span>
+                    )}
+                    {registered > 0 && <span className="hidden sm:inline">{registered} terdaftar</span>}
                     <ChevronDown className={cn("size-4 transition-transform", open && "rotate-180")} />
                   </span>
                 </button>
-                {open && <div className="divide-y divide-border">{matches.map(renderAccount)}</div>}
+                {open && <div className="animate-fade-up divide-y divide-border">{matches.map(renderAccount)}</div>}
               </div>
             );
           })}
@@ -311,10 +377,10 @@ export function AssessmentSettings({
   );
 }
 
-function Stat({ label, value }: { label: string; value: number }) {
+function Stat({ label, value, tone }: { label: string; value: number; tone?: "good" | "warn" }) {
   return (
     <span className="flex items-baseline gap-1.5">
-      <span className="text-lg font-bold tabular-nums text-foreground">{value}</span>
+      <span className={cn("text-lg font-bold tabular-nums", tone === "good" ? "text-brand-600 dark:text-brand-400" : tone === "warn" ? "text-amber-600 dark:text-amber-400" : "text-foreground")}>{value}</span>
       <span className="text-[11px] text-muted-foreground">{label}</span>
     </span>
   );
