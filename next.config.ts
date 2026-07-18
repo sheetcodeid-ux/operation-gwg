@@ -46,6 +46,11 @@ const nextConfig: NextConfig = {
   images: {
     remotePatterns: [{ protocol: "https", hostname: "*.supabase.co" }],
   },
+  experimental: {
+    // Hygiene/Hospitality documentation uploads several timestamped camera
+    // photos per request; the default 1 MB Server Action body limit would 413.
+    serverActions: { bodySizeLimit: "12mb" },
+  },
   async headers() {
     return [{ source: "/:path*", headers: securityHeaders }];
   },

@@ -18,6 +18,28 @@ import { TONE_PILL } from "@/components/ui/tone";
 import { cn } from "@/lib/utils";
 
 const MIN_PHOTOS = 3;
+// Keep each upload request comfortably under the Server Action body limit.
+const MAX_BATCH_BYTES = 3.5 * 1024 * 1024;
+
+/** Group photo entries into batches whose cumulative size stays under `limit`.
+ *  A single oversized file still goes out alone (server enforces its own cap). */
+function batchBySize<T extends { file: File }>(entries: T[], limit: number): T[][] {
+  const batches: T[][] = [];
+  let cur: T[] = [];
+  let size = 0;
+  for (const e of entries) {
+    if (cur.length > 0 && size + e.file.size > limit) {
+      batches.push(cur);
+      cur = [];
+      size = 0;
+    }
+    cur.push(e);
+    size += e.file.size;
+  }
+  if (cur.length > 0) batches.push(cur);
+  return batches;
+}
+
 const todayLocal = () => {
   const d = new Date();
   const p = (n: number) => String(n).padStart(2, "0");
@@ -101,25 +123,30 @@ function HygieneForm({ outlets }: { outlets: { id: string; name: string }[] }) {
     }
     startTransition(async () => {
       // Upload attached photos to Supabase Storage first (permanent URLs).
+      // Server Actions cap the request body (default 1 MB), so upload in
+      // size-bounded batches instead of one giant request.
       let uploaded: Attachment[] = [];
       const entries = Object.entries(photos).flatMap(([label, items]) => items.map((it) => ({ label, file: it.file })));
       if (entries.length > 0) {
-        const fd = new FormData();
-        for (const e of entries) {
-          fd.append("file", e.file);
-          fd.append("label", e.label);
-        }
-        const up = await uploadHygienePhotosAction(fd);
-        if (up.error) {
-          // Demo mode without storage: save the audit anyway, photos skipped.
-          if (up.error.includes("Storage belum aktif")) {
-            toast.info("Storage belum aktif — audit disimpan tanpa foto.");
-          } else {
+        const batches = batchBySize(entries, MAX_BATCH_BYTES);
+        for (const batch of batches) {
+          const fd = new FormData();
+          for (const e of batch) {
+            fd.append("file", e.file);
+            fd.append("label", e.label);
+          }
+          const up = await uploadHygienePhotosAction(fd);
+          if (up.error) {
+            // Demo mode without storage: save the audit anyway, photos skipped.
+            if (up.error.includes("Storage belum aktif")) {
+              toast.info("Storage belum aktif — audit disimpan tanpa foto.");
+              uploaded = [];
+              break;
+            }
             toast.error(up.error);
             return;
           }
-        } else {
-          uploaded = up.photos ?? [];
+          uploaded = uploaded.concat(up.photos ?? []);
         }
       }
 
