@@ -15,10 +15,12 @@ export default async function HospitalityPage() {
   const assessments = listHospitality(user);
   const visible = visibleOutlets(user);
   const outlets = visible.map((o) => ({ id: o.id, name: o.name }));
-  const visibleIds = new Set(visible.map((o) => o.id));
-  const coordinators = getUsers()
-    .filter((u) => u.role === "area_coordinator" && (u.outletIds ?? []).some((oid) => visibleIds.has(oid)))
+  // Supervisors covering the visible outlets (assessor = the SPV doing the visit).
+  const supervisorIds = new Set(visible.map((o) => o.supervisorId));
+  const supervisors = getUsers()
+    .filter((u) => u.role === "supervisor" && (supervisorIds.has(u.id) || u.id === user.id))
     .map((c) => ({ id: c.id, name: c.name }));
+  if (user.role === "supervisor" && !supervisors.some((s) => s.id === user.id)) supervisors.unshift({ id: user.id, name: user.name });
   const canCreate = can(user, "create_hospitality");
 
   const rows: HospitalityRow[] = assessments.map((a) => ({
@@ -46,7 +48,7 @@ export default async function HospitalityPage() {
         icon={ConciergeBell}
         title="Hospitality Assessment"
         description="Service quality scoring across cashier, F&B and dining area"
-        actions={canCreate && outlets.length > 0 ? <NewAssessmentButton outlets={outlets} coordinators={coordinators} /> : undefined}
+        actions={canCreate && outlets.length > 0 ? <NewAssessmentButton outlets={outlets} supervisors={supervisors} defaultAssessorId={user.role === "supervisor" ? user.id : undefined} /> : undefined}
       />
 
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">

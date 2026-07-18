@@ -11,13 +11,20 @@ import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogTrigger, useDialogControl } from "@/components/ui/dialog";
 import { Field, Input, Textarea } from "@/components/ui/input";
 import { Combobox } from "@/components/ui/combobox";
+import { DatePicker } from "@/components/ui/date-picker";
 import { ScoreRing } from "@/components/ui/score-ring";
+import { TONE_PILL } from "@/components/ui/tone";
 import { cn } from "@/lib/utils";
 
 type Scores = Record<HospitalityCategory, Record<string, number>>;
 
 const CATS = Object.keys(HOSPITALITY_CHECKLISTS) as HospitalityCategory[];
 const POSITIONS = ["Bar", "Kitchen", "Kasir", "Supervisor", "Staff"];
+const todayLocal = () => {
+  const d = new Date();
+  const p = (n: number) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
+};
 
 function emptyScores(): Scores {
   const s = {} as Scores;
@@ -30,25 +37,27 @@ function emptyScores(): Scores {
 
 export function NewAssessmentButton({
   outlets,
-  coordinators,
+  supervisors,
+  defaultAssessorId,
 }: {
   outlets: { id: string; name: string }[];
-  coordinators: { id: string; name: string }[];
+  supervisors: { id: string; name: string }[];
+  defaultAssessorId?: string;
 }) {
   return (
     <Dialog>
       <DialogTrigger>
         <Button size="sm">
-          <Plus /> New Assessment
+          <Plus /> Assessment Baru
         </Button>
       </DialogTrigger>
       <DialogContent
         title="Hospitality Assessment"
-        description="Kunjungan Coordinator Area — skor layanan cashier, F&B & dining."
+        description="Kunjungan Supervisor — skor layanan cashier, F&B & dining."
         align="center"
         className="max-w-2xl"
       >
-        <AssessmentForm outlets={outlets} coordinators={coordinators} />
+        <AssessmentForm outlets={outlets} supervisors={supervisors} defaultAssessorId={defaultAssessorId} />
       </DialogContent>
     </Dialog>
   );
@@ -56,16 +65,19 @@ export function NewAssessmentButton({
 
 function AssessmentForm({
   outlets,
-  coordinators,
+  supervisors,
+  defaultAssessorId,
 }: {
   outlets: { id: string; name: string }[];
-  coordinators: { id: string; name: string }[];
+  supervisors: { id: string; name: string }[];
+  defaultAssessorId?: string;
 }) {
   const router = useRouter();
   const { setOpen } = useDialogControl();
   const [pending, startTransition] = useTransition();
   const [outletId, setOutletId] = useState(outlets[0]?.id ?? "");
-  const [coordinatorId, setCoordinatorId] = useState(coordinators[0]?.id ?? "");
+  const [supervisorId, setSupervisorId] = useState(defaultAssessorId ?? supervisors[0]?.id ?? "");
+  const [date, setDate] = useState(todayLocal());
   const [staffName, setStaffName] = useState("");
   const [staffPosition, setStaffPosition] = useState(POSITIONS[0]);
   const [notes, setNotes] = useState("");
@@ -90,11 +102,11 @@ function AssessmentForm({
 
   function submit() {
     if (!staffName.trim()) {
-      toast.error("Staff name is required.");
+      toast.error("Nama staff wajib diisi.");
       return;
     }
     startTransition(async () => {
-      const res = await createHospitalityAction({ outletId, coordinatorId, staffName, staffPosition, scores, notes });
+      const res = await createHospitalityAction({ outletId, coordinatorId: supervisorId, staffName, staffPosition, scores, notes, date: new Date(`${date}T12:00:00`).toISOString() });
       if (res?.error) {
         toast.error(res.error);
         return;
@@ -117,29 +129,35 @@ function AssessmentForm({
             searchPlaceholder="Cari outlet…"
           />
         </Field>
-        <Field label="Coordinator Area">
+        <Field label="Tanggal">
+          <DatePicker value={date} onChange={setDate} />
+        </Field>
+        <Field label="Supervisor">
           <Combobox
-            value={coordinatorId}
-            onChange={setCoordinatorId}
-            options={coordinators.map((c) => ({ value: c.id, label: c.name }))}
-            placeholder="Pilih coordinator"
-            searchPlaceholder="Cari coordinator…"
+            value={supervisorId}
+            onChange={setSupervisorId}
+            options={supervisors.map((c) => ({ value: c.id, label: c.name }))}
+            placeholder="Pilih supervisor"
+            searchPlaceholder="Cari supervisor…"
           />
         </Field>
-        <Field label="Staff Name">
-          <Input value={staffName} onChange={(e) => setStaffName(e.target.value)} placeholder="e.g. Andi" />
+        <Field label="Nama Staff">
+          <Input value={staffName} onChange={(e) => setStaffName(e.target.value)} placeholder="mis. Andi" />
         </Field>
-        <Field label="Position">
+        <Field label="Posisi">
           <Combobox value={staffPosition} onChange={setStaffPosition} options={POSITIONS.map((p) => ({ value: p, label: p }))} />
         </Field>
       </div>
 
       <div className="my-4 flex items-center gap-3 rounded-xl border border-border bg-muted/30 p-3">
-        <ScoreRing value={overall} size={56} stroke={5} label="Score" />
-        <div>
-          <p className="text-sm font-medium text-foreground">Live hospitality score</p>
-          <p className="text-xs text-muted-foreground">Auto-calculated from all checklist items (1–5).</p>
+        <ScoreRing value={overall} size={56} stroke={5} label="Skor" />
+        <div className="flex-1">
+          <p className="text-sm font-medium text-foreground">Skor hospitality langsung</p>
+          <p className="text-xs text-muted-foreground">Dihitung otomatis dari seluruh item (1–5).</p>
         </div>
+        <span className={cn("rounded-full px-2.5 py-1 text-xs font-medium", overall >= 85 ? TONE_PILL.success : overall >= 70 ? TONE_PILL.cyan : overall >= 55 ? TONE_PILL.warning : TONE_PILL.danger)}>
+          {overall >= 85 ? "Sangat Baik" : overall >= 70 ? "Baik" : overall >= 55 ? "Cukup" : "Perlu Perhatian"}
+        </span>
       </div>
 
       <div className="space-y-2">
@@ -174,16 +192,16 @@ function AssessmentForm({
         })}
       </div>
 
-      <Field label="Notes (optional)" className="mt-4">
-        <Textarea value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="Observations, coaching notes…" />
+      <Field label="Catatan (opsional)" className="mt-4">
+        <Textarea value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="Observasi, catatan coaching…" />
       </Field>
 
       <div className="mt-5 flex justify-end gap-2">
         <Button variant="ghost" onClick={() => setOpen(false)} disabled={pending}>
-          Cancel
+          Batal
         </Button>
         <Button onClick={submit} disabled={pending}>
-          {pending && <Loader2 className="animate-spin" />} Save Assessment
+          {pending && <Loader2 className="animate-spin" />} Simpan Assessment
         </Button>
       </div>
     </div>

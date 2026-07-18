@@ -2,7 +2,7 @@
 
 import { useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { ChevronDown, ImagePlus, Loader2, Plus, SprayCan, X } from "lucide-react";
+import { ChevronDown, Loader2, Plus, SprayCan, X } from "lucide-react";
 import { toast } from "sonner";
 import { HYGIENE_PHOTO_GROUPS, HYGIENE_RATING_META, HYGIENE_SECTIONS } from "@/lib/constants";
 import type { Attachment, HygieneRating, HygieneSection } from "@/lib/types";
@@ -11,9 +11,18 @@ import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogTrigger, useDialogControl } from "@/components/ui/dialog";
 import { Field, Input } from "@/components/ui/input";
 import { Combobox } from "@/components/ui/combobox";
+import { DatePicker } from "@/components/ui/date-picker";
+import { CameraCapture, type CapturedPhoto } from "@/components/ui/camera-capture";
 import { ScoreRing } from "@/components/ui/score-ring";
 import { TONE_PILL } from "@/components/ui/tone";
 import { cn } from "@/lib/utils";
+
+const MIN_PHOTOS = 3;
+const todayLocal = () => {
+  const d = new Date();
+  const p = (n: number) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
+};
 
 const SECTIONS = Object.keys(HYGIENE_SECTIONS) as HygieneSection[];
 const RATINGS = Object.keys(HYGIENE_RATING_META) as HygieneRating[];
@@ -34,10 +43,10 @@ export function NewAuditButton({ outlets }: { outlets: { id: string; name: strin
     <Dialog>
       <DialogTrigger>
         <Button size="sm">
-          <Plus /> New Audit
+          <Plus /> Audit Baru
         </Button>
       </DialogTrigger>
-      <DialogContent title="Hygiene Audit" description="Inspect cleanliness across all six outlet sections." align="center" className="max-w-2xl">
+      <DialogContent title="Audit Kebersihan" description="Periksa kebersihan enam area outlet." align="center" className="max-w-2xl">
         <HygieneForm outlets={outlets} />
       </DialogContent>
     </Dialog>
@@ -49,13 +58,15 @@ function HygieneForm({ outlets }: { outlets: { id: string; name: string }[] }) {
   const { setOpen } = useDialogControl();
   const [pending, startTransition] = useTransition();
   const [outletId, setOutletId] = useState(outlets[0]?.id ?? "");
+  const [date, setDate] = useState(todayLocal());
   const [shift, setShift] = useState("Morning");
   const [inspectorName, setInspectorName] = useState("");
   const [ratings, setRatings] = useState<Ratings>(defaultRatings);
   const [findings, setFindings] = useState<string[]>([]);
   const [findingDraft, setFindingDraft] = useState("");
   const [openSection, setOpenSection] = useState<HygieneSection>("front");
-  const [photos, setPhotos] = useState<Record<string, PhotoItem[]>>({});
+  const [photos, setPhotos] = useState<Record<string, CapturedPhoto[]>>({});
+  const outletName = outlets.find((o) => o.id === outletId)?.name;
 
   const score = useMemo(() => {
     let sum = 0;
@@ -82,6 +93,12 @@ function HygieneForm({ outlets }: { outlets: { id: string; name: string }[] }) {
   }
 
   function submit() {
+    // Require min photos per documentation area (camera + timestamp).
+    const missing = HYGIENE_PHOTO_GROUPS.filter((g) => (photos[g]?.length ?? 0) < MIN_PHOTOS);
+    if (missing.length > 0) {
+      toast.error(`Minimal ${MIN_PHOTOS} foto per area. Kurang: ${missing.join(", ")}.`);
+      return;
+    }
     startTransition(async () => {
       // Upload attached photos to Supabase Storage first (permanent URLs).
       let uploaded: Attachment[] = [];
@@ -106,7 +123,7 @@ function HygieneForm({ outlets }: { outlets: { id: string; name: string }[] }) {
         }
       }
 
-      const res = await createHygieneAction({ outletId, shift, inspectorName, ratings, findings, isClean, photos: uploaded });
+      const res = await createHygieneAction({ outletId, shift, inspectorName, ratings, findings, isClean, photos: uploaded, date: new Date(`${date}T12:00:00`).toISOString() });
       if (res?.error) {
         toast.error(res.error);
         return;
@@ -119,36 +136,39 @@ function HygieneForm({ outlets }: { outlets: { id: string; name: string }[] }) {
 
   return (
     <div className="max-h-[72vh] overflow-y-auto p-5">
-      <div className="grid gap-3 sm:grid-cols-3">
+      <div className="grid gap-3 sm:grid-cols-2">
         <Field label="Outlet">
           <Combobox
             value={outletId}
             onChange={setOutletId}
             options={outlets.map((o) => ({ value: o.id, label: o.name }))}
-            placeholder="Select outlet"
-            searchPlaceholder="Search outlets…"
+            placeholder="Pilih outlet"
+            searchPlaceholder="Cari outlet…"
           />
+        </Field>
+        <Field label="Tanggal">
+          <DatePicker value={date} onChange={setDate} />
         </Field>
         <Field label="Shift">
           <Combobox
             value={shift}
             onChange={setShift}
-            options={["Morning", "Afternoon", "Evening"].map((s) => ({ value: s, label: s }))}
+            options={["Pagi", "Siang", "Sore", "Malam"].map((s) => ({ value: s, label: s }))}
           />
         </Field>
-        <Field label="Inspector">
-          <Input value={inspectorName} onChange={(e) => setInspectorName(e.target.value)} placeholder="Your name" />
+        <Field label="Inspektur">
+          <Input value={inspectorName} onChange={(e) => setInspectorName(e.target.value)} placeholder="Nama Anda" />
         </Field>
       </div>
 
       <div className="my-4 flex items-center gap-3 rounded-xl border border-border bg-muted/30 p-3">
-        <ScoreRing value={score} size={56} stroke={5} label="Hygiene" />
+        <ScoreRing value={score} size={56} stroke={5} label="Higiene" />
         <div className="flex-1">
-          <p className="text-sm font-medium text-foreground">Live hygiene score</p>
-          <p className="text-xs text-muted-foreground">Auto-calculated across all six sections.</p>
+          <p className="text-sm font-medium text-foreground">Skor kebersihan langsung</p>
+          <p className="text-xs text-muted-foreground">Dihitung otomatis dari enam area.</p>
         </div>
         <span className={cn("rounded-full px-2.5 py-1 text-xs font-medium", isClean ? TONE_PILL.success : TONE_PILL.danger)}>
-          {isClean ? "Outlet Clean" : "Needs Attention"}
+          {isClean ? "Outlet Bersih" : "Perlu Perhatian"}
         </span>
       </div>
 
@@ -203,25 +223,32 @@ function HygieneForm({ outlets }: { outlets: { id: string; name: string }[] }) {
         })}
       </div>
 
-      {/* Photo documentation — local preview now, Supabase Storage in Phase 11 */}
-      <Field label="Documentation" className="mt-4">
+      {/* Dokumentasi — foto langsung dari kamera HP, timestamp ter-cap, min 3 per area. */}
+      <Field label={`Dokumentasi (foto kamera · min ${MIN_PHOTOS}/area)`} className="mt-4">
         <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
           {HYGIENE_PHOTO_GROUPS.map((g) => (
-            <PhotoGroup key={g} label={g} items={photos[g] ?? []} onChange={(items) => setPhotos((p) => ({ ...p, [g]: items }))} />
+            <CameraCapture
+              key={g}
+              label={g}
+              min={MIN_PHOTOS}
+              stampPrefix={outletName}
+              items={photos[g] ?? []}
+              onChange={(items) => setPhotos((p) => ({ ...p, [g]: items }))}
+            />
           ))}
         </div>
       </Field>
 
-      <Field label="Findings" className="mt-4">
+      <Field label="Temuan" className="mt-4">
         <div className="flex gap-2">
           <Input
             value={findingDraft}
             onChange={(e) => setFindingDraft(e.target.value)}
             onKeyDown={(e) => e.key === "Enter" && (e.preventDefault(), addFinding())}
-            placeholder="e.g. Lampu mati di toilet"
+            placeholder="mis. Lampu mati di toilet"
           />
           <Button type="button" variant="subtle" onClick={addFinding}>
-            Add
+            Tambah
           </Button>
         </div>
         {findings.length > 0 && (
@@ -240,60 +267,13 @@ function HygieneForm({ outlets }: { outlets: { id: string; name: string }[] }) {
 
       <div className="mt-5 flex justify-end gap-2">
         <Button variant="ghost" onClick={() => setOpen(false)} disabled={pending}>
-          Cancel
+          Batal
         </Button>
         <Button onClick={submit} disabled={pending}>
-          {pending && <Loader2 className="animate-spin" />} Save Audit
+          {pending && <Loader2 className="animate-spin" />} Simpan Audit
         </Button>
       </div>
     </div>
   );
 }
 
-interface PhotoItem {
-  file: File;
-  url: string; // local preview object URL
-}
-
-function PhotoGroup({
-  label,
-  items,
-  onChange,
-}: {
-  label: string;
-  items: PhotoItem[];
-  onChange: (items: PhotoItem[]) => void;
-}) {
-  function onFiles(e: React.ChangeEvent<HTMLInputElement>) {
-    const files = Array.from(e.target.files ?? []);
-    if (!files.length) return;
-    onChange([...items, ...files.map((f) => ({ file: f, url: URL.createObjectURL(f) }))]);
-    e.target.value = "";
-  }
-  return (
-    <div className="rounded-lg border border-dashed border-border bg-muted/30 p-2">
-      <label className="flex cursor-pointer flex-col items-center gap-1 py-1.5 text-center text-muted-foreground hover:text-foreground">
-        <ImagePlus className="size-5" />
-        <span className="text-[11px]">{label}</span>
-        <input type="file" accept="image/*" multiple className="hidden" onChange={onFiles} />
-      </label>
-      {items.length > 0 && (
-        <div className="mt-1.5 grid grid-cols-3 gap-1">
-          {items.map((it, i) => (
-            <div key={i} className="group relative aspect-square overflow-hidden rounded-md ring-1 ring-border">
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src={it.url} alt="" className="size-full object-cover" />
-              <button
-                type="button"
-                onClick={() => onChange(items.filter((_, j) => j !== i))}
-                className="absolute right-0.5 top-0.5 grid size-4 place-items-center rounded bg-black/60 text-white opacity-0 transition-opacity group-hover:opacity-100"
-              >
-                <X className="size-2.5" />
-              </button>
-            </div>
-          ))}
-        </div>
-      )}
-    </div>
-  );
-}

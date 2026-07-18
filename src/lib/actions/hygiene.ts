@@ -18,6 +18,7 @@ export interface HygieneInput {
   findings: string[];
   isClean: boolean;
   photos?: Attachment[];
+  date?: string;
 }
 
 const MAX_PHOTOS = 12;
@@ -77,6 +78,7 @@ export async function createHygieneAction(input: HygieneInput) {
       findings: clean.findings.filter((f) => f.trim()),
       isClean: clean.isClean,
       photos: input.photos ?? [],
+      date: input.date,
     });
   } catch (e) {
     return { error: persistMessage(e) };

@@ -72,6 +72,7 @@ export async function createHospitality(input: {
   staffPosition: string;
   scores: Record<HospitalityCategory, Record<string, number>>;
   notes?: string;
+  date?: string;
 }): Promise<HospitalityAssessment> {
   let sum = 0;
   let count = 0;
@@ -88,7 +89,7 @@ export async function createHospitality(input: {
     assessorId: input.assessorId,
     staffName: input.staffName,
     staffPosition: input.staffPosition,
-    date: nowIso(),
+    date: input.date || nowIso(),
     scores: input.scores,
     notes: input.notes,
     overallScore: count ? round1((sum / (count * 5)) * 100) : 0,
@@ -282,6 +283,7 @@ export async function createHygiene(input: {
   findings: string[];
   photos?: import("../types").Attachment[];
   isClean: boolean;
+  date?: string;
 }): Promise<HygieneAudit> {
   let sum = 0;
   let count = 0;
@@ -299,7 +301,7 @@ export async function createHygiene(input: {
     id: nextId("hyg"),
     outletId: input.outletId,
     areaId: areaForOutlet(input.outletId),
-    date: nowIso(),
+    date: input.date || nowIso(),
     shift: input.shift,
     inspectorName: input.inspectorName,
     supervisorName: input.supervisorName,

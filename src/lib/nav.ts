@@ -132,7 +132,7 @@ export const ROLE_MENUS: Record<Role, MenuKey[]> = {
   data_operation: ["work", "assessment"],
   pos_operation: ["work", "assessment"],
   admin_operation: ["work", "complaints", "assessment"],
-  supervisor: ["hygiene", "complaints"], // field staff — NO assessment
+  supervisor: ["hospitality", "hygiene", "complaints"], // field SPV — hospitality & hygiene visits
   head_bar_rnd: ["hpp_dash", "work", "hpp", "hpp_db", "hpp_bahan", "hpp_price", "assessment"],
   bar_rnd: ["hpp_dash", "work", "hpp", "hpp_db", "hpp_bahan", "hpp_price", "assessment"],
   kitchen_rnd: ["hpp_dash", "work", "hpp", "hpp_db", "hpp_bahan", "hpp_price", "assessment"],
@@ -145,7 +145,7 @@ export const ROLE_MENUS: Record<Role, MenuKey[]> = {
 /** Menus shown per division in the Super Admin sidebar (all divisions listed). */
 const DIVISION_MENUS: { division: Division; menus: MenuKey[] }[] = [
   { division: "Operation", menus: OPERATION_FULL },
-  { division: "Supervisor", menus: ["hygiene", "complaints"] },
+  { division: "Supervisor", menus: ["hospitality", "hygiene", "complaints"] },
   { division: "R&D", menus: ["hpp_dash", "work", "hpp", "hpp_db", "hpp_bahan", "hpp_price"] },
   { division: "Human Capital", menus: ["work", "assessment"] },
   // New department-aligned divisions — Work Tracker only for now.

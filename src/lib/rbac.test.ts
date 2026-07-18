@@ -55,10 +55,12 @@ describe("menu access matrix", () => {
     expect(canSeeMenu("legal", "dashboard")).toBe(false);
   });
 
-  it("gives supervisor only Hygiene + Complaints", () => {
-    expect(ROLE_MENUS.supervisor).toEqual(["hygiene", "complaints"]);
+  it("gives supervisor Hospitality + Hygiene + Complaints (field SPV, no dashboard/assessment)", () => {
+    expect(ROLE_MENUS.supervisor).toEqual(["hospitality", "hygiene", "complaints"]);
     expect(canSeeMenu("supervisor", "hygiene")).toBe(true);
+    expect(canSeeMenu("supervisor", "hospitality")).toBe(true);
     expect(canSeeMenu("supervisor", "dashboard")).toBe(false);
+    expect(canSeeMenu("supervisor", "assessment")).toBe(false);
   });
 
   it("restricts admin menus to super_admin", () => {

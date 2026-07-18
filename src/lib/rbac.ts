@@ -61,7 +61,7 @@ export const ROLE_PERMISSIONS: Record<Role, Permission[]> = {
   // Admin Operation now only handles Work Tracker + Complaints (no org/user admin).
   admin_operation: ["create_work_task", "manage_complaint"],
   // Supervisor division — fills Hygiene + Complaints for their own branch.
-  supervisor: ["create_hygiene", "manage_complaint"],
+  supervisor: ["create_hygiene", "create_hospitality", "manage_complaint"],
   // R&D division — Work Tracker only.
   head_bar_rnd: ["create_work_task"],
   bar_rnd: ["create_work_task"],

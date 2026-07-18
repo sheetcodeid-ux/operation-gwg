@@ -16,6 +16,7 @@ export interface HospitalityInput {
   staffPosition: string;
   scores: Record<HospitalityCategory, Record<string, number>>;
   notes?: string;
+  date?: string;
 }
 
 export async function createHospitalityAction(input: HospitalityInput) {
@@ -35,6 +36,7 @@ export async function createHospitalityAction(input: HospitalityInput) {
       staffPosition: input.staffPosition.trim() || "Staff",
       scores: input.scores,
       notes: input.notes,
+      date: input.date,
     });
   } catch (e) {
     return { error: persistMessage(e) };

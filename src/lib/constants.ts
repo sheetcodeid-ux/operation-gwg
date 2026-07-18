@@ -70,10 +70,10 @@ export const EVENT_MILESTONES: { value: EventMilestone; label: string; progress:
 ];
 
 export const HYGIENE_RATING_META: Record<HygieneRating, { label: string; tone: Tone; score: number }> = {
-  excellent: { label: "Excellent", tone: "success", score: 100 },
-  good: { label: "Good", tone: "cyan", score: 80 },
-  fair: { label: "Fair", tone: "warning", score: 55 },
-  poor: { label: "Poor", tone: "danger", score: 25 },
+  excellent: { label: "Sangat Baik", tone: "success", score: 100 },
+  good: { label: "Baik", tone: "cyan", score: 80 },
+  fair: { label: "Cukup", tone: "warning", score: 55 },
+  poor: { label: "Kurang", tone: "danger", score: 25 },
 };
 
 export const COMPLAINT_SOURCE_META: Record<ComplaintSource, { label: string; tone: Tone }> = {
