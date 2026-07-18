@@ -1,4 +1,4 @@
-import { ClipboardList, ConciergeBell, Star, Store, Users } from "lucide-react";
+import { ClipboardList, ConciergeBell, Star, Store, TriangleAlert, Users } from "lucide-react";
 import type { Metadata } from "next";
 import { getSessionUser } from "@/lib/auth";
 import { areaName, getUsers, listHospitality, outletName, userName, visibleOutlets } from "@/lib/data/store";
@@ -50,6 +50,13 @@ export default async function HospitalityPage() {
         description="Service quality scoring across cashier, F&B and dining area"
         actions={canCreate && outlets.length > 0 ? <NewAssessmentButton outlets={outlets} supervisors={supervisors} defaultAssessorId={user.role === "supervisor" ? user.id : undefined} /> : undefined}
       />
+
+      {canCreate && outlets.length === 0 && (
+        <div className="mb-4 flex items-start gap-2 rounded-xl border border-amber-500/30 bg-amber-500/10 p-3 text-sm text-amber-700 dark:text-amber-300">
+          <TriangleAlert className="mt-0.5 size-4 shrink-0" />
+          <span>Belum ada outlet yang ditugaskan ke akun Anda, jadi assessment belum bisa dibuat. Minta Admin menugaskan outlet Anda di <span className="font-semibold">User Management</span> (Edit akun → pilih Outlet).</span>
+        </div>
+      )}
 
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         <StatTile icon={Star} label="Average Score" value={avg.toFixed(1)} tone="brand" />

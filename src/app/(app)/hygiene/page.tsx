@@ -46,6 +46,13 @@ export default async function HygienePage() {
         actions={canCreate && outlets.length > 0 ? <NewAuditButton outlets={outlets} /> : undefined}
       />
 
+      {canCreate && outlets.length === 0 && (
+        <div className="mb-4 flex items-start gap-2 rounded-xl border border-amber-500/30 bg-amber-500/10 p-3 text-sm text-amber-700 dark:text-amber-300">
+          <TriangleAlert className="mt-0.5 size-4 shrink-0" />
+          <span>Belum ada outlet yang ditugaskan ke akun Anda, jadi audit belum bisa dibuat. Minta Admin menugaskan outlet Anda di <span className="font-semibold">User Management</span> (Edit akun → pilih Outlet).</span>
+        </div>
+      )}
+
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         <StatTile icon={SprayCan} label="Average Score" value={avg.toFixed(1)} tone="brand" />
         <StatTile icon={ClipboardCheck} label="Audits" value={audits.length} tone="cyan" />
