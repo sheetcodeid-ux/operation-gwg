@@ -91,8 +91,8 @@
   50% { transform: translateY(-6px); }
 }
 @keyframes clock-pop {
-  from { opacity: 0; transform: translateY(8px) scale(0.96); }
-  to { opacity: 1; transform: translateY(0) scale(1); }
+  from { opacity: 0; }
+  to { opacity: 1; }
 }
 @keyframes shine-sweep {
   0% { transform: translateX(-160%) skewX(-12deg); }
@@ -107,8 +107,8 @@
   to { opacity: 1; }
 }
 @keyframes fade-up {
-  from { opacity: 0; transform: translateY(8px); }
-  to { opacity: 1; transform: translateY(0); }
+  from { opacity: 0; }
+  to { opacity: 1; }
 }
 @keyframes pop-in {
   from { opacity: 0; transform: scale(0.94); }
