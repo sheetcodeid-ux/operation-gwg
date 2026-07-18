@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { Check, ChevronDown, ChevronRight, ListChecks, Lock } from "lucide-react";
+import { BadgeCheck, Check, ChevronDown, ChevronRight, ListTodo, Lock, type LucideIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 export interface QueueItem {
@@ -50,10 +50,10 @@ export function AssessmentQueueList({
         </div>
       )}
 
-      <Section icon={ListChecks} label="Antrian" count={pending.length} tone="pending" open={openPending} onToggle={() => setOpenPending((v) => !v)}>
+      <Section icon={ListTodo} label="Antrian" count={pending.length} tone="pending" open={openPending} onToggle={() => setOpenPending((v) => !v)}>
         {pending.length === 0 ? (
           <div className="grid place-items-center gap-1.5 px-3 py-9 text-center">
-            <span className="grid size-9 place-items-center rounded-xl bg-brand-500/10 text-brand-600 ring-1 ring-brand-500/20 dark:text-brand-400"><Check className="size-5" /></span>
+            <span className="grid size-9 place-items-center rounded-xl bg-brand-500/10 text-brand-600 ring-1 ring-brand-500/20 dark:text-brand-400"><BadgeCheck className="size-5" /></span>
             <p className="text-xs font-medium text-foreground">Semua sudah dinilai</p>
             <p className="text-[11px] text-muted-foreground">Tidak ada yang tersisa di antrian.</p>
           </div>
@@ -63,7 +63,7 @@ export function AssessmentQueueList({
       </Section>
 
       {done.length > 0 && (
-        <Section icon={Check} label="Selesai" count={done.length} tone="done" open={openDone} onToggle={() => setOpenDone((v) => !v)}>
+        <Section icon={BadgeCheck} label="Selesai" count={done.length} tone="done" open={openDone} onToggle={() => setOpenDone((v) => !v)}>
           {done.map((t) => (
             <Row key={t.id} item={t} active={selectedId === t.id} onClick={() => onPick(t)} locked />
           ))}
@@ -82,7 +82,7 @@ function Section({
   onToggle,
   children,
 }: {
-  icon: typeof ListChecks;
+  icon: LucideIcon;
   label: string;
   count: number;
   tone: "pending" | "done";
