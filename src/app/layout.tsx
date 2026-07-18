@@ -25,8 +25,13 @@ export const metadata: Metadata = {
   appleWebApp: { capable: true, title: "Operation GWG", statusBarStyle: "default" },
 };
 
+// Match the phone status bar to the app background (not navy) so the top strip
+// blends with the header instead of showing a blue band.
 export const viewport: Viewport = {
-  themeColor: "#0e186c",
+  themeColor: [
+    { media: "(prefers-color-scheme: light)", color: "#ffffff" },
+    { media: "(prefers-color-scheme: dark)", color: "#101013" },
+  ],
 };
 
 export default function RootLayout({
