@@ -111,7 +111,7 @@ export function DatePicker({ value, onChange, className }: { value: string; onCh
   );
 }
 
-function Calendar({ selected, onPick }: { selected: Date | null; onPick: (d: Date) => void }) {
+export function Calendar({ selected, onPick }: { selected: Date | null; onPick: (d: Date) => void }) {
   const [anchor, setAnchor] = React.useState<Date>(startOfMonth(selected ?? new Date(2026, 5, 1)));
   const first = startOfMonth(anchor);
   const total = endOfMonth(anchor).getDate();

@@ -5,19 +5,10 @@ import { useRouter } from "next/navigation";
 import { CalendarClock, Loader2, Save } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
-import { Field, Input } from "@/components/ui/input";
+import { Field } from "@/components/ui/input";
+import { DateTimePicker } from "@/components/ui/datetime-picker";
 import { saveAssessmentScheduleAction } from "@/lib/actions/assessment-schedule";
 import type { AssessmentSchedule } from "@/lib/data/assessment-schedule";
-
-/** ISO → value for <input type="datetime-local"> in the viewer's local zone. */
-function toLocalInput(iso: string | null): string {
-  if (!iso) return "";
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return "";
-  const pad = (n: number) => String(n).padStart(2, "0");
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
-}
-const fromLocalInput = (v: string): string | null => (v ? new Date(v).toISOString() : null);
 
 const fmt = (iso: string | null) =>
   iso
@@ -28,12 +19,12 @@ const fmt = (iso: string | null) =>
 export function ScheduleEditor({ initial }: { initial: AssessmentSchedule }) {
   const router = useRouter();
   const [pending, start] = React.useTransition();
-  const [startAt, setStartAt] = React.useState(toLocalInput(initial.startAt));
-  const [endAt, setEndAt] = React.useState(toLocalInput(initial.endAt));
+  const [startAt, setStartAt] = React.useState(initial.startAt ?? "");
+  const [endAt, setEndAt] = React.useState(initial.endAt ?? "");
 
   function save() {
     start(async () => {
-      const res = await saveAssessmentScheduleAction({ startAt: fromLocalInput(startAt), endAt: fromLocalInput(endAt) });
+      const res = await saveAssessmentScheduleAction({ startAt: startAt || null, endAt: endAt || null });
       if (res?.error) {
         toast.error(res.error);
         return;
@@ -59,10 +50,10 @@ export function ScheduleEditor({ initial }: { initial: AssessmentSchedule }) {
       </div>
       <div className="grid gap-3 sm:grid-cols-2">
         <Field label="Mulai">
-          <Input type="datetime-local" value={startAt} onChange={(e) => setStartAt(e.target.value)} />
+          <DateTimePicker value={startAt} onChange={setStartAt} />
         </Field>
         <Field label="Selesai">
-          <Input type="datetime-local" value={endAt} onChange={(e) => setEndAt(e.target.value)} />
+          <DateTimePicker value={endAt} onChange={setEndAt} />
         </Field>
       </div>
       <div className="mt-3 flex items-center justify-between gap-2">
