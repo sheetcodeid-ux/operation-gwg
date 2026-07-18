@@ -18,6 +18,8 @@ import { getOutlet } from "./store";
 import {
   deleteEventRow,
   deleteTaskRow,
+  deleteHygieneRow,
+  deleteHospitalityRow,
   saveComplaint,
   saveEvent,
   saveHospitality,
@@ -178,6 +180,22 @@ export function deleteTask(id: string): boolean {
   if (i === -1) return false;
   SEED.tasks.splice(i, 1);
   void deleteTaskRow(id);
+  return true;
+}
+
+export function deleteHygiene(id: string): boolean {
+  const i = SEED.hygiene.findIndex((h) => h.id === id);
+  if (i === -1) return false;
+  SEED.hygiene.splice(i, 1);
+  void deleteHygieneRow(id);
+  return true;
+}
+
+export function deleteHospitality(id: string): boolean {
+  const i = SEED.hospitality.findIndex((h) => h.id === id);
+  if (i === -1) return false;
+  SEED.hospitality.splice(i, 1);
+  void deleteHospitalityRow(id);
   return true;
 }
 

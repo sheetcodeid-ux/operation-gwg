@@ -61,7 +61,7 @@ export default async function HygienePage() {
       </div>
 
       <div className="mt-4">
-        <HygieneExplorer rows={rows} outlets={outlets} />
+        <HygieneExplorer rows={rows} outlets={outlets} canDelete={user.role === "super_admin"} />
       </div>
     </div>
   );

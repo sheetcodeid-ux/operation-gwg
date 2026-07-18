@@ -2,8 +2,11 @@
 
 import * as React from "react";
 import Image from "next/image";
+import { useRouter } from "next/navigation";
 import { type ColumnDef } from "@tanstack/react-table";
-import { Camera } from "lucide-react";
+import { Camera, Trash2 } from "lucide-react";
+import { toast } from "sonner";
+import { deleteHygieneAction } from "@/lib/actions/hygiene";
 import type { Attachment } from "@/lib/types";
 import { scoreColor } from "@/components/ui/tone";
 import { Badge } from "@/components/ui/badge";
@@ -30,9 +33,20 @@ export interface HygieneRow {
 }
 
 
-export function HygieneExplorer({ rows, outlets }: { rows: HygieneRow[]; outlets: { id: string; name: string }[] }) {
+export function HygieneExplorer({ rows, outlets, canDelete = false }: { rows: HygieneRow[]; outlets: { id: string; name: string }[]; canDelete?: boolean }) {
+  const router = useRouter();
   const [month, setMonth] = React.useState("all");
   const [outlet, setOutlet] = React.useState("all");
+  const [deleting, setDeleting] = React.useState<string | null>(null);
+
+  async function onDelete(id: string, label: string) {
+    if (typeof window !== "undefined" && !window.confirm(`Hapus audit "${label}"? Tindakan ini permanen.`)) return;
+    setDeleting(id);
+    const res = await deleteHygieneAction(id);
+    if (res?.error) toast.error(res.error);
+    else { toast.success("Audit dihapus"); router.refresh(); }
+    setDeleting(null);
+  }
   const months = React.useMemo(() => monthOptions(rows.map((r) => r.date)), [rows]);
 
   const scoped = React.useMemo(
@@ -131,8 +145,27 @@ export function HygieneExplorer({ rows, outlets }: { rows: HygieneRow[]; outlets
           );
         },
       },
+      ...(canDelete
+        ? [{
+            id: "actions",
+            header: "",
+            enableSorting: false,
+            cell: ({ row }: { row: { original: HygieneRow } }) => (
+              <button
+                type="button"
+                onClick={() => onDelete(row.original.id, row.original.outlet)}
+                disabled={deleting === row.original.id}
+                className="grid size-7 place-items-center rounded-md text-muted-foreground transition-colors hover:bg-red-500/10 hover:text-red-500 disabled:opacity-50"
+                title="Hapus audit"
+              >
+                <Trash2 className="size-3.5" />
+              </button>
+            ),
+          } as ColumnDef<HygieneRow>]
+        : []),
     ],
-    [],
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [canDelete, deleting],
   );
 
   return (

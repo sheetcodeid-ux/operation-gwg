@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { getSessionUser } from "@/lib/auth";
 import { can, canAccessOutlet } from "@/lib/rbac";
 import { getOutlet, getOutlets, userName } from "@/lib/data/store";
-import { createHygiene } from "@/lib/data/mutations";
+import { createHygiene, deleteHygiene } from "@/lib/data/mutations";
 import { persistMessage } from "@/lib/data/persist";
 import { db, dbEnabled } from "@/lib/data/db";
 import { hygieneInputSchema, parseInput } from "@/lib/validation";
@@ -87,4 +87,16 @@ export async function createHygieneAction(input: HygieneInput) {
   revalidatePath("/hygiene");
   revalidatePath("/dashboard");
   return { ok: true, id: record.id, score: record.hygieneScore };
+}
+
+/** Admin-only: delete a hygiene audit. */
+export async function deleteHygieneAction(id: string) {
+  const user = await getSessionUser();
+  if (!user) return { error: "Not authenticated" };
+  if (user.role !== "super_admin") return { error: "Hanya Admin yang dapat menghapus audit." };
+  const ok = deleteHygiene(id);
+  if (!ok) return { error: "Audit tidak ditemukan." };
+  revalidatePath("/hygiene");
+  revalidatePath("/dashboard");
+  return { ok: true };
 }

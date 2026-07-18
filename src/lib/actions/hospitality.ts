@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { getSessionUser } from "@/lib/auth";
 import { can, canAccessOutlet } from "@/lib/rbac";
 import { getOutlets } from "@/lib/data/store";
-import { createHospitality } from "@/lib/data/mutations";
+import { createHospitality, deleteHospitality } from "@/lib/data/mutations";
 import { persistMessage } from "@/lib/data/persist";
 import type { HospitalityCategory } from "@/lib/types";
 
@@ -45,4 +45,16 @@ export async function createHospitalityAction(input: HospitalityInput) {
   revalidatePath("/hospitality");
   revalidatePath("/dashboard");
   return { ok: true, id: record.id, score: record.overallScore };
+}
+
+/** Admin-only: delete a hospitality assessment. */
+export async function deleteHospitalityAction(id: string) {
+  const user = await getSessionUser();
+  if (!user) return { error: "Not authenticated" };
+  if (user.role !== "super_admin") return { error: "Hanya Admin yang dapat menghapus assessment." };
+  const ok = deleteHospitality(id);
+  if (!ok) return { error: "Assessment tidak ditemukan." };
+  revalidatePath("/hospitality");
+  revalidatePath("/dashboard");
+  return { ok: true };
 }

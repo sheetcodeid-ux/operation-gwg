@@ -1,7 +1,11 @@
 "use client";
 
 import * as React from "react";
+import { useRouter } from "next/navigation";
 import { type ColumnDef } from "@tanstack/react-table";
+import { Trash2 } from "lucide-react";
+import { toast } from "sonner";
+import { deleteHospitalityAction } from "@/lib/actions/hospitality";
 import { Avatar } from "@/components/ui/avatar";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Combobox } from "@/components/ui/combobox";
@@ -23,9 +27,20 @@ export interface HospitalityRow {
   score: number;
 }
 
-export function HospitalityExplorer({ rows, outlets }: { rows: HospitalityRow[]; outlets: { id: string; name: string }[] }) {
+export function HospitalityExplorer({ rows, outlets, canDelete = false }: { rows: HospitalityRow[]; outlets: { id: string; name: string }[]; canDelete?: boolean }) {
+  const router = useRouter();
   const [month, setMonth] = React.useState("all");
   const [outlet, setOutlet] = React.useState("all");
+  const [deleting, setDeleting] = React.useState<string | null>(null);
+
+  async function onDelete(id: string, label: string) {
+    if (typeof window !== "undefined" && !window.confirm(`Hapus assessment "${label}"? Tindakan ini permanen.`)) return;
+    setDeleting(id);
+    const res = await deleteHospitalityAction(id);
+    if (res?.error) toast.error(res.error);
+    else { toast.success("Assessment dihapus"); router.refresh(); }
+    setDeleting(null);
+  }
   const months = React.useMemo(() => monthOptions(rows.map((r) => r.date)), [rows]);
 
   const scoped = React.useMemo(
@@ -55,7 +70,7 @@ export function HospitalityExplorer({ rows, outlets }: { rows: HospitalityRow[];
       },
       { accessorKey: "outlet", header: "Outlet", cell: ({ getValue }) => <span className="text-foreground/80">{getValue<string>()}</span> },
       { accessorKey: "area", header: "Area", cell: ({ getValue }) => <span className="text-muted-foreground">{getValue<string>()}</span> },
-      { accessorKey: "assessor", header: "Coordinator Area", cell: ({ getValue }) => <span className="text-foreground/80">{getValue<string>()}</span> },
+      { accessorKey: "assessor", header: "Supervisor", cell: ({ getValue }) => <span className="text-foreground/80">{getValue<string>()}</span> },
       {
         accessorKey: "score",
         header: "Score",
@@ -69,8 +84,27 @@ export function HospitalityExplorer({ rows, outlets }: { rows: HospitalityRow[];
           );
         },
       },
+      ...(canDelete
+        ? [{
+            id: "actions",
+            header: "",
+            enableSorting: false,
+            cell: ({ row }: { row: { original: HospitalityRow } }) => (
+              <button
+                type="button"
+                onClick={() => onDelete(row.original.id, row.original.staffName)}
+                disabled={deleting === row.original.id}
+                className="grid size-7 place-items-center rounded-md text-muted-foreground transition-colors hover:bg-red-500/10 hover:text-red-500 disabled:opacity-50"
+                title="Hapus assessment"
+              >
+                <Trash2 className="size-3.5" />
+              </button>
+            ),
+          } as ColumnDef<HospitalityRow>]
+        : []),
     ],
-    [],
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [canDelete, deleting],
   );
 
   return (

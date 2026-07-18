@@ -66,7 +66,7 @@ export default async function HospitalityPage() {
       </div>
 
       <div className="mt-4">
-        <HospitalityExplorer rows={rows} outlets={outlets} />
+        <HospitalityExplorer rows={rows} outlets={outlets} canDelete={user.role === "super_admin"} />
       </div>
     </div>
   );

@@ -75,9 +75,13 @@ export const deleteEventRow = (id: string): Promise<PersistResult> =>
 
 export const saveHospitality = (h: HospitalityAssessment): Promise<PersistResult> =>
   dbEnabled ? write("hospitality", db().from("hospitality").upsert(hospitalityToRow(h))) : Promise.resolve(OK);
+export const deleteHospitalityRow = (id: string): Promise<PersistResult> =>
+  dbEnabled ? write("hospitality", db().from("hospitality").delete().eq("id", id)) : Promise.resolve(OK);
 
 export const saveHygiene = (h: HygieneAudit): Promise<PersistResult> =>
   dbEnabled ? write("hygiene", db().from("hygiene").upsert(hygieneToRow(h))) : Promise.resolve(OK);
+export const deleteHygieneRow = (id: string): Promise<PersistResult> =>
+  dbEnabled ? write("hygiene", db().from("hygiene").delete().eq("id", id)) : Promise.resolve(OK);
 
 export const saveComplaint = (c: Complaint): Promise<PersistResult> =>
   dbEnabled ? write("complaints", db().from("complaints").upsert(complaintToRow(c))) : Promise.resolve(OK);
