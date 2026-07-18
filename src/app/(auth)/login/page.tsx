@@ -1,4 +1,3 @@
-import { LogIn } from "lucide-react";
 import { BrandLogo } from "@/components/layout/brand-logo";
 import type { Metadata } from "next";
 import { getAreas, getOutlets } from "@/lib/data/store";
@@ -29,11 +28,9 @@ export default function LoginPage() {
       {/* card */}
       <div className="relative w-full max-w-md rounded-2xl border border-border bg-card/80 p-7 shadow-2xl backdrop-blur-xl sm:p-8">
         <div className="mb-6 flex flex-col items-center text-center">
-          <div className="mb-4 grid size-14 place-items-center rounded-2xl bg-primary shadow-sm">
-            <LogIn className="size-6 text-primary-foreground" />
-          </div>
-          <h1 className="text-2xl font-semibold tracking-tight text-foreground">Welcome Back</h1>
-          <p className="mt-1 text-sm text-muted-foreground">Please sign in to continue</p>
+          <BrandLogo className="mb-4 size-16 rounded-2xl shadow-sm" markClassName="size-11" />
+          <h1 className="text-2xl font-semibold tracking-tight text-foreground">Operation GWG</h1>
+          <p className="mt-1 text-sm text-muted-foreground">Silakan masuk untuk melanjutkan</p>
         </div>
 
         <LoginForm demoAccounts={[]} demoPassword="" />
