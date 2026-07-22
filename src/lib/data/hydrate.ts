@@ -52,9 +52,14 @@ const HYDRATION_TTL_MS = 3000;
 export function ensureHydrated(): Promise<void> {
   if (!dbEnabled) return Promise.resolve();
   const state = (g.__GWG_HYDRATION__ ??= { at: 0, inflight: null });
-  if (state.inflight) return state.inflight; // dedupe concurrent requests
+  // First-ever load has no data yet → must block. Once we have a snapshot
+  // (at > 0) reads are served from the in-memory cache immediately and the
+  // refresh runs in the background (stale-while-revalidate), so navigating
+  // between pages never waits on the 10-table re-read.
+  const firstLoad = state.at === 0;
+  if (state.inflight) return firstLoad ? state.inflight : Promise.resolve();
   if (Date.now() - state.at < HYDRATION_TTL_MS) return Promise.resolve(); // fresh enough
-  state.inflight = hydrate()
+  const p = hydrate()
     .then(() => {
       state.at = Date.now();
     })
@@ -65,7 +70,8 @@ export function ensureHydrated(): Promise<void> {
     .finally(() => {
       state.inflight = null;
     });
-  return state.inflight;
+  state.inflight = p;
+  return firstLoad ? p : Promise.resolve();
 }
 
 /**

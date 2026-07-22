@@ -105,6 +105,9 @@ export function listComplaints(user: UserProfile): Complaint[] {
   const ids = visibleOutletIdSet(user);
   return SEED.complaints.filter((c) => ids.has(c.outletId)).sort(byDateDesc("createdAt"));
 }
+export function getComplaint(id: string): Complaint | undefined {
+  return SEED.complaints.find((c) => c.id === id);
+}
 export async function listNotifications(user: UserProfile) {
   const ids = visibleOutletIdSet(user);
   const base = SEED.notifications.filter((n) => !n.outletId || ids.has(n.outletId));

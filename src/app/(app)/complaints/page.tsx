@@ -18,6 +18,8 @@ export default async function ComplaintsPage() {
   const complaints = listComplaints(user);
   const outlets = visibleOutlets(user).map((o) => ({ id: o.id, name: o.name }));
   const canManage = can(user, "manage_complaint");
+  // Only the Coordinator Area (and Super Admin) may approve a submitted resolution.
+  const canApprove = user.role === "area_coordinator" || user.role === "super_admin";
 
   const closed = complaints.filter((c) => c.status === "close").length;
   const open = complaints.length - closed;
@@ -34,6 +36,10 @@ export default async function ComplaintsPage() {
     rootCause: c.rootCause ?? null,
     rating: c.rating ?? null,
     createdAt: c.createdAt,
+    correctiveAction: c.correctiveAction
+      ? { description: c.correctiveAction.description, followUpDate: c.correctiveAction.followUpDate ?? null }
+      : null,
+    approval: c.approval ?? null,
   }));
 
   return (
@@ -57,7 +63,7 @@ export default async function ComplaintsPage() {
           <CardTitle>{t("complaint.all")}</CardTitle>
         </CardHeader>
         <CardContent>
-          <ComplaintTable rows={rows} canManage={canManage} />
+          <ComplaintTable rows={rows} canManage={canManage} canApprove={canApprove} />
         </CardContent>
       </Card>
     </div>

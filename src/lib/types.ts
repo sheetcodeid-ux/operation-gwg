@@ -235,6 +235,26 @@ export interface CorrectiveAction {
   followUpDate?: string | null;
 }
 
+/** Approval stage after a resolution is submitted. The admin who resolves the
+ *  complaint sends it to the Coordinator Area, who approves it (optionally with
+ *  a photo + note) to mark it done. */
+export type ComplaintApprovalStage = "pending" | "approved";
+
+export interface ComplaintApproval {
+  stage: ComplaintApprovalStage;
+  /** admin who submitted the resolution for approval */
+  submittedById: string;
+  submittedAt: string;
+  /** Coordinator Area who approved (set once approved) */
+  approverId?: string | null;
+  approverName?: string | null;
+  approvedAt?: string | null;
+  /** optional explanation from the approver */
+  note?: string | null;
+  /** optional supporting photo (public URL) */
+  photoUrl?: string | null;
+}
+
 export interface Complaint {
   id: string;
   source: ComplaintSource;
@@ -249,6 +269,7 @@ export interface Complaint {
   status: ComplaintStatus;
   rootCause?: RootCauseCategory | null;
   correctiveAction?: CorrectiveAction | null;
+  approval?: ComplaintApproval | null;
   createdAt: string;
   closedAt?: string | null;
 }

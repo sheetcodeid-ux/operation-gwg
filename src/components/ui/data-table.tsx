@@ -29,6 +29,10 @@ interface DataTableProps<TData, TValue> {
   /** Sticky header on vertical scroll (default true). */
   stickyHeader?: boolean;
   maxHeight?: string;
+  /** Show the free-text search field/icon (default true). */
+  showSearch?: boolean;
+  /** Show the CSV export (download) button (default true). */
+  showExport?: boolean;
 }
 
 export function DataTable<TData, TValue>({
@@ -40,6 +44,8 @@ export function DataTable<TData, TValue>({
   tableId,
   stickyHeader = true,
   maxHeight = "62vh",
+  showSearch = true,
+  showExport = true,
 }: DataTableProps<TData, TValue>) {
   const [sorting, setSorting] = React.useState<SortingState>([]);
   const [globalFilter, setGlobalFilter] = React.useState("");
@@ -122,49 +128,55 @@ export function DataTable<TData, TValue>({
         {toolbar && <div className="scroll-fade-x -mx-1 flex min-w-0 flex-1 items-center gap-2 px-1 py-0.5">{toolbar}</div>}
 
         <div className={cn("flex shrink-0 items-center gap-2", !toolbar && "ml-auto")}>
-          <button
-            onClick={exportCsv}
-            title="Export to Excel (CSV)"
-            className="grid size-9 shrink-0 place-items-center rounded-lg border border-border text-muted-foreground hover:bg-muted hover:text-foreground"
-          >
-            <Download className="size-4" />
-          </button>
+          {showExport && (
+            <button
+              onClick={exportCsv}
+              title="Export to Excel (CSV)"
+              className="grid size-9 shrink-0 place-items-center rounded-lg border border-border text-muted-foreground hover:bg-muted hover:text-foreground"
+            >
+              <Download className="size-4" />
+            </button>
+          )}
           {/* Search: inline field on ≥sm; a search icon that opens a field on mobile. */}
-          <div className="relative hidden w-52 sm:block lg:w-60">
-            <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
-            <Input value={globalFilter} onChange={(e) => setGlobalFilter(e.target.value)} placeholder={searchPlaceholder} className="pl-9" />
-          </div>
-          <div className="sm:hidden">
-            <Popover
-              portal
-              align="end"
-              contentClassName="w-[min(20rem,calc(100vw-1.5rem))]"
-              trigger={({ toggle, open }) => (
-                <button
-                  onClick={toggle}
-                  aria-expanded={open}
-                  title="Cari"
-                  className={cn(
-                    "grid size-9 shrink-0 place-items-center rounded-lg border border-border transition-colors hover:bg-muted hover:text-foreground",
-                    globalFilter ? "border-primary text-primary" : "text-muted-foreground",
+          {showSearch && (
+            <>
+              <div className="relative hidden w-52 sm:block lg:w-60">
+                <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+                <Input value={globalFilter} onChange={(e) => setGlobalFilter(e.target.value)} placeholder={searchPlaceholder} className="pl-9" />
+              </div>
+              <div className="sm:hidden">
+                <Popover
+                  portal
+                  align="end"
+                  contentClassName="w-[min(20rem,calc(100vw-1.5rem))]"
+                  trigger={({ toggle, open }) => (
+                    <button
+                      onClick={toggle}
+                      aria-expanded={open}
+                      title="Cari"
+                      className={cn(
+                        "grid size-9 shrink-0 place-items-center rounded-lg border border-border transition-colors hover:bg-muted hover:text-foreground",
+                        globalFilter ? "border-primary text-primary" : "text-muted-foreground",
+                      )}
+                    >
+                      <Search className="size-4" />
+                    </button>
                   )}
                 >
-                  <Search className="size-4" />
-                </button>
-              )}
-            >
-              <div className="relative p-1">
-                <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
-                <input
-                  autoFocus
-                  value={globalFilter}
-                  onChange={(e) => setGlobalFilter(e.target.value)}
-                  placeholder={searchPlaceholder}
-                  className="h-9 w-full rounded-lg bg-transparent pl-9 pr-2 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none"
-                />
+                  <div className="relative p-1">
+                    <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+                    <input
+                      autoFocus
+                      value={globalFilter}
+                      onChange={(e) => setGlobalFilter(e.target.value)}
+                      placeholder={searchPlaceholder}
+                      className="h-9 w-full rounded-lg bg-transparent pl-9 pr-2 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none"
+                    />
+                  </div>
+                </Popover>
               </div>
-            </Popover>
-          </div>
+            </>
+          )}
 
           {hideableColumns.length > 0 && (
             <Popover

@@ -4,6 +4,7 @@ import { randomUUID } from "node:crypto";
 import { HOSPITALITY_CHECKLISTS, HYGIENE_RATING_META, HYGIENE_SECTIONS, EVENT_MILESTONES } from "../constants";
 import type {
   Complaint,
+  ComplaintApproval,
   CorrectiveAction,
   HospitalityAssessment,
   HospitalityCategory,
@@ -375,6 +376,79 @@ export function resolveComplaint(input: {
   if (input.rootCause) c.rootCause = input.rootCause;
   if (input.correctiveAction) c.correctiveAction = input.correctiveAction;
   if (input.status === "close") c.closedAt = nowIso();
+  void saveComplaint(c);
+}
+
+/** Admin submits a resolution → routes the complaint to the Coordinator Area
+ *  for approval. Status moves to in_progress and stays there until approved. */
+export function submitComplaintForApproval(input: {
+  id: string;
+  submittedById: string;
+  rootCause: Complaint["rootCause"];
+  correctiveAction: CorrectiveAction;
+}) {
+  const c = SEED.complaints.find((x) => x.id === input.id);
+  if (!c) return;
+  c.rootCause = input.rootCause;
+  c.correctiveAction = input.correctiveAction;
+  c.status = "in_progress";
+  c.closedAt = null;
+  c.approval = {
+    stage: "pending",
+    submittedById: input.submittedById,
+    submittedAt: nowIso(),
+    approverId: null,
+    approverName: null,
+    approvedAt: null,
+    note: null,
+    photoUrl: null,
+  };
+  void saveComplaint(c);
+}
+
+/** Coordinator Area approves the resolution (optionally with a photo + note) →
+ *  the complaint is closed/done. */
+export function approveComplaint(input: {
+  id: string;
+  approverId: string;
+  approverName: string;
+  note?: string | null;
+  photoUrl?: string | null;
+}) {
+  const c = SEED.complaints.find((x) => x.id === input.id);
+  if (!c) return;
+  const prev: ComplaintApproval = c.approval ?? {
+    stage: "pending",
+    submittedById: input.approverId,
+    submittedAt: nowIso(),
+  };
+  c.approval = {
+    ...prev,
+    stage: "approved",
+    approverId: input.approverId,
+    approverName: input.approverName,
+    approvedAt: nowIso(),
+    note: input.note ?? null,
+    photoUrl: input.photoUrl ?? null,
+  };
+  c.status = "close";
+  c.closedAt = nowIso();
+  void saveComplaint(c);
+}
+
+/** Coordinator Area returns the resolution for revision → back to in_progress,
+ *  approval cleared so the admin can resubmit. */
+export function returnComplaintForRevision(input: { id: string; note?: string | null }) {
+  const c = SEED.complaints.find((x) => x.id === input.id);
+  if (!c) return;
+  c.approval = null;
+  c.status = "in_progress";
+  c.closedAt = null;
+  if (input.note) {
+    c.correctiveAction = c.correctiveAction
+      ? { ...c.correctiveAction, description: `${c.correctiveAction.description}\n\n[Dikembalikan CA] ${input.note}` }
+      : c.correctiveAction;
+  }
   void saveComplaint(c);
 }
 

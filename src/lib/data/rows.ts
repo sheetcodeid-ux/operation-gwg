@@ -199,6 +199,23 @@ export const hygieneFromRow = (r: any): HygieneAudit => ({
   createdAt: r.created_at,
 });
 
+// The `corrective_action` JSONB column carries BOTH the resolution and the
+// approval record (folded under `__approval`) so the approval workflow needs no
+// schema change. Legacy rows hold a flat CorrectiveAction with no `__approval`.
+const packCorrectiveAction = (c: Complaint) => {
+  if (!c.correctiveAction && !c.approval) return null;
+  return { ...(c.correctiveAction ?? {}), __approval: c.approval ?? null };
+};
+const unpackCorrectiveAction = (raw: any): Pick<Complaint, "correctiveAction" | "approval"> => {
+  if (!raw || typeof raw !== "object") return { correctiveAction: null, approval: null };
+  const { __approval, ...rest } = raw;
+  const hasAction = typeof rest?.description === "string" && rest.description.length > 0;
+  return {
+    correctiveAction: hasAction ? (rest as Complaint["correctiveAction"]) : null,
+    approval: (__approval as Complaint["approval"]) ?? null,
+  };
+};
+
 export const complaintToRow = (c: Complaint) => ({
   id: c.id,
   source: c.source,
@@ -211,7 +228,7 @@ export const complaintToRow = (c: Complaint) => ({
   category: c.category,
   status: c.status,
   root_cause: c.rootCause ?? null,
-  corrective_action: c.correctiveAction ?? null,
+  corrective_action: packCorrectiveAction(c),
   created_at: c.createdAt,
   closed_at: c.closedAt ?? null,
 });
@@ -227,7 +244,7 @@ export const complaintFromRow = (r: any): Complaint => ({
   category: r.category,
   status: r.status,
   rootCause: r.root_cause,
-  correctiveAction: r.corrective_action,
+  ...unpackCorrectiveAction(r.corrective_action),
   createdAt: r.created_at,
   closedAt: r.closed_at,
 });
