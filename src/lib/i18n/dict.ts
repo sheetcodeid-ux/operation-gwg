@@ -153,6 +153,12 @@ export const DICT: Record<Lang, Record<string, string>> = {
     "complaint.source": "Source",
     "complaint.category": "Category",
     "complaint.priority": "Priority",
+    "complaint.manageTitle": "Manage Complaint",
+    "complaint.manageDesc": "Update status, assign root cause and record corrective action.",
+    "complaint.rootCause": "Root Cause (5M)",
+    "complaint.corrective": "Corrective Action",
+    "complaint.correctivePh": "Describe the action taken…",
+    "complaint.followUp": "Follow-up Date",
   },
   id: {
     "section.Overview": "Ringkasan",
@@ -300,6 +306,12 @@ export const DICT: Record<Lang, Record<string, string>> = {
     "complaint.source": "Sumber",
     "complaint.category": "Kategori",
     "complaint.priority": "Prioritas",
+    "complaint.manageTitle": "Kelola Komplain",
+    "complaint.manageDesc": "Perbarui status, tentukan akar masalah, dan catat tindakan perbaikan.",
+    "complaint.rootCause": "Akar Masalah (5M)",
+    "complaint.corrective": "Tindakan Perbaikan",
+    "complaint.correctivePh": "Jelaskan tindakan yang dilakukan…",
+    "complaint.followUp": "Tanggal Tindak Lanjut",
   },
 };
 

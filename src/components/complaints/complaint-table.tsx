@@ -192,7 +192,7 @@ export function ComplaintTable({ rows, canManage }: { rows: ComplaintRow[]; canM
 }
 
 function ResolveDialog({ complaint, onClose }: { complaint: ComplaintRow; onClose: () => void }) {
-  const { td } = useI18n();
+  const { t, td } = useI18n();
   const router = useRouter();
   const [pending, startTransition] = React.useTransition();
   const [status, setStatus] = React.useState<ComplaintStatus>(
@@ -223,13 +223,13 @@ function ResolveDialog({ complaint, onClose }: { complaint: ComplaintRow; onClos
 
   return (
     <Dialog open onOpenChange={(v) => !v && onClose()}>
-      <DialogContent title="Manage Complaint" description="Update status, assign root cause and record corrective action." className="max-w-lg">
+      <DialogContent title={t("complaint.manageTitle")} description={t("complaint.manageDesc")} align="center" className="max-w-lg">
         <div className="space-y-4 p-5">
           <p className="rounded-lg border border-border bg-muted/30 p-3 text-sm text-foreground/80">
             “{complaint.content}”
           </p>
           <div className="grid grid-cols-2 gap-3">
-            <Field label="Status">
+            <Field label={t("common.status")}>
               <Combobox
                 portal
                 searchable={false}
@@ -239,7 +239,7 @@ function ResolveDialog({ complaint, onClose }: { complaint: ComplaintRow; onClos
                 options={STATUSES.map((s) => ({ value: s, label: td(COMPLAINT_STATUS_META[s].label) }))}
               />
             </Field>
-            <Field label="Root Cause (5M)">
+            <Field label={t("complaint.rootCause")}>
               <Combobox
                 portal
                 searchable={false}
@@ -250,18 +250,18 @@ function ResolveDialog({ complaint, onClose }: { complaint: ComplaintRow; onClos
               />
             </Field>
           </div>
-          <Field label="Corrective Action">
-            <Textarea value={action} onChange={(e) => setAction(e.target.value)} placeholder="Describe the action taken…" />
+          <Field label={t("complaint.corrective")}>
+            <Textarea value={action} onChange={(e) => setAction(e.target.value)} placeholder={t("complaint.correctivePh")} />
           </Field>
-          <Field label="Follow-up Date">
+          <Field label={t("complaint.followUp")}>
             <Input type="date" value={followUp} onChange={(e) => setFollowUp(e.target.value)} />
           </Field>
           <div className="flex justify-end gap-2">
             <Button variant="ghost" onClick={onClose} disabled={pending}>
-              Cancel
+              {t("common.cancel")}
             </Button>
             <Button onClick={submit} disabled={pending}>
-              {pending && <Loader2 className="animate-spin" />} Save
+              {pending && <Loader2 className="animate-spin" />} {t("common.save")}
             </Button>
           </div>
         </div>
