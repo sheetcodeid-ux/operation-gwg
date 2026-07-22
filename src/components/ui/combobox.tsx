@@ -17,11 +17,11 @@ export function Combobox({
   value,
   onChange,
   placeholder = "Select…",
-  searchPlaceholder = "Search…",
+  searchPlaceholder,
   className,
   disabled,
-  portal,
-  searchable = true,
+  portal = true,
+  searchable,
   matchTriggerWidth = false,
 }: {
   options: ComboOption[];
@@ -31,14 +31,20 @@ export function Combobox({
   searchPlaceholder?: string;
   className?: string;
   disabled?: boolean;
-  /** Render the menu in a portal so it escapes overflow-clipping ancestors. */
+  /** Render the menu in a portal so it escapes overflow-clipping ancestors and
+   *  is clamped inside the viewport (never off-screen). Defaults to true. */
   portal?: boolean;
-  /** Show the type-to-filter search box. Off avoids the mobile keyboard popping. */
+  /** Show the type-to-filter search box. Defaults on ONLY for real data pickers
+   *  (those that pass a `searchPlaceholder`, e.g. outlet/user lists); short enum
+   *  dropdowns get no search box (and no mobile keyboard). Pass explicitly to override. */
   searchable?: boolean;
   /** Size the menu to exactly the trigger width. */
   matchTriggerWidth?: boolean;
 }) {
   const selected = options.find((o) => o.value === value);
+  // A custom search placeholder signals a long, searchable data list; without it
+  // the dropdown is a short enum select that shouldn't show a search box.
+  const canSearch = searchable ?? searchPlaceholder != null;
 
   return (
     <Popover
@@ -71,7 +77,7 @@ export function Combobox({
         </button>
       )}
     >
-      {(close) => <ComboList options={options} value={value} onPick={(v) => { onChange(v); close(); }} searchPlaceholder={searchPlaceholder} searchable={searchable} />}
+      {(close) => <ComboList options={options} value={value} onPick={(v) => { onChange(v); close(); }} searchPlaceholder={searchPlaceholder ?? "Search…"} searchable={canSearch} />}
     </Popover>
   );
 }

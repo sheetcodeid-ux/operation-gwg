@@ -35,8 +35,9 @@ export function MultiCombobox({
 
   return (
     <Popover
+      portal
       className={cn("w-full", className)}
-      contentClassName="w-max min-w-[max(100%,13rem)] max-w-[min(20rem,calc(100vw-2rem))] p-0"
+      contentClassName="w-max min-w-[13rem] max-w-[min(20rem,calc(100vw-1.5rem))] p-0"
       align="end"
       trigger={({ open, toggle }) => (
         <button
