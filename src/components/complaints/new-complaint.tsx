@@ -11,20 +11,22 @@ import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogTrigger, useDialogControl } from "@/components/ui/dialog";
 import { Field, Input, Textarea } from "@/components/ui/input";
 import { Combobox } from "@/components/ui/combobox";
+import { useI18n } from "@/lib/i18n/provider";
 
 const SOURCES = Object.keys(COMPLAINT_SOURCE_META) as ComplaintSource[];
 const CATEGORIES = Object.keys(COMPLAINT_CATEGORY_META) as ComplaintCategory[];
 const PRIORITIES = Object.keys(PRIORITY_META) as Priority[];
 
 export function NewComplaintButton({ outlets }: { outlets: { id: string; name: string }[] }) {
+  const { t } = useI18n();
   return (
     <Dialog>
       <DialogTrigger>
         <Button size="sm">
-          <Plus /> Log Complaint
+          <Plus /> {t("complaint.log")}
         </Button>
       </DialogTrigger>
-      <DialogContent title="Log Complaint" description="Capture a customer complaint from any channel." align="center" className="max-w-xl">
+      <DialogContent title={t("complaint.log")} description={t("complaint.logDesc")} align="center" className="max-w-xl">
         <ComplaintForm outlets={outlets} />
       </DialogContent>
     </Dialog>
@@ -32,6 +34,7 @@ export function NewComplaintButton({ outlets }: { outlets: { id: string; name: s
 }
 
 function ComplaintForm({ outlets }: { outlets: { id: string; name: string }[] }) {
+  const { t, td } = useI18n();
   const router = useRouter();
   const { setOpen } = useDialogControl();
   const [pending, startTransition] = useTransition();
@@ -78,7 +81,7 @@ function ComplaintForm({ outlets }: { outlets: { id: string; name: string }[] })
           <Combobox
             value={form.source}
             onChange={(v) => set("source", v as ComplaintSource)}
-            options={SOURCES.map((s) => ({ value: s, label: COMPLAINT_SOURCE_META[s].label }))}
+            options={SOURCES.map((s) => ({ value: s, label: td(COMPLAINT_SOURCE_META[s].label) }))}
           />
         </Field>
         <Field label="Customer Name">
@@ -109,14 +112,14 @@ function ComplaintForm({ outlets }: { outlets: { id: string; name: string }[] })
           <Combobox
             value={form.category}
             onChange={(v) => set("category", v as ComplaintCategory)}
-            options={CATEGORIES.map((c) => ({ value: c, label: COMPLAINT_CATEGORY_META[c].label }))}
+            options={CATEGORIES.map((c) => ({ value: c, label: td(COMPLAINT_CATEGORY_META[c].label) }))}
           />
         </Field>
         <Field label="Priority">
           <Combobox
             value={form.priority}
             onChange={(v) => set("priority", v as Priority)}
-            options={PRIORITIES.map((p) => ({ value: p, label: PRIORITY_META[p].label }))}
+            options={PRIORITIES.map((p) => ({ value: p, label: td(PRIORITY_META[p].label) }))}
           />
         </Field>
       </div>

@@ -26,6 +26,7 @@ import { DataTable } from "@/components/ui/data-table";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { Field, Input, Textarea } from "@/components/ui/input";
 import { Combobox } from "@/components/ui/combobox";
+import { useI18n } from "@/lib/i18n/provider";
 import { formatDate } from "@/lib/utils";
 
 export interface ComplaintRow {
@@ -46,6 +47,7 @@ const STATUSES = Object.keys(COMPLAINT_STATUS_META) as ComplaintStatus[];
 const CAUSES = Object.keys(ROOT_CAUSE_META) as RootCauseCategory[];
 
 export function ComplaintTable({ rows, canManage }: { rows: ComplaintRow[]; canManage: boolean }) {
+  const { t, td } = useI18n();
   const router = useRouter();
   const [status, setStatus] = React.useState("all");
   const [selected, setSelected] = React.useState<ComplaintRow | null>(null);
@@ -100,7 +102,7 @@ export function ComplaintTable({ rows, canManage }: { rows: ComplaintRow[]; canM
     cols.push(
       {
         accessorKey: "content",
-        header: "Complaint",
+        header: t("complaint.colComplaint"),
         cell: ({ row }) => (
           <div className="max-w-xs">
             <p className="truncate font-medium text-foreground">{row.original.content}</p>
@@ -118,36 +120,36 @@ export function ComplaintTable({ rows, canManage }: { rows: ComplaintRow[]; canM
       },
       {
         accessorKey: "source",
-        header: "Source",
+        header: t("complaint.colSource"),
         cell: ({ getValue }) => {
           const s = getValue<ComplaintSource>();
-          return <Badge tone={COMPLAINT_SOURCE_META[s].tone}>{COMPLAINT_SOURCE_META[s].label}</Badge>;
+          return <Badge tone={COMPLAINT_SOURCE_META[s].tone}>{td(COMPLAINT_SOURCE_META[s].label)}</Badge>;
         },
       },
       {
         accessorKey: "category",
-        header: "Category",
-        cell: ({ getValue }) => <span className="text-muted-foreground">{COMPLAINT_CATEGORY_META[getValue<ComplaintCategory>()].label}</span>,
+        header: t("complaint.colCategory"),
+        cell: ({ getValue }) => <span className="text-muted-foreground">{td(COMPLAINT_CATEGORY_META[getValue<ComplaintCategory>()].label)}</span>,
       },
       {
         accessorKey: "priority",
-        header: "Priority",
+        header: t("complaint.colPriority"),
         cell: ({ getValue }) => {
           const p = getValue<Priority>();
-          return <Badge tone={PRIORITY_META[p].tone}>{PRIORITY_META[p].label}</Badge>;
+          return <Badge tone={PRIORITY_META[p].tone}>{td(PRIORITY_META[p].label)}</Badge>;
         },
       },
       {
         accessorKey: "status",
-        header: "Status",
+        header: t("common.status"),
         cell: ({ getValue }) => {
           const s = getValue<ComplaintStatus>();
-          return <Badge tone={COMPLAINT_STATUS_META[s].tone} dot>{COMPLAINT_STATUS_META[s].label}</Badge>;
+          return <Badge tone={COMPLAINT_STATUS_META[s].tone} dot>{td(COMPLAINT_STATUS_META[s].label)}</Badge>;
         },
       },
       {
         accessorKey: "createdAt",
-        header: "Date",
+        header: t("common.date"),
         cell: ({ getValue }) => <span className="text-muted-foreground">{formatDate(getValue<string>())}</span>,
       },
     );
@@ -157,13 +159,13 @@ export function ComplaintTable({ rows, canManage }: { rows: ComplaintRow[]; canM
         header: "",
         cell: ({ row }) => (
           <Button size="sm" variant="subtle" onClick={() => setSelected(row.original)}>
-            <Settings2 className="size-3.5" /> Manage
+            <Settings2 className="size-3.5" /> {t("complaint.manage")}
           </Button>
         ),
       });
     }
     return cols;
-  }, [canManage, picked, togglePick]);
+  }, [canManage, picked, togglePick, t, td]);
 
   return (
     <>
@@ -185,7 +187,7 @@ export function ComplaintTable({ rows, canManage }: { rows: ComplaintRow[]; canM
               value={status}
               onChange={setStatus}
               className="w-40 shrink-0"
-              options={[{ value: "all", label: "Semua Status" }, ...STATUSES.map((s) => ({ value: s, label: COMPLAINT_STATUS_META[s].label }))]}
+              options={[{ value: "all", label: t("complaint.allStatus") }, ...STATUSES.map((s) => ({ value: s, label: td(COMPLAINT_STATUS_META[s].label) }))]}
             />
           </div>
         }
@@ -196,6 +198,7 @@ export function ComplaintTable({ rows, canManage }: { rows: ComplaintRow[]; canM
 }
 
 function ResolveDialog({ complaint, onClose }: { complaint: ComplaintRow; onClose: () => void }) {
+  const { td } = useI18n();
   const router = useRouter();
   const [pending, startTransition] = React.useTransition();
   const [status, setStatus] = React.useState<ComplaintStatus>(
@@ -239,7 +242,7 @@ function ResolveDialog({ complaint, onClose }: { complaint: ComplaintRow; onClos
                 matchTriggerWidth
                 value={status}
                 onChange={(v) => setStatus(v as ComplaintStatus)}
-                options={STATUSES.map((s) => ({ value: s, label: COMPLAINT_STATUS_META[s].label }))}
+                options={STATUSES.map((s) => ({ value: s, label: td(COMPLAINT_STATUS_META[s].label) }))}
               />
             </Field>
             <Field label="Root Cause (5M)">
@@ -249,7 +252,7 @@ function ResolveDialog({ complaint, onClose }: { complaint: ComplaintRow; onClos
                 matchTriggerWidth
                 value={rootCause}
                 onChange={(v) => setRootCause(v as RootCauseCategory)}
-                options={CAUSES.map((c) => ({ value: c, label: ROOT_CAUSE_META[c].label }))}
+                options={CAUSES.map((c) => ({ value: c, label: td(ROOT_CAUSE_META[c].label) }))}
               />
             </Field>
           </div>

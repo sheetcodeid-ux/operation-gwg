@@ -98,7 +98,7 @@ function AssessmentForm({
   supervisors: { id: string; name: string }[];
   defaultAssessorId?: string;
 }) {
-  const { t } = useI18n();
+  const { t, td } = useI18n();
   const router = useRouter();
   const { setOpen } = useDialogControl();
   const [pending, startTransition] = useTransition();
@@ -185,7 +185,7 @@ function AssessmentForm({
           <Input value={staffName} onChange={(e) => setStaffName(e.target.value)} placeholder="mis. Andi" />
         </Field>
         <Field label={t("hosp.position")}>
-          <Combobox value={staffPosition} onChange={setStaffPosition} options={POSITIONS.map((p) => ({ value: p, label: p }))} />
+          <Combobox value={staffPosition} onChange={setStaffPosition} options={POSITIONS.map((p) => ({ value: p, label: td(p) }))} />
         </Field>
       </div>
 
@@ -230,7 +230,7 @@ function AssessmentForm({
               >
                 <div className="flex items-center gap-2">
                   <ConciergeBell className="size-4 text-muted-foreground" />
-                  <p className="text-sm font-medium text-foreground">{meta.label}</p>
+                  <p className="text-sm font-medium text-foreground">{td(meta.label)}</p>
                 </div>
                 <div className="flex items-center gap-2">
                   <span
@@ -250,7 +250,7 @@ function AssessmentForm({
                 <div className="space-y-1.5 p-3">
                   {meta.items.map((item) => (
                     <div key={item.key} className="flex items-center justify-between gap-3">
-                      <span className="text-sm text-foreground/80">{item.label}</span>
+                      <span className="text-sm text-foreground/80">{td(item.label)}</span>
                       <ScoreSelect value={scores[cat][item.key]} onChange={(v) => setScore(cat, item.key, v)} />
                     </div>
                   ))}

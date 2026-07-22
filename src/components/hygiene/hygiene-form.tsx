@@ -99,7 +99,7 @@ export function NewAuditButton({ outlets }: { outlets: { id: string; name: strin
 }
 
 function HygieneForm({ outlets }: { outlets: { id: string; name: string }[] }) {
-  const { t } = useI18n();
+  const { t, td } = useI18n();
   const router = useRouter();
   const { setOpen } = useDialogControl();
   const [pending, startTransition] = useTransition();
@@ -223,7 +223,7 @@ function HygieneForm({ outlets }: { outlets: { id: string; name: string }[] }) {
           <Combobox
             value={shift}
             onChange={setShift}
-            options={["Pagi", "Siang", "Sore", "Malam"].map((s) => ({ value: s, label: s }))}
+            options={["Pagi", "Siang", "Sore", "Malam"].map((s) => ({ value: s, label: td(s) }))}
           />
         </Field>
         <Field label={t("hygiene.inspector")}>
@@ -253,7 +253,7 @@ function HygieneForm({ outlets }: { outlets: { id: string; name: string }[] }) {
         {RATINGS.map((r) => (
           <span key={r} className="inline-flex items-center gap-1.5 text-[11px] text-muted-foreground">
             <span className={cn("grid size-4 place-items-center rounded text-[9px] font-bold text-white", RATING_BG[r])}>{RATING_SHORT[r]}</span>
-            {HYGIENE_RATING_META[r].label}
+            {td(HYGIENE_RATING_META[r].label)}
           </span>
         ))}
       </div>
@@ -274,7 +274,7 @@ function HygieneForm({ outlets }: { outlets: { id: string; name: string }[] }) {
                 <div className="flex items-center gap-2">
                   <SprayCan className="size-4 text-muted-foreground" />
                   <div>
-                    <p className="text-sm font-medium text-foreground">{meta.label}</p>
+                    <p className="text-sm font-medium text-foreground">{td(meta.label)}</p>
                     <p className="text-[10px] uppercase tracking-wide text-muted-foreground">{meta.subtitle}</p>
                   </div>
                 </div>
@@ -296,14 +296,14 @@ function HygieneForm({ outlets }: { outlets: { id: string; name: string }[] }) {
                 <div className="space-y-2 p-3">
                   {meta.items.map((item) => (
                     <div key={item.key} className="flex items-center justify-between gap-3">
-                      <span className="min-w-0 flex-1 text-sm text-foreground/80">{item.label}</span>
+                      <span className="min-w-0 flex-1 text-sm text-foreground/80">{td(item.label)}</span>
                       <div className="flex shrink-0 gap-1">
                         {RATINGS.map((r) => (
                           <button
                             key={r}
                             type="button"
-                            title={HYGIENE_RATING_META[r].label}
-                            aria-label={HYGIENE_RATING_META[r].label}
+                            title={td(HYGIENE_RATING_META[r].label)}
+                            aria-label={td(HYGIENE_RATING_META[r].label)}
                             onClick={() => setRating(sec, item.key, r)}
                             className={cn(
                               "h-8 min-w-8 rounded-md px-1.5 text-[11px] font-semibold tabular-nums transition-all",
@@ -331,7 +331,7 @@ function HygieneForm({ outlets }: { outlets: { id: string; name: string }[] }) {
           {HYGIENE_PHOTO_GROUPS.map((g) => (
             <CameraCapture
               key={g}
-              label={g}
+              label={td(g)}
               min={MIN_PHOTOS}
               stampPrefix={outletName}
               items={photos[g] ?? []}

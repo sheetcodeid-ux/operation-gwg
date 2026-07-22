@@ -55,7 +55,7 @@ export default async function ComplaintsPage() {
 
       <Card className="mt-4">
         <CardHeader>
-          <CardTitle>All Complaints</CardTitle>
+          <CardTitle>{t("complaint.all")}</CardTitle>
         </CardHeader>
         <CardContent>
           <ComplaintTable rows={rows} canManage={canManage} />
