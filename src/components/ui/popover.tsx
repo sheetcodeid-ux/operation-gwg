@@ -5,6 +5,10 @@ import { createPortal } from "react-dom";
 import { bodyZoom } from "@/components/layout/fit-scale";
 import { cn } from "@/lib/utils";
 
+// Run before paint on the client (so the menu is positioned before it's shown),
+// but fall back to useEffect on the server to avoid the SSR warning.
+const useIsoLayoutEffect = typeof document !== "undefined" ? React.useLayoutEffect : React.useEffect;
+
 /** Minimal anchored popover with click-outside + escape handling.
  *  Pass `portal` to render the menu into <body> (fixed-positioned) so it is
  *  never clipped by an `overflow` ancestor — needed inside horizontal scrollers. */
@@ -55,9 +59,10 @@ export function Popover({
     setPos({ top: r.bottom / z + 8, left, width: triggerWidth, maxW });
   }, [align]);
 
-  // Re-place once the menu has mounted (so its real width is measured) and keep
-  // it placed across layout shifts.
-  React.useEffect(() => {
+  // Place BEFORE paint (layout effect) so the menu is never shown at its
+  // unpositioned top-left origin — that caused a first-open flash/jump. A
+  // follow-up rAF re-measures the real width once mounted.
+  useIsoLayoutEffect(() => {
     if (!open || !portal) return;
     place();
     const raf = requestAnimationFrame(place);
@@ -107,17 +112,21 @@ export function Popover({
         contentClassName,
       )}
       style={
-        portal && pos
-          ? {
-              top: pos.top,
-              left: pos.left,
-              maxWidth: pos.maxW,
-              // Only matchTriggerWidth pins a pos-derived width. Otherwise width
-              // is CSS-driven (w-max / min-w) and STABLE across renders — a
-              // pos-derived minWidth would change the menu width after the first
-              // measurement and shift the placement on first open.
-              ...(matchTriggerWidth ? { width: pos.width } : {}),
-            }
+        portal
+          ? pos
+            ? {
+                top: pos.top,
+                left: pos.left,
+                maxWidth: pos.maxW,
+                // Only matchTriggerWidth pins a pos-derived width. Otherwise width
+                // is CSS-driven (w-max / min-w) and STABLE across renders — a
+                // pos-derived minWidth would change the menu width after the first
+                // measurement and shift the placement on first open.
+                ...(matchTriggerWidth ? { width: pos.width } : {}),
+              }
+            : // Not yet measured: keep it in the DOM (so it can be measured) but
+              // invisible, so the unpositioned origin is never painted.
+              { top: 0, left: 0, visibility: "hidden" }
           : undefined
       }
     >
