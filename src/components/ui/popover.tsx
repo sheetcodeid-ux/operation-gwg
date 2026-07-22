@@ -29,7 +29,7 @@ export function Popover({
   const [open, setOpen] = React.useState(false);
   const ref = React.useRef<HTMLDivElement>(null);
   const menuRef = React.useRef<HTMLDivElement>(null);
-  const [pos, setPos] = React.useState<{ top: number; left: number; width: number } | null>(null);
+  const [pos, setPos] = React.useState<{ top: number; left: number; width: number; maxW: number } | null>(null);
   const close = React.useCallback(() => setOpen(false), []);
 
   const place = React.useCallback(() => {
@@ -39,7 +39,7 @@ export function Popover({
     // returns visual (post-zoom) px, but a fixed child of the zoomed body is
     // scaled again — so divide by the zoom to cancel it.
     const z = bodyZoom();
-    setPos({ top: r.bottom / z + 8, left: r.left / z, width: r.width / z });
+    setPos({ top: r.bottom / z + 8, left: r.left / z, width: r.width / z, maxW: window.innerWidth / z - 16 });
   }, []);
 
   // Keep the menu inside the viewport horizontally (no off-screen overflow).
@@ -90,14 +90,18 @@ export function Popover({
     <div
       ref={menuRef}
       className={cn(
-        "surface-solid origin-top rounded-xl p-1.5",
-        "animate-in fade-in-0 zoom-in-95 duration-150 ease-out",
+        // Solid surface, crisp border, no blur/shadow and no open animation.
+        "rounded-xl border border-border bg-popover text-popover-foreground p-1.5",
         // Portalled menus must clear overlays like the SlideOver (z-[90]); the
         // in-flow variant only needs to beat page content.
         portal ? "fixed z-[120]" : cn("absolute z-50 mt-2 min-w-56", align === "end" ? "right-0" : "left-0"),
         contentClassName,
       )}
-      style={portal && pos ? { top: pos.top, left: pos.left, ...(matchTriggerWidth ? { width: pos.width } : { minWidth: pos.width }) } : undefined}
+      style={
+        portal && pos
+          ? { top: pos.top, left: pos.left, maxWidth: pos.maxW, ...(matchTriggerWidth ? { width: pos.width } : { minWidth: pos.width }) }
+          : undefined
+      }
     >
       {typeof children === "function" ? children(close) : children}
     </div>
