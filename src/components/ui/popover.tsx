@@ -37,24 +37,33 @@ export function Popover({
     const r = ref.current.getBoundingClientRect();
     // The app scales <body> with CSS zoom on small screens; getBoundingClientRect
     // returns visual (post-zoom) px, but a fixed child of the zoomed body is
-    // scaled again — so divide by the zoom to cancel it.
+    // scaled again — so divide by the zoom to cancel it (all math in layout px).
     const z = bodyZoom();
-    setPos({ top: r.bottom / z + 8, left: r.left / z, width: r.width / z, maxW: window.innerWidth / z - 16 });
-  }, []);
-
-  // Keep the menu inside the viewport horizontally (no off-screen overflow).
-  React.useEffect(() => {
-    if (!open || !portal || !pos || !menuRef.current) return;
-    const z = bodyZoom();
-    const vw = window.innerWidth / z;
-    const mw = menuRef.current.offsetWidth;
     const margin = 8;
-    let left = align === "end" ? pos.left + pos.width - mw : pos.left;
-    left = Math.min(left, vw - mw - margin);
+    const vw = window.innerWidth / z;
+    const triggerLeft = r.left / z;
+    const triggerWidth = r.width / z;
+    const maxW = vw - margin * 2;
+    // Clamp is folded INTO placement (not a separate effect) so every reposition
+    // — including the ones fired while the mobile keyboard opens — is already
+    // on-screen. Menu width is measured once mounted, else estimated by trigger.
+    const menuW = menuRef.current ? menuRef.current.getBoundingClientRect().width / z : triggerWidth;
+    const mw = Math.min(menuW || triggerWidth, maxW);
+    let left = align === "end" ? triggerLeft + triggerWidth - mw : triggerLeft;
+    left = Math.min(left, vw - margin - mw);
     left = Math.max(margin, left);
-    if (Math.abs(left - pos.left) > 0.5) setPos((p) => (p ? { ...p, left } : p));
+    setPos({ top: r.bottom / z + 8, left, width: triggerWidth, maxW });
+  }, [align]);
+
+  // Re-place once the menu has mounted (so its real width is measured) and keep
+  // it placed across layout shifts.
+  React.useEffect(() => {
+    if (!open || !portal) return;
+    place();
+    const raf = requestAnimationFrame(place);
+    return () => cancelAnimationFrame(raf);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open, portal, pos?.top, pos?.width]);
+  }, [open, portal]);
 
   React.useEffect(() => {
     if (!open) return;
