@@ -7,10 +7,12 @@ import { PageHeader } from "@/components/ui/page-header";
 import { StatTile } from "@/components/ui/stat";
 import { NewAssessmentButton } from "@/components/hospitality/assessment-form";
 import { HospitalityExplorer, type HospitalityRow } from "@/components/hospitality/hospitality-explorer";
+import { getT } from "@/lib/i18n/server";
 
 export const metadata: Metadata = { title: "Hospitality Assessment" };
 
 export default async function HospitalityPage() {
+  const t = await getT();
   const user = (await getSessionUser())!;
   const assessments = listHospitality(user);
   const visible = visibleOutlets(user);
@@ -46,23 +48,23 @@ export default async function HospitalityPage() {
     <div className="w-full">
       <PageHeader
         icon={ConciergeBell}
-        title="Hospitality Assessment"
-        description="Service quality scoring across cashier, F&B and dining area"
+        title={t("hosp.title")}
+        description={t("hosp.description")}
         actions={canCreate && outlets.length > 0 ? <NewAssessmentButton outlets={outlets} supervisors={supervisors} defaultAssessorId={user.role === "supervisor" ? user.id : undefined} /> : undefined}
       />
 
       {canCreate && outlets.length === 0 && (
         <div className="mb-4 flex items-start gap-2 rounded-xl border border-amber-500/30 bg-amber-500/10 p-3 text-sm text-amber-700 dark:text-amber-300">
           <TriangleAlert className="mt-0.5 size-4 shrink-0" />
-          <span>Belum ada outlet yang ditugaskan ke akun Anda, jadi assessment belum bisa dibuat. Minta Admin menugaskan outlet Anda di <span className="font-semibold">User Management</span> (Edit akun → pilih Outlet).</span>
+          <span>{t("hosp.noOutlet")}</span>
         </div>
       )}
 
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-        <StatTile icon={Star} label="Average Score" value={avg.toFixed(1)} tone="brand" />
-        <StatTile icon={ClipboardList} label="Assessments" value={assessments.length} tone="cyan" />
-        <StatTile icon={Users} label="Staff Evaluated" value={distinctStaff} tone="amber" />
-        <StatTile icon={Store} label="Outlets Covered" value={`${distinctOutlets}/${outlets.length}`} tone="success" />
+        <StatTile icon={Star} label={t("hosp.avgScore")} value={avg.toFixed(1)} tone="brand" />
+        <StatTile icon={ClipboardList} label={t("hosp.assessments")} value={assessments.length} tone="cyan" />
+        <StatTile icon={Users} label={t("hosp.staffEvaluated")} value={distinctStaff} tone="amber" />
+        <StatTile icon={Store} label={t("hosp.outletsCovered")} value={`${distinctOutlets}/${outlets.length}`} tone="success" />
       </div>
 
       <div className="mt-4">

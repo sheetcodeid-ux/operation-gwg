@@ -15,6 +15,7 @@ import { DatePicker } from "@/components/ui/date-picker";
 import { CameraCapture, type CapturedPhoto } from "@/components/ui/camera-capture";
 import { ScoreRing } from "@/components/ui/score-ring";
 import { TONE_PILL } from "@/components/ui/tone";
+import { useI18n } from "@/lib/i18n/provider";
 import { cn } from "@/lib/utils";
 
 const MIN_PHOTOS = 3;
@@ -82,14 +83,15 @@ function ratedOf(ratings: Ratings, sec?: HygieneSection) {
 }
 
 export function NewAuditButton({ outlets }: { outlets: { id: string; name: string }[] }) {
+  const { t } = useI18n();
   return (
     <Dialog>
       <DialogTrigger>
         <Button size="sm">
-          <Plus /> Audit Baru
+          <Plus /> {t("hygiene.new")}
         </Button>
       </DialogTrigger>
-      <DialogContent title="Audit Kebersihan" description="Periksa kebersihan enam area outlet." align="center" className="max-w-2xl">
+      <DialogContent title={t("hygiene.formTitle")} description={t("hygiene.formDesc")} align="center" className="max-w-2xl">
         <HygieneForm outlets={outlets} />
       </DialogContent>
     </Dialog>
@@ -97,6 +99,7 @@ export function NewAuditButton({ outlets }: { outlets: { id: string; name: strin
 }
 
 function HygieneForm({ outlets }: { outlets: { id: string; name: string }[] }) {
+  const { t } = useI18n();
   const router = useRouter();
   const { setOpen } = useDialogControl();
   const [pending, startTransition] = useTransition();
@@ -204,7 +207,7 @@ function HygieneForm({ outlets }: { outlets: { id: string; name: string }[] }) {
   return (
     <div className="max-h-[72vh] overflow-y-auto p-5">
       <div className="grid gap-3 sm:grid-cols-2">
-        <Field label="Outlet">
+        <Field label={t("common.outlet")}>
           <Combobox
             value={outletId}
             onChange={setOutletId}
@@ -213,27 +216,27 @@ function HygieneForm({ outlets }: { outlets: { id: string; name: string }[] }) {
             searchPlaceholder="Cari outlet…"
           />
         </Field>
-        <Field label="Tanggal">
+        <Field label={t("common.date")}>
           <DatePicker value={date} onChange={setDate} />
         </Field>
-        <Field label="Shift">
+        <Field label={t("hygiene.shift")}>
           <Combobox
             value={shift}
             onChange={setShift}
             options={["Pagi", "Siang", "Sore", "Malam"].map((s) => ({ value: s, label: s }))}
           />
         </Field>
-        <Field label="Inspektur">
-          <Input value={inspectorName} onChange={(e) => setInspectorName(e.target.value)} placeholder="Nama Anda" />
+        <Field label={t("hygiene.inspector")}>
+          <Input value={inspectorName} onChange={(e) => setInspectorName(e.target.value)} placeholder={t("hygiene.inspectorPh")} />
         </Field>
       </div>
 
       <div className="my-4 flex items-center gap-3 rounded-xl border border-border bg-muted/30 p-3">
         <ScoreRing value={score} size={56} stroke={5} label="Higiene" />
         <div className="flex-1">
-          <p className="text-sm font-medium text-foreground">Skor kebersihan langsung</p>
+          <p className="text-sm font-medium text-foreground">{t("hygiene.liveScore")}</p>
           <p className="text-xs text-muted-foreground">
-            {complete ? "Dihitung otomatis dari enam area." : `${rated}/${total} item dinilai — lengkapi semua.`}
+            {complete ? t("hygiene.liveScoreAuto") : `${rated}/${total} ${t("hygiene.rated")}`}
           </p>
         </div>
         <span
@@ -242,7 +245,7 @@ function HygieneForm({ outlets }: { outlets: { id: string; name: string }[] }) {
             !complete ? TONE_PILL.warning : isClean ? TONE_PILL.success : TONE_PILL.danger,
           )}
         >
-          {!complete ? "Belum lengkap" : isClean ? "Outlet Bersih" : "Perlu Perhatian"}
+          {!complete ? t("hygiene.incomplete") : isClean ? t("hygiene.cleanOutlet") : t("hygiene.needAttention")}
         </span>
       </div>
 
@@ -323,7 +326,7 @@ function HygieneForm({ outlets }: { outlets: { id: string; name: string }[] }) {
       </div>
 
       {/* Dokumentasi — foto langsung dari kamera HP, timestamp ter-cap, min 3 per area. */}
-      <Field label={`Dokumentasi (foto kamera · min ${MIN_PHOTOS}/area)`} className="mt-4">
+      <Field label={t("hygiene.documentation")} className="mt-4">
         <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
           {HYGIENE_PHOTO_GROUPS.map((g) => (
             <CameraCapture
@@ -338,16 +341,16 @@ function HygieneForm({ outlets }: { outlets: { id: string; name: string }[] }) {
         </div>
       </Field>
 
-      <Field label="Temuan" className="mt-4">
+      <Field label={t("hygiene.findings")} className="mt-4">
         <div className="flex gap-2">
           <Input
             value={findingDraft}
             onChange={(e) => setFindingDraft(e.target.value)}
             onKeyDown={(e) => e.key === "Enter" && (e.preventDefault(), addFinding())}
-            placeholder="mis. Lampu mati di toilet"
+            placeholder={t("hygiene.findingsPh")}
           />
           <Button type="button" variant="subtle" onClick={addFinding}>
-            Tambah
+            {t("common.add")}
           </Button>
         </div>
         {findings.length > 0 && (
@@ -366,10 +369,10 @@ function HygieneForm({ outlets }: { outlets: { id: string; name: string }[] }) {
 
       <div className="mt-5 flex justify-end gap-2">
         <Button variant="ghost" onClick={() => setOpen(false)} disabled={pending}>
-          Batal
+          {t("common.cancel")}
         </Button>
         <Button onClick={submit} disabled={pending}>
-          {pending && <Loader2 className="animate-spin" />} Simpan Audit
+          {pending && <Loader2 className="animate-spin" />} {t("hygiene.save")}
         </Button>
       </div>
     </div>

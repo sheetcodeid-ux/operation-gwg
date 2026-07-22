@@ -15,6 +15,7 @@ import { Combobox } from "@/components/ui/combobox";
 import { DataTable } from "@/components/ui/data-table";
 import { Dialog, DialogContent, DialogTrigger } from "@/components/ui/dialog";
 import { MonthFilter, monthKey, monthOptions } from "@/components/work/division-filter";
+import { useI18n } from "@/lib/i18n/provider";
 import { cn, formatDate } from "@/lib/utils";
 
 export interface HygieneRow {
@@ -114,6 +115,7 @@ function AuditPhotoGallery({ photos, caption }: { photos: Attachment[]; caption:
 }
 
 export function HygieneExplorer({ rows, outlets, canDelete = false }: { rows: HygieneRow[]; outlets: { id: string; name: string }[]; canDelete?: boolean }) {
+  const { t } = useI18n();
   const router = useRouter();
   const [month, setMonth] = React.useState("all");
   const [outlet, setOutlet] = React.useState("all");
@@ -138,12 +140,12 @@ export function HygieneExplorer({ rows, outlets, canDelete = false }: { rows: Hy
     () => [
       {
         accessorKey: "date",
-        header: "Tanggal",
+        header: t("common.date"),
         cell: ({ getValue }) => <span className="whitespace-nowrap text-muted-foreground">{formatDate(getValue<string>())}</span>,
       },
       {
         accessorKey: "outlet",
-        header: "Outlet",
+        header: t("common.outlet"),
         cell: ({ row }) => (
           <div className="min-w-0">
             <p className="truncate font-medium text-foreground">{row.original.outlet}</p>
@@ -151,11 +153,11 @@ export function HygieneExplorer({ rows, outlets, canDelete = false }: { rows: Hy
           </div>
         ),
       },
-      { accessorKey: "shift", header: "Shift", cell: ({ getValue }) => <span className="capitalize text-muted-foreground">{getValue<string>()}</span> },
-      { accessorKey: "inspector", header: "Inspector", cell: ({ getValue }) => <span className="text-muted-foreground">{getValue<string>()}</span> },
+      { accessorKey: "shift", header: t("hygiene.shift"), cell: ({ getValue }) => <span className="capitalize text-muted-foreground">{getValue<string>()}</span> },
+      { accessorKey: "inspector", header: t("hygiene.colInspector"), cell: ({ getValue }) => <span className="text-muted-foreground">{getValue<string>()}</span> },
       {
         accessorKey: "findings",
-        header: "Findings",
+        header: t("hygiene.colFindings"),
         cell: ({ getValue }) => {
           const n = getValue<number>();
           return n > 0 ? <Badge tone="warning">{n}</Badge> : <span className="text-muted-foreground">—</span>;
@@ -163,7 +165,7 @@ export function HygieneExplorer({ rows, outlets, canDelete = false }: { rows: Hy
       },
       {
         id: "photos",
-        header: "Photos",
+        header: t("hygiene.colPhotos"),
         enableSorting: false,
         cell: ({ row }) => {
           const photos = row.original.photos;
@@ -187,19 +189,19 @@ export function HygieneExplorer({ rows, outlets, canDelete = false }: { rows: Hy
       },
       {
         accessorKey: "isClean",
-        header: "Status",
+        header: t("common.status"),
         cell: ({ getValue }) => {
           const clean = getValue<boolean>();
           return (
             <Badge tone={clean ? "success" : "danger"} dot>
-              {clean ? "Clean" : "Attention"}
+              {clean ? t("hygiene.clean") : t("hygiene.attention")}
             </Badge>
           );
         },
       },
       {
         accessorKey: "score",
-        header: "Score",
+        header: t("common.score"),
         cell: ({ getValue }) => {
           const s = getValue<number>();
           return (
@@ -230,14 +232,14 @@ export function HygieneExplorer({ rows, outlets, canDelete = false }: { rows: Hy
         : []),
     ],
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [canDelete, deleting],
+    [canDelete, deleting, t],
   );
 
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Audits</CardTitle>
-        <CardDescription>{scoped.length} catatan</CardDescription>
+        <CardTitle>{t("hygiene.assessments")}</CardTitle>
+        <CardDescription>{scoped.length} {t("common.records")}</CardDescription>
       </CardHeader>
       <CardContent>
         <DataTable
@@ -253,7 +255,7 @@ export function HygieneExplorer({ rows, outlets, canDelete = false }: { rows: Hy
                 value={outlet}
                 onChange={setOutlet}
                 className="w-48 shrink-0"
-                options={[{ value: "all", label: "Semua Outlet" }, ...outlets.map((o) => ({ value: o.id, label: o.name }))]}
+                options={[{ value: "all", label: t("common.allOutlets") }, ...outlets.map((o) => ({ value: o.id, label: o.name }))]}
                 searchPlaceholder="Cari outlet…"
               />
             </div>

@@ -14,12 +14,34 @@ export interface DemoAccount {
   scope: string;
 }
 
+export interface LoginLabels {
+  email: string;
+  password: string;
+  signIn: string;
+  signingIn: string;
+  remember: string;
+  forgot: string;
+  forgotToast: string;
+}
+
+const DEFAULT_LABELS: LoginLabels = {
+  email: "Email Address",
+  password: "Password",
+  signIn: "Sign In",
+  signingIn: "Signing in…",
+  remember: "Remember me",
+  forgot: "Forgot your password?",
+  forgotToast: "Contact your administrator to reset your password.",
+};
+
 export function LoginForm({
   demoAccounts,
   demoPassword,
+  labels = DEFAULT_LABELS,
 }: {
   demoAccounts: DemoAccount[];
   demoPassword: string;
+  labels?: LoginLabels;
 }) {
   const [state, formAction, pending] = useActionState(signInWithPassword, null);
   const [username, setUsername] = useState("");
@@ -31,7 +53,7 @@ export function LoginForm({
     <div className="w-full space-y-5">
       <form action={formAction} className="space-y-4">
         <div className="space-y-1.5">
-          <label className="text-sm font-medium text-foreground">Email Address</label>
+          <label className="text-sm font-medium text-foreground">{labels.email}</label>
           <div className="relative">
             <Mail className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
             <Input
@@ -47,7 +69,7 @@ export function LoginForm({
         </div>
 
         <div className="space-y-1.5">
-          <label className="text-sm font-medium text-foreground">Password</label>
+          <label className="text-sm font-medium text-foreground">{labels.password}</label>
           <div className="relative">
             <Lock className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
             <Input
@@ -74,14 +96,14 @@ export function LoginForm({
         <div className="flex items-center justify-between">
           <label className="flex cursor-pointer items-center gap-2 text-sm text-muted-foreground">
             <input type="checkbox" name="remember" className="size-4 accent-primary" defaultChecked />
-            Remember me
+            {labels.remember}
           </label>
           <button
             type="button"
-            onClick={() => toast.info("Contact your administrator to reset your password.")}
+            onClick={() => toast.info(labels.forgotToast)}
             className="text-sm font-medium text-primary hover:underline"
           >
-            Forgot your password?
+            {labels.forgot}
           </button>
         </div>
 
@@ -93,7 +115,7 @@ export function LoginForm({
         )}
 
         <Button type="submit" size="lg" className="h-11 w-full" disabled={pending}>
-          {pending ? <Loader2 className="animate-spin" /> : <LogIn />} Sign In
+          {pending ? <Loader2 className="animate-spin" /> : <LogIn />} {pending ? labels.signingIn : labels.signIn}
         </Button>
       </form>
 

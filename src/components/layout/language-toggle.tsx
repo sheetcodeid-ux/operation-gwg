@@ -1,6 +1,7 @@
 "use client";
 
 import { ChevronDown } from "lucide-react";
+import { useRouter } from "next/navigation";
 import { LANGS } from "@/lib/i18n/dict";
 import { useI18n } from "@/lib/i18n/provider";
 import { Popover } from "@/components/ui/popover";
@@ -9,6 +10,7 @@ import { cn } from "@/lib/utils";
 
 export function LanguageToggle() {
   const { lang, setLang } = useI18n();
+  const router = useRouter();
 
   return (
     <Popover
@@ -35,6 +37,8 @@ export function LanguageToggle() {
             onClick={() => {
               setLang(l.value);
               close();
+              // Re-render server components (page titles/stats) with the new language.
+              router.refresh();
             }}
             className={cn(
               "flex w-full items-center gap-2.5 rounded-md px-2.5 py-2 text-sm",

@@ -3,10 +3,12 @@ import type { Metadata } from "next";
 import { getAreas, getOutlets } from "@/lib/data/store";
 import { LoginForm } from "@/components/auth/login-form";
 import { ThemeToggle } from "@/components/layout/theme-toggle";
+import { getT } from "@/lib/i18n/server";
 
 export const metadata: Metadata = { title: "Sign in" };
 
-export default function LoginPage() {
+export default async function LoginPage() {
+  const t = await getT();
   const outlets = getOutlets().length;
   const areas = getAreas().length;
 
@@ -30,10 +32,22 @@ export default function LoginPage() {
         <div className="mb-6 flex flex-col items-center text-center">
           <BrandLogo className="mb-4 size-16 rounded-2xl shadow-sm" markClassName="size-11" />
           <h1 className="text-2xl font-semibold tracking-tight text-foreground">Operation GWG</h1>
-          <p className="mt-1 text-sm text-muted-foreground">Silakan masuk untuk melanjutkan</p>
+          <p className="mt-1 text-sm text-muted-foreground">{t("login.subtitle")}</p>
         </div>
 
-        <LoginForm demoAccounts={[]} demoPassword="" />
+        <LoginForm
+          demoAccounts={[]}
+          demoPassword=""
+          labels={{
+            email: t("login.email"),
+            password: t("login.password"),
+            signIn: t("login.signIn"),
+            signingIn: t("login.signingIn"),
+            remember: t("login.remember"),
+            forgot: t("login.forgot"),
+            forgotToast: t("login.forgotToast"),
+          }}
+        />
       </div>
 
       <p className="relative mt-6 max-w-md text-center text-xs text-muted-foreground">

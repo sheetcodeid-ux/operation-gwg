@@ -14,6 +14,7 @@ import { Combobox } from "@/components/ui/combobox";
 import { DatePicker } from "@/components/ui/date-picker";
 import { ScoreRing } from "@/components/ui/score-ring";
 import { TONE_PILL } from "@/components/ui/tone";
+import { useI18n } from "@/lib/i18n/provider";
 import { cn } from "@/lib/utils";
 
 type Scores = Record<HospitalityCategory, Record<string, number>>;
@@ -68,16 +69,17 @@ export function NewAssessmentButton({
   supervisors: { id: string; name: string }[];
   defaultAssessorId?: string;
 }) {
+  const { t } = useI18n();
   return (
     <Dialog>
       <DialogTrigger>
         <Button size="sm">
-          <Plus /> Assessment Baru
+          <Plus /> {t("hosp.new")}
         </Button>
       </DialogTrigger>
       <DialogContent
-        title="Hospitality Assessment"
-        description="Kunjungan Supervisor — skor layanan cashier, F&B & dining."
+        title={t("hosp.formTitle")}
+        description={t("hosp.formDesc")}
         align="center"
         className="max-w-2xl"
       >
@@ -96,6 +98,7 @@ function AssessmentForm({
   supervisors: { id: string; name: string }[];
   defaultAssessorId?: string;
 }) {
+  const { t } = useI18n();
   const router = useRouter();
   const { setOpen } = useDialogControl();
   const [pending, startTransition] = useTransition();
@@ -157,7 +160,7 @@ function AssessmentForm({
   return (
     <div className="max-h-[72vh] overflow-y-auto p-5">
       <div className="grid gap-3 sm:grid-cols-2">
-        <Field label="Outlet">
+        <Field label={t("common.outlet")}>
           <Combobox
             value={outletId}
             onChange={setOutletId}
@@ -166,10 +169,10 @@ function AssessmentForm({
             searchPlaceholder="Cari outlet…"
           />
         </Field>
-        <Field label="Tanggal">
+        <Field label={t("common.date")}>
           <DatePicker value={date} onChange={setDate} />
         </Field>
-        <Field label="Supervisor">
+        <Field label={t("hosp.supervisor")}>
           <Combobox
             value={supervisorId}
             onChange={setSupervisorId}
@@ -178,10 +181,10 @@ function AssessmentForm({
             searchPlaceholder="Cari supervisor…"
           />
         </Field>
-        <Field label="Nama Staff">
+        <Field label={t("hosp.staffName")}>
           <Input value={staffName} onChange={(e) => setStaffName(e.target.value)} placeholder="mis. Andi" />
         </Field>
-        <Field label="Posisi">
+        <Field label={t("hosp.position")}>
           <Combobox value={staffPosition} onChange={setStaffPosition} options={POSITIONS.map((p) => ({ value: p, label: p }))} />
         </Field>
       </div>
@@ -189,9 +192,9 @@ function AssessmentForm({
       <div className="my-4 flex items-center gap-3 rounded-xl border border-border bg-muted/30 p-3">
         <ScoreRing value={overall} size={56} stroke={5} label="Skor" />
         <div className="flex-1">
-          <p className="text-sm font-medium text-foreground">Skor hospitality langsung</p>
+          <p className="text-sm font-medium text-foreground">{t("hosp.liveScore")}</p>
           <p className="text-xs text-muted-foreground">
-            {complete ? "Dihitung otomatis dari seluruh item (1–5)." : `${scored}/${total} item dinilai — lengkapi semua.`}
+            {complete ? t("hosp.liveScoreAuto") : `${scored}/${total} ${t("hygiene.rated")}`}
           </p>
         </div>
         <span
@@ -208,7 +211,7 @@ function AssessmentForm({
                     : TONE_PILL.danger,
           )}
         >
-          {!complete ? "Belum lengkap" : overall >= 85 ? "Sangat Baik" : overall >= 70 ? "Baik" : overall >= 55 ? "Cukup" : "Perlu Perhatian"}
+          {!complete ? t("hygiene.incomplete") : overall >= 85 ? t("hosp.veryGood") : overall >= 70 ? t("hosp.good") : overall >= 55 ? t("hosp.fair") : t("hygiene.needAttention")}
         </span>
       </div>
 
@@ -258,16 +261,16 @@ function AssessmentForm({
         })}
       </div>
 
-      <Field label="Catatan (opsional)" className="mt-4">
-        <Textarea value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="Observasi, catatan coaching…" />
+      <Field label={`${t("hosp.notes")} (${t("common.optional")})`} className="mt-4">
+        <Textarea value={notes} onChange={(e) => setNotes(e.target.value)} placeholder={t("hosp.notesPh")} />
       </Field>
 
       <div className="mt-5 flex justify-end gap-2">
         <Button variant="ghost" onClick={() => setOpen(false)} disabled={pending}>
-          Batal
+          {t("common.cancel")}
         </Button>
         <Button onClick={submit} disabled={pending}>
-          {pending && <Loader2 className="animate-spin" />} Simpan Assessment
+          {pending && <Loader2 className="animate-spin" />} {t("hosp.save")}
         </Button>
       </div>
     </div>

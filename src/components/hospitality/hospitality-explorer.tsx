@@ -12,6 +12,7 @@ import { Combobox } from "@/components/ui/combobox";
 import { DataTable } from "@/components/ui/data-table";
 import { MonthFilter, monthKey, monthOptions } from "@/components/work/division-filter";
 import { scoreColor } from "@/components/ui/tone";
+import { useI18n } from "@/lib/i18n/provider";
 import { formatDate } from "@/lib/utils";
 
 export interface HospitalityRow {
@@ -28,6 +29,7 @@ export interface HospitalityRow {
 }
 
 export function HospitalityExplorer({ rows, outlets, canDelete = false }: { rows: HospitalityRow[]; outlets: { id: string; name: string }[]; canDelete?: boolean }) {
+  const { t } = useI18n();
   const router = useRouter();
   const [month, setMonth] = React.useState("all");
   const [outlet, setOutlet] = React.useState("all");
@@ -52,12 +54,12 @@ export function HospitalityExplorer({ rows, outlets, canDelete = false }: { rows
     () => [
       {
         accessorKey: "date",
-        header: "Tanggal",
+        header: t("common.date"),
         cell: ({ getValue }) => <span className="whitespace-nowrap text-muted-foreground">{formatDate(getValue<string>())}</span>,
       },
       {
         accessorKey: "staffName",
-        header: "Staff",
+        header: t("hosp.colStaff"),
         cell: ({ row }) => (
           <div className="flex items-center gap-2.5">
             <Avatar name={row.original.staffName} size={32} />
@@ -68,12 +70,12 @@ export function HospitalityExplorer({ rows, outlets, canDelete = false }: { rows
           </div>
         ),
       },
-      { accessorKey: "outlet", header: "Outlet", cell: ({ getValue }) => <span className="text-foreground/80">{getValue<string>()}</span> },
-      { accessorKey: "area", header: "Koordinator", cell: ({ getValue }) => <span className="text-muted-foreground">{getValue<string>()}</span> },
-      { accessorKey: "assessor", header: "Supervisor", cell: ({ getValue }) => <span className="text-foreground/80">{getValue<string>()}</span> },
+      { accessorKey: "outlet", header: t("common.outlet"), cell: ({ getValue }) => <span className="text-foreground/80">{getValue<string>()}</span> },
+      { accessorKey: "area", header: t("hosp.colCoordinator"), cell: ({ getValue }) => <span className="text-muted-foreground">{getValue<string>()}</span> },
+      { accessorKey: "assessor", header: t("hosp.supervisor"), cell: ({ getValue }) => <span className="text-foreground/80">{getValue<string>()}</span> },
       {
         accessorKey: "score",
-        header: "Score",
+        header: t("common.score"),
         cell: ({ getValue }) => {
           const s = getValue<number>();
           return (
@@ -104,14 +106,14 @@ export function HospitalityExplorer({ rows, outlets, canDelete = false }: { rows
         : []),
     ],
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [canDelete, deleting],
+    [canDelete, deleting, t],
   );
 
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Assessments</CardTitle>
-        <CardDescription>Kunjungan Supervisor · {scoped.length} catatan</CardDescription>
+        <CardTitle>{t("hosp.assessments")}</CardTitle>
+        <CardDescription>{t("hosp.visit")} · {scoped.length} {t("common.records")}</CardDescription>
       </CardHeader>
       <CardContent>
         <DataTable
@@ -127,7 +129,7 @@ export function HospitalityExplorer({ rows, outlets, canDelete = false }: { rows
                 value={outlet}
                 onChange={setOutlet}
                 className="w-48 shrink-0"
-                options={[{ value: "all", label: "Semua Outlet" }, ...outlets.map((o) => ({ value: o.id, label: o.name }))]}
+                options={[{ value: "all", label: t("common.allOutlets") }, ...outlets.map((o) => ({ value: o.id, label: o.name }))]}
                 searchPlaceholder="Cari outlet…"
               />
             </div>

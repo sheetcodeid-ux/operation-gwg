@@ -7,10 +7,12 @@ import { PageHeader } from "@/components/ui/page-header";
 import { StatTile } from "@/components/ui/stat";
 import { NewAuditButton } from "@/components/hygiene/hygiene-form";
 import { HygieneExplorer, type HygieneRow } from "@/components/hygiene/hygiene-explorer";
+import { getT } from "@/lib/i18n/server";
 
 export const metadata: Metadata = { title: "Hygiene Monitoring" };
 
 export default async function HygienePage() {
+  const t = await getT();
   const user = (await getSessionUser())!;
   const audits = listHygiene(user);
   const outlets = visibleOutlets(user).map((o) => ({ id: o.id, name: o.name }));
@@ -41,23 +43,23 @@ export default async function HygienePage() {
     <div className="w-full">
       <PageHeader
         icon={SprayCan}
-        title="Hygiene Monitoring"
-        description="Six-section cleanliness audits with auto-generated hygiene scores"
+        title={t("hygiene.title")}
+        description={t("hygiene.description")}
         actions={canCreate && outlets.length > 0 ? <NewAuditButton outlets={outlets} /> : undefined}
       />
 
       {canCreate && outlets.length === 0 && (
         <div className="mb-4 flex items-start gap-2 rounded-xl border border-amber-500/30 bg-amber-500/10 p-3 text-sm text-amber-700 dark:text-amber-300">
           <TriangleAlert className="mt-0.5 size-4 shrink-0" />
-          <span>Belum ada outlet yang ditugaskan ke akun Anda, jadi audit belum bisa dibuat. Minta Admin menugaskan outlet Anda di <span className="font-semibold">User Management</span> (Edit akun → pilih Outlet).</span>
+          <span>{t("hygiene.noOutlet")}</span>
         </div>
       )}
 
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-        <StatTile icon={SprayCan} label="Average Score" value={avg.toFixed(1)} tone="brand" />
-        <StatTile icon={ClipboardCheck} label="Audits" value={audits.length} tone="cyan" />
-        <StatTile icon={CircleCheck} label="Clean Rate" value={`${cleanRate}%`} tone="success" />
-        <StatTile icon={TriangleAlert} label="Open Findings" value={openFindings} tone="amber" />
+        <StatTile icon={SprayCan} label={t("hygiene.avgScore")} value={avg.toFixed(1)} tone="brand" />
+        <StatTile icon={ClipboardCheck} label={t("hygiene.audits")} value={audits.length} tone="cyan" />
+        <StatTile icon={CircleCheck} label={t("hygiene.cleanRate")} value={`${cleanRate}%`} tone="success" />
+        <StatTile icon={TriangleAlert} label={t("hygiene.openFindings")} value={openFindings} tone="amber" />
       </div>
 
       <div className="mt-4">
