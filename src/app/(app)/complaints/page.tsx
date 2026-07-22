@@ -19,7 +19,7 @@ export default async function ComplaintsPage() {
   const outlets = visibleOutlets(user).map((o) => ({ id: o.id, name: o.name }));
   const canManage = can(user, "manage_complaint");
 
-  const closed = complaints.filter((c) => c.status === "closed" || c.status === "done").length;
+  const closed = complaints.filter((c) => c.status === "close").length;
   const open = complaints.length - closed;
   const resolutionRate = complaints.length ? Math.round((closed / complaints.length) * 100) : 0;
 
@@ -30,7 +30,6 @@ export default async function ComplaintsPage() {
     content: c.content,
     outlet: outletName(c.outletId),
     category: c.category,
-    priority: c.priority,
     status: c.status,
     rootCause: c.rootCause ?? null,
     rating: c.rating ?? null,

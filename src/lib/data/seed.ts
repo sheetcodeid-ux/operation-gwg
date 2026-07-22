@@ -314,9 +314,9 @@ for (const outlet of outlets) {
 }
 
 /* ---------------- Module 6: Complaints ---------------- */
-const SOURCES: ComplaintSource[] = ["google_review", "instagram", "whatsapp", "email", "walk_in"];
-const CATEGORIES: ComplaintCategory[] = ["cleanliness", "service", "product_quality", "price", "facilities", "staff_attitude", "waiting_time", "others"];
-const CSTATES: ComplaintStatus[] = ["open", "ongoing", "pending", "done", "closed"];
+const SOURCES: ComplaintSource[] = ["google_review", "customer_service", "grup_kuning", "instagram", "tiktok"];
+const CATEGORIES: ComplaintCategory[] = ["service", "food_quality", "cleanliness", "staff_characteristics", "price", "payment_system", "ambiance", "order_error"];
+const CSTATES: ComplaintStatus[] = ["open", "in_progress", "close"];
 const RCA: RootCauseCategory[] = ["man", "method", "material", "machine", "environment"];
 const COMPLAINT_TEXT = ["Pelayanan lambat saat jam sibuk.", "Meja kurang bersih ketika datang.", "Pesanan tidak sesuai.", "Harga dirasa terlalu mahal.", "AC kurang dingin.", "Staff kurang ramah.", "Antrian terlalu panjang.", "Toilet kurang terawat."];
 const complaints: Complaint[] = [];
@@ -329,7 +329,7 @@ for (const outlet of outlets) {
     const status = pick(CSTATES);
     // Spread across the past ~12 months so every month has complaints (daily & yearly views).
     const created = intBetween(1, 365);
-    const resolved = status === "closed" || status === "done";
+    const resolved = status === "close";
     complaints.push({
       id: id("cmp", cN),
       source,
@@ -340,7 +340,6 @@ for (const outlet of outlets) {
       outletId: outlet.id,
       areaId: outlet.areaId,
       category: pick(CATEGORIES),
-      priority: pick(PRIORITIES),
       status,
       rootCause: resolved ? pick(RCA) : chance(0.4) ? pick(RCA) : null,
       correctiveAction: resolved

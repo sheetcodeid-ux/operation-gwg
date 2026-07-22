@@ -171,7 +171,7 @@ export function getDashboardKpis(user: UserProfile): DashboardKpis {
   const evt = SEED.events.filter((e) => ids.has(e.outletId));
 
   const done = tsk.filter((t) => t.status === "done").length;
-  const closed = comp.filter((c) => c.status === "closed" || c.status === "done").length;
+  const closed = comp.filter((c) => c.status === "close").length;
   const open = comp.length - closed;
 
   return {
@@ -273,7 +273,7 @@ export function outletRanking(user: UserProfile): OutletRankRow[] {
   const hygLatest = latestByOutlet(SEED.hygiene);
   const complaintsByOutlet = new Map<string, number>();
   for (const c of SEED.complaints) {
-    if (c.status !== "closed" && c.status !== "done") {
+    if (c.status !== "close") {
       complaintsByOutlet.set(c.outletId, (complaintsByOutlet.get(c.outletId) ?? 0) + 1);
     }
   }
@@ -358,7 +358,7 @@ export function areaRanking(user: UserProfile): AreaRankRow[] {
       const hosp = SEED.hospitality.filter((h) => ids.has(h.outletId)).map((h) => h.overallScore);
       const hyg = SEED.hygiene.filter((h) => ids.has(h.outletId)).map((h) => h.hygieneScore);
       const complaintsOpen = SEED.complaints.filter(
-        (c) => ids.has(c.outletId) && c.status !== "closed" && c.status !== "done",
+        (c) => ids.has(c.outletId) && c.status !== "close",
       ).length;
       const hospitality = round1(avg(hosp));
       const hygiene = round1(avg(hyg));
@@ -437,7 +437,7 @@ export function areaMetricMatrix(user: UserProfile): AreaMetricRow[] {
       const tasks = SEED.tasks.filter((t) => t.outletId !== null && ids.has(t.outletId));
       const done = tasks.filter((t) => t.status === "done").length;
       const comp = SEED.complaints.filter((c) => ids.has(c.outletId));
-      const closed = comp.filter((c) => c.status === "closed" || c.status === "done").length;
+      const closed = comp.filter((c) => c.status === "close").length;
       return {
         area: getArea(areaId)!,
         hospitality: round1(avg(hosp)),
@@ -515,7 +515,7 @@ export function getOutletDetail(outletId: string): OutletDetail | null {
     tasksOpen: tasks.filter((t) => t.status !== "done" && t.status !== "cancelled").length,
     tasksDone: done,
     taskCompletion: tasks.length ? Math.round((done / tasks.length) * 100) : 0,
-    complaintsOpen: complaints.filter((c) => c.status !== "closed" && c.status !== "done").length,
+    complaintsOpen: complaints.filter((c) => c.status !== "close").length,
     eventsRunning: events.filter((e) => e.status === "running").length,
     tasks,
     events,
@@ -621,7 +621,7 @@ export function aggregateOutlets(outletIds: string[]): OutletsAggregate {
   const tasks = SEED.tasks.filter((t) => t.outletId !== null && ids.has(t.outletId));
   const tasksDone = tasks.filter((t) => t.status === "done").length;
   const comp = SEED.complaints.filter((c) => ids.has(c.outletId));
-  const closed = comp.filter((c) => c.status === "closed" || c.status === "done").length;
+  const closed = comp.filter((c) => c.status === "close").length;
   const events = SEED.events.filter((e) => ids.has(e.outletId));
   return {
     outlets: ids.size,
@@ -739,7 +739,7 @@ export function coordinatorPerformance(outletIds: string[]): CoordinatorPerf[] {
       const hosp = SEED.hospitality.filter((h) => ids.has(h.outletId)).map((h) => h.overallScore);
       const hyg = SEED.hygiene.filter((h) => ids.has(h.outletId)).map((h) => h.hygieneScore);
       const complaints = SEED.complaints.filter(
-        (c2) => ids.has(c2.outletId) && c2.status !== "closed" && c2.status !== "done",
+        (c2) => ids.has(c2.outletId) && c2.status !== "close",
       ).length;
       return {
         id: c.id,

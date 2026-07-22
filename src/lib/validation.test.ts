@@ -81,11 +81,10 @@ describe("taskInputSchema", () => {
 describe("complaintInputSchema", () => {
   it("requires content", () => {
     const res = parseInput(complaintInputSchema, {
-      source: "walk_in",
+      source: "customer_service",
       content: "   ",
       outletId: "out_1",
       category: "service",
-      priority: "medium",
     });
     expect("error" in res).toBe(true);
   });

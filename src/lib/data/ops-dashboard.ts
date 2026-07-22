@@ -150,20 +150,20 @@ async function loadTarget(todayNetSales: number): Promise<OpsTarget | null> {
 }
 
 const COMPLAINT_LABEL: Record<ComplaintCategory, string> = {
-  cleanliness: "Kebersihan",
   service: "Service",
-  product_quality: "Kualitas Produk",
-  price: "Harga",
-  facilities: "Fasilitas",
-  staff_attitude: "Sikap Staff",
-  waiting_time: "Waktu Tunggu",
-  others: "Lainnya",
+  food_quality: "Food Quality",
+  cleanliness: "Cleanliness",
+  staff_characteristics: "Staff Characteristics",
+  price: "Price",
+  payment_system: "Payment System",
+  ambiance: "Ambiance",
+  order_error: "Order Error",
 };
 
 /** Complaints (open/in-progress only, Juknis 2.10.2) + hygiene checklist summary. */
 function loadControl(user: UserProfile): OpsControl {
   const complaints: OpsComplaint[] = listComplaints(user)
-    .filter((c) => c.status === "open" || c.status === "ongoing" || c.status === "pending")
+    .filter((c) => c.status !== "close")
     .slice(0, 20)
     .map((c) => ({ outlet: outletName(c.outletId), category: COMPLAINT_LABEL[c.category] ?? c.category, note: c.content, status: c.status === "open" ? "Open" : "In Progress" }));
 

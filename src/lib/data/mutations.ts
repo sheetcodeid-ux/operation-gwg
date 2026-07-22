@@ -342,7 +342,6 @@ export async function createComplaint(input: {
   content: string;
   outletId: string;
   category: Complaint["category"];
-  priority: Complaint["priority"];
 }): Promise<Complaint> {
   const record: Complaint = {
     id: nextId("cmp"),
@@ -354,7 +353,6 @@ export async function createComplaint(input: {
     outletId: input.outletId,
     areaId: areaForOutlet(input.outletId),
     category: input.category,
-    priority: input.priority,
     status: "open",
     rootCause: null,
     correctiveAction: null,
@@ -376,7 +374,7 @@ export function resolveComplaint(input: {
   c.status = input.status;
   if (input.rootCause) c.rootCause = input.rootCause;
   if (input.correctiveAction) c.correctiveAction = input.correctiveAction;
-  if (input.status === "closed" || input.status === "done") c.closedAt = nowIso();
+  if (input.status === "close") c.closedAt = nowIso();
   void saveComplaint(c);
 }
 

@@ -9,14 +9,12 @@ import {
   COMPLAINT_CATEGORY_META,
   COMPLAINT_SOURCE_META,
   COMPLAINT_STATUS_META,
-  PRIORITY_META,
   ROOT_CAUSE_META,
 } from "@/lib/constants";
 import type {
   ComplaintCategory,
   ComplaintSource,
   ComplaintStatus,
-  Priority,
   RootCauseCategory,
 } from "@/lib/types";
 import { bulkCloseComplaintsAction, resolveComplaintAction } from "@/lib/actions/complaints";
@@ -36,7 +34,6 @@ export interface ComplaintRow {
   content: string;
   outlet: string;
   category: ComplaintCategory;
-  priority: Priority;
   status: ComplaintStatus;
   rootCause: RootCauseCategory | null;
   rating: number | null;
@@ -132,14 +129,6 @@ export function ComplaintTable({ rows, canManage }: { rows: ComplaintRow[]; canM
         cell: ({ getValue }) => <span className="text-muted-foreground">{td(COMPLAINT_CATEGORY_META[getValue<ComplaintCategory>()].label)}</span>,
       },
       {
-        accessorKey: "priority",
-        header: t("complaint.colPriority"),
-        cell: ({ getValue }) => {
-          const p = getValue<Priority>();
-          return <Badge tone={PRIORITY_META[p].tone}>{td(PRIORITY_META[p].label)}</Badge>;
-        },
-      },
-      {
         accessorKey: "status",
         header: t("common.status"),
         cell: ({ getValue }) => {
@@ -202,7 +191,7 @@ function ResolveDialog({ complaint, onClose }: { complaint: ComplaintRow; onClos
   const router = useRouter();
   const [pending, startTransition] = React.useTransition();
   const [status, setStatus] = React.useState<ComplaintStatus>(
-    complaint.status === "open" ? "ongoing" : complaint.status,
+    complaint.status === "open" ? "in_progress" : complaint.status,
   );
   const [rootCause, setRootCause] = React.useState<RootCauseCategory>(complaint.rootCause ?? "man");
   const [action, setAction] = React.useState("");

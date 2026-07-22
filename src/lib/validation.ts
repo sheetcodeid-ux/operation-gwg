@@ -27,18 +27,18 @@ export const taskStatusSchema = z.enum(["open", "ongoing", "pending", "done", "c
 export const eventStatusSchema = z.enum(["upcoming", "running", "finished", "cancelled"]);
 export const eventMilestoneSchema = z.enum(["planning", "preparation", "execution", "evaluation"]);
 export const hygieneRatingSchema = z.enum(["excellent", "good", "fair", "poor"]);
-export const complaintSourceSchema = z.enum(["google_review", "instagram", "whatsapp", "email", "walk_in"]);
+export const complaintSourceSchema = z.enum(["google_review", "customer_service", "grup_kuning", "instagram", "tiktok"]);
 export const complaintCategorySchema = z.enum([
-  "cleanliness",
   "service",
-  "product_quality",
+  "food_quality",
+  "cleanliness",
+  "staff_characteristics",
   "price",
-  "facilities",
-  "staff_attitude",
-  "waiting_time",
-  "others",
+  "payment_system",
+  "ambiance",
+  "order_error",
 ]);
-export const complaintStatusSchema = z.enum(["open", "ongoing", "pending", "done", "closed"]);
+export const complaintStatusSchema = z.enum(["open", "in_progress", "close"]);
 export const rootCauseSchema = z.enum(["man", "method", "material", "machine", "environment"]);
 
 const id = z.string().trim().min(1).max(64);
@@ -76,7 +76,6 @@ export const complaintInputSchema = z.object({
   content: z.string().trim().min(1, "Complaint content is required.").max(5000),
   outletId: id,
   category: complaintCategorySchema,
-  priority: prioritySchema,
 });
 
 export const resolveComplaintSchema = z.object({

@@ -99,27 +99,22 @@ export type HygieneRating = "excellent" | "good" | "fair" | "poor";
 
 export type ComplaintSource =
   | "google_review"
+  | "customer_service"
+  | "grup_kuning"
   | "instagram"
-  | "whatsapp"
-  | "email"
-  | "walk_in";
+  | "tiktok";
 
 export type ComplaintCategory =
-  | "cleanliness"
   | "service"
-  | "product_quality"
+  | "food_quality"
+  | "cleanliness"
+  | "staff_characteristics"
   | "price"
-  | "facilities"
-  | "staff_attitude"
-  | "waiting_time"
-  | "others";
+  | "payment_system"
+  | "ambiance"
+  | "order_error";
 
-export type ComplaintStatus =
-  | "open"
-  | "ongoing"
-  | "pending"
-  | "done"
-  | "closed";
+export type ComplaintStatus = "open" | "in_progress" | "close";
 
 export type RootCauseCategory =
   | "man"
@@ -251,7 +246,6 @@ export interface Complaint {
   outletId: string;
   areaId: string;
   category: ComplaintCategory;
-  priority: Priority;
   status: ComplaintStatus;
   rootCause?: RootCauseCategory | null;
   correctiveAction?: CorrectiveAction | null;

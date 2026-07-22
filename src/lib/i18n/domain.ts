@@ -94,22 +94,20 @@ const DOMAIN: Record<Lang, Record<string, string>> = {
     // hospitality positions
     Staff: "Staf",
     // complaint categories
-    Cleanliness: "Kebersihan",
     Service: "Layanan",
-    "Product Quality": "Kualitas Produk",
+    "Food Quality": "Kualitas Makanan",
+    Cleanliness: "Kebersihan",
+    "Staff Characteristics": "Karakter Staf",
     Price: "Harga",
-    Facilities: "Fasilitas",
-    "Staff Attitude": "Sikap Staf",
-    "Waiting Time": "Waktu Tunggu",
-    Others: "Lainnya",
+    "Payment System": "Sistem Pembayaran",
+    Ambiance: "Suasana",
+    "Order Error": "Kesalahan Pesanan",
     // complaint status
     Open: "Terbuka",
-    Ongoing: "Berjalan",
-    Pending: "Tertunda",
-    Done: "Selesai",
-    Closed: "Ditutup",
+    "In Progress": "Diproses",
+    Close: "Selesai",
     // complaint source
-    "Walk-In": "Datang Langsung",
+    "Customer Service": "Layanan Pelanggan",
     // root cause
     Man: "Manusia",
     Method: "Metode",

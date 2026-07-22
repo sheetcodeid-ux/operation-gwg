@@ -4,8 +4,8 @@ import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Loader2, Plus } from "lucide-react";
 import { toast } from "sonner";
-import { COMPLAINT_CATEGORY_META, COMPLAINT_SOURCE_META, PRIORITY_META } from "@/lib/constants";
-import type { ComplaintCategory, ComplaintSource, Priority } from "@/lib/types";
+import { COMPLAINT_CATEGORY_META, COMPLAINT_SOURCE_META } from "@/lib/constants";
+import type { ComplaintCategory, ComplaintSource } from "@/lib/types";
 import { createComplaintAction } from "@/lib/actions/complaints";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogTrigger, useDialogControl } from "@/components/ui/dialog";
@@ -15,7 +15,6 @@ import { useI18n } from "@/lib/i18n/provider";
 
 const SOURCES = Object.keys(COMPLAINT_SOURCE_META) as ComplaintSource[];
 const CATEGORIES = Object.keys(COMPLAINT_CATEGORY_META) as ComplaintCategory[];
-const PRIORITIES = Object.keys(PRIORITY_META) as Priority[];
 
 export function NewComplaintButton({ outlets }: { outlets: { id: string; name: string }[] }) {
   const { t } = useI18n();
@@ -45,7 +44,6 @@ function ComplaintForm({ outlets }: { outlets: { id: string; name: string }[] })
     content: "",
     outletId: outlets[0]?.id ?? "",
     category: "service" as ComplaintCategory,
-    priority: "medium" as Priority,
   });
 
   function set<K extends keyof typeof form>(key: K, value: (typeof form)[K]) {
@@ -62,7 +60,6 @@ function ComplaintForm({ outlets }: { outlets: { id: string; name: string }[] })
         content: form.content,
         outletId: form.outletId,
         category: form.category,
-        priority: form.priority,
       });
       if (res?.error) {
         toast.error(res.error);
@@ -108,18 +105,11 @@ function ComplaintForm({ outlets }: { outlets: { id: string; name: string }[] })
             searchPlaceholder="Search outlets…"
           />
         </Field>
-        <Field label="Category">
+        <Field label={t("complaint.category")}>
           <Combobox
             value={form.category}
             onChange={(v) => set("category", v as ComplaintCategory)}
             options={CATEGORIES.map((c) => ({ value: c, label: td(COMPLAINT_CATEGORY_META[c].label) }))}
-          />
-        </Field>
-        <Field label="Priority">
-          <Combobox
-            value={form.priority}
-            onChange={(v) => set("priority", v as Priority)}
-            options={PRIORITIES.map((p) => ({ value: p, label: td(PRIORITY_META[p].label) }))}
           />
         </Field>
       </div>

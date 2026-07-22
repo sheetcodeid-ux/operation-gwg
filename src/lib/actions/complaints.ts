@@ -11,7 +11,6 @@ import type {
   ComplaintCategory,
   ComplaintSource,
   ComplaintStatus,
-  Priority,
   RootCauseCategory,
 } from "@/lib/types";
 
@@ -22,7 +21,6 @@ export interface ComplaintInput {
   content: string;
   outletId: string;
   category: ComplaintCategory;
-  priority: Priority;
 }
 
 export async function createComplaintAction(input: ComplaintInput) {
@@ -43,7 +41,6 @@ export async function createComplaintAction(input: ComplaintInput) {
       content: clean.content,
       outletId: clean.outletId,
       category: clean.category,
-      priority: clean.priority,
     });
   } catch (e) {
     return { error: persistMessage(e) };
@@ -66,7 +63,7 @@ export async function bulkCloseComplaintsAction(ids: string[]) {
   const user = await getSessionUser();
   if (!user) return { error: "Not authenticated" };
   if (!can(user, "manage_complaint")) return { error: "No permission" };
-  for (const id of ids) resolveComplaint({ id, status: "closed" });
+  for (const id of ids) resolveComplaint({ id, status: "close" });
   revalidatePath("/complaints");
   revalidatePath("/dashboard");
   return { ok: true, count: ids.length };

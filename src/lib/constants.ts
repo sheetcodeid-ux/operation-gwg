@@ -78,29 +78,27 @@ export const HYGIENE_RATING_META: Record<HygieneRating, { label: string; tone: T
 
 export const COMPLAINT_SOURCE_META: Record<ComplaintSource, { label: string; tone: Tone }> = {
   google_review: { label: "Google Review", tone: "amber" },
+  customer_service: { label: "Customer Service", tone: "cyan" },
+  grup_kuning: { label: "Grup Kuning", tone: "success" },
   instagram: { label: "Instagram", tone: "brand" },
-  whatsapp: { label: "WhatsApp", tone: "success" },
-  email: { label: "Email", tone: "cyan" },
-  walk_in: { label: "Walk-In", tone: "neutral" },
+  tiktok: { label: "TikTok", tone: "neutral" },
 };
 
 export const COMPLAINT_CATEGORY_META: Record<ComplaintCategory, { label: string }> = {
-  cleanliness: { label: "Cleanliness" },
   service: { label: "Service" },
-  product_quality: { label: "Product Quality" },
+  food_quality: { label: "Food Quality" },
+  cleanliness: { label: "Cleanliness" },
+  staff_characteristics: { label: "Staff Characteristics" },
   price: { label: "Price" },
-  facilities: { label: "Facilities" },
-  staff_attitude: { label: "Staff Attitude" },
-  waiting_time: { label: "Waiting Time" },
-  others: { label: "Others" },
+  payment_system: { label: "Payment System" },
+  ambiance: { label: "Ambiance" },
+  order_error: { label: "Order Error" },
 };
 
 export const COMPLAINT_STATUS_META: Record<ComplaintStatus, { label: string; tone: Tone }> = {
-  open: { label: "Open", tone: "neutral" },
-  ongoing: { label: "Ongoing", tone: "cyan" },
-  pending: { label: "Pending", tone: "warning" },
-  done: { label: "Done", tone: "brand" },
-  closed: { label: "Closed", tone: "success" },
+  open: { label: "Open", tone: "warning" },
+  in_progress: { label: "In Progress", tone: "cyan" },
+  close: { label: "Close", tone: "success" },
 };
 
 export const ROOT_CAUSE_META: Record<RootCauseCategory, { label: string }> = {
