@@ -120,20 +120,25 @@ export function ComplaintTable({ rows, canManage }: { rows: ComplaintRow[]; canM
         header: t("complaint.colSource"),
         cell: ({ getValue }) => {
           const s = getValue<ComplaintSource>();
-          return <Badge tone={COMPLAINT_SOURCE_META[s].tone}>{td(COMPLAINT_SOURCE_META[s].label)}</Badge>;
+          const m = COMPLAINT_SOURCE_META[s];
+          return <Badge tone={m?.tone ?? "neutral"}>{td(m?.label ?? s)}</Badge>;
         },
       },
       {
         accessorKey: "category",
         header: t("complaint.colCategory"),
-        cell: ({ getValue }) => <span className="text-muted-foreground">{td(COMPLAINT_CATEGORY_META[getValue<ComplaintCategory>()].label)}</span>,
+        cell: ({ getValue }) => {
+          const c = getValue<ComplaintCategory>();
+          return <span className="text-muted-foreground">{td(COMPLAINT_CATEGORY_META[c]?.label ?? c)}</span>;
+        },
       },
       {
         accessorKey: "status",
         header: t("common.status"),
         cell: ({ getValue }) => {
           const s = getValue<ComplaintStatus>();
-          return <Badge tone={COMPLAINT_STATUS_META[s].tone} dot>{td(COMPLAINT_STATUS_META[s].label)}</Badge>;
+          const m = COMPLAINT_STATUS_META[s];
+          return <Badge tone={m?.tone ?? "neutral"} dot>{td(m?.label ?? s)}</Badge>;
         },
       },
       {

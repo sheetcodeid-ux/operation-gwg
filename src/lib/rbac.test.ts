@@ -64,6 +64,9 @@ describe("menu access matrix", () => {
     expect(canSeeMenu("supervisor", "hospitality")).toBe(true);
     expect(canSeeMenu("supervisor", "dashboard")).toBe(false);
     expect(canSeeMenu("supervisor", "assessment")).toBe(false);
+    // Complaints are monitor-only for supervisors — no create/edit.
+    expect(can({ role: "supervisor" }, "manage_complaint")).toBe(false);
+    expect(can({ role: "supervisor" }, "create_hygiene")).toBe(true);
   });
 
   it("restricts admin menus to super_admin", () => {
