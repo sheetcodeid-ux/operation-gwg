@@ -46,6 +46,7 @@ export const DICT: Record<Lang, Record<string, string>> = {
 
     // shared UI
     "common.cancel": "Cancel",
+    "common.close": "Close",
     "common.save": "Save",
     "common.saving": "Saving…",
     "common.add": "Add",
@@ -159,6 +160,11 @@ export const DICT: Record<Lang, Record<string, string>> = {
     "complaint.corrective": "Corrective Action",
     "complaint.correctivePh": "Describe the action taken…",
     "complaint.followUp": "Follow-up Date",
+    "complaint.detailTitle": "Complaint Detail",
+    "complaint.detailDesc": "Complaint details (read-only).",
+    "complaint.view": "Detail",
+    "complaint.customer": "Customer",
+    "complaint.rating": "Rating",
   },
   id: {
     "section.Overview": "Ringkasan",
@@ -199,6 +205,7 @@ export const DICT: Record<Lang, Record<string, string>> = {
 
     // shared UI
     "common.cancel": "Batal",
+    "common.close": "Tutup",
     "common.save": "Simpan",
     "common.saving": "Menyimpan…",
     "common.add": "Tambah",
@@ -312,6 +319,11 @@ export const DICT: Record<Lang, Record<string, string>> = {
     "complaint.corrective": "Tindakan Perbaikan",
     "complaint.correctivePh": "Jelaskan tindakan yang dilakukan…",
     "complaint.followUp": "Tanggal Tindak Lanjut",
+    "complaint.detailTitle": "Detail Komplain",
+    "complaint.detailDesc": "Detail komplain (hanya baca).",
+    "complaint.view": "Detail",
+    "complaint.customer": "Pelanggan",
+    "complaint.rating": "Rating",
   },
 };
 

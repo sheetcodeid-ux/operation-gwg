@@ -3,7 +3,7 @@
 import * as React from "react";
 import { type ColumnDef } from "@tanstack/react-table";
 import { useRouter } from "next/navigation";
-import { CircleCheckBig, Loader2, Settings2, Star } from "lucide-react";
+import { CircleCheckBig, Eye, Loader2, Settings2, Star } from "lucide-react";
 import { toast } from "sonner";
 import {
   COMPLAINT_CATEGORY_META,
@@ -48,6 +48,7 @@ export function ComplaintTable({ rows, canManage }: { rows: ComplaintRow[]; canM
   const router = useRouter();
   const [status, setStatus] = React.useState("all");
   const [selected, setSelected] = React.useState<ComplaintRow | null>(null);
+  const [viewing, setViewing] = React.useState<ComplaintRow | null>(null);
   const [picked, setPicked] = React.useState<Set<string>>(new Set());
   const [bulkPending, startBulk] = React.useTransition();
 
@@ -147,17 +148,21 @@ export function ComplaintTable({ rows, canManage }: { rows: ComplaintRow[]; canM
         cell: ({ getValue }) => <span className="text-muted-foreground">{formatDate(getValue<string>())}</span>,
       },
     );
-    if (canManage) {
-      cols.push({
-        id: "actions",
-        header: "",
-        cell: ({ row }) => (
+    cols.push({
+      id: "actions",
+      header: "",
+      cell: ({ row }) =>
+        canManage ? (
           <Button size="sm" variant="subtle" onClick={() => setSelected(row.original)}>
             <Settings2 className="size-3.5" /> {t("complaint.manage")}
           </Button>
+        ) : (
+          // Supervisors monitor only: open a read-only detail view.
+          <Button size="sm" variant="subtle" onClick={() => setViewing(row.original)}>
+            <Eye className="size-3.5" /> {t("complaint.view")}
+          </Button>
         ),
-      });
-    }
+    });
     return cols;
   }, [canManage, picked, togglePick, t, td]);
 
@@ -187,7 +192,65 @@ export function ComplaintTable({ rows, canManage }: { rows: ComplaintRow[]; canM
         }
       />
       {selected && <ResolveDialog key={selected.id} complaint={selected} onClose={() => setSelected(null)} />}
+      {viewing && <ComplaintDetailDialog key={viewing.id} complaint={viewing} onClose={() => setViewing(null)} />}
     </>
+  );
+}
+
+/** Read-only complaint detail — used by monitor-only roles (Supervisor). */
+function ComplaintDetailDialog({ complaint, onClose }: { complaint: ComplaintRow; onClose: () => void }) {
+  const { t, td } = useI18n();
+  const src = COMPLAINT_SOURCE_META[complaint.source];
+  const st = COMPLAINT_STATUS_META[complaint.status];
+  return (
+    <Dialog open onOpenChange={(v) => !v && onClose()}>
+      <DialogContent title={t("complaint.detailTitle")} description={t("complaint.detailDesc")} align="center" className="max-w-lg">
+        <div className="space-y-4 p-5">
+          <p className="rounded-lg border border-border bg-muted/30 p-3 text-sm text-foreground/90">“{complaint.content}”</p>
+          <dl className="grid grid-cols-2 gap-x-4 gap-y-3 text-sm">
+            <div>
+              <dt className="text-xs text-muted-foreground">{t("complaint.customer")}</dt>
+              <dd className="text-foreground">{complaint.customerName}</dd>
+            </div>
+            <div>
+              <dt className="text-xs text-muted-foreground">{t("common.outlet")}</dt>
+              <dd className="text-foreground">{complaint.outlet}</dd>
+            </div>
+            <div>
+              <dt className="text-xs text-muted-foreground">{t("complaint.colSource")}</dt>
+              <dd><Badge tone={src?.tone ?? "neutral"}>{td(src?.label ?? complaint.source)}</Badge></dd>
+            </div>
+            <div>
+              <dt className="text-xs text-muted-foreground">{t("complaint.colCategory")}</dt>
+              <dd className="text-foreground">{td(COMPLAINT_CATEGORY_META[complaint.category]?.label ?? complaint.category)}</dd>
+            </div>
+            <div>
+              <dt className="text-xs text-muted-foreground">{t("common.status")}</dt>
+              <dd><Badge tone={st?.tone ?? "neutral"} dot>{td(st?.label ?? complaint.status)}</Badge></dd>
+            </div>
+            <div>
+              <dt className="text-xs text-muted-foreground">{t("common.date")}</dt>
+              <dd className="text-foreground">{formatDate(complaint.createdAt)}</dd>
+            </div>
+            {complaint.rating != null && (
+              <div>
+                <dt className="text-xs text-muted-foreground">{t("complaint.rating")}</dt>
+                <dd className="inline-flex items-center gap-1 text-amber-500"><Star className="size-3.5 fill-current" />{complaint.rating}</dd>
+              </div>
+            )}
+            {complaint.rootCause && (
+              <div>
+                <dt className="text-xs text-muted-foreground">{t("complaint.rootCause")}</dt>
+                <dd className="text-foreground">{td(ROOT_CAUSE_META[complaint.rootCause]?.label ?? complaint.rootCause)}</dd>
+              </div>
+            )}
+          </dl>
+          <div className="flex justify-end">
+            <Button variant="ghost" onClick={onClose}>{t("common.close")}</Button>
+          </div>
+        </div>
+      </DialogContent>
+    </Dialog>
   );
 }
 
