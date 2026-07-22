@@ -21,7 +21,19 @@ import type {
   RootCauseCategory,
 } from "@/lib/types";
 
-/** Only the Coordinator Area (and Super Admin as override) may approve. */
+/**
+ * Complaint workflow roles:
+ *  • Admin inputs the complaint         → create
+ *  • Supervisor does the follow-up      → submit resolution
+ *  • Coordinator Area approves/returns  → close or send back
+ * Super Admin may do any step as an override.
+ */
+function canCreateComplaints(role: string): boolean {
+  return role === "admin_operation" || role === "head_operation" || role === "super_admin";
+}
+function canResolveComplaints(role: string): boolean {
+  return role === "supervisor" || role === "super_admin";
+}
 function canApproveComplaints(role: string): boolean {
   return role === "area_coordinator" || role === "super_admin";
 }
@@ -38,7 +50,7 @@ export interface ComplaintInput {
 export async function createComplaintAction(input: ComplaintInput) {
   const user = await getSessionUser();
   if (!user) return { error: "Not authenticated" };
-  if (!can(user, "manage_complaint")) return { error: "You don't have permission to log complaints." };
+  if (!canCreateComplaints(user.role)) return { error: "You don't have permission to log complaints." };
   const parsed = parseInput(complaintInputSchema, input);
   if ("error" in parsed) return { error: parsed.error };
   const clean = parsed.data;
@@ -115,11 +127,11 @@ export interface SubmitApprovalInput {
   followUpDate?: string;
 }
 
-/** Admin submits a resolution → routes to the Coordinator Area for approval. */
+/** Supervisor submits the follow-up → routes to the Coordinator Area for approval. */
 export async function submitComplaintApprovalAction(input: SubmitApprovalInput) {
   const user = await getSessionUser();
   if (!user) return { error: "Not authenticated" };
-  if (!can(user, "manage_complaint")) return { error: "No permission" };
+  if (!canResolveComplaints(user.role)) return { error: "No permission" };
   const complaint = getComplaint(input.id);
   if (!complaint) return { error: "Complaint tidak ditemukan." };
   if (!canAccessOutlet(user, complaint.outletId, getOutlets())) return { error: "Outlet is outside your scope." };

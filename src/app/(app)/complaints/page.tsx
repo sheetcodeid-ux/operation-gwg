@@ -2,7 +2,6 @@ import { CircleCheckBig, Inbox, MessageSquareWarning, Percent } from "lucide-rea
 import type { Metadata } from "next";
 import { getSessionUser } from "@/lib/auth";
 import { listComplaints, outletName, visibleOutlets } from "@/lib/data/store";
-import { can } from "@/lib/rbac";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { PageHeader } from "@/components/ui/page-header";
 import { StatTile } from "@/components/ui/stat";
@@ -17,8 +16,10 @@ export default async function ComplaintsPage() {
   const user = (await getSessionUser())!;
   const complaints = listComplaints(user);
   const outlets = visibleOutlets(user).map((o) => ({ id: o.id, name: o.name }));
-  const canManage = can(user, "manage_complaint");
-  // Only the Coordinator Area (and Super Admin) may approve a submitted resolution.
+  // Complaint workflow: Admin inputs → Supervisor follows up → Coordinator Area
+  // approves → done. Each role sees only its own action; everyone else monitors.
+  const canCreate = user.role === "admin_operation" || user.role === "head_operation" || user.role === "super_admin";
+  const canResolve = user.role === "supervisor" || user.role === "super_admin";
   const canApprove = user.role === "area_coordinator" || user.role === "super_admin";
 
   const closed = complaints.filter((c) => c.status === "close").length;
@@ -48,7 +49,7 @@ export default async function ComplaintsPage() {
         icon={MessageSquareWarning}
         title={t("complaint.title")}
         description={t("complaint.description")}
-        actions={canManage && outlets.length > 0 ? <NewComplaintButton outlets={outlets} /> : undefined}
+        actions={canCreate && outlets.length > 0 ? <NewComplaintButton outlets={outlets} /> : undefined}
       />
 
       <div className="flex snap-x snap-mandatory gap-3 overflow-x-auto pb-1 [&>*]:min-w-[72%] [&>*]:shrink-0 [&>*]:snap-start sm:grid sm:grid-cols-2 sm:overflow-visible sm:[&>*]:min-w-0 lg:grid-cols-4">
@@ -63,7 +64,7 @@ export default async function ComplaintsPage() {
           <CardTitle>{t("complaint.all")}</CardTitle>
         </CardHeader>
         <CardContent>
-          <ComplaintTable rows={rows} canManage={canManage} canApprove={canApprove} />
+          <ComplaintTable rows={rows} canResolve={canResolve} canApprove={canApprove} />
         </CardContent>
       </Card>
     </div>

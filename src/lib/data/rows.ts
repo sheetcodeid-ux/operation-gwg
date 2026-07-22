@@ -227,6 +227,10 @@ export const complaintToRow = (c: Complaint) => ({
   area_id: c.areaId,
   category: c.category,
   status: c.status,
+  // The `priority` column predates the Priority→Status refactor and is still
+  // NOT NULL in the DB; the app no longer uses it, so send a constant default
+  // to satisfy the constraint (avoids a schema migration).
+  priority: "medium",
   root_cause: c.rootCause ?? null,
   corrective_action: packCorrectiveAction(c),
   created_at: c.createdAt,

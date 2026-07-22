@@ -3,7 +3,7 @@
 import * as React from "react";
 import { type ColumnDef } from "@tanstack/react-table";
 import { useRouter } from "next/navigation";
-import { CheckCircle2, CircleCheckBig, Eye, ImagePlus, Loader2, Settings2, Star, Undo2, X } from "lucide-react";
+import { CheckCircle2, ClipboardCheck, Eye, ImagePlus, Loader2, Star, Undo2, X } from "lucide-react";
 import { toast } from "sonner";
 import {
   COMPLAINT_CATEGORY_META,
@@ -20,7 +20,6 @@ import type {
 } from "@/lib/types";
 import {
   approveComplaintAction,
-  bulkCloseComplaintsAction,
   returnComplaintAction,
   submitComplaintApprovalAction,
 } from "@/lib/actions/complaints";
@@ -63,24 +62,30 @@ function StatusBadge({ row }: { row: ComplaintRow }) {
   return <Badge tone={m?.tone ?? "neutral"} dot>{td(m?.label ?? row.status)}</Badge>;
 }
 
+/** What this viewer can do with a given complaint, based on its stage. */
+type RowAction = "approve" | "resolve" | "detail";
+function actionFor(row: ComplaintRow, canResolve: boolean, canApprove: boolean): RowAction {
+  const stage = row.approval?.stage;
+  if (stage === "pending" && canApprove) return "approve";
+  if (canResolve && stage !== "pending" && stage !== "approved") return "resolve";
+  return "detail";
+}
+
 export function ComplaintTable({
   rows,
-  canManage,
+  canResolve = false,
   canApprove = false,
 }: {
   rows: ComplaintRow[];
-  canManage: boolean;
+  canResolve?: boolean;
   canApprove?: boolean;
 }) {
   const { t, td } = useI18n();
-  const router = useRouter();
   const [status, setStatus] = React.useState("all");
   const [source, setSource] = React.useState("all");
   const [category, setCategory] = React.useState("all");
   const [selected, setSelected] = React.useState<ComplaintRow | null>(null);
   const [viewing, setViewing] = React.useState<ComplaintRow | null>(null);
-  const [picked, setPicked] = React.useState<Set<string>>(new Set());
-  const [bulkPending, startBulk] = React.useTransition();
 
   const filtered = React.useMemo(
     () =>
@@ -93,47 +98,8 @@ export function ComplaintTable({
     [rows, status, source, category],
   );
 
-  const togglePick = React.useCallback((id: string) => {
-    setPicked((prev) => {
-      const next = new Set(prev);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
-      return next;
-    });
-  }, []);
-
-  function bulkClose() {
-    const ids = [...picked];
-    startBulk(async () => {
-      const res = await bulkCloseComplaintsAction(ids);
-      if (res?.error) {
-        toast.error(res.error);
-        return;
-      }
-      toast.success(`Closed ${res?.count ?? ids.length} complaints`);
-      setPicked(new Set());
-      router.refresh();
-    });
-  }
-
-  const columns = React.useMemo<ColumnDef<ComplaintRow>[]>(() => {
-    const cols: ColumnDef<ComplaintRow>[] = [];
-    if (canManage) {
-      cols.push({
-        id: "select",
-        header: "",
-        cell: ({ row }) => (
-          <input
-            type="checkbox"
-            checked={picked.has(row.original.id)}
-            onChange={() => togglePick(row.original.id)}
-            className="size-4 accent-primary"
-            aria-label="Select complaint"
-          />
-        ),
-      });
-    }
-    cols.push(
+  const columns = React.useMemo<ColumnDef<ComplaintRow>[]>(
+    () => [
       {
         accessorKey: "content",
         header: t("complaint.colComplaint"),
@@ -179,24 +145,35 @@ export function ComplaintTable({
         header: t("common.date"),
         cell: ({ getValue }) => <span className="text-muted-foreground">{formatDate(getValue<string>())}</span>,
       },
-    );
-    cols.push({
-      id: "actions",
-      header: "",
-      cell: ({ row }) =>
-        canManage ? (
-          <Button size="sm" variant="subtle" onClick={() => setSelected(row.original)}>
-            <Settings2 className="size-3.5" /> {t("complaint.manage")}
-          </Button>
-        ) : (
-          // Supervisors monitor only: open a read-only detail view.
-          <Button size="sm" variant="subtle" onClick={() => setViewing(row.original)}>
-            <Eye className="size-3.5" /> {t("complaint.view")}
-          </Button>
-        ),
-    });
-    return cols;
-  }, [canManage, picked, togglePick, t, td]);
+      {
+        id: "actions",
+        header: "",
+        cell: ({ row }) => {
+          const kind = actionFor(row.original, canResolve, canApprove);
+          if (kind === "approve") {
+            return (
+              <Button size="sm" variant="subtle" onClick={() => setSelected(row.original)}>
+                <CheckCircle2 className="size-3.5" /> {t("complaint.approve")}
+              </Button>
+            );
+          }
+          if (kind === "resolve") {
+            return (
+              <Button size="sm" variant="subtle" onClick={() => setSelected(row.original)}>
+                <ClipboardCheck className="size-3.5" /> {t("complaint.followUpAction")}
+              </Button>
+            );
+          }
+          return (
+            <Button size="sm" variant="subtle" onClick={() => setViewing(row.original)}>
+              <Eye className="size-3.5" /> {t("complaint.view")}
+            </Button>
+          );
+        },
+      },
+    ],
+    [canResolve, canApprove, t, td],
+  );
 
   return (
     <>
@@ -209,11 +186,6 @@ export function ComplaintTable({
         searchPlaceholder="Search complaints…"
         toolbar={
           <div className="contents">
-            {canManage && picked.size > 0 && (
-              <Button size="sm" variant="subtle" onClick={bulkClose} disabled={bulkPending}>
-                {bulkPending ? <Loader2 className="animate-spin" /> : <CircleCheckBig />} Close {picked.size}
-              </Button>
-            )}
             <Combobox
               portal
               searchable={false}
@@ -242,7 +214,13 @@ export function ComplaintTable({
         }
       />
       {selected && (
-        <ManageDialog key={selected.id} complaint={selected} canApprove={canApprove} onClose={() => setSelected(null)} />
+        <WorkDialog
+          key={selected.id}
+          complaint={selected}
+          canResolve={canResolve}
+          canApprove={canApprove}
+          onClose={() => setSelected(null)}
+        />
       )}
       {viewing && <ComplaintDetailDialog key={viewing.id} complaint={viewing} onClose={() => setViewing(null)} />}
     </>
@@ -253,6 +231,8 @@ export function ComplaintTable({
 function ResolutionSummary({ complaint }: { complaint: ComplaintRow }) {
   const { t, td } = useI18n();
   const a = complaint.approval;
+  const empty = !complaint.rootCause && !complaint.correctiveAction?.description && !a;
+  if (empty) return <p className="text-sm text-muted-foreground">—</p>;
   return (
     <div className="space-y-3">
       {complaint.rootCause && (
@@ -286,7 +266,8 @@ function ResolutionSummary({ complaint }: { complaint: ComplaintRow }) {
   );
 }
 
-/** Read-only complaint detail — used by monitor-only roles (Supervisor). */
+/** Read-only complaint detail — used by monitor roles (Admin / anyone without an
+ *  action on this complaint) to follow its progress. */
 function ComplaintDetailDialog({ complaint, onClose }: { complaint: ComplaintRow; onClose: () => void }) {
   const { t, td } = useI18n();
   const src = COMPLAINT_SOURCE_META[complaint.source];
@@ -327,11 +308,15 @@ function ComplaintDetailDialog({ complaint, onClose }: { complaint: ComplaintRow
               </div>
             )}
           </dl>
-          {(complaint.rootCause || complaint.correctiveAction || complaint.approval) && (
-            <div className="border-t border-border pt-3">
-              <ResolutionSummary complaint={complaint} />
-            </div>
-          )}
+          <div className="border-t border-border pt-3">
+            <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground">{t("complaint.resolutionDetail")}</p>
+            <ResolutionSummary complaint={complaint} />
+            {complaint.approval?.stage === "pending" && (
+              <div className="mt-3 flex items-center gap-2 rounded-lg border border-amber-500/30 bg-amber-500/10 p-3 text-sm text-amber-700 dark:text-amber-300">
+                <Loader2 className="size-4 shrink-0" /> {t("complaint.waitingCA")}
+              </div>
+            )}
+          </div>
           <div className="flex justify-end">
             <Button variant="ghost" onClick={onClose}>{t("common.close")}</Button>
           </div>
@@ -341,55 +326,40 @@ function ComplaintDetailDialog({ complaint, onClose }: { complaint: ComplaintRow
   );
 }
 
-/** Manage dialog — adapts to the approval stage and the viewer's role:
- *  • pending + approver  → approval panel (approve / return, optional photo+note)
- *  • pending + non-approver → read-only "waiting for CA"
- *  • otherwise (open/in_progress) → resolution form → submit to CA
- *  • approved → read-only summary */
-function ManageDialog({
+/** Action dialog — Supervisor follow-up (resolve) or Coordinator Area approval. */
+function WorkDialog({
   complaint,
+  canResolve,
   canApprove,
   onClose,
 }: {
   complaint: ComplaintRow;
+  canResolve: boolean;
   canApprove: boolean;
   onClose: () => void;
 }) {
   const { t } = useI18n();
-  const pending = complaint.approval?.stage === "pending";
-  const approved = complaint.approval?.stage === "approved";
+  const isApproval = complaint.approval?.stage === "pending" && canApprove;
 
-  const title = pending && canApprove ? t("complaint.approvalTitle") : t("complaint.manageTitle");
-  const desc = pending && canApprove ? t("complaint.approvalDesc") : t("complaint.manageDesc");
+  const title = isApproval ? t("complaint.approvalTitle") : t("complaint.resolveTitle");
+  const desc = isApproval ? t("complaint.approvalDesc") : t("complaint.resolveDesc");
 
   return (
     <Dialog open onOpenChange={(v) => !v && onClose()}>
       <DialogContent title={title} description={desc} align="center" className="max-w-lg">
         <div className="space-y-4 p-5">
           <p className="rounded-lg border border-border bg-muted/30 p-3 text-sm text-foreground/80">“{complaint.content}”</p>
-          {approved ? (
+          {isApproval ? (
+            <ApprovalPanel complaint={complaint} onClose={onClose} />
+          ) : canResolve ? (
+            <ResolveForm complaint={complaint} onClose={onClose} />
+          ) : (
             <>
               <ResolutionSummary complaint={complaint} />
               <div className="flex justify-end">
                 <Button variant="ghost" onClick={onClose}>{t("common.close")}</Button>
               </div>
             </>
-          ) : pending ? (
-            canApprove ? (
-              <ApprovalPanel complaint={complaint} onClose={onClose} />
-            ) : (
-              <>
-                <ResolutionSummary complaint={complaint} />
-                <div className="flex items-center gap-2 rounded-lg border border-amber-500/30 bg-amber-500/10 p-3 text-sm text-amber-700 dark:text-amber-300">
-                  <Loader2 className="size-4 shrink-0" /> {t("complaint.waitingCA")}
-                </div>
-                <div className="flex justify-end">
-                  <Button variant="ghost" onClick={onClose}>{t("common.close")}</Button>
-                </div>
-              </>
-            )
-          ) : (
-            <ResolveForm complaint={complaint} onClose={onClose} />
           )}
         </div>
       </DialogContent>
@@ -397,7 +367,7 @@ function ManageDialog({
   );
 }
 
-/** Admin fills the resolution and submits it to the Coordinator Area. */
+/** Supervisor records the follow-up and submits it to the Coordinator Area. */
 function ResolveForm({ complaint, onClose }: { complaint: ComplaintRow; onClose: () => void }) {
   const { t, td } = useI18n();
   const router = useRouter();

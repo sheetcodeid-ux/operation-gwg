@@ -181,6 +181,9 @@ export const DICT: Record<Lang, Record<string, string>> = {
     "complaint.submittedForApproval": "Submitted to Coordinator Area — awaiting approval.",
     "complaint.waitingCA": "Waiting for Coordinator Area approval.",
     "complaint.approvalPhotoView": "Approval photo",
+    "complaint.followUpAction": "Follow Up",
+    "complaint.resolveTitle": "Follow Up Complaint",
+    "complaint.resolveDesc": "Record the resolution and submit it to the Coordinator Area for approval.",
   },
   id: {
     "section.Overview": "Ringkasan",
@@ -356,6 +359,9 @@ export const DICT: Record<Lang, Record<string, string>> = {
     "complaint.submittedForApproval": "Dikirim ke Coordinator Area — menunggu approval.",
     "complaint.waitingCA": "Menunggu persetujuan Coordinator Area.",
     "complaint.approvalPhotoView": "Foto approval",
+    "complaint.followUpAction": "Tindak Lanjut",
+    "complaint.resolveTitle": "Tindak Lanjut Komplain",
+    "complaint.resolveDesc": "Catat penyelesaian lalu kirim ke Coordinator Area untuk disetujui.",
   },
 };
 
