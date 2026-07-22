@@ -28,7 +28,7 @@ export interface HospitalityRow {
   score: number;
 }
 
-export function HospitalityExplorer({ rows, outlets, canDelete = false, canViewScore = true }: { rows: HospitalityRow[]; outlets: { id: string; name: string }[]; canDelete?: boolean; canViewScore?: boolean }) {
+export function HospitalityExplorer({ rows, outlets, canDelete = false, canViewScore = true, showOutletFilter = true }: { rows: HospitalityRow[]; outlets: { id: string; name: string }[]; canDelete?: boolean; canViewScore?: boolean; showOutletFilter?: boolean }) {
   const { t } = useI18n();
   const router = useRouter();
   const [month, setMonth] = React.useState("all");
@@ -126,14 +126,16 @@ export function HospitalityExplorer({ rows, outlets, canDelete = false, canViewS
           toolbar={
             <div className="contents">
               <MonthFilter options={months} value={month} onChange={setMonth} className="w-40 shrink-0" />
-              <Combobox
-                portal
-                value={outlet}
-                onChange={setOutlet}
-                className="w-48 shrink-0"
-                options={[{ value: "all", label: t("common.allOutlets") }, ...outlets.map((o) => ({ value: o.id, label: o.name }))]}
-                searchPlaceholder="Cari outlet…"
-              />
+              {showOutletFilter && (
+                <Combobox
+                  portal
+                  value={outlet}
+                  onChange={setOutlet}
+                  className="w-48 shrink-0"
+                  options={[{ value: "all", label: t("common.allOutlets") }, ...outlets.map((o) => ({ value: o.id, label: o.name }))]}
+                  searchPlaceholder="Cari outlet…"
+                />
+              )}
             </div>
           }
         />

@@ -55,7 +55,7 @@ export default async function HygienePage() {
         </div>
       )}
 
-      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+      <div className="flex snap-x snap-mandatory gap-3 overflow-x-auto pb-1 [&>*]:min-w-[72%] [&>*]:shrink-0 [&>*]:snap-start sm:grid sm:grid-cols-2 sm:overflow-visible sm:[&>*]:min-w-0 lg:grid-cols-4">
         <StatTile icon={SprayCan} label={t("hygiene.avgScore")} value={avg.toFixed(1)} tone="brand" />
         <StatTile icon={ClipboardCheck} label={t("hygiene.audits")} value={audits.length} tone="cyan" />
         <StatTile icon={CircleCheck} label={t("hygiene.cleanRate")} value={`${cleanRate}%`} tone="success" />
@@ -63,7 +63,7 @@ export default async function HygienePage() {
       </div>
 
       <div className="mt-4">
-        <HygieneExplorer rows={rows} outlets={outlets} canDelete={user.role === "super_admin"} />
+        <HygieneExplorer rows={rows} outlets={outlets} canDelete={user.role === "super_admin"} showOutletFilter={user.role !== "supervisor"} />
       </div>
     </div>
   );

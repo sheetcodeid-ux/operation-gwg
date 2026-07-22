@@ -114,7 +114,7 @@ function AuditPhotoGallery({ photos, caption }: { photos: Attachment[]; caption:
   );
 }
 
-export function HygieneExplorer({ rows, outlets, canDelete = false }: { rows: HygieneRow[]; outlets: { id: string; name: string }[]; canDelete?: boolean }) {
+export function HygieneExplorer({ rows, outlets, canDelete = false, showOutletFilter = true }: { rows: HygieneRow[]; outlets: { id: string; name: string }[]; canDelete?: boolean; showOutletFilter?: boolean }) {
   const { t } = useI18n();
   const router = useRouter();
   const [month, setMonth] = React.useState("all");
@@ -250,14 +250,16 @@ export function HygieneExplorer({ rows, outlets, canDelete = false }: { rows: Hy
           toolbar={
             <div className="contents">
               <MonthFilter options={months} value={month} onChange={setMonth} className="w-40 shrink-0" />
-              <Combobox
-                portal
-                value={outlet}
-                onChange={setOutlet}
-                className="w-48 shrink-0"
-                options={[{ value: "all", label: t("common.allOutlets") }, ...outlets.map((o) => ({ value: o.id, label: o.name }))]}
-                searchPlaceholder="Cari outlet…"
-              />
+              {showOutletFilter && (
+                <Combobox
+                  portal
+                  value={outlet}
+                  onChange={setOutlet}
+                  className="w-48 shrink-0"
+                  options={[{ value: "all", label: t("common.allOutlets") }, ...outlets.map((o) => ({ value: o.id, label: o.name }))]}
+                  searchPlaceholder="Cari outlet…"
+                />
+              )}
             </div>
           }
         />

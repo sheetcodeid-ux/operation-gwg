@@ -59,7 +59,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
                   scroll inside its own overflow-x-auto wrapper (tables, kanban). */}
               <div className="min-w-0 flex-1 overflow-x-clip">
                 <main className="px-4 py-6 sm:px-6 lg:px-8">
-                  <Breadcrumbs />
+                  <Breadcrumbs showHome={user.role !== "supervisor"} />
                   {children}
                 </main>
                 <Footer />

@@ -45,7 +45,7 @@ export default async function ComplaintsPage() {
         actions={canManage && outlets.length > 0 ? <NewComplaintButton outlets={outlets} /> : undefined}
       />
 
-      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+      <div className="flex snap-x snap-mandatory gap-3 overflow-x-auto pb-1 [&>*]:min-w-[72%] [&>*]:shrink-0 [&>*]:snap-start sm:grid sm:grid-cols-2 sm:overflow-visible sm:[&>*]:min-w-0 lg:grid-cols-4">
         <StatTile icon={Inbox} label={t("complaint.total")} value={complaints.length} tone="brand" />
         <StatTile icon={MessageSquareWarning} label={t("complaint.open")} value={open} tone="warning" />
         <StatTile icon={CircleCheckBig} label={t("complaint.closed")} value={closed} tone="success" />

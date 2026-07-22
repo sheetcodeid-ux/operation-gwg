@@ -33,7 +33,7 @@ function label(seg: string) {
   return seg.charAt(0).toUpperCase() + seg.slice(1);
 }
 
-export function Breadcrumbs() {
+export function Breadcrumbs({ showHome = true }: { showHome?: boolean }) {
   const pathname = usePathname();
   const segments = pathname.split("/").filter(Boolean);
   if (segments.length === 0) return null;
@@ -46,12 +46,17 @@ export function Breadcrumbs() {
 
   return (
     <nav className="mb-4 flex items-center gap-1.5 text-sm text-muted-foreground" aria-label="Breadcrumb">
-      <Link href="/dashboard" className="grid size-5 place-items-center rounded text-muted-foreground hover:text-foreground">
-        <Home className="size-4" />
-      </Link>
-      {crumbs.map((c) => (
-        <Fragment key={c.href}>
+      {showHome && (
+        <>
+          <Link href="/dashboard" className="grid size-5 place-items-center rounded text-muted-foreground hover:text-foreground">
+            <Home className="size-4" />
+          </Link>
           <ChevronRight className="size-3.5 opacity-50" />
+        </>
+      )}
+      {crumbs.map((c, i) => (
+        <Fragment key={c.href}>
+          {i > 0 && <ChevronRight className="size-3.5 opacity-50" />}
           {c.last ? (
             <span className="font-medium text-foreground">{c.label}</span>
           ) : (

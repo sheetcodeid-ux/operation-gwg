@@ -63,7 +63,7 @@ export default async function HospitalityPage() {
         </div>
       )}
 
-      <div className={`grid grid-cols-2 gap-3 ${canViewScore ? "lg:grid-cols-4" : "lg:grid-cols-3"}`}>
+      <div className={`flex snap-x snap-mandatory gap-3 overflow-x-auto pb-1 [&>*]:min-w-[72%] [&>*]:shrink-0 [&>*]:snap-start sm:grid sm:grid-cols-2 sm:overflow-visible sm:[&>*]:min-w-0 ${canViewScore ? "lg:grid-cols-4" : "lg:grid-cols-3"}`}>
         {canViewScore && <StatTile icon={Star} label={t("hosp.avgScore")} value={avg.toFixed(1)} tone="brand" />}
         <StatTile icon={ClipboardList} label={t("hosp.assessments")} value={assessments.length} tone="cyan" />
         <StatTile icon={Users} label={t("hosp.staffEvaluated")} value={distinctStaff} tone="amber" />
@@ -71,7 +71,7 @@ export default async function HospitalityPage() {
       </div>
 
       <div className="mt-4">
-        <HospitalityExplorer rows={rows} outlets={outlets} canDelete={user.role === "super_admin"} canViewScore={canViewScore} />
+        <HospitalityExplorer rows={rows} outlets={outlets} canDelete={user.role === "super_admin"} canViewScore={canViewScore} showOutletFilter={user.role !== "supervisor"} />
       </div>
     </div>
   );

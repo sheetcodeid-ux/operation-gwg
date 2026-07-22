@@ -313,8 +313,7 @@
     overflow-x: auto;
     scrollbar-width: none;
     -ms-overflow-style: none;
-    -webkit-mask-image: linear-gradient(to right, transparent 0, #000 14px, #000 calc(100% - 14px), transparent 100%);
-    mask-image: linear-gradient(to right, transparent 0, #000 14px, #000 calc(100% - 14px), transparent 100%);
+    /* No edge-fade mask — crisp edges (removed per request). */
   }
   .scroll-fade-x::-webkit-scrollbar {
     display: none;
