@@ -64,10 +64,12 @@ export function NewAssessmentButton({
   outlets,
   supervisors,
   defaultAssessorId,
+  canViewScore = true,
 }: {
   outlets: { id: string; name: string }[];
   supervisors: { id: string; name: string }[];
   defaultAssessorId?: string;
+  canViewScore?: boolean;
 }) {
   const { t } = useI18n();
   return (
@@ -83,7 +85,7 @@ export function NewAssessmentButton({
         align="center"
         className="max-w-2xl"
       >
-        <AssessmentForm outlets={outlets} supervisors={supervisors} defaultAssessorId={defaultAssessorId} />
+        <AssessmentForm outlets={outlets} supervisors={supervisors} defaultAssessorId={defaultAssessorId} canViewScore={canViewScore} />
       </DialogContent>
     </Dialog>
   );
@@ -93,10 +95,12 @@ function AssessmentForm({
   outlets,
   supervisors,
   defaultAssessorId,
+  canViewScore = true,
 }: {
   outlets: { id: string; name: string }[];
   supervisors: { id: string; name: string }[];
   defaultAssessorId?: string;
+  canViewScore?: boolean;
 }) {
   const { t, td } = useI18n();
   const router = useRouter();
@@ -151,7 +155,7 @@ function AssessmentForm({
         toast.error(res.error);
         return;
       }
-      toast.success(`Assessment saved · score ${res?.score?.toFixed(1)}`);
+      toast.success(canViewScore ? `${t("hosp.saved")} · ${t("common.score")} ${res?.score?.toFixed(1)}` : t("hosp.saved"));
       setOpen(false);
       router.refresh();
     });
@@ -189,31 +193,46 @@ function AssessmentForm({
         </Field>
       </div>
 
-      <div className="my-4 flex items-center gap-3 rounded-xl border border-border bg-muted/30 p-3">
-        <ScoreRing value={overall} size={56} stroke={5} label="Skor" />
-        <div className="flex-1">
-          <p className="text-sm font-medium text-foreground">{t("hosp.liveScore")}</p>
-          <p className="text-xs text-muted-foreground">
-            {complete ? t("hosp.liveScoreAuto") : `${scored}/${total} ${t("hygiene.rated")}`}
-          </p>
+      {canViewScore ? (
+        <div className="my-4 flex items-center gap-3 rounded-xl border border-border bg-muted/30 p-3">
+          <ScoreRing value={overall} size={56} stroke={5} label="Skor" />
+          <div className="flex-1">
+            <p className="text-sm font-medium text-foreground">{t("hosp.liveScore")}</p>
+            <p className="text-xs text-muted-foreground">
+              {complete ? t("hosp.liveScoreAuto") : `${scored}/${total} ${t("hygiene.rated")}`}
+            </p>
+          </div>
+          <span
+            className={cn(
+              "rounded-full px-2.5 py-1 text-xs font-medium",
+              !complete
+                ? TONE_PILL.warning
+                : overall >= 85
+                  ? TONE_PILL.success
+                  : overall >= 70
+                    ? TONE_PILL.cyan
+                    : overall >= 55
+                      ? TONE_PILL.warning
+                      : TONE_PILL.danger,
+            )}
+          >
+            {!complete ? t("hygiene.incomplete") : overall >= 85 ? t("hosp.veryGood") : overall >= 70 ? t("hosp.good") : overall >= 55 ? t("hosp.fair") : t("hygiene.needAttention")}
+          </span>
         </div>
-        <span
-          className={cn(
-            "rounded-full px-2.5 py-1 text-xs font-medium",
-            !complete
-              ? TONE_PILL.warning
-              : overall >= 85
-                ? TONE_PILL.success
-                : overall >= 70
-                  ? TONE_PILL.cyan
-                  : overall >= 55
-                    ? TONE_PILL.warning
-                    : TONE_PILL.danger,
-          )}
-        >
-          {!complete ? t("hygiene.incomplete") : overall >= 85 ? t("hosp.veryGood") : overall >= 70 ? t("hosp.good") : overall >= 55 ? t("hosp.fair") : t("hygiene.needAttention")}
-        </span>
-      </div>
+      ) : (
+        // Supervisors don't see the score — only completeness progress.
+        <div className="my-4 flex items-center gap-3 rounded-xl border border-border bg-muted/30 p-3">
+          <div className="flex-1">
+            <p className="text-sm font-medium text-foreground">{t("hosp.progressTitle")}</p>
+            <p className="text-xs text-muted-foreground">
+              {`${scored}/${total} ${t("hygiene.rated")}`} · {t("hosp.scoreHidden")}
+            </p>
+          </div>
+          <span className={cn("rounded-full px-2.5 py-1 text-xs font-medium", complete ? TONE_PILL.success : TONE_PILL.warning)}>
+            {complete ? t("hosp.complete") : t("hygiene.incomplete")}
+          </span>
+        </div>
+      )}
 
       <div className="space-y-2">
         {CATS.map((cat) => {

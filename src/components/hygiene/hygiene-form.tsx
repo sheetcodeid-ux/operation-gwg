@@ -105,7 +105,7 @@ function HygieneForm({ outlets }: { outlets: { id: string; name: string }[] }) {
   const [pending, startTransition] = useTransition();
   const [outletId, setOutletId] = useState(outlets[0]?.id ?? "");
   const [date, setDate] = useState(todayLocal());
-  const [shift, setShift] = useState("Morning");
+  const [shift, setShift] = useState("Shift 1");
   const [inspectorName, setInspectorName] = useState("");
   const [ratings, setRatings] = useState<Ratings>(emptyRatings);
   const [findings, setFindings] = useState<string[]>([]);
@@ -223,7 +223,7 @@ function HygieneForm({ outlets }: { outlets: { id: string; name: string }[] }) {
           <Combobox
             value={shift}
             onChange={setShift}
-            options={["Pagi", "Siang", "Sore", "Malam"].map((s) => ({ value: s, label: td(s) }))}
+            options={["Shift 1", "Shift 2", "Shift 3"].map((s) => ({ value: s, label: s }))}
           />
         </Field>
         <Field label={t("hygiene.inspector")}>

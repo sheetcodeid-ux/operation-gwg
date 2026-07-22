@@ -24,6 +24,9 @@ export default async function HospitalityPage() {
     .map((c) => ({ id: c.id, name: c.name }));
   if (user.role === "supervisor" && !supervisors.some((s) => s.id === user.id)) supervisors.unshift({ id: user.id, name: user.name });
   const canCreate = can(user, "create_hospitality");
+  // Hospitality scores are hidden from Supervisors — only Master Admin and the
+  // relevant Coordinator Area may see the numbers. (Hygiene is NOT hidden.)
+  const canViewScore = user.role === "super_admin" || user.role === "area_coordinator";
 
   const rows: HospitalityRow[] = assessments.map((a) => ({
     id: a.id,
@@ -50,7 +53,7 @@ export default async function HospitalityPage() {
         icon={ConciergeBell}
         title={t("hosp.title")}
         description={t("hosp.description")}
-        actions={canCreate && outlets.length > 0 ? <NewAssessmentButton outlets={outlets} supervisors={supervisors} defaultAssessorId={user.role === "supervisor" ? user.id : undefined} /> : undefined}
+        actions={canCreate && outlets.length > 0 ? <NewAssessmentButton outlets={outlets} supervisors={supervisors} defaultAssessorId={user.role === "supervisor" ? user.id : undefined} canViewScore={canViewScore} /> : undefined}
       />
 
       {canCreate && outlets.length === 0 && (
@@ -61,14 +64,14 @@ export default async function HospitalityPage() {
       )}
 
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-        <StatTile icon={Star} label={t("hosp.avgScore")} value={avg.toFixed(1)} tone="brand" />
+        {canViewScore && <StatTile icon={Star} label={t("hosp.avgScore")} value={avg.toFixed(1)} tone="brand" />}
         <StatTile icon={ClipboardList} label={t("hosp.assessments")} value={assessments.length} tone="cyan" />
         <StatTile icon={Users} label={t("hosp.staffEvaluated")} value={distinctStaff} tone="amber" />
         <StatTile icon={Store} label={t("hosp.outletsCovered")} value={`${distinctOutlets}/${outlets.length}`} tone="success" />
       </div>
 
       <div className="mt-4">
-        <HospitalityExplorer rows={rows} outlets={outlets} canDelete={user.role === "super_admin"} />
+        <HospitalityExplorer rows={rows} outlets={outlets} canDelete={user.role === "super_admin"} canViewScore={canViewScore} />
       </div>
     </div>
   );

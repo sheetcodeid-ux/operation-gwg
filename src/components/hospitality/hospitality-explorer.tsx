@@ -28,7 +28,7 @@ export interface HospitalityRow {
   score: number;
 }
 
-export function HospitalityExplorer({ rows, outlets, canDelete = false }: { rows: HospitalityRow[]; outlets: { id: string; name: string }[]; canDelete?: boolean }) {
+export function HospitalityExplorer({ rows, outlets, canDelete = false, canViewScore = true }: { rows: HospitalityRow[]; outlets: { id: string; name: string }[]; canDelete?: boolean; canViewScore?: boolean }) {
   const { t } = useI18n();
   const router = useRouter();
   const [month, setMonth] = React.useState("all");
@@ -73,19 +73,21 @@ export function HospitalityExplorer({ rows, outlets, canDelete = false }: { rows
       { accessorKey: "outlet", header: t("common.outlet"), cell: ({ getValue }) => <span className="text-foreground/80">{getValue<string>()}</span> },
       { accessorKey: "area", header: t("hosp.colCoordinator"), cell: ({ getValue }) => <span className="text-muted-foreground">{getValue<string>()}</span> },
       { accessorKey: "assessor", header: t("hosp.supervisor"), cell: ({ getValue }) => <span className="text-foreground/80">{getValue<string>()}</span> },
-      {
-        accessorKey: "score",
-        header: t("common.score"),
-        cell: ({ getValue }) => {
-          const s = getValue<number>();
-          return (
-            <span className="inline-flex items-center gap-1.5 font-semibold tabular-nums" style={{ color: scoreColor(s) }}>
-              <span className="size-2 rounded-full" style={{ background: scoreColor(s) }} />
-              {s.toFixed(1)}
-            </span>
-          );
-        },
-      },
+      ...(canViewScore
+        ? [{
+            accessorKey: "score",
+            header: t("common.score"),
+            cell: ({ getValue }: { getValue: <T>() => T }) => {
+              const s = getValue<number>();
+              return (
+                <span className="inline-flex items-center gap-1.5 font-semibold tabular-nums" style={{ color: scoreColor(s) }}>
+                  <span className="size-2 rounded-full" style={{ background: scoreColor(s) }} />
+                  {s.toFixed(1)}
+                </span>
+              );
+            },
+          } as ColumnDef<HospitalityRow>]
+        : []),
       ...(canDelete
         ? [{
             id: "actions",
@@ -106,7 +108,7 @@ export function HospitalityExplorer({ rows, outlets, canDelete = false }: { rows
         : []),
     ],
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [canDelete, deleting, t],
+    [canDelete, canViewScore, deleting, t],
   );
 
   return (

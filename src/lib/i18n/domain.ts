@@ -90,6 +90,7 @@ const DOMAIN: Record<Lang, Record<string, string>> = {
     "Customer interaction": "Interaksi pelanggan",
     // hygiene photo groups
     "Front Area": "Area Depan",
+    "Plant Area": "Area Tanaman",
     // hospitality positions
     Staff: "Staf",
     // complaint categories

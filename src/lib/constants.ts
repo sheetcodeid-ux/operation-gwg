@@ -245,7 +245,7 @@ export const HYGIENE_SECTIONS: Record<
   },
 };
 
-export const HYGIENE_PHOTO_GROUPS = ["Front Area", "Customer Area", "Kitchen", "Toilet"] as const;
+export const HYGIENE_PHOTO_GROUPS = ["Front Area", "Customer Area", "Kitchen", "Toilet", "Plant Area"] as const;
 
 /** Organization-wide KPI targets (used for vs-target indicators). */
 export const KPI_TARGETS = {
