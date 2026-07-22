@@ -60,7 +60,7 @@ export function Combobox({
           ? "p-0"
           : "w-max min-w-[13rem] max-w-[min(20rem,calc(100vw-1.5rem))] p-0"
       }
-      align={matchTriggerWidth ? "start" : "end"}
+      align="start"
       trigger={({ open, toggle }) => (
         <button
           type="button"

@@ -108,7 +108,16 @@ export function Popover({
       )}
       style={
         portal && pos
-          ? { top: pos.top, left: pos.left, maxWidth: pos.maxW, ...(matchTriggerWidth ? { width: pos.width } : { minWidth: pos.width }) }
+          ? {
+              top: pos.top,
+              left: pos.left,
+              maxWidth: pos.maxW,
+              // Only matchTriggerWidth pins a pos-derived width. Otherwise width
+              // is CSS-driven (w-max / min-w) and STABLE across renders — a
+              // pos-derived minWidth would change the menu width after the first
+              // measurement and shift the placement on first open.
+              ...(matchTriggerWidth ? { width: pos.width } : {}),
+            }
           : undefined
       }
     >
