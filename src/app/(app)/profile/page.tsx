@@ -1,25 +1,28 @@
 import { Mail, ShieldCheck, UserRound } from "lucide-react";
 import type { Metadata } from "next";
 import { getSessionUser } from "@/lib/auth";
-import { areaName, visibleOutlets } from "@/lib/data/store";
+import { visibleOutlets } from "@/lib/data/store";
+import { hasGlobalScope } from "@/lib/rbac";
 import { ROLE_LABEL } from "@/lib/constants";
-import { Avatar } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { PageHeader } from "@/components/ui/page-header";
 import { ChangePasswordForm } from "@/components/profile/change-password";
+import { AvatarUpload } from "@/components/profile/avatar-upload";
 
 export const metadata: Metadata = { title: "Profile" };
 
 export default async function ProfilePage() {
   const user = (await getSessionUser())!;
   const outlets = visibleOutlets(user);
-  const scope =
-    user.role === "area_coordinator" && user.areaId
-      ? `${outlets.length} outlets · ${areaName(user.areaId)}`
-      : (user.role === "head_operation" || user.role === "pos_operation") && (user.outletIds?.length ?? 0) > 0
-        ? `${outlets.length} outlet`
-        : "All outlets";
+  // Show the user's actual outlet coverage — "All outlets" only for HQ roles.
+  const scope = hasGlobalScope(user.role)
+    ? "All outlets"
+    : outlets.length === 0
+      ? "—"
+      : outlets.length <= 2
+        ? outlets.map((o) => o.name).join(", ")
+        : `${outlets.length} outlets`;
 
   return (
     <div className="mx-auto max-w-3xl">
@@ -28,7 +31,7 @@ export default async function ProfilePage() {
       <Card>
         <CardContent className="pt-5">
           <div className="flex items-center gap-4">
-            <Avatar name={user.name} size={64} />
+            <AvatarUpload name={user.name} src={user.avatarUrl} size={64} />
             <div className="min-w-0">
               <p className="text-lg font-semibold text-foreground">{user.name}</p>
               <p className="flex items-center gap-1.5 text-sm text-muted-foreground">

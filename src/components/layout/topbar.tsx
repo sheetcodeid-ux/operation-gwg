@@ -66,7 +66,7 @@ export function Topbar({
         <LanguageToggle />
         <ThemeToggle />
         <NotificationCenter notifications={notifications} />
-        <UserMenu name={user.name} email={user.email} role={user.role} />
+        <UserMenu name={user.name} email={user.email} role={user.role} avatarUrl={user.avatarUrl} />
       </div>
     </header>
   );

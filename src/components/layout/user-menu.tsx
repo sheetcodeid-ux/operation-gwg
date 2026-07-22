@@ -10,7 +10,7 @@ import { Avatar } from "@/components/ui/avatar";
 import { Popover } from "@/components/ui/popover";
 import { cn } from "@/lib/utils";
 
-export function UserMenu({ name, email, role }: { name: string; email: string; role: Role }) {
+export function UserMenu({ name, email, role, avatarUrl }: { name: string; email: string; role: Role; avatarUrl?: string | null }) {
   const [pending, startTransition] = useTransition();
 
   return (
@@ -20,7 +20,7 @@ export function UserMenu({ name, email, role }: { name: string; email: string; r
           onClick={toggle}
           className="flex items-center gap-2 rounded-lg border border-border bg-card p-1 pr-2 text-left transition-colors hover:bg-muted"
         >
-          <Avatar name={name} size={28} className="rounded-md" />
+          <Avatar name={name} src={avatarUrl} size={28} className="rounded-md" />
           <span className="hidden max-w-28 truncate text-sm font-medium text-foreground sm:inline">
             {name.split(" ")[0]}
           </span>
@@ -33,7 +33,7 @@ export function UserMenu({ name, email, role }: { name: string; email: string; r
       {(close) => (
         <>
           <div className="flex items-center gap-3 rounded-lg px-2.5 py-2">
-            <Avatar name={name} size={36} />
+            <Avatar name={name} src={avatarUrl} size={36} />
             <div className="min-w-0">
               <p className="truncate text-sm font-medium text-foreground">{name}</p>
               <p className="truncate text-xs text-muted-foreground">{email}</p>
