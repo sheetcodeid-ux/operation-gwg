@@ -217,7 +217,7 @@ export async function savePeerReview(input: {
 export function aggregatePeerScores(reviews: PeerReview[]): { scores: ParamScores; submittedCount: number } {
   const submitted = reviews.filter((r) => r.submitted);
   if (submitted.length === 0) return { scores: {}, submittedCount: 0 };
-  const keys: (keyof ParamScores)[] = ["kpi", "att", "loy", "skl", "kon", "msk"];
+  const keys: (keyof ParamScores)[] = ["kpi", "att", "loy", "skl", "kon", "kol"];
   const out: ParamScores = {};
   for (const k of keys) {
     const vals = submitted.map((r) => r.scores[k]).filter((v): v is number => typeof v === "number" && v > 0);

@@ -7,15 +7,17 @@ import {
   DIMENSIONS,
   EVALUATORS,
   emptyEvaluatorScores,
-  evaluatorFilled,
   evaluatorScore,
   evaluatorsFor,
+  filledForEvaluator,
   finalScore,
   gradeTier,
   interviewScore,
   IV_RECOMMENDATIONS,
   PARAMETERS,
+  paramsForEvaluator,
   resolveInterviewRec,
+  scoreForEvaluator,
   type DimensionKey,
   type DimensionScores,
   type Evaluator,
@@ -103,9 +105,9 @@ export function computeResult(input: ResultInput): ResultBundle {
   const single = evaluators.length === 1;
 
   const evalScores: EvalScoreRow[] = evaluators.map((e) => {
-    const score = evaluatorScore(scores[e.key]);
-    const filled = evaluatorFilled(scores[e.key]);
-    return { key: e.key, name: e.name, weight: e.weight, score, filled, done: filled === PARAMETERS.length, contribution: Math.round(score * (e.weight / 100) * 10) / 10 };
+    const score = scoreForEvaluator(e.key, scores[e.key]);
+    const filled = filledForEvaluator(e.key, scores[e.key]);
+    return { key: e.key, name: e.name, weight: e.weight, score, filled, done: filled === paramsForEvaluator(e.key).length, contribution: Math.round(score * (e.weight / 100) * 10) / 10 };
   });
   const done = evalScores.filter((e) => e.done);
 
@@ -161,7 +163,7 @@ export function computeResult(input: ResultInput): ResultBundle {
   const totalEvaluators = evaluators.length;
   const filledEvaluators = done.length;
   const allFilled = filledEvaluators === totalEvaluators;
-  const filledCells = evaluators.reduce((sum, e) => sum + evaluatorFilled(scores[e.key]), 0);
+  const filledCells = evaluators.reduce((sum, e) => sum + filledForEvaluator(e.key, scores[e.key]), 0);
   const completionPct = Math.round((filledCells / (totalEvaluators * PARAMETERS.length)) * 100);
 
   return {
@@ -277,7 +279,7 @@ export function syntheticDetail(record: AssessmentRecord): ResultInput {
   for (const e of evaluators) {
     // Each evaluator has a slightly different target → realistic per-evaluator spread.
     const evTarget = clamp(record.finalScore + (r() * 10 - 5), 30, 99);
-    for (const p of PARAMETERS) scores[e.key][p.key] = pickValue(evTarget, p.scale, r);
+    for (const p of paramsForEvaluator(e.key)) scores[e.key][p.key] = pickValue(evTarget, p.scale, r);
   }
   const self: ParamScores = {};
   for (const p of PARAMETERS) self[p.key] = pickValue(clamp(record.finalScore + (r() * 12 - 6), 30, 99), p.scale, r);

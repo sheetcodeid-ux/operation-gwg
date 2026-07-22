@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import { ArrowLeft, CheckCircle2, Loader2, Send, Star, Users } from "lucide-react";
-import { PARAMETERS, evaluatorScore, type ParamKey, type ParamScores } from "@/lib/assessment/config";
+import { PEER_PARAMETERS, peerFilled, peerScore, type ParamScores } from "@/lib/assessment/config";
 import { getMyPeerTargets, submitMyPeerReview, type PeerTarget } from "@/lib/actions/assessment-peer";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
@@ -38,9 +38,9 @@ export function PeerPenilaianTab() {
     setNote(t.note ?? "");
   }
 
-  const filled = PARAMETERS.filter((p) => !!scores[p.key]).length;
-  const complete = filled === PARAMETERS.length;
-  const score = evaluatorScore(scores);
+  const filled = peerFilled(scores);
+  const complete = filled === PEER_PARAMETERS.length;
+  const score = peerScore(scores);
 
   function save(submit: boolean) {
     if (!active) return;
@@ -91,7 +91,7 @@ export function PeerPenilaianTab() {
         </Card>
 
         <div className={cn("space-y-3", active.submitted && "pointer-events-none opacity-70")}>
-          {PARAMETERS.map((p) => (
+          {PEER_PARAMETERS.map((p) => (
             <Card key={p.key} className="p-0">
               <div className="flex items-center justify-between gap-3 border-b border-border px-4 py-3">
                 <div className="min-w-0">

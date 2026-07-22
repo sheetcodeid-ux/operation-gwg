@@ -17,7 +17,9 @@
  * The normal trio is [al, hc, peer]; `dir` is used only on the director-only path.
  */
 export type EvaluatorKey = "al" | "hc" | "peer" | "dir";
-export type ParamKey = "kpi" | "att" | "loy" | "skl" | "kon" | "msk";
+// `msk` (Masa Kerja) is the 6th parameter for Atasan/HC; `kol` (Kerja Sama Tim
+// & Kolaborasi) is the 6th parameter for the Rekan Sejawat framework instead.
+export type ParamKey = "kpi" | "att" | "loy" | "skl" | "kon" | "msk" | "kol";
 export type DimensionKey = "kont" | "visi" | "siap" | "komit";
 
 export interface ScoreOption {
@@ -178,6 +180,93 @@ export const PARAMETERS: Parameter[] = [
       { value: 3, head: "Nilai 3 — 2–3 tahun", body: "Cukup berpengalaman untuk naik golongan dengan performa yang mendukung.", src: "Otomatis dari sistem HR" },
       { value: 2, head: "Nilai 2 — 1–2 tahun", body: "Masih dalam fase pengembangan, kenaikan golongan memerlukan performa luar biasa.", src: "Otomatis dari sistem HR" },
       { value: 1, head: "Nilai 1 — Kurang dari 1 tahun", body: "Terlalu awal untuk kenaikan golongan reguler. Hanya dipertimbangkan jika ada alasan sangat kuat.", src: "Otomatis dari sistem HR" },
+    ],
+  },
+];
+
+/**
+ * Rekan Sejawat (Penilai 3) framework — revisi tim HC (Framework Penilaian
+ * Rekan Sejawat). Same parameter identities & weights as the main set for the
+ * first five, but scored from the PEER's day-to-day observation standpoint (not
+ * HR-system data), and the 6th parameter is "Kerja Sama Tim & Kolaborasi"
+ * (skala 1–4) instead of "Masa Kerja". Weights sum to 100.
+ */
+export const PEER_PARAMETERS: Parameter[] = [
+  {
+    key: "kpi",
+    title: "KPI Performa",
+    weight: 30,
+    scale: 3,
+    source: "Observasi langsung terhadap hasil kerja & kontribusi rekan dalam pekerjaan/proyek bersama sehari-hari (bukan dari laporan sistem KPI resmi).",
+    options: [
+      { value: 3, head: "Nilai 3 — Sangat Baik", body: "Konsisten menyelesaikan pekerjaan bersama tepat waktu dengan kualitas baik; kontribusinya terlihat nyata dalam hasil kerja tim/proyek bersama." },
+      { value: 2, head: "Nilai 2 — Baik", body: "Umumnya menyelesaikan bagian pekerjaannya dengan baik, sesekali memerlukan pengingat atau bantuan rekan lain." },
+      { value: 1, head: "Nilai 1 — Perlu Perbaikan", body: "Sering terlambat menyelesaikan bagian pekerjaannya atau kualitas kerja belum konsisten baik dalam kolaborasi tim." },
+    ],
+  },
+  {
+    key: "att",
+    title: "Attitude & Leadership",
+    weight: 20,
+    scale: 3,
+    source: "Form 360° (isian rekan sejawat sebagai salah satu responden) & observasi interaksi kerja sehari-hari.",
+    options: [
+      { value: 3, head: "Nilai 3 — Baik & Stabil", body: "Inisiatif tinggi tanpa diminta, komunikasi proaktif, menjadi panutan dan bersedia membantu/membimbing rekan lain." },
+      { value: 2, head: "Nilai 2 — Cukup", body: "Kooperatif dan tidak menimbulkan masalah, namun cenderung pasif — tidak ada inisiatif yang menonjol." },
+      { value: 1, head: "Nilai 1 — Perlu Perhatian", body: "Pernah ada gesekan dengan rekan tim, komunikasi tidak lancar, atau pernah terjadi konflik yang dirasakan langsung oleh rekan sejawat." },
+    ],
+  },
+  {
+    key: "loy",
+    title: "Loyalitas & Disiplin",
+    weight: 15,
+    scale: 4,
+    source: "Observasi rekan sejawat terhadap kehadiran, ketepatan waktu, & konsistensi komitmen kerja dalam aktivitas/jadwal bersama (bukan data absensi sistem HR).",
+    options: [
+      { value: 4, head: "Nilai 4 — Disiplin Tinggi", body: "Selalu hadir tepat waktu dan konsisten menepati komitmen/jadwal kerja bersama tim." },
+      { value: 3, head: "Nilai 3 — Disiplin Standar", body: "Umumnya tepat waktu, jarang terlambat atau tidak hadir tanpa keterangan kepada tim." },
+      { value: 2, head: "Nilai 2 — Pernah Kurang Disiplin", body: "Beberapa kali terlambat atau absen tanpa pemberitahuan yang memengaruhi pekerjaan bersama." },
+      { value: 1, head: "Nilai 1 — Kurang Disiplin", body: "Sering terlambat/absen tanpa koordinasi sehingga mengganggu pekerjaan tim." },
+    ],
+  },
+  {
+    key: "skl",
+    title: "Skill & Kompetensi",
+    weight: 15,
+    scale: 5,
+    source: "Observasi langsung kemampuan teknis/fungsional yang ditunjukkan rekan dalam praktik kerja & kolaborasi sehari-hari.",
+    options: [
+      { value: 5, head: "Nilai 5 — Expert & Bisa Melatih", body: "Menjadi rujukan/tempat bertanya rekan lain, mampu membantu menyelesaikan masalah teknis tim." },
+      { value: 4, head: "Nilai 4 — Sangat Kompeten", body: "Mandiri penuh dalam pekerjaan bersama, jarang membutuhkan bantuan rekan lain." },
+      { value: 3, head: "Nilai 3 — Standar Jabatan", body: "Mampu menyelesaikan bagian tugasnya sesuai standar, kadang memerlukan diskusi/arahan." },
+      { value: 2, head: "Nilai 2 — Perlu Banyak Arahan", body: "Sering meminta bantuan rekan untuk tugas yang seharusnya sudah dikuasai pada level jabatannya." },
+      { value: 1, head: "Nilai 1 — Di Bawah Standar", body: "Belum menunjukkan penguasaan yang memadai dalam kolaborasi kerja sehari-hari." },
+    ],
+  },
+  {
+    key: "kon",
+    title: "Kontribusi ke Perusahaan",
+    weight: 10,
+    scale: 4,
+    source: "Observasi rekan sejawat terhadap kontribusi nyata dalam pekerjaan/proyek bersama (bukti yang terlihat langsung oleh rekan, bukan laporan formal ke atasan).",
+    options: [
+      { value: 4, head: "Nilai 4 — Dampak Signifikan", body: "Kontribusi/inisiatifnya memberi dampak nyata pada hasil kerja tim atau proyek bersama." },
+      { value: 3, head: "Nilai 3 — Normal Job Desk", body: "Menjalankan bagian tugasnya sesuai porsi masing-masing dengan baik dalam kerja tim." },
+      { value: 2, head: "Nilai 2 — Minim", body: "Kontribusi dalam kerja tim/proyek bersama terasa minim dari sudut pandang rekan sejawat." },
+      { value: 1, head: "Nilai 1 — Tidak Ada", body: "Tidak terlihat kontribusi nyata dalam pekerjaan/proyek bersama." },
+    ],
+  },
+  {
+    key: "kol",
+    title: "Kerja Sama Tim & Kolaborasi",
+    weight: 10,
+    scale: 4,
+    source: "Observasi langsung rekan sejawat terhadap cara individu berbagi informasi, merespons kebutuhan tim, & mendukung kelancaran kerja bersama/lintas fungsi.",
+    options: [
+      { value: 4, head: "Nilai 4 — Sangat Kolaboratif", body: "Selalu proaktif berbagi informasi, terbuka menerima masukan, dan menjadi perekat/penengah yang membantu kelancaran kerja tim." },
+      { value: 3, head: "Nilai 3 — Kolaboratif", body: "Bekerja sama dengan baik, responsif terhadap kebutuhan tim, komunikasi dua arah berjalan lancar." },
+      { value: 2, head: "Nilai 2 — Cukup Kolaboratif", body: "Bersedia bekerja sama namun kurang proaktif, terkadang perlu diminta terlebih dahulu." },
+      { value: 1, head: "Nilai 1 — Kurang Kolaboratif", body: "Cenderung individualis, enggan berbagi informasi atau membantu rekan dalam tim." },
     ],
   },
 ];
@@ -401,11 +490,43 @@ export function evaluatorFilled(scores: ParamScores | undefined): number {
   return PARAMETERS.filter((p) => !!scores[p.key]).length;
 }
 
+/** Rekan Sejawat uses its own parameter set (different 6th param + scales). */
+export function peerScore(scores: ParamScores | undefined): number {
+  if (!scores) return 0;
+  let total = 0;
+  for (const p of PEER_PARAMETERS) {
+    const v = scores[p.key];
+    if (!v) continue;
+    total += (v / p.scale) * 100 * (p.weight / 100);
+  }
+  return Math.round(total * 100) / 100;
+}
+
+export function peerFilled(scores: ParamScores | undefined): number {
+  if (!scores) return 0;
+  return PEER_PARAMETERS.filter((p) => !!scores[p.key]).length;
+}
+
+/** The parameter set an evaluator scores against (peer differs). */
+export function paramsForEvaluator(key: EvaluatorKey): Parameter[] {
+  return key === "peer" ? PEER_PARAMETERS : PARAMETERS;
+}
+
+/** 0–100 score for one evaluator column, honouring the peer framework. */
+export function scoreForEvaluator(key: EvaluatorKey, scores: ParamScores | undefined): number {
+  return key === "peer" ? peerScore(scores) : evaluatorScore(scores);
+}
+
+/** Parameters filled for one evaluator column, honouring the peer framework. */
+export function filledForEvaluator(key: EvaluatorKey, scores: ParamScores | undefined): number {
+  return key === "peer" ? peerFilled(scores) : evaluatorFilled(scores);
+}
+
 /** Weighted final score across the active evaluators (0–100). */
 export function finalScore(all: EvaluatorScores, evaluators: Evaluator[] = EVALUATORS): number {
   let total = 0;
   for (const e of evaluators) {
-    total += evaluatorScore(all[e.key]) * (e.weight / 100);
+    total += scoreForEvaluator(e.key, all[e.key]) * (e.weight / 100);
   }
   return Math.round(total * 100) / 100;
 }
