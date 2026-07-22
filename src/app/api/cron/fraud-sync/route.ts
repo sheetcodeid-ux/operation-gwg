@@ -19,9 +19,47 @@ import { getAppConfig } from "@/lib/data/app-config";
 export const maxDuration = 60;
 export const dynamic = "force-dynamic";
 
-const HORIZON_DAYS = 45;
+/** Sales (omset) context stays on a rolling recent window — historical omset
+ *  fills on demand when a month is opened. Fraud rows backfill the WHOLE year. */
+const SALES_HORIZON_DAYS = 60;
+/** ESB export budget per single ESB call window; the sync engine caps a range
+ *  at 62 days internally, so windows stay ≤ 58. */
+const WINDOW_DAYS = 58;
 
 const ymdWib = (offsetDays: number) => new Date(Date.now() + 7 * 3_600_000 - offsetDays * 86_400_000).toISOString().slice(0, 10);
+/** Shift a YYYY-MM-DD by whole days (UTC math — dates are date-only). */
+const addDays = (day: string, delta: number) => new Date(Date.parse(`${day}T00:00:00Z`) + delta * 86_400_000).toISOString().slice(0, 10);
+/** The earliest fraud day we keep synced: 1 January of the current WIB year. */
+const backfillStart = () => `${new Date(Date.now() + 7 * 3_600_000).getUTCFullYear()}-01-01`;
+
+/**
+ * Backfill fraud rows across [start, endStr] newest-first in ≤WINDOW_DAYS
+ * windows, skipping days already final, until the time budget runs out. Because
+ * a day synced after it ended is FINAL and never re-pulled, the whole year
+ * converges over a few runs and then every period opens instantly from the DB.
+ */
+async function backfillHistory(
+  kind: "all" | "delete",
+  start: string,
+  endStr: string,
+  left: () => number,
+): Promise<{ synced: number; windows: number; error?: string }> {
+  let to = endStr;
+  let synced = 0;
+  let windows = 0;
+  let error: string | undefined;
+  while (left() > 8_000 && to >= start) {
+    const from = addDays(to, -(WINDOW_DAYS - 1));
+    const winFrom = from < start ? start : from;
+    const res = await syncFraudRange(winFrom, to, kind, Math.min(left() - 4_000, 24_000));
+    windows += 1;
+    synced += res.synced;
+    if (res.error) { error = res.error; break; }
+    if (res.remaining > 0) break; // budget spent mid-window — next run resumes here
+    to = addDays(winFrom, -1); // window fully final → step to the older window
+  }
+  return { synced, windows, error };
+}
 
 async function authorized(req: Request): Promise<boolean> {
   const url = new URL(req.url);
@@ -42,16 +80,33 @@ export async function GET(req: Request) {
   const started = Date.now();
   const left = () => 52_000 - (Date.now() - started);
   const results: Record<string, unknown> = {};
+  const job = new URL(req.url).searchParams.get("job");
 
   // Dedicated job: ESB product catalog sync (menu-recap is ~124 pages, needs a
   // full budget; scheduled on its own hourly pg_cron with ?job=menu). Resumable
   // upsert — a partial run converges over a few hours.
-  if (new URL(req.url).searchParams.get("job") === "menu") {
+  if (job === "menu") {
     try {
       const { syncEsbMenus } = await import("@/lib/data/esb-menu");
       results["menu"] = await syncEsbMenus(30, 50_000);
     } catch (e) {
       results["menu"] = { error: e instanceof Error ? e.message : "failed" };
+    }
+    return NextResponse.json({ ok: true, tookMs: Date.now() - started, results });
+  }
+
+  // Dedicated job: spend the WHOLE budget backfilling this year's history so the
+  // full Jan→now range is in the DB fast (schedule on its own frequent pg_cron
+  // with ?job=backfill, or hit it manually to prime the cache). No live-day work.
+  if (job === "backfill") {
+    const start = backfillStart();
+    for (const kind of ["all", "delete"] as const) {
+      if (left() < 8_000) break;
+      try {
+        results[`backfill:${kind}`] = await backfillHistory(kind, start, ymdWib(1), left);
+      } catch (e) {
+        results[`backfill:${kind}`] = { error: e instanceof Error ? e.message : "failed" };
+      }
     }
     return NextResponse.json({ ok: true, tookMs: Date.now() - started, results });
   }
@@ -65,23 +120,25 @@ export async function GET(req: Request) {
     }
   }
 
-  // Phase 2 — backfill history (newest first) with whatever budget remains, so
-  // after a day or two of hourly runs the whole horizon is final and every
-  // period opens instantly.
+  // Phase 2 — backfill the WHOLE year (Jan→now), newest first, with whatever
+  // budget remains. After a few hourly runs the entire range is final in the DB
+  // and every period opens instantly. (Prime it faster via ?job=backfill.)
+  const start = backfillStart();
   for (const kind of ["all", "delete"] as const) {
     if (left() < 8_000) break;
     try {
-      results[`backfill:${kind}`] = await syncFraudRange(ymdWib(HORIZON_DAYS), ymdWib(2), kind, Math.min(left() - 4_000, 22_000));
+      results[`backfill:${kind}`] = await backfillHistory(kind, start, ymdWib(2), left);
     } catch (e) {
       results[`backfill:${kind}`] = { error: e instanceof Error ? e.message : "failed" };
     }
   }
 
-  // Phase 3 — omset context: all-outlet daily sales over the horizon, plus a
-  // fresh per-branch snapshot for today so % dari omset is ready when opened.
+  // Phase 3 — omset context: all-outlet daily sales over the recent horizon, plus
+  // a fresh per-branch snapshot for today so % dari omset is ready when opened.
+  // (Historical omset fills on demand when an older month is opened.)
   if (left() > 6_000) {
     try {
-      results["sales:daily"] = await syncSalesDaily(ymdWib(HORIZON_DAYS), ymdWib(0), Math.min(left() - 4_000, 14_000));
+      results["sales:daily"] = await syncSalesDaily(ymdWib(SALES_HORIZON_DAYS), ymdWib(0), Math.min(left() - 4_000, 14_000));
     } catch (e) {
       results["sales:daily"] = { error: e instanceof Error ? e.message : "failed" };
     }
