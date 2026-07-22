@@ -63,7 +63,7 @@ export default async function HospitalityPage() {
         </div>
       )}
 
-      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+      <div className={`grid grid-cols-2 gap-3 ${canViewScore ? "lg:grid-cols-4" : "lg:grid-cols-3"}`}>
         {canViewScore && <StatTile icon={Star} label={t("hosp.avgScore")} value={avg.toFixed(1)} tone="brand" />}
         <StatTile icon={ClipboardList} label={t("hosp.assessments")} value={assessments.length} tone="cyan" />
         <StatTile icon={Users} label={t("hosp.staffEvaluated")} value={distinctStaff} tone="amber" />
