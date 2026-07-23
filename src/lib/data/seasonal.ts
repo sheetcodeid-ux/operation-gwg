@@ -90,13 +90,15 @@ export async function getSeasonal(year: number, branch = ""): Promise<SeasonalRe
 
 /** Pull the next batch of missing/stale days of [from, to] for a branch from ESB
  *  into the cache, newest first, stopping near the budget. */
-export async function syncSeasonalDays(from: string, to: string, branch = "", budgetMs = 42_000): Promise<{ synced: number; remaining: number; error?: string }> {
+export async function syncSeasonalDays(from: string, to: string, branch = "", budgetMs = 42_000, force = false): Promise<{ synced: number; remaining: number; error?: string }> {
   if (!dbEnabled || !esbConfigured()) return { synced: 0, remaining: 0 };
   const { data } = await db().from("seasonal_daily").select("day,synced_at").eq("branch", branch).gte("day", from).lte("day", to);
   const have = new Map((data ?? []).map((r: { day: string; synced_at: string }) => [r.day, r.synced_at]));
   const today = todayWib();
+  // `force` re-pulls every past day (used once to overwrite data synced from an
+  // old source); otherwise only missing/stale days are fetched.
   const pending = eachDay(from, to)
-    .filter((d) => d <= today && (!have.get(d) || !fresh(have.get(d)!, d)))
+    .filter((d) => d <= today && (force || !have.get(d) || !fresh(have.get(d)!, d)))
     .sort()
     .reverse();
   if (pending.length === 0) return { synced: 0, remaining: 0 };

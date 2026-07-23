@@ -117,7 +117,8 @@ export async function GET(req: Request) {
   if (job === "seasonal") {
     try {
       const y = new Date(Date.now() + 7 * 3_600_000).getUTCFullYear();
-      results["seasonal"] = await syncSeasonalDays(`${y}-01-01`, ymdWib(0), "", Math.min(left() - 4_000, 50_000));
+      const force = new URL(req.url).searchParams.get("force") === "1";
+      results["seasonal"] = await syncSeasonalDays(`${y}-01-01`, ymdWib(0), "", Math.min(left() - 4_000, 50_000), force);
     } catch (e) {
       results["seasonal"] = { error: e instanceof Error ? e.message : "failed" };
     }
