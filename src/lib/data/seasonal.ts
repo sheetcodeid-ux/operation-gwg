@@ -104,6 +104,7 @@ export async function syncSeasonalDays(from: string, to: string, branch = "", bu
   if (pending.length === 0) return { synced: 0, remaining: 0 };
   const started = Date.now();
   let synced = 0;
+  let fails = 0;
   let error: string | undefined;
   for (const day of pending) {
     if (synced > 0 && Date.now() - started > budgetMs) break;
@@ -112,9 +113,13 @@ export async function syncSeasonalDays(from: string, to: string, branch = "", bu
       const up = await db().from("seasonal_daily").upsert({ day, branch, gross: sales.gross, net: sales.net, synced_at: new Date().toISOString() });
       if (up.error) throw new Error(up.error.message);
       synced += 1;
+      fails = 0;
     } catch (e) {
+      // ESB occasionally returns an unparseable response — skip that day and
+      // carry on; only give up after several failures in a row.
       error = e instanceof Error ? e.message : "Gagal memuat data ESB.";
-      break;
+      fails += 1;
+      if (fails >= 5) break;
     }
   }
   return { synced, remaining: pending.length - synced, error };
