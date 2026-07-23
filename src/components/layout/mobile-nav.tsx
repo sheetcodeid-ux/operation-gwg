@@ -101,7 +101,9 @@ export function MobileNav({
                           const Icon = NAV_ICONS[item.icon];
                           const locked = !canOpen(item);
                           const active = !locked && isActive(item.href);
-                          const label = t(`nav.${item.label}`);
+                          const translated = t(`nav.${item.label}`);
+                          // Fall back to the original label when no translation exists.
+                          const label = translated.startsWith("nav.") ? item.label : translated;
 
                           if (locked) {
                             return (

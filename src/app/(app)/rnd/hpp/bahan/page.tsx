@@ -14,7 +14,7 @@ export default async function HppIngredientsPage() {
   const user = (await getSessionUser())!;
   const canEdit =
     canOpenMenu(user.role, "hpp", user.grants) ||
-    user.department === "R&D" ||
+    user.department === "Product Development & Quality" ||
     user.department === "Food & Beverage";
   if (!canEdit) redirect("/dashboard");
 

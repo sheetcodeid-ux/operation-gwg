@@ -25,7 +25,7 @@ export default async function HppPage({ searchParams }: { searchParams: Promise<
   const { edit } = await searchParams;
   const canEdit =
     canOpenMenu(user.role, "hpp", user.grants) ||
-    user.department === "R&D" ||
+    user.department === "Product Development & Quality" ||
     user.department === "Food & Beverage";
   if (!canEdit) redirect("/dashboard");
 

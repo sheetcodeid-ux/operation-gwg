@@ -3,6 +3,7 @@ import type { Role } from "./types";
 /** Every navigable menu in the app. */
 export type MenuKey =
   | "dashboard"
+  | "analytics"
   | "work"
   | "events"
   | "hospitality"
@@ -27,14 +28,14 @@ export type MenuKey =
 export type Division =
   | "Operation"
   | "Supervisor"
-  | "R&D"
+  | "Product Development & Quality"
   | "Human Capital"
   | "Administrator"
   | "Finance"
   | "Creative"
   | "Project Manager"
   | "Auditor"
-  | "Sekretaris"
+  | "Executive Assistant"
   | "Business Development";
 
 export interface NavItem {
@@ -51,6 +52,7 @@ export interface NavItem {
 /** Static definition of every menu (order = sidebar order within a group). */
 export const NAV_MENUS: Omit<NavItem, "section">[] = [
   { key: "dashboard", label: "Dashboard", href: "/dashboard", icon: "LayoutDashboard" },
+  { key: "analytics", label: "Analytics", href: "/analytics", icon: "TrendingUp" },
   { key: "work", label: "Work Tracker", href: "/work-tracker", icon: "ListChecks" },
   { key: "events", label: "Event Tracker", href: "/events", icon: "CalendarRange" },
   { key: "hospitality", label: "Hospitality", href: "/hospitality", icon: "ConciergeBell" },
@@ -76,14 +78,14 @@ export const NAV_MENUS: Omit<NavItem, "section">[] = [
 export const DIVISION_ICON: Record<Division, string> = {
   Operation: "Briefcase",
   Supervisor: "ShieldCheck",
-  "R&D": "FlaskConical",
+  "Product Development & Quality": "FlaskConical",
   "Human Capital": "UserRound", // people, not a legal scale
   Administrator: "Settings2",
   Finance: "Wallet",
   Creative: "Palette",
   "Project Manager": "FolderKanban",
   Auditor: "SearchCheck", // distinct from Supervisor's shield
-  Sekretaris: "NotebookPen",
+  "Executive Assistant": "NotebookPen",
   "Business Development": "Handshake",
 };
 
@@ -96,10 +98,10 @@ export const ROLE_DIVISION: Record<Role, Division> = {
   pos_operation: "Operation",
   admin_operation: "Operation",
   supervisor: "Supervisor",
-  head_bar_rnd: "R&D",
-  bar_rnd: "R&D",
-  kitchen_rnd: "R&D",
-  coordinator_rnd: "R&D",
+  head_bar_rnd: "Product Development & Quality",
+  bar_rnd: "Product Development & Quality",
+  kitchen_rnd: "Product Development & Quality",
+  coordinator_rnd: "Product Development & Quality",
   legal: "Human Capital",
   assessor: "Human Capital",
   // Generic member: a placeholder home division; real access comes from their
@@ -109,6 +111,7 @@ export const ROLE_DIVISION: Record<Role, Division> = {
 
 const OPERATION_FULL: MenuKey[] = [
   "dashboard",
+  "analytics",
   "work",
   "events",
   "hospitality",
@@ -146,14 +149,14 @@ export const ROLE_MENUS: Record<Role, MenuKey[]> = {
 const DIVISION_MENUS: { division: Division; menus: MenuKey[] }[] = [
   { division: "Operation", menus: OPERATION_FULL },
   { division: "Supervisor", menus: ["hospitality", "hygiene", "complaints"] },
-  { division: "R&D", menus: ["hpp_dash", "work", "hpp", "hpp_db", "hpp_bahan", "hpp_price"] },
+  { division: "Product Development & Quality", menus: ["hpp_dash", "work", "hpp", "hpp_db", "hpp_bahan", "hpp_price"] },
   { division: "Human Capital", menus: ["work", "assessment"] },
   // New department-aligned divisions — Work Tracker only for now.
   { division: "Finance", menus: ["work"] },
   { division: "Creative", menus: ["work"] },
   { division: "Project Manager", menus: ["work"] },
   { division: "Auditor", menus: ["work"] },
-  { division: "Sekretaris", menus: ["work"] },
+  { division: "Executive Assistant", menus: ["work"] },
   { division: "Business Development", menus: ["work"] },
   { division: "Administrator", menus: ["users", "audit"] },
 ];

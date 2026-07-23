@@ -5,7 +5,7 @@ import { canOpenMenu } from "@/lib/nav";
  *  the R&D / Food & Beverage department. */
 export function canUseHpp(user: UserProfile | null): user is UserProfile {
   if (!user) return false;
-  return canOpenMenu(user.role, "hpp", user.grants) || user.department === "R&D" || user.department === "Food & Beverage";
+  return canOpenMenu(user.role, "hpp", user.grants) || user.department === "Product Development & Quality" || user.department === "Food & Beverage";
 }
 
 /** Who may verify/reject a menu: only the R&D Head (head_bar_rnd) or Super Admin.

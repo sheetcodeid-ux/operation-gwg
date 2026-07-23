@@ -22,9 +22,6 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { PageHeader } from "@/components/ui/page-header";
 import { KpiCarousel, type Kpi } from "@/components/dashboard/kpi-card";
 import { HeroCard } from "@/components/dashboard/hero-card";
-import { DashboardSwitcher } from "@/components/dashboard/dashboard-switcher";
-import { OperationDashboard2 } from "@/components/dashboard/operation-dashboard-2";
-import { getOpsDashboard } from "@/lib/data/ops-dashboard";
 import { InsightsPanel } from "@/components/dashboard/insights-panel";
 import { GlobalFilterBar } from "@/components/dashboard/filter-bar";
 import { OutletRankingTable } from "@/components/dashboard/outlet-ranking-table";
@@ -39,26 +36,11 @@ export const metadata: Metadata = { title: "Executive Dashboard" };
 export default async function DashboardPage({
   searchParams,
 }: {
-  searchParams: Promise<{ range?: string; from?: string; to?: string; scope?: string; view?: string }>;
+  searchParams: Promise<{ range?: string; from?: string; to?: string; scope?: string }>;
 }) {
   const user = (await getSessionUser())!;
   const sp = await searchParams;
 
-  // Dashboard 2 (operational/financial) — switchable on the same page.
-  if (sp.view === "ops2") {
-    const opsData = await getOpsDashboard({ user });
-    return (
-      <div className="w-full">
-        <PageHeader
-          icon={LayoutDashboard}
-          title="Dashboard Operasional"
-          description="Ringkasan finansial & operasional seluruh cabang"
-          actions={<DashboardSwitcher current="ops2" />}
-        />
-        <OperationDashboard2 initial={opsData} />
-      </div>
-    );
-  }
   const range = resolveRange({ range: sp.range, from: sp.from, to: sp.to });
   const periodSub = `vs prev · ${range.label.toLowerCase()}`;
 
@@ -172,7 +154,6 @@ export default async function DashboardPage({
         icon={LayoutDashboard}
         title="Executive Dashboard"
         description={`Real-time operational overview · ${ROLE_LABEL[user.role]} view`}
-        actions={<DashboardSwitcher current="" />}
       />
 
       <GlobalFilterBar scopeOptions={scopeOptions} />

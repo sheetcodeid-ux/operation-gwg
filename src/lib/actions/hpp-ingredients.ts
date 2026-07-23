@@ -9,7 +9,7 @@ import type { UserProfile } from "@/lib/types";
 /** Same access as the HPP calculator: R&D roles, admin, grants, or R&D/F&B dept. */
 function allowed(user: UserProfile | null): user is UserProfile {
   if (!user) return false;
-  return canOpenMenu(user.role, "hpp", user.grants) || user.department === "R&D" || user.department === "Food & Beverage";
+  return canOpenMenu(user.role, "hpp", user.grants) || user.department === "Product Development & Quality" || user.department === "Food & Beverage";
 }
 
 function revalidate() {

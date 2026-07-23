@@ -127,7 +127,10 @@ export function Sidebar({
                         const Icon = NAV_ICONS[item.icon];
                         const locked = !canOpen(item);
                         const active = !locked && isActive(item.href);
-                        const label = t(`nav.${item.label}`);
+                        const translated = t(`nav.${item.label}`);
+                        // Fall back to the original label if no translation exists
+                        // (t() returns the raw "nav.<label>" key when unmatched).
+                        const label = translated.startsWith("nav.") ? item.label : translated;
 
                         if (locked) {
                           return (
