@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { syncFraudRange, syncSalesDaily, syncSalesPeriod } from "@/lib/data/fraud";
+import { syncSeasonalDays } from "@/lib/data/seasonal";
 import { getAppConfig } from "@/lib/data/app-config";
 
 /**
@@ -111,6 +112,18 @@ export async function GET(req: Request) {
     return NextResponse.json({ ok: true, tookMs: Date.now() - started, results });
   }
 
+  // Dedicated job: prime the seasonal (Musiman) daily gross+net cache for the
+  // current year fast. Hit ?job=seasonal to fill it in one go.
+  if (job === "seasonal") {
+    try {
+      const y = new Date(Date.now() + 7 * 3_600_000).getUTCFullYear();
+      results["seasonal"] = await syncSeasonalDays(`${y}-01-01`, ymdWib(0), Math.min(left() - 4_000, 50_000));
+    } catch (e) {
+      results["seasonal"] = { error: e instanceof Error ? e.message : "failed" };
+    }
+    return NextResponse.json({ ok: true, tookMs: Date.now() - started, results });
+  }
+
   // Phase 1 — keep the live window fresh (yesterday + today, both kinds).
   for (const kind of ["all", "delete"] as const) {
     try {
@@ -148,6 +161,17 @@ export async function GET(req: Request) {
       results["sales:today"] = await syncSalesPeriod("daily", ymdWib(0), Math.min(left() - 3_000, 12_000));
     } catch (e) {
       results["sales:today"] = { error: e instanceof Error ? e.message : "failed" };
+    }
+  }
+
+  // Phase 4 — seasonal (Musiman): daily gross+net for the current year so the
+  // seasonality chart opens instantly. Newest-first, whatever budget remains.
+  if (left() > 5_000) {
+    try {
+      const y = new Date(Date.now() + 7 * 3_600_000).getUTCFullYear();
+      results["seasonal"] = await syncSeasonalDays(`${y}-01-01`, ymdWib(0), Math.min(left() - 3_000, 18_000));
+    } catch (e) {
+      results["seasonal"] = { error: e instanceof Error ? e.message : "failed" };
     }
   }
 

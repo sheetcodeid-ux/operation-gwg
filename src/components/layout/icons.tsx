@@ -33,6 +33,7 @@ import {
   UserRound,
   Users,
   Wallet,
+  Waves,
   type LucideIcon,
 } from "lucide-react";
 
@@ -74,4 +75,5 @@ export const NAV_ICONS: Record<string, LucideIcon> = {
   Handshake,
   Rocket,
   TrendingUp,
+  Waves,
 };
