@@ -97,10 +97,14 @@ export async function syncSeasonalDays(from: string, to: string, branch = "", bu
   const today = todayWib();
   // `force` re-pulls every past day (used once to overwrite data synced from an
   // old source); otherwise only missing/stale days are fetched.
-  const pending = eachDay(from, to)
-    .filter((d) => d <= today && (force || !have.get(d) || !fresh(have.get(d)!, d)))
-    .sort()
-    .reverse();
+  const pending = eachDay(from, to).filter((d) => d <= today && (force || !have.get(d) || !fresh(have.get(d)!, d)));
+  if (force) {
+    // Re-pull the LEAST-recently-synced days first so a repeated loop advances
+    // through the whole year instead of redoing the newest days every call.
+    pending.sort((a, b) => (have.get(a) ?? "").localeCompare(have.get(b) ?? ""));
+  } else {
+    pending.sort().reverse(); // newest day first
+  }
   if (pending.length === 0) return { synced: 0, remaining: 0 };
   const started = Date.now();
   let synced = 0;
