@@ -426,6 +426,42 @@ export async function esbFetchNetSales(dateFromYmd: string, dateToYmd: string, b
   return typeof cs === "number" ? cs : parseIdrNumber(String(cs));
 }
 
+export interface EsbSales { gross: number; net: number }
+
+let esbHighlightProbed = false;
+
+/** Gross + net sales for a date range from the same sales-dashboard highlight
+ *  endpoint. Net = currentSales; gross is read from whichever gross field the
+ *  response carries (falls back to net if none). */
+export async function esbFetchSales(dateFromYmd: string, dateToYmd: string, branchId = ""): Promise<EsbSales> {
+  const s = await ensureSession();
+  const body = new URLSearchParams();
+  body.append("branchID", branchId);
+  body.append("brandID", "");
+  body.append("reportDateStart", toEsbDate(dateFromYmd));
+  body.append("reportDateEnd", toEsbDate(dateToYmd));
+  for (const c of await getCompanyIds()) body.append("companyID[]", c);
+  const res = await fetch(`${BASE}/sales-dashboard/get-today-highlight`, {
+    method: "POST",
+    headers: { "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8", "X-Requested-With": "XMLHttpRequest", "X-Csrf-Token": s.csrf, Cookie: s.cookie, Referer: `${BASE}/sales-dashboard` },
+    body,
+    cache: "no-store",
+  });
+  if (!res.ok) throw new Error(`ESB highlight failed (${res.status})`);
+  const j = decodeAjax<Record<string, unknown>>(await res.text());
+  if (!j || typeof j !== "object") throw new Error("ESB highlight: respons tidak terbaca");
+  // One-time probe so we can confirm the real gross-sales field name from logs.
+  if (!esbHighlightProbed) { esbHighlightProbed = true; console.log("[esb-highlight-keys]", JSON.stringify(j)); }
+  const num = (v: unknown) => (v === undefined || v === null || v === "" ? 0 : typeof v === "number" ? v : parseIdrNumber(String(v)));
+  const net = num(j.currentSales);
+  const grossKeys = ["grossSales", "currentGrossSales", "grossSalesAmount", "totalGrossSales", "grossAmount", "currentSalesGross", "penjualanKotor", "grandTotal"];
+  let gross = 0;
+  for (const k of grossKeys) {
+    if (j[k] !== undefined && j[k] !== null && j[k] !== "") { gross = num(j[k]); break; }
+  }
+  return { gross: gross > 0 ? gross : net, net };
+}
+
 /* -------------------- Sales Menu Recapitulation (catalog) -------------------- */
 
 import { parseMenuRecapReport, type MenuRecapRow } from "./esb";

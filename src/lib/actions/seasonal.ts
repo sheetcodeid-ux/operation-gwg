@@ -11,15 +11,14 @@ async function guard() {
   return user;
 }
 
-export async function seasonalReportAction(year: number): Promise<SeasonalReport | { error: string }> {
+export async function seasonalReportAction(year: number, branch = ""): Promise<SeasonalReport | { error: string }> {
   if (!(await guard())) return { error: "Not authorized" };
-  return getSeasonal(year);
+  return getSeasonal(year, branch);
 }
 
-/** Pull the next batch of missing days for the year into the cache. The client
- *  calls this repeatedly (background) until remaining hits 0. Smaller budget than
- *  the cron so the chart fills in in visible steps. */
-export async function seasonalSyncAction(year: number): Promise<{ synced: number; remaining: number; error?: string } | { error: string }> {
+/** Pull the next batch of missing days for the year (all outlets or one branch)
+ *  into the cache. The client calls this repeatedly until remaining hits 0. */
+export async function seasonalSyncAction(year: number, branch = ""): Promise<{ synced: number; remaining: number; error?: string } | { error: string }> {
   if (!(await guard())) return { error: "Not authorized" };
-  return syncSeasonalDays(`${year}-01-01`, `${year}-12-31`, 12_000);
+  return syncSeasonalDays(`${year}-01-01`, `${year}-12-31`, branch, 12_000);
 }

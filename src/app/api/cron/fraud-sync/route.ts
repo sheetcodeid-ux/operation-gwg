@@ -117,7 +117,7 @@ export async function GET(req: Request) {
   if (job === "seasonal") {
     try {
       const y = new Date(Date.now() + 7 * 3_600_000).getUTCFullYear();
-      results["seasonal"] = await syncSeasonalDays(`${y}-01-01`, ymdWib(0), Math.min(left() - 4_000, 50_000));
+      results["seasonal"] = await syncSeasonalDays(`${y}-01-01`, ymdWib(0), "", Math.min(left() - 4_000, 50_000));
     } catch (e) {
       results["seasonal"] = { error: e instanceof Error ? e.message : "failed" };
     }
@@ -169,7 +169,7 @@ export async function GET(req: Request) {
   if (left() > 5_000) {
     try {
       const y = new Date(Date.now() + 7 * 3_600_000).getUTCFullYear();
-      results["seasonal"] = await syncSeasonalDays(`${y}-01-01`, ymdWib(0), Math.min(left() - 3_000, 18_000));
+      results["seasonal"] = await syncSeasonalDays(`${y}-01-01`, ymdWib(0), "", Math.min(left() - 3_000, 18_000));
     } catch (e) {
       results["seasonal"] = { error: e instanceof Error ? e.message : "failed" };
     }

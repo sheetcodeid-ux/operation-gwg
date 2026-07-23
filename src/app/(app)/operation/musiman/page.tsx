@@ -3,8 +3,7 @@ import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 import { getSessionUser } from "@/lib/auth";
 import { canOpenMenu } from "@/lib/nav";
-import { visibleOutlets } from "@/lib/data/store";
-import { getSeasonal } from "@/lib/data/seasonal";
+import { getSeasonal, getSeasonalBranches } from "@/lib/data/seasonal";
 import { PageHeader } from "@/components/ui/page-header";
 import { SeasonalChart } from "@/components/operation/seasonal-chart";
 
@@ -18,8 +17,7 @@ export default async function MusimanPage() {
 
   const year = new Date(Date.now() + 7 * 3_600_000).getUTCFullYear();
   const years = [year, year - 1, year - 2];
-  const initial = await getSeasonal(year);
-  const outlets = visibleOutlets(user).map((o) => ({ id: o.id, name: o.name }));
+  const [initial, outlets] = await Promise.all([getSeasonal(year, ""), getSeasonalBranches()]);
 
   return (
     <div className="w-full">

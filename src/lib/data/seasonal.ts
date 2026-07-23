@@ -1,21 +1,23 @@
 import "server-only";
 
 import { db, dbEnabled } from "./db";
-import { fetchErpDashboard, gwgmanageConfigured } from "@/lib/integrations/gwgmanage";
+import { esbConfigured, esbFetchSales, esbListBranches } from "@/lib/integrations/esb-client";
 
 /**
  * Seasonal (Musiman) sales — daily gross & net sales for a whole year, cached in
- * `seasonal_daily` so the overlay chart renders instantly. Days are pulled one
- * at a time from the POS dashboard (on demand + hourly cron); a day synced after
- * it ended is FINAL and never re-pulled, so the year converges and stays fast.
+ * `seasonal_daily` so the overlay chart renders instantly. Data comes from ESB
+ * (the sales-dashboard highlight, all outlets or one branch). Days are pulled one
+ * at a time (on demand + hourly cron); a day synced after it ended is FINAL and
+ * never re-pulled, so the year converges and stays fast.
  *
- * Branch '' = all outlets (the only scope cached for now).
+ * branch '' = all outlets; otherwise the ESB branchID.
  */
 
 export interface SeasonalDayValue { gross: number; net: number }
 export interface SeasonalReport {
   configured: boolean;
   year: number;
+  branch: string;
   /** month 0..11 → day 1..31 → { gross, net } */
   months: Record<number, Record<number, SeasonalDayValue>>;
   /** days in the year not yet synced — the client drains these in the background */
@@ -50,39 +52,47 @@ function fresh(syncedAt: string, day: string): boolean {
 
 interface Row { day: string; gross: number | string; net: number | string; synced_at: string }
 
-/** Read the cached year and report which days still need a POS pull. */
-export async function getSeasonal(year: number): Promise<SeasonalReport> {
-  if (!gwgmanageConfigured()) return { configured: false, year, months: {}, pendingDays: [], error: "Integrasi POS belum dikonfigurasi." };
-  if (!dbEnabled) return { configured: true, year, months: {}, pendingDays: [] };
+/** The ESB branches for the outlet filter (id + name). Empty when ESB is off. */
+export async function getSeasonalBranches(): Promise<{ id: string; name: string }[]> {
+  if (!esbConfigured()) return [];
+  try {
+    return await esbListBranches();
+  } catch {
+    return [];
+  }
+}
+
+/** Read the cached year for a branch and report which days still need a pull. */
+export async function getSeasonal(year: number, branch = ""): Promise<SeasonalReport> {
+  if (!esbConfigured()) return { configured: false, year, branch, months: {}, pendingDays: [], error: "Integrasi ESB belum dikonfigurasi." };
+  if (!dbEnabled) return { configured: true, year, branch, months: {}, pendingDays: [] };
   const from = `${year}-01-01`;
   const to = `${year}-12-31`;
-  const { data, error } = await db().from("seasonal_daily").select("day,gross,net,synced_at").eq("branch", "").gte("day", from).lte("day", to);
-  if (error) return { configured: true, year, months: {}, pendingDays: [], error: error.message };
+  const { data, error } = await db().from("seasonal_daily").select("day,gross,net,synced_at").eq("branch", branch).gte("day", from).lte("day", to);
+  if (error) return { configured: true, year, branch, months: {}, pendingDays: [], error: error.message };
 
   const months: Record<number, Record<number, SeasonalDayValue>> = {};
   const have = new Map<string, string>();
   for (const r of (data ?? []) as Row[]) {
     const d = new Date(`${r.day}T00:00:00`);
-    const m = d.getMonth();
-    const day = d.getDate();
-    (months[m] ??= {})[day] = { gross: Number(r.gross) || 0, net: Number(r.net) || 0 };
+    (months[d.getMonth()] ??= {})[d.getDate()] = { gross: Number(r.gross) || 0, net: Number(r.net) || 0 };
     have.set(r.day, r.synced_at);
   }
   const today = todayWib();
   const pendingDays: string[] = [];
   for (const day of eachDay(from, to)) {
-    if (day > today) continue; // future
+    if (day > today) continue;
     const s = have.get(day);
     if (!s || !fresh(s, day)) pendingDays.push(day);
   }
-  return { configured: true, year, months, pendingDays };
+  return { configured: true, year, branch, months, pendingDays };
 }
 
-/** Pull the next batch of missing/stale days of [from, to] from the POS into the
- *  cache, newest first, stopping near the budget so it fits a serverless slot. */
-export async function syncSeasonalDays(from: string, to: string, budgetMs = 42_000): Promise<{ synced: number; remaining: number; error?: string }> {
-  if (!dbEnabled || !gwgmanageConfigured()) return { synced: 0, remaining: 0 };
-  const { data } = await db().from("seasonal_daily").select("day,synced_at").eq("branch", "").gte("day", from).lte("day", to);
+/** Pull the next batch of missing/stale days of [from, to] for a branch from ESB
+ *  into the cache, newest first, stopping near the budget. */
+export async function syncSeasonalDays(from: string, to: string, branch = "", budgetMs = 42_000): Promise<{ synced: number; remaining: number; error?: string }> {
+  if (!dbEnabled || !esbConfigured()) return { synced: 0, remaining: 0 };
+  const { data } = await db().from("seasonal_daily").select("day,synced_at").eq("branch", branch).gte("day", from).lte("day", to);
   const have = new Map((data ?? []).map((r: { day: string; synced_at: string }) => [r.day, r.synced_at]));
   const today = todayWib();
   const pending = eachDay(from, to)
@@ -96,12 +106,12 @@ export async function syncSeasonalDays(from: string, to: string, budgetMs = 42_0
   for (const day of pending) {
     if (synced > 0 && Date.now() - started > budgetMs) break;
     try {
-      const dash = await fetchErpDashboard({ date: day });
-      const up = await db().from("seasonal_daily").upsert({ day, branch: "", gross: dash.grossSales, net: dash.netSales, synced_at: new Date().toISOString() });
+      const sales = await esbFetchSales(day, day, branch);
+      const up = await db().from("seasonal_daily").upsert({ day, branch, gross: sales.gross, net: sales.net, synced_at: new Date().toISOString() });
       if (up.error) throw new Error(up.error.message);
       synced += 1;
     } catch (e) {
-      error = e instanceof Error ? e.message : "Gagal memuat data POS.";
+      error = e instanceof Error ? e.message : "Gagal memuat data ESB.";
       break;
     }
   }

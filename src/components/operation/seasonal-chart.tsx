@@ -14,6 +14,7 @@ const MONTH_SHORT = ["Jan", "Feb", "Mar", "Apr", "Mei", "Jun", "Jul", "Agu", "Se
 /** One distinct colour per month (stable, high-contrast on light & dark). */
 const MONTH_COLORS = ["#ef4444", "#f97316", "#eab308", "#22c55e", "#14b8a6", "#0ea5e9", "#3b82f6", "#6366f1", "#a855f7", "#ec4899", "#f43f5e", "#84cc16"];
 const AVG_COLOR = "#111827";
+const SLIDER_MAROON = "#7f1d1d";
 
 type Metric = "gross" | "net";
 type Unit = "angka" | "persen";
@@ -39,7 +40,7 @@ export function SeasonalChart({
   const [year, setYear] = React.useState(initialYear);
   const [metric, setMetric] = React.useState<Metric>("gross");
   const [unit, setUnit] = React.useState<Unit>("angka");
-  const [branch, setBranch] = React.useState("all");
+  const [branch, setBranch] = React.useState("");
   const [showAvg, setShowAvg] = React.useState(true);
   const [view, setView] = React.useState<"chart" | "table">("chart");
   const [range, setRange] = React.useState<{ start: number; end: number }>({ start: 0, end: 11 });
@@ -103,15 +104,14 @@ export function SeasonalChart({
 
   // Background drain of days not yet cached (like the fraud page). Cancels on
   // year change via the seq guard.
-  const drain = React.useCallback(async (y: number, expected: number) => {
-    const seq = ++seqRef.current;
+  const drain = React.useCallback(async (y: number, br: string, seq: number, expected: number) => {
     setSyncLeft(expected);
     for (let i = 0; i < 60 && seqRef.current === seq; i++) {
-      const s = await seasonalSyncAction(y);
+      const s = await seasonalSyncAction(y, br);
       if (seqRef.current !== seq) return;
       if (!("synced" in s)) { toast.error(s.error); break; }
       setSyncLeft(s.remaining);
-      const r = await seasonalReportAction(y);
+      const r = await seasonalReportAction(y, br);
       if (seqRef.current !== seq) return;
       if ("configured" in r) setReport(r);
       if (s.remaining === 0 || s.error || s.synced === 0) break;
@@ -119,22 +119,30 @@ export function SeasonalChart({
     if (seqRef.current === seq) setSyncLeft(0);
   }, []);
 
+  // Load a (year, branch) selection: show cached data instantly, drain the rest.
+  const load = React.useCallback(async (y: number, br: string) => {
+    const seq = ++seqRef.current;
+    setSyncLeft(0);
+    const r = await seasonalReportAction(y, br);
+    if (seqRef.current !== seq) return;
+    if (!("configured" in r)) { toast.error((r as { error: string }).error); return; }
+    setReport(r);
+    if (r.pendingDays?.length) void drain(y, br, seq, r.pendingDays.length);
+  }, [drain]);
+
   React.useEffect(() => {
-    if (initial.pendingDays?.length) void drain(initialYear, initial.pendingDays.length);
+    if (initial.pendingDays?.length) void drain(initialYear, "", ++seqRef.current, initial.pendingDays.length);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   function onYear(y: number) {
-    seqRef.current += 1;
     setYear(y);
     setRange({ start: 0, end: 11 });
-    (async () => {
-      const r = await seasonalReportAction(y);
-      if ("configured" in r) {
-        setReport(r);
-        if (r.pendingDays?.length) void drain(y, r.pendingDays.length);
-      }
-    })();
+    void load(y, branch);
+  }
+  function onBranch(br: string) {
+    setBranch(br);
+    void load(year, br);
   }
 
   function capturePng() {
@@ -205,9 +213,9 @@ export function SeasonalChart({
 
           <Combobox
             value={branch}
-            onChange={setBranch}
-            className="w-44 shrink-0"
-            options={[{ value: "all", label: "Semua Cabang" }, ...outlets.map((o) => ({ value: o.id, label: o.name }))]}
+            onChange={onBranch}
+            className="w-48 shrink-0"
+            options={[{ value: "", label: "Semua Cabang" }, ...outlets.map((o) => ({ value: o.id, label: o.name }))]}
             searchPlaceholder="Cari outlet…"
             placeholder="Semua Cabang"
           />
@@ -301,9 +309,9 @@ export function SeasonalChart({
                     dataKey={`m${m}`}
                     name={MONTHS[m]}
                     stroke={MONTH_COLORS[m]}
-                    strokeWidth={2}
+                    strokeWidth={1.4}
                     dot={false}
-                    activeDot={{ r: 4 }}
+                    activeDot={{ r: 3 }}
                     connectNulls
                     isAnimationActive={false}
                   />
@@ -314,7 +322,7 @@ export function SeasonalChart({
                     dataKey="avg"
                     name="Average"
                     stroke={AVG_COLOR}
-                    strokeWidth={2}
+                    strokeWidth={1.6}
                     strokeDasharray="5 4"
                     dot={false}
                     connectNulls
@@ -344,9 +352,11 @@ interface TooltipProps {
 
 function SeasonalTooltip({ active, label, payload, showAvg, year, fmt }: TooltipProps) {
   if (!active || !payload?.length || label == null) return null;
+  // Chronological order (Jan → Des), Average last.
+  const order = (dk: string) => (dk === "avg" ? 99 : Number(dk.slice(1)));
   const rows = payload
     .filter((p) => p.value != null && (showAvg || p.dataKey !== "avg"))
-    .sort((a, b) => (b.value ?? 0) - (a.value ?? 0));
+    .sort((a, b) => order(a.dataKey) - order(b.dataKey));
   return (
     <div className="rounded-xl border border-border bg-popover p-3 text-xs shadow-lg">
       <p className="mb-1.5 font-semibold text-foreground">Tanggal {label} · {year}</p>
@@ -433,33 +443,27 @@ function MonthRangeSlider({
           </div>
         ))}
       </div>
-      {/* Track */}
+      {/* Track — maroon range bar with two round handles, like the reference. */}
       <div ref={ref} className="relative mt-1 h-7 touch-none rounded-full bg-muted">
         <div
           onPointerDown={(e) => { e.preventDefault(); beginDrag("range", e.clientX); }}
-          className="absolute inset-y-0 cursor-grab rounded-full bg-primary/25 ring-1 ring-inset ring-primary/40 active:cursor-grabbing"
-          style={{ left: `${centerPct(value.start)}%`, right: `${100 - centerPct(value.end)}%` }}
+          className="absolute inset-y-0 cursor-grab rounded-full active:cursor-grabbing"
+          style={{ left: `${centerPct(value.start)}%`, right: `${100 - centerPct(value.end)}%`, background: SLIDER_MAROON }}
         >
-          <span className="pointer-events-none absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 text-[9px] font-semibold tracking-widest text-primary/70">⋮⋮⋮</span>
+          <span className="pointer-events-none absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 text-[10px] font-bold tracking-[0.2em] text-white/80">⋮⋮⋮</span>
         </div>
-        <button
-          type="button"
-          aria-label="Bulan awal"
-          onPointerDown={(e) => { e.preventDefault(); beginDrag("start", e.clientX); }}
-          className="absolute top-1/2 grid size-6 -translate-x-1/2 -translate-y-1/2 place-items-center rounded-full border-2 border-primary bg-background shadow-sm active:cursor-grabbing"
-          style={{ left: `${centerPct(value.start)}%` }}
-        >
-          <span className="size-1.5 rounded-full bg-primary" />
-        </button>
-        <button
-          type="button"
-          aria-label="Bulan akhir"
-          onPointerDown={(e) => { e.preventDefault(); beginDrag("end", e.clientX); }}
-          className="absolute top-1/2 grid size-6 -translate-x-1/2 -translate-y-1/2 place-items-center rounded-full border-2 border-primary bg-background shadow-sm active:cursor-grabbing"
-          style={{ left: `${centerPct(value.end)}%` }}
-        >
-          <span className="size-1.5 rounded-full bg-primary" />
-        </button>
+        {(["start", "end"] as const).map((h) => (
+          <button
+            key={h}
+            type="button"
+            aria-label={h === "start" ? "Bulan awal" : "Bulan akhir"}
+            onPointerDown={(e) => { e.preventDefault(); beginDrag(h, e.clientX); }}
+            className="absolute top-1/2 grid size-6 -translate-x-1/2 -translate-y-1/2 place-items-center rounded-full bg-white shadow active:cursor-grabbing"
+            style={{ left: `${centerPct(h === "start" ? value.start : value.end)}%`, border: `2.5px solid ${SLIDER_MAROON}` }}
+          >
+            <span className="size-1.5 rounded-full" style={{ background: SLIDER_MAROON }} />
+          </button>
+        ))}
       </div>
     </div>
   );
