@@ -35,7 +35,7 @@ export function PriceReference({ initial, esbSyncedAt, canSync }: { initial: Pri
 
   const rows = React.useMemo(() => {
     const s = q.trim().toLowerCase();
-    let list = initial.filter((r) => {
+    const list = initial.filter((r) => {
       if (s && !r.menu.toLowerCase().includes(s)) return false;
       if (brand !== "all" && r.brand !== brand) return false;
       if (cat !== "all" && r.category !== cat) return false;

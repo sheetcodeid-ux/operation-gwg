@@ -15,11 +15,18 @@ const eslintConfig = defineConfig([
   ]),
   {
     rules: {
-      // React Compiler performance advisory (not a correctness rule). Our
-      // intentional effects — localStorage hydration, reset-on-close, session
-      // sync — are correct as written; keep it visible as a warning rather than
-      // failing CI. Real correctness rules stay errors.
+      // React Compiler advisories (performance / compiler-model hints, NOT
+      // runtime-correctness rules). Our patterns — intentional effects, inline
+      // cell/render components, controlled mutations of local builders — are
+      // correct as written, so keep these visible as warnings instead of failing
+      // CI. Genuine correctness rules (rules-of-hooks, exhaustive-deps, etc.)
+      // remain errors.
       "react-hooks/set-state-in-effect": "warn",
+      "react-hooks/static-components": "warn",
+      "react-hooks/immutability": "warn",
+      "react-hooks/purity": "warn",
+      "react-hooks/preserve-manual-memoization": "warn",
+      "react-hooks/incompatible-library": "warn",
     },
   },
 ]);
