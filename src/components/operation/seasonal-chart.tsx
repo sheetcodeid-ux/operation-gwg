@@ -42,7 +42,7 @@ export function SeasonalChart({
   const [branch, setBranch] = React.useState("all");
   const [showAvg, setShowAvg] = React.useState(true);
   const [view, setView] = React.useState<"chart" | "table">("chart");
-  const [hidden, setHidden] = React.useState<Set<number>>(new Set());
+  const [range, setRange] = React.useState<{ start: number; end: number }>({ start: 0, end: 11 });
   const [syncLeft, setSyncLeft] = React.useState(0);
   const seqRef = React.useRef(0);
   const captureRef = React.useRef<HTMLDivElement>(null);
@@ -52,7 +52,10 @@ export function SeasonalChart({
     () => Array.from({ length: 12 }, (_, m) => m).filter((m) => report.months[m] && Object.keys(report.months[m]).length > 0),
     [report],
   );
-  const visibleMonths = React.useMemo(() => presentMonths.filter((m) => !hidden.has(m)), [presentMonths, hidden]);
+  const visibleMonths = React.useMemo(
+    () => presentMonths.filter((m) => m >= range.start && m <= range.end),
+    [presentMonths, range],
+  );
 
   // Per-month total (for the "Persen" normalisation = share of the month).
   const monthTotals = React.useMemo(() => {
@@ -124,7 +127,7 @@ export function SeasonalChart({
   function onYear(y: number) {
     seqRef.current += 1;
     setYear(y);
-    setHidden(new Set());
+    setRange({ start: 0, end: 11 });
     (async () => {
       const r = await seasonalReportAction(y);
       if ("configured" in r) {
@@ -132,15 +135,6 @@ export function SeasonalChart({
         if (r.pendingDays?.length) void drain(y, r.pendingDays.length);
       }
     })();
-  }
-
-  function toggleMonth(m: number) {
-    setHidden((prev) => {
-      const next = new Set(prev);
-      if (next.has(m)) next.delete(m);
-      else next.add(m);
-      return next;
-    });
   }
 
   function capturePng() {
@@ -262,26 +256,19 @@ export function SeasonalChart({
           </button>
         </div>
 
-        {/* Month legend / selector (click to hide a month; grey = hidden). */}
+        {/* Draggable month-range slider (drag handles / the bar to pick the span
+            of months to overlay) + colour legend for the months in range. */}
         {!empty && (
-          <div className="mt-2.5 flex flex-wrap items-center gap-1.5">
-            {presentMonths.map((m) => {
-              const on = !hidden.has(m);
-              return (
-                <button
-                  key={m}
-                  type="button"
-                  onClick={() => toggleMonth(m)}
-                  className={cn(
-                    "inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-medium transition-colors",
-                    on ? "border-border bg-card text-foreground" : "border-border/60 text-muted-foreground/50",
-                  )}
-                >
-                  <span className="size-2.5 rounded-full" style={{ background: on ? MONTH_COLORS[m] : "#9ca3af" }} />
+          <div className="mt-3">
+            <MonthRangeSlider value={range} onChange={setRange} present={new Set(presentMonths)} />
+            <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1">
+              {visibleMonths.map((m) => (
+                <span key={m} className="inline-flex items-center gap-1.5 text-[11px] text-muted-foreground">
+                  <span className="size-2.5 rounded-full" style={{ background: MONTH_COLORS[m] }} />
                   {MONTHS[m]}
-                </button>
-              );
-            })}
+                </span>
+              ))}
+            </div>
           </div>
         )}
       </div>
@@ -310,7 +297,7 @@ export function SeasonalChart({
                 {visibleMonths.map((m) => (
                   <Line
                     key={m}
-                    type="monotone"
+                    type="linear"
                     dataKey={`m${m}`}
                     name={MONTHS[m]}
                     stroke={MONTH_COLORS[m]}
@@ -323,7 +310,7 @@ export function SeasonalChart({
                 ))}
                 {showAvg && (
                   <Line
-                    type="monotone"
+                    type="linear"
                     dataKey="avg"
                     name="Average"
                     stroke={AVG_COLOR}
@@ -373,6 +360,106 @@ function SeasonalTooltip({ active, label, payload, showAvg, year, fmt }: Tooltip
             <span className="font-medium tabular-nums text-foreground">{fmt(p.value as number)}</span>
           </div>
         ))}
+      </div>
+    </div>
+  );
+}
+
+/** TradingView-style draggable month-range selector. Drag either handle to
+ *  change the start/end month, or drag the filled bar to shift the whole span. */
+function MonthRangeSlider({
+  value,
+  onChange,
+  present,
+}: {
+  value: { start: number; end: number };
+  onChange: (v: { start: number; end: number }) => void;
+  present: Set<number>;
+}) {
+  const ref = React.useRef<HTMLDivElement>(null);
+  const drag = React.useRef<{ mode: "start" | "end" | "range"; startVal: { start: number; end: number }; grab: number } | null>(null);
+  const centerPct = (m: number) => ((m + 0.5) / 12) * 100;
+
+  const monthAt = React.useCallback((clientX: number) => {
+    const el = ref.current;
+    if (!el) return 0;
+    const r = el.getBoundingClientRect();
+    const frac = (clientX - r.left) / r.width;
+    return Math.max(0, Math.min(11, Math.floor(frac * 12)));
+  }, []);
+
+  React.useEffect(() => {
+    const move = (e: PointerEvent) => {
+      const d = drag.current;
+      if (!d) return;
+      const m = monthAt(e.clientX);
+      if (d.mode === "start") onChange({ start: Math.min(m, value.end), end: value.end });
+      else if (d.mode === "end") onChange({ start: value.start, end: Math.max(m, value.start) });
+      else {
+        const span = d.startVal.end - d.startVal.start;
+        const s = Math.max(0, Math.min(11 - span, d.startVal.start + (m - d.grab)));
+        onChange({ start: s, end: s + span });
+      }
+    };
+    const up = () => { drag.current = null; };
+    window.addEventListener("pointermove", move);
+    window.addEventListener("pointerup", up);
+    return () => {
+      window.removeEventListener("pointermove", move);
+      window.removeEventListener("pointerup", up);
+    };
+  }, [monthAt, onChange, value.start, value.end]);
+
+  const beginDrag = React.useCallback(
+    (mode: "start" | "end" | "range", clientX: number) => {
+      drag.current = { mode, startVal: { start: value.start, end: value.end }, grab: monthAt(clientX) };
+    },
+    [value.start, value.end, monthAt],
+  );
+
+  return (
+    <div className="select-none">
+      {/* Month labels */}
+      <div className="flex">
+        {MONTH_SHORT.map((mo, m) => (
+          <div
+            key={m}
+            className={cn(
+              "flex-1 text-center text-[10px] font-medium",
+              m >= value.start && m <= value.end ? "text-foreground" : present.has(m) ? "text-muted-foreground" : "text-muted-foreground/40",
+            )}
+          >
+            {mo}
+          </div>
+        ))}
+      </div>
+      {/* Track */}
+      <div ref={ref} className="relative mt-1 h-7 touch-none rounded-full bg-muted">
+        <div
+          onPointerDown={(e) => { e.preventDefault(); beginDrag("range", e.clientX); }}
+          className="absolute inset-y-0 cursor-grab rounded-full bg-primary/25 ring-1 ring-inset ring-primary/40 active:cursor-grabbing"
+          style={{ left: `${centerPct(value.start)}%`, right: `${100 - centerPct(value.end)}%` }}
+        >
+          <span className="pointer-events-none absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 text-[9px] font-semibold tracking-widest text-primary/70">⋮⋮⋮</span>
+        </div>
+        <button
+          type="button"
+          aria-label="Bulan awal"
+          onPointerDown={(e) => { e.preventDefault(); beginDrag("start", e.clientX); }}
+          className="absolute top-1/2 grid size-6 -translate-x-1/2 -translate-y-1/2 place-items-center rounded-full border-2 border-primary bg-background shadow-sm active:cursor-grabbing"
+          style={{ left: `${centerPct(value.start)}%` }}
+        >
+          <span className="size-1.5 rounded-full bg-primary" />
+        </button>
+        <button
+          type="button"
+          aria-label="Bulan akhir"
+          onPointerDown={(e) => { e.preventDefault(); beginDrag("end", e.clientX); }}
+          className="absolute top-1/2 grid size-6 -translate-x-1/2 -translate-y-1/2 place-items-center rounded-full border-2 border-primary bg-background shadow-sm active:cursor-grabbing"
+          style={{ left: `${centerPct(value.end)}%` }}
+        >
+          <span className="size-1.5 rounded-full bg-primary" />
+        </button>
       </div>
     </div>
   );
