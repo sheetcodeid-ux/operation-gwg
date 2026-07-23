@@ -9,6 +9,7 @@ export type DivisionMembers = Record<string, { id: string; name: string }[]>;
 
 /** Enriched task rows shared by the Work Tracker table, Kanban and Calendar views. */
 export function buildWorkRows(user: UserProfile): WorkRow[] {
+  const avatarById = new Map(getUsers().map((u) => [u.id, u.avatarUrl ?? null]));
   return listTasks(user).map((t) => ({
     id: t.id,
     title: t.title,
@@ -22,6 +23,7 @@ export function buildWorkRows(user: UserProfile): WorkRow[] {
     area: t.areaId ? areaName(t.areaId) : "—",
     picIds: t.picIds,
     pic: t.picIds.length ? t.picIds.map(userName).join(", ") : "—",
+    picAvatarUrl: t.picIds.length ? avatarById.get(t.picIds[0]) ?? null : null,
     startDate: t.startDate,
     dueDate: t.dueDate,
     progress: t.progress,

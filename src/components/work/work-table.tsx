@@ -30,6 +30,8 @@ export interface WorkRow {
   area: string;
   picIds: string[];
   pic: string;
+  /** Photo of the first PIC (for the avatar); null → initials fallback. */
+  picAvatarUrl?: string | null;
   startDate: string;
   dueDate: string;
   progress: number;

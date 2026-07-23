@@ -212,7 +212,7 @@ function KanbanCard({
       <div className="mt-2.5 flex items-center justify-between gap-2 border-t border-border/60 pt-2.5 text-[11px]">
         <span className={cn(overdue ? "font-medium text-red-400" : "text-muted-foreground")}>{formatDate(task.dueDate)}</span>
         <span className="flex items-center gap-1.5 text-muted-foreground">
-          <Avatar name={task.pic} size={18} />
+          <Avatar name={task.pic} size={18} src={task.picAvatarUrl} />
           <span className="max-w-24 truncate">{task.pic}</span>
         </span>
       </div>
