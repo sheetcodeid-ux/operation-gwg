@@ -28,6 +28,8 @@ interface Row {
   urgency: SysUrgency;
   needed_date: string | null;
   attachment_link: string | null;
+  attachment_path: string | null;
+  attachment_name: string | null;
   status: SystemRequest["status"];
   handler_id: string | null;
   note: string | null;
@@ -38,7 +40,20 @@ interface Row {
   created_at: string;
 }
 
-function toRequest(r: Row): SystemRequest {
+const SIGN_TTL = 60 * 60;
+
+/** Batch-sign uploaded-attachment paths in one API call → path→URL map. */
+async function signBatch(paths: string[]): Promise<Map<string, string>> {
+  const map = new Map<string, string>();
+  const unique = [...new Set(paths.filter(Boolean))];
+  if (!dbEnabled || unique.length === 0) return map;
+  const { data } = await db().storage.from("system-attachments").createSignedUrls(unique, SIGN_TTL);
+  for (const d of data ?? []) if (d.path && d.signedUrl) map.set(d.path, d.signedUrl);
+  return map;
+}
+
+function toRequest(r: Row, signed: Map<string, string>): SystemRequest {
+  const fileUrl = r.attachment_path ? signed.get(r.attachment_path) ?? null : null;
   return {
     id: r.id,
     requesterId: r.requester_id,
@@ -53,7 +68,9 @@ function toRequest(r: Row): SystemRequest {
     impact: r.impact,
     urgency: r.urgency,
     neededDate: r.needed_date,
-    attachmentLink: r.attachment_link,
+    attachmentUrl: fileUrl ?? r.attachment_link,
+    attachmentName: r.attachment_path ? r.attachment_name || "Berkas lampiran" : r.attachment_link ? "Link lampiran" : null,
+    attachmentIsFile: !!fileUrl,
     status: r.status,
     handlerId: r.handler_id,
     handlerName: r.handler_id ? userName(r.handler_id) : null,
@@ -72,7 +89,9 @@ export async function listSystemRequests(requesterId?: string): Promise<SystemRe
   if (requesterId) q = q.eq("requester_id", requesterId);
   const { data, error } = await q;
   if (error || !data) return [];
-  return (data as Row[]).map(toRequest);
+  const rows = data as Row[];
+  const signed = await signBatch(rows.map((r) => r.attachment_path).filter((p): p is string => !!p));
+  return rows.map((r) => toRequest(r, signed));
 }
 
 export async function getSystemRequestRow(id: string): Promise<Row | null> {
@@ -95,6 +114,8 @@ export interface SysCreateInput {
   urgency: SysUrgency;
   neededDate: string | null;
   attachmentLink: string | null;
+  attachmentPath: string | null;
+  attachmentName: string | null;
 }
 
 export async function createSystemRequest(input: SysCreateInput): Promise<{ id: string } | null> {
@@ -115,6 +136,8 @@ export async function createSystemRequest(input: SysCreateInput): Promise<{ id: 
     urgency: input.urgency,
     needed_date: input.neededDate,
     attachment_link: input.attachmentLink,
+    attachment_path: input.attachmentPath,
+    attachment_name: input.attachmentName,
     status: "waiting",
     created_at: new Date().toISOString(),
   });
@@ -156,10 +179,12 @@ export async function completeSystemRequest(id: string): Promise<{ error?: strin
   return error ? { error: error.message } : {};
 }
 
-/** Delete a request — Super Admin cleanup of test data. */
+/** Delete a request (and any uploaded attachment) — Super Admin cleanup. */
 export async function deleteSystemRequest(id: string): Promise<{ error?: string }> {
   if (!dbEnabled) return { error: "Database belum aktif." };
   markLocalWrite();
+  const row = await getSystemRequestRow(id);
+  if (row?.attachment_path) await db().storage.from("system-attachments").remove([row.attachment_path]);
   const { error } = await db().from("system_requests").delete().eq("id", id);
   return error ? { error: error.message } : {};
 }

@@ -133,7 +133,6 @@ const OPERATION_FULL: MenuKey[] = [
   "op_settings",
   "op_fraud",
   "op_seasonal",
-  "sys_review",
   "reports",
 ];
 
@@ -159,7 +158,9 @@ export const ROLE_MENUS: Record<Role, MenuKey[]> = {
 
 /** Menus shown per division in the Super Admin sidebar (all divisions listed). */
 const DIVISION_MENUS: { division: Division; menus: MenuKey[] }[] = [
-  { division: "Operation", menus: OPERATION_FULL },
+  // sys_review sits under Operation for placement, but access is jabatan-gated
+  // (System Support) via an injected grant — it is NOT a general Operation menu.
+  { division: "Operation", menus: [...OPERATION_FULL, "sys_review"] },
   { division: "Supervisor", menus: ["hospitality", "hygiene", "complaints", "hc_submit", "sys_submit"] },
   { division: "Product Development & Quality", menus: ["hpp_dash", "work", "hpp", "hpp_db", "hpp_bahan", "hpp_price"] },
   { division: "Human Capital", menus: ["work", "hc_review", "assessment"] },

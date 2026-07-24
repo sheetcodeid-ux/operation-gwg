@@ -268,12 +268,12 @@ function DetailPanel({
         {row.neededDate && <InfoRow label="Tanggal Dibutuhkan" value={fmtDate(row.neededDate)} />}
         <InfoRow label="Deskripsi" value={<span className="whitespace-pre-wrap">{row.description}</span>} />
         {row.impact && <InfoRow label="Dampak" value={<span className="whitespace-pre-wrap">{row.impact}</span>} />}
-        {row.attachmentLink && (
+        {row.attachmentUrl && (
           <InfoRow
-            label="Foto Pendukung"
+            label="Lampiran Pendukung"
             value={
-              <a href={row.attachmentLink} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1.5 text-brand-600 hover:underline dark:text-brand-400">
-                <ExternalLink className="size-3.5" /> Buka lampiran
+              <a href={row.attachmentUrl} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1.5 text-brand-600 hover:underline dark:text-brand-400">
+                <ExternalLink className="size-3.5" /> {row.attachmentName ?? "Buka lampiran"}
               </a>
             }
           />

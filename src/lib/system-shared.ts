@@ -5,6 +5,21 @@ import type { Tone } from "@/lib/constants";
  * data module so both the server and the client components can use them.
  */
 
+/** The System Support team = Operation staff (department "Operational") whose
+ *  job title is "System Support". Only they (and Super Admin) may process,
+ *  assign and close system tickets. */
+export function isSystemSupport(
+  user: { role: string; department?: string | null; jabatan?: string | null } | null,
+): boolean {
+  if (!user) return false;
+  if (user.role === "super_admin") return true;
+  return user.department === "Operational" && (user.jabatan ?? "").trim().toLowerCase() === "system support";
+}
+
+/** The exact department + job title that defines the System Support team. */
+export const SYSTEM_SUPPORT_DEPT = "Operational";
+export const SYSTEM_SUPPORT_JABATAN = "System Support";
+
 export type SysRequestType = "fitur" | "bug" | "akses" | "hardware" | "training" | "lainnya";
 export type SysUrgency = "urgent" | "normal" | "low";
 export type SysStatus = "waiting" | "processing" | "done";
@@ -48,7 +63,10 @@ export interface SystemRequest {
   impact: string | null;
   urgency: SysUrgency;
   neededDate: string | null;
-  attachmentLink: string | null;
+  /** Supporting file/photo — a signed URL for an uploaded file OR a pasted link. */
+  attachmentUrl: string | null;
+  attachmentName: string | null;
+  attachmentIsFile: boolean;
   status: SysStatus;
   handlerId: string | null;
   handlerName: string | null;

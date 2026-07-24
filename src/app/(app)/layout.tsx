@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import { getSessionUser } from "@/lib/auth";
 import { areaName, listNotifications, visibleOutlets } from "@/lib/data/store";
 import { accessibleMenuKeys, canReachMenu, homeDivision, navAll, setNavExtras } from "@/lib/nav";
+import { isSystemSupport } from "@/lib/system-shared";
 import { getNavExtra } from "@/lib/data/nav";
 import { I18nProvider } from "@/lib/i18n/provider";
 import type { Lang } from "@/lib/i18n/dict";
@@ -32,7 +33,10 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   const allowedKeys = accessibleMenuKeys(user.role);
   const home = homeDivision(user.role);
   const isAdmin = user.role === "super_admin";
-  const grants = user.grants ?? [];
+  // "Antrian System" is gated by job title, not the grant system — unlock it for
+  // the System Support team (Operational + jabatan System Support) by injecting
+  // its grant so the sidebar/command palette show it for them only.
+  const grants = isSystemSupport(user) && !isAdmin ? [...(user.grants ?? []), "Operation:sys_review"] : user.grants ?? [];
   const department = user.department ?? "";
   const allowed = new Set(allowedKeys);
   const grantSet = new Set(grants);

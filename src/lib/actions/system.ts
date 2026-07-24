@@ -3,7 +3,7 @@
 import { randomUUID } from "node:crypto";
 import { revalidatePath } from "next/cache";
 import { getSessionUser } from "@/lib/auth";
-import { dbEnabled } from "@/lib/data/db";
+import { db, dbEnabled } from "@/lib/data/db";
 import { getOutlets, userName } from "@/lib/data/store";
 import { canAccessOutlet } from "@/lib/rbac";
 import { canReachMenu } from "@/lib/nav";
@@ -16,15 +16,35 @@ import {
   getSystemRequestRow,
   processSystemRequest,
 } from "@/lib/data/system";
-import { SYS_TYPE_LABEL, type SysRequestType, type SysUrgency } from "@/lib/system-shared";
+import { isSystemSupport, SYS_TYPE_LABEL, type SysRequestType, type SysUrgency } from "@/lib/system-shared";
 import type { Priority, UserProfile } from "@/lib/types";
 
 const canSubmit = (u: UserProfile | null) => !!u && canReachMenu(u, "sys_submit");
-const canReview = (u: UserProfile | null) => !!u && canReachMenu(u, "sys_review");
+// Only the System Support team (Operational + jabatan "System Support") — plus
+// Super Admin — may triage, forward and close system tickets.
+const canReview = (u: UserProfile | null) => isSystemSupport(u);
 
+const MAX_BYTES = 10 * 1024 * 1024; // 10 MB per supporting file
 const REQ_TYPES: SysRequestType[] = ["fitur", "bug", "akses", "hardware", "training", "lainnya"];
 const URGENCIES: SysUrgency[] = ["urgent", "normal", "low"];
 const URGENCY_PRIORITY: Record<SysUrgency, Priority> = { urgent: "high", normal: "medium", low: "low" };
+
+/** Upload a supporting photo/file (supervisor); returns the private storage path. */
+export async function uploadSystemAttachmentAction(formData: FormData) {
+  const user = await getSessionUser();
+  if (!canSubmit(user)) return { error: "Tidak punya akses." };
+  if (!dbEnabled) return { error: "Storage belum aktif." };
+  const file = formData.get("file");
+  if (!(file instanceof File)) return { error: "Tidak ada berkas." };
+  if (file.size > MAX_BYTES) return { error: `Berkas "${file.name}" melebihi 10 MB.` };
+  const okType = file.type.startsWith("image/") || file.type === "application/pdf";
+  if (!okType) return { error: `"${file.name}" harus berupa foto atau PDF.` };
+  const safe = file.name.replace(/[^a-zA-Z0-9._-]/g, "_").slice(-60);
+  const path = `${user!.id}/${Date.now()}-${randomUUID().slice(0, 8)}-${safe}`;
+  const { error } = await db().storage.from("system-attachments").upload(path, file, { contentType: file.type });
+  if (error) return { error: `Upload gagal: ${error.message}` };
+  return { path, name: file.name };
+}
 
 /* ------------------------------------------------------------------ */
 /* Supervisor — raise a request                                        */
@@ -40,6 +60,8 @@ export interface SysSubmitInput {
   urgency: SysUrgency;
   neededDate: string;
   attachmentLink: string;
+  attachmentPath: string | null;
+  attachmentName: string | null;
 }
 
 export async function submitSystemRequestAction(input: SysSubmitInput) {
@@ -68,6 +90,8 @@ export async function submitSystemRequestAction(input: SysSubmitInput) {
     urgency: input.urgency,
     neededDate: input.neededDate || null,
     attachmentLink: input.attachmentLink?.trim() || null,
+    attachmentPath: input.attachmentPath ?? null,
+    attachmentName: input.attachmentName ?? null,
   });
   if (!rec) return { error: "Gagal menyimpan request. Coba lagi." };
 

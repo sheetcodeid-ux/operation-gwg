@@ -2,7 +2,7 @@
 
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { CircleUser, ExternalLink, Link2, Loader2, MonitorCog, Plus, Store } from "lucide-react";
+import { CircleUser, ExternalLink, Link2, Loader2, MonitorCog, Paperclip, Plus, Store, Upload, X } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -11,7 +11,7 @@ import { Field, Input, Textarea } from "@/components/ui/input";
 import { Combobox } from "@/components/ui/combobox";
 import { DatePicker } from "@/components/ui/date-picker";
 import { cn } from "@/lib/utils";
-import { submitSystemRequestAction } from "@/lib/actions/system";
+import { submitSystemRequestAction, uploadSystemAttachmentAction } from "@/lib/actions/system";
 import {
   SYS_REQUEST_TYPES,
   SYS_STATUS_META,
@@ -40,12 +40,12 @@ export function NewSystemRequestButton({
     <Dialog>
       <DialogTrigger>
         <Button size="sm" disabled={outlets.length === 0}>
-          <Plus /> Ajukan Request
+          <Plus /> Ajukan Permintaan
         </Button>
       </DialogTrigger>
       <DialogContent
-        title="Pengajuan System / IT Support"
-        description="Kirim permintaan fitur, perbaikan bug, akses, atau kendala sistem ke tim System Support."
+        title="Formulir Pengajuan Dukungan Sistem"
+        description="Sampaikan kebutuhan atau kendala sistem Anda selengkap mungkin agar tim System Support dapat menindaklanjuti dengan cepat dan tepat."
         align="center"
         className="max-w-lg"
       >
@@ -69,14 +69,29 @@ function SystemRequestForm({ requesterName, outlets }: { requesterName: string; 
   const [urgency, setUrgency] = useState<SysUrgency>("normal");
   const [neededDate, setNeededDate] = useState("");
   const [attachmentLink, setAttachmentLink] = useState("");
+  const [file, setFile] = useState<File | null>(null);
 
   const outletName = outlets.find((o) => o.id === outletId)?.name ?? "—";
 
   function submit() {
-    if (!title.trim()) return toast.error("Judul request wajib diisi.");
-    if (!description.trim()) return toast.error("Deskripsi request wajib diisi.");
+    if (!title.trim()) return toast.error("Judul permintaan wajib diisi.");
+    if (!description.trim()) return toast.error("Uraian permintaan wajib diisi.");
     if (!outletId) return toast.error("Cabang wajib dipilih.");
+
     startTransition(async () => {
+      let attachmentPath: string | null = null;
+      let attachmentName: string | null = null;
+      if (file) {
+        const fd = new FormData();
+        fd.append("file", file);
+        const up = await uploadSystemAttachmentAction(fd);
+        if (up.error) {
+          toast.error(up.error);
+          return;
+        }
+        attachmentPath = up.path ?? null;
+        attachmentName = up.name ?? file.name;
+      }
       const res = await submitSystemRequestAction({
         outletId,
         waNumber,
@@ -87,39 +102,44 @@ function SystemRequestForm({ requesterName, outlets }: { requesterName: string; 
         urgency,
         neededDate,
         attachmentLink,
+        attachmentPath,
+        attachmentName,
       });
       if (res?.error) {
         toast.error(res.error);
         return;
       }
-      toast.success("Request terkirim ke System Support.");
+      toast.success("Permintaan berhasil dikirim ke tim System Support.");
       setOpen(false);
       router.refresh();
     });
   }
 
   return (
-    <div className="max-h-[74vh] space-y-3 overflow-y-auto p-5">
+    <div className="max-h-[76vh] space-y-3 overflow-y-auto p-5">
       {/* Auto-filled identity */}
-      <div className="grid gap-2.5 rounded-xl border border-border bg-muted/20 p-3 sm:grid-cols-3">
-        <AutoField icon={<CircleUser className="size-3.5" />} label="Nama" value={requesterName} />
-        <AutoField icon={<CircleUser className="size-3.5" />} label="Jabatan" value="Supervisor" />
-        {outlets.length > 1 ? (
-          <Field label="Cabang">
-            <Combobox
-              value={outletId}
-              onChange={setOutletId}
-              options={outlets.map((o) => ({ value: o.id, label: o.name }))}
-              placeholder="Pilih cabang"
-              searchPlaceholder="Cari cabang…"
-            />
-          </Field>
-        ) : (
-          <AutoField icon={<Store className="size-3.5" />} label="Cabang" value={outletName} />
-        )}
+      <div>
+        <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Informasi Pemohon</p>
+        <div className="grid gap-2.5 rounded-xl border border-border bg-muted/20 p-3 sm:grid-cols-3">
+          <AutoField icon={<CircleUser className="size-3.5" />} label="Nama" value={requesterName} />
+          <AutoField icon={<CircleUser className="size-3.5" />} label="Jabatan" value="Supervisor" />
+          {outlets.length > 1 ? (
+            <Field label="Cabang">
+              <Combobox
+                value={outletId}
+                onChange={setOutletId}
+                options={outlets.map((o) => ({ value: o.id, label: o.name }))}
+                placeholder="Pilih cabang"
+                searchPlaceholder="Cari cabang…"
+              />
+            </Field>
+          ) : (
+            <AutoField icon={<Store className="size-3.5" />} label="Cabang" value={outletName} />
+          )}
+        </div>
       </div>
 
-      <Field label="Nomor WhatsApp" hint="Format: 082154860207">
+      <Field label="Nomor WhatsApp Aktif" hint="Untuk konfirmasi tindak lanjut. Contoh: 082154860207">
         <Input
           value={waNumber}
           onChange={(e) => setWaNumber(e.target.value.replace(/[^\d]/g, ""))}
@@ -129,9 +149,9 @@ function SystemRequestForm({ requesterName, outlets }: { requesterName: string; 
       </Field>
 
       <div className="border-t border-border pt-3">
-        <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Detail Request</p>
+        <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Detail Permintaan</p>
 
-        <Field label="Jenis Request">
+        <Field label="Jenis Permintaan">
           <Combobox
             value={requestType}
             onChange={(v) => setRequestType(v as SysRequestType)}
@@ -139,35 +159,35 @@ function SystemRequestForm({ requesterName, outlets }: { requesterName: string; 
           />
         </Field>
 
-        <Field label="Judul Request" className="mt-3">
+        <Field label="Judul Permintaan" className="mt-3">
           <Input
             value={title}
             onChange={(e) => setTitle(e.target.value)}
-            placeholder="Tulis ringkas. Contoh: 'Kasir tidak bisa login'"
+            placeholder="Ringkas dalam satu kalimat — mis. 'Aplikasi kasir gagal login sejak pagi'"
           />
         </Field>
 
-        <Field label="Deskripsi Lengkap Request" className="mt-3">
+        <Field label="Uraian Lengkap" className="mt-3">
           <Textarea
             value={description}
             onChange={(e) => setDescription(e.target.value)}
-            placeholder="Jelaskan detail kebutuhan, langkah untuk mereproduksi masalah, atau fitur yang diinginkan."
+            placeholder="Jelaskan selengkap mungkin: apa yang terjadi, sejak kapan, langkah yang sudah dicoba, atau detail fitur yang diharapkan."
             rows={4}
           />
         </Field>
 
-        <Field label="Dampak Jika Tidak Segera Ditangani" className="mt-3">
+        <Field label="Dampak bila Tertunda" className="mt-3" hint="Bantu tim menilai prioritas penanganan.">
           <Textarea
             value={impact}
             onChange={(e) => setImpact(e.target.value)}
-            placeholder="Contoh: Kasir tidak bisa transaksi sejak pagi, menyebabkan antrean panjang."
+            placeholder="Contoh: Transaksi kasir terhenti sehingga menimbulkan antrean panjang dan potensi kehilangan penjualan."
             rows={2}
           />
         </Field>
       </div>
 
       <div className="grid gap-3 sm:grid-cols-2">
-        <Field label="Urgensi">
+        <Field label="Tingkat Urgensi">
           <div className="flex gap-1.5">
             {URGENCIES.map((u) => {
               const meta = SYS_URGENCY_META[u];
@@ -193,15 +213,20 @@ function SystemRequestForm({ requesterName, outlets }: { requesterName: string; 
         </Field>
       </div>
 
-      <Field label="Foto Pendukung (jika ada)" hint="Upload foto/screenshot ke Google Drive, lalu tempel link-nya di sini.">
-        <div className="relative">
-          <Link2 className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
-          <Input
-            value={attachmentLink}
-            onChange={(e) => setAttachmentLink(e.target.value)}
-            placeholder="https://drive.google.com/…"
-            className="pl-9"
-          />
+      <Field label="Lampiran Pendukung (opsional)" hint="Unggah foto/berkas (maks 10 MB) atau tempel tautan Google Drive.">
+        <div className="space-y-2">
+          <FilePick file={file} onPick={setFile} />
+          {!file && (
+            <div className="relative">
+              <Link2 className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+              <Input
+                value={attachmentLink}
+                onChange={(e) => setAttachmentLink(e.target.value)}
+                placeholder="atau tempel tautan: https://drive.google.com/…"
+                className="pl-9"
+              />
+            </div>
+          )}
         </div>
       </Field>
 
@@ -210,9 +235,30 @@ function SystemRequestForm({ requesterName, outlets }: { requesterName: string; 
           Batal
         </Button>
         <Button onClick={submit} disabled={pending}>
-          {pending && <Loader2 className="animate-spin" />} Kirim Request
+          {pending && <Loader2 className="animate-spin" />} Kirim Permintaan
         </Button>
       </div>
+    </div>
+  );
+}
+
+function FilePick({ file, onPick }: { file: File | null; onPick: (f: File | null) => void }) {
+  return (
+    <div className="flex w-full min-w-0 flex-col gap-2 sm:flex-row sm:items-center">
+      <label className="inline-flex shrink-0 cursor-pointer items-center gap-2 self-start rounded-lg border border-input bg-background/40 px-3 py-2 text-sm text-foreground/80 hover:bg-muted/50">
+        <Upload className="size-4" />
+        {file ? "Ganti berkas" : "Unggah foto / berkas"}
+        <input type="file" accept="image/*,application/pdf" className="hidden" onChange={(e) => onPick(e.target.files?.[0] ?? null)} />
+      </label>
+      {file && (
+        <span className="flex min-w-0 max-w-full items-center gap-1.5 rounded-lg bg-muted/60 px-2.5 py-1.5 text-xs text-foreground/80">
+          <Paperclip className="size-3.5 shrink-0" />
+          <span className="min-w-0 flex-1 truncate">{file.name}</span>
+          <button type="button" onClick={() => onPick(null)} className="shrink-0 text-muted-foreground hover:text-foreground">
+            <X className="size-3.5" />
+          </button>
+        </span>
+      )}
     </div>
   );
 }
@@ -231,7 +277,7 @@ export function SystemRequestList({ rows }: { rows: SystemRequest[] }) {
   if (rows.length === 0) {
     return (
       <div className="rounded-xl border border-dashed border-border p-10 text-center text-sm text-muted-foreground">
-        Belum ada request. Klik “Ajukan Request” untuk mengirim permintaan ke System Support.
+        Belum ada permintaan. Klik “Ajukan Permintaan” untuk mengirim kebutuhan Anda ke tim System Support.
       </div>
     );
   }
@@ -253,8 +299,8 @@ export function SystemRequestList({ rows }: { rows: SystemRequest[] }) {
             </div>
             <Badge tone={ur.tone} className="shrink-0">{ur.label}</Badge>
             <Badge tone={st.tone} className="shrink-0">{st.label}</Badge>
-            {r.attachmentLink && (
-              <a href={r.attachmentLink} target="_blank" rel="noopener noreferrer" title="Lampiran" className="text-muted-foreground hover:text-foreground">
+            {r.attachmentUrl && (
+              <a href={r.attachmentUrl} target="_blank" rel="noopener noreferrer" title="Lampiran" className="text-muted-foreground hover:text-foreground">
                 <ExternalLink className="size-4" />
               </a>
             )}

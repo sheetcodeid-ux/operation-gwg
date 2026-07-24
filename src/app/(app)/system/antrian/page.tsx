@@ -2,9 +2,9 @@ import { Headset } from "lucide-react";
 import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 import { getSessionUser } from "@/lib/auth";
-import { canReachMenu, ROLE_DIVISION } from "@/lib/nav";
 import { getUsers } from "@/lib/data/store";
 import { listSystemRequests } from "@/lib/data/system";
+import { isSystemSupport, SYSTEM_SUPPORT_DEPT, SYSTEM_SUPPORT_JABATAN } from "@/lib/system-shared";
 import { PageHeader } from "@/components/ui/page-header";
 import { SystemReviewPanel } from "@/components/system/system-review";
 
@@ -12,13 +12,13 @@ export const metadata: Metadata = { title: "Antrian System — System Support" }
 
 export default async function SystemAntrianPage() {
   const user = (await getSessionUser())!;
-  if (!canReachMenu(user, "sys_review")) redirect("/dashboard");
+  // Only the System Support team (Operational + jabatan System Support) or Admin.
+  if (!isSystemSupport(user)) redirect("/dashboard");
 
   const rows = await listSystemRequests();
-  // Handlers = the Operation (System Support) team — Operation-role users plus
-  // members whose department sits in the Operation division.
+  // Handlers = the System Support team (department Operational, jabatan System Support).
   const handlers = getUsers()
-    .filter((u) => ROLE_DIVISION[u.role] === "Operation" || u.department === "Operational")
+    .filter((u) => u.department === SYSTEM_SUPPORT_DEPT && (u.jabatan ?? "").trim().toLowerCase() === SYSTEM_SUPPORT_JABATAN.toLowerCase())
     .map((u) => ({ id: u.id, name: u.name }))
     .sort((a, b) => a.name.localeCompare(b.name));
 
