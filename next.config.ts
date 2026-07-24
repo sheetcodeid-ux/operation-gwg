@@ -20,9 +20,9 @@ const csp = [
   // Next injects small inline bootstrap scripts; 'unsafe-inline' needed until a nonce is wired.
   `script-src 'self' 'unsafe-inline'${isProd ? "" : " 'unsafe-eval'"}`,
   "style-src 'self' 'unsafe-inline'",
-  "img-src 'self' data: blob: https://*.supabase.co",
+  "img-src 'self' data: blob: https://*.supabase.co https://*.r2.cloudflarestorage.com",
   "font-src 'self' data:",
-  "connect-src 'self' https://*.supabase.co wss://*.supabase.co",
+  "connect-src 'self' https://*.supabase.co wss://*.supabase.co https://*.r2.cloudflarestorage.com",
   "frame-src 'self'",
   "upgrade-insecure-requests",
 ].join("; ");
