@@ -2,7 +2,7 @@
 
 import { useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { Bell, CircleAlert, CalendarClock, ClipboardCheck, FileCheck2, ListTodo, MessageSquareWarning, TrendingDown } from "lucide-react";
+import { Bell, CircleAlert, CalendarClock, ClipboardCheck, FileCheck2, ListTodo, MessageSquareWarning, MonitorCog, TrendingDown } from "lucide-react";
 import type { AppNotification, NotificationKind } from "@/lib/types";
 import { Popover } from "@/components/ui/popover";
 import { markAllNotificationsReadAction, markNotificationReadAction } from "@/lib/actions/notifications";
@@ -17,6 +17,7 @@ const KIND_ICON: Record<NotificationKind, typeof Bell> = {
   score_drop: TrendingDown,
   hpp_review: ClipboardCheck,
   hc_done: FileCheck2,
+  sys_update: MonitorCog,
 };
 
 const SEVERITY_DOT: Record<AppNotification["severity"], string> = {

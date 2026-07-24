@@ -285,7 +285,8 @@ export type NotificationKind =
   | "event_deadline"
   | "score_drop"
   | "hpp_review"
-  | "hc_done";
+  | "hc_done"
+  | "sys_update";
 
 export interface AppNotification {
   id: string;

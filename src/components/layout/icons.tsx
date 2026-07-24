@@ -13,6 +13,8 @@ import {
   FolderInput,
   FolderKanban,
   Handshake,
+  Headset,
+  MonitorCog,
   LayoutDashboard,
   ListChecks,
   MessageSquareWarning,
@@ -61,6 +63,8 @@ export const NAV_ICONS: Record<string, LucideIcon> = {
   ShieldAlert,
   FileUp,
   FolderInput,
+  Headset,
+  MonitorCog,
   // Division (group) icons
   Briefcase,
   ShieldCheck,
