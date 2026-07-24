@@ -284,7 +284,8 @@ export type NotificationKind =
   | "task_overdue"
   | "event_deadline"
   | "score_drop"
-  | "hpp_review";
+  | "hpp_review"
+  | "hc_done";
 
 export interface AppNotification {
   id: string;

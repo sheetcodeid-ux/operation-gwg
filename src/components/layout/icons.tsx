@@ -8,7 +8,9 @@ import {
   ClipboardCheck,
   ConciergeBell,
   FileText,
+  FileUp,
   FlaskConical,
+  FolderInput,
   FolderKanban,
   Handshake,
   LayoutDashboard,
@@ -57,6 +59,8 @@ export const NAV_ICONS: Record<string, LucideIcon> = {
   Package,
   ShoppingCart,
   ShieldAlert,
+  FileUp,
+  FolderInput,
   // Division (group) icons
   Briefcase,
   ShieldCheck,

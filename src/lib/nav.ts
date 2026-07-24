@@ -16,6 +16,8 @@ export type MenuKey =
   | "op_settings"
   | "op_fraud"
   | "op_seasonal"
+  | "hc_submit"
+  | "hc_review"
   | "assessment"
   | "hpp_dash"
   | "hpp"
@@ -65,6 +67,8 @@ export const NAV_MENUS: Omit<NavItem, "section">[] = [
   { key: "op_settings", label: "Pengaturan Threshold", href: "/operation/settings", icon: "Settings2" },
   { key: "op_fraud", label: "Analisis Fraud", href: "/operation/fraud", icon: "ShieldAlert" },
   { key: "op_seasonal", label: "Musiman", href: "/operation/musiman", icon: "Waves" },
+  { key: "hc_submit", label: "Pengajuan Dokumen", href: "/hc/pengajuan", icon: "FileUp" },
+  { key: "hc_review", label: "Antrian Dokumen", href: "/hc/antrian", icon: "FolderInput" },
   { key: "reports", label: "Reports", href: "/reports", icon: "FileText" },
   { key: "assessment", label: "Assessment Golongan", href: "/assessment", icon: "Award" },
   { key: "hpp_dash", label: "Dashboard R&D", href: "/rnd/dashboard", icon: "ChartSpline" },
@@ -138,12 +142,12 @@ export const ROLE_MENUS: Record<Role, MenuKey[]> = {
   data_operation: ["work", "assessment"],
   pos_operation: ["work", "assessment"],
   admin_operation: ["work", "complaints", "assessment"],
-  supervisor: ["hospitality", "hygiene", "complaints"], // field SPV — hospitality & hygiene visits
+  supervisor: ["hospitality", "hygiene", "complaints", "hc_submit"], // field SPV — visits + HC document requests
   head_bar_rnd: ["hpp_dash", "work", "hpp", "hpp_db", "hpp_bahan", "hpp_price", "assessment"],
   bar_rnd: ["hpp_dash", "work", "hpp", "hpp_db", "hpp_bahan", "hpp_price", "assessment"],
   kitchen_rnd: ["hpp_dash", "work", "hpp", "hpp_db", "hpp_bahan", "hpp_price", "assessment"],
   coordinator_rnd: ["hpp_dash", "work", "hpp", "hpp_db", "hpp_bahan", "hpp_price", "assessment"],
-  legal: ["work", "assessment"], // HRD — grade-promotion assessment
+  legal: ["work", "hc_review", "assessment"], // HRD — grade-promotion assessment + HC document queue
   assessor: ["assessment"], // division Head / evaluator — assessment only
   member: ["assessment"], // HO staff — assessment; other access via `department`
 };
@@ -151,9 +155,9 @@ export const ROLE_MENUS: Record<Role, MenuKey[]> = {
 /** Menus shown per division in the Super Admin sidebar (all divisions listed). */
 const DIVISION_MENUS: { division: Division; menus: MenuKey[] }[] = [
   { division: "Operation", menus: OPERATION_FULL },
-  { division: "Supervisor", menus: ["hospitality", "hygiene", "complaints"] },
+  { division: "Supervisor", menus: ["hospitality", "hygiene", "complaints", "hc_submit"] },
   { division: "Product Development & Quality", menus: ["hpp_dash", "work", "hpp", "hpp_db", "hpp_bahan", "hpp_price"] },
-  { division: "Human Capital", menus: ["work", "assessment"] },
+  { division: "Human Capital", menus: ["work", "hc_review", "assessment"] },
   // New department-aligned divisions — Work Tracker only for now.
   { division: "Finance", menus: ["work"] },
   { division: "Creative", menus: ["work"] },
