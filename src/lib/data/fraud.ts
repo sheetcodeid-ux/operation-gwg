@@ -2,7 +2,7 @@ import "server-only";
 
 import { fetchBranches, fetchErpDashboard, gwgmanageConfigured } from "@/lib/integrations/gwgmanage";
 import { esbConfigured, esbFetchCancelRows, esbFetchNetSales, esbListBranches, type EsbCancelResult } from "@/lib/integrations/esb-client";
-import { fraudStoreEnabled, getFraudRows, getSalesDaily, getSalesPeriod, getSyncStates, replaceFraudDay, upsertSalesDay, upsertSalesPeriod, type FraudKindGroup, type FraudSyncState } from "./fraud-store";
+import { fraudAgg, fraudStoreEnabled, fraudTopOrders, getFraudRows, getSalesDaily, getSalesPeriod, getSyncStates, replaceFraudDay, upsertSalesDay, upsertSalesPeriod, type FraudKindGroup, type FraudSyncState } from "./fraud-store";
 
 /**
  * Fraud (Void & Cancel) analysis sourced from the POS dashboard endpoint.
@@ -265,6 +265,59 @@ function aggregate(period: FraudPeriod, kind: FraudKind, r: { from: string; to: 
   };
 }
 
+/** Build the report from the in-DB aggregation RPCs (fast path). Produces the
+ *  exact same structure as `aggregate()` but without shipping raw rows. */
+async function reportViaRpc(period: FraudPeriod, kind: FraudKind, r: { from: string; to: string; label: string }, group: FraudKindGroup): Promise<FraudReport> {
+  const daily = period === "daily";
+  const [agg, tops] = await Promise.all([
+    fraudAgg(group, r.from, r.to, kind, daily),
+    fraudTopOrders(group, r.from, r.to, kind, MAX_ORDERS_PER_OUTLET),
+  ]);
+
+  const outletAgg = new Map<string, { void: number; cancel: number; voidAmount: number; cancelAmount: number }>();
+  const dailyM: Record<string, Record<string, number>> = {};
+  const dailyCount: Record<string, Record<string, number>> = {};
+  let tv = 0, tc = 0, tva = 0, tca = 0;
+  for (const b of agg.branchDay) {
+    const cnt = Number(b.cnt) || 0;
+    const amount = Number(b.amount) || 0;
+    const a = outletAgg.get(b.branch) ?? { void: 0, cancel: 0, voidAmount: 0, cancelAmount: 0 };
+    if (b.isVoid) { a.void += cnt; a.voidAmount += amount; tv += cnt; tva += amount; }
+    else { a.cancel += cnt; a.cancelAmount += amount; tc += cnt; tca += amount; }
+    outletAgg.set(b.branch, a);
+    (dailyM[b.branch] ??= {})[b.d] = (dailyM[b.branch][b.d] ?? 0) + amount;
+    (dailyCount[b.branch] ??= {})[b.d] = (dailyCount[b.branch][b.d] ?? 0) + cnt;
+  }
+
+  const hourly: Record<string, Record<string, number>> = {};
+  const hourlyCount: Record<string, Record<string, number>> = {};
+  for (const h of agg.hours) {
+    (hourly[h.branch] ??= {})[h.hour] = (hourly[h.branch][h.hour] ?? 0) + (Number(h.amount) || 0);
+    (hourlyCount[h.branch] ??= {})[h.hour] = (hourlyCount[h.branch][h.hour] ?? 0) + (Number(h.cnt) || 0);
+  }
+
+  const orders: Record<string, FraudOrder[]> = {};
+  for (const o of tops) {
+    (orders[o.branch] ??= []).push({
+      salesNumber: o.sales_number, menu: o.menu, category: o.menu_category,
+      orderBy: o.order_by, orderTime: o.order_time, voidBy: o.void_by, voidTime: o.void_time,
+      type: o.type, notes: o.notes, qty: Number(o.qty) || 0, total: Number(o.amount) || 0,
+    });
+  }
+
+  const actors = agg.actors.map((a) => ({ name: a.name, count: Number(a.count) || 0, total: Number(a.total) || 0 })).slice(0, 10);
+  const outlets: FraudOutletRow[] = [...outletAgg.entries()]
+    .map(([name, a], i) => ({ branchId: i + 1, code: name, name, void: a.void, cancel: a.cancel, voidAmount: a.voidAmount, cancelAmount: a.cancelAmount }))
+    .sort((x, y) => y.voidAmount + y.cancelAmount - (x.voidAmount + x.cancelAmount));
+
+  return {
+    configured: true, period, kind, from: r.from, to: r.to, label: r.label, source: "esb",
+    totalVoid: tv, totalCancel: tc, totalVoidAmount: tva, totalCancelAmount: tca,
+    hasAmount: true, outlets, perOutletReliable: true, orders, daily: dailyM, dailyCount, actors,
+    hourly: daily ? hourly : undefined, hourlyCount: daily ? hourlyCount : undefined,
+  };
+}
+
 /** Build the report from a LIVE ESB fetch (no DB cache). */
 function esbReport(period: FraudPeriod, kind: FraudKind, r: { from: string; to: string; label: string }, res: EsbCancelResult): FraudReport {
   // The default export carries BOTH Void and Cancel rows — narrow here when a
@@ -463,9 +516,17 @@ export async function getFraudReport(period: FraudPeriod, date: string, kind: Fr
   if (fraudStoreEnabled() && esbConfigured()) {
     try {
       const group = kindGroup(kind);
-      const [rowsDb, states] = await Promise.all([getFraudRows(group, r.from, r.to), getSyncStates(group, r.from, r.to)]);
+      const states = await getSyncStates(group, r.from, r.to);
       const pending = pendingSyncDays(states, r.from, r.to);
-      const report = aggregate(period, kind, r, filterKind(rowsDb, kind, group === "delete"));
+      // Fast path: aggregate in the database. On any hiccup fall back to the
+      // in-JS aggregation over raw rows (identical output, just heavier).
+      let report: FraudReport;
+      try {
+        report = await reportViaRpc(period, kind, r, group);
+      } catch {
+        const rowsDb = await getFraudRows(group, r.from, r.to);
+        report = aggregate(period, kind, r, filterKind(rowsDb, kind, group === "delete"));
+      }
       report.pendingDays = pending;
       try {
         const [periodRows, dailyRows] = await Promise.all([getSalesPeriod(r.from, r.to), getSalesDaily(r.from, r.to)]);

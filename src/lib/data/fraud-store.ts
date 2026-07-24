@@ -60,6 +60,38 @@ interface OrderRow {
   total: number | string;
 }
 
+/* ------------------------------------------------------------------ */
+/* In-database aggregation (fast path)                                 */
+/* The Postgres functions fraud_agg / fraud_top_orders sum the 140k-row */
+/* table server-side so a monthly report ships a few hundred pre-summed */
+/* rows instead of tens of thousands. Rules mirror the JS aggregator.  */
+/* ------------------------------------------------------------------ */
+
+export interface FraudAggBucket { branch: string; d: string; isVoid: boolean; cnt: number; amount: number }
+export interface FraudAggHour { branch: string; hour: string; cnt: number; amount: number }
+export interface FraudAggActor { name: string; count: number; total: number }
+export interface FraudAggResult { branchDay: FraudAggBucket[]; hours: FraudAggHour[]; actors: FraudAggActor[] }
+export interface FraudTopOrderRow {
+  branch: string; sales_number: string; menu: string; menu_category: string; order_by: string;
+  order_time: string; void_by: string; void_time: string; type: string; notes: string;
+  qty: number | string; amount: number | string;
+}
+
+/** Per-branch/day (and per-hour when daily) + actor sums, computed in the DB. */
+export async function fraudAgg(group: FraudKindGroup, from: string, to: string, kind: string, daily: boolean): Promise<FraudAggResult> {
+  const { data, error } = await db().rpc("fraud_agg", { p_group: group, p_from: from, p_to: to, p_kind: kind, p_daily: daily });
+  if (error) throw new Error(`DB fraud_agg: ${error.message}`);
+  const r = (data ?? {}) as Partial<FraudAggResult>;
+  return { branchDay: r.branchDay ?? [], hours: r.hours ?? [], actors: r.actors ?? [] };
+}
+
+/** Capped per-branch drill-down (largest orders first), computed in the DB. */
+export async function fraudTopOrders(group: FraudKindGroup, from: string, to: string, kind: string, cap: number): Promise<FraudTopOrderRow[]> {
+  const { data, error } = await db().rpc("fraud_top_orders", { p_group: group, p_from: from, p_to: to, p_kind: kind, p_cap: cap });
+  if (error) throw new Error(`DB fraud_top_orders: ${error.message}`);
+  return (data ?? []) as FraudTopOrderRow[];
+}
+
 /** All cached rows for [from, to] (paged past supabase's 1000-row cap). */
 export async function getFraudRows(kind: FraudKindGroup, from: string, to: string): Promise<StoredFraudRow[]> {
   const out: StoredFraudRow[] = [];
