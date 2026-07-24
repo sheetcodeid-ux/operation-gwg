@@ -220,25 +220,33 @@ export function SubmissionList({ rows }: { rows: HcSubmission[] }) {
       {rows.map((r) => {
         const st = HC_STATUS_META[r.status];
         return (
-          <div key={r.id} className="flex flex-wrap items-center gap-3 rounded-xl border border-border bg-card p-3.5">
-            <div className="grid size-9 shrink-0 place-items-center rounded-lg bg-muted text-muted-foreground">
-              <FileText className="size-4" />
+          <div key={r.id} className="rounded-xl border border-border bg-card p-3.5">
+            <div className="flex flex-wrap items-center gap-3">
+              <div className="grid size-9 shrink-0 place-items-center rounded-lg bg-muted text-muted-foreground">
+                <FileText className="size-4" />
+              </div>
+              <div className="min-w-0 flex-1">
+                <p className="truncate text-sm font-medium text-foreground">{r.employeeName}</p>
+                <p className="truncate text-xs text-muted-foreground">
+                  {HC_DOC_LABEL[r.docType]} · {r.outletName} · {fmtDate(r.createdAt)}
+                </p>
+              </div>
+              <Badge tone={st.tone}>{st.label}</Badge>
+              {r.status === "done" && r.finalDocUrl ? (
+                <a href={forceDownload(r.finalDocUrl, `${r.employeeName} - ${HC_DOC_LABEL[r.docType]}.pdf`)} download>
+                  <Button size="sm" variant="subtle">
+                    <Download className="size-4" /> Unduh
+                  </Button>
+                </a>
+              ) : r.status !== "done" ? (
+                <span className="text-xs text-muted-foreground">Menunggu HC</span>
+              ) : null}
             </div>
-            <div className="min-w-0 flex-1">
-              <p className="truncate text-sm font-medium text-foreground">{r.employeeName}</p>
-              <p className="truncate text-xs text-muted-foreground">
-                {HC_DOC_LABEL[r.docType]} · {r.outletName} · {fmtDate(r.createdAt)}
+            {/* Completed but no file yet (e.g. BPJS): show HC's note / number. */}
+            {r.status === "done" && !r.finalDocUrl && r.hcNote && (
+              <p className="mt-2 whitespace-pre-wrap rounded-lg bg-emerald-500/10 px-3 py-2 text-xs text-emerald-700 dark:text-emerald-300">
+                <span className="font-medium">Keterangan HC:</span> {r.hcNote}
               </p>
-            </div>
-            <Badge tone={st.tone}>{st.label}</Badge>
-            {r.status === "done" && r.finalDocUrl ? (
-              <a href={forceDownload(r.finalDocUrl, `${r.employeeName} - ${HC_DOC_LABEL[r.docType]}.pdf`)} download>
-                <Button size="sm" variant="subtle">
-                  <Download className="size-4" /> Unduh
-                </Button>
-              </a>
-            ) : (
-              <span className="text-xs text-muted-foreground">Menunggu HC</span>
             )}
           </div>
         );

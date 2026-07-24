@@ -128,11 +128,20 @@ export async function uploadHcFinalAction(formData: FormData) {
 export async function completeHcRequestAction(input: { id: string; note: string; finalDocPath: string }) {
   const user = await getSessionUser();
   if (!canReview(user)) return { error: "Tidak punya akses." };
-  if (!input.finalDocPath) return { error: "Unggah dokumen jadi (PDF) terlebih dahulu." };
 
   const rec = await getHcSubmissionRow(input.id);
   if (!rec) return { error: "Pengajuan tidak ditemukan." };
   if (rec.status === "done") return { error: "Pengajuan sudah selesai." };
+
+  // BPJS numbers/cards aren't issued immediately, so the finished file may not
+  // exist yet — HC can close a BPJS request with just a note (e.g. the no. BPJS)
+  // and attach the card later. Other doc types still require the finished file.
+  if (rec.doc_type !== "bpjs" && !input.finalDocPath) {
+    return { error: "Unggah dokumen jadi (PDF) terlebih dahulu." };
+  }
+  if (rec.doc_type === "bpjs" && !input.finalDocPath && !input.note?.trim()) {
+    return { error: "Untuk BPJS, unggah dokumen atau isi catatan (mis. No. BPJS) dulu." };
+  }
 
   const res = await completeHcSubmission(input.id, user!.id, input.note?.trim() ?? "", input.finalDocPath);
   if (res.error) return { error: res.error };

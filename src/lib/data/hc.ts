@@ -170,7 +170,7 @@ export async function completeHcSubmission(
     .update({
       status: "done",
       hc_note: note || null,
-      final_doc_path: finalDocPath,
+      final_doc_path: finalDocPath || null,
       completed_by: userId,
       completed_at: new Date().toISOString(),
     })

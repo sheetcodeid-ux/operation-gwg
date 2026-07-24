@@ -258,25 +258,36 @@ function DetailPanel({ row, canDelete, onDeleted }: { row: HcSubmission; canDele
     });
   }
 
+  // BPJS numbers aren't issued immediately, so the finished card may not exist
+  // yet — allow closing a BPJS request with just a note (e.g. the No. BPJS).
+  const isBpjs = row.docType === "bpjs";
   function complete() {
-    if (!finalFile) {
+    if (!finalFile && !isBpjs) {
       toast.error("Unggah dokumen jadi (PDF) terlebih dahulu.");
       return;
     }
+    if (!finalFile && isBpjs && !note.trim()) {
+      toast.error("Untuk BPJS, unggah dokumen atau isi catatan (mis. No. BPJS) dulu.");
+      return;
+    }
     startTransition(async () => {
-      const fd = new FormData();
-      fd.append("file", finalFile);
-      const up = await uploadHcFinalAction(fd);
-      if (up.error) {
-        toast.error(up.error);
-        return;
+      let finalDocPath = "";
+      if (finalFile) {
+        const fd = new FormData();
+        fd.append("file", finalFile);
+        const up = await uploadHcFinalAction(fd);
+        if (up.error) {
+          toast.error(up.error);
+          return;
+        }
+        finalDocPath = up.path ?? "";
       }
-      const res = await completeHcRequestAction({ id: row.id, note, finalDocPath: up.path ?? "" });
+      const res = await completeHcRequestAction({ id: row.id, note, finalDocPath });
       if (res?.error) {
         toast.error(res.error);
         return;
       }
-      toast.success("Dokumen dikirim balik ke Supervisor.");
+      toast.success(finalDocPath ? "Dokumen dikirim balik ke Supervisor." : "Pengajuan diselesaikan.");
       router.refresh();
     });
   }
@@ -398,11 +409,14 @@ function DetailPanel({ row, canDelete, onDeleted }: { row: HcSubmission; canDele
             </>
           ) : (
             <>
-              <Field label="Upload Dokumen Jadi (PDF)" hint="Hasil dokumen final yang akan diunduh Supervisor. Maks 8 MB.">
+              <Field
+                label={isBpjs ? "Upload Dokumen Jadi (PDF) — opsional" : "Upload Dokumen Jadi (PDF)"}
+                hint={isBpjs ? "Kartu BPJS sering belum terbit. Boleh diselesaikan tanpa file — cukup tulis No. BPJS/KPJ di catatan; file bisa menyusul." : "Hasil dokumen final yang akan diunduh Supervisor. Maks 8 MB."}
+              >
                 <FinalFilePick file={finalFile} onPick={setFinalFile} />
               </Field>
-              <Field label="Catatan untuk Supervisor (opsional)">
-                <Textarea value={note} onChange={(e) => setNote(e.target.value)} placeholder="Tambahkan catatan bila perlu…" rows={3} />
+              <Field label={isBpjs ? "Catatan untuk Supervisor (mis. No. BPJS/KPJ)" : "Catatan untuk Supervisor (opsional)"}>
+                <Textarea value={note} onChange={(e) => setNote(e.target.value)} placeholder={isBpjs ? "Contoh: No. BPJS 0001234567890 — kartu menyusul" : "Tambahkan catatan bila perlu…"} rows={3} />
               </Field>
               <div className="flex justify-end">
                 <Button onClick={complete} disabled={pending} className="shrink-0">
