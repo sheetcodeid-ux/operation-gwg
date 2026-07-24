@@ -14,7 +14,15 @@ import {
   getHcSubmissionRow,
   startHcProcessing,
 } from "@/lib/data/hc";
-import { canReviewHc, canSubmitHc, type HcDetails, type HcDocType } from "@/lib/hc-shared";
+import { canReachMenu } from "@/lib/nav";
+import type { HcDetails, HcDocType } from "@/lib/hc-shared";
+import type { UserProfile } from "@/lib/types";
+
+// Access is department-aware (mirrors the sidebar): supervisors submit, Human
+// Capital reviews — including department-aligned `member` accounts, not just
+// the `legal`/`supervisor` roles.
+const canSubmit = (u: UserProfile | null) => !!u && canReachMenu(u, "hc_submit");
+const canReview = (u: UserProfile | null) => !!u && canReachMenu(u, "hc_review");
 
 const MAX_BYTES = 8 * 1024 * 1024; // 8 MB per file (KTP scan or finished PDF)
 
@@ -36,7 +44,7 @@ async function uploadFile(userId: string, folder: string, file: File): Promise<{
 /** Upload the employee KTP scan; returns the storage path (kept private). */
 export async function uploadHcKtpAction(formData: FormData) {
   const user = await getSessionUser();
-  if (!canSubmitHc(user)) return { error: "Tidak punya akses." };
+  if (!canSubmit(user)) return { error: "Tidak punya akses." };
   if (!dbEnabled) return { error: "Storage belum aktif." };
   const file = formData.get("file");
   if (!(file instanceof File)) return { error: "Tidak ada berkas." };
@@ -53,7 +61,7 @@ export interface HcSubmitInput {
 
 export async function submitHcRequestAction(input: HcSubmitInput) {
   const user = await getSessionUser();
-  if (!canSubmitHc(user)) return { error: "Tidak punya akses." };
+  if (!canSubmit(user)) return { error: "Tidak punya akses." };
   if (!dbEnabled) return { error: "Database belum aktif." };
 
   const employeeName = input.employeeName?.trim();
@@ -88,7 +96,7 @@ export async function submitHcRequestAction(input: HcSubmitInput) {
 
 export async function startHcProcessingAction(id: string) {
   const user = await getSessionUser();
-  if (!canReviewHc(user)) return { error: "Tidak punya akses." };
+  if (!canReview(user)) return { error: "Tidak punya akses." };
   const res = await startHcProcessing(id, user!.id);
   if (res.error) return { error: res.error };
   revalidatePath("/hc/antrian");
@@ -98,7 +106,7 @@ export async function startHcProcessingAction(id: string) {
 /** Upload the finished document (PDF) HC produced; returns the storage path. */
 export async function uploadHcFinalAction(formData: FormData) {
   const user = await getSessionUser();
-  if (!canReviewHc(user)) return { error: "Tidak punya akses." };
+  if (!canReview(user)) return { error: "Tidak punya akses." };
   if (!dbEnabled) return { error: "Storage belum aktif." };
   const file = formData.get("file");
   if (!(file instanceof File)) return { error: "Tidak ada berkas." };
@@ -107,7 +115,7 @@ export async function uploadHcFinalAction(formData: FormData) {
 
 export async function completeHcRequestAction(input: { id: string; note: string; finalDocPath: string }) {
   const user = await getSessionUser();
-  if (!canReviewHc(user)) return { error: "Tidak punya akses." };
+  if (!canReview(user)) return { error: "Tidak punya akses." };
   if (!input.finalDocPath) return { error: "Unggah dokumen jadi (PDF) terlebih dahulu." };
 
   const rec = await getHcSubmissionRow(input.id);

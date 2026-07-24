@@ -150,37 +150,90 @@ function InfoRow({ label, value }: { label: string; value: React.ReactNode }) {
   );
 }
 
-/** Neat framed KTP preview (image inline, PDF as a card) + a Download action. */
-function KtpViewer({ url, employeeName }: { url: string; employeeName: string }) {
-  const isImg = isImageUrl(url);
-  const dl = forceDownload(url, `KTP ${employeeName}`);
+/** KTP shown as a file entry (keeps the original name, e.g. "dfsfs.jpg").
+ *  Tapping "Buka" opens an image in a framed lightbox like the Hygiene photos,
+ *  or opens a PDF in a new tab; "Download" saves the file to the device. */
+function KtpViewer({ url, name, employeeName }: { url: string; name: string; employeeName: string }) {
+  const [open, setOpen] = useState(false);
+  const isImg = name ? isImageUrl(name) : isImageUrl(url);
+  const label = name || (isImg ? "KTP.jpg" : "KTP.pdf");
+  const dl = forceDownload(url, name || `KTP ${employeeName}`);
+
+  const openFile = () => {
+    if (isImg) setOpen(true);
+    else window.open(url, "_blank", "noopener,noreferrer");
+  };
+
   return (
-    <div className="overflow-hidden rounded-xl border border-border bg-muted/20">
-      {isImg ? (
-        <a href={url} target="_blank" rel="noopener noreferrer" className="block">
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src={url} alt={`KTP ${employeeName}`} className="max-h-56 w-full bg-black/5 object-contain" />
-        </a>
-      ) : (
-        <a href={url} target="_blank" rel="noopener noreferrer" className="flex items-center gap-3 p-4 hover:bg-muted/40">
-          <div className="grid size-11 shrink-0 place-items-center rounded-lg bg-brand-500/10 text-brand-600 dark:text-brand-400">
-            <IdCard className="size-5" />
-          </div>
-          <div className="min-w-0">
-            <p className="truncate text-sm font-medium text-foreground">Berkas KTP (PDF)</p>
-            <p className="text-xs text-muted-foreground">Ketuk untuk membuka</p>
-          </div>
-        </a>
-      )}
-      <div className="flex items-center justify-between gap-2 border-t border-border px-3 py-2">
-        <a href={url} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1.5 text-xs font-medium text-muted-foreground hover:text-foreground">
-          <ExternalLink className="size-3.5" /> Buka
-        </a>
-        <a href={dl} download className="inline-flex items-center gap-1.5 text-xs font-medium text-brand-600 hover:underline dark:text-brand-400">
-          <Download className="size-3.5" /> Download
-        </a>
+    <>
+      <div className="flex items-center gap-3 rounded-xl border border-border bg-muted/20 p-2.5">
+        <button
+          type="button"
+          onClick={openFile}
+          className="grid size-12 shrink-0 place-items-center overflow-hidden rounded-lg bg-muted ring-1 ring-border transition-transform hover:scale-[1.03]"
+          aria-label="Buka KTP"
+        >
+          {isImg ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img src={url} alt={`KTP ${employeeName}`} className="size-full object-cover" />
+          ) : (
+            <IdCard className="size-5 text-brand-600 dark:text-brand-400" />
+          )}
+        </button>
+        <div className="min-w-0 flex-1">
+          <p className="truncate text-sm font-medium text-foreground">{label}</p>
+          <p className="text-xs text-muted-foreground">{isImg ? "Foto KTP" : "Dokumen KTP (PDF)"}</p>
+        </div>
+        <div className="flex shrink-0 items-center gap-1.5">
+          <button
+            type="button"
+            onClick={openFile}
+            className="inline-flex items-center gap-1 rounded-lg px-2 py-1.5 text-xs font-medium text-muted-foreground hover:bg-muted hover:text-foreground"
+          >
+            <ExternalLink className="size-3.5" /> Buka
+          </button>
+          <a
+            href={dl}
+            download
+            className="inline-flex items-center gap-1 rounded-lg bg-brand-500/10 px-2 py-1.5 text-xs font-medium text-brand-600 hover:bg-brand-500/20 dark:text-brand-400"
+          >
+            <Download className="size-3.5" /> Download
+          </a>
+        </div>
       </div>
-    </div>
+
+      {/* Framed lightbox — same look as the Hygiene documentation viewer. */}
+      {open && isImg && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/85 p-4 backdrop-blur-sm" onClick={() => setOpen(false)}>
+          <button
+            type="button"
+            onClick={() => setOpen(false)}
+            className="absolute right-4 top-4 grid size-9 place-items-center rounded-full bg-white/10 text-white transition-colors hover:bg-white/20"
+            aria-label="Tutup"
+          >
+            <X className="size-5" />
+          </button>
+          <div className="flex max-h-full max-w-3xl flex-col items-center gap-3" onClick={(e) => e.stopPropagation()}>
+            <div className="overflow-hidden rounded-2xl bg-black shadow-2xl ring-1 ring-white/15">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src={url} alt={`KTP ${employeeName}`} className="max-h-[78vh] w-auto object-contain" />
+            </div>
+            <div className="flex items-center gap-3">
+              <span className="text-xs text-white/80">
+                <span className="font-medium text-white/95">{label}</span> · KTP {employeeName}
+              </span>
+              <a
+                href={dl}
+                download
+                className="inline-flex items-center gap-1.5 rounded-lg bg-white/15 px-3 py-1.5 text-xs font-medium text-white hover:bg-white/25"
+              >
+                <Download className="size-3.5" /> Download
+              </a>
+            </div>
+          </div>
+        </div>
+      )}
+    </>
   );
 }
 
@@ -296,7 +349,7 @@ function DetailPanel({ row, canDelete, onDeleted }: { row: HcSubmission; canDele
         <div className="flex flex-col gap-1.5 pt-1">
           <span className="text-xs font-medium uppercase tracking-wide text-muted-foreground">File KTP</span>
           {row.ktpUrl ? (
-            <KtpViewer url={row.ktpUrl} employeeName={row.employeeName} />
+            <KtpViewer url={row.ktpUrl} name={row.details.ktpName ?? ""} employeeName={row.employeeName} />
           ) : (
             <span className="text-sm text-muted-foreground">Tidak dilampirkan</span>
           )}

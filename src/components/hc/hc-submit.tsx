@@ -67,6 +67,7 @@ function SubmissionForm({ outlets }: { outlets: { id: string; name: string }[] }
 
     startTransition(async () => {
       let ktpPath: string | null = null;
+      const outgoing: HcDetails = { ...details };
       if (ktp) {
         const fd = new FormData();
         fd.append("file", ktp);
@@ -76,8 +77,9 @@ function SubmissionForm({ outlets }: { outlets: { id: string; name: string }[] }
           return;
         }
         ktpPath = up.path ?? null;
+        outgoing.ktpName = ktp.name; // keep the original filename (e.g. dfsfs.jpg)
       }
-      const res = await submitHcRequestAction({ employeeName: employeeName.trim(), docType, outletId, ktpPath, details });
+      const res = await submitHcRequestAction({ employeeName: employeeName.trim(), docType, outletId, ktpPath, details: outgoing });
       if (res?.error) {
         toast.error(res.error);
         return;

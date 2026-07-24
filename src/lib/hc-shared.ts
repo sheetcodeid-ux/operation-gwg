@@ -1,19 +1,7 @@
 import type { Tone } from "@/lib/constants";
-import type { UserProfile } from "@/lib/types";
 
-/* ------------------------------------------------------------------ */
-/* Access                                                              */
-/* ------------------------------------------------------------------ */
-
-/** Supervisors (field) submit document requests; Admin can too for testing. */
-export function canSubmitHc(user: UserProfile | null): boolean {
-  return !!user && (user.role === "supervisor" || user.role === "super_admin");
-}
-
-/** Human Capital (legal/HRD) processes the queue; Admin oversees. */
-export function canReviewHc(user: UserProfile | null): boolean {
-  return !!user && (user.role === "legal" || user.role === "super_admin");
-}
+// Access checks live in `lib/actions/hc.ts` (server) and are department-aware
+// via `canReachMenu` — do not gate on role alone.
 
 /**
  * Shared Human-Capital document types + labels. Lives OUTSIDE the server-only
@@ -69,6 +57,8 @@ export interface HcDetails {
   /** Surat Teguran / SP — jenis (Teguran / SP1 / SP2 / SP3) + kronologi. */
   warningLevel?: string;
   chronology?: string;
+  /** Original KTP filename (e.g. "dfsfs.jpg") — for display & download name. */
+  ktpName?: string;
 }
 
 /** A submission as returned to the client (files exposed as signed URLs). */
