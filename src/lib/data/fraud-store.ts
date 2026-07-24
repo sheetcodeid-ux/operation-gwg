@@ -92,6 +92,22 @@ export async function fraudTopOrders(group: FraudKindGroup, from: string, to: st
   return (data ?? []) as FraudTopOrderRow[];
 }
 
+/* ------------------------------------------------------------------ */
+/* Report cache — only PAST, fully-synced (final) periods are stored,  */
+/* so a re-open is instant and can never be stale.                     */
+/* ------------------------------------------------------------------ */
+
+/** Return a cached report only when it was stored as final (immutable). */
+export async function getFraudReportCache<T>(key: string): Promise<T | null> {
+  const { data, error } = await db().from("fraud_report_cache").select("report,final").eq("key", key).maybeSingle();
+  if (error || !data || !data.final) return null;
+  return data.report as T;
+}
+
+export async function setFraudReportCache(key: string, report: unknown, final: boolean): Promise<void> {
+  await db().from("fraud_report_cache").upsert({ key, report, final, computed_at: new Date().toISOString() });
+}
+
 /** All cached rows for [from, to] (paged past supabase's 1000-row cap). */
 export async function getFraudRows(kind: FraudKindGroup, from: string, to: string): Promise<StoredFraudRow[]> {
   const out: StoredFraudRow[] = [];
@@ -185,6 +201,14 @@ export async function replaceFraudDay(kind: FraudKindGroup, day: string, rows: C
     synced_at: new Date().toISOString(),
   });
   if (up.error) throw new Error(`DB fraud_sync upsert: ${up.error.message}`);
+
+  // Rewriting a PAST day (e.g. an admin backfill) could make a cached final
+  // report stale — clear the small report cache so it rebuilds lazily. A
+  // current-day sync never touches cached (past-only) reports.
+  const todayW = new Date(Date.now() + 7 * 3_600_000).toISOString().slice(0, 10);
+  if (day < todayW) {
+    try { await db().from("fraud_report_cache").delete().neq("key", ""); } catch { /* best-effort */ }
+  }
 }
 
 /* ------------------------------ Sales (omset) ------------------------------ */

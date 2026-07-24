@@ -2,7 +2,7 @@ import "server-only";
 
 import { fetchBranches, fetchErpDashboard, gwgmanageConfigured } from "@/lib/integrations/gwgmanage";
 import { esbConfigured, esbFetchCancelRows, esbFetchNetSales, esbListBranches, type EsbCancelResult } from "@/lib/integrations/esb-client";
-import { fraudAgg, fraudStoreEnabled, fraudTopOrders, getFraudRows, getSalesDaily, getSalesPeriod, getSyncStates, replaceFraudDay, upsertSalesDay, upsertSalesPeriod, type FraudKindGroup, type FraudSyncState } from "./fraud-store";
+import { fraudAgg, fraudStoreEnabled, fraudTopOrders, getFraudReportCache, getFraudRows, getSalesDaily, getSalesPeriod, getSyncStates, replaceFraudDay, setFraudReportCache, upsertSalesDay, upsertSalesPeriod, type FraudKindGroup, type FraudSyncState } from "./fraud-store";
 
 /**
  * Fraud (Void & Cancel) analysis sourced from the POS dashboard endpoint.
@@ -514,6 +514,12 @@ export async function getFraudReport(period: FraudPeriod, date: string, kind: Fr
   // synced are reported via pendingDays so the client drains them in the
   // background (syncFraudDays) instead of blocking this request on ESB.
   if (fraudStoreEnabled() && esbConfigured()) {
+    const cacheKey = `${period}|${kind}|${r.from}|${r.to}`;
+    // Past, fully-synced periods are immutable → serve the stored report instantly.
+    try {
+      const hit = await getFraudReportCache<FraudReport>(cacheKey);
+      if (hit) return hit;
+    } catch { /* cache miss/errors just recompute */ }
     try {
       const group = kindGroup(kind);
       const states = await getSyncStates(group, r.from, r.to);
@@ -546,6 +552,11 @@ export async function getFraudReport(period: FraudPeriod, date: string, kind: Fr
       } catch { /* omset optional — report stays usable without it */ }
       if (pending.length > 0) {
         report.warning = `${pending.length} hari dalam periode ini belum tersinkron dari ESB — data sedang diambil otomatis, angka akan bertambah sendiri.`;
+      }
+      // Cache only immutable periods: entirely in the past AND fully synced.
+      // Current-day periods keep recomputing so the live day stays accurate.
+      if (r.to < todayWib() && pending.length === 0) {
+        try { await setFraudReportCache(cacheKey, report, true); } catch { /* caching is best-effort */ }
       }
       return report;
     } catch {
