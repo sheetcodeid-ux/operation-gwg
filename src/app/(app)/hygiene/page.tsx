@@ -8,6 +8,16 @@ import { StatTile } from "@/components/ui/stat";
 import { NewAuditButton } from "@/components/hygiene/hygiene-form";
 import { HygieneExplorer, type HygieneRow } from "@/components/hygiene/hygiene-explorer";
 import { getT } from "@/lib/i18n/server";
+import { isR2Key, presignGet, r2Enabled, r2KeyOf } from "@/lib/storage/r2";
+import type { Attachment } from "@/lib/types";
+
+/** Turn stored R2 keys into short-lived viewable URLs (bucket stays private). */
+async function resolvePhotos(photos: Attachment[]): Promise<Attachment[]> {
+  if (!r2Enabled() || !photos.some((p) => isR2Key(p.id))) return photos;
+  return Promise.all(
+    photos.map(async (p) => (isR2Key(p.id) ? { ...p, url: await presignGet(r2KeyOf(p.id)) } : p)),
+  );
+}
 
 export const metadata: Metadata = { title: "Hygiene Monitoring" };
 
@@ -18,20 +28,22 @@ export default async function HygienePage() {
   const outlets = visibleOutlets(user).map((o) => ({ id: o.id, name: o.name }));
   const canCreate = can(user, "create_hygiene");
 
-  const rows: HygieneRow[] = audits.map((a) => ({
-    id: a.id,
-    outletId: a.outletId,
-    outlet: outletName(a.outletId),
-    areaId: a.areaId,
-    area: outletCoordinatorName(a.outletId),
-    shift: a.shift,
-    inspector: a.inspectorName,
-    date: a.date,
-    score: a.hygieneScore,
-    isClean: a.isClean,
-    findings: a.findings.length,
-    photos: a.photos,
-  }));
+  const rows: HygieneRow[] = await Promise.all(
+    audits.map(async (a) => ({
+      id: a.id,
+      outletId: a.outletId,
+      outlet: outletName(a.outletId),
+      areaId: a.areaId,
+      area: outletCoordinatorName(a.outletId),
+      shift: a.shift,
+      inspector: a.inspectorName,
+      date: a.date,
+      score: a.hygieneScore,
+      isClean: a.isClean,
+      findings: a.findings.length,
+      photos: await resolvePhotos(a.photos),
+    })),
+  );
 
   const avg = audits.length
     ? Math.round((audits.reduce((a, b) => a + b.hygieneScore, 0) / audits.length) * 10) / 10

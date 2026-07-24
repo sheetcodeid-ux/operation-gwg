@@ -7,6 +7,7 @@ import { toast } from "sonner";
 import { HYGIENE_PHOTO_GROUPS, HYGIENE_RATING_META, HYGIENE_SECTIONS } from "@/lib/constants";
 import type { Attachment, HygieneRating, HygieneSection } from "@/lib/types";
 import { createHygieneAction, uploadHygienePhotosAction } from "@/lib/actions/hygiene";
+import { presignHygieneUploadsAction } from "@/lib/actions/uploads";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogTrigger, useDialogControl } from "@/components/ui/dialog";
 import { Field, Input } from "@/components/ui/input";
@@ -171,25 +172,46 @@ function HygieneForm({ outlets }: { outlets: { id: string; name: string }[] }) {
       let uploaded: Attachment[] = [];
       const entries = Object.entries(photos).flatMap(([label, items]) => items.map((it) => ({ label, file: it.file })));
       if (entries.length > 0) {
-        const batches = batchBySize(entries, MAX_BATCH_BYTES);
-        for (const batch of batches) {
-          const fd = new FormData();
-          for (const e of batch) {
-            fd.append("file", e.file);
-            fd.append("label", e.label);
-          }
-          const up = await uploadHygienePhotosAction(fd);
-          if (up.error) {
-            // Demo mode without storage: save the audit anyway, photos skipped.
-            if (up.error.includes("Storage belum aktif")) {
-              toast.info("Storage belum aktif — audit disimpan tanpa foto.");
-              uploaded = [];
-              break;
+        // Preferred path: upload straight to Cloudflare R2 via presigned URLs so
+        // the photos never pass through Vercel (keeps it well under free limits).
+        const presign = await presignHygieneUploadsAction(entries.map((e) => ({ name: e.file.name, type: e.file.type })));
+        if ("error" in presign) {
+          toast.error(presign.error);
+          return;
+        }
+        if (presign.mode === "r2") {
+          try {
+            for (let i = 0; i < entries.length; i++) {
+              const { id, url } = presign.items[i];
+              const put = await fetch(url, { method: "PUT", body: entries[i].file, headers: { "content-type": entries[i].file.type } });
+              if (!put.ok) throw new Error(`R2 ${put.status}`);
+              uploaded.push({ id, name: entries[i].label || entries[i].file.name, url: "", kind: "photo", size: entries[i].file.size });
             }
-            toast.error(up.error);
+          } catch {
+            toast.error("Upload foto gagal — periksa koneksi lalu coba lagi.");
             return;
           }
-          uploaded = uploaded.concat(up.photos ?? []);
+        } else {
+          // Fallback: upload through the server to Supabase (size-batched).
+          const batches = batchBySize(entries, MAX_BATCH_BYTES);
+          for (const batch of batches) {
+            const fd = new FormData();
+            for (const e of batch) {
+              fd.append("file", e.file);
+              fd.append("label", e.label);
+            }
+            const up = await uploadHygienePhotosAction(fd);
+            if (up.error) {
+              if (up.error.includes("Storage belum aktif")) {
+                toast.info("Storage belum aktif — audit disimpan tanpa foto.");
+                uploaded = [];
+                break;
+              }
+              toast.error(up.error);
+              return;
+            }
+            uploaded = uploaded.concat(up.photos ?? []);
+          }
         }
       }
 

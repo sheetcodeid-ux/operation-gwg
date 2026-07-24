@@ -26,7 +26,10 @@ async function stampPhoto(file: File, prefix?: string): Promise<CapturedPhoto> {
     im.onerror = rej;
     im.src = dataUrl;
   });
-  const maxW = 1280;
+  // Documentation photos only need to be legible, not print-quality. Cap at
+  // 1024px so each file is ~80–120 KB — critical when 50 outlets upload
+  // thousands of photos daily (keeps storage + bandwidth small).
+  const maxW = 1024;
   const scale = Math.min(1, maxW / (img.width || maxW));
   const w = Math.max(1, Math.round(img.width * scale));
   const h = Math.max(1, Math.round(img.height * scale));
@@ -48,7 +51,7 @@ async function stampPhoto(file: File, prefix?: string): Promise<CapturedPhoto> {
   ctx.textBaseline = "middle";
   ctx.fillText(caption, pad, h - barH / 2);
 
-  const blob: Blob | null = await new Promise((res) => canvas.toBlob(res, "image/jpeg", 0.85));
+  const blob: Blob | null = await new Promise((res) => canvas.toBlob(res, "image/jpeg", 0.62));
   if (!blob) return { file, url: URL.createObjectURL(file) };
   const stamped = new File([blob], `foto-${Date.now()}.jpg`, { type: "image/jpeg" });
   return { file: stamped, url: URL.createObjectURL(stamped) };

@@ -1,7 +1,6 @@
 "use client";
 
 import * as React from "react";
-import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { type ColumnDef } from "@tanstack/react-table";
 import { Camera, ChevronDown, Trash2, X } from "lucide-react";
@@ -77,7 +76,10 @@ function AuditPhotoGallery({ photos, caption }: { photos: Attachment[]; caption:
                     onClick={() => setActive(p)}
                     className="group relative aspect-square w-full overflow-hidden rounded-lg ring-1 ring-border transition-transform hover:scale-[1.02]"
                   >
-                    <Image src={p.url} alt={p.name} fill sizes="(max-width: 640px) 33vw, 180px" className="object-cover" />
+                    {/* Plain img (not next/image): photos are already compressed at
+                        capture, so we skip Vercel Image Optimization entirely. */}
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img src={p.url} alt={p.name} loading="lazy" className="absolute inset-0 size-full object-cover" />
                   </button>
                 ))}
               </div>
