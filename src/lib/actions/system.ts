@@ -16,6 +16,7 @@ import {
   getSystemRequestRow,
   processSystemRequest,
 } from "@/lib/data/system";
+import { r2Enabled, r2Put, R2_PREFIX } from "@/lib/storage/r2";
 import { isSystemSupport, SYS_TYPE_LABEL, type SysRequestType, type SysUrgency } from "@/lib/system-shared";
 import type { Priority, UserProfile } from "@/lib/types";
 
@@ -40,10 +41,19 @@ export async function uploadSystemAttachmentAction(formData: FormData) {
   const okType = file.type.startsWith("image/") || file.type === "application/pdf";
   if (!okType) return { error: `"${file.name}" harus berupa foto atau PDF.` };
   const safe = file.name.replace(/[^a-zA-Z0-9._-]/g, "_").slice(-60);
-  const path = `${user!.id}/${Date.now()}-${randomUUID().slice(0, 8)}-${safe}`;
-  const { error } = await db().storage.from("system-attachments").upload(path, file, { contentType: file.type });
+  const name = `${user!.id}/${Date.now()}-${randomUUID().slice(0, 8)}-${safe}`;
+  if (r2Enabled()) {
+    try {
+      const key = `system/${name}`;
+      await r2Put(key, await file.arrayBuffer(), file.type || "application/octet-stream");
+      return { path: `${R2_PREFIX}${key}`, name: file.name };
+    } catch (e) {
+      console.error("[system] R2 upload gagal, fallback ke Supabase:", e);
+    }
+  }
+  const { error } = await db().storage.from("system-attachments").upload(name, file, { contentType: file.type });
   if (error) return { error: `Upload gagal: ${error.message}` };
-  return { path, name: file.name };
+  return { path: name, name: file.name };
 }
 
 /* ------------------------------------------------------------------ */

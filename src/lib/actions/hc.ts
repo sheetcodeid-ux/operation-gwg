@@ -15,6 +15,7 @@ import {
   startHcProcessing,
 } from "@/lib/data/hc";
 import { canReachMenu } from "@/lib/nav";
+import { r2Enabled, r2Put, R2_PREFIX } from "@/lib/storage/r2";
 import type { HcDetails, HcDocType } from "@/lib/hc-shared";
 import type { UserProfile } from "@/lib/types";
 
@@ -31,7 +32,18 @@ async function uploadFile(userId: string, folder: string, file: File): Promise<{
   const okType = file.type.startsWith("image/") || file.type === "application/pdf";
   if (!okType) return { error: `"${file.name}" harus berupa gambar atau PDF.` };
   const safe = file.name.replace(/[^a-zA-Z0-9._-]/g, "_").slice(-60);
-  const path = `${folder}/${userId}/${Date.now()}-${randomUUID().slice(0, 8)}-${safe}`;
+  const name = `${Date.now()}-${randomUUID().slice(0, 8)}-${safe}`;
+  // Prefer R2 (keeps Supabase storage free); fall back to Supabase on any error.
+  if (r2Enabled()) {
+    try {
+      const key = `hc/${folder}/${userId}/${name}`;
+      await r2Put(key, await file.arrayBuffer(), file.type || "application/octet-stream");
+      return { path: `${R2_PREFIX}${key}` };
+    } catch (e) {
+      console.error("[hc] R2 upload gagal, fallback ke Supabase:", e);
+    }
+  }
+  const path = `${folder}/${userId}/${name}`;
   const { error } = await db().storage.from("hc-documents").upload(path, file, { contentType: file.type });
   if (error) return { error: `Upload gagal: ${error.message}` };
   return { path };

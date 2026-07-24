@@ -4,6 +4,7 @@ import { randomUUID } from "node:crypto";
 import { db, dbEnabled } from "./db";
 import { markLocalWrite } from "./hydrate";
 import { outletName, userName } from "./store";
+import { isR2Key, presignGet, r2Delete, r2KeyOf } from "@/lib/storage/r2";
 import type { SysRequestType, SysUrgency, SystemRequest } from "@/lib/system-shared";
 
 /**
@@ -46,9 +47,18 @@ const SIGN_TTL = 60 * 60;
 async function signBatch(paths: string[]): Promise<Map<string, string>> {
   const map = new Map<string, string>();
   const unique = [...new Set(paths.filter(Boolean))];
-  if (!dbEnabled || unique.length === 0) return map;
-  const { data } = await db().storage.from("system-attachments").createSignedUrls(unique, SIGN_TTL);
-  for (const d of data ?? []) if (d.path && d.signedUrl) map.set(d.path, d.signedUrl);
+  if (unique.length === 0) return map;
+  for (const p of unique) {
+    if (isR2Key(p)) {
+      const url = await presignGet(r2KeyOf(p), SIGN_TTL);
+      if (url) map.set(p, url);
+    }
+  }
+  const sb = unique.filter((p) => !isR2Key(p));
+  if (dbEnabled && sb.length > 0) {
+    const { data } = await db().storage.from("system-attachments").createSignedUrls(sb, SIGN_TTL);
+    for (const d of data ?? []) if (d.path && d.signedUrl) map.set(d.path, d.signedUrl);
+  }
   return map;
 }
 
@@ -184,7 +194,10 @@ export async function deleteSystemRequest(id: string): Promise<{ error?: string 
   if (!dbEnabled) return { error: "Database belum aktif." };
   markLocalWrite();
   const row = await getSystemRequestRow(id);
-  if (row?.attachment_path) await db().storage.from("system-attachments").remove([row.attachment_path]);
+  if (row?.attachment_path) {
+    if (isR2Key(row.attachment_path)) await r2Delete(r2KeyOf(row.attachment_path));
+    else await db().storage.from("system-attachments").remove([row.attachment_path]);
+  }
   const { error } = await db().from("system_requests").delete().eq("id", id);
   return error ? { error: error.message } : {};
 }

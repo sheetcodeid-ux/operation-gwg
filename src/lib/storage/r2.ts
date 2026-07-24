@@ -52,6 +52,18 @@ export async function presignPut(key: string, contentType: string, expiresSec = 
   return signed.url;
 }
 
+/** Server-side upload of bytes to R2 (used for low-volume HC/System files). */
+export async function r2Put(key: string, data: ArrayBuffer, contentType: string): Promise<void> {
+  const res = await client().fetch(objectUrl(key), {
+    method: "PUT",
+    headers: { "content-type": contentType },
+    body: new Blob([data], { type: contentType }),
+  });
+  if (!res.ok && res.status !== 200 && res.status !== 204) {
+    throw new Error(`R2 upload gagal (${res.status})`);
+  }
+}
+
 /** Presigned GET URL to view a private object (cheap HMAC, no network call). */
 export async function presignGet(key: string, expiresSec = 21_600): Promise<string> {
   const signed = await client().sign(`${objectUrl(key)}?X-Amz-Expires=${expiresSec}`, {

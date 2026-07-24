@@ -4,6 +4,7 @@ import { randomUUID } from "node:crypto";
 import { db, dbEnabled } from "./db";
 import { markLocalWrite } from "./hydrate";
 import { outletName, userName } from "./store";
+import { isR2Key, presignGet, r2Delete, r2KeyOf } from "@/lib/storage/r2";
 import type { HcDetails, HcDocType, HcSubmission } from "@/lib/hc-shared";
 
 /**
@@ -39,13 +40,25 @@ interface Row {
 
 const SIGN_TTL = 60 * 60; // 1 hour — links are re-signed on every page load.
 
-/** Batch-sign a set of storage paths in a single API call → path→URL map. */
+/** Sign a set of storage paths → path→URL map. R2 keys are presigned locally
+ *  (cheap HMAC); Supabase paths are batch-signed in one API call. */
 async function signBatch(paths: string[]): Promise<Map<string, string>> {
   const map = new Map<string, string>();
   const unique = [...new Set(paths.filter(Boolean))];
-  if (!dbEnabled || unique.length === 0) return map;
-  const { data } = await db().storage.from("hc-documents").createSignedUrls(unique, SIGN_TTL);
-  for (const d of data ?? []) if (d.path && d.signedUrl) map.set(d.path, d.signedUrl);
+  if (unique.length === 0) return map;
+  // R2-stored files.
+  for (const p of unique) {
+    if (isR2Key(p)) {
+      const url = await presignGet(r2KeyOf(p), SIGN_TTL);
+      if (url) map.set(p, url);
+    }
+  }
+  // Supabase-stored files (legacy / fallback).
+  const sb = unique.filter((p) => !isR2Key(p));
+  if (dbEnabled && sb.length > 0) {
+    const { data } = await db().storage.from("hc-documents").createSignedUrls(sb, SIGN_TTL);
+    for (const d of data ?? []) if (d.path && d.signedUrl) map.set(d.path, d.signedUrl);
+  }
   return map;
 }
 
@@ -172,7 +185,9 @@ export async function deleteHcSubmission(id: string): Promise<{ error?: string }
   markLocalWrite();
   const row = await getHcSubmissionRow(id);
   const files = [row?.ktp_path, row?.final_doc_path].filter((p): p is string => !!p);
-  if (files.length > 0) await db().storage.from("hc-documents").remove(files);
+  await Promise.all(files.filter(isR2Key).map((p) => r2Delete(r2KeyOf(p))));
+  const sb = files.filter((p) => !isR2Key(p));
+  if (sb.length > 0) await db().storage.from("hc-documents").remove(sb);
   const { error } = await db().from("hc_submissions").delete().eq("id", id);
   return error ? { error: error.message } : {};
 }
