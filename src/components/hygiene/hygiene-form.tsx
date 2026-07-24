@@ -184,11 +184,14 @@ function HygieneForm({ outlets }: { outlets: { id: string; name: string }[] }) {
             for (let i = 0; i < entries.length; i++) {
               const { id, url } = presign.items[i];
               const put = await fetch(url, { method: "PUT", body: entries[i].file, headers: { "content-type": entries[i].file.type } });
-              if (!put.ok) throw new Error(`R2 ${put.status}`);
+              if (!put.ok) {
+                const detail = await put.text().catch(() => "");
+                throw new Error(`R2 ${put.status} ${detail.replace(/<[^>]+>/g, " ").slice(0, 120)}`);
+              }
               uploaded.push({ id, name: entries[i].label || entries[i].file.name, url: "", kind: "photo", size: entries[i].file.size });
             }
-          } catch {
-            toast.error("Upload foto gagal — periksa koneksi lalu coba lagi.");
+          } catch (e) {
+            toast.error(`Upload foto gagal: ${e instanceof Error ? e.message : "koneksi bermasalah"}`);
             return;
           }
         } else {

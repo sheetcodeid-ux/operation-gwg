@@ -15,8 +15,10 @@ import { AwsClient } from "aws4fetch";
  * Supabase Storage (unchanged), so nothing breaks before configuration.
  */
 
-const endpoint = (process.env.R2_ENDPOINT || "").replace(/\/+$/, "");
-const bucket = process.env.R2_BUCKET || "";
+// Trim env values — a stray space/newline pasted into the dashboard would break
+// the S3 signature (403) or the endpoint URL.
+const endpoint = (process.env.R2_ENDPOINT || "").trim().replace(/\/+$/, "");
+const bucket = (process.env.R2_BUCKET || "").trim();
 
 export function r2Enabled(): boolean {
   return !!(endpoint && bucket && process.env.R2_ACCESS_KEY_ID && process.env.R2_SECRET_ACCESS_KEY);
@@ -26,8 +28,8 @@ let _client: AwsClient | null = null;
 function client(): AwsClient {
   if (!_client) {
     _client = new AwsClient({
-      accessKeyId: process.env.R2_ACCESS_KEY_ID || "",
-      secretAccessKey: process.env.R2_SECRET_ACCESS_KEY || "",
+      accessKeyId: (process.env.R2_ACCESS_KEY_ID || "").trim(),
+      secretAccessKey: (process.env.R2_SECRET_ACCESS_KEY || "").trim(),
       region: "auto",
       service: "s3",
     });
