@@ -34,6 +34,7 @@ interface Row {
   status: SystemRequest["status"];
   handler_id: string | null;
   note: string | null;
+  result_paths: string[] | null;
   work_task_id: string | null;
   processed_by: string | null;
   processed_at: string | null;
@@ -85,6 +86,7 @@ function toRequest(r: Row, signed: Map<string, string>): SystemRequest {
     handlerId: r.handler_id,
     handlerName: r.handler_id ? userName(r.handler_id) : null,
     note: r.note,
+    resultUrls: (r.result_paths ?? []).map((p) => signed.get(p)).filter((u): u is string => !!u),
     workTaskId: r.work_task_id,
     processedByName: r.processed_by ? userName(r.processed_by) : null,
     completedAt: r.completed_at,
@@ -100,7 +102,8 @@ export async function listSystemRequests(requesterId?: string): Promise<SystemRe
   const { data, error } = await q;
   if (error || !data) return [];
   const rows = data as Row[];
-  const signed = await signBatch(rows.map((r) => r.attachment_path).filter((p): p is string => !!p));
+  const paths = rows.flatMap((r) => [r.attachment_path, ...(r.result_paths ?? [])]).filter((p): p is string => !!p);
+  const signed = await signBatch(paths);
   return rows.map((r) => toRequest(r, signed));
 }
 
@@ -177,27 +180,27 @@ export async function processSystemRequest(
   return error ? { error: error.message } : {};
 }
 
-/** Processing → Done (System Support closes the ticket). */
-export async function completeSystemRequest(id: string): Promise<{ error?: string }> {
+/** Processing → Done (System Support closes the ticket, with proof photos). */
+export async function completeSystemRequest(id: string, resultPaths: string[] = []): Promise<{ error?: string }> {
   if (!dbEnabled) return { error: "Database belum aktif." };
   markLocalWrite();
   const { error } = await db()
     .from("system_requests")
-    .update({ status: "done", completed_at: new Date().toISOString() })
+    .update({ status: "done", result_paths: resultPaths, completed_at: new Date().toISOString() })
     .eq("id", id)
     .neq("status", "done");
   return error ? { error: error.message } : {};
 }
 
-/** Delete a request (and any uploaded attachment) — Super Admin cleanup. */
+/** Delete a request (and all uploaded files) — Super Admin cleanup. */
 export async function deleteSystemRequest(id: string): Promise<{ error?: string }> {
   if (!dbEnabled) return { error: "Database belum aktif." };
   markLocalWrite();
   const row = await getSystemRequestRow(id);
-  if (row?.attachment_path) {
-    if (isR2Key(row.attachment_path)) await r2Delete(r2KeyOf(row.attachment_path));
-    else await db().storage.from("system-attachments").remove([row.attachment_path]);
-  }
+  const files = [row?.attachment_path, ...(row?.result_paths ?? [])].filter((p): p is string => !!p);
+  await Promise.all(files.filter(isR2Key).map((p) => r2Delete(r2KeyOf(p))));
+  const sb = files.filter((p) => !isR2Key(p));
+  if (sb.length > 0) await db().storage.from("system-attachments").remove(sb);
   const { error } = await db().from("system_requests").delete().eq("id", id);
   return error ? { error: error.message } : {};
 }

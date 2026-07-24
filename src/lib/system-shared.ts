@@ -71,6 +71,8 @@ export interface SystemRequest {
   handlerId: string | null;
   handlerName: string | null;
   note: string | null;
+  /** Proof-of-repair photos attached by System Support on completion (signed URLs). */
+  resultUrls: string[];
   workTaskId: string | null;
   processedByName: string | null;
   completedAt: string | null;

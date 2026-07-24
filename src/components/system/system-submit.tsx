@@ -12,6 +12,7 @@ import { Combobox } from "@/components/ui/combobox";
 import { DatePicker } from "@/components/ui/date-picker";
 import { cn } from "@/lib/utils";
 import { submitSystemRequestAction, uploadSystemAttachmentAction } from "@/lib/actions/system";
+import { ProofGrid } from "@/components/system/system-review";
 import {
   SYS_REQUEST_TYPES,
   SYS_STATUS_META,
@@ -287,22 +288,30 @@ export function SystemRequestList({ rows }: { rows: SystemRequest[] }) {
         const st = SYS_STATUS_META[r.status];
         const ur = SYS_URGENCY_META[r.urgency];
         return (
-          <div key={r.id} className="flex flex-wrap items-center gap-3 rounded-xl border border-border bg-card p-3.5">
-            <div className="grid size-9 shrink-0 place-items-center rounded-lg bg-muted text-muted-foreground">
-              <MonitorCog className="size-4" />
+          <div key={r.id} className="rounded-xl border border-border bg-card p-3.5">
+            <div className="flex flex-wrap items-center gap-3">
+              <div className="grid size-9 shrink-0 place-items-center rounded-lg bg-muted text-muted-foreground">
+                <MonitorCog className="size-4" />
+              </div>
+              <div className="min-w-0 flex-1">
+                <p className="truncate text-sm font-medium text-foreground">{r.title}</p>
+                <p className="truncate text-xs text-muted-foreground">
+                  {SYS_TYPE_LABEL[r.requestType]} · {r.outletName} · {fmtDate(r.createdAt)}
+                </p>
+              </div>
+              <Badge tone={ur.tone} className="shrink-0">{ur.label}</Badge>
+              <Badge tone={st.tone} className="shrink-0">{st.label}</Badge>
+              {r.attachmentUrl && (
+                <a href={r.attachmentUrl} target="_blank" rel="noopener noreferrer" title="Lampiran" className="text-muted-foreground hover:text-foreground">
+                  <ExternalLink className="size-4" />
+                </a>
+              )}
             </div>
-            <div className="min-w-0 flex-1">
-              <p className="truncate text-sm font-medium text-foreground">{r.title}</p>
-              <p className="truncate text-xs text-muted-foreground">
-                {SYS_TYPE_LABEL[r.requestType]} · {r.outletName} · {fmtDate(r.createdAt)}
-              </p>
-            </div>
-            <Badge tone={ur.tone} className="shrink-0">{ur.label}</Badge>
-            <Badge tone={st.tone} className="shrink-0">{st.label}</Badge>
-            {r.attachmentUrl && (
-              <a href={r.attachmentUrl} target="_blank" rel="noopener noreferrer" title="Lampiran" className="text-muted-foreground hover:text-foreground">
-                <ExternalLink className="size-4" />
-              </a>
+            {r.status === "done" && r.resultUrls.length > 0 && (
+              <div className="mt-3 border-t border-border pt-3">
+                <p className="mb-1.5 text-xs font-medium text-emerald-600 dark:text-emerald-400">Bukti Perbaikan dari System Support</p>
+                <ProofGrid urls={r.resultUrls} />
+              </div>
             )}
           </div>
         );

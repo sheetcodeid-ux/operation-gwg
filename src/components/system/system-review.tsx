@@ -7,6 +7,7 @@ import {
   CheckCircle2,
   CircleUser,
   ExternalLink,
+  ImagePlus,
   Inbox,
   ListChecks,
   Loader2,
@@ -15,6 +16,7 @@ import {
   Send,
   Trash2,
   UserCog,
+  X,
 } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -26,6 +28,7 @@ import {
   completeSystemRequestAction,
   deleteSystemRequestAction,
   processSystemRequestAction,
+  uploadSystemResultAction,
 } from "@/lib/actions/system";
 import {
   SYS_STATUS_META,
@@ -174,6 +177,7 @@ function DetailPanel({
   const [pending, startTransition] = useTransition();
   const [handlerId, setHandlerId] = useState(row.handlerId ?? handlers[0]?.id ?? "");
   const [note, setNote] = useState(row.note ?? "");
+  const [resultFiles, setResultFiles] = useState<File[]>([]);
   const st = SYS_STATUS_META[row.status];
   const ur = SYS_URGENCY_META[row.urgency];
 
@@ -195,7 +199,19 @@ function DetailPanel({
 
   function complete() {
     startTransition(async () => {
-      const res = await completeSystemRequestAction(row.id);
+      // Upload proof-of-repair photos (if any) straight to storage first.
+      const resultPaths: string[] = [];
+      for (const file of resultFiles) {
+        const fd = new FormData();
+        fd.append("file", file);
+        const up = await uploadSystemResultAction(fd);
+        if (up.error) {
+          toast.error(up.error);
+          return;
+        }
+        if (up.path) resultPaths.push(up.path);
+      }
+      const res = await completeSystemRequestAction({ id: row.id, resultPaths });
       if (res?.error) {
         toast.error(res.error);
         return;
@@ -319,19 +335,85 @@ function DetailPanel({
           )}
 
           {row.status === "processing" ? (
-            <div className="flex justify-end border-t border-border pt-3">
-              <Button onClick={complete} disabled={pending} className="shrink-0">
-                {pending ? <Loader2 className="animate-spin" /> : <CheckCircle2 className="size-4" />} Tandai Selesai
-              </Button>
+            <div className="space-y-3 border-t border-border pt-3">
+              <Field label="Foto Bukti Perbaikan (opsional)" hint="Lampirkan foto hasil perbaikan agar Supervisor bisa melihat buktinya.">
+                <ResultPicker files={resultFiles} onChange={setResultFiles} />
+              </Field>
+              <div className="flex justify-end">
+                <Button onClick={complete} disabled={pending} className="shrink-0">
+                  {pending ? <Loader2 className="animate-spin" /> : <CheckCircle2 className="size-4" />} Tandai Selesai
+                </Button>
+              </div>
             </div>
           ) : (
-            <div className="flex items-center gap-2 rounded-lg bg-emerald-500/10 px-3 py-2 text-sm text-emerald-700 dark:text-emerald-300">
-              <Lock className="size-4 shrink-0" /> Selesai
-              {row.completedAt ? ` · ${fmtDateTime(row.completedAt)}` : ""}
-            </div>
+            <>
+              <div className="flex items-center gap-2 rounded-lg bg-emerald-500/10 px-3 py-2 text-sm text-emerald-700 dark:text-emerald-300">
+                <Lock className="size-4 shrink-0" /> Selesai
+                {row.completedAt ? ` · ${fmtDateTime(row.completedAt)}` : ""}
+              </div>
+              {row.resultUrls.length > 0 && (
+                <div>
+                  <p className="mb-1.5 text-xs font-medium text-muted-foreground">Bukti Perbaikan</p>
+                  <ProofGrid urls={row.resultUrls} />
+                </div>
+              )}
+            </>
           )}
         </div>
       )}
+    </div>
+  );
+}
+
+/** Multi-photo picker for proof-of-repair (local preview before upload). */
+function ResultPicker({ files, onChange }: { files: File[]; onChange: (f: File[]) => void }) {
+  return (
+    <div className="space-y-2">
+      <label className="inline-flex cursor-pointer items-center gap-2 self-start rounded-lg border border-input bg-background/40 px-3 py-2 text-sm text-foreground/80 hover:bg-muted/50">
+        <ImagePlus className="size-4" /> Tambah foto
+        <input
+          type="file"
+          accept="image/*"
+          multiple
+          className="hidden"
+          onChange={(e) => {
+            const picked = Array.from(e.target.files ?? []);
+            e.target.value = "";
+            if (picked.length) onChange([...files, ...picked]);
+          }}
+        />
+      </label>
+      {files.length > 0 && (
+        <div className="grid grid-cols-3 gap-2 sm:grid-cols-4">
+          {files.map((f, i) => (
+            <div key={i} className="group relative aspect-square overflow-hidden rounded-lg ring-1 ring-border">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src={URL.createObjectURL(f)} alt="" className="size-full object-cover" />
+              <button
+                type="button"
+                onClick={() => onChange(files.filter((_, j) => j !== i))}
+                className="absolute right-0.5 top-0.5 grid size-5 place-items-center rounded bg-black/60 text-white opacity-0 transition-opacity group-hover:opacity-100"
+              >
+                <X className="size-3" />
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/** Grid of proof-of-repair photos (tap to open full-size). */
+export function ProofGrid({ urls }: { urls: string[] }) {
+  return (
+    <div className="grid grid-cols-3 gap-2 sm:grid-cols-4">
+      {urls.map((u, i) => (
+        <a key={i} href={u} target="_blank" rel="noopener noreferrer" className="group relative aspect-square overflow-hidden rounded-lg ring-1 ring-border">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src={u} alt={`Bukti ${i + 1}`} loading="lazy" className="size-full object-cover transition-transform group-hover:scale-105" />
+        </a>
+      ))}
     </div>
   );
 }

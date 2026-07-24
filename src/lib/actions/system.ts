@@ -30,18 +30,13 @@ const REQ_TYPES: SysRequestType[] = ["fitur", "bug", "akses", "hardware", "train
 const URGENCIES: SysUrgency[] = ["urgent", "normal", "low"];
 const URGENCY_PRIORITY: Record<SysUrgency, Priority> = { urgent: "high", normal: "medium", low: "low" };
 
-/** Upload a supporting photo/file (supervisor); returns the private storage path. */
-export async function uploadSystemAttachmentAction(formData: FormData) {
-  const user = await getSessionUser();
-  if (!canSubmit(user)) return { error: "Tidak punya akses." };
-  if (!dbEnabled) return { error: "Storage belum aktif." };
-  const file = formData.get("file");
-  if (!(file instanceof File)) return { error: "Tidak ada berkas." };
+/** Store one file in R2 (fallback Supabase) under the system/<folder> prefix. */
+async function putSystemFile(userId: string, folder: string, file: File): Promise<{ path?: string; name?: string; error?: string }> {
   if (file.size > MAX_BYTES) return { error: `Berkas "${file.name}" melebihi 10 MB.` };
   const okType = file.type.startsWith("image/") || file.type === "application/pdf";
   if (!okType) return { error: `"${file.name}" harus berupa foto atau PDF.` };
   const safe = file.name.replace(/[^a-zA-Z0-9._-]/g, "_").slice(-60);
-  const name = `${user!.id}/${Date.now()}-${randomUUID().slice(0, 8)}-${safe}`;
+  const name = `${folder}/${userId}/${Date.now()}-${randomUUID().slice(0, 8)}-${safe}`;
   if (r2Enabled()) {
     try {
       const key = `system/${name}`;
@@ -54,6 +49,26 @@ export async function uploadSystemAttachmentAction(formData: FormData) {
   const { error } = await db().storage.from("system-attachments").upload(name, file, { contentType: file.type });
   if (error) return { error: `Upload gagal: ${error.message}` };
   return { path: name, name: file.name };
+}
+
+/** Upload a supporting photo/file (supervisor, at submission). */
+export async function uploadSystemAttachmentAction(formData: FormData) {
+  const user = await getSessionUser();
+  if (!canSubmit(user)) return { error: "Tidak punya akses." };
+  if (!dbEnabled) return { error: "Storage belum aktif." };
+  const file = formData.get("file");
+  if (!(file instanceof File)) return { error: "Tidak ada berkas." };
+  return putSystemFile(user!.id, "attachment", file);
+}
+
+/** Upload a proof-of-repair photo (System Support, at completion). */
+export async function uploadSystemResultAction(formData: FormData) {
+  const user = await getSessionUser();
+  if (!canReview(user)) return { error: "Tidak punya akses." };
+  if (!dbEnabled) return { error: "Storage belum aktif." };
+  const file = formData.get("file");
+  if (!(file instanceof File)) return { error: "Tidak ada berkas." };
+  return putSystemFile(user!.id, "result", file);
 }
 
 /* ------------------------------------------------------------------ */
@@ -179,19 +194,20 @@ export async function processSystemRequestAction(input: { id: string; handlerId:
   return { ok: true, taskId: task.id };
 }
 
-export async function completeSystemRequestAction(id: string) {
+export async function completeSystemRequestAction(input: { id: string; resultPaths?: string[] }) {
   const user = await getSessionUser();
   if (!canReview(user)) return { error: "Tidak punya akses." };
-  const req = await getSystemRequestRow(id);
+  const req = await getSystemRequestRow(input.id);
   if (!req) return { error: "Request tidak ditemukan." };
-  const res = await completeSystemRequest(id);
+  const resultPaths = (input.resultPaths ?? []).filter((p) => typeof p === "string" && p);
+  const res = await completeSystemRequest(input.id, resultPaths);
   if (res.error) return { error: res.error };
 
   await saveNotification({
     id: `ntf_${randomUUID()}`,
     kind: "sys_update",
     title: "Request system selesai",
-    message: `"${req.title}" telah diselesaikan oleh System Support.`,
+    message: `"${req.title}" telah diselesaikan oleh System Support${resultPaths.length ? " (dengan bukti perbaikan)" : ""}.`,
     targetUser: req.requester_id,
     severity: "info",
     read: false,
