@@ -2,7 +2,7 @@ import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { getSessionUser } from "@/lib/auth";
 import { areaName, listNotifications, visibleOutlets } from "@/lib/data/store";
-import { accessibleMenuKeys, homeDivision, navAll, setNavExtras } from "@/lib/nav";
+import { accessibleMenuKeys, canReachMenu, homeDivision, navAll, setNavExtras } from "@/lib/nav";
 import { getNavExtra } from "@/lib/data/nav";
 import { I18nProvider } from "@/lib/i18n/provider";
 import type { Lang } from "@/lib/i18n/dict";
@@ -59,7 +59,10 @@ export default async function AppLayout({ children }: { children: React.ReactNod
                   scroll inside its own overflow-x-auto wrapper (tables, kanban). */}
               <div className="min-w-0 flex-1 overflow-x-clip">
                 <main className="px-4 py-6 sm:px-6 lg:px-8">
-                  <Breadcrumbs showHome={user.role !== "supervisor"} />
+                  {/* Home points at /dashboard — only show it to users who can
+                      actually open the dashboard (hides the dead home icon for
+                      supervisors and department members like Human Capital). */}
+                  <Breadcrumbs showHome={canReachMenu(user, "dashboard")} />
                   {children}
                 </main>
                 <Footer />

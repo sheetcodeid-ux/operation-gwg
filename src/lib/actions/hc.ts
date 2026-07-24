@@ -10,6 +10,7 @@ import { saveNotification } from "@/lib/data/persist";
 import {
   completeHcSubmission,
   createHcSubmission,
+  deleteHcSubmission,
   getHcSubmissionRow,
   startHcProcessing,
 } from "@/lib/data/hc";
@@ -129,6 +130,17 @@ export async function completeHcRequestAction(input: { id: string; note: string;
     createdAt: new Date().toISOString(),
   });
 
+  revalidatePath("/hc/antrian");
+  revalidatePath("/hc/pengajuan");
+  return { ok: true };
+}
+
+/** Delete a submission — Super Admin only (clears out test/dummy pengajuan). */
+export async function deleteHcRequestAction(id: string) {
+  const user = await getSessionUser();
+  if (user?.role !== "super_admin") return { error: "Hanya Super Admin yang dapat menghapus pengajuan." };
+  const res = await deleteHcSubmission(id);
+  if (res.error) return { error: res.error };
   revalidatePath("/hc/antrian");
   revalidatePath("/hc/pengajuan");
   return { ok: true };

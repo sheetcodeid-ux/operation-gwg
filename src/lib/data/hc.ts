@@ -13,6 +13,10 @@ import type { HcDetails, HcDocType, HcSubmission } from "@/lib/hc-shared";
  * HC reviews it, processes it, and returns a finished PDF. Files (KTP scan +
  * finished doc) live in the private `hc-documents` bucket and are only ever
  * exposed as short-lived signed URLs, since a KTP is PII.
+ *
+ * Performance: signed URLs are generated in ONE batch call per file kind
+ * (`createSignedUrls`) instead of one request per row, so a full queue loads
+ * fast even with hundreds of submissions.
  */
 
 interface Row {
@@ -35,14 +39,17 @@ interface Row {
 
 const SIGN_TTL = 60 * 60; // 1 hour — links are re-signed on every page load.
 
-async function signed(path: string | null): Promise<string | null> {
-  if (!path || !dbEnabled) return null;
-  const { data } = await db().storage.from("hc-documents").createSignedUrl(path, SIGN_TTL);
-  return data?.signedUrl ?? null;
+/** Batch-sign a set of storage paths in a single API call → path→URL map. */
+async function signBatch(paths: string[]): Promise<Map<string, string>> {
+  const map = new Map<string, string>();
+  const unique = [...new Set(paths.filter(Boolean))];
+  if (!dbEnabled || unique.length === 0) return map;
+  const { data } = await db().storage.from("hc-documents").createSignedUrls(unique, SIGN_TTL);
+  for (const d of data ?? []) if (d.path && d.signedUrl) map.set(d.path, d.signedUrl);
+  return map;
 }
 
-async function toSubmission(r: Row): Promise<HcSubmission> {
-  const [ktpUrl, finalDocUrl] = await Promise.all([signed(r.ktp_path), signed(r.final_doc_path)]);
+function toSubmission(r: Row, ktpUrl: string | null, finalDocUrl: string | null): HcSubmission {
   return {
     id: r.id,
     employeeName: r.employee_name,
@@ -63,14 +70,30 @@ async function toSubmission(r: Row): Promise<HcSubmission> {
   };
 }
 
-/** List submissions, newest first. Pass `supervisorId` to scope to one SPV. */
-export async function listHcSubmissions(supervisorId?: string): Promise<HcSubmission[]> {
+export interface ListHcOptions {
+  /** Scope to a single supervisor's own submissions. */
+  supervisorId?: string;
+  /** Sign the KTP scan too (HC review needs it; supervisor list doesn't). */
+  withKtp?: boolean;
+}
+
+/** List submissions, newest first. Signs the finished doc always, KTP on demand. */
+export async function listHcSubmissions(opts: ListHcOptions = {}): Promise<HcSubmission[]> {
   if (!dbEnabled) return [];
   let q = db().from("hc_submissions").select("*").order("created_at", { ascending: false }).limit(200);
-  if (supervisorId) q = q.eq("supervisor_id", supervisorId);
+  if (opts.supervisorId) q = q.eq("supervisor_id", opts.supervisorId);
   const { data, error } = await q;
   if (error || !data) return [];
-  return Promise.all((data as Row[]).map(toSubmission));
+  const rows = data as Row[];
+
+  const [finalMap, ktpMap] = await Promise.all([
+    signBatch(rows.map((r) => r.final_doc_path).filter((p): p is string => !!p)),
+    opts.withKtp ? signBatch(rows.map((r) => r.ktp_path).filter((p): p is string => !!p)) : Promise.resolve(new Map<string, string>()),
+  ]);
+
+  return rows.map((r) =>
+    toSubmission(r, r.ktp_path ? ktpMap.get(r.ktp_path) ?? null : null, r.final_doc_path ? finalMap.get(r.final_doc_path) ?? null : null),
+  );
 }
 
 export async function getHcSubmissionRow(id: string): Promise<Row | null> {
@@ -89,11 +112,12 @@ export interface HcCreateInput {
   details: HcDetails;
 }
 
-export async function createHcSubmission(input: HcCreateInput): Promise<HcSubmission | null> {
+export async function createHcSubmission(input: HcCreateInput): Promise<{ id: string } | null> {
   if (!dbEnabled) return null;
   markLocalWrite();
-  const row: Row = {
-    id: `hc_${randomUUID()}`,
+  const id = `hc_${randomUUID()}`;
+  const { error } = await db().from("hc_submissions").insert({
+    id,
     employee_name: input.employeeName,
     doc_type: input.docType,
     outlet_id: input.outletId,
@@ -101,17 +125,10 @@ export async function createHcSubmission(input: HcCreateInput): Promise<HcSubmis
     ktp_path: input.ktpPath,
     details: input.details,
     status: "waiting",
-    hc_note: null,
-    final_doc_path: null,
-    processed_by: null,
-    processed_at: null,
-    completed_by: null,
-    completed_at: null,
     created_at: new Date().toISOString(),
-  };
-  const { error } = await db().from("hc_submissions").insert(row);
+  });
   if (error) return null;
-  return toSubmission(row);
+  return { id };
 }
 
 /** Waiting → Processing (HC claims the item). */
@@ -146,5 +163,16 @@ export async function completeHcSubmission(
     })
     .eq("id", id)
     .neq("status", "done"); // never re-complete a locked item
+  return error ? { error: error.message } : {};
+}
+
+/** Delete a submission and its stored files (super-admin cleanup of test data). */
+export async function deleteHcSubmission(id: string): Promise<{ error?: string }> {
+  if (!dbEnabled) return { error: "Database belum aktif." };
+  markLocalWrite();
+  const row = await getHcSubmissionRow(id);
+  const files = [row?.ktp_path, row?.final_doc_path].filter((p): p is string => !!p);
+  if (files.length > 0) await db().storage.from("hc-documents").remove(files);
+  const { error } = await db().from("hc_submissions").delete().eq("id", id);
   return error ? { error: error.message } : {};
 }

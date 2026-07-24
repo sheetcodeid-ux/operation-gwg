@@ -9,8 +9,10 @@ import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogTrigger, useDialogControl } from "@/components/ui/dialog";
 import { Field, Input, Textarea } from "@/components/ui/input";
 import { Combobox } from "@/components/ui/combobox";
+import { DatePicker } from "@/components/ui/date-picker";
 import { submitHcRequestAction, uploadHcKtpAction } from "@/lib/actions/hc";
 import {
+  forceDownload,
   HC_DOC_LABEL,
   HC_DOC_TYPES,
   HC_STATUS_META,
@@ -131,7 +133,7 @@ function SubmissionForm({ outlets }: { outlets: { id: string; name: string }[] }
             <Input value={details.contractDuration ?? ""} onChange={(e) => setD({ contractDuration: e.target.value })} placeholder="cth. 12 bulan" />
           </Field>
           <Field label="Tanggal Mulai">
-            <Input type="date" value={details.startDate ?? ""} onChange={(e) => setD({ startDate: e.target.value })} />
+            <DatePicker value={details.startDate ?? ""} onChange={(v) => setD({ startDate: v })} />
           </Field>
           <Field label="Gaji (opsional)">
             <Input value={details.salary ?? ""} onChange={(e) => setD({ salary: e.target.value })} placeholder="cth. 3.000.000" />
@@ -178,8 +180,8 @@ function SubmissionForm({ outlets }: { outlets: { id: string; name: string }[] }
 /** Small file picker with selected-file chip. */
 function FilePick({ file, onPick, accept }: { file: File | null; onPick: (f: File | null) => void; accept: string }) {
   return (
-    <div className="flex items-center gap-2">
-      <label className="inline-flex cursor-pointer items-center gap-2 rounded-lg border border-input bg-background/40 px-3 py-2 text-sm text-foreground/80 hover:bg-muted/50">
+    <div className="flex w-full min-w-0 flex-col gap-2 sm:flex-row sm:items-center">
+      <label className="inline-flex shrink-0 cursor-pointer items-center gap-2 self-start rounded-lg border border-input bg-background/40 px-3 py-2 text-sm text-foreground/80 hover:bg-muted/50">
         <FileUp className="size-4" />
         {file ? "Ganti berkas" : "Pilih berkas"}
         <input
@@ -190,9 +192,9 @@ function FilePick({ file, onPick, accept }: { file: File | null; onPick: (f: Fil
         />
       </label>
       {file && (
-        <span className="inline-flex min-w-0 items-center gap-1.5 rounded-lg bg-muted/60 px-2.5 py-1.5 text-xs text-foreground/80">
+        <span className="flex min-w-0 max-w-full items-center gap-1.5 rounded-lg bg-muted/60 px-2.5 py-1.5 text-xs text-foreground/80">
           <Paperclip className="size-3.5 shrink-0" />
-          <span className="truncate">{file.name}</span>
+          <span className="min-w-0 flex-1 truncate">{file.name}</span>
           <button type="button" onClick={() => onPick(null)} className="shrink-0 text-muted-foreground hover:text-foreground">
             <X className="size-3.5" />
           </button>
@@ -228,7 +230,7 @@ export function SubmissionList({ rows }: { rows: HcSubmission[] }) {
             </div>
             <Badge tone={st.tone}>{st.label}</Badge>
             {r.status === "done" && r.finalDocUrl ? (
-              <a href={r.finalDocUrl} target="_blank" rel="noopener noreferrer">
+              <a href={forceDownload(r.finalDocUrl, `${r.employeeName} - ${HC_DOC_LABEL[r.docType]}.pdf`)} download>
                 <Button size="sm" variant="subtle">
                   <Download className="size-4" /> Unduh
                 </Button>

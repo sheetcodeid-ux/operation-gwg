@@ -301,6 +301,24 @@ export function canOpenMenu(role: Role, key: MenuKey, grants?: string[]): boolea
   return role === "super_admin" || canSeeMenu(role, key) || hasMenuGrant(grants, key);
 }
 
+/** Does the division named `division` (built-in or admin-defined) include `key`? */
+export function divisionHasMenu(division: string, key: MenuKey): boolean {
+  if (DIVISION_MENUS.some((d) => d.division === division && d.menus.includes(key))) return true;
+  return EXTRA_DIVISIONS.some((d) => d.name === division && d.menus.includes(key));
+}
+
+/** Full route access, mirroring the sidebar's `canOpen` exactly: super admin,
+ *  the role's own menus, an explicit per-user grant, OR the user's department
+ *  division containing the menu (department-aligned members). Use this in page
+ *  guards so a menu the sidebar shows as open never bounces to /dashboard. */
+export function canReachMenu(
+  user: { role: Role; grants?: string[] | null; department?: string | null },
+  key: MenuKey,
+): boolean {
+  if (canOpenMenu(user.role, key, user.grants ?? undefined)) return true;
+  return !!user.department && divisionHasMenu(user.department, key);
+}
+
 /** Where a role should land after login — its first visible menu.
  *  Roles without the executive dashboard (legal, assessor) go to their own
  *  first menu instead of an empty /dashboard. */

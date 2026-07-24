@@ -44,6 +44,19 @@ export const HC_STATUS_META: Record<HcStatus, { label: string; tone: Tone }> = {
 
 export const HC_WARNING_LEVELS = ["Teguran Lisan", "SP 1", "SP 2", "SP 3"] as const;
 
+/** Turn a Supabase signed URL into one that forces a download (attachment)
+ *  instead of opening in the browser — so tapping “Unduh” on a phone saves the
+ *  file straight to the device. */
+export function forceDownload(url: string, filename?: string): string {
+  const sep = url.includes("?") ? "&" : "?";
+  return `${url}${sep}download${filename ? `=${encodeURIComponent(filename)}` : ""}`;
+}
+
+/** Whether the signed URL points at an image (for inline preview vs a PDF). */
+export function isImageUrl(url: string): boolean {
+  return /\.(png|jpe?g|webp|gif|bmp|heic|heif)(\?|$)/i.test(url);
+}
+
 /** Extra fields the supervisor fills, by document type. */
 export interface HcDetails {
   /** BPJS — nama ibu kandung. */
