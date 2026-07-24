@@ -333,6 +333,7 @@ function HygieneForm({ outlets }: { outlets: { id: string; name: string }[] }) {
               key={g}
               label={td(g)}
               min={MIN_PHOTOS}
+              max={MIN_PHOTOS}
               stampPrefix={outletName}
               items={photos[g] ?? []}
               onChange={(items) => setPhotos((p) => ({ ...p, [g]: items }))}

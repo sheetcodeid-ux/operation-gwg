@@ -61,18 +61,29 @@ export function CameraCapture({
   items,
   onChange,
   min = 3,
+  max,
   stampPrefix,
 }: {
   label: string;
   items: CapturedPhoto[];
   onChange: (items: CapturedPhoto[]) => void;
   min?: number;
+  /** Hard cap on photos for this area (extra captures are ignored). */
+  max?: number;
   stampPrefix?: string;
 }) {
   const [busy, setBusy] = React.useState(false);
+  const full = max != null && items.length >= max;
 
   async function onFiles(e: React.ChangeEvent<HTMLInputElement>) {
-    const files = Array.from(e.target.files ?? []);
+    let files = Array.from(e.target.files ?? []);
+    e.target.value = "";
+    if (!files.length) return;
+    // Never exceed the per-area cap — keep only what still fits.
+    if (max != null) {
+      const room = Math.max(0, max - items.length);
+      if (files.length > room) files = files.slice(0, room);
+    }
     if (!files.length) return;
     setBusy(true);
     try {
@@ -83,7 +94,6 @@ export function CameraCapture({
       onChange([...items, ...files.map((f) => ({ file: f, url: URL.createObjectURL(f) }))]);
     } finally {
       setBusy(false);
-      e.target.value = "";
     }
   }
 
@@ -93,13 +103,18 @@ export function CameraCapture({
       <div className="mb-2 flex items-center justify-between gap-2">
         <span className="text-xs font-medium text-foreground">{label}</span>
         <span className={cn("rounded-full px-1.5 py-0.5 text-[10px] font-bold tabular-nums", ok ? "bg-brand-500/12 text-brand-600 dark:text-brand-400" : "bg-amber-500/15 text-amber-600 dark:text-amber-400")}>
-          {items.length}/{min}
+          {items.length}/{max ?? min}
         </span>
       </div>
-      <label className="flex cursor-pointer flex-col items-center gap-1 rounded-lg border border-dashed border-border py-3 text-center text-muted-foreground transition-colors hover:border-primary/40 hover:text-foreground">
+      <label
+        className={cn(
+          "flex flex-col items-center gap-1 rounded-lg border border-dashed py-3 text-center transition-colors",
+          full ? "cursor-not-allowed border-border/60 text-muted-foreground/40" : "cursor-pointer border-border text-muted-foreground hover:border-primary/40 hover:text-foreground",
+        )}
+      >
         {busy ? <Loader2 className="size-5 animate-spin" /> : <Camera className="size-5" />}
-        <span className="text-[11px] font-medium">Ambil Foto</span>
-        <input type="file" accept="image/*" capture="environment" multiple className="hidden" onChange={onFiles} disabled={busy} />
+        <span className="text-[11px] font-medium">{full ? `Maksimal ${max} foto` : "Ambil Foto"}</span>
+        <input type="file" accept="image/*" capture="environment" multiple className="hidden" onChange={onFiles} disabled={busy || full} />
       </label>
       {items.length > 0 && (
         <div className="mt-2 grid grid-cols-3 gap-1">

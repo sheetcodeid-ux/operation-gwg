@@ -1,27 +1,87 @@
-// Minimal service worker to make the app installable as a PWA on Android/iOS.
-// A registered SW with a fetch handler is required for Chrome's "Install app"
-// prompt; without it the browser only offers a plain home-screen shortcut.
+// Service worker for the installable PWA.
+//
+// Goals (all supervisors use this on phones, often on flaky hotspots):
+//  • Never show a blank white screen. If a page navigation fails on a bad
+//    network, serve a friendly offline page with a retry instead of nothing.
+//  • Stay fast & work after the first load: hashed build assets are immutable,
+//    so cache-first them; the HTML shell is always network-first so a new deploy
+//    is picked up (and references the current chunks).
 
-const CACHE = "gwg-shell-v1";
+const CACHE = "gwg-shell-v3";
+const OFFLINE_URL = "/offline.html";
 
-self.addEventListener("install", () => {
+self.addEventListener("install", (event) => {
+  event.waitUntil(
+    caches.open(CACHE).then((cache) => cache.addAll([OFFLINE_URL])).catch(() => {}),
+  );
   self.skipWaiting();
 });
 
 self.addEventListener("activate", (event) => {
-  event.waitUntil(self.clients.claim());
+  event.waitUntil(
+    (async () => {
+      // Drop caches from older SW versions so stale shells can't linger.
+      const keys = await caches.keys();
+      await Promise.all(keys.filter((k) => k !== CACHE).map((k) => caches.delete(k)));
+      await self.clients.claim();
+    })(),
+  );
 });
 
-// Network-first pass-through. The presence of this fetch handler is what makes
-// the app installable; we don't intercept responses beyond an offline fallback.
+// Let the page trigger an immediate update (used by the register script).
+self.addEventListener("message", (event) => {
+  if (event.data === "skip-waiting") self.skipWaiting();
+});
+
+function isImmutableAsset(url) {
+  return url.pathname.startsWith("/_next/static/") || /\.(?:js|css|woff2?|png|jpg|jpeg|svg|webp|ico)$/.test(url.pathname);
+}
+
 self.addEventListener("fetch", (event) => {
   const req = event.request;
   if (req.method !== "GET") return;
+
+  const url = new URL(req.url);
+  // Only handle our own origin — never touch Supabase/ESB/API calls.
+  if (url.origin !== self.location.origin) return;
+
+  const isNavigation = req.mode === "navigate" || (req.headers.get("accept") || "").includes("text/html");
+
+  if (isNavigation) {
+    // Network-first: always try to load the freshest HTML; on failure fall back
+    // to the offline page so the screen is never blank.
+    event.respondWith(
+      fetch(req).catch(async () => {
+        const cache = await caches.open(CACHE);
+        return (await cache.match(OFFLINE_URL)) || Response.error();
+      }),
+    );
+    return;
+  }
+
+  if (isImmutableAsset(url)) {
+    // Cache-first for immutable, hashed build assets (fast + offline-capable).
+    event.respondWith(
+      caches.open(CACHE).then(async (cache) => {
+        const cached = await cache.match(req);
+        if (cached) return cached;
+        try {
+          const res = await fetch(req);
+          if (res && res.ok) cache.put(req, res.clone());
+          return res;
+        } catch {
+          return cached || Response.error();
+        }
+      }),
+    );
+    return;
+  }
+
+  // Everything else: network-first, fall back to any cached copy.
   event.respondWith(
     fetch(req).catch(async () => {
       const cache = await caches.open(CACHE);
-      const cached = await cache.match(req);
-      return cached ?? Response.error();
+      return (await cache.match(req)) || Response.error();
     }),
   );
 });
