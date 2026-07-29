@@ -10,7 +10,7 @@ import type { Tone } from "@/lib/constants";
  */
 
 export type HcDocType = "bpjs" | "pkwt" | "teguran";
-export type HcStatus = "waiting" | "processing" | "done";
+export type HcStatus = "waiting" | "processing" | "pending" | "done";
 
 export const HC_DOC_TYPES: { value: HcDocType; label: string }[] = [
   { value: "bpjs", label: "Pendaftaran BPJS" },
@@ -27,6 +27,7 @@ export const HC_DOC_LABEL: Record<HcDocType, string> = {
 export const HC_STATUS_META: Record<HcStatus, { label: string; tone: Tone }> = {
   waiting: { label: "Menunggu", tone: "warning" },
   processing: { label: "Diproses", tone: "cyan" },
+  pending: { label: "Menunggu Berkas", tone: "amber" },
   done: { label: "Selesai", tone: "success" },
 };
 

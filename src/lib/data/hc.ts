@@ -156,7 +156,20 @@ export async function startHcProcessing(id: string, userId: string): Promise<{ e
   return error ? { error: error.message } : {};
 }
 
-/** Processing → Done (HC attaches the finished doc + optional note). Locks the item. */
+/** Processing → Menunggu Berkas (pending): HC records info (e.g. No. BPJS) but
+ *  the result file isn't issued yet. Awaits the file to finish. */
+export async function holdHcSubmission(id: string, note: string): Promise<{ error?: string }> {
+  if (!dbEnabled) return { error: "Database belum aktif." };
+  markLocalWrite();
+  const { error } = await db()
+    .from("hc_submissions")
+    .update({ status: "pending", hc_note: note || null })
+    .eq("id", id)
+    .eq("status", "processing");
+  return error ? { error: error.message } : {};
+}
+
+/** Processing/Pending → Done (HC attaches the finished doc + optional note). Locks the item. */
 export async function completeHcSubmission(
   id: string,
   userId: string,
@@ -175,7 +188,7 @@ export async function completeHcSubmission(
       completed_at: new Date().toISOString(),
     })
     .eq("id", id)
-    .neq("status", "done"); // never re-complete a locked item
+    .in("status", ["processing", "pending"]); // only from an in-progress state
   return error ? { error: error.message } : {};
 }
 

@@ -238,13 +238,13 @@ export function SubmissionList({ rows }: { rows: HcSubmission[] }) {
                     <Download className="size-4" /> Unduh
                   </Button>
                 </a>
-              ) : r.status !== "done" ? (
+              ) : r.status === "waiting" || r.status === "processing" ? (
                 <span className="text-xs text-muted-foreground">Menunggu HC</span>
               ) : null}
             </div>
-            {/* Completed but no file yet (e.g. BPJS): show HC's note / number. */}
-            {r.status === "done" && !r.finalDocUrl && r.hcNote && (
-              <p className="mt-2 whitespace-pre-wrap rounded-lg bg-emerald-500/10 px-3 py-2 text-xs text-emerald-700 dark:text-emerald-300">
+            {/* Awaiting the file, or done via note only (e.g. BPJS): show HC's keterangan. */}
+            {(r.status === "pending" || (r.status === "done" && !r.finalDocUrl)) && r.hcNote && (
+              <p className="mt-2 whitespace-pre-wrap rounded-lg bg-amber-500/10 px-3 py-2 text-xs text-amber-700 dark:text-amber-300">
                 <span className="font-medium">Keterangan HC:</span> {r.hcNote}
               </p>
             )}

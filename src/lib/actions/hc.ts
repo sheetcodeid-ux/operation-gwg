@@ -12,6 +12,7 @@ import {
   createHcSubmission,
   deleteHcSubmission,
   getHcSubmissionRow,
+  holdHcSubmission,
   startHcProcessing,
 } from "@/lib/data/hc";
 import { canReachMenu } from "@/lib/nav";
@@ -125,34 +126,56 @@ export async function uploadHcFinalAction(formData: FormData) {
   return uploadFile(user!.id, "final", file);
 }
 
+const outletLabel = (outletId: string) => (getOutlet(outletId) ? outletName(outletId) : outletId);
+
+/** Processing → Menunggu Berkas (pending): record the info (e.g. No. BPJS) while
+ *  the result document is still being issued. Awaits the file to finish. */
+export async function holdHcRequestAction(input: { id: string; note: string }) {
+  const user = await getSessionUser();
+  if (!canReview(user)) return { error: "Tidak punya akses." };
+  if (!input.note?.trim()) return { error: "Isi keterangan dulu (mis. No. BPJS/KPJ)." };
+
+  const rec = await getHcSubmissionRow(input.id);
+  if (!rec) return { error: "Pengajuan tidak ditemukan." };
+  if (rec.status !== "processing") return { error: "Hanya pengajuan yang sedang diproses yang bisa ditahan." };
+
+  const res = await holdHcSubmission(input.id, input.note.trim());
+  if (res.error) return { error: res.error };
+
+  await saveNotification({
+    id: `ntf_${randomUUID()}`,
+    kind: "hc_done",
+    title: "Dokumen menunggu berkas",
+    message: `Pengajuan ${rec.employee_name} (${outletLabel(rec.outlet_id)}) diproses — menunggu berkas terbit. Keterangan: ${input.note.trim()}`,
+    targetUser: rec.supervisor_id,
+    severity: "info",
+    read: false,
+    createdAt: new Date().toISOString(),
+  });
+
+  revalidatePath("/hc/antrian");
+  revalidatePath("/hc/pengajuan");
+  return { ok: true };
+}
+
 export async function completeHcRequestAction(input: { id: string; note: string; finalDocPath: string }) {
   const user = await getSessionUser();
   if (!canReview(user)) return { error: "Tidak punya akses." };
+  if (!input.finalDocPath) return { error: "Unggah dokumen jadi (PDF) terlebih dahulu." };
 
   const rec = await getHcSubmissionRow(input.id);
   if (!rec) return { error: "Pengajuan tidak ditemukan." };
   if (rec.status === "done") return { error: "Pengajuan sudah selesai." };
 
-  // BPJS numbers/cards aren't issued immediately, so the finished file may not
-  // exist yet — HC can close a BPJS request with just a note (e.g. the no. BPJS)
-  // and attach the card later. Other doc types still require the finished file.
-  if (rec.doc_type !== "bpjs" && !input.finalDocPath) {
-    return { error: "Unggah dokumen jadi (PDF) terlebih dahulu." };
-  }
-  if (rec.doc_type === "bpjs" && !input.finalDocPath && !input.note?.trim()) {
-    return { error: "Untuk BPJS, unggah dokumen atau isi catatan (mis. No. BPJS) dulu." };
-  }
-
   const res = await completeHcSubmission(input.id, user!.id, input.note?.trim() ?? "", input.finalDocPath);
   if (res.error) return { error: res.error };
 
   // Notify the submitting supervisor — they can now download the finished doc.
-  const label = getOutlet(rec.outlet_id) ? outletName(rec.outlet_id) : rec.outlet_id;
   await saveNotification({
     id: `ntf_${randomUUID()}`,
     kind: "hc_done",
     title: "Dokumen selesai diproses",
-    message: `Dokumen ${rec.employee_name} (${label}) telah diselesaikan oleh ${userName(user!.id)} — siap diunduh.`,
+    message: `Dokumen ${rec.employee_name} (${outletLabel(rec.outlet_id)}) telah diselesaikan oleh ${userName(user!.id)} — siap diunduh.`,
     targetUser: rec.supervisor_id,
     severity: "info",
     read: false,

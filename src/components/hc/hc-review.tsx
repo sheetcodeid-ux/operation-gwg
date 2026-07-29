@@ -4,6 +4,7 @@ import { useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import {
   CheckCircle2,
+  Clock,
   Download,
   ExternalLink,
   FileText,
@@ -26,6 +27,7 @@ import { cn } from "@/lib/utils";
 import {
   completeHcRequestAction,
   deleteHcRequestAction,
+  holdHcRequestAction,
   startHcProcessingAction,
   uploadHcFinalAction,
 } from "@/lib/actions/hc";
@@ -46,6 +48,7 @@ const STATUS_FILTERS: { value: HcStatus | "all"; label: string }[] = [
   { value: "all", label: "Semua" },
   { value: "waiting", label: "Menunggu" },
   { value: "processing", label: "Diproses" },
+  { value: "pending", label: "Menunggu Berkas" },
   { value: "done", label: "Selesai" },
 ];
 
@@ -59,7 +62,7 @@ export function HcReviewPanel({ rows, canDelete = false }: { rows: HcSubmission[
   );
   const selected = rows.find((r) => r.id === selectedId) ?? null;
   const counts = useMemo(() => {
-    const c = { waiting: 0, processing: 0, done: 0 };
+    const c: Record<HcStatus, number> = { waiting: 0, processing: 0, pending: 0, done: 0 };
     for (const r of rows) c[r.status]++;
     return c;
   }, [rows]);
@@ -258,36 +261,45 @@ function DetailPanel({ row, canDelete, onDeleted }: { row: HcSubmission; canDele
     });
   }
 
-  // BPJS numbers aren't issued immediately, so the finished card may not exist
-  // yet — allow closing a BPJS request with just a note (e.g. the No. BPJS).
   const isBpjs = row.docType === "bpjs";
+
+  /** Upload the finished document and mark the request Selesai. */
   function complete() {
-    if (!finalFile && !isBpjs) {
+    if (!finalFile) {
       toast.error("Unggah dokumen jadi (PDF) terlebih dahulu.");
       return;
     }
-    if (!finalFile && isBpjs && !note.trim()) {
-      toast.error("Untuk BPJS, unggah dokumen atau isi catatan (mis. No. BPJS) dulu.");
-      return;
-    }
     startTransition(async () => {
-      let finalDocPath = "";
-      if (finalFile) {
-        const fd = new FormData();
-        fd.append("file", finalFile);
-        const up = await uploadHcFinalAction(fd);
-        if (up.error) {
-          toast.error(up.error);
-          return;
-        }
-        finalDocPath = up.path ?? "";
+      const fd = new FormData();
+      fd.append("file", finalFile);
+      const up = await uploadHcFinalAction(fd);
+      if (up.error) {
+        toast.error(up.error);
+        return;
       }
-      const res = await completeHcRequestAction({ id: row.id, note, finalDocPath });
+      const res = await completeHcRequestAction({ id: row.id, note, finalDocPath: up.path ?? "" });
       if (res?.error) {
         toast.error(res.error);
         return;
       }
-      toast.success(finalDocPath ? "Dokumen dikirim balik ke Supervisor." : "Pengajuan diselesaikan.");
+      toast.success("Dokumen dikirim balik ke Supervisor.");
+      router.refresh();
+    });
+  }
+
+  /** Processing → Menunggu Berkas: record info (e.g. No. BPJS), await the file. */
+  function hold() {
+    if (!note.trim()) {
+      toast.error(isBpjs ? "Isi No. BPJS/KPJ dulu di catatan." : "Isi keterangan dulu.");
+      return;
+    }
+    startTransition(async () => {
+      const res = await holdHcRequestAction({ id: row.id, note });
+      if (res?.error) {
+        toast.error(res.error);
+        return;
+      }
+      toast.success("Ditandai Menunggu Berkas. Unggah berkas nanti untuk menyelesaikan.");
       router.refresh();
     });
   }
@@ -377,7 +389,7 @@ function DetailPanel({ row, canDelete, onDeleted }: { row: HcSubmission; canDele
         </div>
       )}
 
-      {(row.status === "processing" || row.status === "done") && (
+      {(row.status === "processing" || row.status === "pending" || row.status === "done") && (
         <div className="mt-4 space-y-3 rounded-xl border border-border p-4">
           <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Hasil Human Capital</p>
 
@@ -407,22 +419,50 @@ function DetailPanel({ row, canDelete, onDeleted }: { row: HcSubmission; canDele
                 <Lock className="size-3.5 shrink-0" /> Pengajuan terkunci (read-only). Revisi = buat pengajuan baru.
               </p>
             </>
-          ) : (
+          ) : row.status === "pending" ? (
             <>
-              <Field
-                label={isBpjs ? "Upload Dokumen Jadi (PDF) — opsional" : "Upload Dokumen Jadi (PDF)"}
-                hint={isBpjs ? "Kartu BPJS sering belum terbit. Boleh diselesaikan tanpa file — cukup tulis No. BPJS/KPJ di catatan; file bisa menyusul." : "Hasil dokumen final yang akan diunduh Supervisor. Maks 8 MB."}
-              >
+              <div className="flex items-center gap-2 rounded-lg bg-amber-500/10 px-3 py-2 text-sm text-amber-700 dark:text-amber-300">
+                <Clock className="size-4 shrink-0" /> Menunggu berkas terbit — unggah berkas untuk menyelesaikan.
+              </div>
+              {row.hcNote && (
+                <div>
+                  <p className="mb-1 text-xs font-medium text-muted-foreground">Keterangan{isBpjs ? " (No. BPJS/KPJ)" : ""}</p>
+                  <p className="whitespace-pre-wrap break-words rounded-lg bg-muted/40 p-3 text-sm text-foreground">{row.hcNote}</p>
+                </div>
+              )}
+              <Field label="Unggah Berkas (PDF)" hint={isBpjs ? "Setelah kartu BPJS terbit, unggah di sini untuk menyelesaikan." : "Setelah berkas terbit, unggah di sini untuk menyelesaikan."}>
                 <FinalFilePick file={finalFile} onPick={setFinalFile} />
               </Field>
-              <Field label={isBpjs ? "Catatan untuk Supervisor (mis. No. BPJS/KPJ)" : "Catatan untuk Supervisor (opsional)"}>
-                <Textarea value={note} onChange={(e) => setNote(e.target.value)} placeholder={isBpjs ? "Contoh: No. BPJS 0001234567890 — kartu menyusul" : "Tambahkan catatan bila perlu…"} rows={3} />
+              <Field label="Perbarui Keterangan (opsional)">
+                <Textarea value={note} onChange={(e) => setNote(e.target.value)} rows={2} />
               </Field>
               <div className="flex justify-end">
+                <Button onClick={complete} disabled={pending} className="shrink-0">
+                  {pending ? <Loader2 className="animate-spin" /> : <Send className="size-4" />} Unggah Berkas & Selesaikan
+                </Button>
+              </div>
+            </>
+          ) : (
+            <>
+              <Field label="Upload Dokumen Jadi (PDF)" hint="Hasil dokumen final yang akan diunduh Supervisor. Maks 8 MB.">
+                <FinalFilePick file={finalFile} onPick={setFinalFile} />
+              </Field>
+              <Field label={isBpjs ? "Catatan / No. BPJS (untuk Supervisor)" : "Catatan untuk Supervisor (opsional)"}>
+                <Textarea value={note} onChange={(e) => setNote(e.target.value)} placeholder={isBpjs ? "Contoh: No. BPJS 0001234567890" : "Tambahkan catatan bila perlu…"} rows={3} />
+              </Field>
+              <div className="flex flex-col gap-2 sm:flex-row sm:justify-end">
+                <Button variant="subtle" onClick={hold} disabled={pending} className="shrink-0">
+                  <Clock className="size-4" /> {isBpjs ? "Tandai Menunggu Kartu" : "Tandai Menunggu Berkas"}
+                </Button>
                 <Button onClick={complete} disabled={pending} className="shrink-0">
                   {pending ? <Loader2 className="animate-spin" /> : <Send className="size-4" />} Kirim Balik ke Supervisor
                 </Button>
               </div>
+              {isBpjs && (
+                <p className="text-[11px] text-muted-foreground">
+                  Kartu belum terbit? Isi No. BPJS di catatan lalu tekan <b>Tandai Menunggu Kartu</b> — unggah kartunya nanti untuk menyelesaikan.
+                </p>
+              )}
             </>
           )}
         </div>
