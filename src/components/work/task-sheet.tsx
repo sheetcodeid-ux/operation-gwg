@@ -7,7 +7,6 @@ import { toast } from "sonner";
 import { PRIORITY_META, TASK_STATUS_META, WORK_CATEGORIES } from "@/lib/constants";
 import type { Priority, TaskStatus } from "@/lib/types";
 import { createTaskAction, updateTaskAction } from "@/lib/actions/work";
-import { DEMO_NOW } from "@/lib/now";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetTrigger, useSheetControl } from "@/components/ui/sheet";
@@ -42,12 +41,17 @@ export interface EditableTask {
 const PRIORITIES = Object.keys(PRIORITY_META) as Priority[];
 const STATUSES = Object.keys(TASK_STATUS_META) as TaskStatus[];
 
-/** Default date for the form, anchored to the demo "now" (not the wall clock),
- *  so new tasks land in the same period the dashboard/calendar display. */
+/** Default date for a NEW task's Start/Due fields — the REAL current date (local
+ *  time), so a new task always lands in the running month and automatically
+ *  rolls into the next month/year as time passes (no more being stuck in a past
+ *  month). Local Y-M-D avoids a UTC off-by-one at the edges of the day. */
 function defaultDateISO(offsetDays = 0) {
-  const d = new Date(DEMO_NOW);
-  d.setUTCDate(d.getUTCDate() + offsetDays);
-  return d.toISOString().slice(0, 10);
+  const d = new Date();
+  d.setDate(d.getDate() + offsetDays);
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
 }
 
 function toDateInput(iso: string) {
