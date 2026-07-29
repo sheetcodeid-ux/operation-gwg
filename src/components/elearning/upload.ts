@@ -7,7 +7,7 @@ import { presignElearningUploadAction } from "@/lib/actions/elearning";
  */
 export async function uploadToR2(
   file: File,
-  folder: "video" | "thumbnail" | "file",
+  folder: "video" | "thumbnail" | "file" | "subtitle",
   onProgress?: (pct: number) => void,
 ): Promise<string> {
   const res = await presignElearningUploadAction({ name: file.name, type: file.type, size: file.size, folder });

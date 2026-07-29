@@ -41,8 +41,8 @@ function revalidate() {
 const MAX_VIDEO = 2 * 1024 * 1024 * 1024; // 2 GB
 const MAX_DOC = 50 * 1024 * 1024; // 50 MB
 
-/** Issue a presigned PUT URL for a lesson asset. `folder` = video|thumbnail|file. */
-export async function presignElearningUploadAction(input: { name: string; type: string; size: number; folder: "video" | "thumbnail" | "file" }) {
+/** Issue a presigned PUT URL for a lesson asset. `folder` = video|thumbnail|file|subtitle. */
+export async function presignElearningUploadAction(input: { name: string; type: string; size: number; folder: "video" | "thumbnail" | "file" | "subtitle" }) {
   const user = await getSessionUser();
   if (!manage(user)) return { error: "Hanya Head Operational yang dapat mengunggah." } as const;
   if (!r2Enabled()) return { error: "Penyimpanan (R2) belum aktif." } as const;
@@ -50,6 +50,7 @@ export async function presignElearningUploadAction(input: { name: string; type: 
   const isVideo = input.folder === "video";
   if (isVideo && !input.type.startsWith("video/")) return { error: "File video tidak valid." } as const;
   if (input.folder === "thumbnail" && !input.type.startsWith("image/")) return { error: "Thumbnail harus berupa gambar." } as const;
+  if (input.folder === "subtitle" && !/\.vtt$/i.test(input.name)) return { error: "Subtitle harus berformat .vtt (WebVTT)." } as const;
   const limit = isVideo ? MAX_VIDEO : MAX_DOC;
   if (input.size > limit) return { error: `Ukuran melebihi batas (${isVideo ? "2 GB" : "50 MB"}).` } as const;
 
@@ -148,6 +149,7 @@ export interface LessonActionInput {
   description: string;
   thumbnailPath: string | null;
   videoPath: string | null;
+  subtitlePath: string | null;
   estimatedMinutes: number;
   required: boolean;
   allowSkip: boolean;
@@ -166,6 +168,7 @@ export async function createLessonAction(input: LessonActionInput & { courseId: 
     description: input.description.trim(),
     thumbnailPath: input.thumbnailPath,
     videoPath: input.videoPath,
+    subtitlePath: input.subtitlePath,
     estimatedMinutes: Math.max(0, Math.round(input.estimatedMinutes || 0)),
     required: input.required,
     allowSkip: input.allowSkip,

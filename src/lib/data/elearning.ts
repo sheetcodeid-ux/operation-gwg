@@ -70,6 +70,8 @@ const lessonFromRow = (r: any, thumbUrl: string | null, fileCount: number): ELea
   thumbnailUrl: thumbUrl,
   hasVideo: !!r.video_path,
   videoUrl: null,
+  hasSubtitle: !!r.subtitle_path,
+  subtitleUrl: null,
   estimatedMinutes: r.estimated_minutes ?? 0,
   required: r.required !== false,
   allowSkip: !!r.allow_skip,
@@ -178,9 +180,10 @@ export async function getLessonDetail(lessonId: string): Promise<ELearningLesson
     .order("sort_order", { ascending: true });
   const files = (fileRows ?? []) as any[];
   const fileUrls = await signBatch(files.map((f) => f.path));
-  const [videoUrl, thumbUrl] = await Promise.all([sign1(r.video_path), sign1(r.thumbnail_path)]);
+  const [videoUrl, thumbUrl, subtitleUrl] = await Promise.all([sign1(r.video_path), sign1(r.thumbnail_path), sign1(r.subtitle_path)]);
   const lesson = lessonFromRow(r, thumbUrl, files.length);
   lesson.videoUrl = videoUrl;
+  lesson.subtitleUrl = subtitleUrl;
   lesson.files = files.map((f) => fileFromRow(f, f.path ? fileUrls.get(f.path) ?? null : null));
   return lesson;
 }
@@ -244,10 +247,10 @@ export async function deleteCourse(id: string): Promise<{ error?: string }> {
   if (!dbEnabled) return { error: "Database belum aktif." };
   markLocalWrite();
   // Best-effort R2 cleanup of all lesson media in the course.
-  const { data: lessons } = await db().from("elearning_lessons").select("video_path,thumbnail_path").eq("course_id", id);
+  const { data: lessons } = await db().from("elearning_lessons").select("video_path,thumbnail_path,subtitle_path").eq("course_id", id);
   const { data: files } = await db().from("elearning_files").select("path").eq("course_id", id);
   await cleanupR2([
-    ...((lessons ?? []) as any[]).flatMap((l) => [l.video_path, l.thumbnail_path]),
+    ...((lessons ?? []) as any[]).flatMap((l) => [l.video_path, l.thumbnail_path, l.subtitle_path]),
     ...((files ?? []) as any[]).map((f) => f.path),
   ]);
   const { error } = await db().from("elearning_courses").delete().eq("id", id);
@@ -289,10 +292,10 @@ export async function updateDay(id: string, patch: Partial<{ title: string; desc
 export async function deleteDay(id: string): Promise<{ error?: string }> {
   if (!dbEnabled) return { error: "Database belum aktif." };
   markLocalWrite();
-  const { data: lessons } = await db().from("elearning_lessons").select("video_path,thumbnail_path").eq("day_id", id);
+  const { data: lessons } = await db().from("elearning_lessons").select("video_path,thumbnail_path,subtitle_path").eq("day_id", id);
   const { data: files } = await db().from("elearning_files").select("path").eq("day_id", id);
   await cleanupR2([
-    ...((lessons ?? []) as any[]).flatMap((l) => [l.video_path, l.thumbnail_path]),
+    ...((lessons ?? []) as any[]).flatMap((l) => [l.video_path, l.thumbnail_path, l.subtitle_path]),
     ...((files ?? []) as any[]).map((f) => f.path),
   ]);
   const { error } = await db().from("elearning_days").delete().eq("id", id);
@@ -316,6 +319,7 @@ export interface LessonWriteInput {
   description: string;
   thumbnailPath?: string | null;
   videoPath?: string | null;
+  subtitlePath?: string | null;
   estimatedMinutes: number;
   required: boolean;
   allowSkip: boolean;
@@ -336,6 +340,7 @@ export async function createLesson(input: LessonWriteInput & { courseId: string;
     description: input.description,
     thumbnail_path: input.thumbnailPath ?? null,
     video_path: input.videoPath ?? null,
+    subtitle_path: input.subtitlePath ?? null,
     estimated_minutes: input.estimatedMinutes,
     required: input.required,
     allow_skip: input.allowSkip,
@@ -355,6 +360,7 @@ export async function updateLesson(id: string, patch: Partial<LessonWriteInput>)
   if (patch.description !== undefined) row.description = patch.description;
   if (patch.thumbnailPath !== undefined) row.thumbnail_path = patch.thumbnailPath;
   if (patch.videoPath !== undefined) row.video_path = patch.videoPath;
+  if (patch.subtitlePath !== undefined) row.subtitle_path = patch.subtitlePath;
   if (patch.estimatedMinutes !== undefined) row.estimated_minutes = patch.estimatedMinutes;
   if (patch.required !== undefined) row.required = patch.required;
   if (patch.allowSkip !== undefined) row.allow_skip = patch.allowSkip;
@@ -367,9 +373,9 @@ export async function updateLesson(id: string, patch: Partial<LessonWriteInput>)
 export async function deleteLesson(id: string): Promise<{ error?: string }> {
   if (!dbEnabled) return { error: "Database belum aktif." };
   markLocalWrite();
-  const { data: lesson } = await db().from("elearning_lessons").select("video_path,thumbnail_path").eq("id", id).maybeSingle();
+  const { data: lesson } = await db().from("elearning_lessons").select("video_path,thumbnail_path,subtitle_path").eq("id", id).maybeSingle();
   const { data: files } = await db().from("elearning_files").select("path").eq("lesson_id", id);
-  await cleanupR2([(lesson as any)?.video_path, (lesson as any)?.thumbnail_path, ...((files ?? []) as any[]).map((f) => f.path)]);
+  await cleanupR2([(lesson as any)?.video_path, (lesson as any)?.thumbnail_path, (lesson as any)?.subtitle_path, ...((files ?? []) as any[]).map((f) => f.path)]);
   const { error } = await db().from("elearning_lessons").delete().eq("id", id);
   return error ? { error: error.message } : {};
 }

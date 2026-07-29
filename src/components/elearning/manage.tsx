@@ -354,6 +354,7 @@ interface LessonFormState {
   tags: string;
   thumbnailPath: string | null;
   videoPath: string | null;
+  subtitlePath: string | null;
 }
 
 function LessonDialog({ course, dayId, lesson, open, onOpenChange }: { course: ELearningCourse; dayId: string; lesson?: ELearningLesson; open: boolean; onOpenChange: (v: boolean) => void }) {
@@ -363,10 +364,12 @@ function LessonDialog({ course, dayId, lesson, open, onOpenChange }: { course: E
   const [videoName, setVideoName] = React.useState<string | null>(null);
   const [videoPct, setVideoPct] = React.useState<number | null>(null);
   const [thumbPct, setThumbPct] = React.useState<number | null>(null);
+  const [subName, setSubName] = React.useState<string | null>(null);
+  const [subPct, setSubPct] = React.useState<number | null>(null);
   const [form, setForm] = React.useState<LessonFormState>(blank());
 
   function blank(): LessonFormState {
-    return { title: "", description: "", estimatedMinutes: 10, required: true, allowSkip: false, mustCompleteVideo: false, tags: "", thumbnailPath: null, videoPath: null };
+    return { title: "", description: "", estimatedMinutes: 10, required: true, allowSkip: false, mustCompleteVideo: false, tags: "", thumbnailPath: null, videoPath: null, subtitlePath: null };
   }
 
   // Populate on open (fetch detail for the file list when editing).
@@ -383,16 +386,20 @@ function LessonDialog({ course, dayId, lesson, open, onOpenChange }: { course: E
         tags: lesson.tags.join(", "),
         thumbnailPath: undefined as unknown as string | null, // keep existing unless replaced
         videoPath: undefined as unknown as string | null,
+        subtitlePath: undefined as unknown as string | null,
       });
       setVideoName(lesson.hasVideo ? "Video tersimpan" : null);
+      setSubName(lesson.hasSubtitle ? "Subtitle tersimpan" : null);
       getLessonDetailAction(lesson.id).then((r) => r.ok && setDetail(r.lesson));
     } else {
       setForm(blank());
       setVideoName(null);
+      setSubName(null);
       setDetail(null);
     }
     setVideoPct(null);
     setThumbPct(null);
+    setSubPct(null);
   }, [open, lesson]);
 
   const set = <K extends keyof LessonFormState>(k: K, v: LessonFormState[K]) => setForm((f) => ({ ...f, [k]: v }));
@@ -424,9 +431,24 @@ function LessonDialog({ course, dayId, lesson, open, onOpenChange }: { course: E
     }
   };
 
+  const onSubtitle = async (file: File) => {
+    if (!/\.vtt$/i.test(file.name)) return toast.error("Subtitle harus berformat .vtt (WebVTT).");
+    setSubName(file.name);
+    setSubPct(0);
+    try {
+      const path = await uploadToR2(file, "subtitle", setSubPct);
+      set("subtitlePath", path);
+      setSubPct(100);
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Upload subtitle gagal.");
+      setSubPct(null);
+    }
+  };
+
   const save = () => {
     if (!form.title.trim()) return toast.error("Judul materi wajib diisi.");
-    if (videoPct !== null && videoPct < 100) return toast.error("Tunggu upload video selesai.");
+    if ((videoPct !== null && videoPct < 100) || (thumbPct !== null && thumbPct < 100) || (subPct !== null && subPct < 100))
+      return toast.error("Tunggu proses unggah selesai dulu.");
     setBusy(true);
     const tags = form.tags.split(",").map((t) => t.trim()).filter(Boolean);
     const base = {
@@ -443,8 +465,9 @@ function LessonDialog({ course, dayId, lesson, open, onOpenChange }: { course: E
           ...base,
           ...(form.thumbnailPath !== undefined && form.thumbnailPath !== null ? { thumbnailPath: form.thumbnailPath } : {}),
           ...(form.videoPath !== undefined && form.videoPath !== null ? { videoPath: form.videoPath } : {}),
+          ...(form.subtitlePath !== undefined && form.subtitlePath !== null ? { subtitlePath: form.subtitlePath } : {}),
         })
-      : createLessonAction({ ...base, courseId: course.id, dayId, thumbnailPath: form.thumbnailPath ?? null, videoPath: form.videoPath ?? null });
+      : createLessonAction({ ...base, courseId: course.id, dayId, thumbnailPath: form.thumbnailPath ?? null, videoPath: form.videoPath ?? null, subtitlePath: form.subtitlePath ?? null });
     p.then((r) => {
       if (r?.error) return toast.error(r.error);
       toast.success(lesson ? "Materi diperbarui." : "Materi ditambahkan.");
@@ -475,6 +498,12 @@ function LessonDialog({ course, dayId, lesson, open, onOpenChange }: { course: E
           <Field label="Thumbnail (opsional)" hint="Gambar sampul materi.">
             <FilePick file={form.thumbnailPath ? "Thumbnail terpasang" : lesson?.thumbnailUrl ? "Thumbnail tersimpan" : null} accept="image/*" onPick={onThumb} icon={<FileUp className="size-4" />} label="Unggah thumbnail" />
             {thumbPct !== null && <UploadBar pct={thumbPct} />}
+          </Field>
+
+          {/* Subtitle */}
+          <Field label="Subtitle / Teks (opsional)" hint="Berkas .vtt (WebVTT). Tampil sebagai closed caption di video.">
+            <FilePick file={subName} accept=".vtt,text/vtt" onPick={onSubtitle} icon={<FileUp className="size-4" />} label={subName ? "Ganti subtitle" : "Unggah subtitle"} />
+            {subPct !== null && <UploadBar pct={subPct} />}
           </Field>
 
           {/* Rules */}

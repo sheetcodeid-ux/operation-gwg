@@ -74,6 +74,9 @@ export interface ELearningLesson {
   /** Whether a video is attached (URL only signed in the learner detail view). */
   hasVideo: boolean;
   videoUrl: string | null;
+  /** Optional subtitle track (WebVTT), signed only in the detail view. */
+  hasSubtitle: boolean;
+  subtitleUrl: string | null;
   estimatedMinutes: number;
   required: boolean;
   allowSkip: boolean;

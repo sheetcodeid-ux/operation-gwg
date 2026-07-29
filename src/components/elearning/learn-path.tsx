@@ -35,6 +35,7 @@ import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
+import { VideoPlayer } from "./video-player";
 
 export function LearnPath({
   course,
@@ -65,6 +66,10 @@ export function LearnPath({
     }
     setActiveId(id);
   };
+
+  // Next lesson id after the active one (for auto-advance). Just completed, so we
+  // open it directly without re-checking the (stale) unlock state.
+  const nextLessonId = activeIndex >= 0 && activeIndex < lessons.length - 1 ? lessons[activeIndex + 1].id : null;
 
   const resumeId = resumeLessonId(days, progress);
   const st = LEARNER_STATUS_META[status];
@@ -136,6 +141,8 @@ export function LearnPath({
               lessonMeta={activeLesson}
               alreadyDone={!!progress[activeLesson.id]?.completed}
               savedSeconds={progress[activeLesson.id]?.videoSeconds ?? 0}
+              hasNext={!!nextLessonId}
+              onNext={() => nextLessonId && setActiveId(nextLessonId)}
               onClose={() => setActiveId(null)}
             />
           </DialogContent>
@@ -246,12 +253,16 @@ function LessonViewer({
   lessonMeta,
   alreadyDone,
   savedSeconds,
+  hasNext,
+  onNext,
   onClose,
 }: {
   courseId: string;
   lessonMeta: ELearningLesson;
   alreadyDone: boolean;
   savedSeconds: number;
+  hasNext: boolean;
+  onNext: () => void;
   onClose: () => void;
 }) {
   const router = useRouter();
@@ -259,12 +270,11 @@ function LessonViewer({
   const [loading, setLoading] = React.useState(true);
   const [videoDone, setVideoDone] = React.useState(false);
   const [saving, setSaving] = React.useState(false);
-  const videoRef = React.useRef<HTMLVideoElement | null>(null);
-  const lastSaveRef = React.useRef(0);
 
   React.useEffect(() => {
     let live = true;
     setLoading(true);
+    setVideoDone(false);
     getLessonDetailAction(lessonMeta.id).then((r) => {
       if (!live) return;
       if (r.ok) setLesson(r.lesson);
@@ -283,20 +293,6 @@ function LessonViewer({
     [courseId, lessonMeta.id],
   );
 
-  const onTime = () => {
-    const v = videoRef.current;
-    if (!v) return;
-    const now = Date.now();
-    if (now - lastSaveRef.current > 12000) {
-      lastSaveRef.current = now;
-      saveProgress(v.currentTime);
-    }
-    if (!videoDone && v.duration && v.currentTime / v.duration >= 0.95) {
-      setVideoDone(true);
-      saveProgress(v.currentTime, true);
-    }
-  };
-
   const requireVideo = lessonMeta.mustCompleteVideo && lessonMeta.hasVideo;
   const canComplete = !requireVideo || videoDone || alreadyDone;
 
@@ -308,9 +304,14 @@ function LessonViewer({
           toast.error(r.error);
           return;
         }
-        toast.success("Materi ditandai selesai.");
         router.refresh();
-        onClose();
+        if (hasNext) {
+          toast.success("Materi selesai — lanjut ke materi berikutnya.");
+          onNext();
+        } else {
+          toast.success("Selamat! Anda menyelesaikan seluruh materi.");
+          onClose();
+        }
       })
       .finally(() => setSaving(false));
   };
@@ -327,24 +328,19 @@ function LessonViewer({
   return (
     <div className="max-h-[80vh] space-y-4 overflow-y-auto p-5">
       {lesson.videoUrl ? (
-        <video
-          ref={videoRef}
+        <VideoPlayer
           src={lesson.videoUrl}
-          poster={lesson.thumbnailUrl ?? undefined}
-          controls
-          controlsList="nodownload"
-          onContextMenu={(e) => e.preventDefault()}
-          onLoadedMetadata={(e) => {
-            const v = e.currentTarget;
-            if (savedSeconds > 0 && savedSeconds < v.duration - 1) v.currentTime = savedSeconds;
+          poster={lesson.thumbnailUrl}
+          subtitleUrl={lesson.subtitleUrl}
+          startSeconds={savedSeconds}
+          requireFullWatch={requireVideo}
+          onProgress={(s) => saveProgress(s)}
+          onVideoComplete={() => {
+            if (!videoDone) {
+              setVideoDone(true);
+              void saveLessonProgressAction({ courseId, lessonId: lessonMeta.id, videoCompleted: true });
+            }
           }}
-          onTimeUpdate={onTime}
-          onPause={(e) => saveProgress(e.currentTarget.currentTime)}
-          onEnded={(e) => {
-            setVideoDone(true);
-            saveProgress(e.currentTarget.currentTime, true);
-          }}
-          className="aspect-video w-full rounded-xl bg-black"
         />
       ) : lesson.thumbnailUrl ? (
         // eslint-disable-next-line @next/next/no-img-element
@@ -353,7 +349,7 @@ function LessonViewer({
 
       {requireVideo && !canComplete && (
         <p className="rounded-lg bg-amber-500/10 px-3 py-2 text-xs text-amber-700 dark:text-amber-300">
-          Materi ini mewajibkan menonton video sampai selesai sebelum dapat ditandai selesai.
+          Materi ini mewajibkan menonton video sampai selesai (tidak dapat dilompati) sebelum ditandai selesai.
         </p>
       )}
 
@@ -388,10 +384,13 @@ function LessonViewer({
           {alreadyDone ? "Sudah selesai — bisa ditinjau ulang kapan saja." : lesson.required ? "Materi wajib" : "Materi opsional"}
         </span>
         {alreadyDone ? (
-          <Button variant="outline" onClick={onClose}>Tutup</Button>
+          <div className="flex gap-2">
+            <Button variant="outline" onClick={onClose}>Tutup</Button>
+            {hasNext && <Button onClick={onNext}>Materi Berikutnya</Button>}
+          </div>
         ) : (
           <Button onClick={markDone} disabled={!canComplete || saving}>
-            {saving ? <Loader2 className="size-4 animate-spin" /> : <CheckCircle2 className="size-4" />} Tandai Selesai
+            {saving ? <Loader2 className="size-4 animate-spin" /> : <CheckCircle2 className="size-4" />} {hasNext ? "Selesai & Lanjut" : "Tandai Selesai"}
           </Button>
         )}
       </div>
