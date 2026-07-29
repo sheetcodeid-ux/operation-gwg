@@ -39,8 +39,14 @@ export interface EvalScoreRow {
   name: string;
   weight: number;
   score: number;
+  /** Progress numerator — parameters filled (al/hc/dir) or peers submitted (peer). */
   filled: number;
+  /** Progress denominator — 6 parameters, or the expected peer-panel size (peer). */
+  total: number;
+  /** Has a usable score (all params in; ≥1 peer submitted for the peer panel). */
   done: boolean;
+  /** Fully finished (all params; ALL expected peers submitted for the peer panel). */
+  complete: boolean;
   contribution: number;
 }
 
@@ -95,19 +101,36 @@ export interface ResultInput {
   ivRecValue: IvRecommendation["value"] | null;
   evaluators: Evaluator[];
   financialImpact: boolean;
+  /** Rekan Sejawat panel progress (submitted vs expected peers). When omitted,
+   *  the peer column falls back to counting averaged parameter cells (demo /
+   *  historical records that have no live peer panel). */
+  peerProgress?: { submitted: number; expected: number };
 }
 
 const EV_LABEL: Record<EvaluatorKey, string> = { al: "Atasan Langsung", hc: "HC / Human Capital", peer: "Rekan Sejawat", dir: "Director" };
 
 /** Reduce raw assessment state into every derived dashboard figure. */
 export function computeResult(input: ResultInput): ResultBundle {
-  const { scores, self, interview, ivRecValue, evaluators, financialImpact } = input;
+  const { scores, self, interview, ivRecValue, evaluators, financialImpact, peerProgress } = input;
   const single = evaluators.length === 1;
 
   const evalScores: EvalScoreRow[] = evaluators.map((e) => {
     const score = scoreForEvaluator(e.key, scores[e.key]);
-    const filled = filledForEvaluator(e.key, scores[e.key]);
-    return { key: e.key, name: e.name, weight: e.weight, score, filled, done: filled === paramsForEvaluator(e.key).length, contribution: Math.round(score * (e.weight / 100) * 10) / 10 };
+    const params = paramsForEvaluator(e.key).length;
+    let filled = filledForEvaluator(e.key, scores[e.key]);
+    let total = params;
+    let done = filled === params; // usable score
+    let complete = done; // fully finished
+    // The Rekan Sejawat column is a panel of reviewers, not a set of parameters:
+    // progress = peers submitted / expected, and it's "usable" once ≥1 peer has
+    // submitted (the running average) but only "complete" when the whole panel is in.
+    if (e.key === "peer" && peerProgress) {
+      filled = peerProgress.submitted;
+      total = peerProgress.expected;
+      done = peerProgress.submitted > 0;
+      complete = peerProgress.expected > 0 && peerProgress.submitted >= peerProgress.expected;
+    }
+    return { key: e.key, name: e.name, weight: e.weight, score, filled, total, done, complete, contribution: Math.round(score * (e.weight / 100) * 10) / 10 };
   });
   const done = evalScores.filter((e) => e.done);
 
@@ -161,10 +184,16 @@ export function computeResult(input: ResultInput): ResultBundle {
   const weak = withData.length ? withData.reduce((a, b) => (a.avgPct <= b.avgPct ? a : b)) : null;
 
   const totalEvaluators = evaluators.length;
-  const filledEvaluators = done.length;
+  // "Filled"/"all filled" tracks fully-finished evaluators — the peer panel counts
+  // only when ALL expected rekan sejawat have submitted, so a 1/5 panel keeps the
+  // assessment in progress rather than prematurely "Menunggu Interview".
+  const filledEvaluators = evalScores.filter((e) => e.complete).length;
   const allFilled = filledEvaluators === totalEvaluators;
-  const filledCells = evaluators.reduce((sum, e) => sum + filledForEvaluator(e.key, scores[e.key]), 0);
-  const completionPct = Math.round((filledCells / (totalEvaluators * PARAMETERS.length)) * 100);
+  // Completion = average of each evaluator's own progress ratio (params filled, or
+  // peers submitted for the panel), so the bar reflects the peer panel honestly.
+  const completionPct = totalEvaluators
+    ? Math.round((evalScores.reduce((sum, e) => sum + (e.total > 0 ? Math.min(1, e.filled / e.total) : 0), 0) / totalEvaluators) * 100)
+    : 0;
 
   return {
     evaluators,
@@ -186,7 +215,7 @@ export function computeResult(input: ResultInput): ResultBundle {
     totalEvaluators,
     filledEvaluators,
     allFilled,
-    anyFilled: filledEvaluators > 0,
+    anyFilled: done.length > 0,
     completionPct,
     recommendations: buildRecommendations(final, ivRecValue, weak?.title ?? null, financialImpact),
   };
@@ -350,9 +379,11 @@ export function sessionToEnriched(s: SessionState): EnrichedRecord {
     ivRecValue: resolveInterviewRec(votes),
     evaluators,
     financialImpact: s.financialImpact,
+    peerProgress: { submitted: s.peerSubmitted ?? 0, expected: s.peerExpected ?? 0 },
   };
   const bundle = computeResult(detail);
-  const anySubmitted = s.evaluations.some((e) => e.submitted);
+  // In progress once any official evaluator submitted OR any peer has reviewed.
+  const anySubmitted = s.evaluations.some((e) => e.submitted) || (s.peerSubmitted ?? 0) > 0;
   const status = bundle.allFilled ? "Menunggu Interview" : anySubmitted ? "Proses Penilaian" : "Draft";
   const base: AssessmentRecord = {
     id: s.id,

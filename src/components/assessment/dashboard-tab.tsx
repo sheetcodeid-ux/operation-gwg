@@ -16,6 +16,7 @@ import {
   Zap,
   type LucideIcon,
 } from "lucide-react";
+import { emptyEvaluatorScores, type EvaluatorKey, type EvaluatorScores } from "@/lib/assessment/config";
 import { departmentOptions, employeesForPosition, formatGolongan, positionsForDepartment } from "@/lib/assessment/org";
 import { ASSESSMENTS, LATEST_ASSESSMENTS, computeResult, historyFor, sessionToEnriched, type EnrichedRecord, type RecoKind, type ResultBundle } from "@/lib/assessment/result";
 import { deleteSession, listAllSessions } from "@/lib/actions/assessment";
@@ -67,18 +68,39 @@ export function DashboardTab() {
   const golNow = formatGolongan(a.candidate.golongan, a.candidate.golonganLevel);
   const golNext = formatGolongan(a.candidate.golonganTujuan, a.candidate.golonganTujuanLevel);
 
+  // The running assessment's scores: prefer the server session (authoritative —
+  // every evaluator's submitted column PLUS the averaged Rekan Sejawat panel),
+  // overlaid with the signed-in evaluator's own not-yet-submitted local edits so
+  // their in-progress work still previews. Falls back to purely-local scores when
+  // there's no server session (demo / super-admin viewpoint).
+  const liveScores: EvaluatorScores = React.useMemo(() => {
+    if (!a.session) return a.scores;
+    const merged = emptyEvaluatorScores();
+    for (const ev of a.session.evaluations) merged[ev.evaluatorKey] = ev.scores ?? {};
+    const myKey = a.evaluator?.evaluatorKey;
+    if (myKey && a.scores[myKey] && Object.keys(a.scores[myKey]).length) merged[myKey] = a.scores[myKey];
+    return merged;
+  }, [a.session, a.scores, a.evaluator]);
+
+  const livePeer = a.session
+    ? { submitted: a.session.peerSubmitted ?? 0, expected: a.session.peerExpected ?? 0 }
+    : undefined;
+
   const liveBundle = computeResult({
-    scores: a.scores,
+    scores: liveScores,
     self: a.self,
     interview: a.interview,
     ivRecValue: a.ivRecommendation,
     evaluators: a.activeEvaluators,
     financialImpact: a.financialImpact,
+    peerProgress: livePeer,
   });
 
   const liveRecord: AssessmentRecord | null = a.resolved.nama
     ? {
-        id: "live",
+        // Carry the server session id so the running record and its polled DB twin
+        // de-duplicate to a single row (no more "Bella" appearing twice).
+        id: a.session?.id ?? "live",
         tanggal: new Date().toISOString().slice(0, 10),
         batch: a.candidate.batch || "—",
         nik: a.candidate.nik || "—",
@@ -143,6 +165,14 @@ export function DashboardTab() {
     [reload],
   );
 
+  // The running assessment is rendered from `liveRecord`; drop its DB twin from the
+  // polled list so the same employee never shows twice.
+  const liveSessionId = a.session?.id ?? null;
+  const extraRecords = React.useMemo(
+    () => (liveSessionId ? dbRecords.filter((r) => r.id !== liveSessionId) : dbRecords),
+    [dbRecords, liveSessionId],
+  );
+
   // Sample data is demo-only; production (DB live) shows real sessions alone.
   const sampleAll = a.showSample ? ASSESSMENTS : [];
   const sampleLatest = a.showSample ? LATEST_ASSESSMENTS : [];
@@ -193,7 +223,7 @@ export function DashboardTab() {
   return (
     <div className="space-y-4">
       <SectionLabel>Ringkasan Batch (Tracking)</SectionLabel>
-      <BatchTracking live={liveRecord} extra={dbRecords} sample={sampleLatest} />
+      <BatchTracking live={liveRecord} extra={extraRecords} sample={sampleLatest} />
 
       <SectionLabel>Lihat Hasil per Karyawan</SectionLabel>
       <Card>
@@ -256,7 +286,7 @@ export function DashboardTab() {
       <SectionLabel>Seluruh Data Assessment</SectionLabel>
       <AllAssessmentsTable
         live={liveRecord}
-        extra={dbRecords}
+        extra={extraRecords}
         sample={sampleAll}
         canDelete={a.canSwitchRole}
         liveIds={liveIds}
@@ -269,9 +299,26 @@ export function DashboardTab() {
 const BAR_BG: Record<string, string> = { fast: "bg-violet-500", ok: "bg-brand-500", wait: "bg-amber-500", no: "bg-red-500" };
 const DIST_ORDER: HasilStatus[] = ["fast_track", "layak", "ditunda", "tidak_layak"];
 
+/** Collapse duplicate rows: the same session by id, or the same person+batch on
+ *  the same day (the running record vs its polled DB twin). Distinct historical
+ *  assessments (different batch/date) are preserved — this only kills true dupes. */
+function dedupeRecords<T extends AssessmentRecord>(rows: T[]): T[] {
+  const seen = new Set<string>();
+  const out: T[] = [];
+  for (const r of rows) {
+    const idKey = `id:${r.id}`;
+    const identityKey = `k:${r.name}|${r.departmentId}|${r.batch}|${r.tanggal}`;
+    if (seen.has(idKey) || seen.has(identityKey)) continue;
+    seen.add(idKey);
+    seen.add(identityKey);
+    out.push(r);
+  }
+  return out;
+}
+
 /** Batch-wide tracking tiles + outcome distribution — automatic, precise counts. */
 function BatchTracking({ live, extra = [], sample = [] }: { live: AssessmentRecord | null; extra?: EnrichedRecord[]; sample?: EnrichedRecord[] }) {
-  const all = [...(live ? [live] : []), ...extra, ...sample];
+  const all = dedupeRecords([...(live ? [live] : []), ...extra, ...sample]);
   const total = all.length;
   const selesai = all.filter((r) => r.status === "Selesai" || r.status === "Menunggu Interview").length;
   const berjalan = total - selesai;
@@ -380,17 +427,26 @@ function IndividualResult({
           <MeterBar pct={b.completionPct} colorClass="bg-brand-500" tooltip={`${b.filledEvaluators}/${b.totalEvaluators} penilai lengkap`} />
 
           <div className="mt-3 flex flex-wrap gap-2">
-            {b.evalScores.map((e) => (
-              <span
-                key={e.key}
-                className={cn(
-                  "inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-medium ring-1",
-                  e.done ? "bg-brand-500/10 text-brand-700 ring-brand-500/25 dark:text-brand-400" : "bg-muted text-muted-foreground ring-border",
-                )}
-              >
-                {e.done ? <CheckCircle2 className="size-3" /> : <Circle className="size-3" />} {e.name} · {e.filled}/6
-              </span>
-            ))}
+            {b.evalScores.map((e) => {
+              // Peer shows peers-submitted/expected (e.g. 1/5); others show params/6.
+              const unit = e.key === "peer" ? "rekan" : "";
+              return (
+                <span
+                  key={e.key}
+                  className={cn(
+                    "inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-medium ring-1",
+                    e.complete
+                      ? "bg-brand-500/10 text-brand-700 ring-brand-500/25 dark:text-brand-400"
+                      : e.done
+                        ? "bg-amber-500/10 text-amber-700 ring-amber-500/25 dark:text-amber-300"
+                        : "bg-muted text-muted-foreground ring-border",
+                  )}
+                >
+                  {e.complete ? <CheckCircle2 className="size-3" /> : <Circle className="size-3" />} {e.name} · {e.filled}/{e.total}
+                  {unit && <span className="opacity-70">{unit}</span>}
+                </span>
+              );
+            })}
           </div>
         </Card>
       )}
@@ -422,6 +478,11 @@ function IndividualResult({
             <p className="mt-0.5 text-[11px] text-muted-foreground">
               {e.done ? <>Kontribusi ke final: <span className="tabular-nums">{e.contribution.toFixed(1)}</span></> : "Belum diisi"}
             </p>
+            {e.key === "peer" && e.done && !e.complete && (
+              <p className="mt-1 text-[11px] font-medium text-amber-600 dark:text-amber-400">
+                Rata-rata sementara · {e.filled}/{e.total} rekan sejawat
+              </p>
+            )}
           </Card>
         ))}
       </ScrollRow>
@@ -675,7 +736,7 @@ function AllAssessmentsTable({
     return employeesForPosition(pos?.id).map((e) => ({ value: e.name, label: e.name }));
   }, [dept, jabatan]);
 
-  const all = React.useMemo(() => [...(live ? [live] : []), ...extra, ...sample], [live, extra, sample]);
+  const all = React.useMemo(() => dedupeRecords([...(live ? [live] : []), ...extra, ...sample]), [live, extra, sample]);
   const rows = React.useMemo(
     () =>
       all.filter(

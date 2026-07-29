@@ -9,7 +9,12 @@ import type {
   SessionState,
 } from "../assessment/session";
 import type { DimensionScores, EvaluatorKey, IvRecValue, ParamScores } from "../assessment/config";
-import { aggregatePeerScores, listPeerReviews } from "./assessment-roster";
+import { aggregatePeerScores, listAssignments, listPeerReviews } from "./assessment-roster";
+
+/** Nominal Rekan Sejawat panel size (spec: rata-rata 5 rekan sejawat). Used as
+ *  the expected-peer fallback when a participant has no explicit assignment yet,
+ *  so progress still reads "0/5" and nudges HC to appoint the panel. */
+const NOMINAL_PEERS = 5;
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
@@ -24,7 +29,7 @@ import { aggregatePeerScores, listPeerReviews } from "./assessment-roster";
 
 /* ---------------- row mappers ---------------- */
 
-const sessionFromRow = (r: any, evals: EvaluationState[]): SessionState => ({
+const sessionFromRow = (r: any, loaded: LoadedEvaluations): SessionState => ({
   id: r.id,
   batch: r.batch ?? "",
   nik: r.nik ?? "",
@@ -40,7 +45,9 @@ const sessionFromRow = (r: any, evals: EvaluationState[]): SessionState => ({
   financialImpact: !!r.financial_impact,
   ivNote: r.iv_note ?? "",
   status: r.status ?? "proses",
-  evaluations: evals,
+  evaluations: loaded.evals,
+  peerSubmitted: loaded.peerSubmitted,
+  peerExpected: loaded.peerExpected,
   createdBy: r.created_by ?? null,
   updatedAt: r.updated_at ?? r.created_at ?? new Date().toISOString(),
 });
@@ -86,26 +93,54 @@ export async function resolveEvaluator(userId: string): Promise<EvaluatorIdentit
 
 /* ---------------- session reads ---------------- */
 
+interface LoadedEvaluations {
+  evals: EvaluationState[];
+  /** How many assigned peers have submitted their review. */
+  peerSubmitted: number;
+  /** How many peers are expected on the panel (assignment size, else nominal 5). */
+  peerExpected: number;
+}
+
+/** How many Rekan Sejawat are expected for a participant — the size of their
+ *  assigned peer panel, falling back to the nominal 5 when none is set yet. */
+async function expectedPeerCount(participantUserId: string): Promise<number> {
+  if (!participantUserId) return NOMINAL_PEERS;
+  const assigns = await listAssignments();
+  const n = assigns.find((a) => a.participantUserId === participantUserId)?.peerUserIds.length ?? 0;
+  return n > 0 ? n : NOMINAL_PEERS;
+}
+
 /** Synthesize the Penilai 3 (Rekan Sejawat) column from the averaged, submitted
- *  peer reviews. Returns null when no peer has reviewed yet. */
-async function peerEvaluation(sessionId: string): Promise<EvaluationState | null> {
-  const reviews = await listPeerReviews(sessionId);
-  if (reviews.length === 0) return null;
+ *  peer reviews, plus the panel progress (submitted / expected). */
+async function peerAggregate(
+  sessionId: string,
+  participantUserId: string,
+): Promise<{ state: EvaluationState | null; submitted: number; expected: number }> {
+  const [reviews, expected] = await Promise.all([listPeerReviews(sessionId), expectedPeerCount(participantUserId)]);
   const { scores, submittedCount } = aggregatePeerScores(reviews);
-  return {
+  // No review row at all → no synthetic peer column, but still report the panel
+  // size so the dashboard can show "0/5".
+  if (reviews.length === 0) return { state: null, submitted: 0, expected };
+  const state: EvaluationState = {
     evaluatorKey: "peer",
     evaluatorUserId: null,
     scores,
-    note: submittedCount > 0 ? `Rata-rata ${submittedCount} rekan sejawat` : "Menunggu rekan sejawat",
+    note:
+      submittedCount > 0
+        ? `Rata-rata ${submittedCount} dari ${expected} rekan sejawat`
+        : "Menunggu rekan sejawat",
     interview: {},
     ivVote: null,
-    submitted: submittedCount > 0,
+    // "submitted" here means the panel is COMPLETE (all expected peers in) — a
+    // partial panel (e.g. 1/5) is still in progress.
+    submitted: expected > 0 && submittedCount >= expected,
     submittedAt: null,
     updatedAt: new Date().toISOString(),
   };
+  return { state, submitted: submittedCount, expected };
 }
 
-async function loadEvaluations(sessionId: string): Promise<EvaluationState[]> {
+async function loadEvaluations(sessionId: string, participantUserId: string): Promise<LoadedEvaluations> {
   let official: EvaluationState[];
   if (!dbEnabled) {
     const s = memSessions.get(sessionId);
@@ -117,29 +152,33 @@ async function loadEvaluations(sessionId: string): Promise<EvaluationState[]> {
   // Peer (Penilai 3) never lives in assessment_evaluations — it's the average of
   // the per-reviewer rows. Drop any stray 'peer' row and inject the aggregate.
   const rest = official.filter((e) => e.evaluatorKey !== "peer");
-  const peer = await peerEvaluation(sessionId);
-  return peer ? [...rest, peer] : rest;
+  const peer = await peerAggregate(sessionId, participantUserId);
+  return {
+    evals: peer.state ? [...rest, peer.state] : rest,
+    peerSubmitted: peer.submitted,
+    peerExpected: peer.expected,
+  };
 }
 
 /** Find a session by the participant's account id (read-only, no create). */
 export async function getSessionByParticipant(participantUserId: string): Promise<SessionState | null> {
   if (!participantUserId) return null;
   if (!dbEnabled) {
-    for (const { row } of memSessions.values()) if (row.participant_user_id === participantUserId) return sessionFromRow(row, await loadEvaluations(row.id));
+    for (const { row } of memSessions.values()) if (row.participant_user_id === participantUserId) return sessionFromRow(row, await loadEvaluations(row.id, row.participant_user_id ?? ""));
     return null;
   }
   const { data } = await db().from("assessment_sessions").select("*").eq("participant_user_id", participantUserId).maybeSingle();
-  return data ? sessionFromRow(data, await loadEvaluations(data.id)) : null;
+  return data ? sessionFromRow(data, await loadEvaluations(data.id, data.participant_user_id ?? "")) : null;
 }
 
 export async function getSession(id: string): Promise<SessionState | null> {
   if (!dbEnabled) {
     const s = memSessions.get(id);
-    return s ? sessionFromRow(s.row, await loadEvaluations(id)) : null;
+    return s ? sessionFromRow(s.row, await loadEvaluations(id, s.row.participant_user_id ?? "")) : null;
   }
   const { data } = await db().from("assessment_sessions").select("*").eq("id", id).maybeSingle();
   if (!data) return null;
-  return sessionFromRow(data, await loadEvaluations(id));
+  return sessionFromRow(data, await loadEvaluations(id, data.participant_user_id ?? ""));
 }
 
 /** Find the session for an employee in a batch, if one exists. */
@@ -193,7 +232,7 @@ export async function getOrCreateSession(seed: SessionSeed, createdBy: string | 
         await db().from("assessment_sessions").update(patch).eq("id", existing.id);
       }
     }
-    return sessionFromRow(existing, await loadEvaluations(existing.id));
+    return sessionFromRow(existing, await loadEvaluations(existing.id, existing.participant_user_id ?? ""));
   }
 
   const id = newId();
@@ -222,7 +261,9 @@ export async function getOrCreateSession(seed: SessionSeed, createdBy: string | 
   } else {
     await db().from("assessment_sessions").insert(row);
   }
-  return sessionFromRow(row, []);
+  // Brand-new session: no evaluations yet, but report the expected peer panel
+  // size so the dashboard shows "0/N" immediately.
+  return sessionFromRow(row, { evals: [], peerSubmitted: 0, peerExpected: await expectedPeerCount(row.participant_user_id ?? "") });
 }
 
 export async function listSessions(): Promise<SessionState[]> {
@@ -233,7 +274,7 @@ export async function listSessions(): Promise<SessionState[]> {
   }
   const { data } = await db().from("assessment_sessions").select("*").order("updated_at", { ascending: false });
   const rows = data ?? [];
-  const withEvals = await Promise.all(rows.map(async (r) => sessionFromRow(r, await loadEvaluations(r.id))));
+  const withEvals = await Promise.all(rows.map(async (r) => sessionFromRow(r, await loadEvaluations(r.id, r.participant_user_id ?? ""))));
   return withEvals;
 }
 

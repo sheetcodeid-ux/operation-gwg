@@ -51,6 +51,10 @@ export interface SessionState {
   ivNote: string;
   status: string;
   evaluations: EvaluationState[];
+  /** Rekan Sejawat (Penilai 3) panel progress: how many assigned peers have
+   *  submitted vs how many are expected (drives the "1/5" progress display). */
+  peerSubmitted: number;
+  peerExpected: number;
   createdBy: string | null;
   updatedAt: string;
 }
