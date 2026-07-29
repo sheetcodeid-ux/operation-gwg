@@ -323,10 +323,11 @@ function BatchTracking({ live, extra = [], sample = [] }: { live: AssessmentReco
   const selesai = all.filter((r) => r.status === "Selesai" || r.status === "Menunggu Interview").length;
   const berjalan = total - selesai;
   const count = (h: HasilStatus) => all.filter((r) => r.status !== "Proses Penilaian" && r.status !== "Draft" && r.hasil === h).length;
-  const avg = total ? Math.round((all.reduce((s, r) => s + r.finalScore, 0) / total) * 10) / 10 : 0;
 
-  // Distribution over decided assessments (a result is only meaningful once assessed).
+  // Distribution + average over decided assessments only — a partial (in-progress)
+  // score would otherwise drag the batch average down and mislead.
   const decided = all.filter((r) => r.status !== "Proses Penilaian" && r.status !== "Draft");
+  const avg = decided.length ? Math.round((decided.reduce((s, r) => s + r.finalScore, 0) / decided.length) * 10) / 10 : 0;
   const dTotal = decided.length || 1;
   const dist = DIST_ORDER.map((h) => ({ h, n: decided.filter((r) => r.hasil === h).length }));
   const dMax = Math.max(...dist.map((d) => d.n), 1);
@@ -334,7 +335,7 @@ function BatchTracking({ live, extra = [], sample = [] }: { live: AssessmentReco
   return (
     <div className="space-y-3">
       <ScrollRow cols={4}>
-        <MiniStat label="Total Assessment" value={total} hint={`Rata-rata skor ${avg}`} />
+        <MiniStat label="Total Assessment" value={total} hint={decided.length ? `Rata-rata skor ${avg} (${decided.length} selesai)` : "Belum ada yang selesai"} />
         <MiniStat label="Selesai / Berjalan" value={`${selesai} / ${berjalan}`} tone="ok" hint="status proses" />
         <MiniStat label="Layak + Fast Track" value={count("layak") + count("fast_track")} tone="ok" hint={`Fast track ${count("fast_track")}`} />
         <MiniStat label="Ditunda / Tidak Layak" value={`${count("ditunda")} / ${count("tidak_layak")}`} tone="wait" hint="perlu tindak lanjut" />
@@ -451,20 +452,39 @@ function IndividualResult({
         </Card>
       )}
 
-      {/* Final result hero */}
+      {/* Final result hero — the official final score is only shown once EVERY
+          evaluator (incl. the full Rekan Sejawat panel) has submitted, so a
+          partial assessment can't be misread as a low final number. */}
       <div className="grid gap-3 lg:grid-cols-[auto_1fr]">
         <Card className="flex flex-col items-center justify-center gap-3 text-center">
-          <ScoreRing value={b.final} sub="Skor Final" />
-          <TierPill tone={b.decisionTone}>{b.decisionLabel}</TierPill>
+          <ScoreRing value={b.allFilled ? b.final : 0} label={b.allFilled ? undefined : "—"} sub="Skor Final" />
+          {b.allFilled ? (
+            <TierPill tone={b.decisionTone}>{b.decisionLabel}</TierPill>
+          ) : (
+            <TierPill tone="wait">Menunggu penilaian lengkap</TierPill>
+          )}
         </Card>
         <Card className="flex flex-col justify-center">
-          <p className="text-sm font-semibold text-foreground">{b.tier.label}</p>
-          <p className="mt-1.5 text-xs leading-relaxed text-muted-foreground">
-            {b.overridden
-              ? "Meskipun skor memenuhi syarat, interview mengungkap concern serius sehingga kenaikan golongan tidak direkomendasikan periode ini."
-              : b.tier.action}
-          </p>
-          {b.ivRek && <p className="mt-2 text-xs text-muted-foreground">Rekomendasi interview: <span className="font-medium text-foreground">{b.ivRek.label}</span></p>}
+          {b.allFilled ? (
+            <>
+              <p className="text-sm font-semibold text-foreground">{b.tier.label}</p>
+              <p className="mt-1.5 text-xs leading-relaxed text-muted-foreground">
+                {b.overridden
+                  ? "Meskipun skor memenuhi syarat, interview mengungkap concern serius sehingga kenaikan golongan tidak direkomendasikan periode ini."
+                  : b.tier.action}
+              </p>
+              {b.ivRek && <p className="mt-2 text-xs text-muted-foreground">Rekomendasi interview: <span className="font-medium text-foreground">{b.ivRek.label}</span></p>}
+            </>
+          ) : (
+            <>
+              <p className="text-sm font-semibold text-foreground">Skor final belum dihitung</p>
+              <p className="mt-1.5 text-xs leading-relaxed text-muted-foreground">
+                Skor final baru muncul setelah <span className="font-medium text-foreground">{b.filledEvaluators}/{b.totalEvaluators} penilai</span> lengkap
+                {b.evalScores.some((e) => e.key === "peer" && !e.complete) && " (termasuk seluruh panel rekan sejawat)"}.
+                Angka per penilai di bawah sudah dapat dipantau sebagai referensi sementara.
+              </p>
+            </>
+          )}
         </Card>
       </div>
 
