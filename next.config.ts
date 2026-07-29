@@ -21,6 +21,8 @@ const csp = [
   `script-src 'self' 'unsafe-inline'${isProd ? "" : " 'unsafe-eval'"}`,
   "style-src 'self' 'unsafe-inline'",
   "img-src 'self' data: blob: https://*.supabase.co https://*.r2.cloudflarestorage.com",
+  // Training video/audio streamed from R2 (E-Learning) — <video>/<audio> use media-src.
+  "media-src 'self' blob: https://*.r2.cloudflarestorage.com",
   "font-src 'self' data:",
   "connect-src 'self' https://*.supabase.co wss://*.supabase.co https://*.r2.cloudflarestorage.com",
   "frame-src 'self'",

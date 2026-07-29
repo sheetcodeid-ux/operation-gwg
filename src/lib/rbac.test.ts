@@ -76,6 +76,18 @@ describe("menu access matrix", () => {
     expect(canSeeMenu("admin_operation", "users")).toBe(false);
     expect(canSeeMenu("head_operation", "users")).toBe(false);
   });
+
+  it("gives E-Learning management to Head Operational, learning-only to Coordinator Area", () => {
+    // Head Operational manages (both menus) — the only role that can upload/edit.
+    expect(canSeeMenu("head_operation", "elearning")).toBe(true);
+    expect(canSeeMenu("head_operation", "elearning_admin")).toBe(true);
+    // Coordinator Area learns only — no management menu.
+    expect(canSeeMenu("area_coordinator", "elearning")).toBe(true);
+    expect(canSeeMenu("area_coordinator", "elearning_admin")).toBe(false);
+    // Other roles get neither.
+    expect(canSeeMenu("supervisor", "elearning")).toBe(false);
+    expect(canSeeMenu("pos_operation", "elearning_admin")).toBe(false);
+  });
 });
 
 describe("hasGlobalScope", () => {

@@ -20,6 +20,8 @@ export type MenuKey =
   | "hc_submit"
   | "hc_review"
   | "sys_submit"
+  | "elearning"
+  | "elearning_admin"
   | "assessment"
   | "hpp_dash"
   | "hpp"
@@ -73,6 +75,8 @@ export const NAV_MENUS: Omit<NavItem, "section">[] = [
   { key: "hc_submit", label: "Pengajuan Dokumen", href: "/hc/pengajuan", icon: "FileUp" },
   { key: "hc_review", label: "Antrian Dokumen", href: "/hc/antrian", icon: "FolderInput" },
   { key: "sys_submit", label: "Pengajuan System", href: "/system/pengajuan", icon: "MonitorCog" },
+  { key: "elearning", label: "E-Learning", href: "/elearning", icon: "GraduationCap" },
+  { key: "elearning_admin", label: "Kelola E-Learning", href: "/elearning/kelola", icon: "LibraryBig" },
   { key: "reports", label: "Reports", href: "/reports", icon: "FileText" },
   { key: "assessment", label: "Assessment Golongan", href: "/assessment", icon: "Award" },
   { key: "hpp_dash", label: "Dashboard R&D", href: "/rnd/dashboard", icon: "ChartSpline" },
@@ -141,8 +145,8 @@ const OPERATION_FULL: MenuKey[] = [
  *  supervisor (field staff at the branches) gets it. */
 export const ROLE_MENUS: Record<Role, MenuKey[]> = {
   super_admin: NAV_MENUS.map((m) => m.key), // everything, incl. admin menus
-  head_operation: [...OPERATION_FULL, "assessment"], // monitors every branch (no area scope)
-  area_coordinator: [...OPERATION_FULL, "assessment"], // same menus, scoped to their area
+  head_operation: [...OPERATION_FULL, "elearning", "elearning_admin", "assessment"], // manages E-Learning + monitors every branch
+  area_coordinator: [...OPERATION_FULL, "elearning", "assessment"], // learner (E-Learning), menus scoped to their area
   data_operation: ["work", "assessment"],
   pos_operation: ["work", "assessment"],
   admin_operation: ["work", "complaints", "assessment"],
@@ -160,7 +164,7 @@ export const ROLE_MENUS: Record<Role, MenuKey[]> = {
 const DIVISION_MENUS: { division: Division; menus: MenuKey[] }[] = [
   // sys_review sits under Operation for placement, but access is jabatan-gated
   // (System Support) via an injected grant — it is NOT a general Operation menu.
-  { division: "Operation", menus: [...OPERATION_FULL, "sys_review"] },
+  { division: "Operation", menus: [...OPERATION_FULL, "sys_review", "elearning", "elearning_admin"] },
   { division: "Supervisor", menus: ["hospitality", "hygiene", "complaints", "hc_submit", "sys_submit"] },
   { division: "Product Development & Quality", menus: ["hpp_dash", "work", "hpp", "hpp_db", "hpp_bahan", "hpp_price"] },
   { division: "Human Capital", menus: ["work", "hc_review", "assessment"] },
