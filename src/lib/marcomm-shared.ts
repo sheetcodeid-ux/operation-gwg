@@ -30,6 +30,8 @@ export interface MarcommReview {
   eventType: MarcommEventType | null;
   productNames: string[];
   outletIds: string[];
+  /** Event applies to every outlet (measured company-wide). */
+  allOutlets: boolean;
   measureStart: string | null;
   measureEnd: string | null;
   note: string;
@@ -44,8 +46,11 @@ export interface ReviewableEvent {
   name: string;
   description: string;
   outletId: string;
+  /** Human display of scope: outlet name / "N outlet" / "Semua Outlet". */
   outletName: string;
   picName: string;
+  /** Who filed it: Coordinator Area (operational) or Marketing Communication. */
+  origin: "ca" | "marcomm";
   proposedBudget: number; // budget as filled operationally (proposal)
   startDate: string;
   endDate: string;

@@ -14,13 +14,12 @@ import {
   type ReviewableEvent,
 } from "@/lib/marcomm-shared";
 import { ImpactView } from "./impact";
-import { approveEventAction, createMarcommEventAction, rejectEventAction, resetReviewAction } from "@/lib/actions/marcomm";
+import { approveEventAction, createMarcommProposalAction, rejectEventAction, resetReviewAction } from "@/lib/actions/marcomm";
 import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { Field, Input, Textarea } from "@/components/ui/input";
-import { Combobox } from "@/components/ui/combobox";
 import { DatePicker } from "@/components/ui/date-picker";
 import { SegmentedTabs } from "@/components/ui/segmented-tabs";
 import { MultiCombobox, SelectionChips } from "@/components/ui/multi-combobox";
@@ -113,29 +112,36 @@ export function MarcommEvents({
         <AccDialog event={accEvent} products={products} outlets={outlets} onClose={() => setAccId(null)} />
       )}
       {rejectEvent && <RejectDialog event={rejectEvent} onClose={() => setRejectId(null)} />}
-      {newOpen && <NewEventDialog outlets={outlets} onClose={() => setNewOpen(false)} />}
+      {newOpen && <NewEventDialog products={products} outlets={outlets} onClose={() => setNewOpen(false)} />}
     </div>
   );
 }
 
-function NewEventDialog({ outlets, onClose }: { outlets: { id: string; name: string }[]; onClose: () => void }) {
+function NewEventDialog({ products, outlets, onClose }: { products: { name: string; brand: string }[]; outlets: { id: string; name: string }[]; onClose: () => void }) {
   const router = useRouter();
   const [busy, setBusy] = React.useState(false);
   const [name, setName] = React.useState("");
-  const [outletId, setOutletId] = React.useState(outlets[0]?.id ?? "");
   const [description, setDescription] = React.useState("");
+  const [type, setType] = React.useState<MarcommEventType>("event");
+  const [productNames, setProductNames] = React.useState<string[]>([]);
+  const [outletIds, setOutletIds] = React.useState<string[]>([]);
+  const [allOutlets, setAllOutlets] = React.useState(true);
   const [start, setStart] = React.useState("");
   const [end, setEnd] = React.useState("");
 
+  const productOpts = products.map((p) => ({ value: p.name, label: `${p.name} · ${p.brand}` }));
+  const outletOpts = outlets.map((o) => ({ value: o.id, label: o.name }));
+
   const submit = () => {
-    if (!name.trim()) return toast.error("Nama event wajib diisi.");
-    if (!outletId) return toast.error("Pilih outlet.");
+    if (!name.trim()) return toast.error("Nama event/promo wajib diisi.");
     if (!start || !end) return toast.error("Tentukan tanggal mulai & selesai.");
+    if (type === "promo" && productNames.length === 0) return toast.error("Pilih minimal satu produk.");
+    if (type === "event" && !allOutlets && outletIds.length === 0) return toast.error("Pilih outlet atau centang Semua Outlet.");
     setBusy(true);
-    createMarcommEventAction({ name, outletId, description, startDate: start, endDate: end })
+    createMarcommProposalAction({ title: name, description, eventType: type, productNames, outletIds, allOutlets, startDate: start, endDate: end })
       .then((res) => {
         if (res?.error) return toast.error(res.error);
-        toast.success("Event ditambahkan. Lanjutkan dengan ACC & klasifikasi.");
+        toast.success("Diajukan. Lanjutkan dengan ACC (tetapkan budget).");
         onClose();
         router.refresh();
       })
@@ -144,24 +150,61 @@ function NewEventDialog({ outlets, onClose }: { outlets: { id: string; name: str
 
   return (
     <Dialog open onOpenChange={(v) => !v && onClose()}>
-      <DialogContent title="Tambah Event / Promo" description="Ajukan event atau promo baru — langkah berikutnya ACC & klasifikasi." align="center" className="max-w-lg">
-        <div className="space-y-3 p-5">
+      <DialogContent title="Tambah Event / Promo" description="Ajukan event atau promo baru. Budget ditetapkan saat ACC." align="center" className="max-w-lg">
+        <div className="max-h-[76vh] space-y-3 overflow-y-auto p-5">
           <Field label="Nama Event / Promo">
             <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="cth. Promo Kopi Susu Merdeka" />
           </Field>
-          <Field label="Outlet">
-            <Combobox value={outletId} onChange={setOutletId} options={outlets.map((o) => ({ value: o.id, label: o.name }))} placeholder="Pilih outlet" searchPlaceholder="Cari outlet…" />
+
+          <Field label="Kategori">
+            <SegmentedTabs
+              value={type}
+              onChange={(v) => setType(v as MarcommEventType)}
+              items={[
+                { value: "event", label: "Event (Outlet)" },
+                { value: "promo", label: "Promo (Produk)" },
+              ]}
+            />
           </Field>
+
+          {type === "promo" ? (
+            <Field label={`Produk (${productNames.length})`} hint="Dampak diukur dari omzet produk ini saja.">
+              {productOpts.length ? (
+                <div className="space-y-2">
+                  <MultiCombobox value={productNames} onChange={setProductNames} options={productOpts} placeholder="Pilih produk…" searchPlaceholder="Cari produk…" />
+                  <SelectionChips labels={productNames} onClear={() => setProductNames([])} />
+                </div>
+              ) : (
+                <p className="rounded-lg border border-dashed border-border p-2.5 text-xs text-muted-foreground">Belum ada produk di katalog HPP.</p>
+              )}
+            </Field>
+          ) : (
+            <Field label="Outlet yang terdampak" hint="Beberapa cabang atau semua outlet.">
+              <div className="space-y-2">
+                <label className="flex cursor-pointer items-center gap-2 rounded-lg border border-border p-2.5 text-sm text-foreground">
+                  <input type="checkbox" checked={allOutlets} onChange={(e) => setAllOutlets(e.target.checked)} className="size-4 accent-brand-500" />
+                  <Store className="size-4 text-muted-foreground" /> Semua Outlet
+                </label>
+                {!allOutlets && (
+                  <>
+                    <MultiCombobox value={outletIds} onChange={setOutletIds} options={outletOpts} placeholder="Pilih beberapa outlet…" searchPlaceholder="Cari outlet…" />
+                    <SelectionChips labels={outletIds.map((id) => outlets.find((o) => o.id === id)?.name).filter((n): n is string => !!n)} onClear={() => setOutletIds([])} />
+                  </>
+                )}
+              </div>
+            </Field>
+          )}
+
           <Field label="Deskripsi (opsional)">
             <Textarea rows={2} value={description} onChange={(e) => setDescription(e.target.value)} placeholder="Detail event / promo…" />
           </Field>
           <div className="grid gap-3 sm:grid-cols-2">
-            <Field label="Tanggal Mulai"><DatePicker value={start} onChange={setStart} /></Field>
+            <Field label={type === "promo" ? "Mulai Jual" : "Tanggal Mulai"}><DatePicker value={start} onChange={setStart} /></Field>
             <Field label="Tanggal Selesai"><DatePicker value={end} onChange={setEnd} /></Field>
           </div>
           <div className="flex justify-end gap-2 pt-1">
             <Button variant="ghost" onClick={onClose} disabled={busy}>Batal</Button>
-            <Button onClick={submit} disabled={busy}>{busy ? <Loader2 className="size-4 animate-spin" /> : <Plus className="size-4" />} Tambah</Button>
+            <Button onClick={submit} disabled={busy}>{busy ? <Loader2 className="size-4 animate-spin" /> : <Plus className="size-4" />} Ajukan</Button>
           </div>
         </div>
       </DialogContent>
@@ -260,6 +303,7 @@ function AccDialog({ event, products, outlets, onClose }: { event: ReviewableEve
   const [type, setType] = React.useState<MarcommEventType>(r.eventType ?? "event");
   const [productNames, setProductNames] = React.useState<string[]>(r.productNames);
   const [outletIds, setOutletIds] = React.useState<string[]>(r.outletIds.length ? r.outletIds : event.outletId ? [event.outletId] : []);
+  const [allOutlets, setAllOutlets] = React.useState(r.allOutlets);
   const [start, setStart] = React.useState(r.measureStart ?? event.startDate.slice(0, 10));
   const [end, setEnd] = React.useState(r.measureEnd ?? event.endDate.slice(0, 10));
   const [note, setNote] = React.useState(r.note);
@@ -269,7 +313,7 @@ function AccDialog({ event, products, outlets, onClose }: { event: ReviewableEve
 
   const submit = () => {
     setBusy(true);
-    approveEventAction({ eventId: event.id, budget, eventType: type, productNames, outletIds, measureStart: start, measureEnd: end, note })
+    approveEventAction({ eventId: event.id, budget, eventType: type, productNames, outletIds, allOutlets, measureStart: start, measureEnd: end, note })
       .then((res) => {
         if (res?.error) return toast.error(res.error);
         toast.success("Event di-ACC.");
@@ -310,10 +354,18 @@ function AccDialog({ event, products, outlets, onClose }: { event: ReviewableEve
               )}
             </Field>
           ) : (
-            <Field label={`Outlet yang terdampak (${outletIds.length})`}>
+            <Field label="Outlet yang terdampak" hint="Dampak diukur dari omzet outlet terpilih.">
               <div className="space-y-2">
-                <MultiCombobox value={outletIds} onChange={setOutletIds} options={outletOpts} placeholder="Pilih outlet…" searchPlaceholder="Cari outlet…" />
-                <SelectionChips labels={outletIds.map((id) => outlets.find((o) => o.id === id)?.name).filter((n): n is string => !!n)} onClear={() => setOutletIds([])} />
+                <label className="flex cursor-pointer items-center gap-2 rounded-lg border border-border p-2.5 text-sm text-foreground">
+                  <input type="checkbox" checked={allOutlets} onChange={(e) => setAllOutlets(e.target.checked)} className="size-4 accent-brand-500" />
+                  <Store className="size-4 text-muted-foreground" /> Semua Outlet (dampak dihitung company-wide)
+                </label>
+                {!allOutlets && (
+                  <>
+                    <MultiCombobox value={outletIds} onChange={setOutletIds} options={outletOpts} placeholder="Pilih beberapa outlet…" searchPlaceholder="Cari outlet…" />
+                    <SelectionChips labels={outletIds.map((id) => outlets.find((o) => o.id === id)?.name).filter((n): n is string => !!n)} onClear={() => setOutletIds([])} />
+                  </>
+                )}
               </div>
             </Field>
           )}

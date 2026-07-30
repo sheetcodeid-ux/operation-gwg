@@ -5,7 +5,7 @@ import { outletName } from "./store";
 import { listSales } from "./hpp-sales";
 import { listReviewableEvents } from "./marcomm";
 import { esbConfigured, esbListBranches } from "@/lib/integrations/esb-client";
-import { fmtRupiah, verdictOf, windowDays, type EventImpact, type ProductBreakdown, type ReviewableEvent } from "@/lib/marcomm-shared";
+import { verdictOf, windowDays, type EventImpact, type ProductBreakdown, type ReviewableEvent } from "@/lib/marcomm-shared";
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
@@ -119,21 +119,29 @@ async function computeImpact(e: ReviewableEvent, bmap: Map<string, string>, sale
   let note = "";
 
   if (type === "event") {
-    const branchIds = matchBranchIds(r.outletIds, bmap);
-    if (branchIds.length) {
-      omzetScope = "outlet";
-      for (const b of branchIds) {
-        windowOmzet += await omzetInRange(b, start, end);
-        baselineOmzet += await omzetInRange(b, baseFrom, baseTo);
-      }
-    } else {
+    // Event → outlet omzet. All Outlets = company-wide; else the affected outlets.
+    if (r.allOutlets) {
       omzetScope = "all";
       windowOmzet = await omzetInRange("", start, end);
       baselineOmzet = await omzetInRange("", baseFrom, baseTo);
-      note = esbConfigured() ? "Outlet tidak terpetakan ke cabang ESB — omzet dihitung seluruh outlet." : "Integrasi ESB/Musiman belum aktif — data omzet belum tersedia.";
+      note = "Dampak dihitung dari omzet seluruh outlet.";
+    } else {
+      const branchIds = matchBranchIds(r.outletIds, bmap);
+      if (branchIds.length) {
+        omzetScope = "outlet";
+        for (const b of branchIds) {
+          windowOmzet += await omzetInRange(b, start, end);
+          baselineOmzet += await omzetInRange(b, baseFrom, baseTo);
+        }
+      } else {
+        omzetScope = "all";
+        windowOmzet = await omzetInRange("", start, end);
+        baselineOmzet = await omzetInRange("", baseFrom, baseTo);
+        note = esbConfigured() ? "Outlet tidak terpetakan ke cabang ESB — omzet dihitung seluruh outlet." : "Integrasi ESB/Musiman belum aktif — data omzet belum tersedia.";
+      }
     }
   } else {
-    // promo — product monthly sales as the primary impact.
+    // Promo → omzet produk saja (penjualan bulanan produk terpilih).
     const winMonths = monthsBetween(start, end);
     const baseMonths = monthsBefore(winMonths[0], winMonths.length);
     const win = await productOmzet(r.productNames, winMonths, salesCache);
@@ -145,11 +153,7 @@ async function computeImpact(e: ReviewableEvent, bmap: Map<string, string>, sale
       const b = base.byName.get(n) ?? 0;
       productBreakdown.push({ name: n, windowOmzet: w, baselineOmzet: b, uplift: w - b });
     }
-    // Company-wide daily omzet as context.
-    const ctxWin = await omzetInRange("", start, end);
-    const ctxBase = await omzetInRange("", baseFrom, baseTo);
-    if (ctxWin || ctxBase) note = `Omzet harian seluruh outlet: ${fmtRupiah(ctxWin)} vs baseline ${fmtRupiah(ctxBase)} (selisih ${fmtRupiah(ctxWin - ctxBase)}).`;
-    else if (windowOmzet === 0 && baselineOmzet === 0) note = "Penjualan produk pada periode ini belum tersedia (butuh sinkronisasi penjualan HPP).";
+    if (windowOmzet === 0 && baselineOmzet === 0) note = "Penjualan produk pada periode ini belum tersedia (butuh sinkronisasi penjualan HPP).";
   }
 
   const uplift = windowOmzet - baselineOmzet;

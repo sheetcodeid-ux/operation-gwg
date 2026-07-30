@@ -1,5 +1,6 @@
 import "server-only";
 
+import { randomUUID } from "node:crypto";
 import { db, dbEnabled } from "./db";
 import { markLocalWrite } from "./hydrate";
 import { getOutlets, outletName, userName } from "./store";
@@ -22,6 +23,7 @@ const emptyReview = (eventId: string): MarcommReview => ({
   eventType: null,
   productNames: [],
   outletIds: [],
+  allOutlets: false,
   measureStart: null,
   measureEnd: null,
   note: "",
@@ -37,6 +39,7 @@ const reviewFromRow = (r: any): MarcommReview => ({
   eventType: (r.event_type ?? null) as MarcommEventType | null,
   productNames: Array.isArray(r.product_names) ? r.product_names : [],
   outletIds: Array.isArray(r.outlet_ids) ? r.outlet_ids : [],
+  allOutlets: !!r.all_outlets,
   measureStart: r.measure_start ?? null,
   measureEnd: r.measure_end ?? null,
   note: r.note ?? "",
@@ -45,7 +48,16 @@ const reviewFromRow = (r: any): MarcommReview => ({
   approvedAt: r.approved_at ?? null,
 });
 
-/** Every operational event joined with its MarComm review (default = pending). */
+/** Human display of an event's outlet scope. */
+function outletDisplay(review: MarcommReview, fallbackOutletId: string): string {
+  if (review.allOutlets) return "Semua Outlet";
+  if (review.outletIds.length > 1) return `${review.outletIds.length} outlet`;
+  if (review.outletIds.length === 1) return outletName(review.outletIds[0]);
+  return fallbackOutletId ? outletName(fallbackOutletId) : "—";
+}
+
+/** Every reviewable event — Coordinator Area's operational events joined with
+ *  their MarComm review, PLUS self-contained proposals MarComm filed directly. */
 export async function listReviewableEvents(): Promise<ReviewableEvent[]> {
   if (!dbEnabled) return [];
   const [{ data: evRows }, { data: revRows }] = await Promise.all([
@@ -53,25 +65,54 @@ export async function listReviewableEvents(): Promise<ReviewableEvent[]> {
     db().from("marcomm_reviews").select("*"),
   ]);
   const reviews = new Map<string, MarcommReview>();
-  for (const r of (revRows ?? []) as any[]) reviews.set(r.event_id, reviewFromRow(r));
+  const marcommRaw: any[] = [];
+  for (const r of (revRows ?? []) as any[]) {
+    reviews.set(r.event_id, reviewFromRow(r));
+    if (r.origin === "marcomm") marcommRaw.push(r);
+  }
 
-  return ((evRows ?? []) as any[]).map((row) => {
+  // CA-originated events (operational Event Tracker).
+  const caEvents: ReviewableEvent[] = ((evRows ?? []) as any[]).map((row) => {
     const e = eventFromRow(row);
+    const review = reviews.get(e.id) ?? emptyReview(e.id);
     return {
       id: e.id,
       name: e.name,
       description: e.description,
       outletId: e.outletId,
-      outletName: outletName(e.outletId),
+      outletName: outletDisplay(review, e.outletId),
       picName: userName(e.picId),
+      origin: "ca" as const,
       proposedBudget: e.budget,
       startDate: e.startDate,
       endDate: e.endDate,
       status: e.status,
       createdAt: e.createdAt,
-      review: reviews.get(e.id) ?? emptyReview(e.id),
+      review,
     };
   });
+
+  // MarComm-originated proposals (self-contained; no ops_event).
+  const marcommEvents: ReviewableEvent[] = marcommRaw.map((r) => {
+    const review = reviewFromRow(r);
+    return {
+      id: r.event_id,
+      name: r.title || "(tanpa nama)",
+      description: r.description ?? "",
+      outletId: "",
+      outletName: outletDisplay(review, ""),
+      picName: review.approvedByName ?? "Marketing Communication",
+      origin: "marcomm" as const,
+      proposedBudget: review.budget,
+      startDate: r.start_date ?? r.created_at,
+      endDate: r.end_date ?? r.created_at,
+      status: "upcoming",
+      createdAt: r.created_at,
+      review,
+    };
+  });
+
+  return [...caEvents, ...marcommEvents].sort((a, b) => (a.startDate < b.startDate ? 1 : -1));
 }
 
 export async function getReview(eventId: string): Promise<MarcommReview> {
@@ -86,6 +127,7 @@ export interface ApproveReviewInput {
   eventType: MarcommEventType;
   productNames: string[];
   outletIds: string[];
+  allOutlets: boolean;
   measureStart: string;
   measureEnd: string;
   note: string;
@@ -102,7 +144,8 @@ export async function approveReview(input: ApproveReviewInput): Promise<{ error?
       budget: input.budget,
       event_type: input.eventType,
       product_names: input.eventType === "promo" ? input.productNames : [],
-      outlet_ids: input.eventType === "event" ? input.outletIds : [],
+      outlet_ids: input.eventType === "event" && !input.allOutlets ? input.outletIds : [],
+      all_outlets: input.eventType === "event" ? input.allOutlets : false,
       measure_start: input.measureStart,
       measure_end: input.measureEnd,
       note: input.note,
@@ -114,6 +157,41 @@ export async function approveReview(input: ApproveReviewInput): Promise<{ error?
     { onConflict: "event_id" },
   );
   return error ? { error: error.message } : {};
+}
+
+export interface ProposalInput {
+  title: string;
+  description: string;
+  eventType: MarcommEventType;
+  productNames: string[];
+  outletIds: string[];
+  allOutlets: boolean;
+  startDate: string;
+  endDate: string;
+}
+
+/** MarComm files a self-contained event/promo proposal (multi/all outlet). It
+ *  lands as pending, already classified; ACC only needs to set the budget. */
+export async function createMarcommProposal(input: ProposalInput): Promise<{ id: string } | null> {
+  if (!dbEnabled) return null;
+  markLocalWrite();
+  const id = `mce_${randomUUID()}`;
+  const { error } = await db().from("marcomm_reviews").insert({
+    event_id: id,
+    origin: "marcomm",
+    status: "pending",
+    title: input.title,
+    description: input.description,
+    start_date: input.startDate,
+    end_date: input.endDate,
+    event_type: input.eventType,
+    product_names: input.eventType === "promo" ? input.productNames : [],
+    outlet_ids: input.eventType === "event" && !input.allOutlets ? input.outletIds : [],
+    all_outlets: input.eventType === "event" ? input.allOutlets : false,
+    measure_start: input.startDate,
+    measure_end: input.endDate,
+  });
+  return error ? null : { id };
 }
 
 export async function rejectReview(eventId: string, reason: string, by: string): Promise<{ error?: string }> {
