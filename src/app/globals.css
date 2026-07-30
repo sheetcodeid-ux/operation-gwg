@@ -378,3 +378,98 @@
   .print-break { break-before: page; }
   a { text-decoration: none !important; color: inherit !important; }
 }
+
+/* ============================================================
+   Dashboard "Command Center" neon demo — SCOPED to `.dash-neon`.
+   A deep-black nebula backdrop with blue/violet/teal blooms, glass
+   cards with a neon edge + soft bloom, and glowing metric numbers.
+   Everything is namespaced under `.dash-neon` so nothing leaks to the
+   rest of the app. The wrapper also carries `.dark`, so the panel reads
+   as an intentional dark control room regardless of the global theme.
+   ============================================================ */
+@layer components {
+  .dash-neon {
+    position: relative;
+    isolation: isolate;
+  }
+
+  /* Nebula backdrop — deep black + neon radial blooms. */
+  .dash-neon::before {
+    content: "";
+    position: fixed;
+    inset: 0;
+    z-index: -2;
+    pointer-events: none;
+    background:
+      radial-gradient(48% 38% at 10% -6%, rgba(56, 130, 246, 0.22), transparent 70%),
+      radial-gradient(44% 40% at 106% 6%, rgba(139, 92, 246, 0.20), transparent 70%),
+      radial-gradient(64% 52% at 50% 116%, rgba(13, 148, 136, 0.16), transparent 72%),
+      linear-gradient(180deg, #070912, #05060c);
+  }
+
+  /* Faint tech grid, fading out lower down. */
+  .dash-neon::after {
+    content: "";
+    position: fixed;
+    inset: 0;
+    z-index: -1;
+    pointer-events: none;
+    background-image:
+      linear-gradient(rgba(140, 170, 255, 0.05) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(140, 170, 255, 0.05) 1px, transparent 1px);
+    background-size: 48px 48px;
+    -webkit-mask-image: radial-gradient(85% 60% at 50% 0%, #000 35%, transparent 100%);
+    mask-image: radial-gradient(85% 60% at 50% 0%, #000 35%, transparent 100%);
+  }
+
+  /* Glass / stat surfaces → darker translucent glass with a neon edge + bloom. */
+  .dash-neon .glass,
+  .dash-neon .card-gradient {
+    background:
+      linear-gradient(180deg, rgba(255, 255, 255, 0.055), rgba(255, 255, 255, 0.012) 34%, rgba(255, 255, 255, 0) 62%),
+      color-mix(in oklch, #0b1220 80%, transparent);
+    border: 1px solid rgba(120, 160, 255, 0.16);
+    box-shadow:
+      0 1px 0 0 rgba(255, 255, 255, 0.05) inset,
+      0 18px 48px -30px rgba(0, 0, 0, 0.95),
+      0 0 44px -22px rgba(56, 130, 246, 0.35);
+    -webkit-backdrop-filter: blur(16px) saturate(155%);
+    backdrop-filter: blur(16px) saturate(155%);
+    transition: border-color 0.25s ease, box-shadow 0.25s ease, transform 0.25s ease;
+  }
+  .dash-neon .glass:hover,
+  .dash-neon .card-gradient:hover {
+    border-color: rgba(130, 170, 255, 0.32);
+    box-shadow:
+      0 1px 0 0 rgba(255, 255, 255, 0.07) inset,
+      0 22px 60px -28px rgba(0, 0, 0, 0.98),
+      0 0 48px -14px rgba(72, 140, 255, 0.5);
+  }
+
+  /* Metric icon squares → neon-tinted chip with a glowing ring. */
+  .dash-neon .bg-muted.ring-border {
+    background: linear-gradient(160deg, rgba(56, 130, 246, 0.28), rgba(139, 92, 246, 0.18)) !important;
+    box-shadow: 0 0 20px -6px rgba(72, 140, 255, 0.55), 0 0 0 1px rgba(130, 170, 255, 0.25) inset;
+  }
+  .dash-neon .bg-muted.ring-border svg {
+    color: #cfe0ff !important;
+  }
+
+  /* Big metric numbers → soft neon glow. */
+  .dash-neon .tabular-nums {
+    text-shadow: 0 0 24px rgba(120, 170, 255, 0.28);
+  }
+
+  /* Section titles → crisp with a faint glow. */
+  .dash-neon h1,
+  .dash-neon h2 {
+    text-shadow: 0 0 26px rgba(120, 170, 255, 0.22);
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .dash-neon .glass,
+    .dash-neon .card-gradient {
+      transition: none;
+    }
+  }
+}

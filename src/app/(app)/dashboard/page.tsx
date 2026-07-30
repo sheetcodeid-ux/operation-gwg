@@ -149,7 +149,7 @@ export default async function DashboardPage({
   ];
 
   return (
-    <div className="w-full">
+    <div className="dash-neon dark w-full">
       <PageHeader
         icon={LayoutDashboard}
         title="Executive Dashboard"
