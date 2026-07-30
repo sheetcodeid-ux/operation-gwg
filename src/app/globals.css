@@ -473,3 +473,103 @@
     }
   }
 }
+
+/* ---- Dashboard neon — enhancement pass v2 (still scoped to .dash-neon) ---- */
+@keyframes dashDrift {
+  0%, 100% { transform: translate3d(0, 0, 0) scale(1); }
+  50% { transform: translate3d(0, -1.6%, 0) scale(1.05); }
+}
+@layer components {
+  /* Slowly drifting aurora so the backdrop feels alive. */
+  .dash-neon::before { animation: dashDrift 22s ease-in-out infinite; }
+  @media (prefers-reduced-motion: reduce) {
+    .dash-neon::before { animation: none; }
+  }
+
+  /* Richer card: bright neon top hairline + top-left light source + glass. */
+  .dash-neon .glass,
+  .dash-neon .card-gradient {
+    background:
+      linear-gradient(90deg, transparent 6%, rgba(120, 170, 255, 0.55) 50%, transparent 94%) top / 100% 1px no-repeat,
+      radial-gradient(120% 85% at 0% 0%, rgba(96, 150, 255, 0.13), transparent 46%),
+      linear-gradient(180deg, rgba(255, 255, 255, 0.05), rgba(255, 255, 255, 0.012) 34%, rgba(255, 255, 255, 0) 62%),
+      color-mix(in oklch, #0a1120 82%, transparent);
+    border: 1px solid rgba(120, 160, 255, 0.15);
+    box-shadow:
+      0 1px 0 0 rgba(255, 255, 255, 0.05) inset,
+      0 20px 50px -30px rgba(0, 0, 0, 0.95),
+      0 0 46px -24px rgba(56, 130, 246, 0.35);
+  }
+  .dash-neon .glass:hover,
+  .dash-neon .card-gradient:hover {
+    transform: translateY(-2px);
+    border-color: rgba(130, 175, 255, 0.34);
+    box-shadow:
+      0 1px 0 0 rgba(255, 255, 255, 0.08) inset,
+      0 26px 66px -28px rgba(0, 0, 0, 0.98),
+      0 0 52px -12px rgba(80, 150, 255, 0.55);
+  }
+
+  /* Page title → cool neon gradient (drops the flat glow). */
+  .dash-neon h1 {
+    background: linear-gradient(92deg, #f2f6ff, #a9c2ff 55%, #c4a9ff);
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+    text-shadow: none;
+  }
+
+  /* Neon selection + slim glowing scrollbars inside the panel. */
+  .dash-neon ::selection { background: rgba(96, 150, 255, 0.35); color: #fff; }
+  .dash-neon *::-webkit-scrollbar { width: 10px; height: 10px; }
+  .dash-neon *::-webkit-scrollbar-track { background: transparent; }
+  .dash-neon *::-webkit-scrollbar-thumb {
+    background: linear-gradient(180deg, rgba(80, 140, 255, 0.7), rgba(139, 92, 246, 0.7));
+    border-radius: 8px;
+    border: 2px solid transparent;
+    background-clip: padding-box;
+  }
+  .dash-neon *::-webkit-scrollbar-thumb:hover {
+    background: linear-gradient(180deg, rgba(100, 160, 255, 0.9), rgba(159, 112, 255, 0.9));
+    background-clip: padding-box;
+  }
+}
+
+/* ---- Dashboard neon — intensity pass v3 (scoped to .dash-neon) ---- */
+@layer components {
+  /* More vivid nebula (extra cyan bloom mid-left). */
+  .dash-neon::before {
+    background:
+      radial-gradient(46% 36% at 8% -6%, rgba(56, 130, 246, 0.30), transparent 70%),
+      radial-gradient(42% 40% at 108% 4%, rgba(139, 92, 246, 0.26), transparent 70%),
+      radial-gradient(40% 34% at -6% 52%, rgba(34, 211, 238, 0.16), transparent 70%),
+      radial-gradient(64% 52% at 52% 118%, rgba(13, 148, 136, 0.18), transparent 72%),
+      linear-gradient(180deg, #070912, #05060c);
+  }
+
+  /* Glowing top edge on every card. */
+  .dash-neon .glass,
+  .dash-neon .card-gradient {
+    background:
+      linear-gradient(90deg, transparent 4%, rgba(150, 190, 255, 0.85) 50%, transparent 96%) top / 100% 2px no-repeat,
+      radial-gradient(130% 90% at 0% 0%, rgba(96, 150, 255, 0.16), transparent 46%),
+      linear-gradient(180deg, rgba(255, 255, 255, 0.05), rgba(255, 255, 255, 0.012) 34%, rgba(255, 255, 255, 0) 62%),
+      color-mix(in oklch, #0a1120 82%, transparent);
+    box-shadow:
+      0 2px 14px -6px rgba(96, 150, 255, 0.5) inset,
+      0 1px 0 0 rgba(255, 255, 255, 0.05) inset,
+      0 20px 50px -30px rgba(0, 0, 0, 0.95),
+      0 0 46px -24px rgba(56, 130, 246, 0.35);
+  }
+
+  /* Big display numbers/headings → white→blue gradient with a neon glow. */
+  .dash-neon .text-2xl,
+  .dash-neon .text-3xl,
+  .dash-neon .text-4xl {
+    background: linear-gradient(180deg, #ffffff, #b9cfff);
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+    filter: drop-shadow(0 0 16px rgba(120, 170, 255, 0.4));
+  }
+}
