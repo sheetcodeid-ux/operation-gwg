@@ -55,7 +55,57 @@ export interface ReviewableEvent {
 }
 
 export function fmtRupiah(n: number): string {
-  return "Rp " + Math.round(n || 0).toLocaleString("id-ID");
+  const neg = n < 0;
+  return (neg ? "-Rp " : "Rp ") + Math.round(Math.abs(n) || 0).toLocaleString("id-ID");
+}
+
+/* ---------------- impact analysis (Fase B) ---------------- */
+
+export type ImpactVerdict = "impactful" | "marginal" | "no_impact" | "no_data";
+
+export const VERDICT_META: Record<ImpactVerdict, { label: string; tone: Tone }> = {
+  impactful: { label: "Berdampak", tone: "success" },
+  marginal: { label: "Marginal", tone: "amber" },
+  no_impact: { label: "Tidak Berdampak", tone: "danger" },
+  no_data: { label: "Data Belum Tersedia", tone: "neutral" },
+};
+
+export interface ProductBreakdown {
+  name: string;
+  windowOmzet: number;
+  baselineOmzet: number;
+  uplift: number;
+}
+
+/** Computed revenue impact for one approved event/promo. */
+export interface EventImpact {
+  eventId: string;
+  name: string;
+  type: MarcommEventType;
+  budget: number;
+  measureStart: string;
+  measureEnd: string;
+  days: number;
+  /** Whether omzet came from matched outlets ("outlet") or company-wide ("all"). */
+  omzetScope: "outlet" | "all";
+  windowOmzet: number;
+  baselineOmzet: number;
+  uplift: number;
+  upliftPct: number;
+  roi: number; // uplift / budget
+  net: number; // uplift - budget
+  verdict: ImpactVerdict;
+  /** Promo only: per-product monthly omzet window vs baseline. */
+  productBreakdown: ProductBreakdown[];
+  /** Extra note (e.g. omzet is company-wide, or data not synced). */
+  note: string;
+}
+
+export function verdictOf(uplift: number, budget: number, hasData: boolean): ImpactVerdict {
+  if (!hasData) return "no_data";
+  if (uplift <= 0) return "no_impact";
+  if (uplift <= budget) return "marginal";
+  return "impactful";
 }
 
 /** Inclusive day count of a measurement window. */

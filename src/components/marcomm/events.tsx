@@ -9,9 +9,11 @@ import {
   MC_STATUS_META,
   MC_TYPE_META,
   windowDays,
+  type EventImpact,
   type MarcommEventType,
   type ReviewableEvent,
 } from "@/lib/marcomm-shared";
+import { ImpactView } from "./impact";
 import { approveEventAction, rejectEventAction, resetReviewAction } from "@/lib/actions/marcomm";
 import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
@@ -29,11 +31,14 @@ export function MarcommEvents({
   events,
   products,
   outlets,
+  impacts,
 }: {
   events: ReviewableEvent[];
   products: { name: string; brand: string }[];
   outlets: { id: string; name: string }[];
+  impacts: EventImpact[];
 }) {
+  const [tab, setTab] = React.useState<"review" | "impact">("review");
   const [filter, setFilter] = React.useState<Filter>("all");
   const [q, setQ] = React.useState("");
   const [accId, setAccId] = React.useState<string | null>(null);
@@ -52,6 +57,19 @@ export function MarcommEvents({
 
   return (
     <div className="space-y-4">
+      <SegmentedTabs
+        value={tab}
+        onChange={(v) => setTab(v as "review" | "impact")}
+        items={[
+          { value: "review", label: "ACC & Klasifikasi" },
+          { value: "impact", label: "Analisis Dampak & ROI" },
+        ]}
+      />
+
+      {tab === "impact" ? (
+        <ImpactView impacts={impacts} />
+      ) : (
+        <>
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         <StatTile icon={Megaphone} label="Total Event" value={events.length} sub="diajukan CA" />
         <StatTile icon={ClipboardCheck} label="Menunggu ACC" value={pending} sub="perlu keputusan" />
@@ -83,6 +101,8 @@ export function MarcommEvents({
             <EventCard key={e.id} e={e} onAcc={() => setAccId(e.id)} onReject={() => setRejectId(e.id)} />
           ))}
         </div>
+      )}
+        </>
       )}
 
       {accEvent && (
