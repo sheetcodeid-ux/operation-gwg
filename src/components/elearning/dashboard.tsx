@@ -12,6 +12,7 @@ import { cn, fromNow } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { SegmentedTabs } from "@/components/ui/segmented-tabs";
+import { StatTile } from "@/components/ui/stat";
 import { ManageElearning } from "./manage";
 import type { ELearningCourse, ELearningDay } from "@/lib/elearning-shared";
 
@@ -70,14 +71,14 @@ function DashboardView({ dashboard, participants, essays, certificates, audit }:
     <div className="space-y-4">
       {/* Stat tiles */}
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-        <Stat icon={Users} label="Total Peserta" value={d.totalLearners} hint={`${d.started} sudah mulai`} />
-        <Stat icon={CheckCircle2} label="Selesai" value={d.completed} hint={`${d.passRate}% kelulusan`} tone="brand" />
-        <Stat icon={TrendingUp} label="Rata-rata Nilai" value={d.avgScore} hint="assessment" />
-        <Stat icon={Award} label="Sertifikat Terbit" value={certificates.length} hint="peserta lulus" tone="violet" />
+        <StatTile icon={Users} label="Total Peserta" value={d.totalLearners} sub={`${d.started} sudah mulai`} />
+        <StatTile icon={CheckCircle2} label="Selesai" value={d.completed} sub={`${d.passRate}% kelulusan`} />
+        <StatTile icon={TrendingUp} label="Rata-rata Nilai" value={d.avgScore} sub="assessment" />
+        <StatTile icon={Award} label="Sertifikat Terbit" value={certificates.length} sub="peserta lulus" />
       </div>
 
       {/* Activity chart */}
-      <div className="rounded-xl border border-border bg-card p-4">
+      <div className="card-gradient rounded-2xl p-4">
         <p className="mb-3 text-sm font-semibold text-foreground">Aktivitas 30 Hari Terakhir</p>
         <div className="h-56">
           <ResponsiveContainer width="100%" height="100%">
@@ -114,7 +115,7 @@ function DashboardView({ dashboard, participants, essays, certificates, audit }:
       )}
 
       {/* Participants */}
-      <div className="rounded-xl border border-border bg-card p-4">
+      <div className="card-gradient rounded-2xl p-4">
         <p className="mb-3 text-sm font-semibold text-foreground">Progres Peserta ({participants.length})</p>
         {participants.length === 0 ? (
           <p className="py-6 text-center text-xs text-muted-foreground">Belum ada peserta (Coordinator Area).</p>
@@ -163,7 +164,7 @@ function DashboardView({ dashboard, participants, essays, certificates, audit }:
 
       {/* Certificates */}
       {certificates.length > 0 && (
-        <div className="rounded-xl border border-border bg-card p-4">
+        <div className="card-gradient rounded-2xl p-4">
           <p className="mb-3 flex items-center gap-2 text-sm font-semibold text-foreground"><Award className="size-4 text-violet-500" /> Sertifikat Terbit ({certificates.length})</p>
           <div className="space-y-1.5">
             {certificates.map((c) => (
@@ -184,7 +185,7 @@ function DashboardView({ dashboard, participants, essays, certificates, audit }:
 
       {/* Audit log — every material change (append-only) */}
       {audit.length > 0 && (
-        <div className="rounded-xl border border-border bg-card p-4">
+        <div className="card-gradient rounded-2xl p-4">
           <p className="mb-3 flex items-center gap-2 text-sm font-semibold text-foreground"><ClipboardList className="size-4 text-muted-foreground" /> Audit Perubahan Materi</p>
           <div className="max-h-72 space-y-1 overflow-y-auto">
             {audit.map((a) => (
@@ -237,22 +238,9 @@ function EssayCard({ essay }: { essay: EssayReviewItem }) {
   );
 }
 
-function Stat({ icon: Icon, label, value, hint, tone }: { icon: React.ComponentType<{ className?: string }>; label: string; value: number; hint?: string; tone?: "brand" | "violet" }) {
-  return (
-    <div className="rounded-xl border border-border bg-card p-4">
-      <div className="flex items-center gap-2 text-muted-foreground">
-        <Icon className={cn("size-4", tone === "brand" && "text-brand-500", tone === "violet" && "text-violet-500")} />
-        <span className="text-[11px] font-medium uppercase tracking-wide">{label}</span>
-      </div>
-      <p className="mt-1.5 text-2xl font-semibold tabular-nums text-foreground">{value}</p>
-      {hint && <p className="text-[11px] text-muted-foreground">{hint}</p>}
-    </div>
-  );
-}
-
 function ListCard({ title, icon: Icon, rows, empty }: { title: string; icon: React.ComponentType<{ className?: string }>; rows: { label: string; value: string; sub: string }[]; empty: string }) {
   return (
-    <div className="rounded-xl border border-border bg-card p-4">
+    <div className="card-gradient rounded-2xl p-4">
       <p className="mb-3 flex items-center gap-2 text-sm font-semibold text-foreground"><Icon className="size-4 text-muted-foreground" /> {title}</p>
       {rows.length === 0 ? (
         <p className="py-4 text-center text-xs text-muted-foreground">{empty}</p>

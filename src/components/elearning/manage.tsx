@@ -83,7 +83,7 @@ function CreateCourseCard() {
   };
 
   return (
-    <div className="mx-auto max-w-xl space-y-4 rounded-2xl border border-border bg-card p-6">
+    <div className="mx-auto max-w-xl space-y-4 card-gradient rounded-2xl p-6">
       <div>
         <h2 className="text-base font-semibold text-foreground">Buat Course Pembelajaran</h2>
         <p className="mt-1 text-sm text-muted-foreground">Satu course berisi Learning Path bertahap (Hari 1–7) untuk peserta.</p>
@@ -128,7 +128,7 @@ function CourseHeader({ course }: { course: ELearningCourse }) {
   };
 
   return (
-    <div className="rounded-2xl border border-border bg-card p-5">
+    <div className="card-gradient rounded-2xl p-5">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="min-w-0">
           <div className="flex flex-wrap items-center gap-2">
@@ -226,7 +226,7 @@ function DayCard({ course, day, index, count, onMove }: { course: ELearningCours
   };
 
   return (
-    <div className="overflow-hidden rounded-xl border border-border bg-card">
+    <div className="card-gradient overflow-hidden rounded-xl">
       <div className="flex items-center gap-2 p-3">
         <span className="grid size-8 shrink-0 place-items-center rounded-lg bg-brand-500/10 text-sm font-semibold text-brand-700 dark:text-brand-400">{index + 1}</span>
         <button type="button" onClick={() => setOpen((o) => !o)} className="flex min-w-0 flex-1 items-center gap-2 text-left">

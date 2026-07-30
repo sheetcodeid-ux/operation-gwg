@@ -39,7 +39,7 @@ import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { VideoPlayer } from "./video-player";
 import { QuizRunner } from "./quiz-runner";
-import { Award, ClipboardCheck, RotateCcw } from "lucide-react";
+import { Award, ClipboardCheck, GraduationCap, RotateCcw } from "lucide-react";
 
 export function LearnPath({
   course,
@@ -83,26 +83,30 @@ export function LearnPath({
   return (
     <div className="w-full space-y-5">
       {/* Hero */}
-      <div className="overflow-hidden rounded-2xl border border-border bg-gradient-to-br from-brand-500/10 via-card to-card">
-        <div className="flex flex-col gap-5 p-5 sm:flex-row sm:items-center sm:justify-between sm:p-6">
+      <div className="card-gradient animate-fade-up relative overflow-hidden rounded-2xl">
+        <div className="pointer-events-none absolute -right-16 -top-24 size-64 rounded-full bg-brand-500/15 blur-3xl" />
+        <div className="relative flex flex-col gap-5 p-5 sm:flex-row sm:items-center sm:justify-between sm:p-6">
           <div className="min-w-0">
             <div className="flex flex-wrap items-center gap-2">
+              <span className="inline-flex items-center gap-1.5 rounded-full bg-brand-500/10 px-2.5 py-1 text-[11px] font-semibold text-brand-700 ring-1 ring-brand-500/25 dark:text-brand-400">
+                <GraduationCap className="size-3.5" /> E-Learning
+              </span>
               {course.category && <Badge tone="cyan">{course.category}</Badge>}
               <Badge tone={st.tone}>{st.label}</Badge>
             </div>
-            <h1 className="mt-2 text-xl font-semibold text-foreground sm:text-2xl">{course.title}</h1>
-            {course.description && <p className="mt-1 max-w-2xl text-sm text-muted-foreground">{course.description}</p>}
-            <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-muted-foreground">
-              <span className="inline-flex items-center gap-1.5"><PlayCircle className="size-4" /> {lessons.length} materi · {days.length} hari</span>
-              <span className="inline-flex items-center gap-1.5"><Clock className="size-4" /> Estimasi {fmtMinutes(totalMin)}</span>
-              <span className="inline-flex items-center gap-1.5"><CheckCircle2 className="size-4" /> {doneCount}/{lessons.length} selesai</span>
+            <h1 className="text-gradient-brand mt-2.5 text-2xl font-bold tracking-tight sm:text-3xl">{course.title}</h1>
+            {course.description && <p className="mt-1.5 max-w-2xl text-sm leading-relaxed text-muted-foreground">{course.description}</p>}
+            <div className="mt-4 flex flex-wrap items-center gap-2">
+              <MetaChip icon={PlayCircle}>{lessons.length} materi · {days.length} hari</MetaChip>
+              <MetaChip icon={Clock}>Estimasi {fmtMinutes(totalMin)}</MetaChip>
+              <MetaChip icon={CheckCircle2}>{doneCount}/{lessons.length} selesai</MetaChip>
             </div>
           </div>
 
           <div className="flex shrink-0 flex-col items-center gap-3">
             <ProgressRing pct={completion} />
             {resumeId && completion < 100 && (
-              <Button onClick={() => openLesson(resumeId)} className="w-full">
+              <Button onClick={() => openLesson(resumeId)} className="w-full shadow-lg shadow-brand-500/20">
                 <Play className="size-4" /> {doneCount === 0 ? "Mulai Belajar" : "Lanjutkan"}
               </Button>
             )}
@@ -164,6 +168,15 @@ export function LearnPath({
   );
 }
 
+/** A small pill of metadata for the hero. */
+function MetaChip({ icon: Icon, children }: { icon: React.ComponentType<{ className?: string }>; children: React.ReactNode }) {
+  return (
+    <span className="inline-flex items-center gap-1.5 rounded-lg bg-background/50 px-2.5 py-1.5 text-xs text-muted-foreground ring-1 ring-border">
+      <Icon className="size-3.5" /> {children}
+    </span>
+  );
+}
+
 /** Circular completion ring (no external dep). */
 function ProgressRing({ pct }: { pct: number }) {
   const size = 92;
@@ -205,14 +218,21 @@ function DaySection({
   const [open, setOpen] = React.useState(defaultOpen);
   const dayLessons = day.lessons.slice().sort((a, b) => a.sortOrder - b.sortOrder);
   const doneInDay = dayLessons.filter((l) => progress[l.id]?.completed).length;
+  const dayPct = dayLessons.length ? Math.round((doneInDay / dayLessons.length) * 100) : 0;
+  const dayComplete = dayLessons.length > 0 && doneInDay === dayLessons.length;
 
   return (
-    <div className="overflow-hidden rounded-xl border border-border bg-card">
-      <button type="button" onClick={() => setOpen((o) => !o)} className="flex w-full items-center gap-3 p-4 text-left hover:bg-muted/30">
-        <span className="grid size-9 shrink-0 place-items-center rounded-lg bg-brand-500/10 text-sm font-semibold text-brand-700 dark:text-brand-400">{index + 1}</span>
+    <div className="card-gradient animate-fade-up overflow-hidden rounded-xl" style={{ animationDelay: `${Math.min(index, 6) * 40}ms` }}>
+      <button type="button" onClick={() => setOpen((o) => !o)} className="flex w-full items-center gap-3 p-4 text-left transition-colors hover:bg-muted/20">
+        <span className={cn("grid size-10 shrink-0 place-items-center rounded-xl text-sm font-bold ring-1 transition-colors", dayComplete ? "bg-brand-500/15 text-brand-700 ring-brand-500/30 dark:text-brand-400" : "bg-muted text-foreground ring-border")}>
+          {dayComplete ? <CheckCircle2 className="size-5 text-brand-500" /> : index + 1}
+        </span>
         <div className="min-w-0 flex-1">
           <p className="truncate text-sm font-semibold text-foreground">{day.title}</p>
-          <p className="truncate text-xs text-muted-foreground">{doneInDay}/{dayLessons.length} materi selesai{day.description ? ` · ${day.description}` : ""}</p>
+          <div className="mt-1.5 flex items-center gap-2">
+            <div className="h-1.5 w-28 overflow-hidden rounded-full bg-muted"><div className="h-full rounded-full bg-brand-500 transition-all duration-500" style={{ width: `${dayPct}%` }} /></div>
+            <span className="text-[11px] tabular-nums text-muted-foreground">{doneInDay}/{dayLessons.length}</span>
+          </div>
         </div>
         <ChevronDown className={cn("size-4 shrink-0 text-muted-foreground transition-transform", open && "rotate-180")} />
       </button>
@@ -232,34 +252,41 @@ function DaySection({
                   onClick={() => onOpen(l.id)}
                   disabled={!unlocked}
                   className={cn(
-                    "flex w-full items-center gap-3 rounded-lg border p-3 text-left transition-colors",
-                    done ? "border-brand-500/30 bg-brand-500/5" : "border-border bg-background/40",
-                    unlocked ? "hover:bg-muted/40" : "cursor-not-allowed opacity-60",
+                    "group/lesson flex w-full items-center gap-3 rounded-xl border p-2.5 text-left transition-all",
+                    done ? "border-brand-500/30 bg-brand-500/[0.06]" : "border-border bg-background/40",
+                    unlocked ? "hover:-translate-y-0.5 hover:border-brand-500/40 hover:shadow-md hover:shadow-black/5" : "cursor-not-allowed opacity-55",
                   )}
                 >
-                  <span className="shrink-0">
-                    {done ? <CheckCircle2 className="size-5 text-brand-500" /> : !unlocked ? <Lock className="size-5 text-muted-foreground" /> : l.hasVideo ? <PlayCircle className="size-5 text-muted-foreground" /> : <Circle className="size-5 text-muted-foreground" />}
+                  {/* Thumbnail / status tile */}
+                  <span className={cn("relative grid aspect-video w-20 shrink-0 place-items-center overflow-hidden rounded-lg bg-gradient-to-br", done ? "from-brand-500/20 to-brand-500/5" : "from-muted to-muted/40")}>
+                    {l.thumbnailUrl ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img src={l.thumbnailUrl} alt="" className="absolute inset-0 size-full object-cover" />
+                    ) : null}
+                    <span className={cn("relative grid size-7 place-items-center rounded-full", l.thumbnailUrl ? "bg-black/45 text-white backdrop-blur-sm" : "text-muted-foreground")}>
+                      {done ? <CheckCircle2 className="size-4 text-brand-400" /> : !unlocked ? <Lock className="size-4" /> : l.hasVideo ? <Play className="size-4 translate-x-0.5" fill="currentColor" /> : <Circle className="size-4" />}
+                    </span>
                   </span>
                   <div className="min-w-0 flex-1">
                     <p className="truncate text-sm font-medium text-foreground">{l.title}</p>
-                    <div className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[11px] text-muted-foreground">
-                      {l.required && <span className="font-medium text-amber-600 dark:text-amber-400">Wajib</span>}
-                      {l.estimatedMinutes > 0 && <span>· {fmtMinutes(l.estimatedMinutes)}</span>}
-                      {l.hasVideo && <span>· Video</span>}
-                      {l.fileCount > 0 && <span>· {l.fileCount} lampiran</span>}
+                    <div className="mt-1 flex flex-wrap items-center gap-1.5 text-[11px] text-muted-foreground">
+                      {l.required && <span className="rounded bg-amber-500/10 px-1.5 py-0.5 font-medium text-amber-600 dark:text-amber-400">Wajib</span>}
+                      {l.estimatedMinutes > 0 && <span className="inline-flex items-center gap-0.5"><Clock className="size-3" /> {fmtMinutes(l.estimatedMinutes)}</span>}
+                      {l.hasVideo && <span className="inline-flex items-center gap-0.5"><PlayCircle className="size-3" /> Video</span>}
+                      {l.fileCount > 0 && <span>{l.fileCount} lampiran</span>}
                       {l.hasQuiz && (
-                        <span className="inline-flex items-center gap-0.5">
-                          · <ClipboardCheck className="size-3" />
-                          {quizResults[l.id]?.passed
-                            ? `Lulus ${quizResults[l.id].score}`
-                            : quizResults[l.id]
-                              ? `Belum lulus (${quizResults[l.id].score})`
-                              : "Assessment"}
+                        <span className={cn("inline-flex items-center gap-0.5 rounded px-1.5 py-0.5 font-medium", quizResults[l.id]?.passed ? "bg-brand-500/10 text-brand-600 dark:text-brand-400" : quizResults[l.id] ? "bg-red-500/10 text-red-600 dark:text-red-400" : "bg-muted text-muted-foreground")}>
+                          <ClipboardCheck className="size-3" />
+                          {quizResults[l.id]?.passed ? `Lulus ${quizResults[l.id].score}` : quizResults[l.id] ? `Ulangi (${quizResults[l.id].score})` : "Assessment"}
                         </span>
                       )}
                     </div>
                   </div>
-                  {!unlocked && <span className="shrink-0 text-[11px] text-muted-foreground">Terkunci</span>}
+                  {unlocked ? (
+                    <ChevronDown className="size-4 shrink-0 -rotate-90 text-muted-foreground/50 transition-transform group-hover/lesson:translate-x-0.5" />
+                  ) : (
+                    <Lock className="size-3.5 shrink-0 text-muted-foreground" />
+                  )}
                 </button>
               );
             })
