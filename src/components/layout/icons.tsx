@@ -16,6 +16,7 @@ import {
   Handshake,
   Headset,
   LibraryBig,
+  Megaphone,
   MonitorCog,
   LayoutDashboard,
   ListChecks,
@@ -69,6 +70,7 @@ export const NAV_ICONS: Record<string, LucideIcon> = {
   MonitorCog,
   GraduationCap,
   LibraryBig,
+  Megaphone,
   // Division (group) icons
   Briefcase,
   ShieldCheck,

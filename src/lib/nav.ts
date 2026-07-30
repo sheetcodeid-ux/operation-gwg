@@ -22,6 +22,7 @@ export type MenuKey =
   | "sys_submit"
   | "elearning"
   | "elearning_admin"
+  | "mc_events"
   | "assessment"
   | "hpp_dash"
   | "hpp"
@@ -43,7 +44,8 @@ export type Division =
   | "Project Manager"
   | "Auditor"
   | "Executive Assistant"
-  | "Business Development";
+  | "Business Development"
+  | "Marketing Communication";
 
 export interface NavItem {
   key: MenuKey;
@@ -77,6 +79,7 @@ export const NAV_MENUS: Omit<NavItem, "section">[] = [
   { key: "sys_submit", label: "Pengajuan System", href: "/system/pengajuan", icon: "MonitorCog" },
   { key: "elearning", label: "E-Learning", href: "/elearning", icon: "GraduationCap" },
   { key: "elearning_admin", label: "Kelola E-Learning", href: "/elearning/kelola", icon: "LibraryBig" },
+  { key: "mc_events", label: "Event Tracker", href: "/marcomm/events", icon: "Megaphone" },
   { key: "reports", label: "Reports", href: "/reports", icon: "FileText" },
   { key: "assessment", label: "Assessment Golongan", href: "/assessment", icon: "Award" },
   { key: "hpp_dash", label: "Dashboard R&D", href: "/rnd/dashboard", icon: "ChartSpline" },
@@ -101,6 +104,7 @@ export const DIVISION_ICON: Record<Division, string> = {
   Auditor: "SearchCheck", // distinct from Supervisor's shield
   "Executive Assistant": "NotebookPen",
   "Business Development": "Handshake",
+  "Marketing Communication": "Megaphone",
 };
 
 /** Which division each role sits in (drives the sidebar group header). */
@@ -175,6 +179,8 @@ const DIVISION_MENUS: { division: Division; menus: MenuKey[] }[] = [
   { division: "Auditor", menus: ["work"] },
   { division: "Executive Assistant", menus: ["work"] },
   { division: "Business Development", menus: ["work"] },
+  // Marketing Communication: Work Tracker + the Event/Promo ACC & impact tracker.
+  { division: "Marketing Communication", menus: ["work", "mc_events"] },
   { division: "Administrator", menus: ["users", "audit"] },
 ];
 

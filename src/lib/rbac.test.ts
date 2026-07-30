@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { can, hasGlobalScope, scopeOutlets } from "./rbac";
-import { canSeeMenu, ROLE_MENUS } from "./nav";
+import { canReachMenu, canSeeMenu, ROLE_MENUS } from "./nav";
 import { getOutlets, getUsers } from "./data/store";
 import type { UserProfile } from "./types";
 
@@ -87,6 +87,17 @@ describe("menu access matrix", () => {
     // Other roles get neither.
     expect(canSeeMenu("supervisor", "elearning")).toBe(false);
     expect(canSeeMenu("pos_operation", "elearning_admin")).toBe(false);
+  });
+
+  it("gives Marketing Communication its Work Tracker + Event Tracker, department-gated", () => {
+    const mc = { role: "member" as const, department: "Marketing Communication" };
+    expect(canReachMenu(mc, "mc_events")).toBe(true);
+    expect(canReachMenu(mc, "work")).toBe(true);
+    // Not exposed to unrelated roles/departments.
+    expect(canReachMenu({ role: "supervisor", department: null }, "mc_events")).toBe(false);
+    expect(canReachMenu({ role: "area_coordinator", department: "Operational" }, "mc_events")).toBe(false);
+    // Super admin sees it in the sidebar.
+    expect(canSeeMenu("super_admin", "mc_events")).toBe(true);
   });
 });
 
