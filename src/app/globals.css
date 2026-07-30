@@ -573,3 +573,69 @@
     filter: drop-shadow(0 0 16px rgba(120, 170, 255, 0.4));
   }
 }
+
+/* ---- Dashboard neon — interactive surfaces (dialogs, sheets, dropdowns,
+   date pickers, inputs, buttons). In-tree overlays match `.dash-neon`;
+   portaled ones (to <body>) match `html.dash-neon-active`. Dark tokens are
+   embedded so the surfaces read correctly whatever the global theme. ---- */
+@layer components {
+  .dash-neon .surface-solid,
+  .dash-neon-active .surface-solid,
+  .dash-neon .bg-popover,
+  .dash-neon-active .bg-popover {
+    --popover: oklch(0.205 0.02 265);
+    --popover-foreground: oklch(0.97 0.004 265);
+    --card: oklch(0.2 0.02 265);
+    --card-foreground: oklch(0.97 0.004 265);
+    --foreground: oklch(0.97 0.004 265);
+    --muted: oklch(0.3 0.02 265);
+    --muted-foreground: oklch(0.74 0.02 265);
+    --border: oklch(1 0 0 / 12%);
+    --input: oklch(1 0 0 / 14%);
+    --accent: oklch(0.32 0.04 265);
+    --accent-foreground: oklch(0.98 0.004 265);
+    --secondary: oklch(0.3 0.02 265);
+    --secondary-foreground: oklch(0.98 0.004 265);
+    --ring: oklch(0.62 0.15 255);
+    color: var(--popover-foreground);
+    background:
+      linear-gradient(90deg, transparent 4%, rgba(150, 190, 255, 0.7) 50%, transparent 96%) top / 100% 2px no-repeat,
+      radial-gradient(120% 85% at 0% 0%, rgba(96, 150, 255, 0.14), transparent 46%),
+      color-mix(in oklch, #0b1322 94%, transparent) !important;
+    border-color: rgba(120, 160, 255, 0.24) !important;
+    box-shadow:
+      0 2px 14px -6px rgba(96, 150, 255, 0.5) inset,
+      0 30px 80px -24px rgba(0, 0, 0, 0.9),
+      0 0 50px -18px rgba(72, 140, 255, 0.4) !important;
+    -webkit-backdrop-filter: blur(18px) saturate(150%);
+    backdrop-filter: blur(18px) saturate(150%);
+  }
+
+  /* Menu / option hover inside overlays. */
+  .dash-neon .bg-popover button:hover,
+  .dash-neon-active .bg-popover button:hover,
+  .dash-neon-active .surface-solid [role="option"]:hover {
+    background: rgba(96, 150, 255, 0.15);
+  }
+
+  /* Inputs, textareas & pickers → neon focus. */
+  .dash-neon input:focus,
+  .dash-neon textarea:focus,
+  .dash-neon-active input:focus,
+  .dash-neon-active textarea:focus {
+    border-color: rgba(120, 170, 255, 0.65) !important;
+    box-shadow: 0 0 0 3px rgba(72, 140, 255, 0.22), 0 0 18px -6px rgba(72, 140, 255, 0.55) !important;
+  }
+
+  /* Primary buttons (New Task, Create Task, …) → neon gradient. */
+  .dash-neon [data-slot="button"].bg-primary,
+  .dash-neon-active [data-slot="button"].bg-primary {
+    background: linear-gradient(120deg, #3b82f6, #8b5cf6) !important;
+    color: #fff !important;
+    box-shadow: 0 10px 26px -12px rgba(72, 140, 255, 0.75), 0 0 0 1px rgba(150, 180, 255, 0.25) inset !important;
+  }
+  .dash-neon [data-slot="button"].bg-primary:hover,
+  .dash-neon-active [data-slot="button"].bg-primary:hover {
+    filter: brightness(1.08);
+  }
+}

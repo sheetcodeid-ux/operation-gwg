@@ -21,6 +21,7 @@ import { ROLE_LABEL } from "@/lib/constants";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { PageHeader } from "@/components/ui/page-header";
 import { KpiCarousel, type Kpi } from "@/components/dashboard/kpi-card";
+import { DashNeonScope } from "@/components/dashboard/dash-neon-scope";
 import { HeroCard } from "@/components/dashboard/hero-card";
 import { InsightsPanel } from "@/components/dashboard/insights-panel";
 import { GlobalFilterBar } from "@/components/dashboard/filter-bar";
@@ -150,6 +151,7 @@ export default async function DashboardPage({
 
   return (
     <div className="dash-neon dark w-full">
+      <DashNeonScope />
       <PageHeader
         icon={LayoutDashboard}
         title="Executive Dashboard"
