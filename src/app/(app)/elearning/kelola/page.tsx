@@ -4,7 +4,7 @@ import { redirect } from "next/navigation";
 import { getSessionUser } from "@/lib/auth";
 import { canManageElearning } from "@/lib/elearning-shared";
 import { getActiveCourse, getCourseTree, listCertificates, listCourses } from "@/lib/data/elearning";
-import { getElearningDashboard, getEssayReviews, getParticipantRows } from "@/lib/data/elearning-admin";
+import { getElearningDashboard, getEssayReviews, getParticipantRows, listElearningAudit } from "@/lib/data/elearning-admin";
 import { PageHeader } from "@/components/ui/page-header";
 import { KelolaShell } from "@/components/elearning/dashboard";
 
@@ -17,15 +17,16 @@ export default async function ElearningManagePage() {
   const courses = await listCourses();
   const primary = (await getActiveCourse()) ?? courses[0] ?? null;
 
-  const [days, dashboard, participants, essays, certificates] = primary
+  const [days, dashboard, participants, essays, certificates, audit] = primary
     ? await Promise.all([
         getCourseTree(primary.id),
         getElearningDashboard(primary.id),
         getParticipantRows(primary.id),
         getEssayReviews(primary.id),
         listCertificates(primary.id),
+        listElearningAudit(60),
       ])
-    : [[], null, [], [], []];
+    : [[], null, [], [], [], []];
 
   return (
     <div className="w-full">
@@ -41,6 +42,7 @@ export default async function ElearningManagePage() {
         participants={participants}
         essays={essays}
         certificates={certificates.map((c) => ({ number: c.number, recipientName: c.recipientName, issuedAt: c.issuedAt }))}
+        audit={audit}
       />
     </div>
   );

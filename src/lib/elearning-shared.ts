@@ -152,6 +152,34 @@ export interface ElearningDashboard {
   activity: ActivityPoint[];
 }
 
+export type AuditAction = "create" | "update" | "delete" | "grade" | "publish";
+export type AuditEntity = "course" | "day" | "lesson" | "quiz" | "question" | "essay";
+
+export interface ElearningAuditRow {
+  id: string;
+  actorName: string;
+  action: AuditAction;
+  entity: AuditEntity;
+  title: string;
+  at: string;
+}
+
+export const AUDIT_ACTION_LABEL: Record<AuditAction, string> = {
+  create: "Tambah",
+  update: "Ubah",
+  delete: "Hapus",
+  grade: "Nilai",
+  publish: "Publikasi",
+};
+export const AUDIT_ENTITY_LABEL: Record<AuditEntity, string> = {
+  course: "Course",
+  day: "Hari",
+  lesson: "Materi",
+  quiz: "Assessment",
+  question: "Soal",
+  essay: "Essay",
+};
+
 export interface ELearningDay {
   id: string;
   courseId: string;

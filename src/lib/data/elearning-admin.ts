@@ -1,9 +1,11 @@
 import "server-only";
 
+import { randomUUID } from "node:crypto";
 import { db, dbEnabled } from "./db";
+import { markLocalWrite } from "./hydrate";
 import { getUser, getUsers } from "./store";
 import { getCourseTree } from "./elearning";
-import { courseCompletion, orderedLessons, type ElearningDashboard, type EssayReviewItem, type LearnerStatus, type LessonStat, type ParticipantRow } from "@/lib/elearning-shared";
+import { courseCompletion, orderedLessons, type AuditAction, type AuditEntity, type ElearningAuditRow, type ElearningDashboard, type EssayReviewItem, type LearnerStatus, type LessonStat, type ParticipantRow } from "@/lib/elearning-shared";
 import type { UserProfile } from "@/lib/types";
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
@@ -212,6 +214,31 @@ export async function getEssayReviews(courseId: string): Promise<EssayReviewItem
       answers: essays.map((e) => ({ prompt: e.prompt, answer: typeof answers[e.id] === "string" ? (answers[e.id] as string) : "—" })),
     };
   });
+}
+
+/* ---------------- audit log ---------------- */
+
+/** Append an audit record for a material change (append-only, never edited). */
+export async function logElearningAudit(actorId: string, actorName: string, action: AuditAction, entity: AuditEntity, title: string): Promise<void> {
+  if (!dbEnabled) return;
+  markLocalWrite();
+  await db()
+    .from("elearning_audit")
+    .insert({ id: `ela_${randomUUID()}`, actor_id: actorId, actor_name: actorName, action, entity, title: title.slice(0, 200) })
+    .then(() => {}, () => {});
+}
+
+export async function listElearningAudit(limit = 60): Promise<ElearningAuditRow[]> {
+  if (!dbEnabled) return [];
+  const { data } = await db().from("elearning_audit").select("*").order("at", { ascending: false }).limit(limit);
+  return ((data ?? []) as any[]).map((r) => ({
+    id: r.id,
+    actorName: r.actor_name ?? "",
+    action: r.action,
+    entity: r.entity,
+    title: r.title ?? "",
+    at: r.at,
+  }));
 }
 
 /** Course completion for one learner (reuses the pure helper against the tree). */

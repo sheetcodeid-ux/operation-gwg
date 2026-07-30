@@ -4,7 +4,8 @@ import { randomUUID } from "node:crypto";
 import { revalidatePath } from "next/cache";
 import { getSessionUser } from "@/lib/auth";
 import { saveNotification } from "@/lib/data/persist";
-import { learnerIds } from "@/lib/data/elearning-admin";
+import { learnerIds, logElearningAudit } from "@/lib/data/elearning-admin";
+import type { AuditAction, AuditEntity } from "@/lib/elearning-shared";
 import { canReachMenu } from "@/lib/nav";
 import { canManageElearning, type LessonFileKind } from "@/lib/elearning-shared";
 import { presignPut, r2Enabled, R2_PREFIX } from "@/lib/storage/r2";
@@ -63,6 +64,11 @@ async function notifyAllLearners(title: string, message: string) {
   await Promise.all(ids.map((id) => notifyUser(id, title, message))).catch(() => {});
 }
 
+/** Record a material change to the append-only E-Learning audit log. */
+async function audit(user: UserProfile, action: AuditAction, entity: AuditEntity, title: string) {
+  await logElearningAudit(user.id, user.name, action, entity, title).catch(() => {});
+}
+
 /* ------------------------------------------------------------------ */
 /* Uploads (Head Operational only) — direct browser → R2 presigned PUT */
 /* ------------------------------------------------------------------ */
@@ -106,6 +112,7 @@ export async function createCourseAction(input: { title: string; description: st
     createdBy: user!.id,
   });
   if (!rec) return { error: "Gagal membuat course." };
+  await audit(user!, "create", "course", input.title.trim());
   revalidate();
   return { ok: true, id: rec.id };
 }
@@ -115,6 +122,7 @@ export async function updateCourseAction(id: string, patch: { title?: string; de
   if (!manage(user)) return { error: "Tidak punya akses." };
   const res = await updateCourse(id, { ...patch, passScore: patch.passScore !== undefined ? clampScore(patch.passScore) : undefined });
   if (res.error) return { error: res.error };
+  await audit(user!, "update", "course", patch.title ?? "Pengaturan course");
   revalidate();
   return { ok: true };
 }
@@ -124,6 +132,7 @@ export async function deleteCourseAction(id: string) {
   if (!manage(user)) return { error: "Tidak punya akses." };
   const res = await deleteCourse(id);
   if (res.error) return { error: res.error };
+  await audit(user!, "delete", "course", id);
   revalidate();
   return { ok: true };
 }
@@ -139,6 +148,7 @@ export async function createDayAction(input: { courseId: string; title: string; 
   const rec = await createDay({ courseId: input.courseId, title: input.title.trim(), description: input.description.trim() });
   if (!rec) return { error: "Gagal menambah hari." };
   await notifyAllLearners("Materi pembelajaran baru", `Tahap baru dibuka: "${input.title.trim()}". Silakan lanjutkan pembelajaran Anda.`);
+  await audit(user!, "create", "day", input.title.trim());
   revalidate();
   return { ok: true, id: rec.id };
 }
@@ -148,6 +158,7 @@ export async function updateDayAction(id: string, patch: { title?: string; descr
   if (!manage(user)) return { error: "Tidak punya akses." };
   const res = await updateDay(id, patch);
   if (res.error) return { error: res.error };
+  await audit(user!, "update", "day", patch.title ?? "Hari");
   revalidate();
   return { ok: true };
 }
@@ -157,6 +168,7 @@ export async function deleteDayAction(id: string) {
   if (!manage(user)) return { error: "Tidak punya akses." };
   const res = await deleteDay(id);
   if (res.error) return { error: res.error };
+  await audit(user!, "delete", "day", id);
   revalidate();
   return { ok: true };
 }
@@ -208,6 +220,7 @@ export async function createLessonAction(input: LessonActionInput & { courseId: 
   });
   if (!rec) return { error: "Gagal membuat materi." };
   await notifyAllLearners("Materi baru tersedia", `"${input.title.trim()}" telah ditambahkan ke pembelajaran. Yuk pelajari sekarang.`);
+  await audit(user!, "create", "lesson", input.title.trim());
   revalidate();
   return { ok: true, id: rec.id };
 }
@@ -221,6 +234,7 @@ export async function updateLessonAction(id: string, patch: Partial<LessonAction
     estimatedMinutes: patch.estimatedMinutes !== undefined ? Math.max(0, Math.round(patch.estimatedMinutes || 0)) : undefined,
   });
   if (res.error) return { error: res.error };
+  await audit(user!, "update", "lesson", patch.title ?? "Materi");
   revalidate();
   return { ok: true };
 }
@@ -230,6 +244,7 @@ export async function deleteLessonAction(id: string) {
   if (!manage(user)) return { error: "Tidak punya akses." };
   const res = await deleteLesson(id);
   if (res.error) return { error: res.error };
+  await audit(user!, "delete", "lesson", id);
   revalidate();
   return { ok: true };
 }
@@ -330,6 +345,7 @@ export async function saveQuizSettingsAction(input: { courseId: string; lessonId
     shuffleAnswers: input.shuffleAnswers,
   });
   if (res.error) return { error: res.error };
+  await audit(user!, "update", "quiz", input.title || "Assessment");
   revalidate();
   return { ok: true, quizId };
 }
@@ -339,6 +355,7 @@ export async function deleteQuizAction(quizId: string) {
   if (!manage(user)) return { error: "Tidak punya akses." };
   const res = await deleteQuiz(quizId);
   if (res.error) return { error: res.error };
+  await audit(user!, "delete", "quiz", "Assessment");
   revalidate();
   return { ok: true };
 }
@@ -370,6 +387,7 @@ export async function addQuestionAction(input: { courseId: string; lessonId: str
   if (!quizId) return { error: "Gagal menyiapkan quiz." };
   const rec = await addQuestion(quizId, input.question);
   if (!rec) return { error: "Gagal menyimpan soal." };
+  await audit(user!, "create", "question", input.question.prompt.slice(0, 80));
   revalidate();
   return { ok: true, id: rec.id, quizId };
 }
@@ -381,6 +399,7 @@ export async function updateQuestionAction(id: string, question: Omit<QuizQuesti
   if (err) return { error: err };
   const res = await updateQuestion(id, question);
   if (res.error) return { error: res.error };
+  await audit(user!, "update", "question", question.prompt.slice(0, 80));
   revalidate();
   return { ok: true };
 }
@@ -390,6 +409,7 @@ export async function deleteQuestionAction(id: string) {
   if (!manage(user)) return { error: "Tidak punya akses." };
   const res = await deleteQuestion(id);
   if (res.error) return { error: res.error };
+  await audit(user!, "delete", "question", id);
   revalidate();
   return { ok: true };
 }
@@ -466,6 +486,7 @@ export async function markEssayPassedAction(resultId: string) {
   if (!manage(user)) return { error: "Tidak punya akses." };
   const res = await passQuizResult(resultId);
   if (!res) return { error: "Hasil tidak ditemukan." };
+  await audit(user!, "grade", "essay", "Penilaian essay diluluskan");
   await notifyUser(res.userId, "Assessment dinilai lulus ✅", "Head Operational telah menilai jawaban essay Anda. Materi berikutnya terbuka.");
   const cert = await maybeIssueCertificate(res.userId, res.courseId);
   if (cert.issued) {

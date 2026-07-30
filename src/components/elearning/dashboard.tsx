@@ -6,9 +6,9 @@ import Link from "next/link";
 import { Area, AreaChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { Award, BadgeCheck, CheckCircle2, ClipboardList, GraduationCap, Loader2, TrendingUp, TriangleAlert, Users } from "lucide-react";
 import { toast } from "sonner";
-import { LEARNER_STATUS_META, type ElearningDashboard, type EssayReviewItem, type ParticipantRow } from "@/lib/elearning-shared";
+import { AUDIT_ACTION_LABEL, AUDIT_ENTITY_LABEL, LEARNER_STATUS_META, type ElearningAuditRow, type ElearningDashboard, type EssayReviewItem, type ParticipantRow } from "@/lib/elearning-shared";
 import { markEssayPassedAction } from "@/lib/actions/elearning";
-import { cn } from "@/lib/utils";
+import { cn, fromNow } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { SegmentedTabs } from "@/components/ui/segmented-tabs";
@@ -28,6 +28,7 @@ export function KelolaShell({
   participants,
   essays,
   certificates,
+  audit = [],
 }: {
   course: ELearningCourse | null;
   days: ELearningDay[];
@@ -35,6 +36,7 @@ export function KelolaShell({
   participants: ParticipantRow[];
   essays: EssayReviewItem[];
   certificates: CertRow[];
+  audit?: ElearningAuditRow[];
 }) {
   const [tab, setTab] = React.useState("materi");
   return (
@@ -50,7 +52,7 @@ export function KelolaShell({
       {tab === "materi" ? (
         <ManageElearning course={course} days={days} />
       ) : dashboard ? (
-        <DashboardView dashboard={dashboard} participants={participants} essays={essays} certificates={certificates} />
+        <DashboardView dashboard={dashboard} participants={participants} essays={essays} certificates={certificates} audit={audit} />
       ) : (
         <p className="rounded-xl border border-dashed border-border p-10 text-center text-sm text-muted-foreground">Buat course & materi dulu untuk melihat dashboard.</p>
       )}
@@ -58,7 +60,7 @@ export function KelolaShell({
   );
 }
 
-function DashboardView({ dashboard, participants, essays, certificates }: { dashboard: ElearningDashboard; participants: ParticipantRow[]; essays: EssayReviewItem[]; certificates: CertRow[] }) {
+function DashboardView({ dashboard, participants, essays, certificates, audit }: { dashboard: ElearningDashboard; participants: ParticipantRow[]; essays: EssayReviewItem[]; certificates: CertRow[]; audit: ElearningAuditRow[] }) {
   const d = dashboard;
   const topStudied = [...d.lessonStats].sort((a, b) => b.studied - a.studied).slice(0, 5);
   const hardest = [...d.lessonStats].filter((l) => l.failCount > 0).sort((a, b) => b.failCount - a.failCount).slice(0, 5);
@@ -174,6 +176,24 @@ function DashboardView({ dashboard, participants, essays, certificates }: { dash
                   <span className="text-[11px] text-muted-foreground">{new Date(c.issuedAt).toLocaleDateString("id-ID")}</span>
                   <Link href={`/elearning/verify/${encodeURIComponent(c.number)}`} className="text-xs font-medium text-brand-600 hover:underline dark:text-brand-400">Validasi</Link>
                 </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Audit log — every material change (append-only) */}
+      {audit.length > 0 && (
+        <div className="rounded-xl border border-border bg-card p-4">
+          <p className="mb-3 flex items-center gap-2 text-sm font-semibold text-foreground"><ClipboardList className="size-4 text-muted-foreground" /> Audit Perubahan Materi</p>
+          <div className="max-h-72 space-y-1 overflow-y-auto">
+            {audit.map((a) => (
+              <div key={a.id} className="flex items-center gap-2 border-b border-border/50 py-1.5 text-xs last:border-0">
+                <Badge tone={a.action === "delete" ? "danger" : a.action === "create" ? "success" : "neutral"}>{AUDIT_ACTION_LABEL[a.action]}</Badge>
+                <span className="text-muted-foreground">{AUDIT_ENTITY_LABEL[a.entity]}</span>
+                <span className="min-w-0 flex-1 truncate text-foreground">{a.title}</span>
+                <span className="shrink-0 text-muted-foreground">{a.actorName}</span>
+                <span className="shrink-0 text-muted-foreground/70">{fromNow(a.at)}</span>
               </div>
             ))}
           </div>
