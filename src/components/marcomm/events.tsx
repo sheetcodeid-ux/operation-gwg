@@ -11,6 +11,7 @@ import {
   windowDays,
   type EventImpact,
   type MarcommEventType,
+  type ProductOption,
   type ReviewableEvent,
 } from "@/lib/marcomm-shared";
 import { ImpactView } from "./impact";
@@ -22,6 +23,7 @@ import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { Field, Input, Textarea } from "@/components/ui/input";
 import { DatePicker } from "@/components/ui/date-picker";
 import { SegmentedTabs } from "@/components/ui/segmented-tabs";
+import { Combobox } from "@/components/ui/combobox";
 import { MultiCombobox, SelectionChips } from "@/components/ui/multi-combobox";
 import { StatTile } from "@/components/ui/stat";
 import { Plus } from "lucide-react";
@@ -36,7 +38,7 @@ export function MarcommEvents({
   canAcc = true,
 }: {
   events: ReviewableEvent[];
-  products: { name: string; brand: string }[];
+  products: ProductOption[];
   outlets: { id: string; name: string }[];
   impacts: EventImpact[];
   /** Marketing Communication can ACC/reject; Coordinator Area only proposes + tracks status. */
@@ -122,7 +124,49 @@ export function MarcommEvents({
   );
 }
 
-function NewEventDialog({ products, outlets, onClose }: { products: { name: string; brand: string }[]; outlets: { id: string; name: string }[]; onClose: () => void }) {
+/** Product multi-select sourced from the ESB catalog, filterable by category
+ *  (a category dropdown that narrows the list) OR by typing a product/category
+ *  name in the combobox — options are grouped by their ESB menu category so a
+ *  whole category can be toggled at once. */
+function ProductPicker({ products, value, onChange }: { products: ProductOption[]; value: string[]; onChange: (v: string[]) => void }) {
+  const [cat, setCat] = React.useState("all");
+
+  const categories = React.useMemo(() => {
+    const set = new Set(products.map((p) => p.category).filter(Boolean));
+    return [...set].sort((a, b) => a.localeCompare(b));
+  }, [products]);
+
+  const options = React.useMemo(
+    () =>
+      products
+        .filter((p) => cat === "all" || p.category === cat)
+        .map((p) => ({ value: p.name, label: p.name, group: p.category, hint: p.foodBev === "minuman" ? "Minuman" : "Makanan" })),
+    [products, cat],
+  );
+
+  if (products.length === 0) {
+    return <p className="rounded-lg border border-dashed border-border p-2.5 text-xs text-muted-foreground">Katalog produk ESB belum tersinkron. Sinkronkan produk ESB terlebih dahulu.</p>;
+  }
+
+  return (
+    <div className="space-y-2">
+      <div className="flex flex-wrap items-center gap-2">
+        <span className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">Kategori</span>
+        <Combobox
+          className="h-9 min-w-40"
+          value={cat}
+          onChange={setCat}
+          searchPlaceholder="Cari kategori…"
+          options={[{ value: "all", label: `Semua Kategori (${products.length})` }, ...categories.map((c) => ({ value: c, label: c }))]}
+        />
+      </div>
+      <MultiCombobox value={value} onChange={onChange} options={options} placeholder="Pilih produk…" searchPlaceholder="Cari produk / kategori…" />
+      <SelectionChips labels={value} onClear={() => onChange([])} />
+    </div>
+  );
+}
+
+function NewEventDialog({ products, outlets, onClose }: { products: ProductOption[]; outlets: { id: string; name: string }[]; onClose: () => void }) {
   const router = useRouter();
   const [busy, setBusy] = React.useState(false);
   const [name, setName] = React.useState("");
@@ -134,7 +178,6 @@ function NewEventDialog({ products, outlets, onClose }: { products: { name: stri
   const [start, setStart] = React.useState("");
   const [end, setEnd] = React.useState("");
 
-  const productOpts = products.map((p) => ({ value: p.name, label: `${p.name} · ${p.brand}` }));
   const outletOpts = outlets.map((o) => ({ value: o.id, label: o.name }));
 
   const submit = () => {
@@ -173,15 +216,8 @@ function NewEventDialog({ products, outlets, onClose }: { products: { name: stri
           </Field>
 
           {type === "promo" ? (
-            <Field label={`Produk (${productNames.length})`} hint="Dampak diukur dari omzet produk ini saja.">
-              {productOpts.length ? (
-                <div className="space-y-2">
-                  <MultiCombobox value={productNames} onChange={setProductNames} options={productOpts} placeholder="Pilih produk…" searchPlaceholder="Cari produk…" />
-                  <SelectionChips labels={productNames} onClear={() => setProductNames([])} />
-                </div>
-              ) : (
-                <p className="rounded-lg border border-dashed border-border p-2.5 text-xs text-muted-foreground">Belum ada produk di katalog HPP.</p>
-              )}
+            <Field label={`Produk (${productNames.length})`} hint="Ambil dari katalog ESB — filter berdasarkan nama produk atau kategori. Dampak diukur dari omzet produk ini.">
+              <ProductPicker products={products} value={productNames} onChange={setProductNames} />
             </Field>
           ) : (
             <Field label="Outlet yang terdampak" hint="Beberapa cabang atau semua outlet.">
@@ -302,7 +338,7 @@ function Detail({ icon: Icon, label, children, className }: { icon: React.Compon
   );
 }
 
-function AccDialog({ event, products, outlets, onClose }: { event: ReviewableEvent; products: { name: string; brand: string }[]; outlets: { id: string; name: string }[]; onClose: () => void }) {
+function AccDialog({ event, products, outlets, onClose }: { event: ReviewableEvent; products: ProductOption[]; outlets: { id: string; name: string }[]; onClose: () => void }) {
   const router = useRouter();
   const r = event.review;
   const [busy, setBusy] = React.useState(false);
@@ -315,7 +351,6 @@ function AccDialog({ event, products, outlets, onClose }: { event: ReviewableEve
   const [end, setEnd] = React.useState(r.measureEnd ?? event.endDate.slice(0, 10));
   const [note, setNote] = React.useState(r.note);
 
-  const productOpts = products.map((p) => ({ value: p.name, label: `${p.name} · ${p.brand}` }));
   const outletOpts = outlets.map((o) => ({ value: o.id, label: o.name }));
 
   const submit = () => {
@@ -350,15 +385,8 @@ function AccDialog({ event, products, outlets, onClose }: { event: ReviewableEve
           </Field>
 
           {type === "promo" ? (
-            <Field label={`Produk yang dipromosikan (${productNames.length})`} hint="Dampak diukur dari omzet produk ini saja.">
-              {productOpts.length ? (
-                <div className="space-y-2">
-                  <MultiCombobox value={productNames} onChange={setProductNames} options={productOpts} placeholder="Pilih produk…" searchPlaceholder="Cari produk…" />
-                  <SelectionChips labels={productNames} onClear={() => setProductNames([])} />
-                </div>
-              ) : (
-                <p className="rounded-lg border border-dashed border-border p-2.5 text-xs text-muted-foreground">Belum ada produk di katalog HPP.</p>
-              )}
+            <Field label={`Produk yang dipromosikan (${productNames.length})`} hint="Ambil dari katalog ESB — filter berdasarkan nama produk atau kategori. Dampak diukur dari omzet produk ini.">
+              <ProductPicker products={products} value={productNames} onChange={setProductNames} />
             </Field>
           ) : (
             <Field label="Outlet yang terdampak" hint="Dampak diukur dari omzet outlet terpilih.">

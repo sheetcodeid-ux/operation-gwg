@@ -59,6 +59,17 @@ export interface ReviewableEvent {
   review: MarcommReview;
 }
 
+/** A selectable product for promo classification — sourced from the ESB catalog
+ *  (menu name + its ESB menu category), with a food/beverage flag. */
+export interface ProductOption {
+  name: string;
+  /** Secondary label (category, shown after the name). */
+  brand: string;
+  /** ESB menu category — the group used to filter by category. */
+  category: string;
+  foodBev: "makanan" | "minuman";
+}
+
 export function fmtRupiah(n: number): string {
   const neg = n < 0;
   return (neg ? "-Rp " : "Rp ") + Math.round(Math.abs(n) || 0).toLocaleString("id-ID");

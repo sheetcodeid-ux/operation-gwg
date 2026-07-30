@@ -6,7 +6,8 @@ import { markLocalWrite } from "./hydrate";
 import { getOutlets, outletName, userName } from "./store";
 import { eventFromRow } from "./rows";
 import { listHpp } from "./hpp";
-import type { MarcommEventType, MarcommReview, MarcommStatus, ReviewableEvent } from "@/lib/marcomm-shared";
+import { listEsbMenus } from "./esb-menu";
+import type { MarcommEventType, MarcommReview, MarcommStatus, ProductOption, ReviewableEvent } from "@/lib/marcomm-shared";
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
@@ -212,18 +213,34 @@ export async function resetReview(eventId: string): Promise<{ error?: string }> 
   return error ? { error: error.message } : {};
 }
 
-/** Product options for promo classification — the HPP menu catalog. */
-export async function productOptions(): Promise<{ name: string; brand: string }[]> {
-  const menus = await listHpp();
+/** Product options for promo classification — sourced straight from the ESB
+ *  product catalog (`esb_menu`) so the promo picker matches what actually sells,
+ *  carrying the ESB menu category so it can be filtered by name OR category.
+ *  Falls back to the HPP catalog when ESB hasn't been synced yet. */
+export async function productOptions(): Promise<ProductOption[]> {
+  const menus = await listEsbMenus();
   const seen = new Set<string>();
-  const out: { name: string; brand: string }[] = [];
+  const out: ProductOption[] = [];
   for (const m of menus) {
+    const name = m.menu.trim();
+    if (!name) continue;
+    const key = name.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    const category = (m.category || "Lainnya").trim() || "Lainnya";
+    out.push({ name, brand: category, category, foodBev: m.foodBev });
+  }
+  if (out.length > 0) return out.sort((a, b) => a.category.localeCompare(b.category) || a.name.localeCompare(b.name));
+
+  // Fallback: HPP catalog (ESB not yet synced).
+  const hpp = await listHpp();
+  for (const m of hpp) {
     const key = m.name.toLowerCase();
     if (seen.has(key)) continue;
     seen.add(key);
-    out.push({ name: m.name, brand: m.brand });
+    out.push({ name: m.name, brand: m.brand, category: m.brand || "Lainnya", foodBev: "makanan" });
   }
-  return out.sort((a, b) => a.name.localeCompare(b.name));
+  return out.sort((a, b) => a.category.localeCompare(b.category) || a.name.localeCompare(b.name));
 }
 
 export function outletOptions(): { id: string; name: string }[] {
