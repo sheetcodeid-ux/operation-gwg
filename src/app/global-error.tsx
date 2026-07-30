@@ -7,9 +7,30 @@ import { useEffect } from "react";
  * root layout, so it must render its own <html>/<body>. Kept dependency-free
  * (no shared components) because those may be what failed.
  */
+/** Detect a stale-deploy chunk-load failure (inlined — this boundary stays
+ *  dependency-free since shared modules may be what failed to load). */
+function isChunkError(error: unknown): boolean {
+  const err = error as { name?: string; message?: string } | null;
+  if (!err) return false;
+  if (err.name === "ChunkLoadError") return true;
+  return /ChunkLoadError|Loading (chunk|CSS chunk)|dynamically imported module|module script failed/i.test(String(err.message ?? error));
+}
+
 export default function GlobalError({ error, reset }: { error: Error & { digest?: string }; reset: () => void }) {
   useEffect(() => {
     console.error("[global-error]", error);
+    // Stale page shell after a deploy → hard-reload once (guarded against loops).
+    if (typeof window !== "undefined" && isChunkError(error)) {
+      try {
+        const last = Number(sessionStorage.getItem("gwg_chunk_reload_at") || 0);
+        if (Date.now() - last > 20_000) {
+          sessionStorage.setItem("gwg_chunk_reload_at", String(Date.now()));
+          window.location.reload();
+        }
+      } catch {
+        window.location.reload();
+      }
+    }
   }, [error]);
 
   return (

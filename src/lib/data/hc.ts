@@ -46,18 +46,25 @@ async function signBatch(paths: string[]): Promise<Map<string, string>> {
   const map = new Map<string, string>();
   const unique = [...new Set(paths.filter(Boolean))];
   if (unique.length === 0) return map;
-  // R2-stored files.
+  // R2-stored files — a single bad key must never blank the whole page.
   for (const p of unique) {
-    if (isR2Key(p)) {
+    if (!isR2Key(p)) continue;
+    try {
       const url = await presignGet(r2KeyOf(p), SIGN_TTL);
       if (url) map.set(p, url);
+    } catch {
+      /* leave this file's link empty rather than throwing the page */
     }
   }
   // Supabase-stored files (legacy / fallback).
   const sb = unique.filter((p) => !isR2Key(p));
   if (dbEnabled && sb.length > 0) {
-    const { data } = await db().storage.from("hc-documents").createSignedUrls(sb, SIGN_TTL);
-    for (const d of data ?? []) if (d.path && d.signedUrl) map.set(d.path, d.signedUrl);
+    try {
+      const { data } = await db().storage.from("hc-documents").createSignedUrls(sb, SIGN_TTL);
+      for (const d of data ?? []) if (d.path && d.signedUrl) map.set(d.path, d.signedUrl);
+    } catch {
+      /* signing unavailable — rows still render, just without a download link */
+    }
   }
   return map;
 }
