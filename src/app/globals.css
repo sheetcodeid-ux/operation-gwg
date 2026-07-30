@@ -792,3 +792,40 @@
     .dash-neon .glass { transition: none; }
   }
 }
+
+/* ============================================================
+   Dashboard neon — PERFORMANCE pass. Keep the look, cut the cost:
+   no always-on animations (they ran on every card every frame),
+   no per-card backdrop blur, and the spinning border only on the
+   ONE card you're hovering. Mobile drops the heaviest effects.
+   ============================================================ */
+@layer components {
+  /* Static nebula (was slowly drifting a full-screen layer every frame). */
+  .dash-neon::before { animation: none !important; }
+
+  /* Drop backdrop-filter on cards — biggest compositing cost; cards are already
+     dark enough that the glass look survives without it. */
+  .dash-neon .glass,
+  .dash-neon .card-gradient {
+    -webkit-backdrop-filter: none !important;
+    backdrop-filter: none !important;
+  }
+
+  /* Spinning conic border ONLY on the hovered card (one at a time), not all. */
+  .dash-neon .glass::after {
+    opacity: 0;
+    animation: none;
+    transition: opacity 0.25s ease;
+  }
+  .dash-neon .glass:hover::after {
+    opacity: 0.6;
+    animation: dashBorderSpin 5s linear infinite;
+  }
+}
+
+/* Phones / small screens: no hover anyway → drop the last continuous bits. */
+@media (max-width: 820px) {
+  .dash-neon .glass::after,
+  .dash-neon .dash-hero::after { display: none !important; }
+  .dash-neon::before { animation: none !important; }
+}
