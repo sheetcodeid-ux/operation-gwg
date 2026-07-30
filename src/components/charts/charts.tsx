@@ -87,7 +87,7 @@ export function CategoryBarChart({
         <XAxis dataKey="label" tick={AXIS} tickLine={false} axisLine={false} interval={0} angle={angle} dy={8} height={angle ? 44 : 28} />
         <YAxis tick={AXIS} tickLine={false} axisLine={false} allowDecimals={false} width={32} domain={max ? [0, max] : undefined} />
         <Tooltip contentStyle={tooltipStyle} cursor={{ fill: "rgba(255,255,255,0.04)" }} />
-        <Bar dataKey="value" radius={[radius, radius, radius, radius]} fill={color} maxBarSize={maxBarSize} />
+        <Bar dataKey="value" radius={[radius, radius, radius, radius]} fill={color} maxBarSize={maxBarSize} isAnimationActive animationBegin={120} animationDuration={1100} animationEasing="ease-out" />
       </BarChart>
     </ResponsiveContainer>
   );
@@ -180,8 +180,8 @@ export function ComboCompareChart({
         />
         {/* tooltipType="none": the shaded area duplicates the line's dataKey and
             must not add a second "current" row to the tooltip. */}
-        <Area type="monotone" dataKey="current" stroke="none" fill="url(#cmpArea)" tooltipType="none" />
-        <Bar dataKey="previous" name={names[1]} fill="url(#cmpBar)" radius={[4, 4, 0, 0]} maxBarSize={26} />
+        <Area type="monotone" dataKey="current" stroke="none" fill="url(#cmpArea)" tooltipType="none" isAnimationActive animationDuration={1100} animationEasing="ease-out" />
+        <Bar dataKey="previous" name={names[1]} fill="url(#cmpBar)" radius={[4, 4, 0, 0]} maxBarSize={26} isAnimationActive animationBegin={120} animationDuration={1100} animationEasing="ease-out" />
         <Line
           type="monotone"
           dataKey="current"
@@ -191,6 +191,10 @@ export function ComboCompareChart({
           dot={{ r: 2.5, fill: "#3b82f6", strokeWidth: 0 }}
           activeDot={{ r: 4 }}
           className="chart-glow-blue"
+          isAnimationActive
+          animationBegin={220}
+          animationDuration={1200}
+          animationEasing="ease-out"
         />
       </ComposedChart>
     </ResponsiveContainer>

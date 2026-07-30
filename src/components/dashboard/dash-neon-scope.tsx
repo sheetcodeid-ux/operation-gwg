@@ -92,17 +92,43 @@ export function DashNeonScope() {
     const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
     const dash = document.querySelector<HTMLElement>(".dash-neon");
 
-    // Cursor spotlight — a soft highlight on each card that follows the mouse.
+    // Cursor spotlight (all cards) + subtle 3D tilt (big .glass cards only, so
+    // the KPI tiles inside the scroll row are never clipped).
+    let tilted: HTMLElement | null = null;
+    const MAX_DEG = 5;
     const onSpot = (e: PointerEvent) => {
-      const card = (e.target as HTMLElement)?.closest<HTMLElement>(".glass, .card-gradient");
-      if (!card) return;
-      const r = card.getBoundingClientRect();
-      card.style.setProperty("--spot-x", `${e.clientX - r.left}px`);
-      card.style.setProperty("--spot-y", `${e.clientY - r.top}px`);
+      const t = e.target as HTMLElement;
+      const anyCard = t?.closest<HTMLElement>(".glass, .card-gradient");
+      if (anyCard) {
+        const r = anyCard.getBoundingClientRect();
+        anyCard.style.setProperty("--spot-x", `${e.clientX - r.left}px`);
+        anyCard.style.setProperty("--spot-y", `${e.clientY - r.top}px`);
+      }
+      const card = t?.closest<HTMLElement>(".glass");
+      if (card !== tilted) {
+        if (tilted) tilted.style.transform = "";
+        tilted = card;
+      }
+      if (card) {
+        const r = card.getBoundingClientRect();
+        const px = (e.clientX - r.left) / r.width - 0.5;
+        const py = (e.clientY - r.top) / r.height - 0.5;
+        card.style.transform = `perspective(1000px) rotateX(${(-py * MAX_DEG * 2).toFixed(2)}deg) rotateY(${(px * MAX_DEG * 2).toFixed(2)}deg) scale(1.012)`;
+      }
+    };
+    const onLeave = () => {
+      if (tilted) {
+        tilted.style.transform = "";
+        tilted = null;
+      }
     };
     if (dash && !reduce) {
       dash.addEventListener("pointermove", onSpot);
-      cleanups.push(() => dash.removeEventListener("pointermove", onSpot));
+      dash.addEventListener("pointerleave", onLeave);
+      cleanups.push(() => {
+        dash.removeEventListener("pointermove", onSpot);
+        dash.removeEventListener("pointerleave", onLeave);
+      });
     }
 
     // Count-up — animate the big metric numbers from 0 on first paint.

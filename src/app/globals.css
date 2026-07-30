@@ -724,3 +724,71 @@
       0 0 80px -26px rgba(72, 140, 255, 0.4) !important;
   }
 }
+
+/* ============================================================
+   Dashboard neon — motion MAX (3D tilt, hero shimmer, spinning
+   conic border, chart grow). Scoped to .dash-neon. @property lets
+   the conic angle animate; falls back gracefully where unsupported.
+   ============================================================ */
+@property --dash-angle {
+  syntax: "<angle>";
+  inherits: false;
+  initial-value: 0deg;
+}
+@keyframes dashBorderSpin { to { --dash-angle: 360deg; } }
+@keyframes dashHeroShimmer {
+  0% { transform: translateX(-140%) skewX(-14deg); }
+  55%, 100% { transform: translateX(260%) skewX(-14deg); }
+}
+
+@layer components {
+  /* 3D tilt: JS sets an inline transform on hover; this smooths it. */
+  .dash-neon .glass {
+    transform-style: preserve-3d;
+    transition: transform 0.16s ease, border-color 0.25s ease, box-shadow 0.25s ease;
+  }
+
+  /* Spinning conic neon border on the big cards. */
+  .dash-neon .glass::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    padding: 1px;
+    background: conic-gradient(
+      from var(--dash-angle),
+      transparent 0deg,
+      rgba(90, 160, 255, 0.9) 40deg,
+      rgba(139, 92, 246, 0.55) 75deg,
+      transparent 130deg,
+      transparent 360deg
+    );
+    -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+    -webkit-mask-composite: xor;
+    mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+    mask-composite: exclude;
+    pointer-events: none;
+    opacity: 0.6;
+    animation: dashBorderSpin 5s linear infinite;
+  }
+
+  /* Hero card: a slow light sweep every few seconds. */
+  .dash-neon .dash-hero::after {
+    content: "";
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    left: 0;
+    width: 42%;
+    background: linear-gradient(100deg, transparent 0%, rgba(255, 255, 255, 0.13) 50%, transparent 100%);
+    transform: translateX(-140%) skewX(-14deg);
+    animation: dashHeroShimmer 7s ease-in-out infinite;
+    pointer-events: none;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .dash-neon .glass::after { animation: none; opacity: 0.3; }
+    .dash-neon .dash-hero::after { animation: none; opacity: 0; }
+    .dash-neon .glass { transition: none; }
+  }
+}
