@@ -29,6 +29,7 @@ import {
   type ELearningDay,
   type ELearningLesson,
   type LessonProgress,
+  type QuizResultSummary,
 } from "@/lib/elearning-shared";
 import { completeLessonAction, getLessonDetailAction, saveLessonProgressAction } from "@/lib/actions/elearning";
 import { cn } from "@/lib/utils";
@@ -36,15 +37,19 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { VideoPlayer } from "./video-player";
+import { QuizRunner } from "./quiz-runner";
+import { ClipboardCheck, RotateCcw } from "lucide-react";
 
 export function LearnPath({
   course,
   days,
   progress,
+  quizResults = {},
 }: {
   course: ELearningCourse;
   days: ELearningDay[];
   progress: Record<string, LessonProgress>;
+  quizResults?: Record<string, QuizResultSummary>;
   canManage?: boolean;
 }) {
   const lessons = React.useMemo(() => orderedLessons(days), [days]);
@@ -127,6 +132,7 @@ export function LearnPath({
                 defaultOpen={di === 0 || day.lessons.some((l) => l.id === resumeId)}
                 lessons={lessons}
                 progress={progress}
+                quizResults={quizResults}
                 onOpen={openLesson}
               />
             ))
@@ -179,6 +185,7 @@ function DaySection({
   defaultOpen,
   lessons,
   progress,
+  quizResults,
   onOpen,
 }: {
   day: ELearningDay;
@@ -186,6 +193,7 @@ function DaySection({
   defaultOpen: boolean;
   lessons: ELearningLesson[];
   progress: Record<string, LessonProgress>;
+  quizResults: Record<string, QuizResultSummary>;
   onOpen: (id: string) => void;
 }) {
   const [open, setOpen] = React.useState(defaultOpen);
@@ -233,6 +241,16 @@ function DaySection({
                       {l.estimatedMinutes > 0 && <span>· {fmtMinutes(l.estimatedMinutes)}</span>}
                       {l.hasVideo && <span>· Video</span>}
                       {l.fileCount > 0 && <span>· {l.fileCount} lampiran</span>}
+                      {l.hasQuiz && (
+                        <span className="inline-flex items-center gap-0.5">
+                          · <ClipboardCheck className="size-3" />
+                          {quizResults[l.id]?.passed
+                            ? `Lulus ${quizResults[l.id].score}`
+                            : quizResults[l.id]
+                              ? `Belum lulus (${quizResults[l.id].score})`
+                              : "Assessment"}
+                        </span>
+                      )}
                     </div>
                   </div>
                   {!unlocked && <span className="shrink-0 text-[11px] text-muted-foreground">Terkunci</span>}
@@ -270,11 +288,13 @@ function LessonViewer({
   const [loading, setLoading] = React.useState(true);
   const [videoDone, setVideoDone] = React.useState(false);
   const [saving, setSaving] = React.useState(false);
+  const [quizMode, setQuizMode] = React.useState(false);
 
   React.useEffect(() => {
     let live = true;
     setLoading(true);
     setVideoDone(false);
+    setQuizMode(false);
     getLessonDetailAction(lessonMeta.id).then((r) => {
       if (!live) return;
       if (r.ok) setLesson(r.lesson);
@@ -295,6 +315,12 @@ function LessonViewer({
 
   const requireVideo = lessonMeta.mustCompleteVideo && lessonMeta.hasVideo;
   const canComplete = !requireVideo || videoDone || alreadyDone;
+
+  const handleQuizPassed = () => {
+    router.refresh();
+    if (hasNext) onNext();
+    else onClose();
+  };
 
   const markDone = () => {
     setSaving(true);
@@ -324,6 +350,13 @@ function LessonViewer({
     );
   }
   if (!lesson) return <div className="p-8 text-center text-sm text-muted-foreground">Materi tidak dapat dimuat.</div>;
+
+  if (quizMode && lesson.quiz) {
+    return <QuizRunner lessonId={lessonMeta.id} quiz={lesson.quiz} onPassed={handleQuizPassed} onClose={() => setQuizMode(false)} />;
+  }
+
+  const hasQuiz = !!lesson.quiz && lesson.quiz.questions.length > 0;
+  const canStartQuiz = !requireVideo || videoDone || alreadyDone;
 
   return (
     <div className="max-h-[80vh] space-y-4 overflow-y-auto p-5">
@@ -381,13 +414,24 @@ function LessonViewer({
 
       <div className="flex items-center justify-between gap-3 border-t border-border pt-4">
         <span className="text-xs text-muted-foreground">
-          {alreadyDone ? "Sudah selesai — bisa ditinjau ulang kapan saja." : lesson.required ? "Materi wajib" : "Materi opsional"}
+          {alreadyDone
+            ? "Sudah selesai — bisa ditinjau ulang kapan saja."
+            : hasQuiz
+              ? "Selesaikan Assessment untuk menyelesaikan materi ini."
+              : lesson.required
+                ? "Materi wajib"
+                : "Materi opsional"}
         </span>
         {alreadyDone ? (
           <div className="flex gap-2">
+            {hasQuiz && <Button variant="outline" onClick={() => setQuizMode(true)}><RotateCcw className="size-4" /> Ulangi</Button>}
             <Button variant="outline" onClick={onClose}>Tutup</Button>
             {hasNext && <Button onClick={onNext}>Materi Berikutnya</Button>}
           </div>
+        ) : hasQuiz ? (
+          <Button onClick={() => setQuizMode(true)} disabled={!canStartQuiz}>
+            <ClipboardCheck className="size-4" /> Mulai Assessment
+          </Button>
         ) : (
           <Button onClick={markDone} disabled={!canComplete || saving}>
             {saving ? <Loader2 className="size-4 animate-spin" /> : <CheckCircle2 className="size-4" />} {hasNext ? "Selesai & Lanjut" : "Tandai Selesai"}

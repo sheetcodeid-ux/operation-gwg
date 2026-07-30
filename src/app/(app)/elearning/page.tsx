@@ -3,7 +3,7 @@ import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 import { getSessionUser } from "@/lib/auth";
 import { canReachMenu } from "@/lib/nav";
-import { getActiveCourse, getCourseTree, getProgressMap } from "@/lib/data/elearning";
+import { getActiveCourse, getCourseTree, getProgressMap, getQuizResultsMap } from "@/lib/data/elearning";
 import { canManageElearning } from "@/lib/elearning-shared";
 import { EmptyState, PageHeader } from "@/components/ui/page-header";
 import { LearnPath } from "@/components/elearning/learn-path";
@@ -38,7 +38,11 @@ export default async function ElearningPage() {
     );
   }
 
-  const [days, progress] = await Promise.all([getCourseTree(course.id), getProgressMap(user.id, course.id)]);
+  const [days, progress, quizResults] = await Promise.all([
+    getCourseTree(course.id),
+    getProgressMap(user.id, course.id),
+    getQuizResultsMap(user.id, course.id),
+  ]);
 
-  return <LearnPath course={course} days={days} progress={progress} canManage={canManage} />;
+  return <LearnPath course={course} days={days} progress={progress} quizResults={quizResults} canManage={canManage} />;
 }

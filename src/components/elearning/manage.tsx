@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import {
   ChevronDown,
   ChevronsUpDown,
+  ClipboardCheck,
   Clock,
   FileText,
   FileUp,
@@ -40,6 +41,7 @@ import {
   updateLessonAction,
 } from "@/lib/actions/elearning";
 import { uploadToR2 } from "./upload";
+import { QuizEditor } from "./quiz-editor";
 import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -309,6 +311,7 @@ function DayDialog({ courseId, day, open, onOpenChange }: { courseId: string; da
 function LessonRow({ course, lesson, index, count, onMove }: { course: ELearningCourse; lesson: ELearningLesson; index: number; count: number; onMove: (dir: -1 | 1) => void }) {
   const router = useRouter();
   const [edit, setEdit] = React.useState(false);
+  const [quizOpen, setQuizOpen] = React.useState(false);
 
   const remove = () => {
     if (!window.confirm(`Hapus materi "${lesson.title}"?`)) return;
@@ -331,15 +334,18 @@ function LessonRow({ course, lesson, index, count, onMove }: { course: ELearning
           {lesson.allowSkip && <span>· boleh skip</span>}
           {lesson.estimatedMinutes > 0 && <span className="inline-flex items-center gap-0.5">· <Clock className="size-3" /> {fmtMinutes(lesson.estimatedMinutes)}</span>}
           {lesson.fileCount > 0 && <span>· {lesson.fileCount} lampiran</span>}
+          {lesson.hasQuiz && <span className="inline-flex items-center gap-0.5 text-brand-600 dark:text-brand-400">· <ClipboardCheck className="size-3" /> Assessment</span>}
         </div>
       </div>
       <div className="flex shrink-0 items-center gap-0.5">
         <IconBtn title="Naik" disabled={index === 0} onClick={() => onMove(-1)}><ChevronsUpDown className="size-4 rotate-180" /></IconBtn>
         <IconBtn title="Turun" disabled={index === count - 1} onClick={() => onMove(1)}><ChevronsUpDown className="size-4" /></IconBtn>
+        <IconBtn title="Assessment / Quiz" onClick={() => setQuizOpen(true)}><ClipboardCheck className={cn("size-4", lesson.hasQuiz && "text-brand-500")} /></IconBtn>
         <IconBtn title="Edit materi" onClick={() => setEdit(true)}><Pencil className="size-4" /></IconBtn>
         <IconBtn title="Hapus materi" danger onClick={remove}><Trash2 className="size-4" /></IconBtn>
       </div>
       <LessonDialog course={course} dayId={lesson.dayId} lesson={lesson} open={edit} onOpenChange={setEdit} />
+      <QuizEditor courseId={course.id} lessonId={lesson.id} open={quizOpen} onOpenChange={setQuizOpen} />
     </div>
   );
 }

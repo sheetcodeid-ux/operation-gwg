@@ -8,6 +8,7 @@ import { canManageElearning, type LessonFileKind } from "@/lib/elearning-shared"
 import { presignPut, r2Enabled, R2_PREFIX } from "@/lib/storage/r2";
 import {
   addLessonFile,
+  addQuestion,
   createCourse,
   createDay,
   createLesson,
@@ -15,14 +16,23 @@ import {
   deleteDay,
   deleteLesson,
   deleteLessonFile,
+  deleteQuestion,
+  deleteQuiz,
+  ensureQuiz,
   getLessonDetail,
+  getQuizAdmin,
   reorderDays,
   reorderLessons,
+  reorderQuestions,
+  saveQuizResult,
   updateCourse,
   updateDay,
   updateLesson,
+  updateQuestion,
+  updateQuizSettings,
   upsertProgress,
 } from "@/lib/data/elearning";
+import { gradeQuiz, type AdminQuiz, type QuizAnswers, type QuizQuestion } from "@/lib/elearning-quiz";
 import type { ELearningLesson } from "@/lib/elearning-shared";
 import type { UserProfile } from "@/lib/types";
 
@@ -268,4 +278,148 @@ export async function completeLessonAction(input: { courseId: string; lessonId: 
 
 function clampScore(n: number): number {
   return Math.max(0, Math.min(100, Math.round(n || 0)));
+}
+
+/* ------------------------------------------------------------------ */
+/* Assessment / Quiz (Fase 3)                                          */
+/* ------------------------------------------------------------------ */
+
+/** Admin: fetch the full quiz (WITH answer key) for the editor. */
+export async function getQuizAdminAction(lessonId: string): Promise<{ ok: true; quiz: AdminQuiz | null } | { ok: false; error: string }> {
+  const user = await getSessionUser();
+  if (!manage(user)) return { ok: false, error: "Tidak punya akses." };
+  return { ok: true, quiz: await getQuizAdmin(lessonId) };
+}
+
+export async function saveQuizSettingsAction(input: { courseId: string; lessonId: string; title: string; timeLimitSec: number; passScore: number; shuffleQuestions: boolean; shuffleAnswers: boolean }) {
+  const user = await getSessionUser();
+  if (!manage(user)) return { error: "Tidak punya akses." };
+  const quizId = await ensureQuiz(input.courseId, input.lessonId);
+  if (!quizId) return { error: "Gagal menyiapkan quiz." };
+  const res = await updateQuizSettings(quizId, {
+    title: input.title.trim() || "Assessment",
+    timeLimitSec: Math.max(0, Math.round(input.timeLimitSec || 0)),
+    passScore: clampScore(input.passScore),
+    shuffleQuestions: input.shuffleQuestions,
+    shuffleAnswers: input.shuffleAnswers,
+  });
+  if (res.error) return { error: res.error };
+  revalidate();
+  return { ok: true, quizId };
+}
+
+export async function deleteQuizAction(quizId: string) {
+  const user = await getSessionUser();
+  if (!manage(user)) return { error: "Tidak punya akses." };
+  const res = await deleteQuiz(quizId);
+  if (res.error) return { error: res.error };
+  revalidate();
+  return { ok: true };
+}
+
+/** Validate a question shape before it's written. */
+function validateQuestion(q: Omit<QuizQuestion, "id" | "sortOrder">): string | null {
+  if (!q.prompt.trim()) return "Pertanyaan wajib diisi.";
+  if (q.type === "essay") return null;
+  const optionIds = new Set(q.options.map((o) => o.id));
+  if (["single", "multiple", "case", "order"].includes(q.type) && q.options.length < 2) return "Minimal 2 opsi jawaban.";
+  if (q.type === "single" || q.type === "case") {
+    if (typeof q.correct !== "string" || !optionIds.has(q.correct)) return "Pilih satu jawaban benar.";
+  } else if (q.type === "truefalse") {
+    if (q.correct !== "true" && q.correct !== "false") return "Pilih Benar atau Salah.";
+  } else if (q.type === "multiple") {
+    if (!Array.isArray(q.correct) || q.correct.length === 0 || !q.correct.every((c) => optionIds.has(c))) return "Pilih minimal satu jawaban benar.";
+  } else if (q.type === "order") {
+    if (!Array.isArray(q.correct) || q.correct.length !== q.options.length) return "Tentukan urutan yang benar untuk semua langkah.";
+  }
+  return null;
+}
+
+export async function addQuestionAction(input: { courseId: string; lessonId: string; question: Omit<QuizQuestion, "id" | "sortOrder"> }) {
+  const user = await getSessionUser();
+  if (!manage(user)) return { error: "Tidak punya akses." };
+  const err = validateQuestion(input.question);
+  if (err) return { error: err };
+  const quizId = await ensureQuiz(input.courseId, input.lessonId);
+  if (!quizId) return { error: "Gagal menyiapkan quiz." };
+  const rec = await addQuestion(quizId, input.question);
+  if (!rec) return { error: "Gagal menyimpan soal." };
+  revalidate();
+  return { ok: true, id: rec.id, quizId };
+}
+
+export async function updateQuestionAction(id: string, question: Omit<QuizQuestion, "id" | "sortOrder">) {
+  const user = await getSessionUser();
+  if (!manage(user)) return { error: "Tidak punya akses." };
+  const err = validateQuestion(question);
+  if (err) return { error: err };
+  const res = await updateQuestion(id, question);
+  if (res.error) return { error: res.error };
+  revalidate();
+  return { ok: true };
+}
+
+export async function deleteQuestionAction(id: string) {
+  const user = await getSessionUser();
+  if (!manage(user)) return { error: "Tidak punya akses." };
+  const res = await deleteQuestion(id);
+  if (res.error) return { error: res.error };
+  revalidate();
+  return { ok: true };
+}
+
+export async function reorderQuestionsAction(orderedIds: string[]) {
+  const user = await getSessionUser();
+  if (!manage(user)) return { error: "Tidak punya akses." };
+  const res = await reorderQuestions(orderedIds);
+  if (res.error) return { error: res.error };
+  revalidate();
+  return { ok: true };
+}
+
+export interface QuizSubmitResult {
+  score: number;
+  passScore: number;
+  passed: boolean;
+  needsReview: boolean;
+  detail: { questionId: string; correct: boolean; auto: boolean }[];
+}
+
+/**
+ * Learner submits quiz answers. Grading happens SERVER-SIDE with the answer key
+ * (the client never sees it). On pass, the lesson is marked complete → next
+ * lesson unlocks. Failing simply records the attempt so the learner can retry.
+ */
+export async function submitQuizAction(input: {
+  lessonId: string;
+  answers: QuizAnswers;
+  startedAt: string | null;
+}): Promise<{ ok: true; result: QuizSubmitResult } | { ok: false; error: string }> {
+  const user = await getSessionUser();
+  if (!learn(user) && !manage(user)) return { ok: false, error: "Tidak punya akses." };
+
+  const quiz = await getQuizAdmin(input.lessonId);
+  if (!quiz) return { ok: false, error: "Quiz tidak ditemukan." };
+  if (quiz.questions.length === 0) return { ok: false, error: "Quiz belum memiliki soal." };
+
+  const grade = gradeQuiz(quiz.questions, input.answers);
+  const passed = grade.total > 0 && grade.score >= quiz.passScore;
+
+  await saveQuizResult({
+    quizId: quiz.id,
+    lessonId: quiz.lessonId,
+    courseId: quiz.courseId,
+    userId: user!.id,
+    score: grade.score,
+    passed,
+    needsReview: grade.needsReview,
+    answers: input.answers,
+    detail: grade.detail,
+    startedAt: input.startedAt,
+  });
+
+  if (passed) await upsertProgress({ userId: user!.id, courseId: quiz.courseId, lessonId: quiz.lessonId, completed: true });
+
+  revalidatePath("/elearning");
+  return { ok: true, result: { score: grade.score, passScore: quiz.passScore, passed, needsReview: grade.needsReview, detail: grade.detail } };
 }

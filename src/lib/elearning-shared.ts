@@ -1,5 +1,6 @@
 import type { Tone } from "@/lib/constants";
 import type { Role } from "@/lib/types";
+import type { PublicQuiz } from "@/lib/elearning-quiz";
 
 /**
  * Shared E-Learning types + helpers. Lives OUTSIDE the server-only data module so
@@ -84,7 +85,20 @@ export interface ELearningLesson {
   tags: string[];
   sortOrder: number;
   fileCount: number;
+  /** Whether an assessment/quiz is attached to this lesson. */
+  hasQuiz: boolean;
   files?: ELearningFile[];
+  /** Learner-facing quiz (answer key stripped) — only in the detail view. */
+  quiz?: PublicQuiz | null;
+}
+
+/** A learner's quiz outcome for one lesson (best attempt). */
+export interface QuizResultSummary {
+  lessonId: string;
+  score: number;
+  passed: boolean;
+  attempts: number;
+  needsReview: boolean;
 }
 
 export interface ELearningDay {

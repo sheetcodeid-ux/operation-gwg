@@ -11,7 +11,9 @@ import type {
   ELearningLesson,
   LessonFileKind,
   LessonProgress,
+  QuizResultSummary,
 } from "@/lib/elearning-shared";
+import { toPublicQuiz, type AdminQuiz, type QuestionType, type QuizAnswers, type QuizQuestion } from "@/lib/elearning-quiz";
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
@@ -61,7 +63,7 @@ const courseFromRow = (r: any, thumbUrl: string | null): ELearningCourse => ({
   updatedAt: r.updated_at ?? r.created_at,
 });
 
-const lessonFromRow = (r: any, thumbUrl: string | null, fileCount: number): ELearningLesson => ({
+const lessonFromRow = (r: any, thumbUrl: string | null, fileCount: number, hasQuiz = false): ELearningLesson => ({
   id: r.id,
   courseId: r.course_id,
   dayId: r.day_id,
@@ -79,6 +81,30 @@ const lessonFromRow = (r: any, thumbUrl: string | null, fileCount: number): ELea
   tags: Array.isArray(r.tags) ? r.tags : [],
   sortOrder: r.sort_order ?? 0,
   fileCount,
+  hasQuiz,
+});
+
+const questionFromRow = (r: any): QuizQuestion => ({
+  id: r.id,
+  type: (r.type ?? "single") as QuestionType,
+  prompt: r.prompt ?? "",
+  scenario: r.scenario ?? "",
+  points: r.points ?? 1,
+  options: Array.isArray(r.options) ? r.options : [],
+  correct: r.correct ?? null,
+  sortOrder: r.sort_order ?? 0,
+});
+
+const quizFromRows = (r: any, questions: QuizQuestion[]): AdminQuiz => ({
+  id: r.id,
+  lessonId: r.lesson_id,
+  courseId: r.course_id,
+  title: r.title ?? "Assessment",
+  timeLimitSec: r.time_limit_sec ?? 0,
+  passScore: r.pass_score ?? 70,
+  shuffleQuestions: r.shuffle_questions !== false,
+  shuffleAnswers: r.shuffle_answers !== false,
+  questions,
 });
 
 const fileFromRow = (r: any, url: string | null): ELearningFile => ({
@@ -150,11 +176,18 @@ export async function getCourseTree(courseId: string): Promise<ELearningDay[]> {
     for (const f of (fileRows ?? []) as any[]) counts.set(f.lesson_id, (counts.get(f.lesson_id) ?? 0) + 1);
   }
 
+  // Which lessons have a quiz (one query for the course).
+  const quizzed = new Set<string>();
+  if (lessons.length) {
+    const { data: quizRows } = await db().from("elearning_quizzes").select("lesson_id").eq("course_id", courseId);
+    for (const qz of (quizRows ?? []) as any[]) quizzed.add(qz.lesson_id);
+  }
+
   const thumbs = await signBatch(lessons.map((l) => l.thumbnail_path));
   const byDay = new Map<string, ELearningLesson[]>();
   for (const l of lessons) {
     const arr = byDay.get(l.day_id) ?? [];
-    arr.push(lessonFromRow(l, l.thumbnail_path ? thumbs.get(l.thumbnail_path) ?? null : null, counts.get(l.id) ?? 0));
+    arr.push(lessonFromRow(l, l.thumbnail_path ? thumbs.get(l.thumbnail_path) ?? null : null, counts.get(l.id) ?? 0, quizzed.has(l.id)));
     byDay.set(l.day_id, arr);
   }
   return days.map((d) => ({
@@ -181,10 +214,12 @@ export async function getLessonDetail(lessonId: string): Promise<ELearningLesson
   const files = (fileRows ?? []) as any[];
   const fileUrls = await signBatch(files.map((f) => f.path));
   const [videoUrl, thumbUrl, subtitleUrl] = await Promise.all([sign1(r.video_path), sign1(r.thumbnail_path), sign1(r.subtitle_path)]);
-  const lesson = lessonFromRow(r, thumbUrl, files.length);
+  const quiz = await getQuizAdmin(lessonId);
+  const lesson = lessonFromRow(r, thumbUrl, files.length, !!quiz);
   lesson.videoUrl = videoUrl;
   lesson.subtitleUrl = subtitleUrl;
   lesson.files = files.map((f) => fileFromRow(f, f.path ? fileUrls.get(f.path) ?? null : null));
+  lesson.quiz = quiz ? toPublicQuiz(quiz) : null;
   return lesson;
 }
 
@@ -466,6 +501,156 @@ export async function upsertProgress(input: {
   };
   const { error } = await db().from("elearning_progress").upsert(row, { onConflict: "user_id,lesson_id" });
   return error ? { error: error.message } : {};
+}
+
+/* ---------------- quiz ---------------- */
+
+/** The full quiz (with answer key) for a lesson, or null. Server/admin only. */
+export async function getQuizAdmin(lessonId: string): Promise<AdminQuiz | null> {
+  if (!dbEnabled) return null;
+  const { data } = await db().from("elearning_quizzes").select("*").eq("lesson_id", lessonId).maybeSingle();
+  if (!data) return null;
+  const { data: qRows } = await db().from("elearning_questions").select("*").eq("quiz_id", (data as any).id).order("sort_order", { ascending: true });
+  return quizFromRows(data, ((qRows ?? []) as any[]).map(questionFromRow));
+}
+
+export async function getQuizById(quizId: string): Promise<AdminQuiz | null> {
+  if (!dbEnabled) return null;
+  const { data } = await db().from("elearning_quizzes").select("*").eq("id", quizId).maybeSingle();
+  if (!data) return null;
+  const { data: qRows } = await db().from("elearning_questions").select("*").eq("quiz_id", quizId).order("sort_order", { ascending: true });
+  return quizFromRows(data, ((qRows ?? []) as any[]).map(questionFromRow));
+}
+
+/** Find-or-create the quiz for a lesson; returns its id. */
+export async function ensureQuiz(courseId: string, lessonId: string): Promise<string | null> {
+  if (!dbEnabled) return null;
+  markLocalWrite();
+  const existing = await db().from("elearning_quizzes").select("id").eq("lesson_id", lessonId).maybeSingle();
+  if (existing.data) return (existing.data as any).id;
+  const id = `elq_${randomUUID()}`;
+  const { error } = await db().from("elearning_quizzes").insert({ id, course_id: courseId, lesson_id: lessonId });
+  return error ? null : id;
+}
+
+export async function updateQuizSettings(
+  quizId: string,
+  patch: Partial<{ title: string; timeLimitSec: number; passScore: number; shuffleQuestions: boolean; shuffleAnswers: boolean }>,
+): Promise<{ error?: string }> {
+  if (!dbEnabled) return { error: "Database belum aktif." };
+  markLocalWrite();
+  const row: any = { updated_at: new Date().toISOString() };
+  if (patch.title !== undefined) row.title = patch.title;
+  if (patch.timeLimitSec !== undefined) row.time_limit_sec = patch.timeLimitSec;
+  if (patch.passScore !== undefined) row.pass_score = patch.passScore;
+  if (patch.shuffleQuestions !== undefined) row.shuffle_questions = patch.shuffleQuestions;
+  if (patch.shuffleAnswers !== undefined) row.shuffle_answers = patch.shuffleAnswers;
+  const { error } = await db().from("elearning_quizzes").update(row).eq("id", quizId);
+  return error ? { error: error.message } : {};
+}
+
+export async function deleteQuiz(quizId: string): Promise<{ error?: string }> {
+  if (!dbEnabled) return { error: "Database belum aktif." };
+  markLocalWrite();
+  const { error } = await db().from("elearning_quizzes").delete().eq("id", quizId);
+  return error ? { error: error.message } : {};
+}
+
+export async function addQuestion(quizId: string, q: Omit<QuizQuestion, "id" | "sortOrder">): Promise<{ id: string } | null> {
+  if (!dbEnabled) return null;
+  markLocalWrite();
+  const id = `elqq_${randomUUID()}`;
+  const sort = await nextSort("elearning_questions", "quiz_id", quizId);
+  const { error } = await db().from("elearning_questions").insert({
+    id, quiz_id: quizId, type: q.type, prompt: q.prompt, scenario: q.scenario, points: q.points,
+    options: q.options, correct: q.correct, sort_order: sort,
+  });
+  return error ? null : { id };
+}
+
+export async function updateQuestion(id: string, q: Omit<QuizQuestion, "id" | "sortOrder">): Promise<{ error?: string }> {
+  if (!dbEnabled) return { error: "Database belum aktif." };
+  markLocalWrite();
+  const { error } = await db().from("elearning_questions").update({
+    type: q.type, prompt: q.prompt, scenario: q.scenario, points: q.points, options: q.options, correct: q.correct,
+  }).eq("id", id);
+  return error ? { error: error.message } : {};
+}
+
+export async function deleteQuestion(id: string): Promise<{ error?: string }> {
+  if (!dbEnabled) return { error: "Database belum aktif." };
+  markLocalWrite();
+  const { error } = await db().from("elearning_questions").delete().eq("id", id);
+  return error ? { error: error.message } : {};
+}
+
+export async function reorderQuestions(orderedIds: string[]): Promise<{ error?: string }> {
+  if (!dbEnabled) return { error: "Database belum aktif." };
+  markLocalWrite();
+  for (let i = 0; i < orderedIds.length; i++) {
+    await db().from("elearning_questions").update({ sort_order: i }).eq("id", orderedIds[i]);
+  }
+  return {};
+}
+
+export async function saveQuizResult(input: {
+  quizId: string;
+  lessonId: string;
+  courseId: string;
+  userId: string;
+  score: number;
+  passed: boolean;
+  needsReview: boolean;
+  answers: QuizAnswers;
+  detail: { questionId: string; correct: boolean; auto: boolean }[];
+  startedAt: string | null;
+}): Promise<{ error?: string }> {
+  if (!dbEnabled) return { error: "Database belum aktif." };
+  markLocalWrite();
+  // Next attempt number for this learner + quiz.
+  const { count } = await db()
+    .from("elearning_quiz_results")
+    .select("id", { count: "exact", head: true })
+    .eq("user_id", input.userId)
+    .eq("quiz_id", input.quizId);
+  const attempt = (count ?? 0) + 1;
+  const { error } = await db().from("elearning_quiz_results").insert({
+    id: `elr_${randomUUID()}`,
+    quiz_id: input.quizId,
+    lesson_id: input.lessonId,
+    course_id: input.courseId,
+    user_id: input.userId,
+    attempt,
+    score: input.score,
+    passed: input.passed,
+    needs_review: input.needsReview,
+    answers: input.answers,
+    detail: input.detail,
+    started_at: input.startedAt,
+  });
+  return error ? { error: error.message } : {};
+}
+
+/** Best quiz outcome per lesson for a learner (highest score wins). */
+export async function getQuizResultsMap(userId: string, courseId: string): Promise<Record<string, QuizResultSummary>> {
+  if (!dbEnabled || !userId) return {};
+  const { data } = await db()
+    .from("elearning_quiz_results")
+    .select("lesson_id,score,passed,needs_review")
+    .eq("user_id", userId)
+    .eq("course_id", courseId);
+  const out: Record<string, QuizResultSummary> = {};
+  for (const r of (data ?? []) as any[]) {
+    const cur = out[r.lesson_id];
+    if (!cur) out[r.lesson_id] = { lessonId: r.lesson_id, score: r.score, passed: !!r.passed, attempts: 1, needsReview: !!r.needs_review };
+    else {
+      cur.attempts += 1;
+      cur.passed = cur.passed || !!r.passed;
+      cur.score = Math.max(cur.score, r.score);
+      cur.needsReview = cur.needsReview || !!r.needs_review;
+    }
+  }
+  return out;
 }
 
 /* ---------------- helpers ---------------- */
