@@ -8,6 +8,8 @@ import type { MarcommEventType } from "@/lib/marcomm-shared";
 import type { UserProfile } from "@/lib/types";
 
 const canMarcomm = (u: UserProfile | null) => !!u && canReachMenu(u, "mc_events");
+// Coordinator Area (operational Event Tracker) may PROPOSE; only MarComm can ACC.
+const canPropose = (u: UserProfile | null) => !!u && (canReachMenu(u, "mc_events") || canReachMenu(u, "events"));
 
 function revalidate() {
   revalidatePath("/marcomm/events");
@@ -92,7 +94,7 @@ export interface ProposalActionInput {
  *  lands pre-classified as pending — ACC only sets the budget. */
 export async function createMarcommProposalAction(input: ProposalActionInput) {
   const user = await getSessionUser();
-  if (!canMarcomm(user)) return { error: "Tidak punya akses." };
+  if (!canPropose(user)) return { error: "Tidak punya akses." };
   if (!input.title.trim()) return { error: "Nama event/promo wajib diisi." };
   const scopeErr = validateScope(input.eventType, input.productNames, input.outletIds, input.allOutlets);
   if (scopeErr) return { error: scopeErr };

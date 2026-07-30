@@ -33,11 +33,14 @@ export function MarcommEvents({
   products,
   outlets,
   impacts,
+  canAcc = true,
 }: {
   events: ReviewableEvent[];
   products: { name: string; brand: string }[];
   outlets: { id: string; name: string }[];
   impacts: EventImpact[];
+  /** Marketing Communication can ACC/reject; Coordinator Area only proposes + tracks status. */
+  canAcc?: boolean;
 }) {
   const [tab, setTab] = React.useState<"review" | "impact">("review");
   const [filter, setFilter] = React.useState<Filter>("all");
@@ -59,16 +62,18 @@ export function MarcommEvents({
 
   return (
     <div className="space-y-4">
-      <SegmentedTabs
-        value={tab}
-        onChange={(v) => setTab(v as "review" | "impact")}
-        items={[
-          { value: "review", label: "ACC & Klasifikasi" },
-          { value: "impact", label: "Analisis Dampak & ROI" },
-        ]}
-      />
+      {canAcc && (
+        <SegmentedTabs
+          value={tab}
+          onChange={(v) => setTab(v as "review" | "impact")}
+          items={[
+            { value: "review", label: "ACC & Klasifikasi" },
+            { value: "impact", label: "Analisis Dampak & ROI" },
+          ]}
+        />
+      )}
 
-      {tab === "impact" ? (
+      {canAcc && tab === "impact" ? (
         <ImpactView impacts={impacts} />
       ) : (
         <>
@@ -101,7 +106,7 @@ export function MarcommEvents({
       ) : (
         <div className="space-y-2.5">
           {rows.map((e) => (
-            <EventCard key={e.id} e={e} onAcc={() => setAccId(e.id)} onReject={() => setRejectId(e.id)} />
+            <EventCard key={e.id} e={e} canAcc={canAcc} onAcc={() => setAccId(e.id)} onReject={() => setRejectId(e.id)} />
           ))}
         </div>
       )}
@@ -216,7 +221,7 @@ function fmtDate(iso: string) {
   return new Date(iso).toLocaleDateString("id-ID", { day: "2-digit", month: "short", year: "numeric" });
 }
 
-function EventCard({ e, onAcc, onReject }: { e: ReviewableEvent; onAcc: () => void; onReject: () => void }) {
+function EventCard({ e, canAcc, onAcc, onReject }: { e: ReviewableEvent; canAcc: boolean; onAcc: () => void; onReject: () => void }) {
   const router = useRouter();
   const r = e.review;
   const st = MC_STATUS_META[r.status];
@@ -243,20 +248,22 @@ function EventCard({ e, onAcc, onReject }: { e: ReviewableEvent; onAcc: () => vo
           </p>
           {e.description && <p className="mt-1 line-clamp-2 max-w-2xl text-xs text-muted-foreground/80">{e.description}</p>}
         </div>
-        <div className="flex shrink-0 items-center gap-2">
-          {r.status === "pending" ? (
-            <>
-              <Button size="sm" variant="ghost" className="text-red-600 dark:text-red-400" onClick={onReject}><XCircle className="size-4" /> Tolak</Button>
-              <Button size="sm" onClick={onAcc}><ClipboardCheck className="size-4" /> ACC & Klasifikasi</Button>
-            </>
-          ) : (
-            <>
-              <Button size="sm" variant="ghost" onClick={reset} title="Kembalikan ke Menunggu ACC"><RotateCcw className="size-4" /></Button>
-              {r.status === "approved" && <Button size="sm" variant="outline" onClick={onAcc}>Ubah ACC</Button>}
-              {r.status === "rejected" && <Button size="sm" onClick={onAcc}><ClipboardCheck className="size-4" /> ACC Ulang</Button>}
-            </>
-          )}
-        </div>
+        {canAcc && (
+          <div className="flex shrink-0 items-center gap-2">
+            {r.status === "pending" ? (
+              <>
+                <Button size="sm" variant="ghost" className="text-red-600 dark:text-red-400" onClick={onReject}><XCircle className="size-4" /> Tolak</Button>
+                <Button size="sm" onClick={onAcc}><ClipboardCheck className="size-4" /> ACC & Klasifikasi</Button>
+              </>
+            ) : (
+              <>
+                <Button size="sm" variant="ghost" onClick={reset} title="Kembalikan ke Menunggu ACC"><RotateCcw className="size-4" /></Button>
+                {r.status === "approved" && <Button size="sm" variant="outline" onClick={onAcc}>Ubah ACC</Button>}
+                {r.status === "rejected" && <Button size="sm" onClick={onAcc}><ClipboardCheck className="size-4" /> ACC Ulang</Button>}
+              </>
+            )}
+          </div>
+        )}
       </div>
 
       {r.status === "approved" && (
@@ -343,7 +350,7 @@ function AccDialog({ event, products, outlets, onClose }: { event: ReviewableEve
           </Field>
 
           {type === "promo" ? (
-            <Field label={`Produk yang dipromosikan (${productNames.length})`} hint="Dampak diukur dari penjualan produk (bulanan) + omzet outlet (harian).">
+            <Field label={`Produk yang dipromosikan (${productNames.length})`} hint="Dampak diukur dari omzet produk ini saja.">
               {productOpts.length ? (
                 <div className="space-y-2">
                   <MultiCombobox value={productNames} onChange={setProductNames} options={productOpts} placeholder="Pilih produk…" searchPlaceholder="Cari produk…" />

@@ -1,35 +1,32 @@
 import { CalendarRange } from "lucide-react";
 import type { Metadata } from "next";
+import { redirect } from "next/navigation";
 import { getSessionUser } from "@/lib/auth";
-import { can } from "@/lib/rbac";
+import { canReachMenu } from "@/lib/nav";
+import { listReviewableEvents, outletOptions, productOptions } from "@/lib/data/marcomm";
 import { PageHeader } from "@/components/ui/page-header";
-import { NewEventButton } from "@/components/events/new-event";
-import { EventNav } from "@/components/events/event-nav";
-import { EventTable } from "@/components/events/event-table";
-import { buildEventFormData, buildEventRows } from "@/components/events/event-data";
+import { MarcommEvents } from "@/components/marcomm/events";
 
 export const metadata: Metadata = { title: "Event Tracker" };
 
 export default async function EventsPage() {
   const user = (await getSessionUser())!;
-  const rows = buildEventRows(user);
-  const form = buildEventFormData(user);
-  const canCreate = can(user, "create_event");
+  if (!canReachMenu(user, "events")) redirect("/dashboard");
+
+  const [events, products, outlets] = await Promise.all([
+    listReviewableEvents(),
+    productOptions(),
+    Promise.resolve(outletOptions()),
+  ]);
 
   return (
     <div className="w-full">
       <PageHeader
         icon={CalendarRange}
-        title="Event Tracker"
-        description="Branch events across planning, preparation, execution and evaluation"
-        actions={canCreate && form.outlets.length > 0 ? <NewEventButton outlets={form.outlets} coordinators={form.coordinators} /> : undefined}
+        title="Event & Promo Tracker"
+        description="Ajukan event (outlet) atau promo (produk) dengan form yang sama seperti Marketing Communication. Setelah diajukan, Marketing Communication akan meng-ACC dan menetapkan budget."
       />
-
-      <EventNav />
-
-      <div className="mt-4">
-        <EventTable rows={rows} outlets={form.outlets} coordinators={form.coordinators} canEdit={canCreate} />
-      </div>
+      <MarcommEvents events={events} products={products} outlets={outlets} impacts={[]} canAcc={false} />
     </div>
   );
 }
