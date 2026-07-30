@@ -89,6 +89,47 @@ export function DashNeonScope() {
     scan();
     const t = window.setTimeout(scan, 400); // rescan once layout settles
 
+    const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    const dash = document.querySelector<HTMLElement>(".dash-neon");
+
+    // Cursor spotlight — a soft highlight on each card that follows the mouse.
+    const onSpot = (e: PointerEvent) => {
+      const card = (e.target as HTMLElement)?.closest<HTMLElement>(".glass, .card-gradient");
+      if (!card) return;
+      const r = card.getBoundingClientRect();
+      card.style.setProperty("--spot-x", `${e.clientX - r.left}px`);
+      card.style.setProperty("--spot-y", `${e.clientY - r.top}px`);
+    };
+    if (dash && !reduce) {
+      dash.addEventListener("pointermove", onSpot);
+      cleanups.push(() => dash.removeEventListener("pointermove", onSpot));
+    }
+
+    // Count-up — animate the big metric numbers from 0 on first paint.
+    if (dash && !reduce) {
+      const nums = dash.querySelectorAll<HTMLElement>(".text-2xl, .text-3xl, .text-4xl");
+      nums.forEach((el) => {
+        if (el.dataset.counted) return;
+        const raw = (el.textContent || "").trim();
+        const m = raw.match(/^(-?)(\d[\d.]*)(%?)$/); // plain number, optional % — skips clocks, °C, Rp
+        if (!m) return;
+        const target = parseFloat(m[2]);
+        if (!isFinite(target)) return;
+        el.dataset.counted = "1";
+        const decimals = (m[2].split(".")[1] || "").length;
+        const dur = 900;
+        const t0 = performance.now();
+        const tick = (now: number) => {
+          const p = Math.min(1, (now - t0) / dur);
+          const eased = 1 - Math.pow(1 - p, 3);
+          el.textContent = m[1] + (target * eased).toFixed(decimals) + m[3];
+          if (p < 1) requestAnimationFrame(tick);
+          else el.textContent = raw;
+        };
+        requestAnimationFrame(tick);
+      });
+    }
+
     return () => {
       root.classList.remove("dash-neon-active");
       window.clearTimeout(t);
