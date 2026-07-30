@@ -639,3 +639,82 @@
     filter: brightness(1.08);
   }
 }
+
+/* ============================================================
+   Dashboard neon — feedback polish ("upgrade to max", scoped).
+   No slash attribute selectors (Tailwind v4's parser drops the whole
+   block on those) — uses :has() / [aria-pressed] / [aria-expanded].
+   ============================================================ */
+@layer components {
+  /* Cards: soft top glow (rounded-friendly), softer bloom, NO hover lift. */
+  .dash-neon .glass,
+  .dash-neon .card-gradient {
+    background:
+      radial-gradient(75% 16px at 50% 0%, rgba(150, 190, 255, 0.5), transparent 75%),
+      radial-gradient(130% 90% at 0% 0%, rgba(96, 150, 255, 0.13), transparent 46%),
+      linear-gradient(180deg, rgba(255, 255, 255, 0.05), rgba(255, 255, 255, 0.012) 34%, rgba(255, 255, 255, 0) 62%),
+      color-mix(in oklch, #0a1120 82%, transparent);
+    border: 1px solid rgba(120, 160, 255, 0.16);
+    box-shadow:
+      0 1px 0 0 rgba(255, 255, 255, 0.05) inset,
+      0 24px 60px -34px rgba(0, 0, 0, 0.9),
+      0 0 70px -34px rgba(56, 130, 246, 0.3);
+  }
+  .dash-neon .glass:hover,
+  .dash-neon .card-gradient:hover {
+    transform: none;
+    border-color: rgba(130, 175, 255, 0.3);
+    box-shadow:
+      0 1px 0 0 rgba(255, 255, 255, 0.07) inset,
+      0 26px 64px -32px rgba(0, 0, 0, 0.92),
+      0 0 84px -30px rgba(80, 150, 255, 0.42);
+  }
+
+  /* Segmented tabs: dark glass shell, active = blue gradient pill. */
+  .dash-neon div:has(> button[aria-pressed]) {
+    background: color-mix(in oklch, #0b1322 80%, transparent) !important;
+    border-color: rgba(120, 160, 255, 0.18) !important;
+  }
+  .dash-neon [aria-pressed="true"] {
+    background: linear-gradient(135deg, #5aa2ff, #2563eb) !important;
+    color: #fff !important;
+    box-shadow: 0 8px 20px -8px rgba(72, 140, 255, 0.75) !important;
+  }
+
+  /* Dropdown / combobox / date-range triggers → dark glass + neon border. */
+  .dash-neon button[aria-expanded] {
+    background: color-mix(in oklch, #0b1322 78%, transparent) !important;
+    border-color: rgba(120, 160, 255, 0.22) !important;
+  }
+  .dash-neon button[aria-expanded]:hover {
+    border-color: rgba(130, 175, 255, 0.45) !important;
+    box-shadow: 0 0 22px -8px rgba(72, 140, 255, 0.5) !important;
+  }
+
+  /* No visible scrollbars anywhere in the dashboard or its overlays. */
+  .dash-neon ::-webkit-scrollbar,
+  .dash-neon-active ::-webkit-scrollbar { width: 0 !important; height: 0 !important; display: none !important; }
+  .dash-neon *,
+  .dash-neon-active * { scrollbar-width: none !important; -ms-overflow-style: none !important; }
+
+  /* Primary buttons (New Task, Create Task, …) → blue gradient (override violet). */
+  .dash-neon [data-slot="button"].bg-primary,
+  .dash-neon-active [data-slot="button"].bg-primary {
+    background: linear-gradient(135deg, #5aa2ff, #2563eb) !important;
+    color: #fff !important;
+    box-shadow: 0 10px 26px -12px rgba(72, 140, 255, 0.75), 0 0 0 1px rgba(150, 180, 255, 0.22) inset !important;
+  }
+
+  /* New Task slide-over → floating rounded panel (not a square edge-sheet). */
+  .dash-neon-active .surface-solid.right-0.top-0 {
+    top: 0.75rem !important;
+    right: 0.75rem !important;
+    bottom: 0.75rem !important;
+    height: auto !important;
+    border-radius: 1.25rem !important;
+    border: 1px solid rgba(120, 160, 255, 0.24) !important;
+    box-shadow:
+      0 40px 90px -30px rgba(0, 0, 0, 0.9),
+      0 0 80px -26px rgba(72, 140, 255, 0.4) !important;
+  }
+}
