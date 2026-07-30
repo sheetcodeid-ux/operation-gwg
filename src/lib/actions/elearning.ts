@@ -3,6 +3,8 @@
 import { randomUUID } from "node:crypto";
 import { revalidatePath } from "next/cache";
 import { getSessionUser } from "@/lib/auth";
+import { saveNotification } from "@/lib/data/persist";
+import { learnerIds } from "@/lib/data/elearning-admin";
 import { canReachMenu } from "@/lib/nav";
 import { canManageElearning, type LessonFileKind } from "@/lib/elearning-shared";
 import { presignPut, r2Enabled, R2_PREFIX } from "@/lib/storage/r2";
@@ -19,8 +21,11 @@ import {
   deleteQuestion,
   deleteQuiz,
   ensureQuiz,
+  getCourse,
   getLessonDetail,
   getQuizAdmin,
+  maybeIssueCertificate,
+  passQuizResult,
   reorderDays,
   reorderLessons,
   reorderQuestions,
@@ -42,6 +47,20 @@ const learn = (u: UserProfile | null) => !!u && canReachMenu(u, "elearning");
 function revalidate() {
   revalidatePath("/elearning");
   revalidatePath("/elearning/kelola");
+}
+
+/** Notify one learner (topbar bell) about an E-Learning event. */
+async function notifyUser(userId: string, title: string, message: string, severity: "info" | "warning" = "info") {
+  await saveNotification({
+    id: `ntf_${randomUUID()}`, kind: "elearning", title, message,
+    targetUser: userId, severity, read: false, createdAt: new Date().toISOString(),
+  }).catch(() => {});
+}
+
+/** Broadcast to every learner (e.g. new material published). */
+async function notifyAllLearners(title: string, message: string) {
+  const ids = learnerIds();
+  await Promise.all(ids.map((id) => notifyUser(id, title, message))).catch(() => {});
 }
 
 /* ------------------------------------------------------------------ */
@@ -119,6 +138,7 @@ export async function createDayAction(input: { courseId: string; title: string; 
   if (!input.title.trim()) return { error: "Judul hari wajib diisi." };
   const rec = await createDay({ courseId: input.courseId, title: input.title.trim(), description: input.description.trim() });
   if (!rec) return { error: "Gagal menambah hari." };
+  await notifyAllLearners("Materi pembelajaran baru", `Tahap baru dibuka: "${input.title.trim()}". Silakan lanjutkan pembelajaran Anda.`);
   revalidate();
   return { ok: true, id: rec.id };
 }
@@ -187,6 +207,7 @@ export async function createLessonAction(input: LessonActionInput & { courseId: 
     createdBy: user!.id,
   });
   if (!rec) return { error: "Gagal membuat materi." };
+  await notifyAllLearners("Materi baru tersedia", `"${input.title.trim()}" telah ditambahkan ke pembelajaran. Yuk pelajari sekarang.`);
   revalidate();
   return { ok: true, id: rec.id };
 }
@@ -272,6 +293,11 @@ export async function completeLessonAction(input: { courseId: string; lessonId: 
   if (!learn(user) && !manage(user)) return { error: "Tidak punya akses." };
   const res = await upsertProgress({ userId: user!.id, courseId: input.courseId, lessonId: input.lessonId, completed: true });
   if (res.error) return { error: res.error };
+  const cert = await maybeIssueCertificate(user!.id, input.courseId);
+  if (cert.issued) {
+    const course = await getCourse(input.courseId);
+    await notifyUser(user!.id, "Training selesai 🎉", `Selamat! Anda menyelesaikan "${course?.title ?? "pembelajaran"}". Sertifikat Anda sudah terbit.`);
+  }
   revalidatePath("/elearning");
   return { ok: true };
 }
@@ -418,8 +444,34 @@ export async function submitQuizAction(input: {
     startedAt: input.startedAt,
   });
 
-  if (passed) await upsertProgress({ userId: user!.id, courseId: quiz.courseId, lessonId: quiz.lessonId, completed: true });
+  if (passed) {
+    await upsertProgress({ userId: user!.id, courseId: quiz.courseId, lessonId: quiz.lessonId, completed: true });
+    await notifyUser(user!.id, "Assessment lulus ✅", `Anda lulus assessment dengan skor ${grade.score}. Materi berikutnya telah terbuka.`);
+    const cert = await maybeIssueCertificate(user!.id, quiz.courseId);
+    if (cert.issued) {
+      const course = await getCourse(quiz.courseId);
+      await notifyUser(user!.id, "Training selesai 🎉", `Selamat! Anda menyelesaikan "${course?.title ?? "pembelajaran"}". Sertifikat Anda sudah terbit.`);
+    }
+  } else {
+    await notifyUser(user!.id, "Assessment belum lulus", `Skor Anda ${grade.score} (minimal ${quiz.passScore}). Silakan pelajari ulang dan coba lagi.`, "warning");
+  }
 
   revalidatePath("/elearning");
   return { ok: true, result: { score: grade.score, passScore: quiz.passScore, passed, needsReview: grade.needsReview, detail: grade.detail } };
+}
+
+/** Admin: fetch dashboard data — proxied so the client component can poll. */
+export async function markEssayPassedAction(resultId: string) {
+  const user = await getSessionUser();
+  if (!manage(user)) return { error: "Tidak punya akses." };
+  const res = await passQuizResult(resultId);
+  if (!res) return { error: "Hasil tidak ditemukan." };
+  await notifyUser(res.userId, "Assessment dinilai lulus ✅", "Head Operational telah menilai jawaban essay Anda. Materi berikutnya terbuka.");
+  const cert = await maybeIssueCertificate(res.userId, res.courseId);
+  if (cert.issued) {
+    const course = await getCourse(res.courseId);
+    await notifyUser(res.userId, "Training selesai 🎉", `Selamat! Anda menyelesaikan "${course?.title ?? "pembelajaran"}". Sertifikat Anda sudah terbit.`);
+  }
+  revalidate();
+  return { ok: true };
 }

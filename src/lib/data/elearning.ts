@@ -3,6 +3,7 @@ import "server-only";
 import { randomUUID } from "node:crypto";
 import { db, dbEnabled } from "./db";
 import { markLocalWrite } from "./hydrate";
+import { getUser } from "./store";
 import { isR2Key, presignGet, r2Delete, r2KeyOf } from "@/lib/storage/r2";
 import type {
   ELearningCourse,
@@ -631,6 +632,19 @@ export async function saveQuizResult(input: {
   return error ? { error: error.message } : {};
 }
 
+/** Admin manual grade: mark a result as passed and complete the lesson for the
+ *  learner (used for essay questions). Returns the affected identity. */
+export async function passQuizResult(resultId: string): Promise<{ userId: string; courseId: string; lessonId: string } | null> {
+  if (!dbEnabled) return null;
+  markLocalWrite();
+  const { data } = await db().from("elearning_quiz_results").select("user_id,course_id,lesson_id").eq("id", resultId).maybeSingle();
+  if (!data) return null;
+  const r = data as any;
+  await db().from("elearning_quiz_results").update({ passed: true, needs_review: false }).eq("id", resultId);
+  await upsertProgress({ userId: r.user_id, courseId: r.course_id, lessonId: r.lesson_id, completed: true });
+  return { userId: r.user_id, courseId: r.course_id, lessonId: r.lesson_id };
+}
+
 /** Best quiz outcome per lesson for a learner (highest score wins). */
 export async function getQuizResultsMap(userId: string, courseId: string): Promise<Record<string, QuizResultSummary>> {
   if (!dbEnabled || !userId) return {};
@@ -651,6 +665,103 @@ export async function getQuizResultsMap(userId: string, courseId: string): Promi
     }
   }
   return out;
+}
+
+/* ---------------- certificates ---------------- */
+
+export interface Certificate {
+  id: string;
+  number: string;
+  courseId: string;
+  userId: string;
+  recipientName: string;
+  jabatan: string;
+  courseTitle: string;
+  score: number;
+  issuedAt: string;
+}
+
+const certFromRow = (r: any): Certificate => ({
+  id: r.id,
+  number: r.number,
+  courseId: r.course_id,
+  userId: r.user_id,
+  recipientName: r.recipient_name ?? "",
+  jabatan: r.jabatan ?? "",
+  courseTitle: r.course_title ?? "",
+  score: r.score ?? 0,
+  issuedAt: r.issued_at,
+});
+
+export async function getCertificate(userId: string, courseId: string): Promise<Certificate | null> {
+  if (!dbEnabled || !userId) return null;
+  const { data } = await db().from("elearning_certificates").select("*").eq("user_id", userId).eq("course_id", courseId).maybeSingle();
+  return data ? certFromRow(data) : null;
+}
+
+export async function getCertificateByNumber(number: string): Promise<Certificate | null> {
+  if (!dbEnabled) return null;
+  const { data } = await db().from("elearning_certificates").select("*").eq("number", number).maybeSingle();
+  return data ? certFromRow(data) : null;
+}
+
+export async function listCertificates(courseId: string): Promise<Certificate[]> {
+  if (!dbEnabled) return [];
+  const { data } = await db().from("elearning_certificates").select("*").eq("course_id", courseId).order("issued_at", { ascending: false });
+  return ((data ?? []) as any[]).map(certFromRow);
+}
+
+/** A learner's average best quiz score in a course (100 when there are no quizzes). */
+async function avgBestScore(userId: string, courseId: string): Promise<number> {
+  const results = await getQuizResultsMap(userId, courseId);
+  const scores = Object.values(results).map((r) => r.score);
+  if (scores.length === 0) return 100;
+  return Math.round(scores.reduce((a, b) => a + b, 0) / scores.length);
+}
+
+/**
+ * Issue a certificate when the learner has completed EVERY lesson in the course
+ * (quiz lessons are only "complete" once passed, so 100% completion already
+ * implies every assessment was passed). Idempotent — returns the existing one.
+ */
+export async function maybeIssueCertificate(userId: string, courseId: string): Promise<{ certificate: Certificate | null; issued: boolean }> {
+  if (!dbEnabled || !userId) return { certificate: null, issued: false };
+  const existing = await getCertificate(userId, courseId);
+  if (existing) return { certificate: existing, issued: false };
+
+  const { data: lessonRows } = await db().from("elearning_lessons").select("id").eq("course_id", courseId);
+  const total = (lessonRows ?? []).length;
+  if (total === 0) return { certificate: null, issued: false };
+  const { count: completed } = await db()
+    .from("elearning_progress")
+    .select("id", { count: "exact", head: true })
+    .eq("user_id", userId)
+    .eq("course_id", courseId)
+    .eq("completed", true);
+  if ((completed ?? 0) < total) return { certificate: null, issued: false };
+
+  const course = await getCourse(courseId);
+  const acc = getUser(userId);
+  const { count: certCount } = await db().from("elearning_certificates").select("id", { count: "exact", head: true });
+  const seq = ((certCount ?? 0) + 1).toString().padStart(4, "0");
+  const number = `GWG-EL-${new Date().getFullYear()}-${seq}`;
+  markLocalWrite();
+  const row = {
+    id: `elc_cert_${randomUUID()}`,
+    course_id: courseId,
+    user_id: userId,
+    number,
+    recipient_name: acc?.name ?? "",
+    jabatan: acc?.jabatan ?? acc?.department ?? "",
+    course_title: course?.title ?? "",
+    score: await avgBestScore(userId, courseId),
+  };
+  const { error } = await db().from("elearning_certificates").insert(row).select().single();
+  if (error) {
+    // Unique race: someone issued between our check and insert → return theirs.
+    return { certificate: await getCertificate(userId, courseId), issued: false };
+  }
+  return { certificate: certFromRow({ ...row, issued_at: new Date().toISOString() }), issued: true };
 }
 
 /* ---------------- helpers ---------------- */

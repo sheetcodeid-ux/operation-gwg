@@ -101,6 +101,57 @@ export interface QuizResultSummary {
   needsReview: boolean;
 }
 
+/* ---------------- admin dashboard shapes ---------------- */
+
+export interface LessonStat {
+  lessonId: string;
+  title: string;
+  studied: number; // distinct learners who opened it
+  completed: number; // distinct learners who completed it
+  failCount: number; // failed quiz attempts
+  videoWatchers: number; // learners with video progress
+}
+
+export interface ActivityPoint {
+  date: string; // YYYY-MM-DD
+  completions: number;
+  attempts: number;
+}
+
+export interface ParticipantRow {
+  userId: string;
+  name: string;
+  jabatan: string;
+  completedLessons: number;
+  totalLessons: number;
+  pct: number;
+  status: LearnerStatus;
+  avgScore: number | null;
+  lastActivity: string | null;
+  certified: boolean;
+}
+
+export interface EssayReviewItem {
+  resultId: string;
+  userId: string;
+  learnerName: string;
+  lessonTitle: string;
+  score: number;
+  submittedAt: string;
+  answers: { prompt: string; answer: string }[];
+}
+
+export interface ElearningDashboard {
+  totalLearners: number;
+  started: number;
+  completed: number;
+  passRate: number; // % learners who completed the whole course
+  avgScore: number; // avg of learners' avg quiz scores
+  totalLessons: number;
+  lessonStats: LessonStat[];
+  activity: ActivityPoint[];
+}
+
 export interface ELearningDay {
   id: string;
   courseId: string;

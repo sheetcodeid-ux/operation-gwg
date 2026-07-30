@@ -1,6 +1,7 @@
 "use client";
 
 import * as React from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
   CheckCircle2,
@@ -38,7 +39,7 @@ import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { VideoPlayer } from "./video-player";
 import { QuizRunner } from "./quiz-runner";
-import { ClipboardCheck, RotateCcw } from "lucide-react";
+import { Award, ClipboardCheck, RotateCcw } from "lucide-react";
 
 export function LearnPath({
   course,
@@ -106,9 +107,14 @@ export function LearnPath({
               </Button>
             )}
             {completion >= 100 && (
-              <span className="inline-flex items-center gap-1.5 text-sm font-medium text-brand-600 dark:text-brand-400">
-                <Sparkles className="size-4" /> Semua materi selesai
-              </span>
+              <>
+                <span className="inline-flex items-center gap-1.5 text-sm font-medium text-brand-600 dark:text-brand-400">
+                  <Sparkles className="size-4" /> Semua materi selesai
+                </span>
+                <Link href="/elearning/sertifikat" className="w-full">
+                  <Button variant="outline" className="w-full"><Award className="size-4" /> Lihat Sertifikat</Button>
+                </Link>
+              </>
             )}
           </div>
         </div>

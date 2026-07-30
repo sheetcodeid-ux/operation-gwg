@@ -3,9 +3,10 @@ import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 import { getSessionUser } from "@/lib/auth";
 import { canManageElearning } from "@/lib/elearning-shared";
-import { getActiveCourse, getCourseTree, listCourses } from "@/lib/data/elearning";
+import { getActiveCourse, getCourseTree, listCertificates, listCourses } from "@/lib/data/elearning";
+import { getElearningDashboard, getEssayReviews, getParticipantRows } from "@/lib/data/elearning-admin";
 import { PageHeader } from "@/components/ui/page-header";
-import { ManageElearning } from "@/components/elearning/manage";
+import { KelolaShell } from "@/components/elearning/dashboard";
 
 export const metadata: Metadata = { title: "Kelola E-Learning" };
 
@@ -15,16 +16,32 @@ export default async function ElearningManagePage() {
 
   const courses = await listCourses();
   const primary = (await getActiveCourse()) ?? courses[0] ?? null;
-  const days = primary ? await getCourseTree(primary.id) : [];
+
+  const [days, dashboard, participants, essays, certificates] = primary
+    ? await Promise.all([
+        getCourseTree(primary.id),
+        getElearningDashboard(primary.id),
+        getParticipantRows(primary.id),
+        getEssayReviews(primary.id),
+        listCertificates(primary.id),
+      ])
+    : [[], null, [], [], []];
 
   return (
     <div className="w-full">
       <PageHeader
         icon={LibraryBig}
         title="Kelola E-Learning"
-        description="Susun Learning Path (Hari 1–7), unggah video/PDF/SOP, dan atur aturan belajar. Hanya Head Operational yang dapat mengunggah & mengubah materi."
+        description="Susun Learning Path, unggah materi & assessment, dan pantau progres peserta. Hanya Head Operational yang dapat mengubah materi."
       />
-      <ManageElearning course={primary} days={days} />
+      <KelolaShell
+        course={primary}
+        days={days}
+        dashboard={dashboard}
+        participants={participants}
+        essays={essays}
+        certificates={certificates.map((c) => ({ number: c.number, recipientName: c.recipientName, issuedAt: c.issuedAt }))}
+      />
     </div>
   );
 }

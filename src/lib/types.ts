@@ -286,7 +286,8 @@ export type NotificationKind =
   | "score_drop"
   | "hpp_review"
   | "hc_done"
-  | "sys_update";
+  | "sys_update"
+  | "elearning";
 
 export interface AppNotification {
   id: string;
