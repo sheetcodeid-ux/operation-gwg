@@ -4,6 +4,9 @@ import { revalidatePath } from "next/cache";
 import { getSessionUser } from "@/lib/auth";
 import { canReachMenu } from "@/lib/nav";
 import { approveReview, rejectReview, resetReview } from "@/lib/data/marcomm";
+import { createEvent } from "@/lib/data/mutations";
+import { getOutlet } from "@/lib/data/store";
+import { persistMessage } from "@/lib/data/persist";
 import type { MarcommEventType } from "@/lib/marcomm-shared";
 import type { UserProfile } from "@/lib/types";
 
@@ -67,6 +70,36 @@ export async function resetReviewAction(eventId: string) {
   if (!canMarcomm(user)) return { error: "Tidak punya akses." };
   const res = await resetReview(eventId);
   if (res.error) return { error: res.error };
+  revalidate();
+  return { ok: true };
+}
+
+/** Marketing Communication proposes an event/promo directly (not only CA). It
+ *  lands in the queue like a CA proposal; budget & classification are set at ACC. */
+export async function createMarcommEventAction(input: { name: string; outletId: string; description: string; startDate: string; endDate: string }) {
+  const user = await getSessionUser();
+  if (!canMarcomm(user)) return { error: "Tidak punya akses." };
+  if (!input.name.trim()) return { error: "Nama event wajib diisi." };
+  if (!input.outletId) return { error: "Pilih outlet." };
+  if (!input.startDate || !input.endDate) return { error: "Tentukan tanggal mulai & selesai." };
+  if (new Date(input.endDate) < new Date(input.startDate)) return { error: "Tanggal selesai harus setelah tanggal mulai." };
+
+  const outlet = getOutlet(input.outletId);
+  try {
+    await createEvent({
+      name: input.name.trim(),
+      outletId: input.outletId,
+      picId: outlet?.picId || user!.id,
+      description: input.description.trim(),
+      budget: 0, // set by MarComm at ACC
+      startDate: new Date(input.startDate).toISOString(),
+      endDate: new Date(input.endDate).toISOString(),
+      milestone: "planning",
+      status: "upcoming",
+    });
+  } catch (e) {
+    return { error: persistMessage(e) };
+  }
   revalidate();
   return { ok: true };
 }

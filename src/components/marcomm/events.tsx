@@ -14,16 +14,18 @@ import {
   type ReviewableEvent,
 } from "@/lib/marcomm-shared";
 import { ImpactView } from "./impact";
-import { approveEventAction, rejectEventAction, resetReviewAction } from "@/lib/actions/marcomm";
+import { approveEventAction, createMarcommEventAction, rejectEventAction, resetReviewAction } from "@/lib/actions/marcomm";
 import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { Field, Input, Textarea } from "@/components/ui/input";
+import { Combobox } from "@/components/ui/combobox";
 import { DatePicker } from "@/components/ui/date-picker";
 import { SegmentedTabs } from "@/components/ui/segmented-tabs";
 import { MultiCombobox, SelectionChips } from "@/components/ui/multi-combobox";
 import { StatTile } from "@/components/ui/stat";
+import { Plus } from "lucide-react";
 
 type Filter = "all" | "pending" | "approved" | "rejected";
 
@@ -43,6 +45,7 @@ export function MarcommEvents({
   const [q, setQ] = React.useState("");
   const [accId, setAccId] = React.useState<string | null>(null);
   const [rejectId, setRejectId] = React.useState<string | null>(null);
+  const [newOpen, setNewOpen] = React.useState(false);
 
   const pending = events.filter((e) => e.review.status === "pending").length;
   const approved = events.filter((e) => e.review.status === "approved");
@@ -89,6 +92,7 @@ export function MarcommEvents({
           ]}
         />
         <Input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Cari event / outlet…" className="h-9 max-w-56" />
+        <Button size="sm" className="ml-auto" onClick={() => setNewOpen(true)}><Plus className="size-4" /> Tambah Event / Promo</Button>
       </div>
 
       {rows.length === 0 ? (
@@ -109,7 +113,59 @@ export function MarcommEvents({
         <AccDialog event={accEvent} products={products} outlets={outlets} onClose={() => setAccId(null)} />
       )}
       {rejectEvent && <RejectDialog event={rejectEvent} onClose={() => setRejectId(null)} />}
+      {newOpen && <NewEventDialog outlets={outlets} onClose={() => setNewOpen(false)} />}
     </div>
+  );
+}
+
+function NewEventDialog({ outlets, onClose }: { outlets: { id: string; name: string }[]; onClose: () => void }) {
+  const router = useRouter();
+  const [busy, setBusy] = React.useState(false);
+  const [name, setName] = React.useState("");
+  const [outletId, setOutletId] = React.useState(outlets[0]?.id ?? "");
+  const [description, setDescription] = React.useState("");
+  const [start, setStart] = React.useState("");
+  const [end, setEnd] = React.useState("");
+
+  const submit = () => {
+    if (!name.trim()) return toast.error("Nama event wajib diisi.");
+    if (!outletId) return toast.error("Pilih outlet.");
+    if (!start || !end) return toast.error("Tentukan tanggal mulai & selesai.");
+    setBusy(true);
+    createMarcommEventAction({ name, outletId, description, startDate: start, endDate: end })
+      .then((res) => {
+        if (res?.error) return toast.error(res.error);
+        toast.success("Event ditambahkan. Lanjutkan dengan ACC & klasifikasi.");
+        onClose();
+        router.refresh();
+      })
+      .finally(() => setBusy(false));
+  };
+
+  return (
+    <Dialog open onOpenChange={(v) => !v && onClose()}>
+      <DialogContent title="Tambah Event / Promo" description="Ajukan event atau promo baru — langkah berikutnya ACC & klasifikasi." align="center" className="max-w-lg">
+        <div className="space-y-3 p-5">
+          <Field label="Nama Event / Promo">
+            <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="cth. Promo Kopi Susu Merdeka" />
+          </Field>
+          <Field label="Outlet">
+            <Combobox value={outletId} onChange={setOutletId} options={outlets.map((o) => ({ value: o.id, label: o.name }))} placeholder="Pilih outlet" searchPlaceholder="Cari outlet…" />
+          </Field>
+          <Field label="Deskripsi (opsional)">
+            <Textarea rows={2} value={description} onChange={(e) => setDescription(e.target.value)} placeholder="Detail event / promo…" />
+          </Field>
+          <div className="grid gap-3 sm:grid-cols-2">
+            <Field label="Tanggal Mulai"><DatePicker value={start} onChange={setStart} /></Field>
+            <Field label="Tanggal Selesai"><DatePicker value={end} onChange={setEnd} /></Field>
+          </div>
+          <div className="flex justify-end gap-2 pt-1">
+            <Button variant="ghost" onClick={onClose} disabled={busy}>Batal</Button>
+            <Button onClick={submit} disabled={busy}>{busy ? <Loader2 className="size-4 animate-spin" /> : <Plus className="size-4" />} Tambah</Button>
+          </div>
+        </div>
+      </DialogContent>
+    </Dialog>
   );
 }
 
@@ -228,7 +284,7 @@ function AccDialog({ event, products, outlets, onClose }: { event: ReviewableEve
       <DialogContent title="ACC & Klasifikasi Event" description={event.name} align="center" className="max-w-lg">
         <div className="max-h-[76vh] space-y-3 overflow-y-auto p-5">
           <Field label="Budget (Rp)" hint="Anggaran yang disetujui Marketing Communication.">
-            <Input type="number" min={0} value={budget} onChange={(e) => setBudget(Number(e.target.value))} />
+            <Input inputMode="numeric" value={budget ? budget.toLocaleString("id-ID") : ""} onChange={(e) => setBudget(Number(e.target.value.replace(/\D/g, "")) || 0)} placeholder="0" />
           </Field>
 
           <Field label="Jenis">

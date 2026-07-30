@@ -166,11 +166,10 @@ function EventForm({
         <div className="grid grid-cols-2 gap-3">
           <Field label="Budget (IDR)">
             <Input
-              type="number"
-              value={form.budget}
-              onChange={(e) => set("budget", Number(e.target.value) as never)}
-              min={0}
-              step={1_000_000}
+              inputMode="numeric"
+              value={form.budget ? form.budget.toLocaleString("id-ID") : ""}
+              onChange={(e) => set("budget", (Number(e.target.value.replace(/\D/g, "")) || 0) as never)}
+              placeholder="0"
             />
           </Field>
           <Field label="Status">
