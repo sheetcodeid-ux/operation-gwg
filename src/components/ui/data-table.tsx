@@ -113,8 +113,15 @@ export function DataTable<TData, TValue>({
   const to = pageIndex * curPageSize + table.getRowModel().rows.length;
 
   // Keep the active page button in view within the scrollable (≈5-wide) strip.
+  // Skip the FIRST run (mount): otherwise scrollIntoView drags the whole page
+  // down to the table on load instead of starting from the top.
   const pagerRef = React.useRef<HTMLDivElement>(null);
+  const pagerMounted = React.useRef(false);
   React.useEffect(() => {
+    if (!pagerMounted.current) {
+      pagerMounted.current = true;
+      return;
+    }
     pagerRef.current?.querySelector('[aria-current="true"]')?.scrollIntoView({ block: "nearest", inline: "center" });
   }, [pageIndex]);
 

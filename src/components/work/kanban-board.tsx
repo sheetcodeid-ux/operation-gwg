@@ -12,8 +12,7 @@ import { TONE_HEX } from "@/components/ui/tone";
 import { Avatar } from "@/components/ui/avatar";
 import { bodyZoom } from "@/components/layout/fit-scale";
 import { TaskDetail } from "./task-detail";
-import { CategoryFilter, DivisionFilter, PicFilter, MonthFilter, divisionLabel, membersForDivision, monthKey, monthOptions } from "./division-filter";
-import { useWorkFilters } from "./use-work-filters";
+import { divisionLabel } from "./division-filter";
 import type { DivisionMembers, TaskOutlet } from "./task-sheet";
 import type { WorkRow } from "./work-table";
 
@@ -23,6 +22,8 @@ const COLUMNS = Object.keys(TASK_STATUS_META) as TaskStatus[];
  *  the board (up/down and sideways) as normal. Mouse drags start immediately. */
 const HOLD_MS = 230;
 const MOVE_CANCEL = 10; // px of movement that cancels the long-press (= a scroll)
+const EDGE = 60; // px from a board edge where auto-scroll kicks in while dragging
+const EDGE_MAX = 20; // max px/frame auto-scroll speed
 
 type Gesture = {
   id: string;
@@ -47,7 +48,6 @@ export function KanbanBoard({
   isAdmin,
   userDepartment,
   categories,
-  initialDivision,
 }: {
   rows: WorkRow[];
   outlets?: TaskOutlet[];
@@ -58,21 +58,19 @@ export function KanbanBoard({
   isAdmin?: boolean;
   userDepartment?: string;
   categories?: Record<string, string[]>;
-  initialDivision?: string;
 }) {
   const [tasks, setTasks] = React.useState(rows);
-  // Re-sync when the server data changes (after create/edit/delete + router.refresh).
+  // Re-sync when the server data OR the parent filters change.
   // eslint-disable-next-line react-hooks/set-state-in-effect
   React.useEffect(() => setTasks(rows), [rows]);
   const [, startTransition] = React.useTransition();
   const [drag, setDrag] = React.useState<{ id: string; x: number; y: number } | null>(null);
   const [overCol, setOverCol] = React.useState<TaskStatus | null>(null);
-  const { month, division, pic, category, setMonth, setDivision, setPic, setCategory } = useWorkFilters(initialDivision);
-  const people = React.useMemo(() => membersForDivision(members, division), [members, division]);
-  const months = React.useMemo(() => monthOptions(rows.map((r) => r.startDate)), [rows]);
-  const categoryOpts = React.useMemo(() => [...new Set(rows.map((r) => r.category).filter(Boolean))].sort((a, b) => a.localeCompare(b)), [rows]);
   const [openTaskId, setOpenTaskId] = React.useState<string | null>(null);
   const g = React.useRef<Gesture | null>(null);
+  const boardRef = React.useRef<HTMLDivElement>(null);
+  const posRef = React.useRef({ x: 0, y: 0 });
+  const autoRef = React.useRef<number | null>(null);
   const openTask = openTaskId !== null ? tasks.find((t) => t.id === openTaskId) ?? null : null;
 
   function move(id: string, status: TaskStatus) {
@@ -86,6 +84,39 @@ export function KanbanBoard({
     if (g.current?.timer) {
       window.clearTimeout(g.current.timer);
       g.current.timer = null;
+    }
+  }
+
+  /** While a card is lifted, auto-scroll the board sideways when the finger sits
+   *  near a horizontal edge — so a card can reach columns that are off-screen
+   *  (previously it felt "stuck" on mobile). */
+  function startAutoScroll() {
+    if (autoRef.current != null) return;
+    const step = () => {
+      const el = boardRef.current;
+      if (!el || !g.current?.armed) {
+        autoRef.current = null;
+        return;
+      }
+      const rect = el.getBoundingClientRect();
+      const x = posRef.current.x;
+      let dx = 0;
+      if (x < rect.left + EDGE) dx = -Math.ceil(((rect.left + EDGE - x) / EDGE) * EDGE_MAX);
+      else if (x > rect.right - EDGE) dx = Math.ceil(((x - (rect.right - EDGE)) / EDGE) * EDGE_MAX);
+      if (dx !== 0) {
+        el.scrollLeft += dx;
+        // Board moved under the finger → re-detect the column beneath it.
+        const col = (document.elementFromPoint(x, posRef.current.y) as HTMLElement | null)?.closest("[data-status]") as HTMLElement | null;
+        setOverCol((col?.dataset.status as TaskStatus | undefined) ?? null);
+      }
+      autoRef.current = requestAnimationFrame(step);
+    };
+    autoRef.current = requestAnimationFrame(step);
+  }
+  function stopAutoScroll() {
+    if (autoRef.current != null) {
+      cancelAnimationFrame(autoRef.current);
+      autoRef.current = null;
     }
   }
 
@@ -105,11 +136,13 @@ export function KanbanBoard({
     }
     navigator.vibrate?.(25);
     setDrag({ id: s.id, x: s.x, y: s.y }); // lift immediately for feedback
+    startAutoScroll();
   }
 
   function onPointerDown(e: React.PointerEvent, task: WorkRow) {
     if (e.pointerType === "mouse" && e.button !== 0) return;
     const el = e.currentTarget as HTMLElement;
+    posRef.current = { x: e.clientX, y: e.clientY };
     const s: Gesture = { id: task.id, status: task.status, x: e.clientX, y: e.clientY, pointerId: e.pointerId, el, armed: false, moved: false, scrolled: false, timer: null };
     g.current = s;
     if (e.pointerType === "mouse") {
@@ -122,6 +155,7 @@ export function KanbanBoard({
   function onPointerMove(e: React.PointerEvent) {
     const s = g.current;
     if (!s) return;
+    posRef.current = { x: e.clientX, y: e.clientY };
     const dist = Math.hypot(e.clientX - s.x, e.clientY - s.y);
     if (!s.armed) {
       // Moved before the long-press fired → it's a scroll; let the browser handle it.
@@ -140,6 +174,7 @@ export function KanbanBoard({
   function onPointerUp(_e: React.PointerEvent, task: WorkRow) {
     const s = g.current;
     g.current = null;
+    stopAutoScroll();
     if (s?.timer) window.clearTimeout(s.timer);
     if (s) {
       s.el.style.touchAction = "";
@@ -158,6 +193,7 @@ export function KanbanBoard({
   function onPointerCancel() {
     const s = g.current;
     if (!s) return;
+    stopAutoScroll();
     if (s.timer) window.clearTimeout(s.timer);
     if (s.armed) s.el.style.touchAction = "";
     g.current = null;
@@ -166,27 +202,14 @@ export function KanbanBoard({
   }
 
   const ghost = drag ? tasks.find((t) => t.id === drag.id) : null;
-  const visible = tasks.filter(
-    (t) =>
-      (division === "all" || t.division === division) &&
-      (pic === "all" || t.picIds.includes(pic)) &&
-      (category === "all" || t.category === category) &&
-      (month === "all" || monthKey(t.startDate) === month),
-  );
 
   return (
     <>
-      <div className="scroll-fade-x -mx-1 mb-3 flex items-center gap-2 px-1 py-0.5">
-        <span className="shrink-0 text-xs font-medium text-muted-foreground">Filter</span>
-        <MonthFilter options={months} value={month} onChange={setMonth} className="w-36 shrink-0" />
-        {isAdmin && <DivisionFilter value={division} onChange={setDivision} options={divisions} className="w-40 shrink-0" />}
-        <PicFilter people={people} value={pic} onChange={setPic} className="w-40 shrink-0" />
-      </div>
-      <div className="flex gap-4 overflow-x-auto pb-2">
+      <div ref={boardRef} className="flex gap-4 overflow-x-auto pb-2">
         {COLUMNS.map((status) => {
           const meta = TASK_STATUS_META[status];
           const color = TONE_HEX[meta.tone];
-          const items = visible.filter((t) => t.status === status);
+          const items = tasks.filter((t) => t.status === status);
           const isOver = overCol === status;
           return (
             <div
