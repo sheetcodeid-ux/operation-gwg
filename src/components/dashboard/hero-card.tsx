@@ -39,7 +39,7 @@ export function HeroCard({ name }: { name: string }) {
   const WeatherIcon = w.Icon;
 
   return (
-    <div className="dash-hero relative overflow-hidden rounded-2xl border border-border bg-gradient-to-br from-card via-card to-blue-950/40 p-6">
+    <div className="relative overflow-hidden rounded-2xl border border-border bg-gradient-to-br from-card via-card to-blue-950/40 p-6">
       {/* blue glow behind the weather (Aniq-ui style) */}
       <div className="pointer-events-none absolute -right-10 -top-16 size-72 rounded-full bg-blue-500/30 blur-[90px]" />
       <div className="pointer-events-none absolute right-24 top-0 size-40 rounded-full bg-sky-400/20 blur-[80px]" />
