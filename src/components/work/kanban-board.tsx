@@ -19,6 +19,24 @@ import type { WorkRow } from "./work-table";
 
 const COLUMNS = Object.keys(TASK_STATUS_META) as TaskStatus[];
 
+/** Long-press (ms) before a touch turns into a drag. Below this, a swipe scrolls
+ *  the board (up/down and sideways) as normal. Mouse drags start immediately. */
+const HOLD_MS = 230;
+const MOVE_CANCEL = 10; // px of movement that cancels the long-press (= a scroll)
+
+type Gesture = {
+  id: string;
+  status: TaskStatus;
+  x: number;
+  y: number;
+  pointerId: number;
+  el: HTMLElement;
+  armed: boolean;
+  moved: boolean;
+  scrolled: boolean;
+  timer: number | null;
+};
+
 export function KanbanBoard({
   rows,
   outlets,
@@ -26,6 +44,9 @@ export function KanbanBoard({
   members,
   divisions,
   canEdit,
+  isAdmin,
+  userDepartment,
+  categories,
 }: {
   rows: WorkRow[];
   outlets?: TaskOutlet[];
@@ -33,6 +54,9 @@ export function KanbanBoard({
   members?: DivisionMembers;
   divisions?: string[];
   canEdit?: boolean;
+  isAdmin?: boolean;
+  userDepartment?: string;
+  categories?: Record<string, string[]>;
 }) {
   const [tasks, setTasks] = React.useState(rows);
   // Re-sync when the server data changes (after create/edit/delete + router.refresh).
@@ -41,13 +65,11 @@ export function KanbanBoard({
   const [, startTransition] = React.useTransition();
   const [drag, setDrag] = React.useState<{ id: string; x: number; y: number } | null>(null);
   const [overCol, setOverCol] = React.useState<TaskStatus | null>(null);
-  // month / division / pic are shared with the Table view via the URL query.
   const { month, division, pic, setMonth, setDivision, setPic } = useWorkFilters();
   const people = React.useMemo(() => membersForDivision(members, division), [members, division]);
   const months = React.useMemo(() => monthOptions(rows.map((r) => r.startDate)), [rows]);
   const [openTaskId, setOpenTaskId] = React.useState<string | null>(null);
-  const startRef = React.useRef<{ id: string; x: number; y: number; moved: boolean } | null>(null);
-  // Live task for the detail dialog (re-derived from synced `tasks`, so edits reflect without reopening).
+  const g = React.useRef<Gesture | null>(null);
   const openTask = openTaskId !== null ? tasks.find((t) => t.id === openTaskId) ?? null : null;
 
   function move(id: string, status: TaskStatus) {
@@ -57,29 +79,72 @@ export function KanbanBoard({
     });
   }
 
+  function clearTimer() {
+    if (g.current?.timer) {
+      window.clearTimeout(g.current.timer);
+      g.current.timer = null;
+    }
+  }
+
+  /** Turn the current press into a drag (finger held still, or a mouse press).
+   *  Arming only happens when the finger HASN'T moved, so flipping touch-action
+   *  to none here reliably stops the browser scrolling for the rest of the drag. */
+  function arm() {
+    const s = g.current;
+    if (!s || s.armed) return;
+    s.armed = true;
+    s.timer = null;
+    s.el.style.touchAction = "none";
+    try {
+      s.el.setPointerCapture(s.pointerId);
+    } catch {
+      /* ignore */
+    }
+    navigator.vibrate?.(25);
+    setDrag({ id: s.id, x: s.x, y: s.y }); // lift immediately for feedback
+  }
+
   function onPointerDown(e: React.PointerEvent, task: WorkRow) {
-    if (e.button !== 0 && e.pointerType === "mouse") return;
-    startRef.current = { id: task.id, x: e.clientX, y: e.clientY, moved: false };
-    (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+    if (e.pointerType === "mouse" && e.button !== 0) return;
+    const el = e.currentTarget as HTMLElement;
+    const s: Gesture = { id: task.id, status: task.status, x: e.clientX, y: e.clientY, pointerId: e.pointerId, el, armed: false, moved: false, scrolled: false, timer: null };
+    g.current = s;
+    if (e.pointerType === "mouse") {
+      arm(); // mouse: drag right away (with grab cursor)
+    } else {
+      s.timer = window.setTimeout(arm, HOLD_MS); // touch/pen: hold to lift
+    }
   }
 
   function onPointerMove(e: React.PointerEvent) {
-    const s = startRef.current;
+    const s = g.current;
     if (!s) return;
-    if (!s.moved && Math.hypot(e.clientX - s.x, e.clientY - s.y) < 8) return;
+    const dist = Math.hypot(e.clientX - s.x, e.clientY - s.y);
+    if (!s.armed) {
+      // Moved before the long-press fired → it's a scroll; let the browser handle it.
+      if (dist > MOVE_CANCEL) {
+        s.scrolled = true;
+        clearTimer();
+      }
+      return;
+    }
     s.moved = true;
     setDrag({ id: s.id, x: e.clientX, y: e.clientY });
-    const el = (document.elementFromPoint(e.clientX, e.clientY) as HTMLElement | null)?.closest("[data-status]") as HTMLElement | null;
-    setOverCol((el?.dataset.status as TaskStatus | undefined) ?? null);
+    const col = (document.elementFromPoint(e.clientX, e.clientY) as HTMLElement | null)?.closest("[data-status]") as HTMLElement | null;
+    setOverCol((col?.dataset.status as TaskStatus | undefined) ?? null);
   }
 
   function onPointerUp(_e: React.PointerEvent, task: WorkRow) {
-    const s = startRef.current;
-    startRef.current = null;
-    if (s?.moved) {
-      if (overCol && overCol !== task.status) move(s.id, overCol);
-    } else {
-      setOpenTaskId(task.id);
+    const s = g.current;
+    g.current = null;
+    if (s?.timer) window.clearTimeout(s.timer);
+    if (s) {
+      s.el.style.touchAction = "";
+      if (s.armed && s.moved) {
+        if (overCol && overCol !== task.status) move(s.id, overCol);
+      } else if (!s.scrolled) {
+        setOpenTaskId(task.id); // a tap (no lift / no scroll) opens the detail
+      }
     }
     setDrag(null);
     setOverCol(null);
@@ -98,7 +163,7 @@ export function KanbanBoard({
       <div className="scroll-fade-x -mx-1 mb-3 flex items-center gap-2 px-1 py-0.5">
         <span className="shrink-0 text-xs font-medium text-muted-foreground">Filter</span>
         <MonthFilter options={months} value={month} onChange={setMonth} className="w-36 shrink-0" />
-        <DivisionFilter value={division} onChange={setDivision} options={divisions} className="w-40 shrink-0" />
+        {isAdmin && <DivisionFilter value={division} onChange={setDivision} options={divisions} className="w-40 shrink-0" />}
         <PicFilter people={people} value={pic} onChange={setPic} className="w-40 shrink-0" />
       </div>
       <div className="flex gap-4 overflow-x-auto pb-2">
@@ -144,7 +209,7 @@ export function KanbanBoard({
                       isOver ? "border-foreground/30 text-foreground/70" : "border-border/60 text-muted-foreground/60",
                     )}
                   >
-                    Drop tasks here
+                    Tahan lalu geser tugas ke sini
                   </div>
                 )}
               </div>
@@ -159,7 +224,7 @@ export function KanbanBoard({
           className="pointer-events-none fixed z-[60] w-64 -translate-x-1/2 -translate-y-1/2"
           style={{ left: drag.x / bodyZoom(), top: drag.y / bodyZoom() }}
         >
-          <div className="card-gradient rounded-xl p-3 opacity-95 shadow-2xl ring-1 ring-border">
+          <div className="card-gradient scale-105 rounded-xl p-3 opacity-95 shadow-2xl ring-1 ring-foreground/20">
             <div className="flex items-start justify-between gap-2">
               <p className="line-clamp-2 text-sm font-medium text-foreground">{ghost.title}</p>
               <Badge tone={PRIORITY_META[ghost.priority].tone}>{PRIORITY_META[ghost.priority].label}</Badge>
@@ -173,7 +238,7 @@ export function KanbanBoard({
       {openTask && (
         <Dialog open onOpenChange={(o) => !o && setOpenTaskId(null)}>
           <DialogContent title={openTask.title} description={`${openTask.outlet} · ${openTask.area}`} align="center" className="max-w-md">
-            <TaskDetail task={openTask} outlets={outlets} coordinators={coordinators} members={members} divisions={divisions} canEdit={canEdit} />
+            <TaskDetail task={openTask} outlets={outlets} coordinators={coordinators} members={members} divisions={divisions} canEdit={canEdit} isAdmin={isAdmin} userDepartment={userDepartment} categories={categories} />
           </DialogContent>
         </Dialog>
       )}
@@ -190,8 +255,12 @@ function KanbanCard({
   return (
     <div
       {...handlers}
+      // touch-action pan-y: a vertical swipe scrolls the column; a HOLD arms a
+      // drag (which flips touch-action to none). Board's horizontal scroll is
+      // handled by the outer container.
+      style={{ touchAction: "pan-y" }}
       className={cn(
-        "card-gradient touch-none cursor-grab select-none rounded-xl p-3 text-left transition-all hover:-translate-y-0.5 hover:shadow-lg hover:ring-1 hover:ring-border active:cursor-grabbing",
+        "card-gradient cursor-grab select-none rounded-xl p-3 text-left transition-all hover:-translate-y-0.5 hover:shadow-lg hover:ring-1 hover:ring-border active:cursor-grabbing",
         dragging && "opacity-40",
       )}
     >

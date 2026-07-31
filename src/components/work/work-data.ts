@@ -1,16 +1,20 @@
-import { areaName, getUsers, listTasks, outletName, userName, visibleOutlets } from "@/lib/data/store";
+import { areaName, getUsers, listDeptTasks, outletName, userName, visibleOutlets } from "@/lib/data/store";
 import { allDepartments, setOrgExtras } from "@/lib/assessment/org";
 import { getOrgExtra } from "@/lib/data/org";
 import { getNavExtra } from "@/lib/data/nav";
+import { categoriesByDivision } from "@/lib/data/task-categories";
+import { hasGlobalScope } from "@/lib/rbac";
 import type { UserProfile } from "@/lib/types";
 import type { WorkRow } from "./work-table";
 
 export type DivisionMembers = Record<string, { id: string; name: string }[]>;
 
-/** Enriched task rows shared by the Work Tracker table, Kanban and Calendar views. */
+/** Enriched task rows shared by the Work Tracker table, Kanban and Calendar
+ *  views — DEPARTMENT-SCOPED (each team sees only its own tasks; Super Admin
+ *  sees all). */
 export function buildWorkRows(user: UserProfile): WorkRow[] {
   const avatarById = new Map(getUsers().map((u) => [u.id, u.avatarUrl ?? null]));
-  return listTasks(user).map((t) => ({
+  return listDeptTasks(user).map((t) => ({
     id: t.id,
     title: t.title,
     description: t.description,
@@ -57,8 +61,14 @@ export async function buildTaskSheetData(user: UserProfile) {
     members[d] = activeUsers.filter((u) => u.department === d).map((u) => ({ id: u.id, name: u.name }));
   }
 
-  // Default to the creator's own department; fall back to the first division.
-  const defaultDivision = (user.department && divisions.includes(user.department) ? user.department : divisions[0]) ?? "";
+  const isAdmin = hasGlobalScope(user.role);
+  // A member creates tasks only for their OWN department (no division picker);
+  // Super Admin may still target any department.
+  const userDepartment = user.department && divisions.includes(user.department) ? user.department : divisions[0] ?? "";
+  const defaultDivision = userDepartment;
+
+  // Category options per department (custom list, or defaults when none defined).
+  const categories = await categoriesByDivision(divisions);
 
   return {
     outlets: all.map((o) => ({ id: o.id, name: o.name, coordinatorId: coordByOutlet.get(o.id) ?? null })),
@@ -66,5 +76,8 @@ export async function buildTaskSheetData(user: UserProfile) {
     members,
     divisions,
     defaultDivision,
+    isAdmin,
+    userDepartment,
+    categories,
   };
 }

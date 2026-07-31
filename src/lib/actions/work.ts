@@ -5,6 +5,7 @@ import { getSessionUser } from "@/lib/auth";
 import { can, canAccessOutlet } from "@/lib/rbac";
 import { getOutlet, getOutlets } from "@/lib/data/store";
 import { createTask, deleteTask, updateTask, updateTaskStatus } from "@/lib/data/mutations";
+import { addTaskCategory, deleteTaskCategory } from "@/lib/data/task-categories";
 import { persistMessage } from "@/lib/data/persist";
 import { DEMO_NOW_ISO } from "@/lib/now";
 import { parseInput, taskInputSchema, taskStatusSchema } from "@/lib/validation";
@@ -113,5 +114,27 @@ export async function updateTaskStatusAction(id: string, status: TaskStatus, pro
   revalidatePath("/work-tracker");
   revalidatePath("/work-tracker/kanban");
   revalidatePath("/dashboard");
+  return { ok: true };
+}
+
+/* ---- Per-department categories (Super Admin manages the custom lists) ---- */
+
+export async function addTaskCategoryAction(department: string, name: string) {
+  const user = await getSessionUser();
+  if (!user) return { error: "Not authenticated" };
+  if (user.role !== "super_admin") return { error: "Hanya Super Admin yang dapat mengelola kategori." };
+  const res = await addTaskCategory(department, name);
+  if (res.error) return { error: res.error };
+  revalidatePath("/work-tracker");
+  return { ok: true };
+}
+
+export async function deleteTaskCategoryAction(department: string, name: string) {
+  const user = await getSessionUser();
+  if (!user) return { error: "Not authenticated" };
+  if (user.role !== "super_admin") return { error: "Hanya Super Admin yang dapat mengelola kategori." };
+  const res = await deleteTaskCategory(department, name);
+  if (res.error) return { error: res.error };
+  revalidatePath("/work-tracker");
   return { ok: true };
 }

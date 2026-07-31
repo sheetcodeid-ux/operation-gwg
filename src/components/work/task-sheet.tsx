@@ -2,11 +2,11 @@
 
 import * as React from "react";
 import { useRouter } from "next/navigation";
-import { CalendarClock, Loader2 } from "lucide-react";
+import { CalendarClock, Loader2, Plus, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { PRIORITY_META, TASK_STATUS_META, WORK_CATEGORIES } from "@/lib/constants";
 import type { Priority, TaskStatus } from "@/lib/types";
-import { createTaskAction, updateTaskAction } from "@/lib/actions/work";
+import { addTaskCategoryAction, createTaskAction, deleteTaskCategoryAction, updateTaskAction } from "@/lib/actions/work";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetTrigger, useSheetControl } from "@/components/ui/sheet";
@@ -69,6 +69,9 @@ export function TaskSheet({
   members,
   divisions,
   defaultDivision,
+  isAdmin,
+  userDepartment,
+  categories,
 }: {
   trigger: React.ReactElement;
   task?: EditableTask;
@@ -76,6 +79,12 @@ export function TaskSheet({
   members?: DivisionMembers;
   divisions?: string[];
   defaultDivision?: string;
+  /** Super Admin can target any department + manage categories. */
+  isAdmin?: boolean;
+  /** The creator's own department — the fixed division for non-admins. */
+  userDepartment?: string;
+  /** Category options per department (custom list or defaults). */
+  categories?: Record<string, string[]>;
   /** Accepted for back-compat; no longer used (assignment is by division). */
   coordinators?: { id: string; name: string }[];
 }) {
@@ -84,12 +93,101 @@ export function TaskSheet({
       <SheetTrigger>{trigger}</SheetTrigger>
       <SheetContent
         title={task ? "Edit Task" : "New Work Task"}
-        description={task ? "Update this task." : "Create a task by division — with or without a branch."}
+        description={task ? "Update this task." : "Buat tugas untuk departemen Anda — dengan atau tanpa cabang."}
         className="max-w-lg"
       >
-        <TaskForm task={task} outlets={outlets} members={members} divisions={divisions} defaultDivision={defaultDivision} />
+        <TaskForm task={task} outlets={outlets} members={members} divisions={divisions} defaultDivision={defaultDivision} isAdmin={isAdmin} userDepartment={userDepartment} categories={categories} />
       </SheetContent>
     </Sheet>
+  );
+}
+
+/** Category dropdown; Super Admin can add/remove a department's categories inline. */
+function CategoryPicker({
+  value,
+  onChange,
+  options,
+  department,
+  isAdmin,
+}: {
+  value: string;
+  onChange: (v: string) => void;
+  options: string[];
+  department: string;
+  isAdmin: boolean;
+}) {
+  const router = useRouter();
+  const [manage, setManage] = React.useState(false);
+  const [newCat, setNewCat] = React.useState("");
+  const [busy, setBusy] = React.useState(false);
+
+  const add = () => {
+    const name = newCat.trim();
+    if (!name) return;
+    setBusy(true);
+    addTaskCategoryAction(department, name)
+      .then((res) => {
+        if (res?.error) return toast.error(res.error);
+        setNewCat("");
+        onChange(name);
+        router.refresh();
+      })
+      .finally(() => setBusy(false));
+  };
+  const del = (name: string) => {
+    setBusy(true);
+    deleteTaskCategoryAction(department, name)
+      .then((res) => {
+        if (res?.error) return toast.error(res.error);
+        if (value === name) onChange(options.find((o) => o !== name) ?? "");
+        router.refresh();
+      })
+      .finally(() => setBusy(false));
+  };
+
+  return (
+    <div className="space-y-1.5">
+      <Combobox value={value} onChange={onChange} options={options.map((c) => ({ value: c, label: c }))} searchPlaceholder="Cari kategori…" />
+      {isAdmin && (
+        <>
+          <button type="button" onClick={() => setManage((m) => !m)} className="text-[11px] font-medium text-primary hover:underline">
+            {manage ? "Tutup kelola kategori" : "Kelola kategori (admin)"}
+          </button>
+          {manage && (
+            <div className="space-y-2 rounded-lg border border-border bg-muted/20 p-2">
+              <div className="flex gap-1.5">
+                <Input
+                  value={newCat}
+                  onChange={(e) => setNewCat(e.target.value)}
+                  placeholder="Kategori baru…"
+                  className="h-8"
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") {
+                      e.preventDefault();
+                      add();
+                    }
+                  }}
+                />
+                <Button size="sm" type="button" onClick={add} disabled={busy || !newCat.trim()}>
+                  <Plus className="size-4" />
+                </Button>
+              </div>
+              <div className="flex flex-wrap gap-1.5">
+                {options.map((c) => (
+                  <span key={c} className="inline-flex items-center gap-1 rounded-md bg-muted px-2 py-0.5 text-[11px] text-foreground/80">
+                    {c}
+                    <button type="button" onClick={() => del(c)} disabled={busy} className="text-muted-foreground hover:text-red-500" title="Hapus kategori">
+                      {busy ? <Loader2 className="size-3 animate-spin" /> : <Trash2 className="size-3" />}
+                    </button>
+                  </span>
+                ))}
+              </div>
+              <p className="text-[10px] text-muted-foreground">Kategori khusus departemen {divisionLabel(department)} — tersimpan permanen untuk semua anggota.</p>
+            </div>
+          )}
+        </>
+      )}
+    </div>
   );
 }
 
@@ -99,24 +197,35 @@ function TaskForm({
   members,
   divisions = [],
   defaultDivision,
+  isAdmin = false,
+  userDepartment,
+  categories,
 }: {
   task?: EditableTask;
   outlets: TaskOutlet[];
   members?: DivisionMembers;
   divisions?: string[];
   defaultDivision?: string;
+  isAdmin?: boolean;
+  userDepartment?: string;
+  categories?: Record<string, string[]>;
 }) {
   const router = useRouter();
   const { setOpen } = useSheetControl();
   const [pending, startTransition] = React.useTransition();
   const [branch, setBranch] = React.useState<boolean>(!!task?.outletId);
+  const initialDivision = task?.division ?? userDepartment ?? defaultDivision ?? divisions[0] ?? "";
+  const catsFor = React.useCallback(
+    (div: string) => categories?.[div] ?? (WORK_CATEGORIES as readonly string[] as string[]),
+    [categories],
+  );
   const [form, setForm] = React.useState({
     title: task?.title ?? "",
     description: task?.description ?? "",
-    category: task?.category ?? (WORK_CATEGORIES[0] as string),
+    category: task?.category ?? catsFor(initialDivision)[0] ?? "",
     priority: task?.priority ?? ("medium" as Priority),
     status: task?.status ?? ("open" as TaskStatus),
-    division: task?.division ?? defaultDivision ?? divisions[0] ?? "",
+    division: initialDivision,
     outletId: task?.outletId ?? outlets[0]?.id ?? "",
     picIds: task?.picIds ?? [],
     startDate: task ? toDateInput(task.start) : defaultDateISO(),
@@ -129,10 +238,16 @@ function TaskForm({
   }
 
   function pickDivision(v: string) {
-    // Reset PIC selection because members differ per division (keep any still valid).
-    const next = members?.[v] ?? [];
-    const validIds = new Set(next.map((m) => m.id));
-    setForm((f) => ({ ...f, division: v, picIds: f.picIds.filter((id) => validIds.has(id)) }));
+    // Members AND categories differ per division — keep any still-valid PICs,
+    // and switch to the new division's category if the current one isn't there.
+    const validIds = new Set((members?.[v] ?? []).map((m) => m.id));
+    const cats = catsFor(v);
+    setForm((f) => ({
+      ...f,
+      division: v,
+      picIds: f.picIds.filter((id) => validIds.has(id)),
+      category: cats.includes(f.category) ? f.category : cats[0] ?? "",
+    }));
   }
 
   const duration = Math.round((+new Date(form.dueDate) - +new Date(form.startDate)) / 86_400_000);
@@ -188,14 +303,21 @@ function TaskForm({
           <Textarea value={form.description} onChange={(e) => set("description", e.target.value)} placeholder="Details…" />
         </Field>
 
-        <Field label="Divisi">
-          <Combobox
-            value={form.division}
-            onChange={pickDivision}
-            options={divisions.map((d) => ({ value: d, label: divisionLabel(d) }))}
-            searchPlaceholder="Cari divisi…"
-          />
-        </Field>
+        {isAdmin ? (
+          <Field label="Divisi">
+            <Combobox
+              value={form.division}
+              onChange={pickDivision}
+              options={divisions.map((d) => ({ value: d, label: divisionLabel(d) }))}
+              searchPlaceholder="Cari divisi…"
+            />
+          </Field>
+        ) : (
+          <div className="flex items-center justify-between rounded-lg border border-border bg-muted/30 px-3 py-2">
+            <span className="text-xs text-muted-foreground">Divisi</span>
+            <span className="text-sm font-medium text-foreground">{divisionLabel(form.division)}</span>
+          </div>
+        )}
 
         <Field label={`PIC · siapa yang mengerjakan (${form.picIds.length})`}>
           {divMembers.length ? (
@@ -241,8 +363,14 @@ function TaskForm({
         )}
 
         <div className="grid grid-cols-2 gap-3">
-          <Field label="Category">
-            <Combobox value={form.category} onChange={(v) => set("category", v)} options={WORK_CATEGORIES.map((c) => ({ value: c, label: c }))} />
+          <Field label="Kategori">
+            <CategoryPicker
+              value={form.category}
+              onChange={(v) => set("category", v)}
+              options={catsFor(form.division)}
+              department={form.division}
+              isAdmin={isAdmin}
+            />
           </Field>
           <Field label="Priority">
             <Combobox value={form.priority} onChange={(v) => set("priority", v as Priority)} options={PRIORITIES.map((p) => ({ value: p, label: PRIORITY_META[p].label }))} />

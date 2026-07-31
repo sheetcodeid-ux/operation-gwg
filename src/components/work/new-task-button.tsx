@@ -10,12 +10,18 @@ export function NewTaskButton({
   members,
   divisions,
   defaultDivision,
+  isAdmin,
+  userDepartment,
+  categories,
 }: {
   outlets: TaskOutlet[];
   coordinators: { id: string; name: string }[];
   members?: DivisionMembers;
   divisions?: string[];
   defaultDivision?: string;
+  isAdmin?: boolean;
+  userDepartment?: string;
+  categories?: Record<string, string[]>;
 }) {
   return (
     <TaskSheet
@@ -24,6 +30,9 @@ export function NewTaskButton({
       members={members}
       divisions={divisions}
       defaultDivision={defaultDivision}
+      isAdmin={isAdmin}
+      userDepartment={userDepartment}
+      categories={categories}
       trigger={
         <Button size="sm">
           <Plus /> New Task

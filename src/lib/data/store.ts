@@ -11,7 +11,7 @@
  */
 import "server-only";
 
-import { scopeOutlets } from "../rbac";
+import { hasGlobalScope, scopeOutlets } from "../rbac";
 import type {
   Area,
   Complaint,
@@ -92,6 +92,16 @@ export function listHospitality(user: UserProfile): HospitalityAssessment[] {
 export function listTasks(user: UserProfile): WorkTask[] {
   const ids = visibleOutletIdSet(user);
   return SEED.tasks.filter((t) => t.outletId === null || ids.has(t.outletId)).sort(byDateDesc("createdAt"));
+}
+
+/** Work Tracker is department-scoped: a member sees ONLY their own department's
+ *  tasks (Business Development sees Business Development, etc.). Super Admin sees
+ *  every department. Users without a department fall back to outlet scope. */
+export function listDeptTasks(user: UserProfile): WorkTask[] {
+  const all = [...SEED.tasks].sort(byDateDesc("createdAt"));
+  if (hasGlobalScope(user.role)) return all;
+  if (user.department) return all.filter((t) => t.division === user.department);
+  return listTasks(user);
 }
 export function listEvents(user: UserProfile): OpsEvent[] {
   const ids = visibleOutletIdSet(user);

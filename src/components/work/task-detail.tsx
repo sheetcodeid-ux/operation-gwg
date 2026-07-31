@@ -21,21 +21,24 @@ interface EditProps {
   members?: DivisionMembers;
   divisions?: string[];
   canEdit?: boolean;
+  isAdmin?: boolean;
+  userDepartment?: string;
+  categories?: Record<string, string[]>;
 }
 
 /** Clickable wrapper: renders `trigger`, opens a centered task-detail dialog (with optional Edit). */
-export function TaskDetailDialog({ task, trigger, outlets, coordinators, members, divisions, canEdit }: { task: WorkRow; trigger: React.ReactElement } & EditProps) {
+export function TaskDetailDialog({ task, trigger, outlets, coordinators, members, divisions, canEdit, isAdmin, userDepartment, categories }: { task: WorkRow; trigger: React.ReactElement } & EditProps) {
   return (
     <Dialog>
       <DialogTrigger>{trigger}</DialogTrigger>
       <DialogContent title={task.title} description={`${task.outlet} · ${task.area}`} align="center" className="max-w-md">
-        <TaskDetail task={task} outlets={outlets} coordinators={coordinators} members={members} divisions={divisions} canEdit={canEdit} />
+        <TaskDetail task={task} outlets={outlets} coordinators={coordinators} members={members} divisions={divisions} canEdit={canEdit} isAdmin={isAdmin} userDepartment={userDepartment} categories={categories} />
       </DialogContent>
     </Dialog>
   );
 }
 
-export function TaskDetail({ task, outlets, coordinators, members, divisions, canEdit }: { task: WorkRow } & EditProps) {
+export function TaskDetail({ task, outlets, coordinators, members, divisions, canEdit, isAdmin, userDepartment, categories }: { task: WorkRow } & EditProps) {
   const router = useRouter();
   const { setOpen } = useDialogControl();
   const [pending, startTransition] = React.useTransition();
@@ -152,6 +155,9 @@ export function TaskDetail({ task, outlets, coordinators, members, divisions, ca
             coordinators={coordinators}
             members={members}
             divisions={divisions}
+            isAdmin={isAdmin}
+            userDepartment={userDepartment}
+            categories={categories}
             trigger={
               <Button size="sm">
                 <Pencil className="size-3.5" /> Edit Task

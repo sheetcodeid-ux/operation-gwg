@@ -2,11 +2,9 @@ import { ListChecks } from "lucide-react";
 import type { Metadata } from "next";
 import { getSessionUser } from "@/lib/auth";
 import { can } from "@/lib/rbac";
-import { Card, CardContent } from "@/components/ui/card";
 import { PageHeader } from "@/components/ui/page-header";
 import { NewTaskButton } from "@/components/work/new-task-button";
-import { KanbanBoard } from "@/components/work/kanban-board";
-import { WorkViews } from "@/components/work/work-views";
+import { WorkTrackerViews } from "@/components/work/work-tracker-views";
 import { buildTaskSheetData, buildWorkRows } from "@/components/work/work-data";
 
 export const metadata: Metadata = { title: "Work Tracker · Kanban" };
@@ -22,21 +20,35 @@ export default async function WorkKanbanPage() {
       <PageHeader
         icon={ListChecks}
         title="Work Tracker"
-        description="Drag tasks between columns to update their status — synced with the table"
+        description="Geser tugas antar kolom untuk mengubah statusnya — tersinkron dengan tabel"
         actions={
-          canCreate && sheet.outlets.length > 0 ? (
-            <NewTaskButton outlets={sheet.outlets} coordinators={sheet.coordinators} members={sheet.members} divisions={sheet.divisions} defaultDivision={sheet.defaultDivision} />
+          canCreate ? (
+            <NewTaskButton
+              outlets={sheet.outlets}
+              coordinators={sheet.coordinators}
+              members={sheet.members}
+              divisions={sheet.divisions}
+              defaultDivision={sheet.defaultDivision}
+              isAdmin={sheet.isAdmin}
+              userDepartment={sheet.userDepartment}
+              categories={sheet.categories}
+            />
           ) : undefined
         }
       />
 
-      <WorkViews />
-
-      <Card className="mt-4">
-        <CardContent className="pt-5">
-          <KanbanBoard rows={rows} outlets={sheet.outlets} coordinators={sheet.coordinators} members={sheet.members} divisions={sheet.divisions} canEdit={canCreate} />
-        </CardContent>
-      </Card>
+      <WorkTrackerViews
+        rows={rows}
+        outlets={sheet.outlets}
+        coordinators={sheet.coordinators}
+        members={sheet.members}
+        divisions={sheet.divisions}
+        canEdit={canCreate}
+        isAdmin={sheet.isAdmin}
+        userDepartment={sheet.userDepartment}
+        categories={sheet.categories}
+        initialView="kanban"
+      />
     </div>
   );
 }

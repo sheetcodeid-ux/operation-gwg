@@ -44,6 +44,9 @@ export function WorkTable({
   members,
   divisions,
   canEdit,
+  isAdmin,
+  userDepartment,
+  categories,
 }: {
   rows: WorkRow[];
   outlets?: TaskOutlet[];
@@ -51,6 +54,10 @@ export function WorkTable({
   members?: DivisionMembers;
   divisions?: string[];
   canEdit?: boolean;
+  /** Only Super Admin gets the division filter (others see just their dept). */
+  isAdmin?: boolean;
+  userDepartment?: string;
+  categories?: Record<string, string[]>;
 }) {
   const [priority, setPriority] = React.useState<string>("all");
   const [status, setStatus] = React.useState<string>("all");
@@ -157,6 +164,9 @@ export function WorkTable({
               members={members}
               divisions={divisions}
               canEdit={canEdit}
+              isAdmin={isAdmin}
+              userDepartment={userDepartment}
+              categories={categories}
               trigger={
                 <button
                   type="button"
@@ -170,7 +180,7 @@ export function WorkTable({
         ),
       },
     ],
-    [outlets, coordinators, members, divisions, canEdit],
+    [outlets, coordinators, members, divisions, canEdit, isAdmin, userDepartment, categories],
   );
 
   return (
@@ -195,7 +205,7 @@ export function WorkTable({
             toolbar={
               <div className="flex items-center gap-2">
                 <MonthFilter options={months} value={month} onChange={setMonth} className="w-36 shrink-0" />
-                <DivisionFilter value={division} onChange={setDivision} options={divisions} className="w-40 shrink-0" />
+                {isAdmin && <DivisionFilter value={division} onChange={setDivision} options={divisions} className="w-40 shrink-0" />}
                 <PicFilter people={people} value={pic} onChange={setPic} className="w-40 shrink-0" />
                 <Combobox
                   portal
