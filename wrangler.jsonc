@@ -14,12 +14,12 @@
   },
   "observability": {
     "enabled": true
-  },
-  // Vercel's daily backup cron for the fraud sync becomes a Cloudflare Cron
-  // Trigger. The Supabase pg_cron job still calls the same route hourly.
-  "triggers": {
-    "crons": ["30 21 * * *"]
   }
+  // The fraud sync runs from Supabase pg_cron (hourly HTTP call to
+  // /api/cron/fraud-sync), independent of hosting — no Cloudflare Cron Trigger
+  // needed. (The OpenNext worker only exports a fetch handler, so a cron
+  // trigger would have no scheduled handler to run anyway.)
+  //
   // --- Bindings & secrets are configured in the Cloudflare dashboard / via
   //     `wrangler secret put` (see MIGRATION-CLOUDFLARE.md). Env vars used:
   //     GWG_SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY (or GWG_SUPABASE_KEY),
