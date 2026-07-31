@@ -6,6 +6,7 @@ import { cn } from "@/lib/utils";
 import { Card, CardContent } from "@/components/ui/card";
 import { WorkTable, type WorkRow } from "./work-table";
 import { KanbanBoard } from "./kanban-board";
+import { WorkPerformanceChart } from "./work-performance-chart";
 import type { DivisionMembers, TaskOutlet } from "./task-sheet";
 
 type View = "table" | "kanban";
@@ -42,9 +43,12 @@ export function WorkTrackerViews({
 }) {
   const [view, setView] = React.useState<View>(initialView);
   const shared = { rows, outlets, coordinators, members, divisions, canEdit, isAdmin, userDepartment, categories, initialDivision };
+  const defaultDivision = initialDivision && initialDivision !== "all" ? initialDivision : userDepartment;
 
   return (
     <div>
+      <WorkPerformanceChart rows={rows} members={members} divisions={divisions} isAdmin={isAdmin} defaultDivision={defaultDivision} />
+
       <div className="inline-grid grid-cols-2 gap-1 rounded-xl border border-border bg-muted/50 p-1">
         {(
           [
