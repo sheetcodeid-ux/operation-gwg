@@ -3,15 +3,25 @@
 import * as React from "react";
 import { Area, Bar, CartesianGrid, ComposedChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { ChevronDown, Users } from "lucide-react";
-import { Card } from "@/components/ui/card";
 import { membersForDivision } from "./division-filter";
 import type { DivisionMembers } from "./task-sheet";
 import type { WorkRow } from "./work-table";
 
 const MONTHS = ["Januari", "Februari", "Maret", "April", "Mei", "Juni", "Juli", "Agustus", "September", "Oktober", "November", "Desember"];
 const BLUE = "#3b82f6";
-const firstName = (n: string) => (n || "").trim().split(/\s+/)[0] || n;
 const pad = (n: number) => String(n).padStart(2, "0");
+
+// Prefiks kehormatan yang dilewati agar nama panggilan yang dipakai
+// (mis. "Muhammad Andi" → "Andi" → "AND").
+const PREFIXES = new Set(["muhammad", "muhamad", "mohammad", "mohamad", "moch", "mochamad", "mochammad", "muh", "m"]);
+/** Singkatan 3 huruf kapital untuk sumbu X — seperti bulan "January" → "JAN". */
+function abbr(name: string): string {
+  const words = (name || "").trim().split(/\s+/).filter(Boolean);
+  if (words.length === 0) return name;
+  let w = words[0];
+  if (words.length > 1 && PREFIXES.has(words[0].toLowerCase().replace(/\./g, ""))) w = words[1];
+  return w.slice(0, 3).toUpperCase();
+}
 
 function Pill({ value, onChange, options }: { value: string; onChange: (v: string) => void; options: { v: string; l: string }[] }) {
   return (
@@ -65,16 +75,15 @@ export function WorkPerformanceChart({ rows, members, divisions, isAdmin, defaul
         if (key === thisKey) ini++;
         else if (key === lastKey) lalu++;
       }
-      return { name: firstName(e.name), full: e.name, ini, lalu };
+      return { name: abbr(e.name), full: e.name, ini, lalu };
     });
   }, [rows, emps, dept, thisKey, lastKey]);
 
   const hasEmployees = emps.length > 0;
   const hasAny = data.some((d) => d.ini > 0 || d.lalu > 0);
-  const angled = data.length > 5;
 
   return (
-    <Card className="mb-4 p-5">
+    <div className="mb-4">
       <div className="mb-3 flex flex-wrap items-start justify-between gap-3">
         <div className="flex items-center gap-2">
           <span className="grid size-9 shrink-0 place-items-center rounded-xl bg-blue-500/12"><Users className="size-4 text-blue-600 dark:text-blue-400" /></span>
@@ -95,13 +104,13 @@ export function WorkPerformanceChart({ rows, members, divisions, isAdmin, defaul
         <>
           <div className="h-[17rem]">
             <ResponsiveContainer width="100%" height="100%">
-              <ComposedChart data={data} margin={{ top: 8, right: 8, left: -12, bottom: angled ? 8 : 0 }}>
+              <ComposedChart data={data} margin={{ top: 8, right: 8, left: -12, bottom: 0 }}>
                 <defs>
                   <linearGradient id="wpBlue" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor={BLUE} stopOpacity={0.35} /><stop offset="100%" stopColor={BLUE} stopOpacity={0} /></linearGradient>
                   <linearGradient id="wpGrey" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="#94a3b8" stopOpacity={0.9} /><stop offset="100%" stopColor="#94a3b8" stopOpacity={0.35} /></linearGradient>
                 </defs>
                 <CartesianGrid strokeDasharray="3 3" stroke="rgba(148,163,184,0.16)" vertical={false} />
-                <XAxis dataKey="name" tick={{ fill: "#94a3b8", fontSize: 10 }} tickLine={false} axisLine={false} interval={0} angle={angled ? -30 : 0} textAnchor={angled ? "end" : "middle"} height={angled ? 54 : 20} />
+                <XAxis dataKey="name" tick={{ fill: "#94a3b8", fontSize: 10, fontWeight: 600 }} tickLine={false} axisLine={false} interval={0} angle={0} textAnchor="middle" height={22} />
                 <YAxis allowDecimals={false} tick={{ fill: "#94a3b8", fontSize: 10 }} tickLine={false} axisLine={false} width={28} />
                 <Tooltip cursor={{ fill: "rgba(148,163,184,0.08)" }} content={<Tip />} />
                 <Bar dataKey="lalu" name="Bulan Lalu" fill="url(#wpGrey)" radius={[3, 3, 0, 0]} maxBarSize={34} />
@@ -116,6 +125,6 @@ export function WorkPerformanceChart({ rows, members, divisions, isAdmin, defaul
           {!hasAny && <p className="mt-2 text-center text-[11px] text-muted-foreground">Belum ada task pada {MONTHS[month]} / bulan sebelumnya untuk departemen ini.</p>}
         </>
       )}
-    </Card>
+    </div>
   );
 }
