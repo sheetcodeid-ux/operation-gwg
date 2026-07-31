@@ -285,6 +285,21 @@
     filter: drop-shadow(0 0 5px rgba(59, 130, 246, 0.55));
   }
 
+  /* Kill the browser focus/tap outline that appears as a white box over a
+     Recharts chart when tapped on mobile (and the a11y focus rectangle). */
+  .recharts-wrapper,
+  .recharts-surface,
+  .recharts-wrapper svg,
+  .recharts-wrapper:focus,
+  .recharts-wrapper:focus-visible,
+  .recharts-surface:focus,
+  .recharts-surface:focus-visible,
+  .recharts-wrapper *:focus,
+  .recharts-wrapper *:focus-visible {
+    outline: none !important;
+    -webkit-tap-highlight-color: transparent;
+  }
+
   /* SOLID surface — for every clickable overlay (menus, dialogs, popovers, command). */
   .surface-solid {
     background: var(--popover);

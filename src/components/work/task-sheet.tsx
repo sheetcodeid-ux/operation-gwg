@@ -60,7 +60,7 @@ function toDateInput(iso: string) {
 }
 
 /** Slide-in (Sheet) task form — create or edit, by division, with optional branch. Shared by Dashboard + Work Tracker. */
-export type DivisionMembers = Record<string, { id: string; name: string }[]>;
+export type DivisionMembers = Record<string, { id: string; name: string; jabatan?: string | null }[]>;
 
 export function TaskSheet({
   trigger,

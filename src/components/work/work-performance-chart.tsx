@@ -70,14 +70,14 @@ export function WorkPerformanceChart({ rows, members, month, department }: { row
 
   if (!hasEmployees) {
     return (
-      <div className="mb-4 grid place-items-center rounded-xl border border-dashed border-border bg-muted/20 py-12 text-center text-xs text-muted-foreground">
+      <div className="grid place-items-center rounded-xl border border-dashed border-border bg-muted/20 py-12 text-center text-xs text-muted-foreground">
         Belum ada karyawan di departemen ini.
       </div>
     );
   }
 
   return (
-    <div className="mb-4">
+    <div>
       <div className="h-[17rem]" style={{ outline: "none" }}>
         <ResponsiveContainer width="100%" height="100%">
           <ComposedChart data={data} margin={{ top: 8, right: 8, left: 0, bottom: 0 }} accessibilityLayer={false}>

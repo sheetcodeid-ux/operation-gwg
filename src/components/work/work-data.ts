@@ -7,7 +7,7 @@ import { hasGlobalScope } from "@/lib/rbac";
 import type { UserProfile } from "@/lib/types";
 import type { WorkRow } from "./work-table";
 
-export type DivisionMembers = Record<string, { id: string; name: string }[]>;
+export type DivisionMembers = Record<string, { id: string; name: string; jabatan?: string | null }[]>;
 
 /** Enriched task rows shared by the Work Tracker table, Kanban and Calendar
  *  views — DEPARTMENT-SCOPED (each team sees only its own tasks; Super Admin
@@ -58,7 +58,7 @@ export async function buildTaskSheetData(user: UserProfile) {
   const activeUsers = getUsers().filter((u) => u.active);
   const members: DivisionMembers = {};
   for (const d of divisions) {
-    members[d] = activeUsers.filter((u) => u.department === d).map((u) => ({ id: u.id, name: u.name }));
+    members[d] = activeUsers.filter((u) => u.department === d).map((u) => ({ id: u.id, name: u.name, jabatan: u.jabatan ?? null }));
   }
 
   const isAdmin = hasGlobalScope(user.role);

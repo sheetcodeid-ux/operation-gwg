@@ -9,6 +9,7 @@ import { Combobox } from "@/components/ui/combobox";
 import { WorkTable, type WorkRow } from "./work-table";
 import { KanbanBoard } from "./kanban-board";
 import { WorkPerformanceChart } from "./work-performance-chart";
+import { WorkRoleDonut } from "./work-role-donut";
 import { CategoryFilter, DivisionFilter, PicFilter, membersForDivision } from "./division-filter";
 import type { DivisionMembers, TaskOutlet } from "./task-sheet";
 
@@ -126,8 +127,13 @@ export function WorkTrackerViews({
         />
       </div>
 
-      {/* Performance chart — TABLE view only (hidden on Kanban). */}
-      {view === "table" && <WorkPerformanceChart rows={rows} members={members} month={month} department={chartDept} />}
+      {/* Performance chart + per-jabatan donut — TABLE view only (hidden on Kanban). */}
+      {view === "table" && (
+        <div className="mb-4 grid gap-4 lg:grid-cols-[1.7fr_1fr]">
+          <WorkPerformanceChart rows={rows} members={members} month={month} department={chartDept} />
+          <WorkRoleDonut rows={rows} members={members} department={chartDept} />
+        </div>
+      )}
 
       <div className="inline-grid grid-cols-2 gap-1 rounded-xl border border-border bg-muted/50 p-1">
         {(
