@@ -1,7 +1,19 @@
 import "server-only";
 
 import { db, dbEnabled } from "./db";
-import type { MenuPerformanceRow } from "@/lib/integrations/gwgmanage";
+
+/** One menu's monthly performance (name, category, qty sold, amount). Sourced
+ *  from the ESB Sales Menu Recap. */
+export interface MenuPerformanceRow {
+  menuName: string;
+  categoryName: string | null;
+  category: string | null;
+  qty: number;
+  amount: number;
+  volume: string | null;
+  omzet: string | null;
+  keterangan: string | null;
+}
 
 export interface SalesRow {
   month: string;

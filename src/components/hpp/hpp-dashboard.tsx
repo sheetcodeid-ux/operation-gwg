@@ -169,7 +169,7 @@ export function HppDashboard({ menus, ingredients, sales }: { menus: DashMenu[];
 
       <KpiCarousel items={d.kpis} />
 
-      {/* Actual sales from ERP (GWG Manage) vs HPP projection */}
+      {/* Actual sales from ERP (ESB) vs HPP projection */}
       <HppSalesPanel configured={sales.configured} month={sales.month} syncedAt={sales.syncedAt} brand={brand} menus={sales.menus} sales={sales.rows} />
 
       {/* Smart insights & recommendations */}

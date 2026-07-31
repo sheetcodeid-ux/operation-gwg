@@ -3,7 +3,7 @@
 import { getSessionUser } from "@/lib/auth";
 import { can } from "@/lib/rbac";
 import { getOutlets, getUsers } from "@/lib/data/store";
-import { fetchBranches, gwgmanageConfigured } from "@/lib/integrations/gwgmanage";
+import { esbConfigured, esbListBranches } from "@/lib/integrations/esb-client";
 
 export interface AssignableOutlet {
   id: string;
@@ -12,7 +12,7 @@ export interface AssignableOutlet {
 
 /**
  * Outlets a Coordinator Area / Supervisor may be assigned, sourced from the POS
- * (gwgmanage branches API) so new POS outlets show up automatically — falling
+ * (ESB branches API) so new POS outlets show up automatically — falling
  * back to the local outlets table when the integration isn't configured/
  * reachable. Outlets already held by ANOTHER user of the SAME role are removed
  * (exclusive assignment): coordinators don't clash with coordinators, and
@@ -38,11 +38,11 @@ export async function listAssignableOutlets(
 
   let all: AssignableOutlet[] = appOutlets.map((o) => ({ id: o.id, name: o.name }));
   let source: "pos" | "local" = "local";
-  if (all.length === 0 && gwgmanageConfigured()) {
+  if (all.length === 0 && esbConfigured()) {
     try {
-      const branches = await fetchBranches();
+      const branches = await esbListBranches();
       all = branches
-        .map((b) => ({ id: b.code || String(b.branchId || b.id), name: b.name }))
+        .map((b) => ({ id: b.id, name: b.name }))
         .filter((o) => o.id && o.name);
       source = "pos";
     } catch {

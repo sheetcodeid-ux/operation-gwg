@@ -1245,7 +1245,7 @@ function OutletTable({ report, hasAmount }: { report: FraudReport; hasAmount: bo
                   {open && (
                     <tr className="border-b border-border/60 bg-muted/20">
                       <td colSpan={6} className="px-4 py-3">
-                        <OutletDetail branchId={o.branchId} from={report.from} to={report.to} hasAmount={hasAmount} />
+                        <OutletDetail branch={o.code} from={report.from} to={report.to} hasAmount={hasAmount} kind={report.kind} />
                       </td>
                     </tr>
                   )}
@@ -1259,22 +1259,22 @@ function OutletTable({ report, hasAmount }: { report: FraudReport; hasAmount: bo
   );
 }
 
-function OutletDetail({ branchId, from, to, hasAmount }: { branchId: number; from: string; to: string; hasAmount: boolean }) {
+function OutletDetail({ branch, from, to, hasAmount, kind }: { branch: string; from: string; to: string; hasAmount: boolean; kind: FraudKind }) {
   const [days, setDays] = React.useState<FraudDailyPoint[] | null>(null);
   React.useEffect(() => {
     let live = true;
-    outletFraudDailyAction(branchId, from, to).then((res) => {
+    outletFraudDailyAction(branch, from, to, kind).then((res) => {
       if (live && Array.isArray(res)) setDays(res);
     });
     return () => {
       live = false;
     };
-  }, [branchId, from, to]);
+  }, [branch, from, to, kind]);
 
   if (!days) {
     return (
       <p className="flex items-center gap-2 py-2 text-xs text-muted-foreground">
-        <Loader2 className="size-3.5 animate-spin" /> Memuat rincian harian dari POS…
+        <Loader2 className="size-3.5 animate-spin" /> Memuat rincian harian dari ESB…
       </p>
     );
   }

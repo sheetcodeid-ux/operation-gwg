@@ -1,6 +1,5 @@
 import "server-only";
 
-import { fetchBranches, fetchErpDashboard, gwgmanageConfigured } from "@/lib/integrations/gwgmanage";
 import { esbConfigured, esbFetchCancelRows, esbFetchNetSales, esbListBranches, type EsbCancelResult } from "@/lib/integrations/esb-client";
 import { fraudAgg, fraudStoreEnabled, fraudTopOrders, getFraudReportCache, getFraudRows, getSalesDaily, getSalesPeriod, getSyncStates, replaceFraudDay, setFraudReportCache, upsertSalesDay, upsertSalesPeriod, type FraudKindGroup, type FraudSyncState } from "./fraud-store";
 
@@ -577,67 +576,10 @@ export async function getFraudReport(period: FraudPeriod, date: string, kind: Fr
     }
   }
 
-  // The POS dashboard has no delete-order data and no void/cancel split filter.
-  if (kind === "delete") return base(period, r, { configured: true, kind, error: "Data Delete Order hanya tersedia dari ESB — aktifkan integrasi ESB." });
-  if (!gwgmanageConfigured()) return base(period, r, { kind, error: "Integrasi POS belum dikonfigurasi." });
-
-  try {
-    // The POS dashboard takes period=daily&date for a single day; a range uses
-    // dateFrom/dateTo (weekly/monthly).
-    const range = r.from === r.to ? { date: r.from } : { dateFrom: r.from, dateTo: r.to };
-    const [globalRes, branches] = await Promise.all([fetchErpDashboard(range), fetchBranches()]);
-    const totalVoid = globalRes.totalVoid;
-    const totalCancel = globalRes.totalCancelled;
-    const totalVoidAmount = globalRes.voidAmount;
-    const totalCancelAmount = globalRes.cancelAmount;
-    const hasAmount = totalVoidAmount > 0 || totalCancelAmount > 0;
-
-    // Per-branch (best effort). Skip entirely if there are no branches.
-    const perBranch = await Promise.allSettled(
-      branches.map((b) => fetchErpDashboard({ ...range, branchId: b.branchId || b.id })),
-    );
-    const rows: FraudOutletRow[] = branches.map((b, i) => {
-      const res = perBranch[i];
-      const v = res.status === "fulfilled" ? res.value : null;
-      return {
-        branchId: b.branchId || b.id,
-        code: b.code,
-        name: b.name,
-        void: v?.totalVoid ?? 0,
-        cancel: v?.totalCancelled ?? 0,
-        voidAmount: v?.voidAmount ?? 0,
-        cancelAmount: v?.cancelAmount ?? 0,
-      };
-    });
-
-    // Score combines counts + amounts so the check works whichever the POS gives.
-    const score = (o: { void: number; cancel: number; voidAmount: number; cancelAmount: number }) =>
-      o.void + o.cancel + o.voidAmount + o.cancelAmount;
-    const globalScore = totalVoid + totalCancel + totalVoidAmount + totalCancelAmount;
-    // Reliable only if the per-branch numbers PARTITION the total (sum ≈ global).
-    // If branchId is ignored every branch echoes the global total → sum ≫ global.
-    const sum = rows.reduce((a, o) => a + score(o), 0);
-    const echoed = branches.length > 1 && rows.every((o) => o.void === totalVoid && o.cancel === totalCancel && o.voidAmount === totalVoidAmount && o.cancelAmount === totalCancelAmount);
-    const perOutletReliable = branches.length > 0 && globalScore > 0 && !echoed && sum <= globalScore * 1.5;
-
-    const outlets = perOutletReliable
-      ? rows.filter((o) => score(o) > 0).sort((a, b) => score(b) - score(a))
-      : [];
-
-    // POS can't split void vs cancel per request — zero the unselected metric.
-    const keepV = kind !== "cancel";
-    const keepC = kind !== "void";
-    return {
-      configured: true, period, kind, from: r.from, to: r.to, label: r.label, source: "pos",
-      totalVoid: keepV ? totalVoid : 0, totalCancel: keepC ? totalCancel : 0,
-      totalVoidAmount: keepV ? totalVoidAmount : 0, totalCancelAmount: keepC ? totalCancelAmount : 0,
-      hasAmount,
-      outlets: outlets.map((o) => ({ ...o, void: keepV ? o.void : 0, cancel: keepC ? o.cancel : 0, voidAmount: keepV ? o.voidAmount : 0, cancelAmount: keepC ? o.cancelAmount : 0 })),
-      perOutletReliable,
-    };
-  } catch (e) {
-    return base(period, r, { configured: true, kind, error: e instanceof Error ? e.message : "Gagal memuat data POS." });
-  }
+  // No ESB configured → nothing to show. (The legacy POS / GWG Manage fallback
+  // was removed; ESB is the sole fraud source now.)
+  if (kind === "delete") return base(period, r, { kind, error: "Data Delete Order hanya tersedia dari ESB — aktifkan integrasi ESB." });
+  return base(period, r, { kind, error: "Integrasi ESB belum dikonfigurasi." });
 }
 
 export interface FraudDailyPoint {
@@ -649,15 +591,31 @@ export interface FraudDailyPoint {
   cancelAmount: number;
 }
 
-/** Per-day void/cancel for ONE outlet across the range (drill-down detail). */
-export async function getOutletFraudDaily(branchId: number, from: string, to: string): Promise<FraudDailyPoint[]> {
-  if (!gwgmanageConfigured()) return [];
-  const days: string[] = [];
-  for (let d = new Date(`${from}T00:00:00`); ymd(d) <= to && days.length < 40; d.setDate(d.getDate() + 1)) days.push(ymd(d));
-  const res = await Promise.allSettled(days.map((day) => fetchErpDashboard({ date: day, branchId })));
-  return days.map((day, i) => {
-    const v = res[i].status === "fulfilled" ? (res[i] as PromiseFulfilledResult<Awaited<ReturnType<typeof fetchErpDashboard>>>).value : null;
+/** Per-day void/cancel for ONE outlet (by branch name), aggregated from the ESB
+ *  fraud cache — the drill-down under each outlet row on the Fraud page. */
+export async function getOutletFraudDaily(branch: string, from: string, to: string, kind: FraudKind = "all"): Promise<FraudDailyPoint[]> {
+  if (!fraudStoreEnabled() || !esbConfigured()) return [];
+  let agg;
+  try {
+    agg = await fraudAgg(kindGroup(kind), from, to, kind, true); // daily buckets
+  } catch {
+    return [];
+  }
+  const byDay = new Map<string, { void: number; cancel: number; voidAmount: number; cancelAmount: number }>();
+  for (const b of agg.branchDay) {
+    if (b.branch !== branch) continue;
+    const cur = byDay.get(b.d) ?? { void: 0, cancel: 0, voidAmount: 0, cancelAmount: 0 };
+    if (b.isVoid) { cur.void += b.cnt; cur.voidAmount += b.amount; }
+    else { cur.cancel += b.cnt; cur.cancelAmount += b.amount; }
+    byDay.set(b.d, cur);
+  }
+  const out: FraudDailyPoint[] = [];
+  for (let d = new Date(`${from}T00:00:00`); ymd(d) <= to && out.length < 40; d.setDate(d.getDate() + 1)) {
+    const day = ymd(d);
+    const v = byDay.get(day) ?? { void: 0, cancel: 0, voidAmount: 0, cancelAmount: 0 };
     const dt = new Date(`${day}T00:00:00`);
-    return { date: day, label: `${dt.getDate()} ${MONTHS[dt.getMonth()].slice(0, 3)}`, void: v?.totalVoid ?? 0, cancel: v?.totalCancelled ?? 0, voidAmount: v?.voidAmount ?? 0, cancelAmount: v?.cancelAmount ?? 0 };
-  });
+    out.push({ date: day, label: `${dt.getDate()} ${MONTHS[dt.getMonth()].slice(0, 3)}`, void: v.void, cancel: v.cancel, voidAmount: v.voidAmount, cancelAmount: v.cancelAmount });
+  }
+  return out;
 }
+

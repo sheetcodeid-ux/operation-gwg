@@ -6,7 +6,7 @@ import { canUseHpp } from "@/lib/hpp/access";
 import { listHpp } from "@/lib/data/hpp";
 import { listIngredients } from "@/lib/data/hpp-ingredients";
 import { latestSalesMonth, listSales } from "@/lib/data/hpp-sales";
-import { gwgmanageConfigured } from "@/lib/integrations/gwgmanage";
+import { esbConfigured } from "@/lib/integrations/esb-client";
 import { HPP_STATUS_META } from "@/lib/hpp/status";
 import { PageHeader } from "@/components/ui/page-header";
 import { HeroCard } from "@/components/dashboard/hero-card";
@@ -60,7 +60,7 @@ export default async function RndDashboardPage() {
   }));
   const salesRowsLite: SalesRowLite[] = salesRows.map((s) => ({ name: s.menuName, category: s.category, qty: s.qty, amount: s.amount }));
   const sales: DashSales = {
-    configured: gwgmanageConfigured(),
+    configured: esbConfigured(),
     month: salesMonth,
     syncedAt: salesRows[0]?.syncedAt ?? null,
     menus: salesMenus,

@@ -32,7 +32,7 @@ const norm = (s: string) => s.trim().toLowerCase().replace(/\s+/g, " ");
 
 /** HPP projection for a menu (subset of the record) used to score actual sales. */
 export type SalesMenu = { name: string; brand: string; category: string; hpp: number; price: number; variableCost: number; targetSales: number };
-/** One synced sales row from GWG Manage. */
+/** One synced sales row from ESB. */
 export type SalesRowLite = { name: string; category: string | null; qty: number; amount: number };
 
 type Matched = {
@@ -183,12 +183,12 @@ export function HppSalesPanel({
           <p className="mt-0.5 text-[11px] text-muted-foreground">
             {configured ? (
               month ? (
-                <>Data ERP GWG Manage · {monthLabel(month)}{syncedAt && ` · disinkron ${relTime(syncedAt)}`}</>
+                <>Data ERP ESB · {monthLabel(month)}{syncedAt && ` · disinkron ${relTime(syncedAt)}`}</>
               ) : (
-                <>Terhubung ke GWG Manage — belum ada data, klik Sync.</>
+                <>Terhubung ke ESB — belum ada data, klik Sync.</>
               )
             ) : (
-              <>Belum tersambung ke ERP GWG Manage.</>
+              <>Belum tersambung ke ERP ESB.</>
             )}
           </p>
         </div>
@@ -215,15 +215,15 @@ export function HppSalesPanel({
           <Link2Off className="mx-auto size-6 text-muted-foreground" />
           <p className="mt-2 text-[13px] font-medium text-foreground">Integrasi ERP belum aktif</p>
           <p className="mx-auto mt-1 max-w-md text-[12px] leading-relaxed text-muted-foreground">
-            Setel <code className="rounded bg-muted px-1 py-0.5 text-[11px]">GWGMANAGE_EMAIL</code> dan{" "}
-            <code className="rounded bg-muted px-1 py-0.5 text-[11px]">GWGMANAGE_PASSWORD</code> di Environment Variables Vercel (pakai akun layanan khusus),
-            lalu redeploy. Setelah itu penjualan aktual dari GWG Manage akan muncul di sini untuk dibandingkan dengan proyeksi HPP.
+            Setel <code className="rounded bg-muted px-1 py-0.5 text-[11px]">ESB_USERNAME</code> dan{" "}
+            <code className="rounded bg-muted px-1 py-0.5 text-[11px]">ESB_PASSWORD</code> di Environment Variables Vercel (pakai akun layanan khusus),
+            lalu redeploy. Setelah itu penjualan aktual dari ESB akan muncul di sini untuk dibandingkan dengan proyeksi HPP.
           </p>
         </div>
       ) : d.matched.length === 0 && d.unmatched.length === 0 ? (
         <div className="mt-4 grid place-items-center rounded-xl border border-dashed border-border bg-muted/20 p-6 text-center text-[13px] text-muted-foreground">
           <span className="flex flex-col items-center gap-1.5">
-            <Package className="size-5" /> Belum ada data penjualan. Klik <span className="font-medium text-foreground">Sync sekarang</span> untuk menarik dari GWG Manage.
+            <Package className="size-5" /> Belum ada data penjualan. Klik <span className="font-medium text-foreground">Sync sekarang</span> untuk menarik dari ESB.
           </span>
         </div>
       ) : (

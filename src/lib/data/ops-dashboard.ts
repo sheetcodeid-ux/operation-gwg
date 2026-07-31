@@ -1,6 +1,8 @@
 import "server-only";
 
-import { fetchBranches, fetchErpDashboard, fetchMenuPerformance, fetchSalesHourly, gwgmanageConfigured } from "@/lib/integrations/gwgmanage";
+import { esbConfigured, esbListBranches } from "@/lib/integrations/esb-client";
+import { getSalesDaily } from "@/lib/data/fraud-store";
+import { listEsbMenus } from "@/lib/data/esb-menu";
 import { expenseTotal, listExpenses, listOpOutlets, listPurchases, sumExpenses, sumPurchases } from "@/lib/data/ops-finance";
 import { areaName, listComplaints, listEvents, listHygiene, listTasks, outletName, userName, visibleOutlets } from "@/lib/data/store";
 import { getOpsSettings } from "@/lib/data/ops-settings";
@@ -92,9 +94,12 @@ export interface OpsDashboardData {
 
 async function loadProducts(): Promise<OpsProduct[] | null> {
   try {
-    const perf = await fetchMenuPerformance(ym(new Date()));
-    if (!perf.menus.length) return null;
-    return perf.menus.map((m) => ({ name: m.menuName, category: m.categoryName || "Lainnya", qty: m.qty, amount: m.amount }));
+    const menus = await listEsbMenus(); // ESB catalog (rolling 30-day qty + price)
+    if (!menus.length) return null;
+    return menus
+      .map((m) => ({ name: m.menu, category: m.category || "Lainnya", qty: m.qty30d, amount: Math.round(m.qty30d * (m.unitPrice || 0)) }))
+      .sort((a, b) => b.amount - a.amount)
+      .slice(0, 50);
   } catch {
     return null;
   }
@@ -102,10 +107,19 @@ async function loadProducts(): Promise<OpsProduct[] | null> {
 
 const ROMAN = ["I", "II", "III", "IV", "V", "VI"];
 
-/** Total omzet of a month = Σ menu-performance amounts (proven ERP endpoint). */
+/** First & last calendar day of a YYYY-MM month. */
+function monthBounds(month: string): { from: string; to: string } {
+  const y = Number(month.slice(0, 4));
+  const m = Number(month.slice(5, 7));
+  const last = new Date(y, m, 0).getDate();
+  return { from: `${month}-01`, to: `${month}-${String(last).padStart(2, "0")}` };
+}
+
+/** Total omzet of a month = Σ daily net sales from the ESB sales cache. */
 async function omzetOfMonth(month: string): Promise<number> {
-  const perf = await fetchMenuPerformance(month);
-  return perf.menus.reduce((a, m) => a + m.amount, 0);
+  const { from, to } = monthBounds(month);
+  const days = await getSalesDaily(from, to);
+  return days.reduce((a, d) => a + d.netSales, 0);
 }
 
 /** Target Per Bulan / Harian / Mingguan + Proyeksi Bulanan (Juknis 2.1–2.3). */
@@ -224,11 +238,13 @@ function baseOpsDashboard(): OpsDashboardData {
 }
 
 /**
- * Pull the real GWG Manage data that maps cleanly to Dashboard 2 components:
- *  - KPI Net Sales + transaksi/pelanggan/avg  ← /api/reports/dashboard (daily)
- *  - Penjualan hourly (today vs yesterday)     ← /api/reports/sales-hourly
- *  - Kontrol › Fraud (void/cancel/platform)    ← /api/reports/dashboard
- *  - Cabang list                               ← /api/branches
+ * Build Dashboard 2 from ESB data (via the cached sales/menu tables — fast):
+ *  - KPI Net Sales (today vs yesterday)        ← ESB daily sales cache
+ *  - Penjualan trend (daily, last 14 days)     ← ESB daily sales cache
+ *  - Produk (menu qty + amount)                ← ESB menu catalog (esb_menu)
+ *  - Cabang list                               ← ESB branches
+ * ESB has no per-hour, transaksi, pelanggan, or avg-bill data, so those KPI
+ * fields stay 0 and the void/cancel card lives on the dedicated Fraud page.
  * Each source is independent (Promise.allSettled) so one failure doesn't blank
  * the rest — the component keeps its placeholder for anything that errored.
  */
@@ -239,54 +255,50 @@ export async function getOpsDashboard(opts: { date?: string; user?: UserProfile 
   const activity = opts.user ? loadActivity(opts.user) : null;
   const branchPerf = await loadBranchPerf(month);
   const settings = await getOpsSettings();
-  if (!gwgmanageConfigured()) return { ...baseOpsDashboard(), finance, control, branchPerf, activity, settings };
-  let target: OpsTarget | null = null;
-
-  const today = opts.date ? new Date(opts.date) : new Date();
-  const yest = new Date(today);
-  yest.setDate(today.getDate() - 1);
-  const dToday = ymd(today);
-  const dYest = ymd(yest);
+  if (!esbConfigured()) return { ...baseOpsDashboard(), finance, control, branchPerf, activity, settings };
   const errors: string[] = [];
 
-  const [dash, hToday, hYest, branches] = await Promise.allSettled([
-    fetchErpDashboard({ date: dToday }),
-    fetchSalesHourly(dToday, dToday),
-    fetchSalesHourly(dYest, dYest),
-    fetchBranches(),
-  ]);
+  const today = opts.date ? new Date(opts.date) : new Date();
+  const dToday = ymd(today);
+  const dYest = ymd(new Date(today.getTime() - 86_400_000));
+  const dFrom = ymd(new Date(today.getTime() - 13 * 86_400_000)); // 14-day window
 
-  // Hourly (today vs yesterday)
+  // ESB gives daily net sales (cached, fast) + branches. There's no per-hour or
+  // transaksi/pelanggan/avg-bill data, so the hourly chart becomes a DAILY net
+  // sales trend and those KPI fields stay 0.
+  const [salesRes, branchesRes] = await Promise.allSettled([getSalesDaily(dFrom, dToday), esbListBranches()]);
+
   let hourly: OpsHourly[] | null = null;
-  let prevTotal = 0;
-  if (hToday.status === "fulfilled") {
-    const yByHour = new Map<string, number>();
-    if (hYest.status === "fulfilled") for (const p of hYest.value) { yByHour.set(p.hour, p.netSales); prevTotal += p.netSales; }
-    hourly = hToday.value.map((p) => ({ x: p.hour, hari: p.netSales, kemarin: yByHour.get(p.hour) ?? 0 }));
+  let todayNet = 0;
+  let prevNet = 0;
+  if (salesRes.status === "fulfilled") {
+    const days = salesRes.value.slice().sort((a, b) => a.day.localeCompare(b.day));
+    const byDay = new Map(days.map((d) => [d.day, d.netSales]));
+    todayNet = byDay.get(dToday) ?? 0;
+    prevNet = byDay.get(dYest) ?? 0;
+    hourly = days.map((d) => {
+      const dt = new Date(`${d.day}T00:00:00`);
+      return { x: `${dt.getDate()}/${dt.getMonth() + 1}`, hari: d.netSales, kemarin: 0 };
+    });
   } else {
     errors.push("Penjualan");
   }
 
-  // KPI + Fraud
-  let kpi: OpsKpi | null = null;
-  let fraud: OpsFraud[] | null = null;
-  if (dash.status === "fulfilled") {
-    const v = dash.value;
-    kpi = { netSales: v.netSales, netSalesPrev: prevTotal, totalTransaksi: v.totalTransaksi, totalPelanggan: v.totalPelanggan, avgBill: v.avgBill };
-    fraud = [
-      { name: "Void", value: v.totalVoid },
-      { name: "Cancelled", value: v.totalCancelled },
-      ...v.platform.slice(0, 6).map((p) => ({ name: p.methodName, value: p.amount })),
-    ];
-  } else {
-    errors.push("KPI");
-  }
+  const kpi: OpsKpi | null =
+    salesRes.status === "fulfilled"
+      ? { netSales: todayNet, netSalesPrev: prevNet, totalTransaksi: 0, totalPelanggan: 0, avgBill: 0 }
+      : null;
+  if (!kpi) errors.push("KPI");
 
-  const brs: OpsBranch[] = branches.status === "fulfilled" ? branches.value.map((b) => ({ code: b.code, name: b.name })) : [];
-  if (branches.status !== "fulfilled") errors.push("Cabang");
+  // Void/cancel breakdown lives on the dedicated Fraud page (ESB cancel export);
+  // leave the dashboard fraud card empty rather than approximate it here.
+  const fraud: OpsFraud[] | null = null;
+
+  const brs: OpsBranch[] = branchesRes.status === "fulfilled" ? branchesRes.value.map((b) => ({ code: b.id, name: b.name })) : [];
+  if (branchesRes.status !== "fulfilled") errors.push("Cabang");
 
   const [tgt, products] = await Promise.all([loadTarget(kpi?.netSales ?? 0), loadProducts()]);
-  target = tgt;
+  const target = tgt;
   if (!target) errors.push("Target");
   if (!products) errors.push("Produk");
 

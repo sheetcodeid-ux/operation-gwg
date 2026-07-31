@@ -16,9 +16,9 @@ export async function fraudReportAction(period: FraudPeriod, date: string, kind:
   return getFraudReport(period, date, kind);
 }
 
-export async function outletFraudDailyAction(branchId: number, from: string, to: string): Promise<FraudDailyPoint[] | { error: string }> {
+export async function outletFraudDailyAction(branch: string, from: string, to: string, kind: FraudKind = "all"): Promise<FraudDailyPoint[] | { error: string }> {
   if (!(await guard())) return { error: "Not authorized" };
-  return getOutletFraudDaily(branchId, from, to);
+  return getOutletFraudDaily(branch, from, to, kind);
 }
 
 /** Pull the next batch of missing/stale days for the period into the DB cache.
