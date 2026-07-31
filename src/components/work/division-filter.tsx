@@ -94,6 +94,30 @@ export function DivisionFilter({
   );
 }
 
+/** Dropdown to filter tasks by category. value "all" = no filter. */
+export function CategoryFilter({
+  options,
+  value,
+  onChange,
+  className,
+}: {
+  options: string[];
+  value: string;
+  onChange: (v: string) => void;
+  className?: string;
+}) {
+  return (
+    <Combobox
+      portal
+      searchable={false}
+      className={className ?? "w-40 shrink-0"}
+      value={value}
+      onChange={onChange}
+      options={[{ value: "all", label: "Semua Kategori" }, ...options.map((c) => ({ value: c, label: c }))]}
+    />
+  );
+}
+
 /** Dropdown to filter tasks by PIC (person). value "all" = no filter. */
 export function PicFilter({
   people,

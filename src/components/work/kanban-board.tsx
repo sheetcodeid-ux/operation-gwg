@@ -12,7 +12,7 @@ import { TONE_HEX } from "@/components/ui/tone";
 import { Avatar } from "@/components/ui/avatar";
 import { bodyZoom } from "@/components/layout/fit-scale";
 import { TaskDetail } from "./task-detail";
-import { DivisionFilter, PicFilter, MonthFilter, divisionLabel, membersForDivision, monthKey, monthOptions } from "./division-filter";
+import { CategoryFilter, DivisionFilter, PicFilter, MonthFilter, divisionLabel, membersForDivision, monthKey, monthOptions } from "./division-filter";
 import { useWorkFilters } from "./use-work-filters";
 import type { DivisionMembers, TaskOutlet } from "./task-sheet";
 import type { WorkRow } from "./work-table";
@@ -65,9 +65,10 @@ export function KanbanBoard({
   const [, startTransition] = React.useTransition();
   const [drag, setDrag] = React.useState<{ id: string; x: number; y: number } | null>(null);
   const [overCol, setOverCol] = React.useState<TaskStatus | null>(null);
-  const { month, division, pic, setMonth, setDivision, setPic } = useWorkFilters();
+  const { month, division, pic, category, setMonth, setDivision, setPic, setCategory } = useWorkFilters();
   const people = React.useMemo(() => membersForDivision(members, division), [members, division]);
   const months = React.useMemo(() => monthOptions(rows.map((r) => r.startDate)), [rows]);
+  const categoryOpts = React.useMemo(() => [...new Set(rows.map((r) => r.category).filter(Boolean))].sort((a, b) => a.localeCompare(b)), [rows]);
   const [openTaskId, setOpenTaskId] = React.useState<string | null>(null);
   const g = React.useRef<Gesture | null>(null);
   const openTask = openTaskId !== null ? tasks.find((t) => t.id === openTaskId) ?? null : null;
@@ -155,6 +156,7 @@ export function KanbanBoard({
     (t) =>
       (division === "all" || t.division === division) &&
       (pic === "all" || t.picIds.includes(pic)) &&
+      (category === "all" || t.category === category) &&
       (month === "all" || monthKey(t.startDate) === month),
   );
 

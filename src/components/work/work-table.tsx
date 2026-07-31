@@ -13,7 +13,7 @@ import { StatTile } from "@/components/ui/stat";
 import { Combobox } from "@/components/ui/combobox";
 import { formatDate, isOverdue } from "@/lib/utils";
 import { TaskDetailDialog } from "./task-detail";
-import { DivisionFilter, PicFilter, MonthFilter, divisionLabel, membersForDivision, monthKey, monthOptions } from "./division-filter";
+import { CategoryFilter, DivisionFilter, PicFilter, MonthFilter, divisionLabel, membersForDivision, monthKey, monthOptions } from "./division-filter";
 import { useWorkFilters } from "./use-work-filters";
 import type { DivisionMembers, TaskOutlet } from "./task-sheet";
 
@@ -61,23 +61,24 @@ export function WorkTable({
 }) {
   const [priority, setPriority] = React.useState<string>("all");
   const [status, setStatus] = React.useState<string>("all");
-  // month / division / pic are shared with the Kanban view via the URL query.
-  const { month, division, pic, setMonth, setDivision, setPic } = useWorkFilters();
+  // All filters are INSTANT local state — no URL navigation / server round-trip.
+  const { month, division, pic, category, setMonth, setDivision, setPic, setCategory } = useWorkFilters();
   const people = React.useMemo(() => membersForDivision(members, division), [members, division]);
   const months = React.useMemo(() => monthOptions(rows.map((r) => r.startDate)), [rows]);
+  const categoryOpts = React.useMemo(() => [...new Set(rows.map((r) => r.category).filter(Boolean))].sort((a, b) => a.localeCompare(b)), [rows]);
 
-  // Scope = month + division + PIC. Drives the KPI cards so they follow the
-  // selected month (and division/PIC), independent of the priority/status
-  // drill-down filters which only narrow the table rows below.
+  // Scope = month + division + PIC + category. Drives the KPI cards, independent
+  // of the priority/status drill-down that only narrows the table rows below.
   const scoped = React.useMemo(
     () =>
       rows.filter(
         (r) =>
           (division === "all" || r.division === division) &&
           (pic === "all" || r.picIds.includes(pic)) &&
+          (category === "all" || r.category === category) &&
           (month === "all" || monthKey(r.startDate) === month),
       ),
-    [rows, division, pic, month],
+    [rows, division, pic, category, month],
   );
 
   const filtered = React.useMemo(
@@ -207,6 +208,7 @@ export function WorkTable({
                 <MonthFilter options={months} value={month} onChange={setMonth} className="w-36 shrink-0" />
                 {isAdmin && <DivisionFilter value={division} onChange={setDivision} options={divisions} className="w-40 shrink-0" />}
                 <PicFilter people={people} value={pic} onChange={setPic} className="w-40 shrink-0" />
+                <CategoryFilter options={categoryOpts} value={category} onChange={setCategory} className="w-40 shrink-0" />
                 <Combobox
                   portal
                   searchable={false}
