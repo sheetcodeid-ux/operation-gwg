@@ -1,5 +1,7 @@
 import { BrandLogo } from "@/components/layout/brand-logo";
 import type { Metadata } from "next";
+import { redirect } from "next/navigation";
+import { getSessionUser } from "@/lib/auth";
 import { getAreas, getOutlets } from "@/lib/data/store";
 import { LoginForm } from "@/components/auth/login-form";
 import { ThemeToggle } from "@/components/layout/theme-toggle";
@@ -8,6 +10,10 @@ import { getT } from "@/lib/i18n/server";
 export const metadata: Metadata = { title: "Sign in" };
 
 export default async function LoginPage() {
+  // Already signed in → straight to the dashboard. (This used to live in the
+  // Node-runtime proxy, which Cloudflare Workers can't run; enforced here now.)
+  if (await getSessionUser()) redirect("/dashboard");
+
   const t = await getT();
   const outlets = getOutlets().length;
   const areas = getAreas().length;

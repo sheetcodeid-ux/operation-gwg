@@ -1,0 +1,30 @@
+{
+  // Cloudflare Workers deployment for the Next.js app, via @opennextjs/cloudflare.
+  // Docs: https://opennext.js.org/cloudflare
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "operation-gwg",
+  "main": ".open-next/worker.js",
+  "compatibility_date": "2025-08-15",
+  // nodejs_compat gives the Node.js APIs the Next server + supabase-js need.
+  "compatibility_flags": ["nodejs_compat", "global_fetch_strictly_public"],
+  "assets": {
+    // OpenNext emits the static assets (/_next/static, public/) here.
+    "binding": "ASSETS",
+    "directory": ".open-next/assets"
+  },
+  "observability": {
+    "enabled": true
+  },
+  // Vercel's daily backup cron for the fraud sync becomes a Cloudflare Cron
+  // Trigger. The Supabase pg_cron job still calls the same route hourly.
+  "triggers": {
+    "crons": ["30 21 * * *"]
+  }
+  // --- Bindings & secrets are configured in the Cloudflare dashboard / via
+  //     `wrangler secret put` (see MIGRATION-CLOUDFLARE.md). Env vars used:
+  //     GWG_SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY (or GWG_SUPABASE_KEY),
+  //     NEXT_PUBLIC_SUPABASE_URL, NEXT_PUBLIC_SUPABASE_ANON_KEY,
+  //     R2_ENDPOINT, R2_BUCKET, R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY,
+  //     ESB_BASE_URL, ESB_USERNAME, ESB_PASSWORD,
+  //     GWGMANAGE_BASE_URL, GWGMANAGE_EMAIL, GWGMANAGE_PASSWORD, CRON_SECRET.
+}
