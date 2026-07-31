@@ -1,7 +1,6 @@
 import { defineConfig, globalIgnores } from "eslint/config";
 import nextVitals from "eslint-config-next/core-web-vitals";
 import nextTs from "eslint-config-next/typescript";
-import reactHooks from "eslint-plugin-react-hooks";
 
 const eslintConfig = defineConfig([
   ...nextVitals,
@@ -13,15 +12,8 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
-    // Cloudflare/OpenNext build output — generated bundles, never lint them.
-    ".open-next/**",
-    ".wrangler/**",
-    "cloudflare-env.d.ts",
   ]),
   {
-    // Register the react-hooks plugin in the same object the rules live in —
-    // eslint-config-next scopes its own copy, so our overrides need it here.
-    plugins: { "react-hooks": reactHooks },
     rules: {
       // React Compiler advisories (performance / compiler-model hints, NOT
       // runtime-correctness rules). Our patterns — intentional effects, inline
