@@ -23,6 +23,7 @@ import {
   Lightbulb,
   FileText,
   Package,
+  Sheet,
   Sparkles,
   Store,
   Target,
@@ -36,6 +37,8 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Combobox } from "@/components/ui/combobox";
 import { StatTile } from "@/components/ui/stat";
 import { DateRangePicker } from "@/components/dashboard/date-range-picker";
+import { ChartFrame } from "./chart-frame";
+import { downloadXlsx } from "./analysis-export";
 import type { AlertItem, AnalysisData } from "@/lib/data/analysis";
 
 const NET = "#6366f1";
@@ -97,6 +100,32 @@ export function DataAnalysis({ data, branches, rangeLabel }: { data: AnalysisDat
   const branchName = (id: string) => branches.find((b) => b.id === id)?.name ?? id;
   const k = data.kpi;
 
+  const exportExcel = () => {
+    const s: { name: string; aoa: (string | number)[][] }[] = [
+      {
+        name: "Ringkasan",
+        aoa: [
+          ["Metrik", "Nilai"],
+          ["Total Sales (Gross)", k.totalSales],
+          ["Net Sales", k.netSales],
+          ["Growth %", k.growthPct ?? "-"],
+          ["Achievement %", k.achievementPct ?? "-"],
+          ["Rata-rata / Hari", k.avgPerDay],
+          ["Produk Terjual (30h)", k.productsSold],
+          ["Kategori", k.categories],
+          ["Rata-rata Margin %", k.avgMarginPct ?? "-"],
+        ],
+      },
+    ];
+    if (data.trend.length) s.push({ name: "Sales Harian", aoa: [["Tanggal", "Gross", "Net"], ...data.trend.map((t) => [t.day, t.gross, t.net])] });
+    if (data.byMonth.length) s.push({ name: "Sales per Bulan", aoa: [["Bulan", "Net"], ...data.byMonth.map((m) => [m.name, m.value])] });
+    if (data.outletPerformance.length) s.push({ name: "Outlet", aoa: [["Outlet", "Net", "Kontribusi %", "Growth %"], ...data.outletPerformance.map((o) => [branchName(o.branch), o.net, o.share, o.growthPct ?? "-"])] });
+    if (data.products.length) s.push({ name: "Produk", aoa: [["Produk", "Kategori", "Qty", "Amount", "Harga", "Kontribusi %"], ...data.products.map((p) => [p.menu, p.category, p.qty, p.amount, p.unitPrice, p.share])] });
+    if (data.categoriesRows.length) s.push({ name: "Kategori", aoa: [["Kategori", "Qty", "Amount", "Kontribusi %"], ...data.categoriesRows.map((c) => [c.category, c.qty, c.amount, c.share])] });
+    if (data.margins.length) s.push({ name: "Margin", aoa: [["Produk", "Kategori", "Harga", "HPP", "Margin", "Margin %"], ...data.margins.map((m) => [m.name, m.category, m.price, m.hpp, m.margin, m.marginPct])] });
+    downloadXlsx(`data-analysis-${data.from}_${data.to}`, s);
+  };
+
   return (
     <div>
       {/* Global filter bar — outlet search + the SAME date picker as Ops Dashboard */}
@@ -110,6 +139,13 @@ export function DataAnalysis({ data, branches, rangeLabel }: { data: AnalysisDat
         <div className="ml-auto flex items-center gap-2">
           <Badge tone="brand">{rangeLabel}</Badge>
           <DateRangePicker />
+          <button
+            type="button"
+            onClick={exportExcel}
+            className="inline-flex shrink-0 items-center gap-1.5 rounded-lg border border-border bg-card px-3 py-1.5 text-xs font-medium text-foreground transition-colors hover:bg-muted"
+          >
+            <Sheet className="size-3.5" /> Excel
+          </button>
           <Link
             href={params.toString() ? `${pathname}/report?${params.toString()}` : `${pathname}/report`}
             className="inline-flex shrink-0 items-center gap-1.5 rounded-lg bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground transition-colors hover:bg-primary/90"
@@ -157,7 +193,7 @@ export function DataAnalysis({ data, branches, rangeLabel }: { data: AnalysisDat
           {/* Sales Analysis */}
           {data.hasSales && (
             <Section title="Sales Analysis" desc="Tren penjualan harian, bulanan & pola hari (data ESB)" icon={TrendingUp}>
-              <div className="h-64 w-full">
+              <ChartFrame title="Tren Net Sales Harian" filename="sales-trend" height={256}>
                 <ResponsiveContainer width="100%" height="100%">
                   <AreaChart data={data.trend} margin={{ top: 6, right: 8, left: 4, bottom: 0 }}>
                     <defs>
@@ -173,7 +209,7 @@ export function DataAnalysis({ data, branches, rangeLabel }: { data: AnalysisDat
                     <Area type="monotone" dataKey="net" name="Net Sales" stroke={NET} strokeWidth={2} fill="url(#gNet)" />
                   </AreaChart>
                 </ResponsiveContainer>
-              </div>
+              </ChartFrame>
 
               <div className="mt-4 grid gap-4 lg:grid-cols-2">
                 <div>
@@ -228,7 +264,7 @@ export function DataAnalysis({ data, branches, rangeLabel }: { data: AnalysisDat
             <Section title="Outlet Performance" desc="Ranking outlet berdasarkan net sales periode ini" icon={Store}>
               {data.outletPerformance.length > 0 ? (
                 <>
-                  <div className="h-56 w-full">
+                  <ChartFrame title="Outlet Performance" filename="outlet-performance" height={224}>
                     <ResponsiveContainer width="100%" height="100%">
                       <BarChart data={data.outletPerformance.slice(0, 12).map((o) => ({ name: branchName(o.branch), net: o.net }))} layout="vertical" margin={{ top: 4, right: 12, left: 4, bottom: 0 }}>
                         <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" horizontal={false} />
@@ -242,7 +278,7 @@ export function DataAnalysis({ data, branches, rangeLabel }: { data: AnalysisDat
                         </Bar>
                       </BarChart>
                     </ResponsiveContainer>
-                  </div>
+                  </ChartFrame>
                   <div className="mt-3">
                     <RankTable
                       title=""
@@ -277,7 +313,7 @@ export function DataAnalysis({ data, branches, rangeLabel }: { data: AnalysisDat
           {/* Category Analysis */}
           {data.categoriesRows.length > 0 && (
             <Section title="Category Analysis" desc="Kontribusi & performa kategori" icon={Box}>
-              <div className="h-52 w-full">
+              <ChartFrame title="Kontribusi Kategori" filename="kategori" height={208}>
                 <ResponsiveContainer width="100%" height="100%">
                   <BarChart data={data.categoriesRows.slice(0, 12)} layout="vertical" margin={{ top: 4, right: 12, left: 4, bottom: 0 }}>
                     <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" horizontal={false} />
@@ -291,7 +327,7 @@ export function DataAnalysis({ data, branches, rangeLabel }: { data: AnalysisDat
                     </Bar>
                   </BarChart>
                 </ResponsiveContainer>
-              </div>
+              </ChartFrame>
             </Section>
           )}
 
