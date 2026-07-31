@@ -154,6 +154,10 @@ export function Sidebar({
                           <Link
                             key={item.href}
                             href={linkHref}
+                            // Full prefetch (route + data) so clicking is INSTANT.
+                            // Scoped to the expanded section — hidden children
+                            // don't prefetch until their section is opened.
+                            prefetch
                             className={cn(
                               "group relative flex items-center gap-2.5 rounded-lg px-2.5 py-2 text-sm transition-colors",
                               active

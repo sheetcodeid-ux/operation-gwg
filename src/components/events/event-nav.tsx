@@ -24,7 +24,8 @@ export function EventNav() {
           <Link
             key={v.href}
             href={qs ? `${v.href}?${qs}` : v.href}
-            prefetch={false}
+            // Full prefetch so switching Table/Kanban/Timeline is instant.
+            prefetch
             className={cn(
               "inline-flex items-center justify-center gap-1.5 rounded-lg px-3 py-1.5 text-sm font-medium transition-colors",
               active
