@@ -3,132 +3,131 @@
 import * as React from "react";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import {
-  Area,
-  AreaChart,
-  Bar,
-  BarChart,
-  CartesianGrid,
-  Cell,
-  Pie,
-  PieChart,
-  ResponsiveContainer,
-  Tooltip,
-  XAxis,
-  YAxis,
-} from "recharts";
+import { Area, AreaChart, Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import {
   AlertTriangle,
+  ArrowDownRight,
+  ArrowRight,
+  ArrowUpRight,
   BadgePercent,
   Box,
+  ChevronDown,
   CircleDollarSign,
-  Lightbulb,
+  Coins,
   FileText,
+  ImageDown,
+  Lightbulb,
   Package,
   Sheet,
   Sparkles,
   Store,
   Target,
-  TrendingDown,
   TrendingUp,
   Wallet,
+  type LucideIcon,
 } from "lucide-react";
 import { cn, formatIDR, formatIDRShort, formatNumber } from "@/lib/utils";
+import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Combobox } from "@/components/ui/combobox";
+import { Button } from "@/components/ui/button";
+import { SegmentedTabs } from "@/components/ui/segmented-tabs";
+import { ConcentricRings } from "@/components/dashboard/concentric-rings";
 import { DateRangePicker } from "@/components/dashboard/date-range-picker";
-import { ChartFrame } from "./chart-frame";
-import { downloadXlsx } from "./analysis-export";
+import { downloadXlsx, exportChartPng } from "./analysis-export";
 import type { AlertItem, AnalysisData } from "@/lib/data/analysis";
 
-const NET = "#6366f1";
-const GROSS = "#a5b4fc";
-const EMERALD = "#10b981";
-const AMBER = "#f59e0b";
-const AXIS = "var(--muted-foreground)";
+/* palette — identical to Dashboard Operation (tone.ts) */
+const C = { blue: "#3b82f6", blueLt: "#93c5fd", green: "#22c55e", amber: "#f59e0b", red: "#ef4444", slate: "#94a3b8" };
+const RING = ["#3b82f6", "#06b6d4", "#14b8a6", "#8b5cf6", "#f59e0b", "#ec4899", "#22c55e", "#ef4444"];
 const rp = (n: number) => formatIDR(n);
 
-function Section({ title, desc, icon: Icon, children }: { title: string; desc?: string; icon: React.ComponentType<{ className?: string }>; children: React.ReactNode }) {
-  return (
-    <Card className="mt-4">
-      <CardHeader>
-        <CardTitle className="flex items-center gap-2 text-base">
-          <Icon className="size-4 text-muted-foreground" /> {title}
-        </CardTitle>
-        {desc && <p className="text-xs text-muted-foreground">{desc}</p>}
-      </CardHeader>
-      <CardContent>{children}</CardContent>
-    </Card>
-  );
+/* ---------- shared primitives (mirrors operation-dashboard-2) ---------- */
+function Panel({ children, className }: { children: React.ReactNode; className?: string }) {
+  return <Card className={cn("flex flex-col p-5", className)}>{children}</Card>;
 }
-
-/** Vibrant categorical palette for donut/series (aniq-style). */
-const PALETTE = ["#3b82f6", "#06b6d4", "#14b8a6", "#8b5cf6", "#f59e0b", "#ec4899", "#22c55e", "#ef4444", "#0ea5e9", "#a855f7"];
-
-/** Premium KPI card: icon chip + big value + trend badge + faint watermark icon. */
-function KpiCard({ icon: Icon, label, value, accent, delta, up }: { icon: React.ComponentType<{ className?: string }>; label: string; value: string; accent: string; delta?: string | null; up?: boolean }) {
+function Head({ title, desc, right }: { title: string; desc?: string; right?: React.ReactNode }) {
   return (
-    <div className="group relative overflow-hidden rounded-2xl border border-border/70 bg-gradient-to-br from-card via-card to-muted/20 p-4 shadow-sm transition-shadow hover:shadow-md">
-      <span aria-hidden className="pointer-events-none absolute -right-3 -top-3 size-24 rounded-full opacity-[0.10] blur-2xl" style={{ background: accent }} />
-      <Icon aria-hidden className="pointer-events-none absolute -bottom-3 -right-2 size-20 opacity-[0.05]" />
-      <div className="flex items-center gap-2">
-        <span className="grid size-8 shrink-0 place-items-center rounded-xl" style={{ background: `${accent}1f`, color: accent }}>
-          <Icon className="size-4" />
-        </span>
-        <span className="truncate text-[11px] font-medium uppercase tracking-wide text-muted-foreground">{label}</span>
+    <div className="mb-3 flex items-start justify-between gap-2">
+      <div className="min-w-0">
+        <h3 className="text-sm font-semibold tracking-tight text-foreground">{title}</h3>
+        {desc && <p className="mt-0.5 text-[11px] text-muted-foreground">{desc}</p>}
       </div>
-      <div className="mt-3 flex items-end justify-between gap-2">
-        <p className="truncate text-xl font-bold tracking-tight text-foreground">{value}</p>
-        {delta != null && (
-          <span className={cn("shrink-0 rounded-full px-1.5 py-0.5 text-[11px] font-semibold", up ? "bg-emerald-500/12 text-emerald-600 dark:text-emerald-400" : "bg-red-500/12 text-red-600 dark:text-red-400")}>
-            {up ? "▲" : "▼"} {delta}
-          </span>
-        )}
+      {right && <div className="shrink-0">{right}</div>}
+    </div>
+  );
+}
+function Delta({ v, positiveIsGood = true }: { v: number | null; positiveIsGood?: boolean }) {
+  if (v === null) return null;
+  const zero = v === 0;
+  const good = v >= 0 === positiveIsGood;
+  return (
+    <span className={cn("inline-flex items-center gap-0.5 rounded-full px-1.5 py-0.5 text-[10.5px] font-semibold tabular-nums", zero ? "bg-muted text-muted-foreground" : good ? "bg-emerald-500/15 text-emerald-600 dark:text-emerald-300" : "bg-red-500/15 text-red-600 dark:text-red-300")}>
+      {zero ? <ArrowRight className="size-3" /> : v >= 0 ? <ArrowUpRight className="size-3" /> : <ArrowDownRight className="size-3" />}
+      {Math.abs(v)}%
+    </span>
+  );
+}
+function PillSelect({ value, onChange, options }: { value: string; onChange: (v: string) => void; options: { v: string; l: string }[] }) {
+  return (
+    <div className="relative inline-flex items-center">
+      <select value={value} onChange={(e) => onChange(e.target.value)} className="max-w-[11rem] cursor-pointer appearance-none truncate rounded-lg border border-border bg-card py-1.5 pl-3 pr-7 text-xs font-medium text-foreground outline-none">
+        {options.map((o) => <option key={o.v} value={o.v} className="bg-popover text-foreground">{o.l}</option>)}
+      </select>
+      <ChevronDown className="pointer-events-none absolute right-2 size-3.5 text-muted-foreground" />
+    </div>
+  );
+}
+function KpiTile({ icon: Icon, label, value, delta, positiveIsGood, sub }: { icon: LucideIcon; label: string; value: string; delta?: number | null; positiveIsGood?: boolean; sub?: string }) {
+  return (
+    <div className="card-gradient flex flex-col rounded-2xl p-4">
+      <div className="flex items-center justify-between gap-2">
+        <div className="grid size-10 shrink-0 place-items-center rounded-xl bg-muted ring-1 ring-border"><Icon className="size-5 text-muted-foreground" /></div>
+        <Delta v={delta ?? null} positiveIsGood={positiveIsGood} />
+      </div>
+      <div className="mt-4 min-w-0">
+        <p className="text-[12px] text-muted-foreground">{label}</p>
+        <p className="truncate text-lg font-semibold tabular-nums text-foreground">{value}</p>
+        {sub && <p className="text-[10px] text-muted-foreground">{sub}</p>}
       </div>
     </div>
   );
 }
-
-function DonutTip({ active, payload }: { active?: boolean; payload?: { name: string; value: number; payload: { fill: string } }[] }) {
+type TipPayload = { name?: string; value?: number; color?: string };
+type TipProps = { active?: boolean; label?: React.ReactNode; payload?: TipPayload[]; money?: boolean };
+function ChartTip({ active, label, payload, money }: TipProps) {
   if (!active || !payload?.length) return null;
-  const p = payload[0];
   return (
-    <div className="rounded-lg border border-border bg-popover px-3 py-2 text-xs shadow-lg">
-      <p className="flex items-center gap-1.5 font-medium text-foreground">
-        <span className="size-2 rounded-full" style={{ background: p.payload.fill }} /> {p.name}
-      </p>
-      <p className="mt-0.5 text-muted-foreground">Qty: <span className="font-medium text-foreground">{formatNumber(p.value)}</span></p>
+    <div className="rounded-xl border border-border bg-popover px-3 py-2 text-xs shadow-lg">
+      {label != null && <p className="mb-1.5 font-medium text-foreground">{label}</p>}
+      <div className="space-y-1">
+        {payload.filter((p) => p.value != null).map((p, i) => (
+          <div key={i} className="flex items-center gap-2">
+            <span className="size-2 rounded-full" style={{ background: p.color }} />
+            <span className="text-muted-foreground">{p.name}</span>
+            <span className="ml-auto font-semibold tabular-nums text-foreground">{money ? rp(Math.abs(Number(p.value))) : formatNumber(Number(p.value))}</span>
+          </div>
+        ))}
+      </div>
     </div>
   );
 }
-
-function ChartTip({ active, payload, label, money }: { active?: boolean; payload?: { name: string; value: number; color: string }[]; label?: string; money?: boolean }) {
-  if (!active || !payload?.length) return null;
+/** Small "export PNG" icon button for a chart panel. */
+function PngBtn({ target, name }: { target: React.RefObject<HTMLDivElement | null>; name: string }) {
   return (
-    <div className="rounded-lg border border-border bg-popover px-3 py-2 text-xs shadow-lg">
-      <p className="mb-1 font-medium text-foreground">{label}</p>
-      {payload.map((p) => (
-        <p key={p.name} className="flex items-center gap-1.5 text-muted-foreground">
-          <span className="size-2 rounded-full" style={{ background: p.color }} />
-          {p.name}: <span className="font-medium text-foreground">{money ? rp(p.value) : formatNumber(p.value)}</span>
-        </p>
-      ))}
-    </div>
+    <button type="button" onClick={() => exportChartPng(target.current, name)} title="Export PNG" className="rounded-md p-1 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground">
+      <ImageDown className="size-4" />
+    </button>
   );
 }
 
-const ALERT_TONE: Record<AlertItem["level"], string> = {
-  high: "border-red-500/30 bg-red-500/[0.06] text-red-600 dark:text-red-400",
-  medium: "border-amber-500/30 bg-amber-500/[0.06] text-amber-600 dark:text-amber-400",
-  low: "border-sky-500/30 bg-sky-500/[0.06] text-sky-600 dark:text-sky-400",
-};
+/* ==================================================================== */
 
 export function DataAnalysis({ data, branches, rangeLabel }: { data: AnalysisData; branches: { id: string; name: string }[]; rangeLabel: string }) {
   const router = useRouter();
   const pathname = usePathname();
   const params = useSearchParams();
   const outlet = params.get("outlet") ?? "";
+  const [salesMode, setSalesMode] = React.useState("harian");
 
   const setOutlet = (v: string) => {
     const next = new URLSearchParams(params.toString());
@@ -136,27 +135,15 @@ export function DataAnalysis({ data, branches, rangeLabel }: { data: AnalysisDat
     else next.delete("outlet");
     router.replace(next.toString() ? `${pathname}?${next.toString()}` : pathname, { scroll: false });
   };
-
-  const outletOptions = [{ value: "", label: "Semua Outlet" }, ...branches.map((b) => ({ value: b.id, label: b.name }))];
   const branchName = (id: string) => branches.find((b) => b.id === id)?.name ?? id;
   const k = data.kpi;
 
+  const trendRef = React.useRef<HTMLDivElement>(null);
+  const salesRef = React.useRef<HTMLDivElement>(null);
+
   const exportExcel = () => {
     const s: { name: string; aoa: (string | number)[][] }[] = [
-      {
-        name: "Ringkasan",
-        aoa: [
-          ["Metrik", "Nilai"],
-          ["Total Sales (Gross)", k.totalSales],
-          ["Net Sales", k.netSales],
-          ["Growth %", k.growthPct ?? "-"],
-          ["Achievement %", k.achievementPct ?? "-"],
-          ["Rata-rata / Hari", k.avgPerDay],
-          ["Produk Terjual (30h)", k.productsSold],
-          ["Kategori", k.categories],
-          ["Rata-rata Margin %", k.avgMarginPct ?? "-"],
-        ],
-      },
+      { name: "Ringkasan", aoa: [["Metrik", "Nilai"], ["Total Sales (Gross)", k.totalSales], ["Net Sales", k.netSales], ["Growth %", k.growthPct ?? "-"], ["Achievement %", k.achievementPct ?? "-"], ["Rata-rata / Hari", k.avgPerDay], ["Produk Terjual (30h)", k.productsSold], ["Kategori", k.categories], ["Rata-rata Margin %", k.avgMarginPct ?? "-"]] },
     ];
     if (data.trend.length) s.push({ name: "Sales Harian", aoa: [["Tanggal", "Gross", "Net"], ...data.trend.map((t) => [t.day, t.gross, t.net])] });
     if (data.byMonth.length) s.push({ name: "Sales per Bulan", aoa: [["Bulan", "Net"], ...data.byMonth.map((m) => [m.name, m.value])] });
@@ -167,335 +154,257 @@ export function DataAnalysis({ data, branches, rangeLabel }: { data: AnalysisDat
     downloadXlsx(`data-analysis-${data.from}_${data.to}`, s);
   };
 
+  const outletOptions = [{ v: "", l: "Semua Outlet" }, ...branches.map((b) => ({ v: b.id, l: b.name }))];
+  const salesData = salesMode === "bulanan" ? data.byMonth.map((m) => ({ x: m.name, v: m.value })) : salesMode === "harian-minggu" ? data.byWeekday.map((d) => ({ x: d.name, v: d.value })) : data.trend.map((t) => ({ x: t.label, v: t.net }));
+  const rings = data.categoriesRows.slice(0, 6).map((c, i) => ({ label: c.category, value: c.share, color: RING[i % RING.length] }));
+
   return (
-    <div>
-      {/* Global filter bar — outlet search + the SAME date picker as Ops Dashboard */}
-      <div className="mb-4 flex flex-wrap items-center gap-2 rounded-xl border border-border bg-card/60 p-2.5">
-        <span className="flex shrink-0 items-center gap-1.5 px-1 text-xs font-medium text-muted-foreground">
-          <Store className="size-3.5" /> Outlet
-        </span>
-        <div className="min-w-0 flex-1 basis-48">
-          <Combobox portal value={outlet} onChange={setOutlet} options={outletOptions} placeholder="Cari outlet…" searchPlaceholder="Cari outlet…" />
+    <div className="w-full space-y-4">
+      {/* Filter row — clean, like Dashboard/Analytics */}
+      <div className="flex flex-wrap items-center gap-2">
+        <div className="flex items-center gap-2 rounded-xl border border-border bg-card px-3 py-2 text-xs">
+          <Store className="size-3.5 text-muted-foreground" />
+          <PillSelect value={outlet} onChange={setOutlet} options={outletOptions} />
         </div>
-        <div className="flex flex-wrap items-center gap-2 sm:ml-auto">
-          <Badge tone="brand">{rangeLabel}</Badge>
+        <Badge tone="brand">{rangeLabel}</Badge>
+        <div className="ml-auto flex flex-wrap items-center gap-2">
           <DateRangePicker />
-          <button
-            type="button"
-            onClick={exportExcel}
-            className="inline-flex shrink-0 items-center gap-1.5 rounded-lg border border-border bg-card px-3 py-1.5 text-xs font-medium text-foreground transition-colors hover:bg-muted"
-          >
-            <Sheet className="size-3.5" /> Excel
-          </button>
-          <Link
-            href={params.toString() ? `${pathname}/report?${params.toString()}` : `${pathname}/report`}
-            className="inline-flex shrink-0 items-center gap-1.5 rounded-lg bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground transition-colors hover:bg-primary/90"
-          >
-            <FileText className="size-3.5" /> Generate Report
+          <Button size="sm" variant="outline" className="gap-1.5" onClick={exportExcel}><Sheet className="size-3.5" /> Excel</Button>
+          <Link href={params.toString() ? `${pathname}/report?${params.toString()}` : `${pathname}/report`} className="inline-flex h-8 items-center gap-1.5 rounded-lg bg-primary px-3 text-xs font-medium text-primary-foreground transition-colors hover:bg-primary/90">
+            <FileText className="size-3.5" /> Report
           </Link>
         </div>
       </div>
 
       {!data.configured ? (
-        <EmptyState title="Integrasi ESB belum aktif" detail="Set kredensial ESB agar data analisis muncul." />
+        <Empty title="Integrasi ESB belum aktif" detail="Set kredensial ESB agar data analisis muncul." />
       ) : !data.hasSales && data.products.length === 0 ? (
-        <EmptyState title="Belum ada data" detail="Data ESB untuk periode/outlet ini belum tersinkron. Coba rentang tanggal lain, atau tunggu sinkronisasi otomatis." />
+        <Empty title="Belum ada data" detail="Data ESB untuk periode/outlet ini belum tersinkron. Coba rentang tanggal lain atau tunggu sinkronisasi otomatis." />
       ) : (
         <>
-          {/* KPI Summary — premium cards */}
-          <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-            <KpiCard icon={Wallet} label="Total Sales" value={rp(k.totalSales)} accent="#3b82f6" delta={k.growthPct === null ? null : `${Math.abs(k.growthPct)}%`} up={(k.growthPct ?? 0) >= 0} />
-            <KpiCard icon={CircleDollarSign} label="Net Sales" value={rp(k.netSales)} accent="#06b6d4" delta={k.growthPct === null ? null : `${Math.abs(k.growthPct)}%`} up={(k.growthPct ?? 0) >= 0} />
-            <KpiCard icon={Target} label="Achievement" value={k.achievementPct === null ? "—" : `${k.achievementPct}%`} accent="#8b5cf6" delta={k.achievementPct === null ? null : `${Math.abs(+(k.achievementPct - 100).toFixed(1))}%`} up={(k.achievementPct ?? 0) >= 100} />
-            <KpiCard icon={(k.growthPct ?? 0) < 0 ? TrendingDown : TrendingUp} label="Growth" value={k.growthPct === null ? "—" : `${k.growthPct > 0 ? "+" : ""}${k.growthPct}%`} accent="#14b8a6" />
-            <KpiCard icon={CircleDollarSign} label="Rata-rata / Hari" value={rp(k.avgPerDay)} accent="#0ea5e9" />
-            <KpiCard icon={Package} label="Produk Terjual" value={formatNumber(k.productsSold)} accent="#22c55e" />
-            <KpiCard icon={Box} label="Kategori" value={formatNumber(k.categories)} accent="#f59e0b" />
-            <KpiCard icon={BadgePercent} label="Rata-rata Margin" value={k.avgMarginPct === null ? "—" : `${k.avgMarginPct}%`} accent="#ec4899" delta={k.avgMarginPct === null ? null : `${k.avgMarginPct}%`} up={(k.avgMarginPct ?? 0) >= 30} />
+          {/* KPI */}
+          <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
+            <KpiTile icon={Wallet} label="Total Sales" value={rp(k.totalSales)} delta={k.growthPct} sub="gross · vs periode lalu" />
+            <KpiTile icon={Coins} label="Net Sales" value={rp(k.netSales)} delta={k.growthPct} sub="vs periode lalu" />
+            <KpiTile icon={Target} label="Achievement" value={k.achievementPct === null ? "—" : `${k.achievementPct}%`} delta={k.achievementPct === null ? null : +(k.achievementPct - 100).toFixed(1)} sub="dari target" />
+            <KpiTile icon={CircleDollarSign} label="Rata-rata / Hari" value={rp(k.avgPerDay)} sub={`${k.days} hari aktif`} />
+            <KpiTile icon={Package} label="Produk Terjual" value={formatNumber(k.productsSold)} sub="30 hari" />
+            <KpiTile icon={Box} label="Kategori" value={formatNumber(k.categories)} sub="jenis" />
+            <KpiTile icon={CircleDollarSign} label="Rata-rata Harga" value={rp(k.avgPrice)} sub="per produk" />
+            <KpiTile icon={BadgePercent} label="Rata-rata Margin" value={k.avgMarginPct === null ? "—" : `${k.avgMarginPct}%`} delta={k.avgMarginPct} positiveIsGood sub="harga vs HPP" />
           </div>
 
           {/* Alerts */}
           {data.alerts.length > 0 && (
-            <Section title="Alert Center" desc="Peringatan otomatis berdasarkan data terbaru" icon={AlertTriangle}>
+            <Panel>
+              <Head title="Alert Center" desc="Peringatan otomatis dari data terbaru" />
               <div className="grid gap-2 sm:grid-cols-2">
-                {data.alerts.map((a, i) => (
-                  <div key={i} className={cn("flex items-start gap-2.5 rounded-lg border px-3 py-2.5 text-xs", ALERT_TONE[a.level])}>
-                    <AlertTriangle className="mt-0.5 size-4 shrink-0" />
-                    <div>
-                      <p className="font-semibold">{a.title}</p>
-                      <p className="mt-0.5 opacity-90">{a.detail}</p>
-                    </div>
-                  </div>
-                ))}
+                {data.alerts.map((a, i) => <AlertRow key={i} a={a} />)}
               </div>
-            </Section>
+            </Panel>
           )}
 
           {/* Sales Analysis */}
           {data.hasSales && (
-            <Section title="Sales Analysis" desc="Tren penjualan harian, bulanan & pola hari (data ESB)" icon={TrendingUp}>
-              <ChartFrame title="Tren Net Sales Harian" filename="sales-trend" height={256}>
+            <Panel>
+              <Head
+                title="Sales Analysis"
+                desc="Tren penjualan · data ESB"
+                right={
+                  <div className="flex items-center gap-1.5">
+                    <SegmentedTabs size="sm" value={salesMode} onChange={setSalesMode} items={[{ value: "harian", label: "Harian" }, { value: "bulanan", label: "Bulanan" }, { value: "harian-minggu", label: "Hari" }]} />
+                    <PngBtn target={salesRef} name="sales" />
+                  </div>
+                }
+              />
+              <div className="mb-2 flex items-center gap-2"><p className="text-xl font-bold tabular-nums text-foreground">{rp(k.netSales)}</p><Delta v={k.growthPct} /></div>
+              <div ref={salesRef} className="min-h-[15rem] flex-1">
                 <ResponsiveContainer width="100%" height="100%">
-                  <AreaChart data={data.trend} margin={{ top: 6, right: 8, left: 4, bottom: 0 }}>
-                    <defs>
-                      <linearGradient id="gNet" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="0%" stopColor={NET} stopOpacity={0.35} />
-                        <stop offset="100%" stopColor={NET} stopOpacity={0} />
-                      </linearGradient>
-                    </defs>
-                    <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" vertical={false} />
-                    <XAxis dataKey="label" tick={{ fontSize: 10, fill: AXIS }} interval="preserveStartEnd" minTickGap={28} />
-                    <YAxis tick={{ fontSize: 10, fill: AXIS }} tickFormatter={(v) => formatIDRShort(v)} width={54} />
-                    <Tooltip content={<ChartTip money />} cursor={{ stroke: NET, strokeWidth: 1.5, strokeDasharray: "4 4" }} />
-                    <Area type="monotone" dataKey="net" name="Net Sales" stroke={NET} strokeWidth={2.5} fill="url(#gNet)" activeDot={{ r: 5, fill: NET, stroke: "var(--background)", strokeWidth: 2 }} dot={false} />
-                  </AreaChart>
+                  {salesMode === "harian" ? (
+                    <AreaChart data={salesData} margin={{ top: 8, right: 8, left: -12, bottom: 0 }}>
+                      <defs><linearGradient id="gArea" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor={C.blue} stopOpacity={0.3} /><stop offset="100%" stopColor={C.blue} stopOpacity={0} /></linearGradient></defs>
+                      <CartesianGrid strokeDasharray="3 3" stroke="rgba(148,163,184,0.16)" vertical={false} />
+                      <XAxis dataKey="x" tick={{ fill: C.slate, fontSize: 10 }} tickLine={false} axisLine={false} interval="preserveStartEnd" minTickGap={28} />
+                      <YAxis tick={{ fill: C.slate, fontSize: 10 }} tickLine={false} axisLine={false} width={40} tickFormatter={(v) => formatIDRShort(Number(v))} />
+                      <Tooltip cursor={{ stroke: "rgba(148,163,184,0.4)", strokeDasharray: "3 3" }} content={(p) => <ChartTip {...(p as unknown as TipProps)} money />} />
+                      <Area type="monotone" dataKey="v" name="Net Sales" stroke={C.blue} strokeWidth={2.5} fill="url(#gArea)" dot={false} activeDot={{ r: 5 }} className="chart-glow-blue" />
+                    </AreaChart>
+                  ) : (
+                    <BarChart data={salesData} margin={{ top: 8, right: 8, left: -12, bottom: 0 }}>
+                      <CartesianGrid strokeDasharray="3 3" stroke="rgba(148,163,184,0.16)" vertical={false} />
+                      <XAxis dataKey="x" tick={{ fill: C.slate, fontSize: 10 }} tickLine={false} axisLine={false} />
+                      <YAxis tick={{ fill: C.slate, fontSize: 10 }} tickLine={false} axisLine={false} width={40} tickFormatter={(v) => formatIDRShort(Number(v))} />
+                      <Tooltip cursor={{ fill: "rgba(148,163,184,0.08)" }} content={(p) => <ChartTip {...(p as unknown as TipProps)} money />} />
+                      <Bar dataKey="v" name={salesMode === "bulanan" ? "Net Sales" : "Rata-rata"} fill={C.blue} radius={[4, 4, 0, 0]} maxBarSize={40} />
+                    </BarChart>
+                  )}
                 </ResponsiveContainer>
-              </ChartFrame>
-
-              <div className="mt-4 grid gap-4 lg:grid-cols-2">
-                <div>
-                  <p className="mb-2 text-xs font-medium text-muted-foreground">Net Sales per Bulan</p>
-                  <div className="h-48 w-full">
-                    <ResponsiveContainer width="100%" height="100%">
-                      <BarChart data={data.byMonth} margin={{ top: 4, right: 8, left: 4, bottom: 0 }}>
-                        <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" vertical={false} />
-                        <XAxis dataKey="name" tick={{ fontSize: 10, fill: AXIS }} />
-                        <YAxis tick={{ fontSize: 10, fill: AXIS }} tickFormatter={(v) => formatIDRShort(v)} width={54} />
-                        <Tooltip content={<ChartTip money />} cursor={{ fill: "var(--muted)", opacity: 0.3 }} />
-                        <Bar dataKey="value" name="Net Sales" fill={NET} radius={[4, 4, 0, 0]} />
-                      </BarChart>
-                    </ResponsiveContainer>
-                  </div>
-                </div>
-                <div>
-                  <p className="mb-2 text-xs font-medium text-muted-foreground">Rata-rata per Hari (dalam Minggu)</p>
-                  <div className="h-48 w-full">
-                    <ResponsiveContainer width="100%" height="100%">
-                      <BarChart data={data.byWeekday} margin={{ top: 4, right: 8, left: 4, bottom: 0 }}>
-                        <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" vertical={false} />
-                        <XAxis dataKey="name" tick={{ fontSize: 10, fill: AXIS }} />
-                        <YAxis tick={{ fontSize: 10, fill: AXIS }} tickFormatter={(v) => formatIDRShort(v)} width={54} />
-                        <Tooltip content={<ChartTip money />} cursor={{ fill: "var(--muted)", opacity: 0.3 }} />
-                        <Bar dataKey="value" name="Rata-rata" fill={EMERALD} radius={[4, 4, 0, 0]} />
-                      </BarChart>
-                    </ResponsiveContainer>
-                  </div>
-                </div>
               </div>
-
               <div className="mt-3 grid grid-cols-2 gap-3">
-                {data.peakDay && (
-                  <div className="rounded-lg border border-emerald-500/30 bg-emerald-500/[0.06] px-3 py-2.5 text-xs">
-                    <p className="font-semibold text-emerald-600 dark:text-emerald-400">Hari Tertinggi</p>
-                    <p className="mt-0.5 text-foreground">{data.peakDay.label} · {rp(data.peakDay.net)}</p>
-                  </div>
-                )}
-                {data.lowDay && (
-                  <div className="rounded-lg border border-amber-500/30 bg-amber-500/[0.06] px-3 py-2.5 text-xs">
-                    <p className="font-semibold text-amber-600 dark:text-amber-400">Hari Terendah</p>
-                    <p className="mt-0.5 text-foreground">{data.lowDay.label} · {rp(data.lowDay.net)}</p>
-                  </div>
-                )}
+                {data.peakDay && <Callout tone="green" title="Hari Tertinggi" body={`${data.peakDay.label} · ${rp(data.peakDay.net)}`} />}
+                {data.lowDay && <Callout tone="amber" title="Hari Terendah" body={`${data.lowDay.label} · ${rp(data.lowDay.net)}`} />}
               </div>
-            </Section>
+            </Panel>
           )}
 
-          {/* Outlet Performance (all-outlets view) */}
-          {!outlet && (
-            <Section title="Outlet Performance" desc="Ranking outlet berdasarkan net sales periode ini" icon={Store}>
-              {data.outletPerformance.length > 0 ? (
-                <>
-                  <ChartFrame title="Outlet Performance" filename="outlet-performance" height={224}>
-                    <ResponsiveContainer width="100%" height="100%">
-                      <BarChart data={data.outletPerformance.slice(0, 12).map((o) => ({ name: branchName(o.branch), net: o.net }))} layout="vertical" margin={{ top: 4, right: 12, left: 4, bottom: 0 }}>
-                        <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" horizontal={false} />
-                        <XAxis type="number" tick={{ fontSize: 10, fill: AXIS }} tickFormatter={(v) => formatIDRShort(v)} />
-                        <YAxis type="category" dataKey="name" tick={{ fontSize: 10, fill: AXIS }} width={120} />
-                        <Tooltip content={<ChartTip money />} cursor={{ fill: "var(--muted)", opacity: 0.3 }} />
-                        <Bar dataKey="net" name="Net Sales" radius={[0, 4, 4, 0]}>
-                          {data.outletPerformance.slice(0, 12).map((_, i) => (
-                            <Cell key={i} fill={i === 0 ? EMERALD : NET} />
-                          ))}
-                        </Bar>
-                      </BarChart>
-                    </ResponsiveContainer>
-                  </ChartFrame>
-                  <div className="mt-3">
-                    <RankTable
-                      title=""
-                      tone="emerald"
-                      rows={data.outletPerformance.slice(0, 15).map((o) => ({ name: branchName(o.branch), sub: `Kontribusi ${o.share}%${o.growthPct !== null ? ` · growth ${o.growthPct > 0 ? "+" : ""}${o.growthPct}%` : ""}`, value: rp(o.net) }))}
-                    />
-                  </div>
-                </>
-              ) : (
-                <p className="rounded-lg border border-dashed border-border bg-muted/20 px-3 py-4 text-center text-xs text-muted-foreground">
-                  Data per-outlet sedang disinkron bertahap dari ESB (satu outlet per jam). Ranking akan terisi otomatis — untuk sekarang gunakan tampilan Semua Outlet.
-                </p>
-              )}
-            </Section>
-          )}
-
-          {/* Product Analysis */}
-          {data.products.length > 0 && (
-            <Section title="Product Analysis" desc="Best/worst seller & kontribusi (katalog ESB 30 hari)" icon={Package}>
-              <div className="grid gap-4 lg:grid-cols-2">
-                <RankTable title="Best Seller" rows={data.bestSellers.map((p) => ({ name: p.menu, sub: p.category, value: `${formatNumber(p.qty)} · ${p.share}%` }))} tone="emerald" />
-                <RankTable title="Slow Moving" rows={data.worstSellers.map((p) => ({ name: p.menu, sub: p.category, value: `${formatNumber(p.qty)} terjual` }))} tone="amber" />
-              </div>
-              {data.deadProducts.length > 0 && (
-                <p className="mt-3 rounded-lg border border-red-500/30 bg-red-500/[0.06] px-3 py-2 text-xs text-red-600 dark:text-red-400">
-                  <span className="font-semibold">{data.deadProducts.length} produk mati</span> — tanpa penjualan dalam 30 hari terakhir.
-                </p>
-              )}
-            </Section>
-          )}
-
-          {/* Category Analysis */}
-          {data.categoriesRows.length > 0 && (
-            <Section title="Category Analysis" desc="Kontribusi & performa kategori" icon={Box}>
-              <div className="grid gap-4 sm:grid-cols-2 sm:items-center">
-                <ChartFrame title="Kontribusi Kategori" filename="kategori" height={240}>
-                  <div className="relative h-full w-full">
-                    <ResponsiveContainer width="100%" height="100%">
-                      <PieChart>
-                        <Pie data={data.categoriesRows.slice(0, 8)} dataKey="qty" nameKey="category" cx="50%" cy="50%" innerRadius="60%" outerRadius="84%" paddingAngle={2} stroke="none">
-                          {data.categoriesRows.slice(0, 8).map((_, i) => (
-                            <Cell key={i} fill={PALETTE[i % PALETTE.length]} />
-                          ))}
-                        </Pie>
-                        <Tooltip content={<DonutTip />} />
-                      </PieChart>
-                    </ResponsiveContainer>
-                    <div className="pointer-events-none absolute inset-0 grid place-items-center">
-                      <div className="text-center">
-                        <p className="text-2xl font-bold tracking-tight text-foreground">{data.categoriesRows[0]?.share ?? 0}%</p>
-                        <p className="max-w-[8rem] truncate text-[10px] text-muted-foreground">{data.categoriesRows[0]?.category}</p>
+          <div className="grid items-start gap-4 lg:grid-cols-2">
+            {/* Outlet Performance */}
+            {!outlet && (
+              <Panel>
+                <Head title="Outlet Performance" desc="Ranking net sales · periode ini" />
+                {data.outletPerformance.length > 0 ? (
+                  <div className="max-h-80 space-y-1.5 overflow-y-auto pr-1 [scrollbar-width:thin]">
+                    {data.outletPerformance.slice(0, 20).map((o, i) => (
+                      <div key={o.branch} className="flex items-center gap-2.5 rounded-lg border border-border/60 bg-muted/20 px-2.5 py-2">
+                        <span className="grid size-6 shrink-0 place-items-center rounded-md bg-blue-500/12 text-[11px] font-semibold tabular-nums text-blue-600 dark:text-blue-400">{i + 1}</span>
+                        <div className="min-w-0 flex-1"><p className="truncate text-[12px] font-medium text-foreground">{branchName(o.branch)}</p><p className="text-[10px] text-muted-foreground">Kontribusi {o.share}%</p></div>
+                        <Delta v={o.growthPct} />
+                        <span className="shrink-0 text-[12px] font-semibold tabular-nums text-foreground">{rp(o.net)}</span>
                       </div>
-                    </div>
+                    ))}
                   </div>
-                </ChartFrame>
-                <div className="space-y-1.5">
-                  {data.categoriesRows.slice(0, 8).map((c, i) => (
-                    <div key={c.category} className="flex items-center gap-2 text-xs">
-                      <span className="size-2.5 shrink-0 rounded-full" style={{ background: PALETTE[i % PALETTE.length] }} />
-                      <span className="min-w-0 flex-1 truncate text-foreground">{c.category}</span>
-                      <span className="shrink-0 tabular-nums text-muted-foreground">{formatNumber(c.qty)}</span>
-                      <span className="w-10 shrink-0 text-right font-semibold tabular-nums text-foreground">{c.share}%</span>
+                ) : (
+                  <p className="rounded-lg border border-dashed border-border bg-muted/20 px-3 py-6 text-center text-xs text-muted-foreground">Data per-outlet sedang disinkron bertahap (1 outlet/jam). Gunakan tampilan Semua Outlet dulu.</p>
+                )}
+              </Panel>
+            )}
+
+            {/* Product Analysis */}
+            {data.products.length > 0 && (
+              <Panel>
+                <Head title="Product Analysis" desc="Best seller · katalog ESB 30 hari" />
+                <div className="max-h-80 space-y-1.5 overflow-y-auto pr-1 [scrollbar-width:thin]">
+                  {data.bestSellers.map((p, i) => (
+                    <div key={p.menu} className="flex items-center gap-2.5 rounded-lg px-1.5 py-1.5">
+                      <span className="grid size-6 shrink-0 place-items-center rounded-md bg-emerald-500/12 text-[11px] font-semibold tabular-nums text-emerald-600 dark:text-emerald-400">{i + 1}</span>
+                      <div className="min-w-0 flex-1"><p className="truncate text-[12px] font-medium text-foreground">{p.menu}</p><p className="text-[10px] uppercase text-muted-foreground">{p.category}</p></div>
+                      <span className="shrink-0 text-[12px] font-semibold tabular-nums text-foreground">{formatNumber(p.qty)} · {p.share}%</span>
                     </div>
                   ))}
                 </div>
-              </div>
-            </Section>
-          )}
+                {data.deadProducts.length > 0 && <p className="mt-2 text-[11px] text-red-600 dark:text-red-400"><b>{data.deadProducts.length}</b> produk mati (tanpa penjualan 30 hari).</p>}
+              </Panel>
+            )}
+          </div>
 
-          {/* Price & Margin Analysis */}
-          {(data.priceStats || data.margins.length > 0) && (
-            <Section title="Price & Margin Analysis" desc="Harga jual & margin (harga ESB vs HPP)" icon={CircleDollarSign}>
-              {data.priceStats && (
-                <div className="grid grid-cols-3 gap-3">
-                  <MiniStat label="Rata-rata Harga" value={rp(data.priceStats.avg)} />
-                  <MiniStat label="Tertinggi" value={data.priceStats.highest ? `${rp(data.priceStats.highest.unitPrice)}` : "—"} sub={data.priceStats.highest?.menu} />
-                  <MiniStat label="Terendah" value={data.priceStats.lowest ? `${rp(data.priceStats.lowest.unitPrice)}` : "—"} sub={data.priceStats.lowest?.menu} />
+          <div className="grid items-start gap-4 lg:grid-cols-2">
+            {/* Category donut (ConcentricRings, like the dashboard) */}
+            {rings.length > 0 && (
+              <Panel>
+                <Head title="Category Analysis" desc="Kontribusi kategori" />
+                <div className="flex flex-1 flex-wrap content-center items-center justify-center gap-5">
+                  <ConcentricRings rings={rings} centerValue={data.categoriesRows[0]?.share ?? 0} centerLabel={data.categoriesRows[0]?.category ?? ""} size={168} />
+                  <ul className="min-w-44 flex-1 space-y-2">
+                    {data.categoriesRows.slice(0, 8).map((c, i) => (
+                      <li key={c.category} className="flex items-center gap-2 text-xs">
+                        <span className="size-2.5 shrink-0 rounded-full" style={{ background: RING[i % RING.length] }} />
+                        <span className="min-w-0 flex-1 truncate text-foreground">{c.category}</span>
+                        <span className="shrink-0 font-semibold tabular-nums text-foreground">{c.share}%</span>
+                      </li>
+                    ))}
+                  </ul>
                 </div>
-              )}
-              {data.lowMargins.length > 0 && (
-                <div className="mt-4">
-                  <p className="mb-2 text-xs font-medium text-muted-foreground">Margin Tipis (&lt; 30%)</p>
-                  <RankTable
-                    title=""
-                    tone="red"
-                    rows={data.lowMargins.map((m) => ({ name: m.name, sub: `${m.category} · ${rp(m.price)}`, value: `${m.marginPct}%` }))}
-                  />
-                </div>
-              )}
-            </Section>
-          )}
+              </Panel>
+            )}
 
-          {/* AI Insight + Recommendation (rule-based) */}
+            {/* Price & Margin */}
+            {(data.priceStats || data.lowMargins.length > 0) && (
+              <Panel>
+                <Head title="Price & Margin" desc="Harga jual & margin (ESB vs HPP)" />
+                {data.priceStats && (
+                  <div className="mb-3 grid grid-cols-3 gap-2">
+                    <Mini label="Rata-rata" value={rp(data.priceStats.avg)} />
+                    <Mini label="Tertinggi" value={data.priceStats.highest ? rp(data.priceStats.highest.unitPrice) : "—"} sub={data.priceStats.highest?.menu} />
+                    <Mini label="Terendah" value={data.priceStats.lowest ? rp(data.priceStats.lowest.unitPrice) : "—"} sub={data.priceStats.lowest?.menu} />
+                  </div>
+                )}
+                {data.lowMargins.length > 0 && (
+                  <>
+                    <p className="mb-1.5 text-[11px] font-semibold text-muted-foreground">Margin Tipis (&lt; 30%)</p>
+                    <div className="max-h-56 space-y-1 overflow-y-auto pr-1 [scrollbar-width:thin]">
+                      {data.lowMargins.map((m) => (
+                        <div key={m.name} className="flex items-center gap-2 rounded-lg border border-border/60 bg-muted/20 px-2.5 py-1.5 text-[12px]">
+                          <span className="min-w-0 flex-1 truncate text-foreground">{m.name}</span>
+                          <span className="shrink-0 text-muted-foreground">{rp(m.price)}</span>
+                          <span className="shrink-0 font-semibold text-red-600 dark:text-red-400">{m.marginPct}%</span>
+                        </div>
+                      ))}
+                    </div>
+                  </>
+                )}
+              </Panel>
+            )}
+          </div>
+
+          {/* Insight + Recommendation */}
           {(data.insights.length > 0 || data.recommendations.length > 0) && (
-            <div className="mt-4 grid gap-4 lg:grid-cols-2">
-              <Card>
-                <CardHeader>
-                  <CardTitle className="flex items-center gap-2 text-base"><Sparkles className="size-4 text-violet-500" /> AI Insight</CardTitle>
-                  <p className="text-xs text-muted-foreground">Analisis otomatis dari data</p>
-                </CardHeader>
-                <CardContent className="space-y-2.5">
-                  {data.insights.map((it, i) => (
-                    <div key={i} className="rounded-lg border border-border bg-muted/20 px-3 py-2.5">
-                      <p className="text-xs font-semibold text-foreground">{it.title}</p>
-                      <p className="mt-0.5 text-xs text-muted-foreground">{it.detail}</p>
-                    </div>
-                  ))}
-                  {data.insights.length === 0 && <p className="text-xs text-muted-foreground">Belum cukup data untuk insight.</p>}
-                </CardContent>
-              </Card>
-              <Card>
-                <CardHeader>
-                  <CardTitle className="flex items-center gap-2 text-base"><Lightbulb className="size-4 text-amber-500" /> Rekomendasi</CardTitle>
-                  <p className="text-xs text-muted-foreground">Tindakan yang disarankan</p>
-                </CardHeader>
-                <CardContent className="space-y-2.5">
-                  {data.recommendations.map((it, i) => (
-                    <div key={i} className="rounded-lg border border-border bg-muted/20 px-3 py-2.5">
-                      <p className="text-xs font-semibold text-foreground">{it.title}</p>
-                      <p className="mt-0.5 text-xs text-muted-foreground">{it.detail}</p>
-                    </div>
-                  ))}
+            <div className="grid items-start gap-4 lg:grid-cols-2">
+              <Panel>
+                <Head title="AI Insight" desc="Analisis otomatis dari data" right={<Sparkles className="size-4 text-violet-500" />} />
+                <div className="space-y-2">
+                  {data.insights.map((it, i) => <InfoRow key={i} title={it.title} detail={it.detail} />)}
+                  {data.insights.length === 0 && <p className="text-xs text-muted-foreground">Belum cukup data.</p>}
+                </div>
+              </Panel>
+              <Panel>
+                <Head title="Rekomendasi" desc="Tindakan yang disarankan" right={<Lightbulb className="size-4 text-amber-500" />} />
+                <div className="space-y-2">
+                  {data.recommendations.map((it, i) => <InfoRow key={i} title={it.title} detail={it.detail} />)}
                   {data.recommendations.length === 0 && <p className="text-xs text-muted-foreground">Belum ada rekomendasi.</p>}
-                </CardContent>
-              </Card>
+                </div>
+              </Panel>
             </div>
           )}
 
-          <p className="mt-4 text-center text-[11px] text-muted-foreground">
-            Data dihitung otomatis dari cache ESB terbaru. Analisis per-outlet & per-jam, export PDF/Excel akan hadir di fase berikutnya.
-          </p>
+          <p className="text-center text-[11px] text-muted-foreground">Data dihitung otomatis dari cache ESB terbaru · analisis per-outlet mengisi bertahap.</p>
+          <span ref={trendRef} className="hidden" />
         </>
       )}
     </div>
   );
 }
 
-function EmptyState({ title, detail }: { title: string; detail: string }) {
+function Empty({ title, detail }: { title: string; detail: string }) {
   return (
-    <div className="mt-6 grid place-items-center rounded-2xl border border-dashed border-border bg-muted/20 p-10 text-center">
+    <div className="grid place-items-center rounded-2xl border border-dashed border-border bg-muted/20 p-10 text-center">
       <Package className="size-7 text-muted-foreground" />
       <p className="mt-3 text-sm font-medium text-foreground">{title}</p>
       <p className="mt-1 max-w-md text-xs text-muted-foreground">{detail}</p>
     </div>
   );
 }
-
-function MiniStat({ label, value, sub }: { label: string; value: string; sub?: string }) {
+function Callout({ tone, title, body }: { tone: "green" | "amber"; title: string; body: string }) {
+  const cls = tone === "green" ? "border-emerald-500/30 bg-emerald-500/[0.06] text-emerald-600 dark:text-emerald-400" : "border-amber-500/30 bg-amber-500/[0.06] text-amber-600 dark:text-amber-400";
   return (
-    <div className="rounded-lg border border-border bg-muted/20 px-3 py-2.5">
+    <div className={cn("rounded-xl border px-3 py-2.5 text-xs", cls)}>
+      <p className="font-semibold">{title}</p>
+      <p className="mt-0.5 text-foreground">{body}</p>
+    </div>
+  );
+}
+function AlertRow({ a }: { a: AlertItem }) {
+  const cls = a.level === "high" ? "border-red-500/30 bg-red-500/[0.06] text-red-600 dark:text-red-400" : a.level === "medium" ? "border-amber-500/30 bg-amber-500/[0.06] text-amber-600 dark:text-amber-400" : "border-sky-500/30 bg-sky-500/[0.06] text-sky-600 dark:text-sky-400";
+  return (
+    <div className={cn("flex items-start gap-2.5 rounded-xl border px-3 py-2.5 text-xs", cls)}>
+      <AlertTriangle className="mt-0.5 size-4 shrink-0" />
+      <div><p className="font-semibold">{a.title}</p><p className="mt-0.5 text-foreground/90">{a.detail}</p></div>
+    </div>
+  );
+}
+function Mini({ label, value, sub }: { label: string; value: string; sub?: string }) {
+  return (
+    <div className="rounded-xl border border-border/60 bg-muted/20 px-3 py-2.5">
       <p className="text-[11px] text-muted-foreground">{label}</p>
-      <p className="mt-0.5 text-sm font-semibold text-foreground">{value}</p>
+      <p className="mt-0.5 text-sm font-semibold tabular-nums text-foreground">{value}</p>
       {sub && <p className="truncate text-[11px] text-muted-foreground">{sub}</p>}
     </div>
   );
 }
-
-function RankTable({ title, rows, tone }: { title: string; tone: "emerald" | "amber" | "red"; rows: { name: string; sub: string; value: string }[] }) {
-  const dot = tone === "emerald" ? "bg-emerald-500" : tone === "amber" ? "bg-amber-500" : "bg-red-500";
+function InfoRow({ title, detail }: { title: string; detail: string }) {
   return (
-    <div>
-      {title && <p className="mb-2 text-xs font-medium text-muted-foreground">{title}</p>}
-      <div className="divide-y divide-border/60 overflow-hidden rounded-lg border border-border">
-        {rows.map((r, i) => (
-          <div key={i} className="flex items-center gap-2 px-3 py-2">
-            <span className="w-4 shrink-0 text-center text-[11px] font-medium tabular-nums text-muted-foreground">{i + 1}</span>
-            <span className={cn("size-1.5 shrink-0 rounded-full", dot)} />
-            <div className="min-w-0 flex-1">
-              <p className="truncate text-xs font-medium text-foreground">{r.name}</p>
-              <p className="truncate text-[11px] text-muted-foreground">{r.sub}</p>
-            </div>
-            <span className="shrink-0 text-xs font-semibold tabular-nums text-foreground">{r.value}</span>
-          </div>
-        ))}
-        {rows.length === 0 && <p className="px-3 py-4 text-center text-xs text-muted-foreground">Tidak ada data.</p>}
-      </div>
+    <div className="rounded-xl border border-border/60 bg-muted/20 px-3 py-2.5">
+      <p className="text-xs font-semibold text-foreground">{title}</p>
+      <p className="mt-0.5 text-xs text-muted-foreground">{detail}</p>
     </div>
   );
 }
