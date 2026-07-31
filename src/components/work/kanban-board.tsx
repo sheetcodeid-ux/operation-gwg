@@ -47,6 +47,7 @@ export function KanbanBoard({
   isAdmin,
   userDepartment,
   categories,
+  initialDivision,
 }: {
   rows: WorkRow[];
   outlets?: TaskOutlet[];
@@ -57,6 +58,7 @@ export function KanbanBoard({
   isAdmin?: boolean;
   userDepartment?: string;
   categories?: Record<string, string[]>;
+  initialDivision?: string;
 }) {
   const [tasks, setTasks] = React.useState(rows);
   // Re-sync when the server data changes (after create/edit/delete + router.refresh).
@@ -65,7 +67,7 @@ export function KanbanBoard({
   const [, startTransition] = React.useTransition();
   const [drag, setDrag] = React.useState<{ id: string; x: number; y: number } | null>(null);
   const [overCol, setOverCol] = React.useState<TaskStatus | null>(null);
-  const { month, division, pic, category, setMonth, setDivision, setPic, setCategory } = useWorkFilters();
+  const { month, division, pic, category, setMonth, setDivision, setPic, setCategory } = useWorkFilters(initialDivision);
   const people = React.useMemo(() => membersForDivision(members, division), [members, division]);
   const months = React.useMemo(() => monthOptions(rows.map((r) => r.startDate)), [rows]);
   const categoryOpts = React.useMemo(() => [...new Set(rows.map((r) => r.category).filter(Boolean))].sort((a, b) => a.localeCompare(b)), [rows]);
@@ -151,6 +153,18 @@ export function KanbanBoard({
     setOverCol(null);
   }
 
+  /** The browser took over the gesture to SCROLL (fired once it commits to a
+   *  pan). Cancel the pending long-press so a card never lifts mid-scroll. */
+  function onPointerCancel() {
+    const s = g.current;
+    if (!s) return;
+    if (s.timer) window.clearTimeout(s.timer);
+    if (s.armed) s.el.style.touchAction = "";
+    g.current = null;
+    setDrag(null);
+    setOverCol(null);
+  }
+
   const ghost = drag ? tasks.find((t) => t.id === drag.id) : null;
   const visible = tasks.filter(
     (t) =>
@@ -202,6 +216,7 @@ export function KanbanBoard({
                     onPointerDown={(e) => onPointerDown(e, t)}
                     onPointerMove={onPointerMove}
                     onPointerUp={(e) => onPointerUp(e, t)}
+                    onPointerCancel={onPointerCancel}
                   />
                 ))}
                 {items.length === 0 && (
@@ -220,21 +235,10 @@ export function KanbanBoard({
         })}
       </div>
 
-      {/* Floating drag ghost (pointer coords are visual px — undo body zoom) */}
-      {ghost && drag && (
-        <div
-          className="pointer-events-none fixed z-[60] w-64 -translate-x-1/2 -translate-y-1/2"
-          style={{ left: drag.x / bodyZoom(), top: drag.y / bodyZoom() }}
-        >
-          <div className="card-gradient scale-105 rounded-xl p-3 opacity-95 shadow-2xl ring-1 ring-foreground/20">
-            <div className="flex items-start justify-between gap-2">
-              <p className="line-clamp-2 text-sm font-medium text-foreground">{ghost.title}</p>
-              <Badge tone={PRIORITY_META[ghost.priority].tone}>{PRIORITY_META[ghost.priority].label}</Badge>
-            </div>
-            <p className="mt-1 truncate text-[11px] text-muted-foreground">{ghost.outlet}</p>
-          </div>
-        </div>
-      )}
+      {/* Floating drag ghost — the FULL card, following the finger. Pointer coords
+          are visual px, so we clamp them to the viewport (keeping the whole card
+          on screen) and then undo the body zoom for positioning. */}
+      {ghost && drag && <DragGhost task={ghost} x={drag.x} y={drag.y} />}
 
       {/* Tap → detail (with Edit/Delete) */}
       {openTask && (
@@ -248,24 +252,12 @@ export function KanbanBoard({
   );
 }
 
-function KanbanCard({
-  task,
-  dragging,
-  ...handlers
-}: { task: WorkRow; dragging: boolean } & React.HTMLAttributes<HTMLDivElement>) {
+/** The card's inner content — shared by the column card and the drag ghost so
+ *  the floating card looks EXACTLY like the real one (full content, not a stub). */
+function TaskCardBody({ task }: { task: WorkRow }) {
   const overdue = isOverdue(task.dueDate) && task.status !== "done" && task.status !== "cancelled";
   return (
-    <div
-      {...handlers}
-      // touch-action pan-y: a vertical swipe scrolls the column; a HOLD arms a
-      // drag (which flips touch-action to none). Board's horizontal scroll is
-      // handled by the outer container.
-      style={{ touchAction: "pan-y" }}
-      className={cn(
-        "card-gradient cursor-grab select-none rounded-xl p-3 text-left transition-all hover:-translate-y-0.5 hover:shadow-lg hover:ring-1 hover:ring-border active:cursor-grabbing",
-        dragging && "opacity-40",
-      )}
-    >
+    <>
       <div className="flex items-start justify-between gap-2">
         <p className="line-clamp-2 text-sm font-medium text-foreground">{task.title}</p>
         <Badge tone={PRIORITY_META[task.priority].tone}>{PRIORITY_META[task.priority].label}</Badge>
@@ -286,6 +278,51 @@ function KanbanCard({
           <Avatar name={task.pic} size={18} src={task.picAvatarUrl} />
           <span className="max-w-24 truncate">{task.pic}</span>
         </span>
+      </div>
+    </>
+  );
+}
+
+function KanbanCard({
+  task,
+  dragging,
+  ...handlers
+}: { task: WorkRow; dragging: boolean } & React.HTMLAttributes<HTMLDivElement>) {
+  return (
+    <div
+      {...handlers}
+      // touch-action pan-x pan-y: a swipe (any direction) scrolls the board/column;
+      // a HOLD arms a drag (which flips touch-action to none for the rest of the
+      // gesture). This keeps scrolling smooth and only lifts a card when held.
+      style={{ touchAction: "pan-x pan-y" }}
+      className={cn(
+        "card-gradient cursor-grab select-none rounded-xl p-3 text-left transition-all hover:-translate-y-0.5 hover:shadow-lg hover:ring-1 hover:ring-border active:cursor-grabbing",
+        dragging && "opacity-40",
+      )}
+    >
+      <TaskCardBody task={task} />
+    </div>
+  );
+}
+
+/** The lifted card that follows the finger. It renders the full card content and
+ *  stays fully on screen (clamped to the viewport) so it's never cut off at an
+ *  edge. `translate3d` keeps the follow buttery-smooth (GPU compositing). */
+function DragGhost({ task, x, y }: { task: WorkRow; x: number; y: number }) {
+  const zoom = bodyZoom();
+  const vw = typeof window !== "undefined" ? window.innerWidth : 0;
+  const vh = typeof window !== "undefined" ? window.innerHeight : 0;
+  const HALF_W = 136; // half of the 16rem card + a little breathing room
+  const HALF_H = 90;
+  const cx = vw ? Math.min(Math.max(x, HALF_W), vw - HALF_W) : x;
+  const cy = vh ? Math.min(Math.max(y, HALF_H), vh - HALF_H) : y;
+  return (
+    <div
+      className="pointer-events-none fixed left-0 top-0 z-[60] w-64 will-change-transform"
+      style={{ transform: `translate3d(${cx / zoom}px, ${cy / zoom}px, 0) translate(-50%, -50%) scale(1.03)` }}
+    >
+      <div className="card-gradient rounded-xl p-3 opacity-95 shadow-2xl ring-1 ring-foreground/25">
+        <TaskCardBody task={task} />
       </div>
     </div>
   );

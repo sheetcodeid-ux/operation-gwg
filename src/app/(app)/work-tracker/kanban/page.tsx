@@ -9,11 +9,15 @@ import { buildTaskSheetData, buildWorkRows } from "@/components/work/work-data";
 
 export const metadata: Metadata = { title: "Work Tracker · Kanban" };
 
-export default async function WorkKanbanPage() {
+export default async function WorkKanbanPage({ searchParams }: { searchParams: Promise<{ dept?: string }> }) {
   const user = (await getSessionUser())!;
+  const sp = await searchParams;
   const rows = buildWorkRows(user);
   const sheet = await buildTaskSheetData(user);
   const canCreate = can(user, "create_work_task");
+
+  const dept = sheet.isAdmin && sp.dept && sheet.divisions.includes(sp.dept) ? sp.dept : undefined;
+  const createDept = dept ?? sheet.defaultDivision;
 
   return (
     <div className="w-full">
@@ -28,9 +32,9 @@ export default async function WorkKanbanPage() {
               coordinators={sheet.coordinators}
               members={sheet.members}
               divisions={sheet.divisions}
-              defaultDivision={sheet.defaultDivision}
+              defaultDivision={createDept}
               isAdmin={sheet.isAdmin}
-              userDepartment={sheet.userDepartment}
+              userDepartment={dept ?? sheet.userDepartment}
               categories={sheet.categories}
             />
           ) : undefined
@@ -47,6 +51,7 @@ export default async function WorkKanbanPage() {
         isAdmin={sheet.isAdmin}
         userDepartment={sheet.userDepartment}
         categories={sheet.categories}
+        initialDivision={dept ?? "all"}
         initialView="kanban"
       />
     </div>

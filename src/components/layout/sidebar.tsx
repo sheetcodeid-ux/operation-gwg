@@ -147,10 +147,13 @@ export function Sidebar({
                           );
                         }
 
+                        // Work Tracker is shared across departments — carry the
+                        // section so it opens pre-scoped to that department.
+                        const linkHref = item.href === "/work-tracker" ? `/work-tracker?dept=${encodeURIComponent(section)}` : item.href;
                         return (
                           <Link
                             key={item.href}
-                            href={item.href}
+                            href={linkHref}
                             className={cn(
                               "group relative flex items-center gap-2.5 rounded-lg px-2.5 py-2 text-sm transition-colors",
                               active

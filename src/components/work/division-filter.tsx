@@ -89,7 +89,7 @@ export function DivisionFilter({
       className={className ?? "w-44 shrink-0"}
       value={value}
       onChange={onChange}
-      options={[{ value: "all", label: "Semua Divisi" }, ...options.map((d) => ({ value: d, label: divisionLabel(d) }))]}
+      options={[{ value: "all", label: "Semua Departemen" }, ...options.map((d) => ({ value: d, label: divisionLabel(d) }))]}
     />
   );
 }

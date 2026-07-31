@@ -25,6 +25,7 @@ export function WorkTrackerViews({
   isAdmin,
   userDepartment,
   categories,
+  initialDivision,
   initialView = "table",
 }: {
   rows: WorkRow[];
@@ -36,10 +37,11 @@ export function WorkTrackerViews({
   isAdmin?: boolean;
   userDepartment?: string;
   categories?: Record<string, string[]>;
+  initialDivision?: string;
   initialView?: View;
 }) {
   const [view, setView] = React.useState<View>(initialView);
-  const shared = { rows, outlets, coordinators, members, divisions, canEdit, isAdmin, userDepartment, categories };
+  const shared = { rows, outlets, coordinators, members, divisions, canEdit, isAdmin, userDepartment, categories, initialDivision };
 
   return (
     <div>

@@ -8,9 +8,9 @@ import * as React from "react";
  * (that made picking a PIC or month feel slow). Each value defaults to "all".
  * Changing the division resets PIC, since the member list differs per division.
  */
-export function useWorkFilters() {
+export function useWorkFilters(initialDivision = "all") {
   const [month, setMonth] = React.useState("all");
-  const [division, setDivisionState] = React.useState("all");
+  const [division, setDivisionState] = React.useState(initialDivision);
   const [pic, setPic] = React.useState("all");
   const [category, setCategory] = React.useState("all");
 

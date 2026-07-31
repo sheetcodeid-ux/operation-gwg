@@ -102,7 +102,9 @@ export function TaskSheet({
   );
 }
 
-/** Category dropdown; Super Admin can add/remove a department's categories inline. */
+/** Category dropdown; Super Admin can add/remove THIS department's categories
+ *  inline. Edits are OPTIMISTIC (instant) — the list updates immediately and the
+ *  server call persists in the background (only that department is affected). */
 function CategoryPicker({
   value,
   onChange,
@@ -116,38 +118,39 @@ function CategoryPicker({
   department: string;
   isAdmin: boolean;
 }) {
-  const router = useRouter();
+  const [list, setList] = React.useState<string[]>(options);
+  // Re-sync when the department (and thus its options) changes.
+  React.useEffect(() => setList(options), [options]);
   const [manage, setManage] = React.useState(false);
   const [newCat, setNewCat] = React.useState("");
-  const [busy, setBusy] = React.useState(false);
 
   const add = () => {
     const name = newCat.trim();
-    if (!name) return;
-    setBusy(true);
-    addTaskCategoryAction(department, name)
-      .then((res) => {
-        if (res?.error) return toast.error(res.error);
-        setNewCat("");
-        onChange(name);
-        router.refresh();
-      })
-      .finally(() => setBusy(false));
+    setNewCat("");
+    if (!name || list.includes(name)) return;
+    setList((l) => [...l, name].sort((a, b) => a.localeCompare(b))); // instant
+    onChange(name);
+    addTaskCategoryAction(department, name).then((res) => {
+      if (res?.error) {
+        toast.error(res.error);
+        setList((l) => l.filter((c) => c !== name)); // rollback
+      }
+    });
   };
   const del = (name: string) => {
-    setBusy(true);
-    deleteTaskCategoryAction(department, name)
-      .then((res) => {
-        if (res?.error) return toast.error(res.error);
-        if (value === name) onChange(options.find((o) => o !== name) ?? "");
-        router.refresh();
-      })
-      .finally(() => setBusy(false));
+    setList((l) => l.filter((c) => c !== name)); // instant
+    if (value === name) onChange(list.find((c) => c !== name) ?? "");
+    deleteTaskCategoryAction(department, name).then((res) => {
+      if (res?.error) {
+        toast.error(res.error);
+        setList((l) => [...l, name].sort((a, b) => a.localeCompare(b))); // rollback
+      }
+    });
   };
 
   return (
     <div className="space-y-1.5">
-      <Combobox value={value} onChange={onChange} options={options.map((c) => ({ value: c, label: c }))} searchPlaceholder="Cari kategori…" />
+      <Combobox value={value} onChange={onChange} options={list.map((c) => ({ value: c, label: c }))} searchPlaceholder="Cari kategori…" />
       {isAdmin && (
         <>
           <button type="button" onClick={() => setManage((m) => !m)} className="text-[11px] font-medium text-primary hover:underline">
@@ -168,21 +171,21 @@ function CategoryPicker({
                     }
                   }}
                 />
-                <Button size="sm" type="button" onClick={add} disabled={busy || !newCat.trim()}>
+                <Button size="sm" type="button" onClick={add} disabled={!newCat.trim()}>
                   <Plus className="size-4" />
                 </Button>
               </div>
               <div className="flex flex-wrap gap-1.5">
-                {options.map((c) => (
+                {list.map((c) => (
                   <span key={c} className="inline-flex items-center gap-1 rounded-md bg-muted px-2 py-0.5 text-[11px] text-foreground/80">
                     {c}
-                    <button type="button" onClick={() => del(c)} disabled={busy} className="text-muted-foreground hover:text-red-500" title="Hapus kategori">
-                      {busy ? <Loader2 className="size-3 animate-spin" /> : <Trash2 className="size-3" />}
+                    <button type="button" onClick={() => del(c)} className="text-muted-foreground hover:text-red-500" title="Hapus kategori">
+                      <Trash2 className="size-3" />
                     </button>
                   </span>
                 ))}
               </div>
-              <p className="text-[10px] text-muted-foreground">Kategori khusus departemen {divisionLabel(department)} — tersimpan permanen untuk semua anggota.</p>
+              <p className="text-[10px] text-muted-foreground">Kategori khusus departemen {divisionLabel(department)} — tersimpan permanen untuk semua anggota departemen ini.</p>
             </div>
           )}
         </>
@@ -304,17 +307,17 @@ function TaskForm({
         </Field>
 
         {isAdmin ? (
-          <Field label="Divisi">
+          <Field label="Departemen">
             <Combobox
               value={form.division}
               onChange={pickDivision}
               options={divisions.map((d) => ({ value: d, label: divisionLabel(d) }))}
-              searchPlaceholder="Cari divisi…"
+              searchPlaceholder="Cari departemen…"
             />
           </Field>
         ) : (
           <div className="flex items-center justify-between rounded-lg border border-border bg-muted/30 px-3 py-2">
-            <span className="text-xs text-muted-foreground">Divisi</span>
+            <span className="text-xs text-muted-foreground">Departemen</span>
             <span className="text-sm font-medium text-foreground">{divisionLabel(form.division)}</span>
           </div>
         )}

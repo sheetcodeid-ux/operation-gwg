@@ -47,6 +47,7 @@ export function WorkTable({
   isAdmin,
   userDepartment,
   categories,
+  initialDivision,
 }: {
   rows: WorkRow[];
   outlets?: TaskOutlet[];
@@ -58,11 +59,13 @@ export function WorkTable({
   isAdmin?: boolean;
   userDepartment?: string;
   categories?: Record<string, string[]>;
+  /** Pre-select the department filter (e.g. Super Admin entering a dept's section). */
+  initialDivision?: string;
 }) {
   const [priority, setPriority] = React.useState<string>("all");
   const [status, setStatus] = React.useState<string>("all");
   // All filters are INSTANT local state — no URL navigation / server round-trip.
-  const { month, division, pic, category, setMonth, setDivision, setPic, setCategory } = useWorkFilters();
+  const { month, division, pic, category, setMonth, setDivision, setPic, setCategory } = useWorkFilters(initialDivision);
   const people = React.useMemo(() => membersForDivision(members, division), [members, division]);
   const months = React.useMemo(() => monthOptions(rows.map((r) => r.startDate)), [rows]);
   const categoryOpts = React.useMemo(() => [...new Set(rows.map((r) => r.category).filter(Boolean))].sort((a, b) => a.localeCompare(b)), [rows]);

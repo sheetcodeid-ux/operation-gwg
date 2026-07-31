@@ -9,18 +9,25 @@ import { buildTaskSheetData, buildWorkRows } from "@/components/work/work-data";
 
 export const metadata: Metadata = { title: "Work Tracker" };
 
-export default async function WorkTrackerPage() {
+export default async function WorkTrackerPage({ searchParams }: { searchParams: Promise<{ dept?: string }> }) {
   const user = (await getSessionUser())!;
+  const sp = await searchParams;
   const rows = buildWorkRows(user);
   const sheet = await buildTaskSheetData(user);
   const canCreate = can(user, "create_work_task");
+
+  // Super Admin entering a specific department's sidebar section (?dept=…) →
+  // open pre-scoped to that department (filter default + create default).
+  const dept = sheet.isAdmin && sp.dept && sheet.divisions.includes(sp.dept) ? sp.dept : undefined;
+  const headerDept = dept ?? (sheet.isAdmin ? null : sheet.userDepartment);
+  const createDept = dept ?? sheet.defaultDivision;
 
   return (
     <div className="w-full">
       <PageHeader
         icon={ListChecks}
         title="Work Tracker"
-        description={sheet.isAdmin ? "Semua tugas per departemen — prioritas, status, dan progres" : `Tugas departemen ${sheet.userDepartment} — prioritas, status, dan progres`}
+        description={headerDept ? `Tugas departemen ${headerDept} — prioritas, status, dan progres` : "Semua tugas per departemen — prioritas, status, dan progres"}
         actions={
           canCreate ? (
             <NewTaskButton
@@ -28,9 +35,9 @@ export default async function WorkTrackerPage() {
               coordinators={sheet.coordinators}
               members={sheet.members}
               divisions={sheet.divisions}
-              defaultDivision={sheet.defaultDivision}
+              defaultDivision={createDept}
               isAdmin={sheet.isAdmin}
-              userDepartment={sheet.userDepartment}
+              userDepartment={dept ?? sheet.userDepartment}
               categories={sheet.categories}
             />
           ) : undefined
@@ -47,6 +54,7 @@ export default async function WorkTrackerPage() {
         isAdmin={sheet.isAdmin}
         userDepartment={sheet.userDepartment}
         categories={sheet.categories}
+        initialDivision={dept ?? "all"}
         initialView="table"
       />
     </div>
