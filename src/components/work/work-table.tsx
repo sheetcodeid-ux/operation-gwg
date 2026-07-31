@@ -6,7 +6,6 @@ import { AlertTriangle, CircleCheck, CircleDot, Eye, ListChecks, TriangleAlert }
 import { PRIORITY_META, TASK_STATUS_META } from "@/lib/constants";
 import type { Priority, TaskStatus } from "@/lib/types";
 import { Badge } from "@/components/ui/badge";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { DataTable } from "@/components/ui/data-table";
 import { Progress } from "@/components/ui/progress";
 import { StatTile } from "@/components/ui/stat";
@@ -196,46 +195,41 @@ export function WorkTable({
         <StatTile icon={TriangleAlert} label="Overdue" value={stats.overdue} tone="danger" />
       </div>
 
-      <Card className="mt-4">
-        <CardHeader>
-          <CardTitle>All Tasks</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <DataTable
-            tableId="work-tracker"
-            columns={columns}
-            data={filtered}
-            searchPlaceholder="Search tasks…"
-            // Scroll only sideways for the wide table; the page handles up/down
-            // (no nested vertical box → no diagonal "geser semua arah").
-            stickyHeader={false}
-            toolbar={
-              <div className="flex items-center gap-2">
-                <MonthFilter options={months} value={month} onChange={setMonth} className="w-36 shrink-0" />
-                {isAdmin && <DivisionFilter value={division} onChange={setDivision} options={divisions} className="w-40 shrink-0" />}
-                <PicFilter people={people} value={pic} onChange={setPic} className="w-40 shrink-0" />
-                <CategoryFilter options={categoryOpts} value={category} onChange={setCategory} className="w-40 shrink-0" />
-                <Combobox
-                  portal
-                  searchable={false}
-                  value={priority}
-                  onChange={setPriority}
-                  className="w-36 shrink-0"
-                  options={[{ value: "all", label: "Semua Prioritas" }, ...(Object.keys(PRIORITY_META) as Priority[]).map((p) => ({ value: p, label: PRIORITY_META[p].label }))]}
-                />
-                <Combobox
-                  portal
-                  searchable={false}
-                  value={status}
-                  onChange={setStatus}
-                  className="w-36 shrink-0"
-                  options={[{ value: "all", label: "Semua Status" }, ...(Object.keys(TASK_STATUS_META) as TaskStatus[]).map((s) => ({ value: s, label: TASK_STATUS_META[s].label }))]}
-                />
-              </div>
-            }
-          />
-        </CardContent>
-      </Card>
+      <div className="mt-4">
+        <DataTable
+          tableId="work-tracker"
+          columns={columns}
+          data={filtered}
+          searchPlaceholder="Search tasks…"
+          // Scroll only sideways for the wide table; the page handles up/down
+          // (no nested vertical box → no diagonal "geser semua arah").
+          stickyHeader={false}
+          toolbar={
+            <div className="flex items-center gap-2">
+              <MonthFilter options={months} value={month} onChange={setMonth} className="w-36 shrink-0" />
+              {isAdmin && <DivisionFilter value={division} onChange={setDivision} options={divisions} className="w-40 shrink-0" />}
+              <PicFilter people={people} value={pic} onChange={setPic} className="w-40 shrink-0" />
+              <CategoryFilter options={categoryOpts} value={category} onChange={setCategory} className="w-40 shrink-0" />
+              <Combobox
+                portal
+                searchable={false}
+                value={priority}
+                onChange={setPriority}
+                className="w-36 shrink-0"
+                options={[{ value: "all", label: "Semua Prioritas" }, ...(Object.keys(PRIORITY_META) as Priority[]).map((p) => ({ value: p, label: PRIORITY_META[p].label }))]}
+              />
+              <Combobox
+                portal
+                searchable={false}
+                value={status}
+                onChange={setStatus}
+                className="w-36 shrink-0"
+                options={[{ value: "all", label: "Semua Status" }, ...(Object.keys(TASK_STATUS_META) as TaskStatus[]).map((s) => ({ value: s, label: TASK_STATUS_META[s].label }))]}
+              />
+            </div>
+          }
+        />
+      </div>
     </div>
   );
 }

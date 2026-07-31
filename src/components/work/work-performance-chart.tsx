@@ -2,7 +2,8 @@
 
 import * as React from "react";
 import { Area, Bar, CartesianGrid, ComposedChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
-import { ChevronDown, Users } from "lucide-react";
+import { Users } from "lucide-react";
+import { Combobox } from "@/components/ui/combobox";
 import { membersForDivision } from "./division-filter";
 import type { DivisionMembers } from "./task-sheet";
 import type { WorkRow } from "./work-table";
@@ -21,17 +22,6 @@ function abbr(name: string): string {
   let w = words[0];
   if (words.length > 1 && PREFIXES.has(words[0].toLowerCase().replace(/\./g, ""))) w = words[1];
   return w.slice(0, 3).toUpperCase();
-}
-
-function Pill({ value, onChange, options }: { value: string; onChange: (v: string) => void; options: { v: string; l: string }[] }) {
-  return (
-    <div className="relative inline-flex items-center">
-      <select value={value} onChange={(e) => onChange(e.target.value)} className="max-w-[11rem] cursor-pointer appearance-none truncate rounded-lg border border-border bg-card py-1.5 pl-3 pr-7 text-xs font-medium text-foreground outline-none">
-        {options.map((o) => <option key={o.v} value={o.v} className="bg-popover text-foreground">{o.l}</option>)}
-      </select>
-      <ChevronDown className="pointer-events-none absolute right-2 size-3.5 text-muted-foreground" />
-    </div>
-  );
 }
 
 type Row = { name: string; full: string; ini: number; lalu: number };
@@ -93,8 +83,24 @@ export function WorkPerformanceChart({ rows, members, divisions, isAdmin, defaul
           </div>
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          {isAdmin && deptOptions.length > 0 && <Pill value={dept} onChange={setDept} options={deptOptions.map((d) => ({ v: d, l: d }))} />}
-          <Pill value={String(month)} onChange={(v) => setMonth(Number(v))} options={MONTHS.map((m, i) => ({ v: String(i), l: m }))} />
+          {isAdmin && deptOptions.length > 0 && (
+            <Combobox
+              portal
+              searchable={false}
+              className="w-40 shrink-0"
+              value={dept}
+              onChange={setDept}
+              options={deptOptions.map((d) => ({ value: d, label: d }))}
+            />
+          )}
+          <Combobox
+            portal
+            searchable={false}
+            className="w-36 shrink-0"
+            value={String(month)}
+            onChange={(v) => setMonth(Number(v))}
+            options={MONTHS.map((m, i) => ({ value: String(i), label: m }))}
+          />
         </div>
       </div>
 
@@ -104,23 +110,19 @@ export function WorkPerformanceChart({ rows, members, divisions, isAdmin, defaul
         <>
           <div className="h-[17rem]">
             <ResponsiveContainer width="100%" height="100%">
-              <ComposedChart data={data} margin={{ top: 8, right: 8, left: -12, bottom: 0 }}>
+              <ComposedChart data={data} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
                 <defs>
                   <linearGradient id="wpBlue" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor={BLUE} stopOpacity={0.35} /><stop offset="100%" stopColor={BLUE} stopOpacity={0} /></linearGradient>
                   <linearGradient id="wpGrey" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="#94a3b8" stopOpacity={0.9} /><stop offset="100%" stopColor="#94a3b8" stopOpacity={0.35} /></linearGradient>
                 </defs>
                 <CartesianGrid strokeDasharray="3 3" stroke="rgba(148,163,184,0.16)" vertical={false} />
-                <XAxis dataKey="name" tick={{ fill: "#94a3b8", fontSize: 10, fontWeight: 600 }} tickLine={false} axisLine={false} interval={0} angle={0} textAnchor="middle" height={22} />
-                <YAxis allowDecimals={false} tick={{ fill: "#94a3b8", fontSize: 10 }} tickLine={false} axisLine={false} width={28} />
+                <XAxis dataKey="name" tick={{ fill: "var(--foreground)", fontSize: 10, fontWeight: 600 }} tickLine={false} axisLine={false} interval={0} angle={0} textAnchor="middle" height={22} />
+                <YAxis allowDecimals={false} tick={{ fill: "var(--foreground)", fontSize: 11, fontWeight: 600 }} tickLine={false} axisLine={false} width={30} />
                 <Tooltip cursor={{ fill: "rgba(148,163,184,0.08)" }} content={<Tip />} />
                 <Bar dataKey="lalu" name="Bulan Lalu" fill="url(#wpGrey)" radius={[3, 3, 0, 0]} maxBarSize={34} />
                 <Area type="monotone" dataKey="ini" name="Bulan Ini" stroke={BLUE} strokeWidth={2.5} fill="url(#wpBlue)" dot={{ r: 3, fill: BLUE }} activeDot={{ r: 5 }} className="chart-glow-blue" />
               </ComposedChart>
             </ResponsiveContainer>
-          </div>
-          <div className="mt-2 flex flex-wrap items-center justify-center gap-4 text-[11px] text-muted-foreground">
-            <span className="flex items-center gap-1.5"><span className="h-0.5 w-4 rounded-full" style={{ background: BLUE }} /> Bulan ini ({MONTHS[month]})</span>
-            <span className="flex items-center gap-1.5"><span className="size-2.5 rounded-sm bg-slate-400" /> Bulan lalu</span>
           </div>
           {!hasAny && <p className="mt-2 text-center text-[11px] text-muted-foreground">Belum ada task pada {MONTHS[month]} / bulan sebelumnya untuk departemen ini.</p>}
         </>
