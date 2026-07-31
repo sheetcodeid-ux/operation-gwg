@@ -206,6 +206,9 @@ export function WorkTable({
             columns={columns}
             data={filtered}
             searchPlaceholder="Search tasks…"
+            // Scroll only sideways for the wide table; the page handles up/down
+            // (no nested vertical box → no diagonal "geser semua arah").
+            stickyHeader={false}
             toolbar={
               <div className="flex items-center gap-2">
                 <MonthFilter options={months} value={month} onChange={setMonth} className="w-36 shrink-0" />
