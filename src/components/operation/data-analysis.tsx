@@ -10,6 +10,8 @@ import {
   BarChart,
   CartesianGrid,
   Cell,
+  Pie,
+  PieChart,
   ResponsiveContainer,
   Tooltip,
   XAxis,
@@ -35,7 +37,6 @@ import { cn, formatIDR, formatIDRShort, formatNumber } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Combobox } from "@/components/ui/combobox";
-import { StatTile } from "@/components/ui/stat";
 import { DateRangePicker } from "@/components/dashboard/date-range-picker";
 import { ChartFrame } from "./chart-frame";
 import { downloadXlsx } from "./analysis-export";
@@ -59,6 +60,46 @@ function Section({ title, desc, icon: Icon, children }: { title: string; desc?: 
       </CardHeader>
       <CardContent>{children}</CardContent>
     </Card>
+  );
+}
+
+/** Vibrant categorical palette for donut/series (aniq-style). */
+const PALETTE = ["#3b82f6", "#06b6d4", "#14b8a6", "#8b5cf6", "#f59e0b", "#ec4899", "#22c55e", "#ef4444", "#0ea5e9", "#a855f7"];
+
+/** Premium KPI card: icon chip + big value + trend badge + faint watermark icon. */
+function KpiCard({ icon: Icon, label, value, accent, delta, up }: { icon: React.ComponentType<{ className?: string }>; label: string; value: string; accent: string; delta?: string | null; up?: boolean }) {
+  return (
+    <div className="group relative overflow-hidden rounded-2xl border border-border/70 bg-gradient-to-br from-card via-card to-muted/20 p-4 shadow-sm transition-shadow hover:shadow-md">
+      <span aria-hidden className="pointer-events-none absolute -right-3 -top-3 size-24 rounded-full opacity-[0.10] blur-2xl" style={{ background: accent }} />
+      <Icon aria-hidden className="pointer-events-none absolute -bottom-3 -right-2 size-20 opacity-[0.05]" />
+      <div className="flex items-center gap-2">
+        <span className="grid size-8 shrink-0 place-items-center rounded-xl" style={{ background: `${accent}1f`, color: accent }}>
+          <Icon className="size-4" />
+        </span>
+        <span className="truncate text-[11px] font-medium uppercase tracking-wide text-muted-foreground">{label}</span>
+      </div>
+      <div className="mt-3 flex items-end justify-between gap-2">
+        <p className="truncate text-xl font-bold tracking-tight text-foreground">{value}</p>
+        {delta != null && (
+          <span className={cn("shrink-0 rounded-full px-1.5 py-0.5 text-[11px] font-semibold", up ? "bg-emerald-500/12 text-emerald-600 dark:text-emerald-400" : "bg-red-500/12 text-red-600 dark:text-red-400")}>
+            {up ? "▲" : "▼"} {delta}
+          </span>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function DonutTip({ active, payload }: { active?: boolean; payload?: { name: string; value: number; payload: { fill: string } }[] }) {
+  if (!active || !payload?.length) return null;
+  const p = payload[0];
+  return (
+    <div className="rounded-lg border border-border bg-popover px-3 py-2 text-xs shadow-lg">
+      <p className="flex items-center gap-1.5 font-medium text-foreground">
+        <span className="size-2 rounded-full" style={{ background: p.payload.fill }} /> {p.name}
+      </p>
+      <p className="mt-0.5 text-muted-foreground">Qty: <span className="font-medium text-foreground">{formatNumber(p.value)}</span></p>
+    </div>
   );
 }
 
@@ -161,16 +202,16 @@ export function DataAnalysis({ data, branches, rangeLabel }: { data: AnalysisDat
         <EmptyState title="Belum ada data" detail="Data ESB untuk periode/outlet ini belum tersinkron. Coba rentang tanggal lain, atau tunggu sinkronisasi otomatis." />
       ) : (
         <>
-          {/* KPI Summary */}
+          {/* KPI Summary — premium cards */}
           <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-            <StatTile icon={Wallet} label="Total Sales (Gross)" value={rp(k.totalSales)} tone="brand" />
-            <StatTile icon={CircleDollarSign} label="Net Sales" value={rp(k.netSales)} tone="cyan" />
-            <StatTile icon={k.growthPct !== null && k.growthPct < 0 ? TrendingDown : TrendingUp} label="Growth vs Sebelumnya" value={k.growthPct === null ? "—" : `${k.growthPct > 0 ? "+" : ""}${k.growthPct}%`} tone={k.growthPct !== null && k.growthPct < 0 ? "danger" : "success"} />
-            <StatTile icon={Target} label="Achievement Target" value={k.achievementPct === null ? "—" : `${k.achievementPct}%`} tone="brand" />
-            <StatTile icon={CircleDollarSign} label="Rata-rata / Hari" value={rp(k.avgPerDay)} tone="brand" />
-            <StatTile icon={Package} label="Produk Terjual (30h)" value={formatNumber(k.productsSold)} tone="cyan" />
-            <StatTile icon={Box} label="Kategori" value={formatNumber(k.categories)} tone="neutral" />
-            <StatTile icon={BadgePercent} label="Rata-rata Margin" value={k.avgMarginPct === null ? "—" : `${k.avgMarginPct}%`} tone={k.avgMarginPct !== null && k.avgMarginPct < 30 ? "danger" : "success"} />
+            <KpiCard icon={Wallet} label="Total Sales" value={rp(k.totalSales)} accent="#3b82f6" delta={k.growthPct === null ? null : `${Math.abs(k.growthPct)}%`} up={(k.growthPct ?? 0) >= 0} />
+            <KpiCard icon={CircleDollarSign} label="Net Sales" value={rp(k.netSales)} accent="#06b6d4" delta={k.growthPct === null ? null : `${Math.abs(k.growthPct)}%`} up={(k.growthPct ?? 0) >= 0} />
+            <KpiCard icon={Target} label="Achievement" value={k.achievementPct === null ? "—" : `${k.achievementPct}%`} accent="#8b5cf6" delta={k.achievementPct === null ? null : `${Math.abs(+(k.achievementPct - 100).toFixed(1))}%`} up={(k.achievementPct ?? 0) >= 100} />
+            <KpiCard icon={(k.growthPct ?? 0) < 0 ? TrendingDown : TrendingUp} label="Growth" value={k.growthPct === null ? "—" : `${k.growthPct > 0 ? "+" : ""}${k.growthPct}%`} accent="#14b8a6" />
+            <KpiCard icon={CircleDollarSign} label="Rata-rata / Hari" value={rp(k.avgPerDay)} accent="#0ea5e9" />
+            <KpiCard icon={Package} label="Produk Terjual" value={formatNumber(k.productsSold)} accent="#22c55e" />
+            <KpiCard icon={Box} label="Kategori" value={formatNumber(k.categories)} accent="#f59e0b" />
+            <KpiCard icon={BadgePercent} label="Rata-rata Margin" value={k.avgMarginPct === null ? "—" : `${k.avgMarginPct}%`} accent="#ec4899" delta={k.avgMarginPct === null ? null : `${k.avgMarginPct}%`} up={(k.avgMarginPct ?? 0) >= 30} />
           </div>
 
           {/* Alerts */}
@@ -205,8 +246,8 @@ export function DataAnalysis({ data, branches, rangeLabel }: { data: AnalysisDat
                     <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" vertical={false} />
                     <XAxis dataKey="label" tick={{ fontSize: 10, fill: AXIS }} interval="preserveStartEnd" minTickGap={28} />
                     <YAxis tick={{ fontSize: 10, fill: AXIS }} tickFormatter={(v) => formatIDRShort(v)} width={54} />
-                    <Tooltip content={<ChartTip money />} />
-                    <Area type="monotone" dataKey="net" name="Net Sales" stroke={NET} strokeWidth={2} fill="url(#gNet)" />
+                    <Tooltip content={<ChartTip money />} cursor={{ stroke: NET, strokeWidth: 1.5, strokeDasharray: "4 4" }} />
+                    <Area type="monotone" dataKey="net" name="Net Sales" stroke={NET} strokeWidth={2.5} fill="url(#gNet)" activeDot={{ r: 5, fill: NET, stroke: "var(--background)", strokeWidth: 2 }} dot={false} />
                   </AreaChart>
                 </ResponsiveContainer>
               </ChartFrame>
@@ -313,21 +354,38 @@ export function DataAnalysis({ data, branches, rangeLabel }: { data: AnalysisDat
           {/* Category Analysis */}
           {data.categoriesRows.length > 0 && (
             <Section title="Category Analysis" desc="Kontribusi & performa kategori" icon={Box}>
-              <ChartFrame title="Kontribusi Kategori" filename="kategori" height={208}>
-                <ResponsiveContainer width="100%" height="100%">
-                  <BarChart data={data.categoriesRows.slice(0, 12)} layout="vertical" margin={{ top: 4, right: 12, left: 4, bottom: 0 }}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" horizontal={false} />
-                    <XAxis type="number" tick={{ fontSize: 10, fill: AXIS }} tickFormatter={(v) => formatNumber(v)} />
-                    <YAxis type="category" dataKey="category" tick={{ fontSize: 10, fill: AXIS }} width={110} />
-                    <Tooltip content={<ChartTip />} cursor={{ fill: "var(--muted)", opacity: 0.3 }} />
-                    <Bar dataKey="qty" name="Qty" radius={[0, 4, 4, 0]}>
-                      {data.categoriesRows.slice(0, 12).map((_, i) => (
-                        <Cell key={i} fill={i === 0 ? EMERALD : NET} />
-                      ))}
-                    </Bar>
-                  </BarChart>
-                </ResponsiveContainer>
-              </ChartFrame>
+              <div className="grid gap-4 sm:grid-cols-2 sm:items-center">
+                <ChartFrame title="Kontribusi Kategori" filename="kategori" height={240}>
+                  <div className="relative h-full w-full">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <PieChart>
+                        <Pie data={data.categoriesRows.slice(0, 8)} dataKey="qty" nameKey="category" cx="50%" cy="50%" innerRadius="60%" outerRadius="84%" paddingAngle={2} stroke="none">
+                          {data.categoriesRows.slice(0, 8).map((_, i) => (
+                            <Cell key={i} fill={PALETTE[i % PALETTE.length]} />
+                          ))}
+                        </Pie>
+                        <Tooltip content={<DonutTip />} />
+                      </PieChart>
+                    </ResponsiveContainer>
+                    <div className="pointer-events-none absolute inset-0 grid place-items-center">
+                      <div className="text-center">
+                        <p className="text-2xl font-bold tracking-tight text-foreground">{data.categoriesRows[0]?.share ?? 0}%</p>
+                        <p className="max-w-[8rem] truncate text-[10px] text-muted-foreground">{data.categoriesRows[0]?.category}</p>
+                      </div>
+                    </div>
+                  </div>
+                </ChartFrame>
+                <div className="space-y-1.5">
+                  {data.categoriesRows.slice(0, 8).map((c, i) => (
+                    <div key={c.category} className="flex items-center gap-2 text-xs">
+                      <span className="size-2.5 shrink-0 rounded-full" style={{ background: PALETTE[i % PALETTE.length] }} />
+                      <span className="min-w-0 flex-1 truncate text-foreground">{c.category}</span>
+                      <span className="shrink-0 tabular-nums text-muted-foreground">{formatNumber(c.qty)}</span>
+                      <span className="w-10 shrink-0 text-right font-semibold tabular-nums text-foreground">{c.share}%</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
             </Section>
           )}
 
