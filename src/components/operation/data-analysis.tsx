@@ -1,6 +1,7 @@
 "use client";
 
 import * as React from "react";
+import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import {
   Area,
@@ -20,6 +21,7 @@ import {
   Box,
   CircleDollarSign,
   Lightbulb,
+  FileText,
   Package,
   Sparkles,
   Store,
@@ -107,6 +109,12 @@ export function DataAnalysis({ data, branches, rangeLabel }: { data: AnalysisDat
         <div className="ml-auto flex items-center gap-2">
           <Badge tone="brand">{rangeLabel}</Badge>
           <DateRangePicker />
+          <Link
+            href={params.toString() ? `${pathname}/report?${params.toString()}` : `${pathname}/report`}
+            className="inline-flex shrink-0 items-center gap-1.5 rounded-lg bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground transition-colors hover:bg-primary/90"
+          >
+            <FileText className="size-3.5" /> Generate Report
+          </Link>
         </div>
       </div>
 
