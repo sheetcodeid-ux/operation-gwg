@@ -3,7 +3,26 @@ import "server-only";
 import { db, dbEnabled } from "./db";
 import { esbConfigured } from "@/lib/integrations/esb-client";
 import { listEsbMenus, type EsbMenu } from "./esb-menu";
+import { getSeasonalBranches } from "./seasonal";
 import { listHpp } from "./hpp";
+
+/**
+ * Outlet list (ESB branch id ↔ name) for the analysis filter, cached in module
+ * memory for 30 min. Without this the branch list was fetched LIVE from ESB on
+ * every render — so changing the date range felt slow. Cached → date changes
+ * read the DB (fast) and reuse the branch list.
+ */
+let branchCache: { at: number; data: { id: string; name: string }[] } | null = null;
+export async function analysisBranchList(): Promise<{ id: string; name: string }[]> {
+  if (branchCache && Date.now() - branchCache.at < 30 * 60 * 1000) return branchCache.data;
+  try {
+    const data = await getSeasonalBranches();
+    branchCache = { at: Date.now(), data };
+    return data;
+  } catch {
+    return branchCache?.data ?? [];
+  }
+}
 
 /**
  * Operation → Data Analysis engine. Everything here is computed from REAL cached

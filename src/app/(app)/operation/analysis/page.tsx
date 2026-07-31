@@ -4,8 +4,7 @@ import { redirect } from "next/navigation";
 import { getSessionUser } from "@/lib/auth";
 import { canReachMenu } from "@/lib/nav";
 import { resolveRange, RANGE_NOW, isoOf } from "@/lib/date-range";
-import { getOperationAnalysis } from "@/lib/data/analysis";
-import { getSeasonalBranches } from "@/lib/data/seasonal";
+import { getOperationAnalysis, analysisBranchList } from "@/lib/data/analysis";
 import { PageHeader } from "@/components/ui/page-header";
 import { DataAnalysis } from "@/components/operation/data-analysis";
 
@@ -30,7 +29,7 @@ export default async function AnalysisPage({
   const to = isoOf(range.to);
   const outlet = sp.outlet ?? "";
 
-  const [data, branches] = await Promise.all([getOperationAnalysis(from, to, outlet), getSeasonalBranches()]);
+  const [data, branches] = await Promise.all([getOperationAnalysis(from, to, outlet), analysisBranchList()]);
 
   return (
     <div className="w-full">

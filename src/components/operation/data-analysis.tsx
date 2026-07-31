@@ -174,10 +174,10 @@ export function DataAnalysis({ data, branches, rangeLabel }: { data: AnalysisDat
         <span className="flex shrink-0 items-center gap-1.5 px-1 text-xs font-medium text-muted-foreground">
           <Store className="size-3.5" /> Outlet
         </span>
-        <div className="min-w-0 max-w-xs flex-1">
+        <div className="min-w-0 flex-1 basis-48">
           <Combobox portal value={outlet} onChange={setOutlet} options={outletOptions} placeholder="Cari outlet…" searchPlaceholder="Cari outlet…" />
         </div>
-        <div className="ml-auto flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2 sm:ml-auto">
           <Badge tone="brand">{rangeLabel}</Badge>
           <DateRangePicker />
           <button

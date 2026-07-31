@@ -5,8 +5,7 @@ import { redirect } from "next/navigation";
 import { getSessionUser } from "@/lib/auth";
 import { canReachMenu } from "@/lib/nav";
 import { resolveRange, RANGE_NOW, isoOf } from "@/lib/date-range";
-import { getOperationAnalysis } from "@/lib/data/analysis";
-import { getSeasonalBranches } from "@/lib/data/seasonal";
+import { getOperationAnalysis, analysisBranchList } from "@/lib/data/analysis";
 import { formatIDR, formatNumber } from "@/lib/utils";
 import { PrintButton } from "@/components/reports/print-button";
 
@@ -31,7 +30,7 @@ export default async function AnalysisReportPage({
   const to = isoOf(range.to);
   const outlet = sp.outlet ?? "";
 
-  const [data, branches] = await Promise.all([getOperationAnalysis(from, to, outlet), getSeasonalBranches()]);
+  const [data, branches] = await Promise.all([getOperationAnalysis(from, to, outlet), analysisBranchList()]);
   const nameOf = (id: string) => branches.find((b) => b.id === id)?.name ?? id;
   const outletName = outlet ? nameOf(outlet) : "Semua Outlet";
   const qs = new URLSearchParams(Object.entries(sp).filter(([, v]) => v) as [string, string][]).toString();

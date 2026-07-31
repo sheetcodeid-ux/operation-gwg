@@ -56,7 +56,7 @@ export function ChartFrame({
       </div>
 
       {full && (
-        <div className="fixed inset-0 z-[80] flex flex-col bg-background/98 p-4 backdrop-blur-sm">
+        <div className="fixed inset-0 z-[90] flex flex-col bg-background p-4">
           <div className="mb-3 flex items-center justify-between">
             <span className="text-sm font-semibold text-foreground">{title}</span>
             {toolbar(true)}
