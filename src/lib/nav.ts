@@ -16,6 +16,7 @@ export type MenuKey =
   | "op_settings"
   | "op_fraud"
   | "op_seasonal"
+  | "op_analysis"
   | "sys_review"
   | "hc_submit"
   | "hc_review"
@@ -73,6 +74,7 @@ export const NAV_MENUS: Omit<NavItem, "section">[] = [
   { key: "op_settings", label: "Pengaturan Threshold", href: "/operation/settings", icon: "Settings2" },
   { key: "op_fraud", label: "Analisis Fraud", href: "/operation/fraud", icon: "ShieldAlert" },
   { key: "op_seasonal", label: "Musiman", href: "/operation/musiman", icon: "Waves" },
+  { key: "op_analysis", label: "Data Analysis", href: "/operation/analysis", icon: "ChartColumnBig" },
   { key: "sys_review", label: "Antrian System", href: "/system/antrian", icon: "Headset" },
   { key: "hc_submit", label: "Pengajuan Dokumen", href: "/hc/pengajuan", icon: "FileUp" },
   { key: "hc_review", label: "Antrian Dokumen", href: "/hc/antrian", icon: "FolderInput" },
@@ -141,6 +143,7 @@ const OPERATION_FULL: MenuKey[] = [
   "op_settings",
   "op_fraud",
   "op_seasonal",
+  "op_analysis",
   "reports",
 ];
 
@@ -151,9 +154,9 @@ export const ROLE_MENUS: Record<Role, MenuKey[]> = {
   super_admin: NAV_MENUS.map((m) => m.key), // everything, incl. admin menus
   head_operation: [...OPERATION_FULL, "elearning", "elearning_admin", "assessment"], // manages E-Learning + monitors every branch
   area_coordinator: [...OPERATION_FULL, "elearning", "assessment"], // learner (E-Learning), menus scoped to their area
-  data_operation: ["work", "assessment"],
-  pos_operation: ["work", "assessment"],
-  admin_operation: ["work", "complaints", "assessment"],
+  data_operation: ["work", "op_analysis", "assessment"],
+  pos_operation: ["work", "op_analysis", "assessment"],
+  admin_operation: ["work", "complaints", "op_analysis", "assessment"],
   supervisor: ["hospitality", "hygiene", "complaints", "hc_submit", "sys_submit"], // field SPV — visits + HC docs + system requests
   head_bar_rnd: ["hpp_dash", "work", "hpp", "hpp_db", "hpp_bahan", "hpp_price", "assessment"],
   bar_rnd: ["hpp_dash", "work", "hpp", "hpp_db", "hpp_bahan", "hpp_price", "assessment"],

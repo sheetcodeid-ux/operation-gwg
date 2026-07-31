@@ -4,6 +4,7 @@ import {
   Briefcase,
   Calculator,
   CalendarRange,
+  ChartColumnBig,
   ChartSpline,
   ClipboardCheck,
   ConciergeBell,
@@ -48,6 +49,7 @@ import {
 export const NAV_ICONS: Record<string, LucideIcon> = {
   LayoutDashboard,
   ChartSpline,
+  ChartColumnBig,
   ListChecks,
   CalendarRange,
   ConciergeBell,
