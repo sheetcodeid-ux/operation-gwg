@@ -29,6 +29,7 @@ export interface MarginRow { name: string; category: string; price: number; hpp:
 export type AlertLevel = "high" | "medium" | "low";
 export interface AlertItem { level: AlertLevel; title: string; detail: string }
 export interface InsightItem { title: string; detail: string }
+export interface OutletPerfRow { branch: string; net: number; share: number; growthPct: number | null }
 
 export interface AnalysisData {
   configured: boolean;
@@ -55,6 +56,7 @@ export interface AnalysisData {
   byWeekday: NameValue[];
   peakDay: DayPoint | null;
   lowDay: DayPoint | null;
+  outletPerformance: OutletPerfRow[]; // per-outlet ranking (all-outlets view only)
   products: ProductRow[];
   bestSellers: ProductRow[];
   worstSellers: ProductRow[];
@@ -78,6 +80,19 @@ async function readSeasonal(from: string, to: string, branch: string): Promise<M
     for (const r of (data ?? []) as SeasRow[]) out.set(r.day, { gross: Number(r.gross) || 0, net: Number(r.net) || 0 });
   } catch {
     /* table missing / off → empty */
+  }
+  return out;
+}
+
+/** Per-branch net-sales totals for a range (branch != "" rows only). */
+async function readSeasonalByBranch(from: string, to: string): Promise<Map<string, number>> {
+  const out = new Map<string, number>();
+  if (!dbEnabled) return out;
+  try {
+    const { data } = await db().from("seasonal_daily").select("branch,net").neq("branch", "").gte("day", from).lte("day", to);
+    for (const r of (data ?? []) as { branch: string; net: number | string }[]) out.set(r.branch, (out.get(r.branch) ?? 0) + (Number(r.net) || 0));
+  } catch {
+    /* off → empty */
   }
   return out;
 }
@@ -110,6 +125,7 @@ export async function getOperationAnalysis(from: string, to: string, branch = ""
     byWeekday: [],
     peakDay: null,
     lowDay: null,
+    outletPerformance: [],
     products: [],
     bestSellers: [],
     worstSellers: [],
@@ -164,6 +180,20 @@ export async function getOperationAnalysis(from: string, to: string, branch = ""
   const growthPct = prevNet > 0 ? +(((totalNet - prevNet) / prevNet) * 100).toFixed(1) : null;
   const targetNet = money(prevNet * 1.15);
   const achievementPct = targetNet > 0 ? +((totalNet / targetNet) * 100).toFixed(1) : null;
+
+  // ---- Outlet performance (all-outlets view only) — per-branch ranking ----
+  let outletPerformance: OutletPerfRow[] = [];
+  if (!branch) {
+    const [curB, prevB] = await Promise.all([readSeasonalByBranch(from, to), readSeasonalByBranch(iso(prevFrom), iso(prevTo))]);
+    const totalB = [...curB.values()].reduce((a, b) => a + b, 0);
+    outletPerformance = [...curB.entries()]
+      .map(([b, net]) => {
+        const p = prevB.get(b) ?? 0;
+        return { branch: b, net: money(net), share: totalB ? +((net / totalB) * 100).toFixed(1) : 0, growthPct: p > 0 ? +(((net - p) / p) * 100).toFixed(1) : null };
+      })
+      .filter((r) => r.net > 0)
+      .sort((a, b) => b.net - a.net);
+  }
 
   // ---- Products / categories / price (esb_menu) ----
   let menus: EsbMenu[] = [];
@@ -269,6 +299,7 @@ export async function getOperationAnalysis(from: string, to: string, branch = ""
     byWeekday,
     peakDay,
     lowDay,
+    outletPerformance,
     products,
     bestSellers,
     worstSellers,

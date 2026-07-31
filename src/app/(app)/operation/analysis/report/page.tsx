@@ -5,7 +5,8 @@ import { redirect } from "next/navigation";
 import { getSessionUser } from "@/lib/auth";
 import { canReachMenu } from "@/lib/nav";
 import { resolveRange, RANGE_NOW, isoOf } from "@/lib/date-range";
-import { getOperationAnalysis, analysisBranches } from "@/lib/data/analysis";
+import { getOperationAnalysis } from "@/lib/data/analysis";
+import { getSeasonalBranches } from "@/lib/data/seasonal";
 import { formatIDR, formatNumber } from "@/lib/utils";
 import { PrintButton } from "@/components/reports/print-button";
 
@@ -30,8 +31,9 @@ export default async function AnalysisReportPage({
   const to = isoOf(range.to);
   const outlet = sp.outlet ?? "";
 
-  const [data, branches] = await Promise.all([getOperationAnalysis(from, to, outlet), analysisBranches()]);
-  const outletName = outlet ? branches.find((b) => b.id === outlet)?.name ?? outlet : "Semua Outlet";
+  const [data, branches] = await Promise.all([getOperationAnalysis(from, to, outlet), getSeasonalBranches()]);
+  const nameOf = (id: string) => branches.find((b) => b.id === id)?.name ?? id;
+  const outletName = outlet ? nameOf(outlet) : "Semua Outlet";
   const qs = new URLSearchParams(Object.entries(sp).filter(([, v]) => v) as [string, string][]).toString();
   const generated = new Date().toLocaleString("id-ID", { dateStyle: "long", timeStyle: "short" });
   const k = data.kpi;
@@ -87,6 +89,16 @@ export default async function AnalysisReportPage({
         {data.byMonth.length > 0 && (
           <Sec title="Sales Analysis">
             <Table head={["Bulan", "Net Sales"]} rows={data.byMonth.map((m) => [m.name, rp(m.value)])} />
+          </Sec>
+        )}
+
+        {/* Outlet Performance */}
+        {data.outletPerformance.length > 0 && (
+          <Sec title="Outlet Performance">
+            <Table
+              head={["#", "Outlet", "Net Sales", "Kontribusi", "Growth"]}
+              rows={data.outletPerformance.slice(0, 20).map((o, i) => [String(i + 1), nameOf(o.branch), rp(o.net), `${o.share}%`, o.growthPct === null ? "—" : `${o.growthPct > 0 ? "+" : ""}${o.growthPct}%`])}
+            />
           </Sec>
         )}
 

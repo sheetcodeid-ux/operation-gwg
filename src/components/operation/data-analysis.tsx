@@ -94,6 +94,7 @@ export function DataAnalysis({ data, branches, rangeLabel }: { data: AnalysisDat
   };
 
   const outletOptions = [{ value: "", label: "Semua Outlet" }, ...branches.map((b) => ({ value: b.id, label: b.name }))];
+  const branchName = (id: string) => branches.find((b) => b.id === id)?.name ?? id;
   const k = data.kpi;
 
   return (
@@ -219,6 +220,42 @@ export function DataAnalysis({ data, branches, rangeLabel }: { data: AnalysisDat
                   </div>
                 )}
               </div>
+            </Section>
+          )}
+
+          {/* Outlet Performance (all-outlets view) */}
+          {!outlet && (
+            <Section title="Outlet Performance" desc="Ranking outlet berdasarkan net sales periode ini" icon={Store}>
+              {data.outletPerformance.length > 0 ? (
+                <>
+                  <div className="h-56 w-full">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <BarChart data={data.outletPerformance.slice(0, 12).map((o) => ({ name: branchName(o.branch), net: o.net }))} layout="vertical" margin={{ top: 4, right: 12, left: 4, bottom: 0 }}>
+                        <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" horizontal={false} />
+                        <XAxis type="number" tick={{ fontSize: 10, fill: AXIS }} tickFormatter={(v) => formatIDRShort(v)} />
+                        <YAxis type="category" dataKey="name" tick={{ fontSize: 10, fill: AXIS }} width={120} />
+                        <Tooltip content={<ChartTip money />} cursor={{ fill: "var(--muted)", opacity: 0.3 }} />
+                        <Bar dataKey="net" name="Net Sales" radius={[0, 4, 4, 0]}>
+                          {data.outletPerformance.slice(0, 12).map((_, i) => (
+                            <Cell key={i} fill={i === 0 ? EMERALD : NET} />
+                          ))}
+                        </Bar>
+                      </BarChart>
+                    </ResponsiveContainer>
+                  </div>
+                  <div className="mt-3">
+                    <RankTable
+                      title=""
+                      tone="emerald"
+                      rows={data.outletPerformance.slice(0, 15).map((o) => ({ name: branchName(o.branch), sub: `Kontribusi ${o.share}%${o.growthPct !== null ? ` · growth ${o.growthPct > 0 ? "+" : ""}${o.growthPct}%` : ""}`, value: rp(o.net) }))}
+                    />
+                  </div>
+                </>
+              ) : (
+                <p className="rounded-lg border border-dashed border-border bg-muted/20 px-3 py-4 text-center text-xs text-muted-foreground">
+                  Data per-outlet sedang disinkron bertahap dari ESB (satu outlet per jam). Ranking akan terisi otomatis — untuk sekarang gunakan tampilan Semua Outlet.
+                </p>
+              )}
             </Section>
           )}
 

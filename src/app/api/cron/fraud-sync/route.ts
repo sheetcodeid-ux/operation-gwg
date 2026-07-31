@@ -176,5 +176,24 @@ export async function GET(req: Request) {
     }
   }
 
+  // Phase 5 — per-branch seasonal (round-robin: ONE outlet per run) so the Data
+  // Analysis per-outlet breakdown fills in over time without hammering ESB.
+  if (left() > 6_000) {
+    try {
+      const { getSeasonalBranches } = await import("@/lib/data/seasonal");
+      const { getAppConfig, setAppConfig } = await import("@/lib/data/app-config");
+      const branches = await getSeasonalBranches();
+      if (branches.length) {
+        const cur = Number((await getAppConfig("seasonal_branch_cursor")) ?? "0") || 0;
+        const b = branches[cur % branches.length];
+        const y = new Date(Date.now() + 7 * 3_600_000).getUTCFullYear();
+        results[`seasonal:branch:${b.id}`] = await syncSeasonalDays(`${y}-01-01`, ymdWib(0), b.id, Math.min(left() - 3_000, 16_000));
+        await setAppConfig("seasonal_branch_cursor", String(cur + 1));
+      }
+    } catch (e) {
+      results["seasonal:branch"] = { error: e instanceof Error ? e.message : "failed" };
+    }
+  }
+
   return NextResponse.json({ ok: true, tookMs: Date.now() - started, results });
 }
