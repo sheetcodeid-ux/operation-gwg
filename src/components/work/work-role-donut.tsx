@@ -71,8 +71,8 @@ export function WorkRoleDonut({ rows, members, department }: { rows: WorkRow[]; 
                     nameKey="jabatan"
                     innerRadius={60}
                     outerRadius={82}
-                    paddingAngle={0}
-                    cornerRadius={8}
+                    paddingAngle={1}
+                    cornerRadius={12}
                     stroke="none"
                     startAngle={90}
                     endAngle={-270}
@@ -87,12 +87,9 @@ export function WorkRoleDonut({ rows, members, department }: { rows: WorkRow[]; 
                   </Pie>
                 </PieChart>
               </ResponsiveContainer>
-              {/* Angka tengah — BERUBAH mengikuti slice aktif (bukan tooltip). */}
-              <div className="pointer-events-none absolute inset-0 grid place-items-center px-4 text-center">
-                <div>
-                  <p className="text-[2rem] font-extrabold leading-none tracking-tight" style={{ color: colorOf(active.jabatan) }}>{activePct}%</p>
-                  <p className="mx-auto mt-1.5 max-w-[6rem] text-[13px] font-medium leading-tight text-muted-foreground">{active.jabatan}</p>
-                </div>
+              {/* Angka tengah — hanya persentase, BERUBAH mengikuti slice aktif. */}
+              <div className="pointer-events-none absolute inset-0 grid place-items-center text-center">
+                <p className="text-[2rem] font-extrabold leading-none tracking-tight" style={{ color: colorOf(active.jabatan) }}>{activePct}%</p>
               </div>
             </div>
 
