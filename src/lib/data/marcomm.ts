@@ -7,7 +7,8 @@ import { getOutlets, outletName, userName } from "./store";
 import { eventFromRow } from "./rows";
 import { listHpp } from "./hpp";
 import { listEsbMenus } from "./esb-menu";
-import type { MarcommEventType, MarcommReview, MarcommStatus, ProductOption, ReviewableEvent } from "@/lib/marcomm-shared";
+import { isR2Key, presignGet, r2KeyOf } from "@/lib/storage/r2";
+import type { MarcommAttachment, MarcommEventType, MarcommReview, MarcommStatus, ProductOption, ReviewableEvent } from "@/lib/marcomm-shared";
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
@@ -31,7 +32,13 @@ const emptyReview = (eventId: string): MarcommReview => ({
   rejectReason: "",
   approvedByName: null,
   approvedAt: null,
+  attachments: [],
 });
+
+const rawAttachments = (r: any): MarcommAttachment[] =>
+  (Array.isArray(r.attachments) ? r.attachments : [])
+    .filter((a: any) => a && a.path && a.name)
+    .map((a: any) => ({ path: String(a.path), name: String(a.name) }));
 
 const reviewFromRow = (r: any): MarcommReview => ({
   eventId: r.event_id,
@@ -47,7 +54,39 @@ const reviewFromRow = (r: any): MarcommReview => ({
   rejectReason: r.reject_reason ?? "",
   approvedByName: r.approved_by ? userName(r.approved_by) : null,
   approvedAt: r.approved_at ?? null,
+  attachments: rawAttachments(r),
 });
+
+/** Resolve each attachment's storage path to a signed download URL (R2 primary,
+ *  Supabase fallback), mutating the reviews in place. One batched Supabase call. */
+async function signReviewAttachments(reviews: MarcommReview[]): Promise<void> {
+  const all = reviews.flatMap((r) => r.attachments);
+  if (all.length === 0) return;
+  const paths = [...new Set(all.map((a) => a.path).filter((p): p is string => !!p))];
+  const map = new Map<string, string>();
+  const sbPaths: string[] = [];
+  for (const p of paths) {
+    if (isR2Key(p)) {
+      try {
+        const url = await presignGet(r2KeyOf(p), 60 * 60);
+        if (url) map.set(p, url);
+      } catch {
+        /* skip this file's link */
+      }
+    } else {
+      sbPaths.push(p);
+    }
+  }
+  if (dbEnabled && sbPaths.length > 0) {
+    try {
+      const { data } = await db().storage.from("system-attachments").createSignedUrls(sbPaths, 60 * 60);
+      for (const d of data ?? []) if (d.path && d.signedUrl) map.set(d.path, d.signedUrl);
+    } catch {
+      /* signing unavailable */
+    }
+  }
+  for (const r of reviews) for (const a of r.attachments) if (a.path) a.url = map.get(a.path);
+}
 
 /** Human display of an event's outlet scope. */
 function outletDisplay(review: MarcommReview, fallbackOutletId: string): string {
@@ -113,13 +152,17 @@ export async function listReviewableEvents(): Promise<ReviewableEvent[]> {
     };
   });
 
-  return [...caEvents, ...marcommEvents].sort((a, b) => (a.startDate < b.startDate ? 1 : -1));
+  const events = [...caEvents, ...marcommEvents].sort((a, b) => (a.startDate < b.startDate ? 1 : -1));
+  await signReviewAttachments(events.map((e) => e.review));
+  return events;
 }
 
 export async function getReview(eventId: string): Promise<MarcommReview> {
   if (!dbEnabled) return emptyReview(eventId);
   const { data } = await db().from("marcomm_reviews").select("*").eq("event_id", eventId).maybeSingle();
-  return data ? reviewFromRow(data) : emptyReview(eventId);
+  const review = data ? reviewFromRow(data) : emptyReview(eventId);
+  await signReviewAttachments([review]);
+  return review;
 }
 
 export interface ApproveReviewInput {
@@ -169,6 +212,7 @@ export interface ProposalInput {
   allOutlets: boolean;
   startDate: string;
   endDate: string;
+  attachments?: MarcommAttachment[];
 }
 
 /** MarComm files a self-contained event/promo proposal (multi/all outlet). It
@@ -191,6 +235,7 @@ export async function createMarcommProposal(input: ProposalInput): Promise<{ id:
     all_outlets: input.eventType === "event" ? input.allOutlets : false,
     measure_start: input.startDate,
     measure_end: input.endDate,
+    attachments: (input.attachments ?? []).filter((a) => a?.path && a?.name).map((a) => ({ path: a.path, name: a.name })),
   });
   return error ? null : { id };
 }

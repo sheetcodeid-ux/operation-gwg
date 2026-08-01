@@ -22,6 +22,14 @@ export const MC_TYPE_META: Record<MarcommEventType, { label: string; tone: Tone 
   event: { label: "Event Outlet", tone: "cyan" },
 };
 
+/** A PDF/PNG file attached to an event/promo proposal. `path` is the storage
+ *  key (used on write); `url` is the signed download link (filled on read). */
+export interface MarcommAttachment {
+  path?: string;
+  name: string;
+  url?: string;
+}
+
 /** MarComm's review of one operational event. */
 export interface MarcommReview {
   eventId: string;
@@ -38,6 +46,8 @@ export interface MarcommReview {
   rejectReason: string;
   approvedByName: string | null;
   approvedAt: string | null;
+  /** Supporting PDF/PNG files attached at proposal time. */
+  attachments: MarcommAttachment[];
 }
 
 /** An operational event joined with its MarComm review (+ display labels). */

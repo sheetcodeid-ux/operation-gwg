@@ -1,15 +1,45 @@
 "use server";
 
+import { randomUUID } from "node:crypto";
 import { revalidatePath } from "next/cache";
 import { getSessionUser } from "@/lib/auth";
+import { db, dbEnabled } from "@/lib/data/db";
 import { canReachMenu } from "@/lib/nav";
 import { approveReview, createMarcommProposal, rejectReview, resetReview } from "@/lib/data/marcomm";
-import type { MarcommEventType } from "@/lib/marcomm-shared";
+import { r2Enabled, r2Put, R2_PREFIX } from "@/lib/storage/r2";
+import type { MarcommEventType, MarcommAttachment } from "@/lib/marcomm-shared";
 import type { UserProfile } from "@/lib/types";
 
 const canMarcomm = (u: UserProfile | null) => !!u && canReachMenu(u, "mc_events");
 // Coordinator Area (operational Event Tracker) may PROPOSE; only MarComm can ACC.
 const canPropose = (u: UserProfile | null) => !!u && (canReachMenu(u, "mc_events") || canReachMenu(u, "events"));
+
+const MAX_BYTES = 10 * 1024 * 1024; // 10 MB per file
+
+/** Store one PDF/PNG in R2 (fallback Supabase) under the marcomm/ prefix. */
+export async function uploadMarcommAttachmentAction(formData: FormData): Promise<{ path?: string; name?: string; error?: string }> {
+  const user = await getSessionUser();
+  if (!canPropose(user)) return { error: "Tidak punya akses." };
+  if (!dbEnabled) return { error: "Storage belum aktif." };
+  const file = formData.get("file");
+  if (!(file instanceof File)) return { error: "Tidak ada berkas." };
+  if (file.size > MAX_BYTES) return { error: `Berkas "${file.name}" melebihi 10 MB.` };
+  if (file.type !== "application/pdf" && file.type !== "image/png") return { error: `"${file.name}" harus berupa PDF atau PNG.` };
+  const safe = file.name.replace(/[^a-zA-Z0-9._-]/g, "_").slice(-60);
+  const name = `attachment/${user!.id}/${Date.now()}-${randomUUID().slice(0, 8)}-${safe}`;
+  if (r2Enabled()) {
+    try {
+      const key = `marcomm/${name}`;
+      await r2Put(key, await file.arrayBuffer(), file.type || "application/octet-stream");
+      return { path: `${R2_PREFIX}${key}`, name: file.name };
+    } catch (e) {
+      console.error("[marcomm] R2 upload gagal, fallback ke Supabase:", e);
+    }
+  }
+  const { error } = await db().storage.from("system-attachments").upload(`marcomm/${name}`, file, { contentType: file.type });
+  if (error) return { error: `Upload gagal: ${error.message}` };
+  return { path: `marcomm/${name}`, name: file.name };
+}
 
 function revalidate() {
   revalidatePath("/marcomm/events");
@@ -88,6 +118,7 @@ export interface ProposalActionInput {
   allOutlets: boolean;
   startDate: string;
   endDate: string;
+  attachments?: MarcommAttachment[];
 }
 
 /** File a new event/promo proposal (MarComm; also usable by CA if granted). It
@@ -110,6 +141,7 @@ export async function createMarcommProposalAction(input: ProposalActionInput) {
     allOutlets: input.allOutlets,
     startDate: input.startDate,
     endDate: input.endDate,
+    attachments: (input.attachments ?? []).filter((a) => a?.path && a?.name).slice(0, 8),
   });
   if (!rec) return { error: "Gagal menyimpan proposal." };
   revalidate();

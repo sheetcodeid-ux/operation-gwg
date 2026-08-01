@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import { useRouter } from "next/navigation";
-import { CalendarRange, CheckCircle2, ClipboardCheck, Loader2, Megaphone, Package, RotateCcw, Store, Wallet, X, XCircle } from "lucide-react";
+import { CalendarRange, CheckCircle2, ClipboardCheck, FileText, Image as ImageIcon, Loader2, Megaphone, Package, Paperclip, RotateCcw, Store, Upload, Wallet, X, XCircle } from "lucide-react";
 import { toast } from "sonner";
 import {
   fmtRupiah,
@@ -15,7 +15,8 @@ import {
   type ReviewableEvent,
 } from "@/lib/marcomm-shared";
 import { ImpactView } from "./impact";
-import { approveEventAction, createMarcommProposalAction, rejectEventAction, resetReviewAction } from "@/lib/actions/marcomm";
+import { approveEventAction, createMarcommProposalAction, rejectEventAction, resetReviewAction, uploadMarcommAttachmentAction } from "@/lib/actions/marcomm";
+import type { MarcommAttachment } from "@/lib/marcomm-shared";
 import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -177,23 +178,34 @@ function NewEventDialog({ products, outlets, onClose }: { products: ProductOptio
   const [allOutlets, setAllOutlets] = React.useState(true);
   const [start, setStart] = React.useState("");
   const [end, setEnd] = React.useState("");
+  const [files, setFiles] = React.useState<File[]>([]);
 
   const outletOpts = outlets.map((o) => ({ value: o.id, label: o.name }));
 
-  const submit = () => {
+  const submit = async () => {
     if (!name.trim()) return toast.error("Nama event/promo wajib diisi.");
     if (!start || !end) return toast.error("Tentukan tanggal mulai & selesai.");
     if (type === "promo" && productNames.length === 0) return toast.error("Pilih minimal satu produk.");
     if (type === "event" && !allOutlets && outletIds.length === 0) return toast.error("Pilih outlet atau centang Semua Outlet.");
     setBusy(true);
-    createMarcommProposalAction({ title: name, description, eventType: type, productNames, outletIds, allOutlets, startDate: start, endDate: end })
-      .then((res) => {
-        if (res?.error) return toast.error(res.error);
-        toast.success("Diajukan. Lanjutkan dengan ACC (tetapkan budget).");
-        onClose();
-        router.refresh();
-      })
-      .finally(() => setBusy(false));
+    try {
+      // Upload each PDF/PNG first → collect its storage path.
+      const attachments: MarcommAttachment[] = [];
+      for (const file of files) {
+        const fd = new FormData();
+        fd.append("file", file);
+        const up = await uploadMarcommAttachmentAction(fd);
+        if (up.error) return toast.error(up.error);
+        if (up.path && up.name) attachments.push({ path: up.path, name: up.name });
+      }
+      const res = await createMarcommProposalAction({ title: name, description, eventType: type, productNames, outletIds, allOutlets, startDate: start, endDate: end, attachments });
+      if (res?.error) return toast.error(res.error);
+      toast.success("Diajukan. Lanjutkan dengan ACC (tetapkan budget).");
+      onClose();
+      router.refresh();
+    } finally {
+      setBusy(false);
+    }
   };
 
   return (
@@ -239,6 +251,10 @@ function NewEventDialog({ products, outlets, onClose }: { products: ProductOptio
           <Field label="Deskripsi (opsional)">
             <Textarea rows={2} value={description} onChange={(e) => setDescription(e.target.value)} placeholder="Detail event / promo…" />
           </Field>
+
+          <Field label="Lampiran (PDF / PNG)" hint="Materi desain atau brief. Bisa lebih dari satu, maks 10 MB per berkas.">
+            <AttachmentPicker files={files} onChange={setFiles} disabled={busy} />
+          </Field>
           <div className="grid gap-3 sm:grid-cols-2">
             <Field label={type === "promo" ? "Mulai Jual" : "Tanggal Mulai"}><DatePicker value={start} onChange={setStart} /></Field>
             <Field label="Tanggal Selesai"><DatePicker value={end} onChange={setEnd} /></Field>
@@ -250,6 +266,62 @@ function NewEventDialog({ products, outlets, onClose }: { products: ProductOptio
         </div>
       </DialogContent>
     </Dialog>
+  );
+}
+
+/** Multi-file picker for PDF/PNG attachments (client-side type + size guard). */
+function AttachmentPicker({ files, onChange, disabled }: { files: File[]; onChange: (f: File[]) => void; disabled?: boolean }) {
+  const add = (list: FileList | null) => {
+    if (!list) return;
+    const valid: File[] = [];
+    for (const f of Array.from(list)) {
+      if (f.type !== "application/pdf" && f.type !== "image/png") { toast.error(`"${f.name}" harus PDF atau PNG.`); continue; }
+      if (f.size > 10 * 1024 * 1024) { toast.error(`"${f.name}" melebihi 10 MB.`); continue; }
+      valid.push(f);
+    }
+    onChange([...files, ...valid].slice(0, 8));
+  };
+  return (
+    <div className="space-y-2">
+      <label className={cn("inline-flex cursor-pointer items-center gap-2 self-start rounded-lg border border-input bg-background/40 px-3 py-2 text-sm text-foreground/80 hover:bg-muted/50", disabled && "pointer-events-none opacity-50")}>
+        <Upload className="size-4" /> Unggah PDF / PNG
+        <input type="file" accept="application/pdf,image/png" multiple className="hidden" disabled={disabled} onChange={(e) => { add(e.target.files); e.target.value = ""; }} />
+      </label>
+      {files.length > 0 && (
+        <ul className="space-y-1.5">
+          {files.map((f, i) => (
+            <li key={i} className="flex items-center gap-2 rounded-lg bg-muted/60 px-2.5 py-1.5 text-xs text-foreground/80">
+              {f.type === "application/pdf" ? <FileText className="size-3.5 shrink-0 text-red-500" /> : <ImageIcon className="size-3.5 shrink-0 text-blue-500" />}
+              <span className="min-w-0 flex-1 truncate">{f.name}</span>
+              <span className="shrink-0 text-muted-foreground">{(f.size / 1024 / 1024).toFixed(1)} MB</span>
+              <button type="button" onClick={() => onChange(files.filter((_, j) => j !== i))} className="shrink-0 text-muted-foreground hover:text-foreground"><X className="size-3.5" /></button>
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
+}
+
+/** Download chips for a proposal's PDF/PNG attachments. */
+function AttachmentChips({ items }: { items: MarcommAttachment[] }) {
+  if (!items.length) return null;
+  return (
+    <div className="mt-2 flex flex-wrap gap-1.5">
+      {items.map((a, i) => {
+        const Icon = a.name.toLowerCase().endsWith(".pdf") ? FileText : ImageIcon;
+        const tone = a.name.toLowerCase().endsWith(".pdf") ? "text-red-500" : "text-blue-500";
+        return a.url ? (
+          <a key={i} href={a.url} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1.5 rounded-lg border border-border bg-background/40 px-2 py-1 text-[11px] text-foreground/80 hover:bg-muted/50">
+            <Icon className={cn("size-3.5 shrink-0", tone)} /> <span className="max-w-[12rem] truncate">{a.name}</span>
+          </a>
+        ) : (
+          <span key={i} className="inline-flex items-center gap-1.5 rounded-lg border border-border px-2 py-1 text-[11px] text-muted-foreground">
+            <Paperclip className="size-3.5 shrink-0" /> <span className="max-w-[12rem] truncate">{a.name}</span>
+          </span>
+        );
+      })}
+    </div>
   );
 }
 
@@ -283,6 +355,7 @@ function EventCard({ e, canAcc, onAcc, onReject }: { e: ReviewableEvent; canAcc:
             {e.outletName} · PIC {e.picName} · {fmtDate(e.startDate)} – {fmtDate(e.endDate)}
           </p>
           {e.description && <p className="mt-1 line-clamp-2 max-w-2xl text-xs text-muted-foreground/80">{e.description}</p>}
+          <AttachmentChips items={r.attachments} />
         </div>
         {canAcc && (
           <div className="flex shrink-0 items-center gap-2">
