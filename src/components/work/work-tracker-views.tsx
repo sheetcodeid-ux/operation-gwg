@@ -157,7 +157,7 @@ export function WorkTrackerViews({
 
       {/* Performance chart + per-jabatan donut — TABLE view only (hidden on Kanban). */}
       {view === "table" && (
-        <div className="mb-4 grid items-stretch gap-4 lg:grid-cols-[1.7fr_1fr]">
+        <div className="mb-4 grid items-stretch gap-4 lg:grid-cols-[minmax(0,1fr)_23rem]">
           <WorkPerformanceChart rows={rows} members={members} month={month} department={chartDept} />
           <WorkRoleDonut rows={rows} members={members} department={chartDept} />
         </div>
