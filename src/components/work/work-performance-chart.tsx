@@ -95,7 +95,9 @@ export function WorkPerformanceChart({ rows, members, month, department }: { row
 
   return (
     <Card title="Kinerja Karyawan" subtitle={subtitle}>
-      <div className="h-[17rem]" style={{ outline: "none" }}>
+      {/* flex-1: chart FILLS the card height so its bottom lines up with the
+          donut card beside it (no empty space under the bars). */}
+      <div className="min-h-[17rem] flex-1" style={{ outline: "none" }}>
         <ResponsiveContainer width="100%" height="100%">
           <ComposedChart data={data} margin={{ top: 8, right: 8, left: 0, bottom: 0 }} accessibilityLayer={false}>
             <defs>
