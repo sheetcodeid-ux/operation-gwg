@@ -69,10 +69,10 @@ export function WorkRoleDonut({ rows, members, department }: { rows: WorkRow[]; 
                     data={slices}
                     dataKey="value"
                     nameKey="jabatan"
-                    innerRadius={54}
-                    outerRadius={86}
-                    paddingAngle={2}
-                    cornerRadius={10}
+                    innerRadius={60}
+                    outerRadius={82}
+                    paddingAngle={0}
+                    cornerRadius={8}
                     stroke="none"
                     startAngle={90}
                     endAngle={-270}
