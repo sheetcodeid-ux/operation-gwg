@@ -66,7 +66,13 @@ export function WorkTrackerViews({
     setPic("all"); // member list differs per division
   }, []);
 
-  const people = React.useMemo(() => membersForDivision(members, division), [members, division]);
+  // PIC list scoped to the department being viewed. A non-admin (department
+  // account) has no division dropdown, so it must be locked to their OWN
+  // department — otherwise "Semua" leaks PICs from every other department.
+  const people = React.useMemo(
+    () => membersForDivision(members, isAdmin ? division : userDepartment || division),
+    [members, division, isAdmin, userDepartment],
+  );
   const categoryOpts = React.useMemo(() => [...new Set(rows.map((r) => r.category).filter(Boolean))].sort((a, b) => a.localeCompare(b)), [rows]);
   const deptOptions = React.useMemo(() => (divisions ?? []).filter((d) => d && d !== "all"), [divisions]);
   // The chart is ALWAYS per-department: use the picked division, else the user's

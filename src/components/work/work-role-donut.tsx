@@ -1,12 +1,12 @@
 "use client";
 
 import * as React from "react";
-import { Cell, Pie, PieChart, ResponsiveContainer } from "recharts";
 import type { DivisionMembers } from "./task-sheet";
 import type { WorkRow } from "./work-table";
 
 // Warna slice donut — palet multi-hue yang selaras dgn tema aplikasi.
 const COLORS = ["#3b82f6", "#f59e0b", "#06b6d4", "#8b5cf6", "#10b981", "#f43f5e", "#64748b", "#eab308"];
+const CIRC = 2 * Math.PI * 66; // keliling lingkaran (r=66) untuk stroke-dasharray
 
 type Slice = { jabatan: string; value: number };
 
@@ -48,6 +48,18 @@ export function WorkRoleDonut({ rows, members, department }: { rows: WorkRow[]; 
   const active = all.find((s) => s.jabatan === activeJabatan) ?? slices[0] ?? all[0];
   const activePct = total && active ? Math.round((active.value / total) * 100) : 0;
 
+  // Busur per slice, mulai dari atas (−90°) searah jarum jam. Ujung membulat +
+  // digambar berurutan → tiap arc menimpa tetangganya (efek "menyatu").
+  const arcs = React.useMemo(() => {
+    let acc = 0;
+    return slices.map((s) => {
+      const len = total ? (s.value / total) * CIRC : 0;
+      const rot = -90 + (acc / CIRC) * 360;
+      acc += len;
+      return { jabatan: s.jabatan, color: colorOf(s.jabatan), len, rot };
+    });
+  }, [slices, total, colorOf]);
+
   return (
     <div className="rounded-2xl border border-border bg-card/40 p-5">
       <div className="mb-3">
@@ -63,30 +75,30 @@ export function WorkRoleDonut({ rows, members, department }: { rows: WorkRow[]; 
         <>
           <div className="flex items-center gap-4">
             <div className="relative h-44 w-44 shrink-0">
-              <ResponsiveContainer width="100%" height="100%">
-                <PieChart>
-                  <Pie
-                    data={slices}
-                    dataKey="value"
-                    nameKey="jabatan"
-                    innerRadius={60}
-                    outerRadius={82}
-                    paddingAngle={1}
-                    cornerRadius={12}
-                    stroke="none"
-                    startAngle={90}
-                    endAngle={-270}
-                    isAnimationActive={false}
-                    onMouseEnter={(_, i) => setActiveJabatan(slices[i]?.jabatan ?? null)}
+              {/* Custom SVG: tiap slice = arc lingkaran dgn ujung MEMBULAT
+                  (stroke-linecap round) yang saling menimpa/terhubung persis
+                  seperti referensi "Spending by Category". */}
+              <svg viewBox="0 0 176 176" className="h-full w-full">
+                {arcs.map((a) => (
+                  <circle
+                    key={a.jabatan}
+                    cx={88}
+                    cy={88}
+                    r={66}
+                    fill="none"
+                    stroke={a.color}
+                    strokeWidth={22}
+                    strokeLinecap="round"
+                    strokeDasharray={`${a.len} ${CIRC - a.len}`}
+                    transform={`rotate(${a.rot} 88 88)`}
+                    className="cursor-pointer transition-opacity"
+                    style={{ opacity: active && a.jabatan === active.jabatan ? 1 : 0.9 }}
+                    onMouseEnter={() => setActiveJabatan(a.jabatan)}
                     onMouseLeave={() => setActiveJabatan(null)}
-                    onClick={(_, i) => setActiveJabatan(slices[i]?.jabatan ?? null)}
-                  >
-                    {slices.map((s) => (
-                      <Cell key={s.jabatan} fill={colorOf(s.jabatan)} opacity={active && s.jabatan === active.jabatan ? 1 : 0.9} className="cursor-pointer outline-none" />
-                    ))}
-                  </Pie>
-                </PieChart>
-              </ResponsiveContainer>
+                    onClick={() => setActiveJabatan(a.jabatan)}
+                  />
+                ))}
+              </svg>
               {/* Angka tengah — hanya persentase, BERUBAH mengikuti slice aktif. */}
               <div className="pointer-events-none absolute inset-0 grid place-items-center text-center">
                 <p className="text-[2rem] font-extrabold leading-none tracking-tight" style={{ color: colorOf(active.jabatan) }}>{activePct}%</p>
