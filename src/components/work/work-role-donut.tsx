@@ -62,16 +62,16 @@ export function WorkRoleDonut({ rows, members, department }: { rows: WorkRow[]; 
       ) : (
         <>
           <div className="flex items-center gap-4">
-            <div className="relative h-40 w-40 shrink-0">
+            <div className="relative h-44 w-44 shrink-0">
               <ResponsiveContainer width="100%" height="100%">
                 <PieChart>
                   <Pie
                     data={slices}
                     dataKey="value"
                     nameKey="jabatan"
-                    innerRadius={52}
-                    outerRadius={72}
-                    paddingAngle={4}
+                    innerRadius={54}
+                    outerRadius={86}
+                    paddingAngle={2}
                     cornerRadius={10}
                     stroke="none"
                     startAngle={90}
@@ -82,16 +82,16 @@ export function WorkRoleDonut({ rows, members, department }: { rows: WorkRow[]; 
                     onClick={(_, i) => setActiveJabatan(slices[i]?.jabatan ?? null)}
                   >
                     {slices.map((s) => (
-                      <Cell key={s.jabatan} fill={colorOf(s.jabatan)} opacity={active && s.jabatan === active.jabatan ? 1 : 0.82} className="cursor-pointer outline-none" />
+                      <Cell key={s.jabatan} fill={colorOf(s.jabatan)} opacity={active && s.jabatan === active.jabatan ? 1 : 0.9} className="cursor-pointer outline-none" />
                     ))}
                   </Pie>
                 </PieChart>
               </ResponsiveContainer>
               {/* Angka tengah — BERUBAH mengikuti slice aktif (bukan tooltip). */}
-              <div className="pointer-events-none absolute inset-0 grid place-items-center px-6 text-center">
+              <div className="pointer-events-none absolute inset-0 grid place-items-center px-4 text-center">
                 <div>
-                  <p className="text-2xl font-bold leading-none" style={{ color: colorOf(active.jabatan) }}>{activePct}%</p>
-                  <p className="mx-auto mt-1 max-w-[5.5rem] text-[10px] leading-tight text-muted-foreground">{active.jabatan}</p>
+                  <p className="text-[2rem] font-extrabold leading-none tracking-tight" style={{ color: colorOf(active.jabatan) }}>{activePct}%</p>
+                  <p className="mx-auto mt-1.5 max-w-[6rem] text-[13px] font-medium leading-tight text-muted-foreground">{active.jabatan}</p>
                 </div>
               </div>
             </div>
