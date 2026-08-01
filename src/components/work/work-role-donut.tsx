@@ -6,7 +6,9 @@ import type { WorkRow } from "./work-table";
 
 // Warna slice donut — palet multi-hue yang selaras dgn tema aplikasi.
 const COLORS = ["#3b82f6", "#f59e0b", "#06b6d4", "#8b5cf6", "#10b981", "#f43f5e", "#64748b", "#eab308"];
-const CIRC = 2 * Math.PI * 66; // keliling lingkaran (r=66) untuk stroke-dasharray
+const R = 66; // radius cincin
+const STROKE = 22; // tebal cincin
+const CIRC = 2 * Math.PI * R; // keliling — untuk stroke-dasharray
 
 type Slice = { jabatan: string; value: number };
 
@@ -48,15 +50,20 @@ export function WorkRoleDonut({ rows, members, department }: { rows: WorkRow[]; 
   const active = all.find((s) => s.jabatan === activeJabatan) ?? slices[0] ?? all[0];
   const activePct = total && active ? Math.round((active.value / total) * 100) : 0;
 
-  // Busur per slice, mulai dari atas (−90°) searah jarum jam. Ujung membulat +
-  // digambar berurutan → tiap arc menimpa tetangganya (efek "menyatu").
+  // Busur per slice, mulai dari atas (−90°) searah jarum jam. Presisi: panjang
+  // garis dikurangi ukuran ujung-membulat (CAP) + jarak antar-slice (GAP) yang
+  // konsisten, lalu digeser CAP+GAP/2 supaya bagian yang TERLIHAT (garis + dua
+  // cap) tepat = proporsi persentase, dengan celah kecil merata di tiap batas.
   const arcs = React.useMemo(() => {
-    let acc = 0;
+    const CAP = STROKE / 2; // radius ujung membulat (px sepanjang keliling)
+    const GAP = 6; // celah antar-slice (px) — kecil & merata
+    let cursor = 0;
     return slices.map((s) => {
-      const len = total ? (s.value / total) * CIRC : 0;
-      const rot = -90 + (acc / CIRC) * 360;
-      acc += len;
-      return { jabatan: s.jabatan, color: colorOf(s.jabatan), len, rot };
+      const slot = total ? (s.value / total) * CIRC : 0; // porsi persis slice ini
+      const startDeg = -90 + ((cursor + GAP / 2 + CAP) / CIRC) * 360;
+      cursor += slot;
+      const dash = Math.max(0.5, slot - GAP - 2 * CAP); // garis; cap menambah 2·CAP
+      return { jabatan: s.jabatan, color: colorOf(s.jabatan), dash, startDeg };
     });
   }, [slices, total, colorOf]);
 
@@ -84,13 +91,13 @@ export function WorkRoleDonut({ rows, members, department }: { rows: WorkRow[]; 
                     key={a.jabatan}
                     cx={88}
                     cy={88}
-                    r={66}
+                    r={R}
                     fill="none"
                     stroke={a.color}
-                    strokeWidth={22}
+                    strokeWidth={STROKE}
                     strokeLinecap="round"
-                    strokeDasharray={`${a.len} ${CIRC - a.len}`}
-                    transform={`rotate(${a.rot} 88 88)`}
+                    strokeDasharray={`${a.dash} ${CIRC}`}
+                    transform={`rotate(${a.startDeg} 88 88)`}
                     className="cursor-pointer transition-opacity"
                     style={{ opacity: active && a.jabatan === active.jabatan ? 1 : 0.9 }}
                     onMouseEnter={() => setActiveJabatan(a.jabatan)}
