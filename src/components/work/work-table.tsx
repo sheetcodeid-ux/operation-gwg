@@ -48,6 +48,7 @@ export function WorkTable({
   isAdmin,
   userDepartment,
   categories,
+  toolbar,
 }: {
   rows: WorkRow[];
   outlets?: TaskOutlet[];
@@ -58,6 +59,8 @@ export function WorkTable({
   isAdmin?: boolean;
   userDepartment?: string;
   categories?: Record<string, string[]>;
+  /** Left-aligned content on the table's control row (e.g. the view toggle). */
+  toolbar?: React.ReactNode;
 }) {
   const columns = React.useMemo<ColumnDef<WorkRow>[]>(
     () => [
@@ -156,6 +159,7 @@ export function WorkTable({
       columns={columns}
       data={rows}
       searchPlaceholder="Search tasks…"
+      toolbar={toolbar}
       // Scroll only sideways for the wide table; the page handles up/down
       // (no nested vertical box → no diagonal "geser semua arah").
       stickyHeader={false}

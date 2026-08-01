@@ -61,7 +61,7 @@ export function WorkRoleDonut({ rows, members, department }: { rows: WorkRow[]; 
   }, [slices, total, colorOf]);
 
   return (
-    <div className="rounded-2xl border border-border bg-card/40 p-5">
+    <div className="flex flex-col rounded-2xl border border-border bg-card/40 p-5">
       <div className="mb-3">
         <h3 className="text-sm font-semibold tracking-tight text-foreground">Distribusi Tugas per Jabatan</h3>
         <p className="text-[11px] text-muted-foreground">{department || "—"}</p>
@@ -122,7 +122,7 @@ export function WorkRoleDonut({ rows, members, department }: { rows: WorkRow[]; 
             </ul>
           </div>
 
-          <div className="mt-4 flex items-center justify-between border-t border-border/60 pt-3">
+          <div className="mt-auto flex items-center justify-between border-t border-border/60 pt-4">
             <span className="text-xs text-muted-foreground">Total Task</span>
             <div className="flex items-center gap-2">
               <div className="flex -space-x-1.5">

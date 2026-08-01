@@ -8,6 +8,20 @@ import type { WorkRow } from "./work-table";
 
 const BLUE = "#3b82f6";
 const pad = (n: number) => String(n).padStart(2, "0");
+const MONTHS = ["Januari", "Februari", "Maret", "April", "Mei", "Juni", "Juli", "Agustus", "September", "Oktober", "November", "Desember"];
+
+/** Kartu pembungkus — disamakan dgn kartu donut agar dua kotak sejajar & rapi. */
+function Card({ title, subtitle, children }: { title: string; subtitle: string; children: React.ReactNode }) {
+  return (
+    <div className="flex flex-col rounded-2xl border border-border bg-card/40 p-5">
+      <div className="mb-3">
+        <h3 className="text-sm font-semibold tracking-tight text-foreground">{title}</h3>
+        <p className="text-[11px] text-muted-foreground">{subtitle}</p>
+      </div>
+      {children}
+    </div>
+  );
+}
 
 // Prefiks kehormatan yang dilewati agar nama panggilan yang dipakai
 // (mis. "Muhammad Andi" → "Andi" → "AND").
@@ -67,17 +81,20 @@ export function WorkPerformanceChart({ rows, members, month, department }: { row
 
   const hasEmployees = emps.length > 0;
   const hasAny = data.some((d) => d.ini > 0 || d.lalu > 0);
+  const subtitle = `${MONTHS[month]} · ${department || "—"}`;
 
   if (!hasEmployees) {
     return (
-      <div className="grid place-items-center rounded-xl border border-dashed border-border bg-muted/20 py-12 text-center text-xs text-muted-foreground">
-        Belum ada karyawan di departemen ini.
-      </div>
+      <Card title="Kinerja Karyawan" subtitle={subtitle}>
+        <div className="grid flex-1 place-items-center rounded-xl border border-dashed border-border bg-muted/20 py-12 text-center text-xs text-muted-foreground">
+          Belum ada karyawan di departemen ini.
+        </div>
+      </Card>
     );
   }
 
   return (
-    <div>
+    <Card title="Kinerja Karyawan" subtitle={subtitle}>
       <div className="h-[17rem]" style={{ outline: "none" }}>
         <ResponsiveContainer width="100%" height="100%">
           <ComposedChart data={data} margin={{ top: 8, right: 8, left: 0, bottom: 0 }} accessibilityLayer={false}>
@@ -95,6 +112,6 @@ export function WorkPerformanceChart({ rows, members, month, department }: { row
         </ResponsiveContainer>
       </div>
       {!hasAny && <p className="mt-2 text-center text-[11px] text-muted-foreground">Belum ada task pada bulan ini / bulan sebelumnya untuk departemen ini.</p>}
-    </div>
+    </Card>
   );
 }

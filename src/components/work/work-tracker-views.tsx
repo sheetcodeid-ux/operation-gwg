@@ -135,46 +135,56 @@ export function WorkTrackerViews({
 
       {/* Performance chart + per-jabatan donut — TABLE view only (hidden on Kanban). */}
       {view === "table" && (
-        <div className="mb-4 grid gap-4 lg:grid-cols-[1.7fr_1fr]">
+        <div className="mb-4 grid items-stretch gap-4 lg:grid-cols-[1.7fr_1fr]">
           <WorkPerformanceChart rows={rows} members={members} month={month} department={chartDept} />
           <WorkRoleDonut rows={rows} members={members} department={chartDept} />
         </div>
       )}
 
-      <div className="inline-grid grid-cols-2 gap-1 rounded-xl border border-border bg-muted/50 p-1">
-        {(
-          [
-            { id: "table", label: "Table", icon: List },
-            { id: "kanban", label: "Kanban", icon: LayoutGrid },
-          ] as const
-        ).map((v) => {
-          const active = view === v.id;
-          const Icon = v.icon;
-          return (
-            <button
-              key={v.id}
-              type="button"
-              onClick={() => setView(v.id)}
-              aria-pressed={active}
-              className={cn(
-                "inline-flex items-center justify-center gap-1.5 rounded-lg px-3 py-1.5 text-sm font-medium transition-colors",
-                active ? "bg-background text-foreground shadow-md ring-1 ring-border" : "text-muted-foreground hover:bg-muted/60 hover:text-foreground",
-              )}
-            >
-              <Icon className="size-4" />
-              {v.label}
-            </button>
-          );
-        })}
+      {/* Both mounted; we just show one — switching is instant with no refetch.
+          The Table/Kanban toggle lives on the same row as the table controls
+          (search/export/columns) so they align. On Kanban it sits on its own row. */}
+      <div className={view === "table" ? "block" : "hidden"}>
+        <WorkTable rows={tableRows} toolbar={<ViewToggle view={view} setView={setView} />} {...shared} />
       </div>
-
-      {/* Both mounted; we just show one — switching is instant with no refetch. */}
-      <div className={cn("mt-4", view === "table" ? "block" : "hidden")}>
-        <WorkTable rows={tableRows} {...shared} />
-      </div>
-      <div className={cn("mt-4", view === "kanban" ? "block" : "hidden")}>
+      <div className={view === "kanban" ? "block" : "hidden"}>
+        <div className="mb-4">
+          <ViewToggle view={view} setView={setView} />
+        </div>
         <KanbanBoard rows={scoped} {...shared} />
       </div>
+    </div>
+  );
+}
+
+/** Table ⇄ Kanban segmented toggle (shared by both view rows). */
+function ViewToggle({ view, setView }: { view: View; setView: (v: View) => void }) {
+  return (
+    <div className="inline-grid grid-cols-2 gap-1 rounded-xl border border-border bg-muted/50 p-1">
+      {(
+        [
+          { id: "table", label: "Table", icon: List },
+          { id: "kanban", label: "Kanban", icon: LayoutGrid },
+        ] as const
+      ).map((v) => {
+        const active = view === v.id;
+        const Icon = v.icon;
+        return (
+          <button
+            key={v.id}
+            type="button"
+            onClick={() => setView(v.id)}
+            aria-pressed={active}
+            className={cn(
+              "inline-flex items-center justify-center gap-1.5 rounded-lg px-3 py-1.5 text-sm font-medium transition-colors",
+              active ? "bg-background text-foreground shadow-md ring-1 ring-border" : "text-muted-foreground hover:bg-muted/60 hover:text-foreground",
+            )}
+          >
+            <Icon className="size-4" />
+            {v.label}
+          </button>
+        );
+      })}
     </div>
   );
 }
