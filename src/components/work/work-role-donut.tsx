@@ -102,8 +102,8 @@ export function WorkRoleDonut({ rows, members, department }: { rows: WorkRow[]; 
           <h3 className="text-sm font-semibold tracking-tight text-foreground">Distribusi Tugas per {MODE_TITLE[mode]}</h3>
           <p className="text-[11px] text-muted-foreground">{department || "—"}</p>
         </div>
-        {/* Segmented toggle — Jabatan / Prioritas / Status. */}
-        <div className="inline-flex w-fit rounded-xl border border-border bg-muted/50 p-1">
+        {/* Segmented toggle — full-width, 3 segmen sama besar (ala Performance/Trends). */}
+        <div className="grid w-full grid-cols-3 gap-1 rounded-xl border border-border bg-muted/50 p-1">
           {MODES.map((m) => {
             const on = mode === m.id;
             const Icon = m.icon;
@@ -114,11 +114,11 @@ export function WorkRoleDonut({ rows, members, department }: { rows: WorkRow[]; 
                 onClick={() => { setMode(m.id); setActiveKey(null); }}
                 aria-pressed={on}
                 className={cn(
-                  "inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-medium transition-colors",
+                  "inline-flex items-center justify-center gap-1.5 rounded-lg px-2 py-2 text-xs font-medium transition-colors",
                   on ? "bg-background text-foreground shadow-sm ring-1 ring-border" : "text-muted-foreground hover:text-foreground",
                 )}
               >
-                <Icon className="size-3.5" />
+                <Icon className="size-3.5 shrink-0" />
                 {m.label}
               </button>
             );
