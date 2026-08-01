@@ -73,7 +73,29 @@ export function WorkTrackerViews({
     () => membersForDivision(members, isAdmin ? division : userDepartment || division),
     [members, division, isAdmin, userDepartment],
   );
-  const categoryOpts = React.useMemo(() => [...new Set(rows.map((r) => r.category).filter(Boolean))].sort((a, b) => a.localeCompare(b)), [rows]);
+  // Category filter options = the department's FULL configured category list
+  // (so a newly-added category shows up even before any task uses it), unioned
+  // with any category actually present on a task (so nothing is ever lost).
+  const categoryOpts = React.useMemo(() => {
+    const set = new Set<string>();
+    const cats = categories ?? {};
+    if (isAdmin) {
+      if (division === "all") {
+        for (const list of Object.values(cats)) for (const c of list) set.add(c);
+      } else {
+        for (const c of cats[division] ?? []) set.add(c);
+      }
+    } else {
+      for (const c of cats[userDepartment || division] ?? []) set.add(c);
+    }
+    for (const r of rows) {
+      if (!r.category) continue;
+      if (isAdmin && division !== "all" && r.division !== division) continue;
+      if (!isAdmin && userDepartment && r.division !== userDepartment) continue;
+      set.add(r.category);
+    }
+    return [...set].sort((a, b) => a.localeCompare(b));
+  }, [categories, rows, isAdmin, division, userDepartment]);
   const deptOptions = React.useMemo(() => (divisions ?? []).filter((d) => d && d !== "all"), [divisions]);
   // The chart is ALWAYS per-department: use the picked division, else the user's
   // own department (member), else the first department (admin on "Semua").
