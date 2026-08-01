@@ -50,20 +50,15 @@ export function WorkRoleDonut({ rows, members, department }: { rows: WorkRow[]; 
   const active = all.find((s) => s.jabatan === activeJabatan) ?? slices[0] ?? all[0];
   const activePct = total && active ? Math.round((active.value / total) * 100) : 0;
 
-  // Busur per slice, mulai dari atas (−90°) searah jarum jam. Presisi: panjang
-  // garis dikurangi ukuran ujung-membulat (CAP) + jarak antar-slice (GAP) yang
-  // konsisten, lalu digeser CAP+GAP/2 supaya bagian yang TERLIHAT (garis + dua
-  // cap) tepat = proporsi persentase, dengan celah kecil merata di tiap batas.
+  // Busur per slice, mulai dari atas (−90°) searah jarum jam. Ujung membulat +
+  // digambar berurutan → tiap arc menimpa tetangganya (efek "menyatu").
   const arcs = React.useMemo(() => {
-    const CAP = STROKE / 2; // radius ujung membulat (px sepanjang keliling)
-    const GAP = 6; // celah antar-slice (px) — kecil & merata
-    let cursor = 0;
+    let acc = 0;
     return slices.map((s) => {
-      const slot = total ? (s.value / total) * CIRC : 0; // porsi persis slice ini
-      const startDeg = -90 + ((cursor + GAP / 2 + CAP) / CIRC) * 360;
-      cursor += slot;
-      const dash = Math.max(0.5, slot - GAP - 2 * CAP); // garis; cap menambah 2·CAP
-      return { jabatan: s.jabatan, color: colorOf(s.jabatan), dash, startDeg };
+      const len = total ? (s.value / total) * CIRC : 0;
+      const rot = -90 + (acc / CIRC) * 360;
+      acc += len;
+      return { jabatan: s.jabatan, color: colorOf(s.jabatan), len, rot };
     });
   }, [slices, total, colorOf]);
 
@@ -75,12 +70,14 @@ export function WorkRoleDonut({ rows, members, department }: { rows: WorkRow[]; 
       </div>
 
       {list.length === 0 || total === 0 ? (
-        <div className="grid place-items-center rounded-xl border border-dashed border-border bg-muted/20 py-12 text-center text-xs text-muted-foreground">
+        <div className="grid flex-1 place-items-center rounded-xl border border-dashed border-border bg-muted/20 py-12 text-center text-xs text-muted-foreground">
           {list.length === 0 ? "Belum ada anggota di departemen ini." : "Belum ada task untuk departemen ini."}
         </div>
       ) : (
         <>
-          <div className="flex items-center gap-4">
+          {/* flex-1 + items-center: donut mengisi & TERPUSAT vertikal di sisa
+              ruang kartu, jadi tidak menempel ke atas / ada space kosong. */}
+          <div className="flex flex-1 items-center gap-4 py-2">
             <div className="relative h-44 w-44 shrink-0">
               {/* Custom SVG: tiap slice = arc lingkaran dgn ujung MEMBULAT
                   (stroke-linecap round) yang saling menimpa/terhubung persis
@@ -96,8 +93,8 @@ export function WorkRoleDonut({ rows, members, department }: { rows: WorkRow[]; 
                     stroke={a.color}
                     strokeWidth={STROKE}
                     strokeLinecap="round"
-                    strokeDasharray={`${a.dash} ${CIRC}`}
-                    transform={`rotate(${a.startDeg} 88 88)`}
+                    strokeDasharray={`${a.len} ${CIRC - a.len}`}
+                    transform={`rotate(${a.rot} 88 88)`}
                     className="cursor-pointer transition-opacity"
                     style={{ opacity: active && a.jabatan === active.jabatan ? 1 : 0.9 }}
                     onMouseEnter={() => setActiveJabatan(a.jabatan)}
@@ -129,7 +126,7 @@ export function WorkRoleDonut({ rows, members, department }: { rows: WorkRow[]; 
             </ul>
           </div>
 
-          <div className="mt-auto flex items-center justify-between border-t border-border/60 pt-4">
+          <div className="flex items-center justify-between border-t border-border/60 pt-4">
             <span className="text-xs text-muted-foreground">Total Task</span>
             <div className="flex items-center gap-2">
               <div className="flex -space-x-1.5">
