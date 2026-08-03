@@ -5,7 +5,9 @@
  */
 
 export type HasilStatus = "tidak_layak" | "layak" | "ditunda" | "fast_track";
-export type ProcessStatus = "Selesai" | "Menunggu Interview" | "Proses Penilaian" | "Draft";
+/** Tahapan proses: Draft → Proses Penilaian → Proses Interview → Selesai.
+ *  ("Menunggu Interview" dipertahankan untuk data contoh/lama.) */
+export type ProcessStatus = "Selesai" | "Proses Interview" | "Menunggu Interview" | "Proses Penilaian" | "Draft";
 
 export const HASIL_META: Record<HasilStatus, { label: string; tone: "no" | "wait" | "ok" | "fast" }> = {
   tidak_layak: { label: "Tidak Layak", tone: "no" },

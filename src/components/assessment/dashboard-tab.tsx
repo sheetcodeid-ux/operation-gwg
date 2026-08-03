@@ -9,6 +9,7 @@ import {
   ClipboardList,
   PenLine,
   RotateCcw,
+  FileText,
   Trash2,
   TriangleAlert,
   UserSearch,
@@ -26,7 +27,7 @@ import { Button } from "@/components/ui/button";
 import { DataTable } from "@/components/ui/data-table";
 import { EmptyState } from "@/components/ui/page-header";
 import { useAssessment } from "./context";
-import { DashboardReportButton, ReportButton } from "./report";
+import { DashboardReportButton, ReportButton, ReportModal } from "./report";
 import { CompetencyRadar } from "./radar";
 import { Banner, Card, Dropdown, ExpandRow, MeterBar, MiniStat, ScoreRing, ScrollRow, SectionLabel, TierPill } from "./parts";
 
@@ -111,7 +112,11 @@ export function DashboardTab() {
         golongan: golNow || "—",
         golonganTujuan: golNext || "—",
         penilai: liveBundle.single ? "Director" : "Atasan, HC, Director",
-        status: liveBundle.allFilled ? "Menunggu Interview" : "Proses Penilaian",
+        status: !liveBundle.allFilled
+          ? "Proses Penilaian"
+          : Object.keys(a.interview ?? {}).length >= 4 && !!liveBundle.ivRek
+            ? "Selesai"
+            : "Proses Interview",
         hasil: TONE_TO_HASIL[liveBundle.decisionTone],
         finalScore: liveBundle.final,
         interviewResult: liveBundle.ivRek?.label ?? "—",
@@ -135,7 +140,15 @@ export function DashboardTab() {
   const reload = React.useCallback(
     () =>
       listAllSessions()
-        .then((ss) => setDbRecords(ss.map(sessionToEnriched)))
+        .then((ss) => {
+          const next = ss.map(sessionToEnriched);
+          setDbRecords((prev) => {
+            const same =
+              prev.length === next.length &&
+              prev.every((p, i) => p.id === next[i].id && p.status === next[i].status && p.finalScore === next[i].finalScore && p.hasil === next[i].hasil);
+            return same ? prev : next;
+          });
+        })
         .catch(() => {}),
     [],
   );
@@ -160,9 +173,10 @@ export function DashboardTab() {
       setDbRecords((rs) => rs.filter((r) => r.id !== id)); // optimistic
       const res = await deleteSession(id);
       if (!res.ok && typeof window !== "undefined") window.alert(res.error ?? "Gagal menghapus.");
+      if (res.ok && a.session?.id === id) a.resetCandidate();
       void reload();
     },
-    [reload],
+    [reload, a],
   );
 
   // The running assessment is rendered from `liveRecord`; drop its DB twin from the
@@ -285,7 +299,7 @@ export function DashboardTab() {
 
       <SectionLabel>Seluruh Data Assessment</SectionLabel>
       <AllAssessmentsTable
-        live={liveRecord}
+        live={a.session ? liveRecord : null}
         extra={extraRecords}
         sample={sampleAll}
         canDelete={a.canSwitchRole}
@@ -320,7 +334,7 @@ function dedupeRecords<T extends AssessmentRecord>(rows: T[]): T[] {
 function BatchTracking({ live, extra = [], sample = [] }: { live: AssessmentRecord | null; extra?: EnrichedRecord[]; sample?: EnrichedRecord[] }) {
   const all = dedupeRecords([...(live ? [live] : []), ...extra, ...sample]);
   const total = all.length;
-  const selesai = all.filter((r) => r.status === "Selesai" || r.status === "Menunggu Interview").length;
+  const selesai = all.filter((r) => r.status === "Selesai" || r.status === "Proses Interview" || r.status === "Menunggu Interview").length;
   const berjalan = total - selesai;
   const count = (h: HasilStatus) => all.filter((r) => r.status !== "Proses Penilaian" && r.status !== "Draft" && r.hasil === h).length;
 
@@ -749,6 +763,10 @@ function AllAssessmentsTable({
   const [jabatan, setJabatan] = React.useState("");
   const [nama, setNama] = React.useState("");
   const [hasil, setHasil] = React.useState("");
+  // Report dialog state lives HERE, not in a table cell: the 8s data refresh
+  // re-renders the cells and would otherwise close the dialog on its own.
+  const [reportRec, setReportRec] = React.useState<AssessmentRecord | null>(null);
+  const onReport = React.useCallback((r: AssessmentRecord) => setReportRec(r), []);
 
   const jabatanOptions = React.useMemo(() => positionsForDepartment(dept).map((p) => ({ value: p.title, label: p.title })), [dept]);
   const namaOptions = React.useMemo(() => {
@@ -797,7 +815,9 @@ function AllAssessmentsTable({
           const deletable = canDelete && liveIds?.has(rec.id);
           return (
             <div className="flex items-center justify-end gap-1">
-              <ReportButton record={rec} />
+              <Button variant="outline" size="sm" onClick={() => onReport(rec)}>
+                <FileText className="size-3.5" /> Report
+              </Button>
               {deletable && (
                 <Button
                   size="sm"
@@ -814,7 +834,7 @@ function AllAssessmentsTable({
         },
       },
     ],
-    [canDelete, liveIds, onDelete],
+    [canDelete, liveIds, onDelete, onReport],
   );
 
   return (
@@ -861,6 +881,7 @@ function AllAssessmentsTable({
       </ScrollRow>
 
       <DataTable columns={columns} data={rows} tableId="assessment-records" searchPlaceholder="Cari nama / NIK…" pageSize={8} />
+      <ReportModal record={reportRec} open={!!reportRec} onOpenChange={(v) => !v && setReportRec(null)} />
     </div>
   );
 }

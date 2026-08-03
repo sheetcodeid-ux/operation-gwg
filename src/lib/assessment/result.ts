@@ -384,7 +384,16 @@ export function sessionToEnriched(s: SessionState): EnrichedRecord {
   const bundle = computeResult(detail);
   // In progress once any official evaluator submitted OR any peer has reviewed.
   const anySubmitted = s.evaluations.some((e) => e.submitted) || (s.peerSubmitted ?? 0) > 0;
-  const status = bundle.allFilled ? "Menunggu Interview" : anySubmitted ? "Proses Penilaian" : "Draft";
+  // Tahapan: Draft → Proses Penilaian → Proses Interview → Selesai.
+  // Interview dianggap selesai bila 4 dimensi terisi DAN sudah ada rekomendasi.
+  const ivDone = Object.keys(withIv?.interview ?? {}).length >= 4 && votes.length > 0;
+  const status: AssessmentRecord["status"] = !bundle.allFilled
+    ? anySubmitted
+      ? "Proses Penilaian"
+      : "Draft"
+    : ivDone
+      ? "Selesai"
+      : "Proses Interview";
   const base: AssessmentRecord = {
     id: s.id,
     tanggal: (s.updatedAt || new Date().toISOString()).slice(0, 10),
