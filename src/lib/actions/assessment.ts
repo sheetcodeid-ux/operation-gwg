@@ -3,6 +3,7 @@
 import { getSessionUser } from "@/lib/auth";
 import {
   deleteSession as dbDeleteSession,
+  findSession,
   getOrCreateSession,
   getSession,
   listSessions,
@@ -36,11 +37,18 @@ export async function getMyEvaluators(): Promise<EvaluatorIdentity[]> {
   );
 }
 
-/** Open (find-or-create) the assessment session for a candidate + batch. */
+/**
+ * Look up the assessment session for a candidate + batch — READ ONLY.
+ *
+ * This used to find-or-create, which meant simply *viewing* the page re-created
+ * a session an admin had just deleted (it kept coming back on its own). A
+ * session is now born only from a real write: an evaluator submitting a score,
+ * a participant saving their Self Assessment, or a peer review.
+ */
 export async function openSession(seed: SessionSeed): Promise<SessionState | null> {
   const user = await getSessionUser();
   if (!user) return null;
-  return getOrCreateSession(seed, user.id);
+  return findSession(seed);
 }
 
 /** Re-read a session — used for cross-device polling. */
@@ -58,7 +66,10 @@ export async function listAllSessions(): Promise<SessionState[]> {
 }
 
 export interface SubmitInput {
+  /** Existing session; empty when this is the first score for the candidate — in
+   *  that case `seed` is used to create it (creation happens ONLY on a write). */
   sessionId: string;
+  seed?: SessionSeed;
   /** Which of MY columns to write (dual-role accounts have more than one). It is
    *  always validated against the caller's own identities — never trusted. */
   evaluatorKey?: EvaluatorKey;
@@ -86,7 +97,11 @@ export async function submitMyEvaluation(
   const me = input.evaluatorKey ? mine.find((e) => e.evaluatorKey === input.evaluatorKey) : mine[0];
   if (!me) return { ok: false, error: "Anda tidak berhak mengisi kolom penilai ini." };
 
-  const session = await getSession(input.sessionId);
+  // Saving a score is the deliberate act that OPENS an assessment: create the
+  // session here when it doesn't exist yet (e.g. the first evaluator, or an
+  // assessment being redone after an admin deleted it).
+  let session = input.sessionId ? await getSession(input.sessionId) : null;
+  if (!session && input.seed) session = await getOrCreateSession(input.seed, user.id);
   if (!session) return { ok: false, error: "Sesi assessment tidak ditemukan." };
 
   // Head (Atasan) is scoped to their own division.
@@ -95,7 +110,7 @@ export async function submitMyEvaluation(
   }
 
   await saveEvaluation({
-    sessionId: input.sessionId,
+    sessionId: session.id,
     evaluatorKey: me.evaluatorKey,
     evaluatorUserId: me.userId,
     scores: input.scores,
@@ -105,7 +120,7 @@ export async function submitMyEvaluation(
     submitted: input.submitted,
   });
 
-  const fresh = await getSession(input.sessionId);
+  const fresh = await getSession(session.id);
   return fresh ? { ok: true, session: fresh } : { ok: false, error: "Gagal memuat ulang sesi." };
 }
 

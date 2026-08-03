@@ -254,6 +254,9 @@ export function AssessmentProvider({
   //    column independently; progress from other devices is polled back in. ──
   const [session, setSession] = React.useState<SessionState | null>(null);
   const [sessionBusy, setSessionBusy] = React.useState(false);
+  // The seed for the selected candidate. Sent with a SAVE so the server can open
+  // the session at that moment — sessions are never created just by viewing.
+  const seedRef = React.useRef<SessionSeed | null>(null);
 
   // ── draft persistence: survive a refresh (frontend-only, no backend yet) ──
   const [hydrated, setHydrated] = React.useState(false);
@@ -492,6 +495,7 @@ export function AssessmentProvider({
       golonganTujuan: formatGolongan(candidate.golonganTujuan, candidate.golonganTujuanLevel) || candidate.golonganTujuan,
       directorOnly: activeEvaluators.length === 1,
     };
+    seedRef.current = seed;
     setSessionBusy(true);
     let openedId: string | null = null;
     // CREATE happens exactly once, on this deliberate candidate selection.
@@ -535,14 +539,19 @@ export function AssessmentProvider({
       submitted?: boolean;
     }): Promise<{ ok: boolean; error?: string }> => {
       if (myHats.length === 0) return { ok: false, error: "Akun ini bukan penilai resmi." };
-      if (!session) return { ok: false, error: "Sesi assessment belum siap. Lengkapi identitas karyawan dulu." };
+      if (!session && !seedRef.current) return { ok: false, error: "Sesi assessment belum siap. Lengkapi identitas karyawan dulu." };
       setSessionBusy(true);
       try {
-        const res = await submitMyEvaluation({ sessionId: session.id, evaluatorKey: patch.evaluatorKey ?? myKey ?? undefined, ...patch });
+        const res = await submitMyEvaluation({
+          sessionId: session?.id ?? "",
+          seed: seedRef.current ?? undefined,
+          evaluatorKey: patch.evaluatorKey ?? myKey ?? undefined,
+          ...patch,
+        });
         if (res.ok) {
           // Also persist the shared session fields (self-assessment, interview
           // note, fast-track) so the dashboard reflects the full picture.
-          const shared = await updateSessionShared(session.id, {
+          const shared = await updateSessionShared(res.session.id, {
             selfScores: self,
             ivNote,
             financialImpact,

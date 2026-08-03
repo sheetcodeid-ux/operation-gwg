@@ -208,6 +208,14 @@ async function findSessionRow(seed: SessionSeed): Promise<any | null> {
   return data ?? null;
 }
 
+/** READ-ONLY lookup for a candidate + batch — never creates. Opening a page must
+ *  not bring back an assessment an admin deleted; only a real write may do that. */
+export async function findSession(seed: SessionSeed): Promise<SessionState | null> {
+  const row = await findSessionRow(seed);
+  if (!row) return null;
+  return sessionFromRow(row, await loadEvaluations(row.id, row.participant_user_id ?? ""));
+}
+
 /** Find-or-create the session for a candidate + batch. */
 export async function getOrCreateSession(seed: SessionSeed, createdBy: string | null): Promise<SessionState> {
   const existing = await findSessionRow(seed);
