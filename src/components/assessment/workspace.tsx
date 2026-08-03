@@ -30,6 +30,8 @@ export function AssessmentWorkspace({
   initialRole,
   scopeDepartmentId,
   evaluator,
+  evaluators,
+  peerCount = 0,
   isAdmin,
   canManage = false,
   isParticipant = false,
@@ -42,6 +44,10 @@ export function AssessmentWorkspace({
   initialRole: AssessmentRole;
   scopeDepartmentId?: string;
   evaluator: EvaluatorIdentity | null;
+  /** Every evaluator hat this account wears (dual-role HC/Head → 2). */
+  evaluators?: EvaluatorIdentity[];
+  /** How many participants this account reviews as a Rekan Sejawat. */
+  peerCount?: number;
   isAdmin: boolean;
   /** Admin-only: shows the Pengaturan entry in the tab row. */
   canManage?: boolean;
@@ -62,7 +68,7 @@ export function AssessmentWorkspace({
   // into the candidate picker & submit checks in the peer-scoring increment.
   void scopeDepartmentId;
   return (
-    <AssessmentProvider initialRole={initialRole} canSwitchRole={isAdmin} evaluator={evaluator} showSample={showSample} viewer={viewer}>
+    <AssessmentProvider initialRole={initialRole} canSwitchRole={isAdmin} evaluator={evaluator} evaluators={evaluators} peerCount={peerCount} showSample={showSample} viewer={viewer}>
       <WorkspaceInner viewerName={viewerName} canManage={canManage} isParticipant={isParticipant} />
     </AssessmentProvider>
   );

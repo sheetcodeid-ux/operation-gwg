@@ -35,7 +35,9 @@ export async function getAssessmentSettingsData() {
     .map((u) => ({ id: u.id, name: u.name, email: u.email, department: u.department ?? null, jabatan: u.jabatan ?? null }))
     .sort((a, b) => a.name.localeCompare(b.name));
   const departments = allDepartments().map((d) => ({ value: d.id, label: d.name }));
-  const initialRoster = Object.fromEntries(roster.map((r) => [r.userId, { role: r.role, scopeDepartmentId: r.scopeDepartmentId }]));
+  const initialRoster = Object.fromEntries(
+    roster.map((r) => [r.userId, { role: r.role, scopeDepartmentId: r.scopeDepartmentId, alsoHead: !!r.alsoHead, alsoHeadScope: r.alsoHeadScope ?? "" }]),
+  );
   const initialAssignments = Object.fromEntries(assignments.map((a) => [a.participantUserId, { atasanUserId: a.atasanUserId, peerUserIds: a.peerUserIds }]));
   return { accounts, departments, initialRoster, initialAssignments, initialSignatures: signatures };
 }
@@ -56,10 +58,10 @@ export async function saveSignatureAction(input: { userId: string; name: string;
 
 /** The HC & Director signatories (name + TTD image) for the printed report. Any
  *  signed-in user may read these to render the PDF. */
-export async function getReportSignatoriesAction() {
+export async function getReportSignatoriesAction(participantUserId?: string) {
   const user = await getSessionUser();
-  if (!user) return { hc: null, director: null };
-  return getReportSignatories();
+  if (!user) return { hc: null, director: null, atasan: null };
+  return getReportSignatories(participantUserId);
 }
 
 export async function saveRosterEntryAction(input: {
@@ -67,6 +69,8 @@ export async function saveRosterEntryAction(input: {
   role: RosterRole;
   scopeDepartmentId?: string;
   active?: boolean;
+  alsoHead?: boolean;
+  alsoHeadScope?: string;
 }) {
   if (!(await canManage())) return { error: "Hanya Admin yang dapat mengatur assessment." };
   try {
@@ -75,10 +79,13 @@ export async function saveRosterEntryAction(input: {
       role: input.role,
       scopeDepartmentId: input.scopeDepartmentId ?? "",
       active: input.active ?? true,
+      alsoHead: input.alsoHead,
+      alsoHeadScope: input.alsoHeadScope,
     });
-    // Atasan/peer assignment only applies to a Karyawan participant — drop it
-    // when the account becomes a Head/HC/Director so no stale participant lingers.
-    if (input.role !== "karyawan") await deleteAssignment(input.userId);
+    // Karyawan AND Head are participants (a Head is assessed by Director + HC and
+    // may also have Rekan Sejawat), so both keep their assignment. Only HC and
+    // Director are pure evaluators — drop any stale participant row for them.
+    if (input.role !== "karyawan" && input.role !== "head") await deleteAssignment(input.userId);
     revalidatePath("/assessment/settings");
     revalidatePath("/assessment");
     return { ok: true };

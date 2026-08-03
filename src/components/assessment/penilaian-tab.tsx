@@ -15,6 +15,7 @@ import { Textarea } from "@/components/ui/input";
 import { useAssessment } from "./context";
 import { CascadingPicker } from "./cascading-picker";
 import { AssessmentQueue } from "./assessment-queue";
+import { PeerPenilaianTab } from "./peer-penilaian-tab";
 import { Banner, Card, ScoreOptions, ScrollRow, SectionLabel } from "./parts";
 
 const ACCENT: Record<EvaluatorKey, "sky" | "emerald" | "violet" | "amber"> = { al: "sky", hc: "emerald", peer: "amber", dir: "violet" };
@@ -28,15 +29,21 @@ const TAB_ACTIVE: Record<EvaluatorKey, string> = {
 /** Tab ③: fill scores for each active evaluator (3 standard, or Director-only). */
 export function PenilaianTab() {
   const a = useAssessment();
+  // An official evaluator who is ALSO a Rekan Sejawat for other divisions gets a
+  // mode switch — the two panels are separate scoring flows.
+  const [mode, setMode] = React.useState<"resmi" | "sejawat">("resmi");
+  const dualPanel = a.evaluators.length > 0 && a.peerCount > 0;
+  const showPeer = dualPanel && mode === "sejawat";
+
   const evaluators = a.activeEvaluators;
   const single = evaluators.length === 1;
-  const myKey = a.evaluator?.evaluatorKey;
-  const locked = !!myKey; // a logged-in evaluator edits only their own column
+  const myKey = a.myKey ?? undefined;
+  const locked = a.evaluators.length > 0; // a logged-in evaluator edits only their own column(s)
 
   const [activeKey, setActiveKey] = React.useState<EvaluatorKey>(evaluators[0].key);
   const active: EvaluatorKey =
-    locked && evaluators.some((e) => e.key === myKey)
-      ? myKey!
+    locked && myKey && evaluators.some((e) => e.key === myKey)
+      ? myKey
       : evaluators.some((e) => e.key === activeKey)
         ? activeKey
         : evaluators[0].key;
@@ -47,13 +54,40 @@ export function PenilaianTab() {
   const filled = evaluatorFilled(scores);
 
   // A logged-in evaluator whose column isn't required for this position.
-  const notMyCandidate = locked && !evaluators.some((e) => e.key === myKey);
+  const notMyCandidate = locked && a.myKeysForCandidate.length === 0;
   // Once submitted, an evaluator's column is final — locked, no edits (integrity).
   const myRow = a.session?.evaluations.find((x) => x.evaluatorKey === active);
   const myLocked = locked && !!myRow?.submitted;
 
   return (
     <div className="space-y-4">
+      {/* Wearing two hats: official evaluator AND Rekan Sejawat for other teams. */}
+      {dualPanel && (
+        <div className="grid grid-cols-2 gap-1 rounded-xl border border-border bg-muted/50 p-1">
+          {([
+            { id: "resmi", label: "Penilai Resmi" },
+            { id: "sejawat", label: `Rekan Sejawat (${a.peerCount})` },
+          ] as const).map((m) => (
+            <button
+              key={m.id}
+              type="button"
+              onClick={() => setMode(m.id)}
+              aria-pressed={mode === m.id}
+              className={cn(
+                "rounded-lg px-3 py-1.5 text-sm font-medium transition-colors",
+                mode === m.id ? "bg-background text-foreground shadow-md ring-1 ring-border" : "text-muted-foreground hover:text-foreground",
+              )}
+            >
+              {m.label}
+            </button>
+          ))}
+        </div>
+      )}
+
+      {showPeer ? (
+        <PeerPenilaianTab />
+      ) : (
+      <div className="space-y-4">
       <Banner tone="info" icon={<Settings2 className="size-4" />}>
         {locked ? (
           <>
@@ -93,6 +127,34 @@ export function PenilaianTab() {
           penilai resmi (bobot 100%).
         </Banner>
       ) : null}
+
+      {/* Dual-role (e.g. HC yang merangkap Head): pick which of MY columns to fill. */}
+      {locked && a.myKeysForCandidate.length > 1 && (
+        <div>
+          <SectionLabel>Anda Menilai 2 Kolom — Pilih yang Diisi</SectionLabel>
+          <ScrollRow cols={a.myKeysForCandidate.length}>
+            {a.myKeysForCandidate.map((k) => {
+              const def = evaluators.find((e) => e.key === k);
+              if (!def) return null;
+              const done = !!a.session?.evaluations.find((x) => x.evaluatorKey === k)?.submitted;
+              return (
+                <button
+                  key={k}
+                  type="button"
+                  onClick={() => a.setMyKey(k)}
+                  className={cn("rounded-xl border p-3 text-left transition-colors", k === active ? TAB_ACTIVE[k] : "border-border bg-muted/20 hover:bg-muted/40")}
+                >
+                  <p className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">Penilai {def.no} · Bobot {def.weight}%</p>
+                  <p className="mt-0.5 text-sm font-semibold text-foreground">{def.name}</p>
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    {done ? <span className="text-brand-600 dark:text-brand-400">Sudah dikirim</span> : `${evaluatorFilled(a.scores[k])}/${PARAMETERS.length} terisi`}
+                  </p>
+                </button>
+              );
+            })}
+          </ScrollRow>
+        </div>
+      )}
 
       {locked && !notMyCandidate && <EvaluatorProgress activeKey={active} />}
 
@@ -200,6 +262,8 @@ export function PenilaianTab() {
           Lengkapi seluruh parameter {single ? "penilai Director" : "dari ketiga penilai"} untuk lanjut ke Interview.
         </div>
       )}
+      </div>
+      )}
     </div>
   );
 }
@@ -250,6 +314,7 @@ function MySaveBar({ activeKey }: { activeKey: EvaluatorKey }) {
   const onSave = async () => {
     setMsg(null);
     const res = await a.submitMine({
+      evaluatorKey: activeKey,
       scores: myScores,
       note: a.evaluatorNotes[activeKey] ?? "",
       submitted: true,

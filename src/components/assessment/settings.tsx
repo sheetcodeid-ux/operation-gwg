@@ -16,7 +16,7 @@ import type { RosterRole } from "@/lib/data/assessment-roster";
 
 export type AccountOption = { id: string; name: string; email: string; department: string | null; jabatan: string | null };
 export type DeptOption = { value: string; label: string };
-type RosterMap = Record<string, { role: RosterRole; scopeDepartmentId: string }>;
+type RosterMap = Record<string, { role: RosterRole; scopeDepartmentId: string; alsoHead?: boolean; alsoHeadScope?: string }>;
 type AssignMap = Record<string, { atasanUserId: string | null; peerUserIds: string[] }>;
 type SigMap = Record<string, { name: string; image: string | null }>;
 
@@ -74,6 +74,7 @@ export function AssessmentSettings({
 
   const roleOf = React.useCallback((id: string): RoleChoice => roster[id]?.role ?? "none", [roster]);
   // A Karyawan is "ready" when both an Atasan and ≥1 Rekan Sejawat are assigned.
+  // A Head needs no atasan (Director + HC assess them) — peers are optional.
   const isReady = React.useCallback(
     (id: string): boolean | null => {
       const role = roster[id]?.role;
@@ -144,9 +145,28 @@ export function AssessmentSettings({
 
   async function changeScope(id: string, scopeDepartmentId: string) {
     setBusy(id);
-    setRoster((r) => ({ ...r, [id]: { role: "head", scopeDepartmentId } }));
+    setRoster((r) => ({ ...r, [id]: { ...r[id], role: "head", scopeDepartmentId } }));
     const res = await saveRosterEntryAction({ userId: id, role: "head", scopeDepartmentId });
     if (res?.error) toast.error(res.error); else toast.success("Divisi penilaian disimpan");
+    setBusy(null);
+  }
+
+  /** HC/Director yang MERANGKAP Head sebuah divisi (mis. MT Adrian = HC + Head
+   *  Human Capital) → menilai dua kolom sekaligus untuk divisi tersebut. */
+  async function changeAlsoHead(id: string, alsoHead: boolean, alsoHeadScope?: string) {
+    const cur = roster[id];
+    if (!cur) return;
+    setBusy(id);
+    const next = { ...cur, alsoHead, alsoHeadScope: alsoHead ? alsoHeadScope ?? cur.alsoHeadScope ?? "" : "" };
+    setRoster((r) => ({ ...r, [id]: next }));
+    const res = await saveRosterEntryAction({
+      userId: id,
+      role: cur.role,
+      scopeDepartmentId: cur.scopeDepartmentId,
+      alsoHead: next.alsoHead,
+      alsoHeadScope: next.alsoHeadScope,
+    });
+    if (res?.error) toast.error(res.error); else toast.success(alsoHead ? "Merangkap Head disimpan" : "Rangkap Head dimatikan");
     setBusy(null);
   }
 
@@ -213,7 +233,8 @@ export function AssessmentSettings({
           </div>
         </div>
 
-        {/* Head → division they assess + note that they're assessed by Director & HC. */}
+        {/* Head → division they assess. As a participant they're scored by
+            Director + HC, and may ALSO get their own Rekan Sejawat panel. */}
         {role === "head" && (
           <div className="mt-2 space-y-2 border-t border-border/60 pt-2">
             <div className="flex flex-wrap items-center gap-2">
@@ -223,23 +244,50 @@ export function AssessmentSettings({
               </div>
             </div>
             <p className="rounded-lg bg-violet-500/10 px-2.5 py-1.5 text-[11px] text-violet-700 dark:text-violet-300">
-              Sebagai peserta, Head dinilai langsung oleh <strong>Director (60%)</strong> &amp; <strong>HC (40%)</strong> — tanpa atasan/rekan sejawat.
+              Sebagai peserta, Head dinilai oleh <strong>Director (60%)</strong> &amp; <strong>HC (40%)</strong>. Rekan sejawat di bawah bersifat opsional — masukannya tampil sebagai data pendukung.
             </p>
           </div>
         )}
 
-        {/* Karyawan → Atasan (P1) + up to 5 Rekan Sejawat (P3). */}
-        {role === "karyawan" && (
+        {/* HC / Director yang merangkap Head sebuah divisi (mis. MT Adrian). */}
+        {(role === "hc" || role === "director") && (
           <div className="mt-2 space-y-2 border-t border-border/60 pt-2">
-            <div className="flex flex-wrap items-center gap-2">
-              <span className="w-28 shrink-0 text-[11px] font-medium text-muted-foreground">Atasan (P1)</span>
-              <div className="w-full sm:w-64">
-                <Combobox portal matchTriggerWidth value={cur.atasanUserId ?? ""} onChange={(v) => setAtasan(a.id, v || null)} options={[{ value: "", label: "— pilih atasan —" }, ...headOptions]} searchPlaceholder="Cari atasan…" placeholder="Pilih atasan…" />
+            <label className="flex cursor-pointer items-center gap-2 text-[11px] font-medium text-foreground">
+              <input
+                type="checkbox"
+                checked={!!roster[a.id]?.alsoHead}
+                onChange={(e) => changeAlsoHead(a.id, e.target.checked)}
+                className="size-3.5 accent-brand-500"
+              />
+              Merangkap sebagai Head divisi (menilai 2 kolom sekaligus)
+            </label>
+            {roster[a.id]?.alsoHead && (
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="w-28 shrink-0 text-[11px] font-medium text-muted-foreground">Head divisi</span>
+                <div className="w-full sm:w-64">
+                  <Combobox portal matchTriggerWidth value={roster[a.id]?.alsoHeadScope ?? ""} onChange={(v) => changeAlsoHead(a.id, true, v)} options={[{ value: "", label: "Divisinya sendiri (default)" }, ...departments]} searchPlaceholder="Cari divisi…" placeholder="Pilih divisi…" />
+                </div>
+                <span className="text-[10px] text-muted-foreground">Untuk divisi ini ia mengisi kolom Atasan (P1) <em>dan</em> {role === "hc" ? "HC (P2)" : "Director"}.</span>
               </div>
-              {headOptions.length === 0 && <span className="text-[10px] text-amber-600 dark:text-amber-400">Tandai dulu akun sebagai Atasan/Head.</span>}
-            </div>
+            )}
+          </div>
+        )}
+
+        {/* Participant panel — Karyawan gets Atasan (P1) + peers; a Head is scored
+            by Director/HC so only the optional Rekan Sejawat panel applies. */}
+        {(role === "karyawan" || role === "head") && (
+          <div className="mt-2 space-y-2 border-t border-border/60 pt-2">
+            {role === "karyawan" && (
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="w-28 shrink-0 text-[11px] font-medium text-muted-foreground">Atasan (P1)</span>
+                <div className="w-full sm:w-64">
+                  <Combobox portal matchTriggerWidth value={cur.atasanUserId ?? ""} onChange={(v) => setAtasan(a.id, v || null)} options={[{ value: "", label: "— pilih atasan —" }, ...headOptions]} searchPlaceholder="Cari atasan…" placeholder="Pilih atasan…" />
+                </div>
+                {headOptions.length === 0 && <span className="text-[10px] text-amber-600 dark:text-amber-400">Tandai dulu akun sebagai Atasan/Head.</span>}
+              </div>
+            )}
             <div className="flex flex-wrap items-start gap-2">
-              <span className="w-28 shrink-0 pt-1.5 text-[11px] font-medium text-muted-foreground">Rekan Sejawat (P3)</span>
+              <span className="w-28 shrink-0 pt-1.5 text-[11px] font-medium text-muted-foreground">Rekan Sejawat{role === "head" ? " (opsional)" : " (P3)"}</span>
               <div className="min-w-0 flex-1">
                 <div className="flex flex-wrap gap-1.5">
                   {cur.peerUserIds.map((pid) => (

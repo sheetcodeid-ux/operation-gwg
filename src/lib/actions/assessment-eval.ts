@@ -3,7 +3,7 @@
 import { getSessionUser } from "@/lib/auth";
 import { getUser } from "@/lib/data/store";
 import { getSessionByParticipant } from "@/lib/data/assessment";
-import { resolveEvaluatorFromRoster, listRoster, listAssignments } from "@/lib/data/assessment-roster";
+import { resolveEvaluatorsFromRoster, listRoster, listAssignments } from "@/lib/data/assessment-roster";
 import { orgDepartmentId } from "@/lib/assessment/org";
 import { DIRECTOR_ONLY_POSITIONS, evaluatorFilled, type EvaluatorKey } from "@/lib/assessment/config";
 
@@ -18,6 +18,8 @@ export interface EvalTarget {
   mineFilled: number;
   mineSubmitted: boolean;
   sessionOpen: boolean;
+  /** Which of MY columns apply to this participant (dual-role → may be 2). */
+  myKeys: EvaluatorKey[];
 }
 
 const isHeadPos = (jabatan: string) => jabatan.toLowerCase().startsWith("head") || DIRECTOR_ONLY_POSITIONS.includes(jabatan) || jabatan === "Director";
@@ -31,13 +33,19 @@ const isHeadPos = (jabatan: string) => jabatan.toLowerCase().startsWith("head") 
 export async function getMyAssessmentTargets(mode: "penilaian" | "interview" = "penilaian"): Promise<EvalTarget[]> {
   const user = await getSessionUser();
   if (!user) return [];
-  const me = await resolveEvaluatorFromRoster(user.id);
-  if (!me) return [];
+  const identities = await resolveEvaluatorsFromRoster(user.id);
+  if (identities.length === 0) return [];
 
   // An Atasan with the default scope assesses their OWN division — mirror the
   // fallback used by the access layer so their queue isn't empty.
   const myDept = getUser(user.id)?.department ?? null;
-  const alScope = me.scopeDepartmentId || (myDept ? orgDepartmentId(myDept) : "");
+  const deptFallback = myDept ? orgDepartmentId(myDept) : "";
+  // Every `al` hat this account wears → the divisions it heads.
+  const alScopes = identities
+    .filter((e) => e.evaluatorKey === "al")
+    .map((e) => e.scopeDepartmentId || deptFallback)
+    .filter(Boolean);
+  const myKeySet = new Set(identities.map((e) => e.evaluatorKey));
 
   const [roster, assigns] = await Promise.all([listRoster(), listAssignments()]);
   const pidSet = new Set<string>();
@@ -47,41 +55,56 @@ export async function getMyAssessmentTargets(mode: "penilaian" | "interview" = "
 
   // First pass — decide which participants this evaluator is responsible for
   // (cheap, no DB), then batch-load the sessions for just those.
-  const pending: { pid: string; name: string; department: string; jabatan: string; head: boolean }[] = [];
+  const pending: { pid: string; name: string; department: string; jabatan: string; head: boolean; keys: EvaluatorKey[] }[] = [];
   for (const pid of pidSet) {
+    if (pid === user.id) continue; // never assess yourself
     const acc = getUser(pid);
     if (!acc) continue;
     const jabatan = acc.jabatan ?? "";
     const head = isHeadPos(jabatan);
     const assessedBy: EvaluatorKey[] = head ? ["dir", "hc"] : ["al", "hc"];
-    if (!assessedBy.includes(me.evaluatorKey)) continue;
-    if (me.evaluatorKey === "al") {
+    // Which of MY hats are required for this participant.
+    const keys = assessedBy.filter((k) => myKeySet.has(k));
+    if (keys.length === 0) continue;
+    if (keys.includes("al")) {
       const assign = assigns.find((a) => a.participantUserId === pid);
       const assigned = assign?.atasanUserId === user.id;
-      const inScope = alScope ? orgDepartmentId(acc.department ?? "") === alScope : false;
-      if (!assigned && !inScope) continue;
+      const inScope = alScopes.includes(orgDepartmentId(acc.department ?? ""));
+      // I'm not this person's Atasan → drop just the `al` hat, keep the rest.
+      if (!assigned && !inScope) {
+        const rest = keys.filter((k) => k !== "al");
+        if (rest.length === 0) continue;
+        pending.push({ pid, name: acc.name, department: acc.department ?? "", jabatan, head, keys: rest });
+        continue;
+      }
     }
-    pending.push({ pid, name: acc.name, department: acc.department ?? "", jabatan, head });
+    pending.push({ pid, name: acc.name, department: acc.department ?? "", jabatan, head, keys });
   }
 
   const sessions = await Promise.all(pending.map((p) => getSessionByParticipant(p.pid)));
   const out: EvalTarget[] = pending.map((p, i) => {
-    const row = sessions[i]?.evaluations.find((e) => e.evaluatorKey === me.evaluatorKey);
     // "Done" is per STEP: Penilaian = all 6 params scored; Interview = 4 dimensions
     // + a recommendation. The two share the row's `submitted` flag, so we derive
     // completion from content instead — otherwise a scored candidate wrongly shows
-    // as done in the Interview queue.
-    const penilaianFilled = row ? evaluatorFilled(row.scores) : 0;
-    const ivFilled = row ? Object.values(row.interview ?? {}).filter((v) => !!v).length : 0;
-    const done = mode === "interview" ? ivFilled >= 4 && !!row?.ivVote : penilaianFilled === 6;
+    // as done in the Interview queue. With two hats, done = ALL my columns done.
+    const per = p.keys.map((k) => {
+      const row = sessions[i]?.evaluations.find((e) => e.evaluatorKey === k);
+      const penilaianFilled = row ? evaluatorFilled(row.scores) : 0;
+      const ivFilled = row ? Object.values(row.interview ?? {}).filter((v) => !!v).length : 0;
+      return {
+        filled: mode === "interview" ? ivFilled : penilaianFilled,
+        done: mode === "interview" ? ivFilled >= 4 && !!row?.ivVote : penilaianFilled === 6,
+      };
+    });
     return {
       participantUserId: p.pid,
       name: p.name,
       department: p.department,
       jabatan: p.jabatan,
       isHead: p.head,
-      mineFilled: mode === "interview" ? ivFilled : penilaianFilled,
-      mineSubmitted: done,
+      myKeys: p.keys,
+      mineFilled: Math.min(...per.map((x) => x.filled)),
+      mineSubmitted: per.every((x) => x.done),
       sessionOpen: !!sessions[i],
     };
   });

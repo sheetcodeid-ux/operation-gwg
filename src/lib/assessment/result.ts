@@ -403,6 +403,7 @@ export function sessionToEnriched(s: SessionState): EnrichedRecord {
     interviewResult: bundle.ivRek?.label ?? "—",
     decision: bundle.decisionLabel,
     evaluators: bundle.evalScores.map((e) => ({ name: e.name, weight: e.weight, score: e.score })),
+    participantUserId: s.participantUserId || undefined,
   };
   return { ...base, detail, bundle };
 }

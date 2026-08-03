@@ -9,15 +9,31 @@ import {
   saveEvaluation,
   updateSessionMeta,
 } from "@/lib/data/assessment";
-import { resolveEvaluatorFromRoster as resolveEvaluator } from "@/lib/data/assessment-roster";
+import { resolveEvaluatorFromRoster as resolveEvaluator, resolveEvaluatorsFromRoster } from "@/lib/data/assessment-roster";
+import { getUser } from "@/lib/data/store";
+import { orgDepartmentId } from "@/lib/assessment/org";
 import type { EvaluatorIdentity, SessionSeed, SessionState } from "@/lib/assessment/session";
-import type { DimensionScores, IvRecValue, ParamScores } from "@/lib/assessment/config";
+import type { DimensionScores, EvaluatorKey, IvRecValue, ParamScores } from "@/lib/assessment/config";
 
 /** Resolve the signed-in user's evaluator identity (null if they aren't one). */
 export async function getMyEvaluator(): Promise<EvaluatorIdentity | null> {
   const user = await getSessionUser();
   if (!user) return null;
   return resolveEvaluator(user.id);
+}
+
+/** EVERY evaluator hat the signed-in user wears (HC who also heads a division
+ *  gets both `hc` and `al`). Scope falls back to their own department. */
+export async function getMyEvaluators(): Promise<EvaluatorIdentity[]> {
+  const user = await getSessionUser();
+  if (!user) return [];
+  const list = await resolveEvaluatorsFromRoster(user.id);
+  const myDept = getUser(user.id)?.department ?? null;
+  return list.map((e) =>
+    e.evaluatorKey === "al" && !e.scopeDepartmentId && myDept
+      ? { ...e, scopeDepartmentId: orgDepartmentId(myDept) }
+      : e,
+  );
 }
 
 /** Open (find-or-create) the assessment session for a candidate + batch. */
@@ -43,6 +59,9 @@ export async function listAllSessions(): Promise<SessionState[]> {
 
 export interface SubmitInput {
   sessionId: string;
+  /** Which of MY columns to write (dual-role accounts have more than one). It is
+   *  always validated against the caller's own identities — never trusted. */
+  evaluatorKey?: EvaluatorKey;
   scores?: ParamScores;
   note?: string;
   interview?: DimensionScores;
@@ -61,8 +80,11 @@ export async function submitMyEvaluation(
 ): Promise<{ ok: true; session: SessionState } | { ok: false; error: string }> {
   const user = await getSessionUser();
   if (!user) return { ok: false, error: "Tidak ada sesi login." };
-  const me = await resolveEvaluator(user.id);
-  if (!me) return { ok: false, error: "Akun ini bukan penilai resmi." };
+  const mine = await getMyEvaluators();
+  if (mine.length === 0) return { ok: false, error: "Akun ini bukan penilai resmi." };
+  // Write the requested column only if the caller actually owns it.
+  const me = input.evaluatorKey ? mine.find((e) => e.evaluatorKey === input.evaluatorKey) : mine[0];
+  if (!me) return { ok: false, error: "Anda tidak berhak mengisi kolom penilai ini." };
 
   const session = await getSession(input.sessionId);
   if (!session) return { ok: false, error: "Sesi assessment tidak ditemukan." };

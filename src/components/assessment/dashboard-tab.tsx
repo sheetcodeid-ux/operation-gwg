@@ -156,7 +156,7 @@ export function DashboardTab() {
   const liveIds = React.useMemo(() => new Set(dbRecords.map((r) => r.id)), [dbRecords]);
   const handleDelete = React.useCallback(
     async (id: string, name: string) => {
-      if (typeof window !== "undefined" && !window.confirm(`Hapus assessment "${name}" untuk semua pengguna? Tindakan ini tidak dapat dibatalkan.`)) return;
+      if (typeof window !== "undefined" && !window.confirm(`Hapus assessment "${name}"?`)) return;
       setDbRecords((rs) => rs.filter((r) => r.id !== id)); // optimistic
       const res = await deleteSession(id);
       if (!res.ok && typeof window !== "undefined") window.alert(res.error ?? "Gagal menghapus.");
@@ -803,7 +803,7 @@ function AllAssessmentsTable({
                   size="sm"
                   variant="ghost"
                   className="text-red-600 hover:bg-red-500/10 hover:text-red-600 dark:text-red-400"
-                  title="Hapus assessment (untuk semua pengguna)"
+                  title="Hapus assessment"
                   onClick={() => onDelete?.(rec.id, rec.name)}
                 >
                   <Trash2 className="size-4" />

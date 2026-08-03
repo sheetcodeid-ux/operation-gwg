@@ -44,6 +44,8 @@ export interface AssessmentRecord {
   decision: string;
   /** Per-evaluator score cards for the PDF (Director-only positions carry one). */
   evaluators?: EvaluatorBreakdown[];
+  /** Participant's account id — lets the report resolve their Atasan's TTD. */
+  participantUserId?: string;
 }
 
 export const MOCK_ASSESSMENTS: AssessmentRecord[] = [

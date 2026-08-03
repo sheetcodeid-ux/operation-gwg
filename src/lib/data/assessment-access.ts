@@ -16,6 +16,8 @@ export interface AssessmentAccess {
   atasanFor: string[];
   /** True when this account is itself a participant (dinilai). */
   isParticipant: boolean;
+  /** This account ALSO heads a division on top of its HC/Director role. */
+  alsoHead: boolean;
 }
 
 /**
@@ -37,7 +39,7 @@ export async function resolveAssessmentAccess(user: {
   const isParticipant =
     entry?.role === "karyawan" || entry?.role === "head" || assignments.some((a) => a.participantUserId === user.id);
 
-  const base = { peerFor, atasanFor, isParticipant };
+  const base = { peerFor, atasanFor, isParticipant, alsoHead: !!entry?.alsoHead };
 
   // Super Admin = administrator → full Director view.
   if (user.role === "super_admin") return { role: "director", scopeDepartmentId: "", ...base };

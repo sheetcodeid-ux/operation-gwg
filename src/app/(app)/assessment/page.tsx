@@ -4,7 +4,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { getSessionUser } from "@/lib/auth";
 import { canSeeMenu, hasMenuGrant } from "@/lib/nav";
-import { getMyEvaluator } from "@/lib/actions/assessment";
+import { getMyEvaluators } from "@/lib/actions/assessment";
 import { dbEnabled } from "@/lib/data/db";
 import { getOrgExtra } from "@/lib/data/org";
 import { getAssessmentSchedule } from "@/lib/data/assessment-schedule";
@@ -33,7 +33,10 @@ export default async function AssessmentPage() {
 
   // Session-scoring identity (al/hc/dir) — only Heads/HC/Director; peers use the
   // peer-review path. Super Admin keeps the manual viewpoint switcher.
-  const evaluator = await getMyEvaluator();
+  // Every hat this account wears — an HC/Director who also heads a division
+  // scores two columns, so the workspace needs the full list, not just the first.
+  const evaluators = await getMyEvaluators();
+  const evaluator = evaluators[0] ?? null;
   const isAdmin = user.role === "super_admin";
   // Pengaturan is Admin-only (owner decision) — HC/Director can assess but not
   // reconfigure who takes part.
@@ -55,7 +58,7 @@ export default async function AssessmentPage() {
 
       {allowed ? (
         /* In production (DB live) show only real sessions; sample data is demo-only. */
-        <AssessmentWorkspace initialRole={access.role} scopeDepartmentId={access.scopeDepartmentId} isParticipant={access.isParticipant} evaluator={evaluator} isAdmin={isAdmin} canManage={canManage} viewer={{ userId: user.id, name: user.name, department: user.department ?? null, jabatan: user.jabatan ?? null }} viewerName={user.name} showSample={!dbEnabled} orgExtra={orgExtra} />
+        <AssessmentWorkspace initialRole={access.role} scopeDepartmentId={access.scopeDepartmentId} isParticipant={access.isParticipant} evaluator={evaluator} evaluators={evaluators} peerCount={access.peerFor.length} isAdmin={isAdmin} canManage={canManage} viewer={{ userId: user.id, name: user.name, department: user.department ?? null, jabatan: user.jabatan ?? null }} viewerName={user.name} showSample={!dbEnabled} orgExtra={orgExtra} />
       ) : !inRoster ? (
         <div className="glass mt-2 flex flex-col items-center gap-3 rounded-2xl border border-border px-6 py-16 text-center">
           <div className="grid size-12 place-items-center rounded-full bg-muted text-muted-foreground">

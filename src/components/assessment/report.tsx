@@ -13,7 +13,7 @@ import { cn } from "@/lib/utils";
 
 type ReportMode = "terang" | "gelap";
 type Sig = { name: string; image: string | null } | null;
-export type Signatories = { hc: Sig; director: Sig };
+export type Signatories = { hc: Sig; director: Sig; atasan: Sig };
 
 const THEME: Record<ReportMode, { bg: string; card: string; text: string; sub: string; border: string; band: string; bandText: string; accent: string }> = {
   terang: {
@@ -156,7 +156,7 @@ function buildReportHtml(r: AssessmentRecord, mode: ReportMode, sg?: Signatories
       <div style="color:${t.text};font-size:13px;line-height:1.6;padding:4px 0">${r.decision}</div>
 
       <div class="signs">
-        ${signBlock(t, "Penilai", r.penilai.split(",")[0].trim(), null)}
+        ${signBlock(t, "Atasan Langsung", sg?.atasan?.name || r.penilai.split(",")[0].trim(), sg?.atasan?.image ?? null)}
         ${signBlock(t, "Human Capital", sg?.hc?.name || HR_NAME, sg?.hc?.image ?? null)}
         ${signBlock(t, "Director", sg?.director?.name || DIRECTOR_NAME, sg?.director?.image ?? null)}
       </div>
@@ -174,21 +174,24 @@ function ReportModalShell({
   title,
   description,
   buildHtml,
+  participantUserId,
 }: {
   open: boolean;
   onOpenChange: (v: boolean) => void;
   title: string;
   description?: string;
   buildHtml: (mode: ReportMode, sg: Signatories) => string;
+  /** Resolves the Atasan (Penilai 1) TTD for THIS participant. */
+  participantUserId?: string;
 }) {
   const [mode, setMode] = React.useState<ReportMode | null>(null);
-  const [sg, setSg] = React.useState<Signatories>({ hc: null, director: null });
+  const [sg, setSg] = React.useState<Signatories>({ hc: null, director: null, atasan: null });
 
   React.useEffect(() => {
     if (!open) { setMode(null); return; }
-    // Load the configured TTD (HC & Director) once the dialog opens.
-    getReportSignatoriesAction().then((s) => setSg(s as Signatories)).catch(() => {});
-  }, [open]);
+    // Load the configured TTD (Atasan, HC & Director) once the dialog opens.
+    getReportSignatoriesAction(participantUserId).then((s) => setSg(s as Signatories)).catch(() => {});
+  }, [open, participantUserId]);
 
   const html = mode ? buildHtml(mode, sg) : "";
 
@@ -271,6 +274,7 @@ export function ReportModal({ record, open, onOpenChange }: { record: Assessment
       onOpenChange={onOpenChange}
       title="Report Assessment"
       description={record ? `${record.name} · ${record.jabatan}` : undefined}
+      participantUserId={record?.participantUserId}
       buildHtml={(mode, sg) => (record ? buildReportHtml(record, mode, sg) : "")}
     />
   );
@@ -423,7 +427,7 @@ function buildFullReportHtml(record: AssessmentRecord, b: ResultBundle, mode: Re
       <div class="sec-title">Rekomendasi Tindak Lanjut</div>
       <ul style="list-style:none">${recos}</ul>
 
-      <div class="signs">${signBlock(t, "Penilai", record.penilai.split(",")[0].trim(), null)}${signBlock(t, "Human Capital", sg?.hc?.name || HR_NAME, sg?.hc?.image ?? null)}${signBlock(t, "Director", sg?.director?.name || DIRECTOR_NAME, sg?.director?.image ?? null)}</div>
+      <div class="signs">${signBlock(t, "Atasan Langsung", sg?.atasan?.name || record.penilai.split(",")[0].trim(), sg?.atasan?.image ?? null)}${signBlock(t, "Human Capital", sg?.hc?.name || HR_NAME, sg?.hc?.image ?? null)}${signBlock(t, "Director", sg?.director?.name || DIRECTOR_NAME, sg?.director?.image ?? null)}</div>
       <div class="foot"><span>Dokumen ini dihasilkan otomatis oleh Sistem Assessment GWG.</span><span>Dicetak: ${today}</span></div>
     </div>
   </div>
@@ -443,6 +447,7 @@ export function DashboardReportButton({ record, bundle }: { record: AssessmentRe
         onOpenChange={setOpen}
         title="Cetak Laporan Lengkap"
         description={`${record.name} · ${record.jabatan}`}
+        participantUserId={record.participantUserId}
         buildHtml={(mode, sg) => buildFullReportHtml(record, bundle, mode, sg)}
       />
     </>

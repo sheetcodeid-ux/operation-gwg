@@ -79,13 +79,23 @@ interface AssessmentState {
   /** Show built-in sample data (demo mode). False in production (DB live) so the
    *  dashboard shows only real sessions. */
   showSample: boolean;
-  /** The signed-in user's evaluator identity (al/hc/dir), or null if not an evaluator. */
+  /** The signed-in user's PRIMARY evaluator identity, or null if not an evaluator. */
   evaluator: EvaluatorIdentity | null;
+  /** Every evaluator hat this account wears (HC who also heads a division → 2). */
+  evaluators: EvaluatorIdentity[];
+  /** The column this account is currently filling (dual-role accounts switch). */
+  myKey: EvaluatorKey | null;
+  setMyKey: (k: EvaluatorKey) => void;
+  /** My hats that actually apply to the selected candidate. */
+  myKeysForCandidate: EvaluatorKey[];
+  /** How many participants this account reviews as a Rekan Sejawat. */
+  peerCount: number;
   /** Live server-backed session for the selected candidate (evaluator flow). */
   session: SessionState | null;
   sessionBusy: boolean;
   /** Submit/save the signed-in evaluator's own column — independent of the others. */
   submitMine: (patch: {
+    evaluatorKey?: EvaluatorKey;
     scores?: ParamScores;
     note?: string;
     interview?: DimensionScores;
@@ -180,6 +190,8 @@ export function AssessmentProvider({
   initialRole = "director",
   canSwitchRole = true,
   evaluator = null,
+  evaluators,
+  peerCount = 0,
   showSample = true,
   viewer = { userId: "", name: "", department: null, jabatan: null },
 }: {
@@ -187,9 +199,16 @@ export function AssessmentProvider({
   initialRole?: AssessmentRole;
   canSwitchRole?: boolean;
   evaluator?: EvaluatorIdentity | null;
+  /** Every hat this account wears; defaults to just the primary identity. */
+  evaluators?: EvaluatorIdentity[];
+  peerCount?: number;
   showSample?: boolean;
   viewer?: Viewer;
 }) {
+  const myHats = React.useMemo<EvaluatorIdentity[]>(
+    () => (evaluators && evaluators.length ? evaluators : evaluator ? [evaluator] : []),
+    [evaluators, evaluator],
+  );
   const [role, setRoleState] = React.useState<AssessmentRole>(initialRole);
   const [tab, setTabState] = React.useState<TabKey>("panduan");
   const [visited, setVisited] = React.useState<Set<TabKey>>(new Set<TabKey>(["panduan"]));
@@ -246,27 +265,20 @@ export function AssessmentProvider({
         if (d.candidate) setCandidate({ ...EMPTY_CANDIDATE, ...d.candidate });
         if (d.syarat) setSyarat(d.syarat);
         if (d.self) setSelf(d.self);
-        // Merge onto a full empty set so a draft saved under the OLD evaluator
-        // model (al/hc/dir, no `peer`) can't leave a column undefined → crash.
-        if (d.scores) setScores({ ...emptyEvaluatorScores(), ...d.scores });
-        if (d.interview) setInterview(d.interview);
-        if (typeof d.ivNote === "string") setIvNote(d.ivNote);
-        if (d.ivVotes) setIvVotes(d.ivVotes);
-        if (d.evaluatorNotes) setEvaluatorNotes(d.evaluatorNotes);
-        if (typeof d.financialImpact === "boolean") setFinancialImpact(d.financialImpact);
       }
     } catch {}
     setHydrated(true);
   }, []);
+  // NOTE: evaluation scores/interview/notes are deliberately NOT persisted here.
+  // They belong to ONE candidate and are the server's source of truth; keeping
+  // them in a shared draft made a freshly-opened candidate show the PREVIOUS
+  // candidate's answers (the "penilaian sudah otomatis terisi" bug).
   React.useEffect(() => {
     if (!hydrated) return;
     try {
-      localStorage.setItem(
-        STORAGE_KEY,
-        JSON.stringify({ candidate, syarat, self, scores, interview, ivNote, ivVotes, evaluatorNotes, financialImpact }),
-      );
+      localStorage.setItem(STORAGE_KEY, JSON.stringify({ candidate, syarat, self }));
     } catch {}
-  }, [hydrated, candidate, syarat, self, scores, interview, ivNote, ivVotes, evaluatorNotes, financialImpact]);
+  }, [hydrated, candidate, syarat, self]);
 
   const resetAssessment = React.useCallback(() => {
     setCandidate({ ...EMPTY_CANDIDATE });
@@ -366,6 +378,61 @@ export function AssessmentProvider({
     () => evaluatorsFor(resolved.jabatan ? { isHead: resolved.isHead, title: resolved.jabatan } : null),
     [resolved.jabatan, resolved.isHead],
   );
+
+  // ── Which of MY columns apply to the selected candidate ──
+  const myKeysForCandidate = React.useMemo<EvaluatorKey[]>(() => {
+    const required = new Set(activeEvaluators.map((e) => e.key));
+    return myHats.map((h) => h.evaluatorKey).filter((k) => required.has(k));
+  }, [myHats, activeEvaluators]);
+  const [myKeyState, setMyKeyState] = React.useState<EvaluatorKey | null>(null);
+  const myKey: EvaluatorKey | null =
+    myKeyState && myKeysForCandidate.includes(myKeyState) ? myKeyState : myKeysForCandidate[0] ?? null;
+  const setMyKey = React.useCallback((k: EvaluatorKey) => setMyKeyState(k), []);
+
+  // ── Switching candidate must NEVER carry the previous person's answers over ──
+  const candidateKey = `${candidate.departmentId}|${candidate.positionId}|${candidate.employeeId}`;
+  const lastCandidateRef = React.useRef(candidateKey);
+  React.useEffect(() => {
+    if (lastCandidateRef.current === candidateKey) return;
+    lastCandidateRef.current = candidateKey;
+    setScores(emptyEvaluatorScores());
+    setInterview({});
+    setIvVotes({});
+    setEvaluatorNotes({});
+    setIvNote("");
+    setFinancialImpact(false);
+  }, [candidateKey]);
+
+  // ── Hydrate from the SERVER: what I already saved for this session, nothing
+  //    more. Keyed on the session id so the 5s poll can't clobber live edits. ──
+  const hydratedSessionRef = React.useRef<string | null>(null);
+  React.useEffect(() => {
+    if (!session) {
+      hydratedSessionRef.current = null;
+      return;
+    }
+    if (hydratedSessionRef.current === session.id) return;
+    hydratedSessionRef.current = session.id;
+    const next = emptyEvaluatorScores();
+    const notes: Partial<Record<EvaluatorKey, string>> = {};
+    const votes: Partial<Record<EvaluatorKey, IvRecValue>> = {};
+    let iv: DimensionScores = {};
+    for (const row of session.evaluations) {
+      // Only MY columns are editable here; the rest is read-only progress.
+      if (!myHats.some((h) => h.evaluatorKey === row.evaluatorKey)) continue;
+      next[row.evaluatorKey] = { ...row.scores };
+      if (row.note) notes[row.evaluatorKey] = row.note;
+      if (row.ivVote) votes[row.evaluatorKey] = row.ivVote;
+      if (Object.keys(row.interview ?? {}).length) iv = { ...row.interview };
+    }
+    setScores(next);
+    setEvaluatorNotes(notes);
+    setIvVotes(votes);
+    setInterview(iv);
+    setIvNote(session.ivNote ?? "");
+    setFinancialImpact(!!session.financialImpact);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [session?.id, myHats]);
   const penilaianComplete = activeEvaluators.every((e) => evaluatorFilled(scores[e.key]) === PARAMETERS.length);
   // Final interview recommendation = majority vote across the active evaluators.
   const ivRecommendation = React.useMemo(
@@ -389,11 +456,12 @@ export function AssessmentProvider({
 
   // Open (find-or-create) the server session once a logged-in evaluator has a
   // full candidate selected, then poll so other evaluators' progress shows up.
-  const seedKey = evaluator
+  const isEvaluator = myHats.length > 0;
+  const seedKey = isEvaluator
     ? [candidate.departmentId, resolved.nama, candidate.batch].join("|")
     : "";
   React.useEffect(() => {
-    if (!evaluator || !identityComplete || !resolved.nama) {
+    if (!isEvaluator || !identityComplete || !resolved.nama) {
       setSession(null);
       return;
     }
@@ -435,17 +503,18 @@ export function AssessmentProvider({
 
   const submitMine = React.useCallback(
     async (patch: {
+      evaluatorKey?: EvaluatorKey;
       scores?: ParamScores;
       note?: string;
       interview?: DimensionScores;
       ivVote?: IvRecValue | null;
       submitted?: boolean;
     }): Promise<{ ok: boolean; error?: string }> => {
-      if (!evaluator) return { ok: false, error: "Akun ini bukan penilai resmi." };
+      if (myHats.length === 0) return { ok: false, error: "Akun ini bukan penilai resmi." };
       if (!session) return { ok: false, error: "Sesi assessment belum siap. Lengkapi identitas karyawan dulu." };
       setSessionBusy(true);
       try {
-        const res = await submitMyEvaluation({ sessionId: session.id, ...patch });
+        const res = await submitMyEvaluation({ sessionId: session.id, evaluatorKey: patch.evaluatorKey ?? myKey ?? undefined, ...patch });
         if (res.ok) {
           // Also persist the shared session fields (self-assessment, interview
           // note, fast-track) so the dashboard reflects the full picture.
@@ -464,7 +533,7 @@ export function AssessmentProvider({
         setSessionBusy(false);
       }
     },
-    [evaluator, session, self, ivNote, financialImpact],
+    [myHats, myKey, session, self, ivNote, financialImpact],
   );
 
   const saveMySelf = React.useCallback(async (): Promise<{ ok: boolean; error?: string }> => {
@@ -493,6 +562,11 @@ export function AssessmentProvider({
     canSwitchRole,
     showSample,
     evaluator,
+    evaluators: myHats,
+    myKey,
+    setMyKey,
+    myKeysForCandidate,
+    peerCount,
     session,
     sessionBusy,
     submitMine,

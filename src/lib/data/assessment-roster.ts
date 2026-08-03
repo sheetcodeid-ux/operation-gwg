@@ -18,6 +18,12 @@ export interface RosterEntry {
   role: RosterRole;
   scopeDepartmentId: string; // "" unless a Head scoped to a division
   active: boolean;
+  /** Dual role: an HC/Director account that ALSO heads a division, so it scores
+   *  both its primary column (hc/dir) and the Atasan (al) column for that
+   *  division. e.g. MT Adrian = Human Capital + Head Human Capital. */
+  alsoHead?: boolean;
+  /** Division this account heads when `alsoHead` — "" = their own department. */
+  alsoHeadScope?: string;
 }
 
 export interface Assignment {
@@ -40,12 +46,14 @@ const memPeer = new Map<string, MemPeer>(); // key `${sessionId}|${reviewerId}`
 export async function listRoster(): Promise<RosterEntry[]> {
   if (!dbEnabled) return [...memRoster.values()];
   try {
-    const { data } = await db().from("assessment_roster").select("user_id,role,scope_department_id,active");
+    const { data } = await db().from("assessment_roster").select("user_id,role,scope_department_id,active,also_head,also_head_scope");
     return ((data ?? []) as any[]).map((r) => ({
       userId: r.user_id,
       role: asRole(r.role),
       scopeDepartmentId: r.scope_department_id ?? "",
       active: r.active !== false,
+      alsoHead: !!r.also_head,
+      alsoHeadScope: r.also_head_scope ?? "",
     }));
   } catch {
     return [];
@@ -53,11 +61,15 @@ export async function listRoster(): Promise<RosterEntry[]> {
 }
 
 export async function saveRosterEntry(input: RosterEntry): Promise<void> {
+  // "Also head" only makes sense for HC/Director (a Head already IS one).
+  const dual = (input.role === "hc" || input.role === "director") && !!input.alsoHead;
   const rec: RosterEntry = {
     userId: input.userId,
     role: asRole(input.role),
     scopeDepartmentId: input.role === "head" ? input.scopeDepartmentId || "" : "",
     active: input.active !== false,
+    alsoHead: dual,
+    alsoHeadScope: dual ? input.alsoHeadScope || "" : "",
   };
   if (!dbEnabled) {
     memRoster.set(rec.userId, rec);
@@ -68,6 +80,8 @@ export async function saveRosterEntry(input: RosterEntry): Promise<void> {
     role: rec.role,
     scope_department_id: rec.scopeDepartmentId || null,
     active: rec.active,
+    also_head: rec.alsoHead,
+    also_head_scope: rec.alsoHeadScope || null,
     updated_at: new Date().toISOString(),
   });
 }
@@ -134,18 +148,31 @@ export async function saveAssignment(input: Assignment): Promise<void> {
  * from the roster. Rekan Sejawat (peer) are NOT resolved here — they submit via
  * the peer-review path keyed by their own user id.
  */
-export async function resolveEvaluatorFromRoster(userId: string): Promise<EvaluatorIdentity | null> {
+/**
+ * EVERY evaluator hat this account wears. Normally one, but an HC/Director who
+ * also heads a division (`alsoHead`) gets a second `al` identity scoped to that
+ * division — so e.g. MT Adrian scores Human Capital staff both as HC (Penilai 2)
+ * and as their Head (Penilai 1). The primary identity is always first.
+ */
+export async function resolveEvaluatorsFromRoster(userId: string): Promise<EvaluatorIdentity[]> {
   const roster = await listRoster();
   const e = roster.find((r) => r.userId === userId && r.active);
-  if (!e) return null;
+  if (!e) return [];
   const key: EvaluatorKey | null = e.role === "head" ? "al" : e.role === "hc" ? "hc" : e.role === "director" ? "dir" : null;
-  if (!key) return null;
-  return {
-    userId,
-    evaluatorKey: key,
-    scopeDepartmentId: key === "al" ? e.scopeDepartmentId : "",
-    displayName: "",
-  };
+  if (!key) return [];
+  const out: EvaluatorIdentity[] = [
+    { userId, evaluatorKey: key, scopeDepartmentId: key === "al" ? e.scopeDepartmentId : "", displayName: "" },
+  ];
+  if (e.alsoHead && key !== "al") {
+    out.push({ userId, evaluatorKey: "al", scopeDepartmentId: e.alsoHeadScope ?? "", displayName: "" });
+  }
+  return out;
+}
+
+/** The account's PRIMARY evaluator identity (kept for callers that need one). */
+export async function resolveEvaluatorFromRoster(userId: string): Promise<EvaluatorIdentity | null> {
+  const all = await resolveEvaluatorsFromRoster(userId);
+  return all[0] ?? null;
 }
 
 /* ---------------- peer reviews ---------------- */
