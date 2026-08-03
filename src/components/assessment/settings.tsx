@@ -94,8 +94,17 @@ export function AssessmentSettings({
     [filter, roleOf],
   );
   const nameById = React.useMemo(() => Object.fromEntries(accounts.map((a) => [a.id, a.name])), [accounts]);
+  // Selectable Atasan (P1): accounts registered as Head, PLUS HC/Director who
+  // merangkap Head — they fill the Atasan column too (mis. MT Adrianto).
   const headOptions = React.useMemo(
-    () => accounts.filter((a) => roster[a.id]?.role === "head").map((a) => ({ value: a.id, label: a.name, hint: a.department ?? undefined })),
+    () =>
+      accounts
+        .filter((a) => roster[a.id]?.role === "head" || roster[a.id]?.alsoHead)
+        .map((a) => ({
+          value: a.id,
+          label: a.name,
+          hint: roster[a.id]?.alsoHead ? `${a.department ?? "—"} · rangkap Head` : a.department ?? undefined,
+        })),
     [accounts, roster],
   );
 
