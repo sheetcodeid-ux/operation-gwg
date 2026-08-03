@@ -262,7 +262,9 @@ export function AssessmentProvider({
       const raw = localStorage.getItem(STORAGE_KEY);
       if (raw) {
         const d = JSON.parse(raw);
-        if (d.candidate) setCandidate({ ...EMPTY_CANDIDATE, ...d.candidate });
+        // `candidate` is deliberately NOT restored: a remembered pick made the
+        // page silently re-create the session on every load, resurrecting an
+        // assessment an admin had just deleted. Evaluators start at the queue.
         if (d.syarat) setSyarat(d.syarat);
         if (d.self) setSelf(d.self);
       }
@@ -276,9 +278,9 @@ export function AssessmentProvider({
   React.useEffect(() => {
     if (!hydrated) return;
     try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify({ candidate, syarat, self }));
+      localStorage.setItem(STORAGE_KEY, JSON.stringify({ syarat, self }));
     } catch {}
-  }, [hydrated, candidate, syarat, self]);
+  }, [hydrated, syarat, self]);
 
   const resetAssessment = React.useCallback(() => {
     setCandidate({ ...EMPTY_CANDIDATE });
@@ -331,13 +333,21 @@ export function AssessmentProvider({
     (id: string) => setCandidate((c) => ({ ...c, positionId: id, employeeId: "" })),
     [],
   );
-  const setEmployee = React.useCallback((id: string) => setCandidate((c) => ({ ...c, employeeId: id })), []);
+  // Guard: only a deliberate pick in THIS visit may create a server session.
+  // Without it, any restored/derived candidate silently re-created a session an
+  // admin had just deleted.
+  const pickedRef = React.useRef(false);
+  const setEmployee = React.useCallback((id: string) => {
+    pickedRef.current = true;
+    setCandidate((c) => ({ ...c, employeeId: id }));
+  }, []);
   const patchCandidate = React.useCallback((patch: Partial<Candidate>) => setCandidate((c) => ({ ...c, ...patch })), []);
 
   // Quick-pick a participant from the evaluator's queue: fill dept/position/name
   // (and a default batch) so the session opens immediately — golongan/tujuan can
   // be completed by HC later. `userId` maps to the mirrored org employee id.
   const pickParticipant = React.useCallback((userId: string, department: string, jabatan: string) => {
+    pickedRef.current = true;
     setCandidate((c) => ({
       ...c,
       departmentId: orgDepartmentId(department),
@@ -349,6 +359,7 @@ export function AssessmentProvider({
 
   // Clear the current candidate + local scores → back to the queue (reset ke 0).
   const resetCandidate = React.useCallback(() => {
+    pickedRef.current = false;
     setCandidate({ ...EMPTY_CANDIDATE });
     setScores(emptyEvaluatorScores());
     setEvaluatorNotes({});
@@ -461,7 +472,7 @@ export function AssessmentProvider({
     ? [candidate.departmentId, resolved.nama, candidate.batch].join("|")
     : "";
   React.useEffect(() => {
-    if (!isEvaluator || !identityComplete || !resolved.nama) {
+    if (!isEvaluator || !identityComplete || !resolved.nama || !pickedRef.current) {
       setSession(null);
       return;
     }
