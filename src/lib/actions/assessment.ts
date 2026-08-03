@@ -115,7 +115,8 @@ export async function deleteSession(sessionId: string): Promise<{ ok: boolean; e
   const user = await getSessionUser();
   if (!user) return { ok: false, error: "Tidak ada sesi login." };
   if (user.role !== "super_admin") return { ok: false, error: "Hanya admin yang dapat menghapus assessment." };
-  await dbDeleteSession(sessionId);
+  const res = await dbDeleteSession(sessionId);
+  if (res.error) return { ok: false, error: res.error };
   return { ok: true };
 }
 

@@ -364,14 +364,22 @@ export async function updateSessionMeta(
   await db().from("assessment_sessions").update(row).eq("id", sessionId);
 }
 
-/** Delete a session and all its evaluations (FK cascade). Shared DB, so the
- *  removal is visible to every user on their next poll. */
-export async function deleteSession(id: string): Promise<void> {
+/** Delete a session with its evaluations (FK cascade) and peer reviews (no FK,
+ *  so removed explicitly — otherwise orphan rows pile up). Shared DB, so the
+ *  removal is visible to every user on their next poll. Errors are RETURNED,
+ *  never swallowed: a silent failure looked exactly like "it came back". */
+export async function deleteSession(id: string): Promise<{ error?: string }> {
   if (!dbEnabled) {
     memSessions.delete(id);
-    return;
+    return {};
   }
-  await db().from("assessment_sessions").delete().eq("id", id);
+  // Peer reviews first — they reference the session but without a cascade.
+  await db().from("assessment_peer_reviews").delete().eq("session_id", id);
+  const { error } = await db().from("assessment_sessions").delete().eq("id", id);
+  if (error) return { error: error.message };
+  // Verify it is really gone (a blocked delete reports no error but leaves the row).
+  const { data } = await db().from("assessment_sessions").select("id").eq("id", id).maybeSingle();
+  return data ? { error: "Baris masih ada setelah dihapus — periksa hak akses database." } : {};
 }
 
 /** Test/seed helper (demo mode only): register an evaluator identity. */

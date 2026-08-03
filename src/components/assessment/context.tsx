@@ -20,7 +20,7 @@ import { BATCHES, formatGolongan, getDepartment, getEmployee, getPosition, orgDe
 import type { AssessmentRole, TabKey } from "@/lib/assessment/access";
 import { canSeeTab, TAB_ACCESS } from "@/lib/assessment/access";
 import type { EvaluatorIdentity, SessionSeed, SessionState } from "@/lib/assessment/session";
-import { openSession, submitMyEvaluation, updateSessionShared } from "@/lib/actions/assessment";
+import { fetchSession, openSession, submitMyEvaluation, updateSessionShared } from "@/lib/actions/assessment";
 import { getMySelf, saveMySelfAssessmentAction } from "@/lib/actions/assessment-self";
 
 /** The signed-in viewer's own identity — used to auto-fill their Self Assessment. */
@@ -482,17 +482,30 @@ export function AssessmentProvider({
       directorOnly: activeEvaluators.length === 1,
     };
     setSessionBusy(true);
+    let openedId: string | null = null;
+    // CREATE happens exactly once, on this deliberate candidate selection.
     openSession(seed)
       .then((s) => {
+        openedId = s?.id ?? null;
         if (!cancelled) setSession(s);
       })
       .finally(() => {
         if (!cancelled) setSessionBusy(false);
       });
-    // Poll for cross-device updates every 5s.
+    // Poll for cross-device updates every 5s — READ-ONLY. It used to call
+    // openSession(), which re-CREATED the session moments after an admin
+    // deleted it ("sudah dihapus tapi muncul lagi"). If the row is gone we let
+    // the selection go instead of resurrecting it.
     const poll = setInterval(async () => {
-      const cur = await openSession(seed).catch(() => null);
-      if (!cancelled && cur) setSession(cur);
+      if (!openedId) return;
+      const cur = await fetchSession(openedId).catch(() => null);
+      if (cancelled) return;
+      if (cur) setSession(cur);
+      else {
+        openedId = null;
+        setSession(null);
+        setCandidate({ ...EMPTY_CANDIDATE });
+      }
     }, 5000);
     return () => {
       cancelled = true;
