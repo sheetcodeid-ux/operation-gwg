@@ -14,7 +14,7 @@ import { AssessmentQueueList, type QueueItem } from "./queue-list";
 /** Penilaian tab for a Rekan Sejawat (Penilai 3): score only the participants
  *  the settings assigned to this reviewer. Each peer submits independently; the
  *  system averages the submitted reviews into the Penilai 3 (25%) column. */
-export function PeerPenilaianTab() {
+export function PeerPenilaianTab({ onActiveChange }: { onActiveChange?: (active: boolean) => void } = {}) {
   const [targets, setTargets] = React.useState<PeerTarget[] | null>(null);
   const [activeId, setActiveId] = React.useState<string | null>(null);
   const [scores, setScores] = React.useState<ParamScores>({});
@@ -31,6 +31,8 @@ export function PeerPenilaianTab() {
   }, [load]);
 
   const active = targets?.find((t) => t.participantUserId === activeId) ?? null;
+  // Let the host hide its own section while a peer review is open.
+  React.useEffect(() => { onActiveChange?.(!!active); }, [active, onActiveChange]);
 
   function open(t: PeerTarget) {
     setActiveId(t.participantUserId);

@@ -136,6 +136,9 @@ export async function saveAssignmentAction(input: {
   if (!(await canManage())) return { error: "Hanya Admin yang dapat mengatur assessment." };
   try {
     await saveAssignment(input);
+    // Re-assigning an atasan / rekan sejawat is the deliberate "set up again"
+    // gesture — lift any delete block so the new round can actually be scored.
+    await unblockParticipant(input.participantUserId);
     revalidatePath("/assessment/settings");
     revalidatePath("/assessment");
     return { ok: true };

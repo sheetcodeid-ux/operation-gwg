@@ -31,9 +31,10 @@ export function PenilaianTab() {
   const a = useAssessment();
   // An official evaluator who is ALSO a Rekan Sejawat for other divisions gets a
   // mode switch — the two panels are separate scoring flows.
-  const [mode, setMode] = React.useState<"resmi" | "sejawat">("resmi");
-  const dualPanel = a.evaluators.length > 0 && a.peerCount > 0;
-  const showPeer = dualPanel && mode === "sejawat";
+  // Peer duty is shown INLINE (not behind a toggle): an evaluator who is also a
+  // Rekan Sejawat must see that queue without hunting for a hidden tab.
+  const [peerActive, setPeerActive] = React.useState(false);
+  const hasPeerDuty = a.peerCount > 0;
 
   const evaluators = a.activeEvaluators;
   const single = evaluators.length === 1;
@@ -61,33 +62,16 @@ export function PenilaianTab() {
 
   return (
     <div className="space-y-4">
-      {/* Wearing two hats: official evaluator AND Rekan Sejawat for other teams. */}
-      {dualPanel && (
-        <div className="grid grid-cols-2 gap-1 rounded-xl border border-border bg-muted/50 p-1">
-          {([
-            { id: "resmi", label: "Penilai Resmi" },
-            { id: "sejawat", label: `Rekan Sejawat (${a.peerCount})` },
-          ] as const).map((m) => (
-            <button
-              key={m.id}
-              type="button"
-              onClick={() => setMode(m.id)}
-              aria-pressed={mode === m.id}
-              className={cn(
-                "rounded-lg px-3 py-1.5 text-sm font-medium transition-colors",
-                mode === m.id ? "bg-background text-foreground shadow-md ring-1 ring-border" : "text-muted-foreground hover:text-foreground",
-              )}
-            >
-              {m.label}
-            </button>
-          ))}
+      {hasPeerDuty && (
+        <div className="space-y-3">
+          <SectionLabel>Antrian Rekan Sejawat ({a.peerCount})</SectionLabel>
+          <PeerPenilaianTab onActiveChange={setPeerActive} />
         </div>
       )}
 
-      {showPeer ? (
-        <PeerPenilaianTab />
-      ) : (
+      {!peerActive && (
       <div className="space-y-4">
+      {hasPeerDuty && <SectionLabel>Antrian Penilaian Resmi</SectionLabel>}
       <Banner tone="info" icon={<Settings2 className="size-4" />}>
         {locked ? (
           <>
