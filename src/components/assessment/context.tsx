@@ -396,8 +396,14 @@ export function AssessmentProvider({
   // ── Which of MY columns apply to the selected candidate ──
   const myKeysForCandidate = React.useMemo<EvaluatorKey[]>(() => {
     const required = new Set(activeEvaluators.map((e) => e.key));
-    return myHats.map((h) => h.evaluatorKey).filter((k) => required.has(k));
-  }, [myHats, activeEvaluators]);
+    return myHats
+      .filter((h) => required.has(h.evaluatorKey))
+      // The Atasan (P1) column belongs to the head of the candidate's OWN
+      // division. A head from another division (e.g. Head Creative looking at an
+      // HC staffer) is only ever a Rekan Sejawat — never their Atasan.
+      .filter((h) => h.evaluatorKey !== "al" || !h.scopeDepartmentId || h.scopeDepartmentId === candidate.departmentId)
+      .map((h) => h.evaluatorKey);
+  }, [myHats, activeEvaluators, candidate.departmentId]);
   const [myKeyState, setMyKeyState] = React.useState<EvaluatorKey | null>(null);
   const myKey: EvaluatorKey | null =
     myKeyState && myKeysForCandidate.includes(myKeyState) ? myKeyState : myKeysForCandidate[0] ?? null;

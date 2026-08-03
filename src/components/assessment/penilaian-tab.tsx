@@ -102,8 +102,17 @@ export function PenilaianTab() {
 
       {notMyCandidate ? (
         <Banner tone="amber" icon={<Circle className="size-4" />}>
-          Posisi <strong>{a.resolved.jabatan || "ini"}</strong> tidak dinilai oleh peran Anda. Pilih karyawan lain yang
-          menjadi tanggung jawab penilaian Anda.
+          {hasPeerDuty ? (
+            <>
+              Anda bukan penilai resmi <strong>{a.resolved.nama || "karyawan ini"}</strong> — dia di luar divisi Anda. Bila
+              namanya ada di <strong>Antrian Rekan Sejawat</strong> di atas, nilai dari sana.
+            </>
+          ) : (
+            <>
+              Posisi <strong>{a.resolved.jabatan || "ini"}</strong> tidak dinilai oleh peran Anda. Pilih karyawan lain yang
+              menjadi tanggung jawab penilaian Anda.
+            </>
+          )}
         </Banner>
       ) : single && !locked ? (
         <Banner tone="violet" icon={<Star className="size-4" />}>
