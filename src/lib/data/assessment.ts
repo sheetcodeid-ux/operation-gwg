@@ -267,7 +267,16 @@ export async function getOrCreateSession(seed: SessionSeed, createdBy: string | 
   if (!dbEnabled) {
     memSessions.set(id, { row, evals: new Map() });
   } else {
-    await db().from("assessment_sessions").insert(row);
+    const { error } = await db().from("assessment_sessions").insert(row);
+    if (error) {
+      // The DB guard refuses to resurrect an assessment the admin deleted.
+      if ((error.message || "").includes("ASSESSMENT_BLOCKED")) {
+        throw new Error(
+          "Assessment karyawan ini sudah dihapus admin. Aktifkan ulang di Pengaturan Assessment untuk menilai dari awal.",
+        );
+      }
+      throw new Error(error.message);
+    }
   }
   // Brand-new session: no evaluations yet, but report the expected peer panel
   // size so the dashboard shows "0/N" immediately.
@@ -381,13 +390,44 @@ export async function deleteSession(id: string): Promise<{ error?: string }> {
     memSessions.delete(id);
     return {};
   }
+  // Remember WHO this was, then block re-creation. A database trigger enforces
+  // the block, so no client — not even a stale tab still running an older build
+  // — can bring the assessment back on its own.
+  const { data: row } = await db()
+    .from("assessment_sessions")
+    .select("participant_user_id,employee_name")
+    .eq("id", id)
+    .maybeSingle();
+
   // Peer reviews first — they reference the session but without a cascade.
   await db().from("assessment_peer_reviews").delete().eq("session_id", id);
   const { error } = await db().from("assessment_sessions").delete().eq("id", id);
   if (error) return { error: error.message };
+
+  if (row) {
+    await db().from("assessment_blocked").upsert({
+      participant_user_id: row.participant_user_id || `name:${row.employee_name}`,
+      employee_name: row.employee_name ?? null,
+      blocked_at: nowIso(),
+    });
+  }
   // Verify it is really gone (a blocked delete reports no error but leaves the row).
   const { data } = await db().from("assessment_sessions").select("id").eq("id", id).maybeSingle();
   return data ? { error: "Baris masih ada setelah dihapus — periksa hak akses database." } : {};
+}
+
+/** Participant ids whose assessment was deleted and is awaiting a fresh start. */
+export async function listBlockedParticipants(): Promise<string[]> {
+  if (!dbEnabled) return [];
+  const { data } = await db().from("assessment_blocked").select("participant_user_id");
+  return ((data ?? []) as { participant_user_id: string }[]).map((r) => r.participant_user_id);
+}
+
+/** Admin re-opens assessment for a participant (start over from zero). */
+export async function unblockParticipant(participantUserId: string, employeeName?: string | null): Promise<void> {
+  if (!dbEnabled) return;
+  await db().from("assessment_blocked").delete().eq("participant_user_id", participantUserId);
+  if (employeeName) await db().from("assessment_blocked").delete().eq("employee_name", employeeName);
 }
 
 /** Test/seed helper (demo mode only): register an evaluator identity. */

@@ -11,6 +11,7 @@ import {
   removeRosterEntryAction,
   saveAssignmentAction,
   saveSignatureAction,
+  unblockAssessmentAction,
 } from "@/lib/actions/assessment-settings";
 import type { RosterRole } from "@/lib/data/assessment-roster";
 
@@ -57,16 +58,27 @@ export function AssessmentSettings({
   initialRoster,
   initialAssignments,
   initialSignatures = {},
+  initialBlocked = [],
 }: {
   accounts: AccountOption[];
   departments: DeptOption[];
   initialRoster: RosterMap;
   initialAssignments: AssignMap;
   initialSignatures?: SigMap;
+  /** Participants whose assessment was deleted — creation is blocked until reset. */
+  initialBlocked?: string[];
 }) {
   const [roster, setRoster] = React.useState<RosterMap>(initialRoster);
   const [assign, setAssign] = React.useState<AssignMap>(initialAssignments);
   const [sigs, setSigs] = React.useState<SigMap>(initialSignatures);
+  const [blocked, setBlocked] = React.useState<Set<string>>(new Set(initialBlocked));
+
+  async function unblock(id: string, name: string) {
+    setBlocked((b) => { const n = new Set(b); n.delete(id); return n; });
+    const res = await unblockAssessmentAction(id, name);
+    if (res?.error) toast.error(res.error);
+    else toast.success("Assessment dibuka kembali — bisa dinilai dari awal");
+  }
   const [q, setQ] = React.useState("");
   const [filter, setFilter] = React.useState<Filter>("all");
   const [busy, setBusy] = React.useState<string | null>(null);
@@ -147,7 +159,8 @@ export function AssessmentSettings({
       const scope = role === "head" ? roster[id]?.scopeDepartmentId ?? "" : "";
       setRoster((r) => ({ ...r, [id]: { role, scopeDepartmentId: scope } }));
       const res = await saveRosterEntryAction({ userId: id, role, scopeDepartmentId: scope });
-      if (res?.error) { setRoster(prev); toast.error(res.error); } else toast.success("Peran diperbarui");
+      if (res?.error) { setRoster(prev); toast.error(res.error); }
+      else { setBlocked((b) => { const n = new Set(b); n.delete(id); return n; }); toast.success("Peran diperbarui"); }
     }
     setBusy(null);
   }
@@ -241,6 +254,20 @@ export function AssessmentSettings({
             <Combobox portal matchTriggerWidth searchable={false} value={role} onChange={(v) => changeRole(a.id, v as RoleChoice)} options={ROLE_OPTS.map((r) => ({ value: r.value, label: r.label }))} />
           </div>
         </div>
+
+        {blocked.has(a.id) && (
+          <div className="mt-2 flex flex-wrap items-center gap-2 rounded-lg bg-amber-500/10 px-2.5 py-2 text-[11px] text-amber-700 dark:text-amber-300">
+            <AlertCircle className="size-3.5 shrink-0" />
+            <span className="min-w-0 flex-1">Assessment sudah dihapus. Penilaian baru diblokir sampai diaktifkan kembali.</span>
+            <button
+              type="button"
+              onClick={() => unblock(a.id, a.name)}
+              className="shrink-0 rounded-md bg-amber-600 px-2 py-1 text-[11px] font-semibold text-white hover:bg-amber-700"
+            >
+              Aktifkan assessment ulang
+            </button>
+          </div>
+        )}
 
         {/* Head → division they assess. As a participant they're scored by
             Director + HC, and may ALSO get their own Rekan Sejawat panel. */}

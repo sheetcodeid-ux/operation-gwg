@@ -11,6 +11,7 @@ type Data = {
   initialRoster: Record<string, { role: "karyawan" | "head" | "director" | "hc"; scopeDepartmentId: string }>;
   initialAssignments: Record<string, { atasanUserId: string | null; peerUserIds: string[] }>;
   initialSignatures: Record<string, { name: string; image: string | null }>;
+  initialBlocked: string[];
 };
 
 /** Loads the settings data on demand (so the Pengaturan tab opens instantly),
@@ -37,6 +38,7 @@ export function SettingsPanel() {
       initialRoster={data.initialRoster}
       initialAssignments={data.initialAssignments}
       initialSignatures={data.initialSignatures}
+      initialBlocked={data.initialBlocked}
     />
   );
 }

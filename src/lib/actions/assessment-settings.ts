@@ -16,6 +16,7 @@ import {
   type RosterRole,
 } from "@/lib/data/assessment-roster";
 import { getReportSignatories, listSignatures, saveSignature } from "@/lib/data/assessment-signature";
+import { listBlockedParticipants, unblockParticipant } from "@/lib/data/assessment";
 import type { UserProfile } from "@/lib/types";
 
 /** Who may edit the assessment settings: Super Admin only (owner decision). */
@@ -29,7 +30,12 @@ async function canManage(): Promise<UserProfile | null> {
 export async function getAssessmentSettingsData() {
   if (!(await canManage())) return null;
   setOrgExtras(await getOrgExtra());
-  const [roster, assignments, signatures] = await Promise.all([listRoster(), listAssignments(), listSignatures()]);
+  const [roster, assignments, signatures, blocked] = await Promise.all([
+    listRoster(),
+    listAssignments(),
+    listSignatures(),
+    listBlockedParticipants(),
+  ]);
   const accounts = getUsers()
     .filter((u) => u.active)
     .map((u) => ({ id: u.id, name: u.name, email: u.email, department: u.department ?? null, jabatan: u.jabatan ?? null }))
@@ -39,7 +45,7 @@ export async function getAssessmentSettingsData() {
     roster.map((r) => [r.userId, { role: r.role, scopeDepartmentId: r.scopeDepartmentId, alsoHead: !!r.alsoHead, alsoHeadScope: r.alsoHeadScope ?? "" }]),
   );
   const initialAssignments = Object.fromEntries(assignments.map((a) => [a.participantUserId, { atasanUserId: a.atasanUserId, peerUserIds: a.peerUserIds }]));
-  return { accounts, departments, initialRoster, initialAssignments, initialSignatures: signatures };
+  return { accounts, departments, initialRoster, initialAssignments, initialSignatures: signatures, initialBlocked: blocked };
 }
 
 /** Save one signatory's TTD (name + optional signature image data URL). Admin only. */
@@ -64,6 +70,19 @@ export async function getReportSignatoriesAction(participantUserId?: string) {
   return getReportSignatories(participantUserId);
 }
 
+/** Re-open assessment for a participant whose record the admin deleted, so a
+ *  brand-new assessment can be started from zero. */
+export async function unblockAssessmentAction(userId: string, employeeName?: string) {
+  if (!(await canManage())) return { error: "Hanya Admin yang dapat mengatur assessment." };
+  try {
+    await unblockParticipant(userId, employeeName ?? null);
+    revalidatePath("/assessment");
+    return { ok: true };
+  } catch (e) {
+    return { error: persistMessage(e) };
+  }
+}
+
 export async function saveRosterEntryAction(input: {
   userId: string;
   role: RosterRole;
@@ -86,6 +105,8 @@ export async function saveRosterEntryAction(input: {
     // may also have Rekan Sejawat), so both keep their assignment. Only HC and
     // Director are pure evaluators — drop any stale participant row for them.
     if (input.role !== "karyawan" && input.role !== "head") await deleteAssignment(input.userId);
+    // Re-registering someone is a deliberate fresh start — lift any delete block.
+    await unblockParticipant(input.userId);
     revalidatePath("/assessment/settings");
     revalidatePath("/assessment");
     return { ok: true };
