@@ -15,20 +15,20 @@ import {
   financeTrainingRequestsAction,
   hcDecideRequestAction,
 } from "@/lib/actions/hc-requests";
-import { fmtRupiah, isOpen, nextActions, type HcRequest } from "@/lib/hc-request";
+import { fmtRupiah, isOpen, nextActions, type HcRequest, type HcRequestKind } from "@/lib/hc-request";
 import { FilePicker, RequestSummary, uploadAll } from "./request-shared";
 
 type Mode = "hc" | "finance";
 type Tab = "open" | "done";
 
-/** Antrian pengajuan — dipakai HC (semua jenis) dan Finance (dana pelatihan). */
-export function HcRequestReview({ mode }: { mode: Mode }) {
+/** Antrian pengajuan — dipakai HC (per jenis) dan Finance (dana pelatihan). */
+export function HcRequestReview({ mode, kind }: { mode: Mode; kind?: HcRequestKind }) {
   const [rows, setRows] = React.useState<HcRequest[] | null>(null);
   const [tab, setTab] = React.useState<Tab>("open");
 
   const load = React.useCallback(async () => {
-    setRows(mode === "hc" ? await allHcRequestsAction() : await financeTrainingRequestsAction());
-  }, [mode]);
+    setRows(mode === "hc" ? await allHcRequestsAction(kind) : await financeTrainingRequestsAction());
+  }, [mode, kind]);
   React.useEffect(() => {
     void load();
   }, [load]);
@@ -78,7 +78,7 @@ export function HcRequestReview({ mode }: { mode: Mode }) {
       ) : (
         <div className="space-y-3">
           {shown.map((r) => (
-            <RequestSummary key={r.id} r={r} timeline>
+            <RequestSummary key={r.id} r={r}>
               <Actions r={r} mode={mode} onDone={load} />
             </RequestSummary>
           ))}

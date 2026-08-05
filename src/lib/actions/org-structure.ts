@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { getSessionUser } from "@/lib/auth";
 import { can } from "@/lib/rbac";
 import { addOrgDepartment, addOrgEmployee, deleteOrgDepartment, deleteOrgEmployee } from "@/lib/data/org";
-import { addNavDivision, deleteNavDivision } from "@/lib/data/nav";
+import { addNavDivision, deleteNavDivision, saveNavGroups } from "@/lib/data/nav";
 import { builtInDivisions } from "@/lib/nav";
 
 async function guard() {
@@ -78,6 +78,22 @@ export async function addDivisionAction(input: { name: string; icon: string; men
 export async function deleteDivisionAction(id: string) {
   if (!(await guard())) return { error: "Not authorized" };
   await deleteNavDivision(id);
+  refreshNav();
+  return { ok: true };
+}
+
+/** Susun sub-grup ("bidang kerja") di dalam satu divisi. Daftar kosong ⇒ divisi
+ *  itu kembali memakai susunan bawaan aplikasi. */
+export async function saveDivisionGroupsAction(input: {
+  division: string;
+  groups: { name: string; icon: string; menus: string[] }[];
+}) {
+  if (!(await guard())) return { error: "Not authorized" };
+  if (!input.division.trim()) return { error: "Pilih divisi dulu." };
+  const names = input.groups.map((g) => g.name.trim()).filter(Boolean);
+  if (names.length !== new Set(names).size) return { error: "Nama bidang tidak boleh sama." };
+  if (input.groups.some((g) => !g.name.trim())) return { error: "Setiap bidang harus punya nama." };
+  await saveNavGroups(input.division, input.groups);
   refreshNav();
   return { ok: true };
 }

@@ -13,8 +13,8 @@ import type { UserProfile } from "@/lib/types";
 
 /** Setiap departemen boleh mengajukan (menu hc_request). */
 const canSubmit = (u: UserProfile | null) => !!u && canReachMenu(u, "hc_request");
-/** HC memproses semua pengajuan (menu hc_reqreview). */
-const canHc = (u: UserProfile | null) => !!u && canReachMenu(u, "hc_reqreview");
+/** HC memproses pengajuan — permintaan karyawan maupun pelatihan. */
+const canHc = (u: UserProfile | null) => !!u && (canReachMenu(u, "hc_reqreview") || canReachMenu(u, "hc_training"));
 /** Finance menyetujui dana pelatihan (menu fin_training). */
 const canFinance = (u: UserProfile | null) => !!u && canReachMenu(u, "fin_training");
 
@@ -55,6 +55,7 @@ export interface SubmitRequestInput {
   headcount?: number;
   trainingType?: string;
   participants?: number;
+  participantNames?: string[];
   budget?: number;
   plannedDate?: string;
   attachments: HcRequestAttachment[];
@@ -81,6 +82,7 @@ export async function submitHcRequestAction(input: SubmitRequestInput): Promise<
       headcount: input.headcount ?? 0,
       trainingType: input.trainingType?.trim() || null,
       participants: input.participants ?? 0,
+      participantNames: input.participantNames ?? [],
       budget: input.budget ?? 0,
       plannedDate: input.plannedDate || null,
       attachments: input.attachments ?? [],
@@ -98,6 +100,7 @@ function revalidateAll() {
   revalidatePath("/pengajuan/karyawan");
   revalidatePath("/pengajuan/pelatihan");
   revalidatePath("/hc/permintaan");
+  revalidatePath("/hc/pelatihan");
   revalidatePath("/finance/pelatihan");
   revalidatePath("/hc/kpi");
 }
@@ -110,11 +113,11 @@ export async function myHcRequestsAction(): Promise<HcRequest[]> {
   return listHcRequests({ department: user!.department ?? "—" });
 }
 
-/** Semua pengajuan (HC). */
-export async function allHcRequestsAction(): Promise<HcRequest[]> {
+/** Pengajuan yang masuk ke HC — dibatasi satu jenis bila diminta. */
+export async function allHcRequestsAction(kind?: HcRequestKind): Promise<HcRequest[]> {
   const user = await getSessionUser();
   if (!canHc(user)) return [];
-  return listHcRequests();
+  return listHcRequests(kind ? { kind } : {});
 }
 
 /** Pelatihan yang menunggu / sudah diputus Finance. */

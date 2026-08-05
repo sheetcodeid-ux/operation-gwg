@@ -26,6 +26,7 @@ export type MenuKey =
   | "hc_kpi"
   | "hc_request"
   | "hc_reqreview"
+  | "hc_training"
   | "fin_training"
   | "mc_events"
   | "assessment"
@@ -61,10 +62,17 @@ export interface NavItem {
   section: string;
   /** Lucide icon name for the section header (built-in or admin-defined). */
   sectionIcon?: string;
+  /** Sub-group inside the division ("Talent Acquisition"), if the menu is in one. */
+  group?: string;
+  /** Lucide icon name for that sub-group's header. */
+  groupIcon?: string;
+  /** Reachable by route but never listed in the sidebar — it lives inside
+   *  another page (the Pengajuan hub links to these). */
+  hidden?: boolean;
 }
 
 /** Static definition of every menu (order = sidebar order within a group). */
-export const NAV_MENUS: Omit<NavItem, "section">[] = [
+export const NAV_MENUS: Omit<NavItem, "section" | "group" | "groupIcon">[] = [
   { key: "dashboard", label: "Dashboard", href: "/dashboard", icon: "LayoutDashboard" },
   { key: "analytics", label: "Analytics", href: "/analytics", icon: "TrendingUp" },
   { key: "work", label: "Work Tracker", href: "/work-tracker", icon: "ListChecks" },
@@ -80,14 +88,17 @@ export const NAV_MENUS: Omit<NavItem, "section">[] = [
   { key: "op_seasonal", label: "Musiman", href: "/operation/musiman", icon: "Waves" },
   { key: "op_analysis", label: "Data Analysis", href: "/operation/analysis", icon: "ChartColumnBig" },
   { key: "sys_review", label: "Antrian System", href: "/system/antrian", icon: "Headset" },
-  { key: "hc_submit", label: "Pengajuan Dokumen", href: "/hc/pengajuan", icon: "FileUp" },
+  // Kedua "pengajuan" ini kini menjadi kategori DI DALAM halaman Pengajuan —
+  // tetap punya rute sendiri, tapi tidak lagi muncul terpisah di sidebar.
+  { key: "hc_submit", label: "Pengajuan Dokumen", href: "/hc/pengajuan", icon: "FileUp", hidden: true },
   { key: "hc_review", label: "Antrian Dokumen", href: "/hc/antrian", icon: "FolderInput" },
-  { key: "sys_submit", label: "Pengajuan System", href: "/system/pengajuan", icon: "MonitorCog" },
+  { key: "sys_submit", label: "Pengajuan System", href: "/system/pengajuan", icon: "MonitorCog", hidden: true },
   { key: "elearning", label: "E-Learning", href: "/elearning", icon: "GraduationCap" },
   { key: "elearning_admin", label: "Kelola E-Learning", href: "/elearning/kelola", icon: "LibraryBig" },
   { key: "hc_kpi", label: "KPI Human Capital", href: "/hc/kpi", icon: "Target" },
   { key: "hc_request", label: "Pengajuan", href: "/pengajuan", icon: "Send" },
-  { key: "hc_reqreview", label: "Permintaan & Pelatihan", href: "/hc/permintaan", icon: "ClipboardCheck" },
+  { key: "hc_reqreview", label: "Permintaan Karyawan", href: "/hc/permintaan", icon: "ClipboardCheck" },
+  { key: "hc_training", label: "Pelatihan", href: "/hc/pelatihan", icon: "GraduationCap" },
   { key: "fin_training", label: "ACC Dana Pelatihan", href: "/finance/pelatihan", icon: "Wallet" },
   { key: "mc_events", label: "Event Tracker", href: "/marcomm/events", icon: "Megaphone" },
   { key: "reports", label: "Reports", href: "/reports", icon: "FileText" },
@@ -100,6 +111,12 @@ export const NAV_MENUS: Omit<NavItem, "section">[] = [
   { key: "users", label: "User Management", href: "/admin/users", icon: "Users" },
   { key: "audit", label: "Audit Logs", href: "/admin/audit", icon: "ScrollText" },
 ];
+
+/** Menu definition by key — lookup used when assembling the sidebar. */
+const MENU_BY_KEY = Object.fromEntries(NAV_MENUS.map((m) => [m.key, m])) as Record<
+  MenuKey,
+  (typeof NAV_MENUS)[number] | undefined
+>;
 
 /** Icon (lucide name) shown next to each division's collapsible header. */
 export const DIVISION_ICON: Record<Division, string> = {
@@ -170,7 +187,7 @@ export const ROLE_MENUS: Record<Role, MenuKey[]> = {
   bar_rnd: ["hpp_dash", "work", "hpp", "hpp_db", "hpp_bahan", "hpp_price", "assessment"],
   kitchen_rnd: ["hpp_dash", "work", "hpp", "hpp_db", "hpp_bahan", "hpp_price", "assessment"],
   coordinator_rnd: ["hpp_dash", "work", "hpp", "hpp_db", "hpp_bahan", "hpp_price", "assessment"],
-  legal: ["work", "hc_review", "hc_kpi", "hc_reqreview", "assessment"], // HRD — assessment, HC document queue + KPI departemen
+  legal: ["work", "hc_review", "hc_kpi", "hc_reqreview", "hc_training", "assessment"], // HRD — assessment, HC document queue + KPI departemen
   assessor: ["assessment"], // division Head / evaluator — assessment only
   member: ["assessment"], // HO staff — assessment; other access via `department`
 };
@@ -181,8 +198,49 @@ export const ROLE_MENUS: Record<Role, MenuKey[]> = {
  *  training programme without an admin granting it first. */
 export const UNIVERSAL_MENUS: MenuKey[] = ["hc_request"];
 
+/** Divisions that are NOT a department doing day-to-day work — they don't get
+ *  the company-wide menus (Administrator is app configuration, not a team). */
+const NO_UNIVERSAL: string[] = ["Administrator"];
+
 /** A menu list plus the company-wide menus, without duplicates. */
-const withUniversal = (menus: MenuKey[]): MenuKey[] => [...new Set([...menus, ...UNIVERSAL_MENUS])];
+const withUniversal = (menus: MenuKey[], division: string): MenuKey[] =>
+  NO_UNIVERSAL.includes(division) ? [...menus] : [...new Set([...menus, ...UNIVERSAL_MENUS])];
+
+/* ───────────────────────── sub-grup di dalam divisi ─────────────────────────
+ * Satu departemen berisi beberapa bidang kerja, dan tiap bidang punya menu
+ * wajibnya sendiri (mis. Human Capital → Talent Acquisition → Permintaan
+ * Karyawan + Pelatihan). Menu yang tidak masuk bidang mana pun dianggap umum
+ * dan diletakkan di bawah, urut abjad.                                       */
+
+export interface NavGroupDef {
+  name: string;
+  icon: string; // lucide icon name
+  menus: MenuKey[];
+}
+
+/** Pengelompokan bawaan per divisi. Bisa ditimpa admin lewat User Management. */
+export const DIVISION_GROUPS: Partial<Record<Division, NavGroupDef[]>> = {
+  Operation: [
+    { name: "Monitoring Outlet", icon: "Store", menus: ["outlets", "hospitality", "hygiene", "complaints"] },
+    { name: "Keuangan Operasional", icon: "Wallet", menus: ["op_beban", "op_pembelian", "op_settings"] },
+    { name: "Analisis & Laporan", icon: "ChartColumnBig", menus: ["analytics", "op_analysis", "op_fraud", "op_seasonal", "reports"] },
+    { name: "Pembelajaran", icon: "GraduationCap", menus: ["elearning", "elearning_admin"] },
+    { name: "System Support", icon: "Headset", menus: ["sys_review"] },
+  ],
+  Supervisor: [
+    { name: "Operasional Outlet", icon: "Store", menus: ["hospitality", "hygiene", "complaints"] },
+  ],
+  "Product Development & Quality": [
+    { name: "Kalkulasi HPP", icon: "Calculator", menus: ["hpp", "hpp_db", "hpp_bahan", "hpp_price"] },
+  ],
+  "Human Capital": [
+    { name: "Talent Acquisition", icon: "UserRound", menus: ["hc_reqreview", "hc_training"] },
+    { name: "Administrasi Personalia", icon: "FolderInput", menus: ["hc_review"] },
+    { name: "Kinerja & Penilaian", icon: "Target", menus: ["hc_kpi", "assessment"] },
+  ],
+  Finance: [{ name: "Persetujuan Dana", icon: "Wallet", menus: ["fin_training"] }],
+  "Marketing Communication": [{ name: "Event & Promo", icon: "Megaphone", menus: ["mc_events"] }],
+};
 
 /** Menus shown per division in the Super Admin sidebar (all divisions listed). */
 const DIVISION_MENUS: { division: Division; menus: MenuKey[] }[] = [
@@ -191,7 +249,7 @@ const DIVISION_MENUS: { division: Division; menus: MenuKey[] }[] = [
   { division: "Operation", menus: [...OPERATION_FULL, "sys_review", "elearning", "elearning_admin"] },
   { division: "Supervisor", menus: ["events", "hospitality", "hygiene", "complaints", "hc_submit", "sys_submit"] },
   { division: "Product Development & Quality", menus: ["hpp_dash", "work", "hpp", "hpp_db", "hpp_bahan", "hpp_price"] },
-  { division: "Human Capital", menus: ["work", "hc_review", "hc_kpi", "hc_reqreview", "assessment"] },
+  { division: "Human Capital", menus: ["work", "hc_review", "hc_kpi", "hc_reqreview", "hc_training", "assessment"] },
   // New department-aligned divisions — Work Tracker only for now.
   { division: "Finance", menus: ["work", "fin_training"] },
   { division: "Creative", menus: ["work"] },
@@ -217,8 +275,17 @@ export interface NavExtraDivision {
   icon: string; // lucide icon name (see NAV_ICONS)
   menus: MenuKey[]; // subset of NAV_MENUS keys
 }
+/** Pengelompokan menu di dalam SATU divisi, disusun admin di User Management. */
+export interface NavExtraGroup {
+  division: string;
+  name: string;
+  icon: string;
+  menus: MenuKey[];
+}
 export interface NavExtra {
   divisions: NavExtraDivision[];
+  /** Bila sebuah divisi punya entri di sini, ia MENGGANTI grup bawaannya. */
+  groups?: NavExtraGroup[];
 }
 
 /** Shape a stable division id from its name (matches the data layer). */
@@ -232,26 +299,77 @@ const RESERVED_DIVISIONS = new Set<string>(DIVISION_MENUS.map((d) => d.division)
 export const builtInDivisions = (): string[] => [...RESERVED_DIVISIONS];
 
 let EXTRA_DIVISIONS: NavExtraDivision[] = [];
+let EXTRA_GROUPS: NavExtraGroup[] = [];
 
-/** Inject DB-added sidebar divisions (called once with page-fetched data). */
+/** Inject DB-added sidebar divisions & groupings (called with page-fetched data). */
 export function setNavExtras(extra: NavExtra) {
   const valid = new Set<MenuKey>(NAV_MENUS.map((m) => m.key));
   EXTRA_DIVISIONS = (extra.divisions ?? [])
     .filter((d) => d.name && !RESERVED_DIVISIONS.has(d.name))
     .map((d) => ({ ...d, menus: d.menus.filter((k) => valid.has(k)) }));
+  EXTRA_GROUPS = (extra.groups ?? [])
+    .filter((g) => g.division && g.name)
+    .map((g) => ({ ...g, menus: (g.menus ?? []).filter((k) => valid.has(k)) }));
 }
 
 /** The admin-defined divisions currently merged (for the management UI). */
 export const extraDivisions = (): NavExtraDivision[] => EXTRA_DIVISIONS;
+
+/** The admin-defined groupings currently merged (for the management UI). */
+export const extraGroups = (): NavExtraGroup[] => EXTRA_GROUPS;
+
+/** Sub-grup yang berlaku untuk sebuah divisi: susunan admin bila ada, kalau
+ *  tidak pakai bawaan. Divisi tambahan tanpa susunan ⇒ semua menu jadi umum. */
+export function groupsFor(division: string): NavGroupDef[] {
+  const custom = EXTRA_GROUPS.filter((g) => g.division === division);
+  if (custom.length > 0) return custom.map((g) => ({ name: g.name, icon: g.icon, menus: g.menus }));
+  return DIVISION_GROUPS[division as Division] ?? [];
+}
+
+/**
+ * Menu satu divisi menjadi NavItem terurut: sub-grup dulu (sesuai urutan yang
+ * ditetapkan), lalu menu umum di bawahnya urut abjad. Menu `hidden` tidak
+ * pernah ikut — rutenya tetap hidup, hanya tidak muncul di sidebar.
+ */
+function itemsForDivision(division: string, menus: MenuKey[], sectionIcon: string): NavItem[] {
+  const visible = new Set(withUniversal(menus, division).filter((k) => !MENU_BY_KEY[k]?.hidden));
+  const grouped: NavItem[] = [];
+  const used = new Set<MenuKey>();
+
+  for (const g of groupsFor(division)) {
+    for (const key of g.menus) {
+      if (!visible.has(key) || used.has(key)) continue;
+      const m = MENU_BY_KEY[key];
+      if (!m) continue;
+      used.add(key);
+      grouped.push({ ...m, section: division, sectionIcon, group: g.name, groupIcon: g.icon });
+    }
+  }
+
+  const loose = NAV_MENUS.filter((m) => visible.has(m.key) && !used.has(m.key))
+    .map((m) => ({ ...m, section: division, sectionIcon }))
+    .sort((a, b) => a.label.localeCompare(b.label, "id"));
+
+  return [...grouped, ...loose];
+}
 
 /** Every assignable sidebar division + its menus (built-in + admin-defined).
  *  Used by the "Role (Akses)" picker in Add User: choosing a division grants
  *  the user access to that sidebar's menus. */
 export function assignableDivisions(): { name: string; menus: MenuKey[] }[] {
   return [
-    ...DIVISION_MENUS.map((d) => ({ name: d.division as string, menus: withUniversal(d.menus) })),
-    ...EXTRA_DIVISIONS.map((d) => ({ name: d.name, menus: withUniversal(d.menus) })),
+    ...DIVISION_MENUS.map((d) => ({ name: d.division as string, menus: withUniversal(d.menus, d.division) })),
+    ...EXTRA_DIVISIONS.map((d) => ({ name: d.name, menus: withUniversal(d.menus, d.name) })),
   ];
+}
+
+/** Menu sebuah divisi yang benar-benar tampil di sidebar (tanpa yang `hidden`),
+ *  lengkap dengan labelnya — dipakai penyusun bidang di User Management. */
+export function visibleMenusOf(division: string): { key: MenuKey; label: string }[] {
+  const d = assignableDivisions().find((x) => x.name === division);
+  if (!d) return [];
+  const set = new Set(d.menus);
+  return NAV_MENUS.filter((m) => set.has(m.key) && !m.hidden).map((m) => ({ key: m.key, label: m.label }));
 }
 
 /** Per-user grants that unlock a whole sidebar division ("<div>:<menu>" each). */
@@ -262,10 +380,7 @@ export function grantsForDivision(name: string): string[] {
 
 /** Build the NavItems for the admin-defined divisions (custom sidebar groups). */
 function extraNavItems(): NavItem[] {
-  return EXTRA_DIVISIONS.flatMap((div) => {
-    const set = new Set(withUniversal(div.menus));
-    return NAV_MENUS.filter((m) => set.has(m.key)).map((m) => ({ ...m, section: div.name, sectionIcon: div.icon }));
-  });
+  return EXTRA_DIVISIONS.flatMap((div) => itemsForDivision(div.name, div.menus, div.icon));
 }
 
 /** Roles that own Work-Tracker tasks — used as the "division" options when
@@ -288,31 +403,28 @@ export const WORK_DIVISIONS: Role[] = [
  *  their own division's menus. */
 export function navFor(role: Role): NavItem[] {
   if (role === "super_admin") {
-    const base = DIVISION_MENUS.flatMap(({ division, menus }) => {
-      const allowed = new Set(withUniversal(menus));
-      return NAV_MENUS.filter((m) => allowed.has(m.key)).map((m) => ({ ...m, section: division, sectionIcon: DIVISION_ICON[division] }));
-    });
+    const base = DIVISION_MENUS.flatMap(({ division, menus }) =>
+      itemsForDivision(division, menus, DIVISION_ICON[division]),
+    );
     return [...base, ...extraNavItems()];
   }
-  const allowed = new Set(withUniversal(ROLE_MENUS[role]));
   const division = ROLE_DIVISION[role];
-  return NAV_MENUS.filter((m) => allowed.has(m.key)).map((m) => ({ ...m, section: division, sectionIcon: DIVISION_ICON[division] }));
+  return itemsForDivision(division, ROLE_MENUS[role], DIVISION_ICON[division]);
 }
 
 /** Every division + its menus (the full sidebar) — shown to EVERY role.
  *  Access is enforced separately via accessibleMenuKeys(); non-accessible
  *  menus render locked. Admin-defined divisions are appended after the base. */
 export function navAll(): NavItem[] {
-  const base = DIVISION_MENUS.flatMap(({ division, menus }) => {
-    const set = new Set(withUniversal(menus));
-    return NAV_MENUS.filter((m) => set.has(m.key)).map((m) => ({ ...m, section: division, sectionIcon: DIVISION_ICON[division] }));
-  });
+  const base = DIVISION_MENUS.flatMap(({ division, menus }) =>
+    itemsForDivision(division, menus, DIVISION_ICON[division]),
+  );
   return [...base, ...extraNavItems()];
 }
 
 /** The menus a role may actually open (everything else is shown but locked). */
 export function accessibleMenuKeys(role: Role): MenuKey[] {
-  return withUniversal(ROLE_MENUS[role]);
+  return withUniversal(ROLE_MENUS[role], ROLE_DIVISION[role]);
 }
 
 /** The division a role belongs to (its own, unlocked division header). */
@@ -339,7 +451,7 @@ export function canOpenMenu(role: Role, key: MenuKey, grants?: string[]): boolea
 
 /** Does the division named `division` (built-in or admin-defined) include `key`? */
 export function divisionHasMenu(division: string, key: MenuKey): boolean {
-  if (UNIVERSAL_MENUS.includes(key)) return true;
+  if (UNIVERSAL_MENUS.includes(key) && !NO_UNIVERSAL.includes(division)) return true;
   if (DIVISION_MENUS.some((d) => d.division === division && d.menus.includes(key))) return true;
   return EXTRA_DIVISIONS.some((d) => d.name === division && d.menus.includes(key));
 }

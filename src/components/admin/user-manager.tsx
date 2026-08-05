@@ -11,6 +11,7 @@ import {
   EyeOff,
   ImagePlus,
   KeyRound,
+  Layers,
   Loader2,
   Lock,
   MoreVertical,
@@ -30,6 +31,7 @@ import { toast } from "sonner";
 import { ROLE_LABEL, type Tone } from "@/lib/constants";
 import { ROLE_DIVISION, accessibleMenuKeys, assignableDivisions, builtInDivisions, grantsForDivision, navAll, setNavExtras, type Division, type NavExtra } from "@/lib/nav";
 import { builtInStructure } from "@/lib/assessment/org";
+import { GroupManager, type DivisionGroups } from "./group-manager";
 import type { Role } from "@/lib/types";
 import {
   assignRoleAction,
@@ -139,6 +141,7 @@ export function UserManager({
   users,
   outlets,
   navExtra,
+  sidebarGroups = [],
   departmentOptions = [],
   orgDepts = [],
   initialPrefill,
@@ -146,6 +149,8 @@ export function UserManager({
   users: UserRow[];
   outlets: OutletLite[];
   navExtra?: NavExtra;
+  /** Susunan bidang kerja tiap divisi — sumber data penyusun sidebar. */
+  sidebarGroups?: DivisionGroups[];
   departmentOptions?: string[];
   /** Admin-managed department → jabatan taxonomy (feeds the Add User comboboxes). */
   orgDepts?: OrgDept[];
@@ -158,6 +163,7 @@ export function UserManager({
   const router = useRouter();
   const [creating, setCreating] = React.useState(false);
   const [managingDepts, setManagingDepts] = React.useState(false);
+  const [arrangingNav, setArrangingNav] = React.useState(false);
   const [prefill, setPrefill] = React.useState<UserPrefill | undefined>(undefined);
   const [editUser, setEditUser] = React.useState<UserRow | null>(null);
   const [rolesUser, setRolesUser] = React.useState<UserRow | null>(null);
@@ -211,6 +217,9 @@ export function UserManager({
         <div className="flex flex-wrap items-center gap-2">
           <Button variant="outline" onClick={() => setManagingDepts(true)}>
             <Building2 className="size-4" /> Kelola Departemen
+          </Button>
+          <Button variant="outline" onClick={() => setArrangingNav(true)}>
+            <Layers className="size-4" /> Susunan Sidebar
           </Button>
           <Button onClick={() => { setPrefill(undefined); setCreating(true); }}>
             <Plus className="size-4" /> Add User
@@ -346,6 +355,17 @@ export function UserManager({
       {rolesUser && <AssignRolesPanel user={rolesUser} onClose={() => setRolesUser(null)} />}
       {accessUser && <AccessPanel user={accessUser} onClose={() => setAccessUser(null)} />}
       {managingDepts && <DeptManagerPanel orgDepts={orgDepts} onClose={() => setManagingDepts(false)} />}
+      {arrangingNav && (
+        <SlideOver
+          title="Susunan Sidebar"
+          subtitle="Kelompokkan menu tiap divisi ke dalam bidang kerja — menu sisanya turun ke bawah, urut abjad"
+          onClose={() => setArrangingNav(false)}
+        >
+          <div className="flex-1 overflow-y-auto p-5">
+            <GroupManager divisions={sidebarGroups} />
+          </div>
+        </SlideOver>
+      )}
     </>
   );
 }

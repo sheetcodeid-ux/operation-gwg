@@ -40,7 +40,7 @@ export function RecentRequests() {
   return (
     <div className="space-y-3">
       {rows.slice(0, LIMIT).map((r) => (
-        <RequestSummary key={r.id} r={r} timeline />
+        <RequestSummary key={r.id} r={r} />
       ))}
       {rows.length > LIMIT && (
         <div className="flex flex-wrap gap-2">

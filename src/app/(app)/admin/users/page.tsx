@@ -7,7 +7,8 @@ import { getNavExtra } from "@/lib/data/nav";
 import { getOrgExtra } from "@/lib/data/org";
 import { getUserDepartments } from "@/lib/data/user-departments";
 import { allDepartments, setOrgExtras } from "@/lib/assessment/org";
-import type { NavExtra } from "@/lib/nav";
+import { assignableDivisions, groupsFor, setNavExtras, visibleMenusOf, type NavExtra } from "@/lib/nav";
+import type { DivisionGroups } from "@/components/admin/group-manager";
 import { UserManager, type OrgDept, type OutletLite, type UserRow } from "@/components/admin/user-manager";
 
 export const metadata: Metadata = { title: "User Management" };
@@ -56,6 +57,15 @@ export default async function UsersPage({ searchParams }: { searchParams: Promis
 
   const navExtra: NavExtra = await getNavExtra();
 
+  // Susunan "bidang kerja" tiap divisi untuk penyusun sidebar.
+  setNavExtras(navExtra);
+  const sidebarGroups: DivisionGroups[] = assignableDivisions().map((d) => ({
+    division: d.name,
+    menus: visibleMenusOf(d.name),
+    groups: groupsFor(d.name).map((g) => ({ name: g.name, icon: g.icon, menus: [...g.menus] })),
+    isDefault: !(navExtra.groups ?? []).some((g) => g.division === d.name),
+  }));
+
   // Admin-managed department → jabatan taxonomy (drives the Add User comboboxes).
   const orgDepts: OrgDept[] = (await getUserDepartments()).map((d) => ({ id: d.id, name: d.name, jabatan: d.jabatan }));
 
@@ -76,6 +86,7 @@ export default async function UsersPage({ searchParams }: { searchParams: Promis
         users={userRows}
         outlets={outletLite}
         navExtra={navExtra}
+        sidebarGroups={sidebarGroups}
         departmentOptions={departmentOptions}
         orgDepts={orgDepts}
         initialPrefill={initialPrefill}

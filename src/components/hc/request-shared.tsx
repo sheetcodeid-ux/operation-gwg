@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { Check, FileText, Image as ImageIcon, Paperclip, Upload, X } from "lucide-react";
+import { Check, ChevronDown, FileText, Image as ImageIcon, Paperclip, Upload, Users, X } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
@@ -26,14 +26,19 @@ export function FileChip({ a }: { a: HcRequestAttachment }) {
   const tone = isPdf ? "text-red-500" : "text-blue-500";
   if (!a.url) {
     return (
-      <span className="inline-flex items-center gap-1 rounded-md border border-border px-1.5 py-0.5 text-[11px] text-muted-foreground">
-        <Paperclip className="size-3" /> <span className="max-w-[8rem] truncate">{a.name}</span>
+      <span className="inline-flex max-w-full items-center gap-1 rounded-md border border-border px-1.5 py-0.5 text-[11px] text-muted-foreground">
+        <Paperclip className="size-3 shrink-0" /> <span className="truncate">{a.name}</span>
       </span>
     );
   }
   return (
-    <a href={a.url} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 rounded-md border border-border bg-background/40 px-1.5 py-0.5 text-[11px] text-foreground/80 hover:bg-muted/50">
-      <Icon className={cn("size-3 shrink-0", tone)} /> <span className="max-w-[8rem] truncate">{a.name}</span>
+    <a
+      href={a.url}
+      target="_blank"
+      rel="noopener noreferrer"
+      className="inline-flex max-w-full items-center gap-1 rounded-md border border-border bg-background/40 px-1.5 py-0.5 text-[11px] text-foreground/80 hover:bg-muted/50"
+    >
+      <Icon className={cn("size-3 shrink-0", tone)} /> <span className="truncate">{a.name}</span>
     </a>
   );
 }
@@ -96,97 +101,197 @@ export async function uploadAll(files: File[]): Promise<HcRequestAttachment[]> {
   return out;
 }
 
+/* ───────────────────────────── alur persetujuan ───────────────────────────── */
+
 const DOT: Record<StepState, string> = {
-  done: "border-emerald-500/40 bg-emerald-500/15 text-emerald-600 dark:text-emerald-400",
-  current: "border-brand-500/50 bg-brand-500/15 text-brand-600 dark:text-brand-400",
+  done: "border-emerald-500/45 bg-emerald-500/15 text-emerald-600 dark:text-emerald-400",
+  current: "border-brand-500/55 bg-brand-500/15 text-brand-600 dark:text-brand-400",
   todo: "border-border bg-muted/60 text-muted-foreground",
-  rejected: "border-red-500/40 bg-red-500/15 text-red-600 dark:text-red-400",
+  rejected: "border-red-500/45 bg-red-500/15 text-red-600 dark:text-red-400",
 };
-const BAR: Record<StepState, string> = {
-  done: "bg-emerald-500/40",
-  current: "bg-brand-500/40",
+const RAIL: Record<StepState, string> = {
+  done: "bg-emerald-500/45",
+  current: "bg-brand-500/45",
   todo: "bg-border",
-  rejected: "bg-red-500/40",
+  rejected: "bg-red-500/45",
 };
 
-/** Stepper alur persetujuan — posisi berkas terlihat sekali lihat. */
+/**
+ * Alur persetujuan sebagai daftar vertikal. Dipilih vertikal supaya label
+ * sepanjang apa pun tetap terbaca utuh dan jarak antar langkah selalu sama —
+ * versi horizontal selalu berakhir terpotong di layar sempit.
+ */
 export function RequestTimeline({ r }: { r: HcRequest }) {
   const steps = requestSteps(r);
   return (
-    <ol className="flex items-start gap-1 overflow-x-auto pb-0.5">
+    <ol className="space-y-0">
       {steps.map((s, i) => (
-        <li key={s.label} className="flex min-w-0 flex-1 items-start gap-1">
-          <div className="flex min-w-0 flex-1 flex-col items-center text-center">
+        <li key={s.label} className="flex gap-3">
+          {/* Rel: bulatan langkah + garis penghubung dengan tinggi tetap. */}
+          <div className="flex flex-col items-center">
             <span className={cn("grid size-6 shrink-0 place-items-center rounded-full border text-[11px] font-semibold", DOT[s.state])}>
               {s.state === "done" ? <Check className="size-3.5" /> : s.state === "rejected" ? <X className="size-3.5" /> : i + 1}
             </span>
-            <span
-              className={cn(
-                "mt-1 max-w-full truncate text-[11px] leading-tight",
-                s.state === "todo" ? "text-muted-foreground" : "font-medium text-foreground",
-              )}
-              title={s.label}
-            >
-              {s.label}
-            </span>
-            {s.detail && <span className="max-w-full truncate text-[10px] text-muted-foreground" title={s.detail}>{s.detail}</span>}
+            {i < steps.length - 1 && <span className={cn("w-px flex-1", RAIL[steps[i + 1].state === "todo" ? "todo" : s.state])} />}
           </div>
-          {i < steps.length - 1 && <span className={cn("mt-3 h-px min-w-4 flex-1", BAR[steps[i + 1].state === "todo" ? s.state : steps[i + 1].state])} />}
+          <div className={cn("min-w-0 flex-1", i < steps.length - 1 && "pb-3")}>
+            <p className={cn("text-xs leading-6", s.state === "todo" ? "text-muted-foreground" : "font-medium text-foreground")}>{s.label}</p>
+            {s.detail && <p className="text-[11px] leading-tight text-muted-foreground">{s.detail}</p>}
+          </div>
         </li>
       ))}
     </ol>
   );
 }
 
-/** Ringkasan satu pengajuan — dipakai di daftar pemohon, HC, dan Finance. */
-export function RequestSummary({ r, children, timeline }: { r: HcRequest; children?: React.ReactNode; timeline?: boolean }) {
-  const st = HC_REQUEST_STATUS_META[r.status];
+/** Satu baris ringkas "Label — isi", tanpa pemotongan teks. */
+function Line({ label, children }: { label: string; children: React.ReactNode }) {
   return (
-    <div className="card-gradient rounded-xl p-4">
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div className="min-w-0">
-          <div className="flex flex-wrap items-center gap-2">
-            <Badge tone={st.tone}>{st.label}</Badge>
-            <Badge tone={r.kind === "pelatihan" ? "cyan" : "brand"}>{HC_REQUEST_KIND_LABEL[r.kind]}</Badge>
+    <div className="flex flex-wrap gap-x-1.5 text-xs">
+      <span className="text-muted-foreground">{label}</span>
+      <span className="min-w-0 font-medium text-foreground">{children}</span>
+    </div>
+  );
+}
+
+/** Detail lengkap satu pengajuan (isi panel yang terbuka saat kartu diklik). */
+function RequestDetail({ r }: { r: HcRequest }) {
+  return (
+    <div className="grid gap-4 sm:grid-cols-2">
+      <div className="space-y-2">
+        <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Rincian</p>
+        <Line label="Departemen">{r.department}</Line>
+        <Line label="Pemohon">{r.requesterName}</Line>
+        <Line label="Diajukan">{fmtDate(r.createdAt)}</Line>
+        {r.kind === "rekrutmen" ? (
+          <>
+            <Line label="Posisi">{r.position || "—"}</Line>
+            <Line label="Jumlah diminta">{r.headcount} orang</Line>
+            {r.plannedDate && <Line label="Target mulai kerja">{fmtDate(r.plannedDate)}</Line>}
+            {r.status === "terlaksana" && <Line label="Direkrut">{r.recruited} orang</Line>}
+          </>
+        ) : (
+          <>
+            <Line label="Jenis pelatihan">{r.trainingType || "—"}</Line>
+            <Line label="Jumlah peserta">{r.participants} orang</Line>
+            <Line label="Estimasi biaya">{fmtRupiah(r.budget)}</Line>
+            {r.budgetApproved > 0 && <Line label="Dana disetujui">{fmtRupiah(r.budgetApproved)}</Line>}
+            {r.plannedDate && <Line label="Rencana pelaksanaan">{fmtDate(r.plannedDate)}</Line>}
+          </>
+        )}
+
+        {r.participantNames.length > 0 && (
+          <div className="pt-1">
+            <p className="mb-1 flex items-center gap-1 text-[11px] text-muted-foreground">
+              <Users className="size-3" /> Peserta
+            </p>
+            <div className="flex flex-wrap gap-1">
+              {r.participantNames.map((n) => (
+                <span key={n} className="rounded-md border border-border bg-muted/40 px-1.5 py-0.5 text-[11px] text-foreground/85">{n}</span>
+              ))}
+            </div>
           </div>
-          <p className="mt-1.5 truncate text-sm font-semibold text-foreground">{r.title}</p>
-          <p className="truncate text-xs text-muted-foreground">
-            {r.department} · {r.requesterName} · {fmtDate(r.createdAt)}
-          </p>
-          {r.kind === "rekrutmen" ? (
-            <p className="mt-1 text-xs text-muted-foreground">
-              Posisi <span className="font-medium text-foreground">{r.position || "—"}</span> · diminta{" "}
-              <span className="font-medium text-foreground">{r.headcount}</span> orang
-              {r.plannedDate && <> · target mulai {fmtDate(r.plannedDate)}</>}
-              {r.status === "terlaksana" && <> · direkrut <span className="font-medium text-foreground">{r.recruited}</span></>}
-            </p>
-          ) : (
-            <p className="mt-1 text-xs text-muted-foreground">
-              {r.trainingType || "—"} · {r.participants} peserta · estimasi {fmtRupiah(r.budget)}
-              {r.budgetApproved > 0 && <> · disetujui <span className="font-medium text-foreground">{fmtRupiah(r.budgetApproved)}</span></>}
-              {r.plannedDate && <> · rencana {fmtDate(r.plannedDate)}</>}
-            </p>
-          )}
-          {r.description && <p className="mt-1 line-clamp-2 max-w-2xl text-xs text-muted-foreground/80">{r.description}</p>}
-          {r.attachments.length > 0 && (
-            <div className="mt-2 flex flex-wrap gap-1.5">
+        )}
+
+        {r.description && (
+          <div className="pt-1">
+            <p className="mb-1 text-[11px] text-muted-foreground">{r.kind === "rekrutmen" ? "Alasan permintaan" : "Tujuan pelatihan"}</p>
+            <p className="whitespace-pre-wrap text-xs leading-relaxed text-foreground/85">{r.description}</p>
+          </div>
+        )}
+
+        {r.attachments.length > 0 && (
+          <div className="pt-1">
+            <p className="mb-1 text-[11px] text-muted-foreground">Lampiran</p>
+            <div className="flex flex-wrap gap-1.5">
               {r.attachments.map((a, i) => <FileChip key={i} a={a} />)}
             </div>
-          )}
-          {(r.hcNote || r.financeNote) && (
-            <div className="mt-2 space-y-1 text-[11px]">
-              {r.hcNote && <p className="rounded-lg bg-muted/60 px-2.5 py-1.5 text-muted-foreground"><span className="font-medium text-foreground">Catatan HC:</span> {r.hcNote}</p>}
-              {r.financeNote && <p className="rounded-lg bg-muted/60 px-2.5 py-1.5 text-muted-foreground"><span className="font-medium text-foreground">Catatan Finance:</span> {r.financeNote}</p>}
+          </div>
+        )}
+
+        {(r.hcNote || r.financeNote) && (
+          <div className="space-y-1 pt-1">
+            {r.hcNote && (
+              <p className="rounded-lg bg-muted/60 px-2.5 py-1.5 text-[11px] leading-relaxed text-muted-foreground">
+                <span className="font-medium text-foreground">Catatan HC:</span> {r.hcNote}
+              </p>
+            )}
+            {r.financeNote && (
+              <p className="rounded-lg bg-muted/60 px-2.5 py-1.5 text-[11px] leading-relaxed text-muted-foreground">
+                <span className="font-medium text-foreground">Catatan Finance:</span> {r.financeNote}
+              </p>
+            )}
+          </div>
+        )}
+      </div>
+
+      <div>
+        <p className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Alur Persetujuan</p>
+        <RequestTimeline r={r} />
+      </div>
+    </div>
+  );
+}
+
+/**
+ * Kartu satu pengajuan. Tertutup memperlihatkan judul, status dan langkah yang
+ * sedang berjalan; detail lengkap baru muncul setelah kartu diketuk.
+ */
+export function RequestSummary({
+  r,
+  children,
+  defaultOpen = false,
+}: {
+  r: HcRequest;
+  children?: React.ReactNode;
+  defaultOpen?: boolean;
+}) {
+  const [open, setOpen] = React.useState(defaultOpen);
+  const st = HC_REQUEST_STATUS_META[r.status];
+  const steps = requestSteps(r);
+  const active = steps.find((s) => s.state === "current" || s.state === "rejected");
+  const doneCount = steps.filter((s) => s.state === "done").length;
+  const bodyId = `req-${r.id}`;
+
+  const subtitle =
+    r.kind === "rekrutmen"
+      ? `${r.position || "Posisi belum diisi"} · ${r.headcount} orang`
+      : `${r.trainingType || "Jenis belum diisi"} · ${r.participants} peserta`;
+
+  return (
+    <div className="card-gradient overflow-hidden rounded-xl">
+      <div className="flex flex-wrap items-start gap-3 p-4">
+        <button
+          type="button"
+          onClick={() => setOpen((v) => !v)}
+          aria-expanded={open}
+          aria-controls={bodyId}
+          className="flex min-w-0 flex-1 items-start gap-3 text-left"
+        >
+          <ChevronDown className={cn("mt-0.5 size-4 shrink-0 text-muted-foreground transition-transform duration-200", open && "rotate-180")} />
+          <div className="min-w-0 flex-1">
+            <div className="flex flex-wrap items-center gap-1.5">
+              <Badge tone={st.tone}>{st.label}</Badge>
+              <Badge tone={r.kind === "pelatihan" ? "cyan" : "brand"}>{HC_REQUEST_KIND_LABEL[r.kind]}</Badge>
             </div>
-          )}
-        </div>
+            <p className="mt-1.5 text-sm font-semibold leading-snug text-foreground">{r.title}</p>
+            <p className="text-xs text-muted-foreground">{subtitle}</p>
+            <p className="mt-0.5 text-[11px] text-muted-foreground">
+              {r.department} · {r.requesterName} · {fmtDate(r.createdAt)}
+              {active ? ` · menunggu ${active.label}` : ` · ${doneCount}/${steps.length} langkah selesai`}
+            </p>
+          </div>
+        </button>
         {children && <div className="flex shrink-0 flex-wrap items-center gap-2">{children}</div>}
       </div>
-      {timeline && (
-        <div className="mt-3 border-t border-border/60 pt-3">
-          <RequestTimeline r={r} />
+
+      <div id={bodyId} className={cn("grid transition-[grid-template-rows] duration-200", open ? "grid-rows-[1fr]" : "grid-rows-[0fr]")}>
+        <div className="overflow-hidden">
+          <div className="border-t border-border/60 p-4">
+            <RequestDetail r={r} />
+          </div>
         </div>
-      )}
+      </div>
     </div>
   );
 }

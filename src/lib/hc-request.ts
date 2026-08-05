@@ -69,6 +69,8 @@ export interface HcRequest {
   /** pelatihan */
   trainingType: string | null;
   participants: number;
+  /** Nama peserta yang dipilih dari anggota departemen pemohon. */
+  participantNames: string[];
   budget: number;
   budgetApproved: number;
   plannedDate: string | null;

@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Combobox } from "@/components/ui/combobox";
 import { DatePicker } from "@/components/ui/date-picker";
 import { Field, Input, Textarea } from "@/components/ui/input";
+import { MultiCombobox } from "@/components/ui/multi-combobox";
 import { SegmentedTabs } from "@/components/ui/segmented-tabs";
 import { Sheet, SheetContent, SheetTrigger, useSheetControl } from "@/components/ui/sheet";
 import { EmptyState } from "@/components/ui/page-header";
@@ -33,8 +34,15 @@ const COPY: Record<HcRequestKind, { new: string; title: string; sheetDesc: strin
   },
 };
 
+/** Anggota departemen pemohon — kandidat peserta pelatihan. */
+export interface DeptMember {
+  id: string;
+  name: string;
+  jabatan?: string | null;
+}
+
 /** Daftar + formulir satu jenis pengajuan (satu halaman per kategori). */
-export function HcRequestBoard({ kind }: { kind: HcRequestKind }) {
+export function HcRequestBoard({ kind, members = [] }: { kind: HcRequestKind; members?: DeptMember[] }) {
   const [rows, setRows] = React.useState<HcRequest[] | null>(null);
   const [tab, setTab] = React.useState<Tab>("open");
   const copy = COPY[kind];
@@ -73,7 +81,7 @@ export function HcRequestBoard({ kind }: { kind: HcRequestKind }) {
             </button>
           ))}
         </div>
-        <NewRequestSheet kind={kind} onDone={load} />
+        <NewRequestSheet kind={kind} members={members} onDone={load} />
       </div>
 
       {rows === null ? (
@@ -89,7 +97,7 @@ export function HcRequestBoard({ kind }: { kind: HcRequestKind }) {
       ) : (
         <div className="space-y-3">
           {shown.map((r) => (
-            <RequestSummary key={r.id} r={r} timeline />
+            <RequestSummary key={r.id} r={r} />
           ))}
         </div>
       )}
@@ -97,7 +105,7 @@ export function HcRequestBoard({ kind }: { kind: HcRequestKind }) {
   );
 }
 
-function NewRequestSheet({ kind, onDone }: { kind: HcRequestKind; onDone: () => void }) {
+function NewRequestSheet({ kind, members, onDone }: { kind: HcRequestKind; members: DeptMember[]; onDone: () => void }) {
   const copy = COPY[kind];
   return (
     <Sheet>
@@ -107,7 +115,7 @@ function NewRequestSheet({ kind, onDone }: { kind: HcRequestKind; onDone: () => 
         </Button>
       </SheetTrigger>
       <SheetContent title={copy.title} description={copy.sheetDesc} className="max-w-lg">
-        <RequestForm kind={kind} onDone={onDone} />
+        <RequestForm kind={kind} members={members} onDone={onDone} />
       </SheetContent>
     </Sheet>
   );
@@ -135,7 +143,7 @@ function FieldError({ children }: { children?: string }) {
 
 type Errors = Partial<Record<"title" | "position" | "headcount" | "trainingType" | "participants", string>>;
 
-function RequestForm({ kind, onDone }: { kind: HcRequestKind; onDone: () => void }) {
+function RequestForm({ kind, members, onDone }: { kind: HcRequestKind; members: DeptMember[]; onDone: () => void }) {
   const router = useRouter();
   const { setOpen } = useSheetControl();
   const isTraining = kind === "pelatihan";
@@ -146,6 +154,7 @@ function RequestForm({ kind, onDone }: { kind: HcRequestKind; onDone: () => void
   const [headcount, setHeadcount] = React.useState("1");
   const [trainingType, setTrainingType] = React.useState(TRAINING_TYPES[0]);
   const [customType, setCustomType] = React.useState("");
+  const [participantIds, setParticipantIds] = React.useState<string[]>([]);
   const [participants, setParticipants] = React.useState("");
   const [budget, setBudget] = React.useState("");
   const [plannedDate, setPlannedDate] = React.useState("");
@@ -156,12 +165,20 @@ function RequestForm({ kind, onDone }: { kind: HcRequestKind; onDone: () => void
   const resolvedType = trainingType === "Lainnya" ? customType.trim() : trainingType;
   const budgetNum = Number(budget) || 0;
 
+  // Peserta boleh dipilih dari anggota departemen; bila tidak ada yang dipilih
+  // (mis. pelatihan untuk kandidat baru), jumlahnya diisi manual.
+  const participantNames = React.useMemo(() => {
+    const byId = new Map(members.map((m) => [m.id, m.name]));
+    return participantIds.map((id) => byId.get(id)).filter((n): n is string => !!n);
+  }, [members, participantIds]);
+  const participantCount = participantNames.length > 0 ? participantNames.length : Number(participants) || 0;
+
   function validate(): Errors {
     const e: Errors = {};
     if (!title.trim()) e.title = "Judul pengajuan wajib diisi.";
     if (isTraining) {
       if (!resolvedType) e.trainingType = "Sebutkan jenis pelatihannya.";
-      if (Number(participants) < 1) e.participants = "Jumlah peserta minimal 1 orang.";
+      if (participantCount < 1) e.participants = "Pilih pesertanya atau isi jumlah peserta.";
     } else {
       if (!position.trim()) e.position = "Posisi yang diminta wajib diisi.";
       if (Number(headcount) < 1) e.headcount = "Jumlah minimal 1 orang.";
@@ -184,7 +201,8 @@ function RequestForm({ kind, onDone }: { kind: HcRequestKind; onDone: () => void
         position: position.trim(),
         headcount: Number(headcount) || 0,
         trainingType: resolvedType,
-        participants: Number(participants) || 0,
+        participants: participantCount,
+        participantNames,
         budget: budgetNum,
         plannedDate,
         attachments,
@@ -241,17 +259,47 @@ function RequestForm({ kind, onDone }: { kind: HcRequestKind; onDone: () => void
             </div>
             <FieldError>{errors.trainingType}</FieldError>
           </Field>
-          <div className="grid grid-cols-2 gap-3">
-            <Field label="Jumlah Peserta">
+          <Field
+            label="Peserta"
+            hint={
+              members.length > 0
+                ? "Pilih dari anggota departemen Anda. Kosongkan bila peserta di luar daftar, lalu isi jumlahnya."
+                : "Belum ada anggota terdaftar di departemen ini — isi jumlah pesertanya saja."
+            }
+          >
+            {members.length > 0 && (
+              <MultiCombobox
+                value={participantIds}
+                onChange={setParticipantIds}
+                options={members.map((m) => ({ value: m.id, label: m.name, hint: m.jabatan ?? undefined }))}
+                placeholder="Pilih peserta…"
+                searchPlaceholder="Cari nama…"
+                allLabel="Semua anggota"
+              />
+            )}
+            {participantNames.length > 0 && (
+              <div className="mt-2 flex flex-wrap gap-1">
+                {participantNames.map((n) => (
+                  <span key={n} className="rounded-md border border-border bg-muted/40 px-1.5 py-0.5 text-[11px] text-foreground/85">{n}</span>
+                ))}
+              </div>
+            )}
+            <FieldError>{errors.participants}</FieldError>
+          </Field>
+          <div className="grid gap-3 sm:grid-cols-2">
+            <Field
+              label="Jumlah Peserta"
+              hint={participantNames.length > 0 ? "Terisi otomatis dari peserta yang dipilih." : undefined}
+            >
               <Input
                 type="number"
                 min={1}
-                value={participants}
+                value={participantNames.length > 0 ? String(participantNames.length) : participants}
+                readOnly={participantNames.length > 0}
                 onChange={(e) => setParticipants(e.target.value)}
-                className={cn(errors.participants && "border-red-500/60")}
+                className={cn(errors.participants && "border-red-500/60", participantNames.length > 0 && "bg-muted/50")}
                 placeholder="cth. 15"
               />
-              <FieldError>{errors.participants}</FieldError>
             </Field>
             <Field label="Estimasi Biaya" hint={budgetNum > 0 ? fmtRupiah(budgetNum) : "Kosongkan bila tanpa biaya."}>
               <Input type="number" min={0} value={budget} onChange={(e) => setBudget(e.target.value)} placeholder="cth. 5000000" />
@@ -263,7 +311,7 @@ function RequestForm({ kind, onDone }: { kind: HcRequestKind; onDone: () => void
         </FormSection>
       ) : (
         <FormSection title="Kebutuhan Pegawai">
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid gap-3 sm:grid-cols-2">
             <Field label="Posisi yang Diminta">
               <Input
                 value={position}

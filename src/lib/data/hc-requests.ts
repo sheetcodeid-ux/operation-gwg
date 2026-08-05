@@ -29,6 +29,7 @@ const fromRow = (r: any): HcRequest => ({
   recruited: Number(r.recruited ?? 0),
   trainingType: r.training_type ?? null,
   participants: Number(r.participants ?? 0),
+  participantNames: (Array.isArray(r.participant_names) ? r.participant_names : []).map((n: any) => String(n)),
   budget: Number(r.budget ?? 0),
   budgetApproved: Number(r.budget_approved ?? 0),
   plannedDate: r.planned_date ?? null,
@@ -109,6 +110,7 @@ export interface CreateRequestInput {
   headcount?: number;
   trainingType?: string | null;
   participants?: number;
+  participantNames?: string[];
   budget?: number;
   plannedDate?: string | null;
   attachments: HcRequestAttachment[];
@@ -128,6 +130,7 @@ export async function createHcRequest(input: CreateRequestInput): Promise<{ id?:
     recruited: 0,
     training_type: input.trainingType ?? null,
     participants: input.participants ?? 0,
+    participant_names: (input.participantNames ?? []).map((n) => String(n).trim()).filter(Boolean).slice(0, 100),
     budget: input.budget ?? 0,
     budget_approved: 0,
     planned_date: input.plannedDate || null,
