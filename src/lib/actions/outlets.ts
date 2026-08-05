@@ -8,6 +8,10 @@ import { createOutlet } from "@/lib/data/mutations";
 import { persistMessage } from "@/lib/data/persist";
 import { esbConfigured, esbListBranches } from "@/lib/integrations/esb-client";
 
+/** Compare branch names loosely — ESB spacing/punctuation differs from what was
+ *  typed into the app, and we must never create a duplicate of an existing one. */
+const normName = (s: string) => s.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+
 export interface AssignableOutlet {
   id: string;
   name: string;
@@ -41,15 +45,32 @@ export async function listAssignableOutlets(
 
   let all: AssignableOutlet[] = appOutlets.map((o) => ({ id: o.id, name: o.name }));
   let source: "pos" | "local" = "local";
-  if (all.length === 0 && esbConfigured()) {
+  if (esbConfigured()) {
     try {
       const branches = await esbListBranches();
-      all = branches
-        .map((b) => ({ id: b.id, name: b.name }))
-        .filter((o) => o.id && o.name);
-      source = "pos";
+      if (all.length === 0) {
+        // Nothing synced yet — offer POS branches directly.
+        all = branches.map((b) => ({ id: b.id, name: b.name })).filter((o) => o.id && o.name);
+        source = "pos";
+      } else {
+        // Adopt any branch the app is missing (e.g. a newly opened outlet) so the
+        // picker always matches the POS — the promise this dialog makes to the
+        // admin. Additive only; existing outlets are never touched.
+        const known = new Set(appOutlets.map((o) => normName(o.name)));
+        for (const b of branches) {
+          const name = (b.name ?? "").trim();
+          if (!name || known.has(normName(name))) continue;
+          try {
+            const created = await createOutlet({ name, code: b.id ?? "", city: "", areaId: "", picId: "" });
+            known.add(normName(name));
+            all.push({ id: created.id, name: created.name });
+          } catch {
+            /* keep the picker usable even if one insert fails */
+          }
+        }
+      }
     } catch {
-      all = [];
+      /* POS unreachable — fall back to whatever the app already has */
     }
   }
 
@@ -70,10 +91,6 @@ export async function listAssignableOutlets(
     .sort((a, b) => a.name.localeCompare(b.name));
   return { ok: true, outlets, source };
 }
-
-/** Compare branch names loosely — ESB spacing/punctuation differs from what was
- *  typed into the app, and we must never create a duplicate of an existing one. */
-const normName = (s: string) => s.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
 
 export interface OutletSyncResult {
   added: string[];
