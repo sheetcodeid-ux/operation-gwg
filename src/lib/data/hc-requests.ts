@@ -200,6 +200,8 @@ export interface KpiAuto {
   pelatihanTerlaksana: number;
   /** Dokumen HC selesai tepat waktu & sesuai standar (realisasi Administrasi). */
   dokumenSelesai: number;
+  /** Seluruh dokumen yang diselesaikan pada periode — pembanding `dokumenSelesai`. */
+  dokumenTotal: number;
 }
 
 const monthRange = (period: string) => {
@@ -214,34 +216,63 @@ const monthRange = (period: string) => {
  * Dipakai sebagai nilai bawaan KPI — HC tetap boleh menimpanya secara manual.
  */
 export async function kpiAutoFigures(period: string): Promise<KpiAuto> {
-  const empty: KpiAuto = { rekrutmenDiminta: 0, rekrutmenTerpenuhi: 0, pelatihanTerlaksana: 0, dokumenSelesai: 0 };
+  const empty: KpiAuto = {
+    rekrutmenDiminta: 0,
+    rekrutmenTerpenuhi: 0,
+    pelatihanTerlaksana: 0,
+    dokumenSelesai: 0,
+    dokumenTotal: 0,
+  };
   if (!dbEnabled) return empty;
   const { from, to } = monthRange(period);
 
   try {
-    const [reqRes, trainRes, docRes] = await Promise.all([
-      // Permintaan pegawai yang DIBUAT pada periode ini.
-      db().from("hc_requests").select("headcount,recruited,status").eq("kind", "rekrutmen").gte("created_at", from).lt("created_at", to),
+    const [mintaRes, rekrutRes, trainRes, docRes] = await Promise.all([
+      // Permintaan pegawai yang DIBUAT pada periode ini → target.
+      db().from("hc_requests").select("headcount").eq("kind", "rekrutmen").gte("created_at", from).lt("created_at", to),
+      // Permintaan pegawai yang TERPENUHI pada periode ini → realisasi.
+      db().from("hc_requests").select("recruited").eq("kind", "rekrutmen").eq("status", "terlaksana").gte("completed_at", from).lt("completed_at", to),
       // Pelatihan yang TERLAKSANA pada periode ini (pakai tanggal penyelesaian).
       db().from("hc_requests").select("id").eq("kind", "pelatihan").eq("status", "terlaksana").gte("completed_at", from).lt("completed_at", to),
-      // Dokumen HC yang selesai pada periode ini.
-      db().from("hc_submissions").select("created_at,updated_at,status").eq("status", "done").gte("updated_at", from).lt("updated_at", to),
+      // Dokumen HC yang diselesaikan pada periode ini. Tabel hc_submissions
+      // memakai `completed_at` (tidak ada kolom updated_at) dan `final_doc_path`
+      // sebagai bukti dokumen jadi benar-benar diterbitkan.
+      db()
+        .from("hc_submissions")
+        .select("created_at,completed_at,final_doc_path")
+        .eq("status", "done")
+        .gte("completed_at", from)
+        .lt("completed_at", to),
     ]);
 
-    const reqs = (reqRes.data ?? []) as { headcount: number; recruited: number }[];
-    const docs = (docRes.data ?? []) as { created_at: string; updated_at: string }[];
-    const onTime = docs.filter((d) => {
-      const days = (new Date(d.updated_at).getTime() - new Date(d.created_at).getTime()) / 86_400_000;
+    for (const [what, res] of [
+      ["permintaan", mintaRes],
+      ["rekrutmen", rekrutRes],
+      ["pelatihan", trainRes],
+      ["dokumen", docRes],
+    ] as const) {
+      if (res.error) throw new Error(`kpiAutoFigures/${what}: ${res.error.message}`);
+    }
+
+    const docs = (docRes.data ?? []) as { created_at: string; completed_at: string; final_doc_path: string | null }[];
+    // "Tepat waktu dan sesuai standar": selesai dalam SLA DAN dokumen final terlampir.
+    const memenuhi = docs.filter((d) => {
+      if (!d.final_doc_path) return false;
+      const days = (new Date(d.completed_at).getTime() - new Date(d.created_at).getTime()) / 86_400_000;
       return days <= DOC_SLA_DAYS;
     });
 
     return {
-      rekrutmenDiminta: reqs.reduce((a, r) => a + Number(r.headcount ?? 0), 0),
-      rekrutmenTerpenuhi: reqs.reduce((a, r) => a + Number(r.recruited ?? 0), 0),
+      rekrutmenDiminta: ((mintaRes.data ?? []) as { headcount: number }[]).reduce((a, r) => a + Number(r.headcount ?? 0), 0),
+      rekrutmenTerpenuhi: ((rekrutRes.data ?? []) as { recruited: number }[]).reduce((a, r) => a + Number(r.recruited ?? 0), 0),
       pelatihanTerlaksana: (trainRes.data ?? []).length,
-      dokumenSelesai: onTime.length,
+      dokumenSelesai: memenuhi.length,
+      dokumenTotal: docs.length,
     };
-  } catch {
+  } catch (e) {
+    // Jangan diam-diam mengembalikan 0 — angka nol yang salah lebih berbahaya
+    // daripada error yang terlihat.
+    console.error("[hc-kpi] gagal menghitung angka otomatis:", e);
     return empty;
   }
 }

@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { FileText, Image as ImageIcon, Paperclip, Upload, X } from "lucide-react";
+import { Check, FileText, Image as ImageIcon, Paperclip, Upload, X } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
@@ -10,8 +10,10 @@ import {
   HC_REQUEST_KIND_LABEL,
   HC_REQUEST_STATUS_META,
   fmtRupiah,
+  requestSteps,
   type HcRequest,
   type HcRequestAttachment,
+  type StepState,
 } from "@/lib/hc-request";
 
 export const fmtDate = (iso: string | null) =>
@@ -94,8 +96,50 @@ export async function uploadAll(files: File[]): Promise<HcRequestAttachment[]> {
   return out;
 }
 
+const DOT: Record<StepState, string> = {
+  done: "border-emerald-500/40 bg-emerald-500/15 text-emerald-600 dark:text-emerald-400",
+  current: "border-brand-500/50 bg-brand-500/15 text-brand-600 dark:text-brand-400",
+  todo: "border-border bg-muted/60 text-muted-foreground",
+  rejected: "border-red-500/40 bg-red-500/15 text-red-600 dark:text-red-400",
+};
+const BAR: Record<StepState, string> = {
+  done: "bg-emerald-500/40",
+  current: "bg-brand-500/40",
+  todo: "bg-border",
+  rejected: "bg-red-500/40",
+};
+
+/** Stepper alur persetujuan — posisi berkas terlihat sekali lihat. */
+export function RequestTimeline({ r }: { r: HcRequest }) {
+  const steps = requestSteps(r);
+  return (
+    <ol className="flex items-start gap-1 overflow-x-auto pb-0.5">
+      {steps.map((s, i) => (
+        <li key={s.label} className="flex min-w-0 flex-1 items-start gap-1">
+          <div className="flex min-w-0 flex-1 flex-col items-center text-center">
+            <span className={cn("grid size-6 shrink-0 place-items-center rounded-full border text-[11px] font-semibold", DOT[s.state])}>
+              {s.state === "done" ? <Check className="size-3.5" /> : s.state === "rejected" ? <X className="size-3.5" /> : i + 1}
+            </span>
+            <span
+              className={cn(
+                "mt-1 max-w-full truncate text-[11px] leading-tight",
+                s.state === "todo" ? "text-muted-foreground" : "font-medium text-foreground",
+              )}
+              title={s.label}
+            >
+              {s.label}
+            </span>
+            {s.detail && <span className="max-w-full truncate text-[10px] text-muted-foreground" title={s.detail}>{s.detail}</span>}
+          </div>
+          {i < steps.length - 1 && <span className={cn("mt-3 h-px min-w-4 flex-1", BAR[steps[i + 1].state === "todo" ? s.state : steps[i + 1].state])} />}
+        </li>
+      ))}
+    </ol>
+  );
+}
+
 /** Ringkasan satu pengajuan — dipakai di daftar pemohon, HC, dan Finance. */
-export function RequestSummary({ r, children }: { r: HcRequest; children?: React.ReactNode }) {
+export function RequestSummary({ r, children, timeline }: { r: HcRequest; children?: React.ReactNode; timeline?: boolean }) {
   const st = HC_REQUEST_STATUS_META[r.status];
   return (
     <div className="card-gradient rounded-xl p-4">
@@ -113,6 +157,7 @@ export function RequestSummary({ r, children }: { r: HcRequest; children?: React
             <p className="mt-1 text-xs text-muted-foreground">
               Posisi <span className="font-medium text-foreground">{r.position || "—"}</span> · diminta{" "}
               <span className="font-medium text-foreground">{r.headcount}</span> orang
+              {r.plannedDate && <> · target mulai {fmtDate(r.plannedDate)}</>}
               {r.status === "terlaksana" && <> · direkrut <span className="font-medium text-foreground">{r.recruited}</span></>}
             </p>
           ) : (
@@ -137,6 +182,11 @@ export function RequestSummary({ r, children }: { r: HcRequest; children?: React
         </div>
         {children && <div className="flex shrink-0 flex-wrap items-center gap-2">{children}</div>}
       </div>
+      {timeline && (
+        <div className="mt-3 border-t border-border/60 pt-3">
+          <RequestTimeline r={r} />
+        </div>
+      )}
     </div>
   );
 }

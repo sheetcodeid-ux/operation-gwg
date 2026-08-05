@@ -47,17 +47,30 @@ export interface AutoFigures {
   rekrutmenTerpenuhi: number;
   pelatihanTerlaksana: number;
   dokumenSelesai: number;
+  dokumenTotal: number;
 }
 
 /** Indikator yang realisasinya bisa diambil otomatis + dari mana asalnya. */
-const AUTO_SOURCE: Partial<Record<KpiKey, { label: string; value: (a: AutoFigures) => number; target?: (a: AutoFigures) => number }>> = {
+const AUTO_SOURCE: Partial<
+  Record<KpiKey, { label: string; value: (a: AutoFigures) => number; target?: (a: AutoFigures) => number; note?: (a: AutoFigures) => string }>
+> = {
   rekrutmen: {
     label: "Permintaan pegawai yang sudah direkrut",
     value: (a) => a.rekrutmenTerpenuhi,
     target: (a) => a.rekrutmenDiminta,
+    note: (a) => `Dari Pengajuan → Permintaan Karyawan: ${num(a.rekrutmenDiminta)} orang diminta, ${num(a.rekrutmenTerpenuhi)} terpenuhi bulan ini.`,
   },
-  development: { label: "Pelatihan berstatus terlaksana", value: (a) => a.pelatihanTerlaksana },
-  administrasi: { label: "Dokumen HC selesai tepat waktu (≤ 7 hari)", value: (a) => a.dokumenSelesai },
+  development: {
+    label: "Pelatihan berstatus terlaksana",
+    value: (a) => a.pelatihanTerlaksana,
+    note: () => "Dihitung dari pengajuan pelatihan yang sudah ditandai Terlaksana oleh HC.",
+  },
+  administrasi: {
+    label: "Dokumen selesai tepat waktu & sesuai standar",
+    value: (a) => a.dokumenSelesai,
+    note: (a) =>
+      `Dari Antrian Dokumen: ${num(a.dokumenTotal)} dokumen diselesaikan bulan ini, ${num(a.dokumenSelesai)} memenuhi kriteria (selesai ≤ 7 hari dan dokumen final terlampir).`,
+  },
 };
 
 const num = (n: number) => n.toLocaleString("id-ID", { maximumFractionDigits: 2 });
@@ -84,7 +97,13 @@ export function KpiBoard({ canEdit }: { canEdit: boolean }) {
 
   const [entries, setEntries] = React.useState<KpiEntry[]>([]);
   const [trend, setTrend] = React.useState<{ period: string; score: number }[]>([]);
-  const [auto, setAuto] = React.useState<AutoFigures>({ rekrutmenDiminta: 0, rekrutmenTerpenuhi: 0, pelatihanTerlaksana: 0, dokumenSelesai: 0 });
+  const [auto, setAuto] = React.useState<AutoFigures>({
+    rekrutmenDiminta: 0,
+    rekrutmenTerpenuhi: 0,
+    pelatihanTerlaksana: 0,
+    dokumenSelesai: 0,
+    dokumenTotal: 0,
+  });
   const [loading, setLoading] = React.useState(true);
 
   const load = React.useCallback(async () => {
@@ -513,23 +532,26 @@ function KpiEntryForm({ row, period, auto, onSaved }: { row: KpiRow; period: str
       </div>
 
       {source && (
-        <div className="flex flex-wrap items-center gap-2 rounded-xl border border-brand-500/30 bg-brand-500/10 px-3 py-2 text-xs">
-          <span className="min-w-0 flex-1 text-muted-foreground">
-            <span className="font-medium text-foreground">Otomatis dari sistem:</span> {source.label} —{" "}
-            <span className="font-semibold text-foreground">{num(autoValue ?? 0)}</span>
-            {autoTarget !== null && <> (diminta <span className="font-semibold text-foreground">{num(autoTarget)}</span>)</>}
-          </span>
-          <button
-            type="button"
-            onClick={() => {
-              setRealisasi(String(autoValue ?? 0));
-              if (autoTarget !== null && autoTarget > 0) setTarget(String(autoTarget));
-              toast.success("Nilai otomatis diterapkan");
-            }}
-            className="shrink-0 rounded-md bg-brand-600 px-2 py-1 font-semibold text-white hover:bg-brand-700"
-          >
-            Pakai nilai ini
-          </button>
+        <div className="rounded-xl border border-brand-500/30 bg-brand-500/10 px-3 py-2 text-xs">
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="min-w-0 flex-1 text-muted-foreground">
+              <span className="font-medium text-foreground">Otomatis dari sistem:</span> {source.label} —{" "}
+              <span className="font-semibold text-foreground">{num(autoValue ?? 0)}</span>
+              {autoTarget !== null && <> (diminta <span className="font-semibold text-foreground">{num(autoTarget)}</span>)</>}
+            </span>
+            <button
+              type="button"
+              onClick={() => {
+                setRealisasi(String(autoValue ?? 0));
+                if (autoTarget !== null && autoTarget > 0) setTarget(String(autoTarget));
+                toast.success("Nilai otomatis diterapkan");
+              }}
+              className="shrink-0 rounded-md bg-brand-600 px-2 py-1 font-semibold text-white hover:bg-brand-700"
+            >
+              Pakai nilai ini
+            </button>
+          </div>
+          {source.note && <p className="mt-1 text-[11px] text-muted-foreground">{source.note(auto)}</p>}
         </div>
       )}
 

@@ -86,7 +86,7 @@ export const NAV_MENUS: Omit<NavItem, "section">[] = [
   { key: "elearning", label: "E-Learning", href: "/elearning", icon: "GraduationCap" },
   { key: "elearning_admin", label: "Kelola E-Learning", href: "/elearning/kelola", icon: "LibraryBig" },
   { key: "hc_kpi", label: "KPI Human Capital", href: "/hc/kpi", icon: "Target" },
-  { key: "hc_request", label: "Pengajuan ke HC", href: "/hc/request", icon: "Send" },
+  { key: "hc_request", label: "Pengajuan", href: "/pengajuan", icon: "Send" },
   { key: "hc_reqreview", label: "Permintaan & Pelatihan", href: "/hc/permintaan", icon: "ClipboardCheck" },
   { key: "fin_training", label: "ACC Dana Pelatihan", href: "/finance/pelatihan", icon: "Wallet" },
   { key: "mc_events", label: "Event Tracker", href: "/marcomm/events", icon: "Megaphone" },
@@ -170,10 +170,19 @@ export const ROLE_MENUS: Record<Role, MenuKey[]> = {
   bar_rnd: ["hpp_dash", "work", "hpp", "hpp_db", "hpp_bahan", "hpp_price", "assessment"],
   kitchen_rnd: ["hpp_dash", "work", "hpp", "hpp_db", "hpp_bahan", "hpp_price", "assessment"],
   coordinator_rnd: ["hpp_dash", "work", "hpp", "hpp_db", "hpp_bahan", "hpp_price", "assessment"],
-  legal: ["work", "hc_review", "hc_kpi", "hc_reqreview", "hc_request", "assessment"], // HRD — assessment, HC document queue + KPI departemen
+  legal: ["work", "hc_review", "hc_kpi", "hc_reqreview", "assessment"], // HRD — assessment, HC document queue + KPI departemen
   assessor: ["assessment"], // division Head / evaluator — assessment only
   member: ["assessment"], // HO staff — assessment; other access via `department`
 };
+
+/** Menus every department gets automatically — including divisions an admin
+ *  adds later, and roles that were never wired up for them. "Pengajuan" is
+ *  company-wide by design: any team must be able to request headcount or a
+ *  training programme without an admin granting it first. */
+export const UNIVERSAL_MENUS: MenuKey[] = ["hc_request"];
+
+/** A menu list plus the company-wide menus, without duplicates. */
+const withUniversal = (menus: MenuKey[]): MenuKey[] => [...new Set([...menus, ...UNIVERSAL_MENUS])];
 
 /** Menus shown per division in the Super Admin sidebar (all divisions listed). */
 const DIVISION_MENUS: { division: Division; menus: MenuKey[] }[] = [
@@ -182,9 +191,9 @@ const DIVISION_MENUS: { division: Division; menus: MenuKey[] }[] = [
   { division: "Operation", menus: [...OPERATION_FULL, "sys_review", "elearning", "elearning_admin"] },
   { division: "Supervisor", menus: ["events", "hospitality", "hygiene", "complaints", "hc_submit", "sys_submit"] },
   { division: "Product Development & Quality", menus: ["hpp_dash", "work", "hpp", "hpp_db", "hpp_bahan", "hpp_price"] },
-  { division: "Human Capital", menus: ["work", "hc_review", "hc_kpi", "hc_reqreview", "hc_request", "assessment"] },
+  { division: "Human Capital", menus: ["work", "hc_review", "hc_kpi", "hc_reqreview", "assessment"] },
   // New department-aligned divisions — Work Tracker only for now.
-  { division: "Finance", menus: ["work", "fin_training", "hc_request"] },
+  { division: "Finance", menus: ["work", "fin_training"] },
   { division: "Creative", menus: ["work"] },
   { division: "Project Manager", menus: ["work"] },
   { division: "Auditor", menus: ["work"] },
@@ -240,8 +249,8 @@ export const extraDivisions = (): NavExtraDivision[] => EXTRA_DIVISIONS;
  *  the user access to that sidebar's menus. */
 export function assignableDivisions(): { name: string; menus: MenuKey[] }[] {
   return [
-    ...DIVISION_MENUS.map((d) => ({ name: d.division as string, menus: d.menus })),
-    ...EXTRA_DIVISIONS.map((d) => ({ name: d.name, menus: d.menus })),
+    ...DIVISION_MENUS.map((d) => ({ name: d.division as string, menus: withUniversal(d.menus) })),
+    ...EXTRA_DIVISIONS.map((d) => ({ name: d.name, menus: withUniversal(d.menus) })),
   ];
 }
 
@@ -254,7 +263,7 @@ export function grantsForDivision(name: string): string[] {
 /** Build the NavItems for the admin-defined divisions (custom sidebar groups). */
 function extraNavItems(): NavItem[] {
   return EXTRA_DIVISIONS.flatMap((div) => {
-    const set = new Set(div.menus);
+    const set = new Set(withUniversal(div.menus));
     return NAV_MENUS.filter((m) => set.has(m.key)).map((m) => ({ ...m, section: div.name, sectionIcon: div.icon }));
   });
 }
@@ -280,12 +289,12 @@ export const WORK_DIVISIONS: Role[] = [
 export function navFor(role: Role): NavItem[] {
   if (role === "super_admin") {
     const base = DIVISION_MENUS.flatMap(({ division, menus }) => {
-      const allowed = new Set(menus);
+      const allowed = new Set(withUniversal(menus));
       return NAV_MENUS.filter((m) => allowed.has(m.key)).map((m) => ({ ...m, section: division, sectionIcon: DIVISION_ICON[division] }));
     });
     return [...base, ...extraNavItems()];
   }
-  const allowed = new Set(ROLE_MENUS[role]);
+  const allowed = new Set(withUniversal(ROLE_MENUS[role]));
   const division = ROLE_DIVISION[role];
   return NAV_MENUS.filter((m) => allowed.has(m.key)).map((m) => ({ ...m, section: division, sectionIcon: DIVISION_ICON[division] }));
 }
@@ -295,7 +304,7 @@ export function navFor(role: Role): NavItem[] {
  *  menus render locked. Admin-defined divisions are appended after the base. */
 export function navAll(): NavItem[] {
   const base = DIVISION_MENUS.flatMap(({ division, menus }) => {
-    const set = new Set(menus);
+    const set = new Set(withUniversal(menus));
     return NAV_MENUS.filter((m) => set.has(m.key)).map((m) => ({ ...m, section: division, sectionIcon: DIVISION_ICON[division] }));
   });
   return [...base, ...extraNavItems()];
@@ -303,7 +312,7 @@ export function navAll(): NavItem[] {
 
 /** The menus a role may actually open (everything else is shown but locked). */
 export function accessibleMenuKeys(role: Role): MenuKey[] {
-  return [...ROLE_MENUS[role]];
+  return withUniversal(ROLE_MENUS[role]);
 }
 
 /** The division a role belongs to (its own, unlocked division header). */
@@ -313,7 +322,7 @@ export function homeDivision(role: Role): Division {
 
 /** Whether a role may open a given menu (route guard helper). */
 export function canSeeMenu(role: Role, key: MenuKey): boolean {
-  return ROLE_MENUS[role].includes(key);
+  return UNIVERSAL_MENUS.includes(key) || ROLE_MENUS[role].includes(key);
 }
 
 /** Whether any per-user grant unlocks a menu, in ANY division. Grants are
@@ -327,11 +336,6 @@ export function hasMenuGrant(grants: string[] | undefined, key: MenuKey): boolea
 export function canOpenMenu(role: Role, key: MenuKey, grants?: string[]): boolean {
   return role === "super_admin" || canSeeMenu(role, key) || hasMenuGrant(grants, key);
 }
-
-/** Menus every department gets automatically — including divisions an admin
- *  adds later. "Pengajuan ke HC" is company-wide by design: any team must be
- *  able to request headcount or a training programme without being wired up. */
-export const UNIVERSAL_MENUS: MenuKey[] = ["hc_request"];
 
 /** Does the division named `division` (built-in or admin-defined) include `key`? */
 export function divisionHasMenu(division: string, key: MenuKey): boolean {

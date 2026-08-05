@@ -78,7 +78,7 @@ export function HcRequestReview({ mode }: { mode: Mode }) {
       ) : (
         <div className="space-y-3">
           {shown.map((r) => (
-            <RequestSummary key={r.id} r={r}>
+            <RequestSummary key={r.id} r={r} timeline>
               <Actions r={r} mode={mode} onDone={load} />
             </RequestSummary>
           ))}

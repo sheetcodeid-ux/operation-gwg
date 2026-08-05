@@ -98,3 +98,55 @@ export function nextActions(r: HcRequest): { hc: boolean; finance: boolean; comp
 export const isOpen = (s: HcRequestStatus) => s !== "terlaksana" && s !== "ditolak_hc" && s !== "ditolak_finance";
 
 export const fmtRupiah = (n: number) => `Rp ${Math.round(n).toLocaleString("id-ID")}`;
+
+/* ───────────────────────────── alur persetujuan ───────────────────────────── */
+
+export type StepState = "done" | "current" | "todo" | "rejected";
+
+export interface RequestStep {
+  label: string;
+  state: StepState;
+  /** Baris kecil di bawah label: penanggung jawab / hasil langkah. */
+  detail?: string;
+}
+
+/**
+ * Alur satu pengajuan sebagai deretan langkah — dipakai stepper di UI supaya
+ * pemohon selalu tahu posisi berkasnya, bukan sekadar satu label status.
+ */
+export function requestSteps(r: HcRequest): RequestStep[] {
+  const afterHc: HcRequestStatus[] = ["disetujui_hc", "menunggu_finance", "ditolak_finance", "disetujui_finance", "terlaksana"];
+  const hcState: StepState =
+    r.status === "ditolak_hc" ? "rejected" : afterHc.includes(r.status) ? "done" : "current";
+
+  const steps: RequestStep[] = [
+    { label: "Diajukan", state: "done", detail: r.requesterName },
+    { label: "Persetujuan HC", state: hcState, detail: r.hcByName ?? undefined },
+  ];
+
+  if (r.kind === "pelatihan") {
+    const financeState: StepState =
+      r.status === "ditolak_finance"
+        ? "rejected"
+        : r.status === "disetujui_finance" || r.status === "terlaksana"
+          ? "done"
+          : r.status === "menunggu_finance"
+            ? "current"
+            : "todo";
+    steps.push({
+      label: "Dana Finance",
+      state: financeState,
+      detail: r.budgetApproved > 0 ? fmtRupiah(r.budgetApproved) : (r.financeByName ?? undefined),
+    });
+  }
+
+  const readyToRun = r.kind === "rekrutmen" ? r.status === "disetujui_hc" : r.status === "disetujui_finance";
+  steps.push({
+    label: r.kind === "rekrutmen" ? "Pegawai Diterima" : "Pelatihan Terlaksana",
+    state: r.status === "terlaksana" ? "done" : readyToRun ? "current" : "todo",
+    detail:
+      r.status === "terlaksana" && r.kind === "rekrutmen" ? `${r.recruited} dari ${r.headcount} orang` : undefined,
+  });
+
+  return steps;
+}

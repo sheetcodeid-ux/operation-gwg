@@ -94,7 +94,9 @@ export async function submitHcRequestAction(input: SubmitRequestInput): Promise<
 }
 
 function revalidateAll() {
-  revalidatePath("/hc/request");
+  revalidatePath("/pengajuan");
+  revalidatePath("/pengajuan/karyawan");
+  revalidatePath("/pengajuan/pelatihan");
   revalidatePath("/hc/permintaan");
   revalidatePath("/finance/pelatihan");
   revalidatePath("/hc/kpi");
