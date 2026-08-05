@@ -16,7 +16,7 @@ import {
   hcDecideRequestAction,
 } from "@/lib/actions/hc-requests";
 import { fmtRupiah, isOpen, nextActions, type HcRequest, type HcRequestKind } from "@/lib/hc-request";
-import { FilePicker, RequestSummary, uploadAll } from "./request-shared";
+import { FilePicker, RequestList, uploadAll } from "./request-shared";
 
 type Mode = "hc" | "finance";
 type Tab = "open" | "done";
@@ -76,13 +76,7 @@ export function HcRequestReview({ mode, kind }: { mode: Mode; kind?: HcRequestKi
           }
         />
       ) : (
-        <div className="space-y-3">
-          {shown.map((r) => (
-            <RequestSummary key={r.id} r={r}>
-              <Actions r={r} mode={mode} onDone={load} />
-            </RequestSummary>
-          ))}
-        </div>
+        <RequestList rows={shown} actions={(r) => <Actions r={r} mode={mode} onDone={load} />} />
       )}
     </div>
   );

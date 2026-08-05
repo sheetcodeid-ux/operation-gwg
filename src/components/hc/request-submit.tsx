@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import { useRouter } from "next/navigation";
-import { AlertCircle, Loader2, Plus, Send } from "lucide-react";
+import { AlertCircle, Loader2, Plus } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -11,11 +11,11 @@ import { DatePicker } from "@/components/ui/date-picker";
 import { Field, Input, Textarea } from "@/components/ui/input";
 import { MultiCombobox } from "@/components/ui/multi-combobox";
 import { SegmentedTabs } from "@/components/ui/segmented-tabs";
-import { Sheet, SheetContent, SheetTrigger, useSheetControl } from "@/components/ui/sheet";
+import { Dialog, DialogContent, DialogTrigger, useDialogControl } from "@/components/ui/dialog";
 import { EmptyState } from "@/components/ui/page-header";
 import { myHcRequestsAction, submitHcRequestAction } from "@/lib/actions/hc-requests";
 import { TRAINING_TYPES, fmtRupiah, isOpen, type HcRequest, type HcRequestKind } from "@/lib/hc-request";
-import { FilePicker, RequestSummary, uploadAll } from "./request-shared";
+import { FilePicker, RequestList, uploadAll } from "./request-shared";
 
 type Tab = "open" | "done";
 
@@ -81,7 +81,7 @@ export function HcRequestBoard({ kind, members = [] }: { kind: HcRequestKind; me
             </button>
           ))}
         </div>
-        <NewRequestSheet kind={kind} members={members} onDone={load} />
+        <NewRequestButton kind={kind} members={members} onDone={load} />
       </div>
 
       {rows === null ? (
@@ -95,39 +95,27 @@ export function HcRequestBoard({ kind, members = [] }: { kind: HcRequestKind; me
           description={tab === "open" ? copy.empty : "Pengajuan yang sudah selesai atau ditolak muncul di sini."}
         />
       ) : (
-        <div className="space-y-3">
-          {shown.map((r) => (
-            <RequestSummary key={r.id} r={r} />
-          ))}
-        </div>
+        <RequestList rows={shown} />
       )}
     </div>
   );
 }
 
-function NewRequestSheet({ kind, members, onDone }: { kind: HcRequestKind; members: DeptMember[]; onDone: () => void }) {
+/** Dialog terpusat — bentuk yang sama dengan Pengajuan Dokumen & Pengajuan
+ *  System, supaya seluruh formulir pengajuan terasa satu keluarga. */
+function NewRequestButton({ kind, members, onDone }: { kind: HcRequestKind; members: DeptMember[]; onDone: () => void }) {
   const copy = COPY[kind];
   return (
-    <Sheet>
-      <SheetTrigger>
+    <Dialog>
+      <DialogTrigger>
         <Button size="sm">
-          <Plus className="size-4" /> {copy.new}
+          <Plus /> {copy.new}
         </Button>
-      </SheetTrigger>
-      <SheetContent title={copy.title} description={copy.sheetDesc} className="max-w-lg">
+      </DialogTrigger>
+      <DialogContent title={copy.title} description={copy.sheetDesc} align="center" className="max-w-lg">
         <RequestForm kind={kind} members={members} onDone={onDone} />
-      </SheetContent>
-    </Sheet>
-  );
-}
-
-/** Judul kelompok isian di dalam formulir. */
-function FormSection({ title, children }: { title: string; children: React.ReactNode }) {
-  return (
-    <section className="space-y-3">
-      <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">{title}</p>
-      {children}
-    </section>
+      </DialogContent>
+    </Dialog>
   );
 }
 
@@ -145,7 +133,7 @@ type Errors = Partial<Record<"title" | "position" | "headcount" | "trainingType"
 
 function RequestForm({ kind, members, onDone }: { kind: HcRequestKind; members: DeptMember[]; onDone: () => void }) {
   const router = useRouter();
-  const { setOpen } = useSheetControl();
+  const { setOpen } = useDialogControl();
   const isTraining = kind === "pelatihan";
 
   const [title, setTitle] = React.useState("");
@@ -220,9 +208,8 @@ function RequestForm({ kind, members, onDone }: { kind: HcRequestKind; members: 
   }
 
   return (
-    <div className="max-h-[76vh] space-y-5 overflow-y-auto p-5">
-      <FormSection title="Informasi Pengajuan">
-        <Field label="Judul Pengajuan">
+    <div className="max-h-[76vh] space-y-3 overflow-y-auto p-5">
+      <Field label="Judul Pengajuan">
           <Input
             value={title}
             onChange={(e) => setTitle(e.target.value)}
@@ -230,12 +217,11 @@ function RequestForm({ kind, members, onDone }: { kind: HcRequestKind; members: 
             className={cn(errors.title && "border-red-500/60")}
             placeholder={isTraining ? "cth. Pelatihan Service Excellence Batch 1" : "cth. Penambahan Barista Outlet Ketapang"}
           />
-          <FieldError>{errors.title}</FieldError>
-        </Field>
-      </FormSection>
+        <FieldError>{errors.title}</FieldError>
+      </Field>
 
       {isTraining ? (
-        <FormSection title="Detail Pelatihan">
+        <>
           <Field label="Jenis Pelatihan">
             <SegmentedTabs
               value={trainingType === "Lainnya" ? "Lainnya" : "preset"}
@@ -308,9 +294,9 @@ function RequestForm({ kind, members, onDone }: { kind: HcRequestKind; members: 
           <Field label="Rencana Pelaksanaan">
             <DatePicker value={plannedDate} onChange={setPlannedDate} />
           </Field>
-        </FormSection>
+        </>
       ) : (
-        <FormSection title="Kebutuhan Pegawai">
+        <>
           <div className="grid gap-3 sm:grid-cols-2">
             <Field label="Posisi yang Diminta">
               <Input
@@ -335,36 +321,35 @@ function RequestForm({ kind, members, onDone }: { kind: HcRequestKind; members: 
           <Field label="Target Mulai Kerja" hint="Dipakai HC untuk mengukur waktu rekrutmen.">
             <DatePicker value={plannedDate} onChange={setPlannedDate} />
           </Field>
-        </FormSection>
+        </>
       )}
 
-      <FormSection title="Keterangan & Lampiran">
-        <Field label={isTraining ? "Tujuan Pelatihan" : "Alasan Permintaan"}>
-          <Textarea
-            rows={3}
-            value={description}
-            onChange={(e) => setDescription(e.target.value)}
-            placeholder={isTraining ? "Tujuan pelatihan, materi, narasumber…" : "Alasan penambahan, beban kerja saat ini…"}
-          />
-        </Field>
-        <Field
-          label={isTraining ? "Lampiran (proposal / materi / foto)" : "Lampiran (formulir permintaan pegawai)"}
-          hint="PDF / JPG / PNG, maks 10 MB per berkas."
-        >
-          <FilePicker files={files} onChange={setFiles} disabled={busy} />
-        </Field>
-      </FormSection>
+      <Field label={isTraining ? "Tujuan Pelatihan" : "Alasan Permintaan"}>
+        <Textarea
+          rows={3}
+          value={description}
+          onChange={(e) => setDescription(e.target.value)}
+          placeholder={isTraining ? "Tujuan pelatihan, materi, narasumber…" : "Alasan penambahan, beban kerja saat ini…"}
+        />
+      </Field>
 
-      <div className="rounded-lg bg-muted/50 px-3 py-2 text-xs text-muted-foreground">
+      <Field
+        label={isTraining ? "Lampiran (proposal / materi / foto)" : "Lampiran (formulir permintaan pegawai)"}
+        hint="PDF / JPG / PNG, maks 10 MB per berkas."
+      >
+        <FilePicker files={files} onChange={setFiles} disabled={busy} />
+      </Field>
+
+      <p className="rounded-lg bg-muted/50 px-3 py-2 text-xs text-muted-foreground">
         {isTraining
           ? "Setelah dikirim: ACC Human Capital → persetujuan dana Finance → pelatihan dijalankan → HC menandai terlaksana."
           : "Setelah dikirim: ACC Human Capital → proses rekrutmen → HC menandai jumlah pegawai yang diterima."}
-      </div>
+      </p>
 
-      <div className="flex justify-end gap-2">
+      <div className="flex justify-end gap-2 pt-1">
         <Button variant="ghost" onClick={() => setOpen(false)} disabled={busy}>Batal</Button>
         <Button onClick={submit} disabled={busy}>
-          {busy ? <Loader2 className="size-4 animate-spin" /> : <Send className="size-4" />} Kirim ke HC
+          {busy && <Loader2 className="animate-spin" />} Kirim Pengajuan
         </Button>
       </div>
     </div>

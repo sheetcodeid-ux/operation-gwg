@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import { useRouter } from "next/navigation";
-import { ArrowDown, ArrowUp, Check, Layers, Loader2, Plus, RotateCcw, Save, Trash2 } from "lucide-react";
+import { Check, Layers, Loader2, Plus, RotateCcw, Save, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { saveDivisionGroupsAction } from "@/lib/actions/org-structure";
 import { Button } from "@/components/ui/button";
@@ -34,8 +34,8 @@ const ICON_CHOICES = [
 /**
  * Penyusun "bidang kerja" di dalam satu divisi — inilah yang membuat sidebar
  * bertingkat (mis. Human Capital → Talent Acquisition → Permintaan Karyawan).
- * Menu yang tidak dimasukkan ke bidang mana pun otomatis turun ke bawah,
- * berurutan abjad.
+ * Urutan tampil selalu abjad (bidang maupun isinya); menu yang tidak dimasukkan
+ * ke bidang mana pun turun ke bawah, juga urut abjad.
  */
 export function GroupManager({ divisions }: { divisions: DivisionGroups[] }) {
   const router = useRouter();
@@ -57,15 +57,6 @@ export function GroupManager({ divisions }: { divisions: DivisionGroups[] }) {
 
   const patch = (i: number, next: Partial<GroupDisplay>) =>
     setDraft((d) => d.map((g, j) => (j === i ? { ...g, ...next } : g)));
-
-  const move = (i: number, dir: -1 | 1) =>
-    setDraft((d) => {
-      const j = i + dir;
-      if (j < 0 || j >= d.length) return d;
-      const next = [...d];
-      [next[i], next[j]] = [next[j], next[i]];
-      return next;
-    });
 
   const toggleMenu = (i: number, key: string) =>
     setDraft((d) =>
@@ -142,30 +133,22 @@ export function GroupManager({ divisions }: { divisions: DivisionGroups[] }) {
                   <div className="grid size-9 shrink-0 place-items-center rounded-xl bg-primary/10 text-primary ring-1 ring-primary/25">
                     <Icon className="size-4" />
                   </div>
-                  <Field label={`Nama Bidang ${i + 1}`} className="min-w-[12rem] flex-1">
+                  <Field label="Nama Bidang" className="min-w-[12rem] flex-1">
                     <Input
                       value={g.name}
                       onChange={(e) => patch(i, { name: e.target.value })}
                       placeholder="mis. Talent Acquisition"
                     />
                   </Field>
-                  <div className="flex gap-1">
-                    <Button size="icon-sm" variant="outline" disabled={i === 0} onClick={() => move(i, -1)} title="Naikkan">
-                      <ArrowUp className="size-3.5" />
-                    </Button>
-                    <Button size="icon-sm" variant="outline" disabled={i === draft.length - 1} onClick={() => move(i, 1)} title="Turunkan">
-                      <ArrowDown className="size-3.5" />
-                    </Button>
-                    <Button
-                      size="icon-sm"
-                      variant="outline"
-                      className="text-red-600 dark:text-red-400"
-                      onClick={() => setDraft((d) => d.filter((_, j) => j !== i))}
-                      title="Hapus bidang"
-                    >
-                      <Trash2 className="size-3.5" />
-                    </Button>
-                  </div>
+                  <Button
+                    size="icon-sm"
+                    variant="outline"
+                    className="text-red-600 dark:text-red-400"
+                    onClick={() => setDraft((d) => d.filter((_, j) => j !== i))}
+                    title="Hapus bidang"
+                  >
+                    <Trash2 className="size-3.5" />
+                  </Button>
                 </div>
 
                 <div className="mt-3">

@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/page-header";
 import { myHcRequestsAction } from "@/lib/actions/hc-requests";
 import type { HcRequest } from "@/lib/hc-request";
-import { RequestSummary } from "./request-shared";
+import { RequestList } from "./request-shared";
 
 const LIMIT = 4;
 
@@ -39,9 +39,7 @@ export function RecentRequests() {
 
   return (
     <div className="space-y-3">
-      {rows.slice(0, LIMIT).map((r) => (
-        <RequestSummary key={r.id} r={r} />
-      ))}
+      <RequestList rows={rows.slice(0, LIMIT)} />
       {rows.length > LIMIT && (
         <div className="flex flex-wrap gap-2">
           <Button size="sm" variant="outline" render={<Link href="/pengajuan/karyawan" />}>

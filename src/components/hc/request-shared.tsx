@@ -233,20 +233,21 @@ function RequestDetail({ r }: { r: HcRequest }) {
   );
 }
 
-/**
- * Kartu satu pengajuan. Tertutup memperlihatkan judul, status dan langkah yang
- * sedang berjalan; detail lengkap baru muncul setelah kartu diketuk.
- */
-export function RequestSummary({
+/** Satu baris pengajuan di dalam daftar. Tertutup: judul, status, dan langkah
+ *  yang sedang berjalan. Terbuka: rincian penuh + alur persetujuan. */
+function RequestRow({
   r,
-  children,
-  defaultOpen = false,
+  open,
+  onToggle,
+  actions,
+  first,
 }: {
   r: HcRequest;
-  children?: React.ReactNode;
-  defaultOpen?: boolean;
+  open: boolean;
+  onToggle: () => void;
+  actions?: React.ReactNode;
+  first: boolean;
 }) {
-  const [open, setOpen] = React.useState(defaultOpen);
   const st = HC_REQUEST_STATUS_META[r.status];
   const steps = requestSteps(r);
   const active = steps.find((s) => s.state === "current" || s.state === "rejected");
@@ -259,39 +260,71 @@ export function RequestSummary({
       : `${r.trainingType || "Jenis belum diisi"} · ${r.participants} peserta`;
 
   return (
-    <div className="card-gradient overflow-hidden rounded-xl">
-      <div className="flex flex-wrap items-start gap-3 p-4">
+    <div className={cn(!first && "border-t border-border", open && "bg-muted/25")}>
+      <div className="flex flex-wrap items-start gap-3 px-4 py-3.5">
         <button
           type="button"
-          onClick={() => setOpen((v) => !v)}
+          onClick={onToggle}
           aria-expanded={open}
           aria-controls={bodyId}
           className="flex min-w-0 flex-1 items-start gap-3 text-left"
         >
-          <ChevronDown className={cn("mt-0.5 size-4 shrink-0 text-muted-foreground transition-transform duration-200", open && "rotate-180")} />
-          <div className="min-w-0 flex-1">
-            <div className="flex flex-wrap items-center gap-1.5">
+          <span className="mt-0.5 grid size-6 shrink-0 place-items-center rounded-lg bg-muted ring-1 ring-border">
+            <ChevronDown className={cn("size-3.5 text-muted-foreground transition-transform duration-200", open && "rotate-180")} />
+          </span>
+          <span className="min-w-0 flex-1">
+            <span className="flex flex-wrap items-center gap-2">
+              <span className="text-sm font-medium text-foreground">{r.title}</span>
               <Badge tone={st.tone}>{st.label}</Badge>
-              <Badge tone={r.kind === "pelatihan" ? "cyan" : "brand"}>{HC_REQUEST_KIND_LABEL[r.kind]}</Badge>
-            </div>
-            <p className="mt-1.5 text-sm font-semibold leading-snug text-foreground">{r.title}</p>
-            <p className="text-xs text-muted-foreground">{subtitle}</p>
-            <p className="mt-0.5 text-[11px] text-muted-foreground">
-              {r.department} · {r.requesterName} · {fmtDate(r.createdAt)}
-              {active ? ` · menunggu ${active.label}` : ` · ${doneCount}/${steps.length} langkah selesai`}
-            </p>
-          </div>
+            </span>
+            <span className="mt-0.5 block text-xs text-muted-foreground">
+              {HC_REQUEST_KIND_LABEL[r.kind]} · {subtitle}
+            </span>
+            <span className="mt-0.5 block text-[11px] text-muted-foreground">
+              {r.department} · {r.requesterName} · {fmtDate(r.createdAt)} ·{" "}
+              {active ? `menunggu ${active.label}` : `${doneCount}/${steps.length} langkah selesai`}
+            </span>
+          </span>
         </button>
-        {children && <div className="flex shrink-0 flex-wrap items-center gap-2">{children}</div>}
+        {actions && <div className="flex shrink-0 flex-wrap items-center gap-2">{actions}</div>}
       </div>
 
       <div id={bodyId} className={cn("grid transition-[grid-template-rows] duration-200", open ? "grid-rows-[1fr]" : "grid-rows-[0fr]")}>
         <div className="overflow-hidden">
-          <div className="border-t border-border/60 p-4">
+          <div className="border-t border-border/60 px-4 py-4">
             <RequestDetail r={r} />
           </div>
         </div>
       </div>
+    </div>
+  );
+}
+
+/**
+ * Daftar pengajuan sebagai satu kartu berbaris — bentuk yang sama dipakai tabel
+ * lain di aplikasi. Hanya satu baris terbuka sekaligus: membuka yang lain
+ * menutup yang sedang terbuka.
+ */
+export function RequestList({
+  rows,
+  actions,
+}: {
+  rows: HcRequest[];
+  actions?: (r: HcRequest) => React.ReactNode;
+}) {
+  const [openId, setOpenId] = React.useState<string | null>(null);
+  return (
+    <div className="glass overflow-hidden rounded-2xl border border-border">
+      {rows.map((r, i) => (
+        <RequestRow
+          key={r.id}
+          r={r}
+          first={i === 0}
+          open={openId === r.id}
+          onToggle={() => setOpenId((cur) => (cur === r.id ? null : r.id))}
+          actions={actions?.(r)}
+        />
+      ))}
     </div>
   );
 }

@@ -41,15 +41,9 @@ export function MobileNav({
   // the previous one. null = all collapsed.
   const [openSection, setOpenSection] = useState<string | null>(homeDivision);
   const toggle = (s: string) => setOpenSection((cur) => (cur === s ? null : s));
-  // Sub-groups start expanded; the one containing the active route stays open.
-  const [closedGroups, setClosedGroups] = useState<Set<string>>(() => new Set());
-  const toggleGroup = (id: string) =>
-    setClosedGroups((cur) => {
-      const next = new Set(cur);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
-      return next;
-    });
+  // Sub-groups: one open at a time, clicking the open one closes it.
+  // `undefined` = untouched, so the group holding the current page shows open.
+  const [openGroup, setOpenGroup] = useState<string | null | undefined>(undefined);
   // Most-specific match only — avoids a parent route lighting up with its children.
   const activeHref = useMemo(() => {
     let best = "";
@@ -156,13 +150,13 @@ export function MobileNav({
 
                           const groupId = `${section}/${block.name}`;
                           const hasActive = block.items.some((i) => canOpen(i) && isActive(i.href));
-                          const groupOpen = hasActive || !closedGroups.has(groupId);
+                          const groupOpen = openGroup === undefined ? hasActive : openGroup === groupId;
                           const GroupIcon = block.icon ? NAV_ICONS[block.icon] : undefined;
                           return (
                             <div key={groupId} className="pt-0.5">
                               <button
                                 type="button"
-                                onClick={() => toggleGroup(groupId)}
+                                onClick={() => setOpenGroup(groupOpen ? null : groupId)}
                                 aria-expanded={groupOpen}
                                 className="flex w-full items-center gap-2 rounded-lg px-2.5 py-1.5 text-left text-[13px] font-medium text-foreground/85 hover:bg-muted/50"
                               >
@@ -172,7 +166,9 @@ export function MobileNav({
                               </button>
                               <div className={cn("grid transition-[grid-template-rows] duration-200", groupOpen ? "grid-rows-[1fr]" : "grid-rows-[0fr]")}>
                                 <div className="overflow-hidden">
-                                  <div className="ml-[0.55rem] mt-0.5 space-y-0.5 border-l border-border/70 pl-2.5">
+                                  {/* pl-3 (12px) + 1px border matches the
+                                      -left-[13px] active indicator offset. */}
+                                  <div className="ml-[0.55rem] mt-0.5 space-y-0.5 border-l border-border/70 pl-3">
                                     {block.items.map(renderItem)}
                                   </div>
                                 </div>

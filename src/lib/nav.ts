@@ -333,22 +333,28 @@ export function groupsFor(division: string): NavGroupDef[] {
  */
 function itemsForDivision(division: string, menus: MenuKey[], sectionIcon: string): NavItem[] {
   const visible = new Set(withUniversal(menus, division).filter((k) => !MENU_BY_KEY[k]?.hidden));
+  const byName = (a: { label: string }, b: { label: string }) => a.label.localeCompare(b.label, "id");
+
+  // Bidang kerja urut abjad, isinya juga urut abjad.
+  const groups = [...groupsFor(division)].sort((a, b) => a.name.localeCompare(b.name, "id"));
   const grouped: NavItem[] = [];
   const used = new Set<MenuKey>();
 
-  for (const g of groupsFor(division)) {
-    for (const key of g.menus) {
-      if (!visible.has(key) || used.has(key)) continue;
-      const m = MENU_BY_KEY[key];
-      if (!m) continue;
-      used.add(key);
-      grouped.push({ ...m, section: division, sectionIcon, group: g.name, groupIcon: g.icon });
-    }
+  for (const g of groups) {
+    const items = g.menus
+      .filter((key) => visible.has(key) && !used.has(key) && MENU_BY_KEY[key])
+      .map((key) => {
+        used.add(key);
+        return { ...MENU_BY_KEY[key]!, section: division, sectionIcon, group: g.name, groupIcon: g.icon };
+      })
+      .sort(byName);
+    grouped.push(...items);
   }
 
+  // Menu umum: selalu paling bawah, urut abjad.
   const loose = NAV_MENUS.filter((m) => visible.has(m.key) && !used.has(m.key))
     .map((m) => ({ ...m, section: division, sectionIcon }))
-    .sort((a, b) => a.label.localeCompare(b.label, "id"));
+    .sort(byName);
 
   return [...grouped, ...loose];
 }

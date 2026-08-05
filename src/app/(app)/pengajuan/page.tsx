@@ -1,4 +1,4 @@
-import { CheckCircle2, Clock, FileUp, GraduationCap, Inbox, MonitorCog, Send, UserPlus } from "lucide-react";
+import { FileUp, GraduationCap, MonitorCog, Send, UserPlus } from "lucide-react";
 import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 import { getSessionUser } from "@/lib/auth";
@@ -6,7 +6,6 @@ import { canReachMenu } from "@/lib/nav";
 import { listHcRequests } from "@/lib/data/hc-requests";
 import { isOpen } from "@/lib/hc-request";
 import { PageHeader } from "@/components/ui/page-header";
-import { StatTile } from "@/components/ui/stat";
 import { HubBanner, HubCategories, HubSectionTitle, type HubCategory } from "@/components/hc/request-hub";
 import { RecentRequests } from "@/components/hc/request-recent";
 
@@ -20,8 +19,6 @@ export default async function PengajuanPage() {
   const mine = await listHcRequests({ department });
   const openOf = (kind: "rekrutmen" | "pelatihan") =>
     mine.filter((r) => r.kind === kind && isOpen(r.status)).length;
-  const berjalan = mine.filter((r) => isOpen(r.status)).length;
-  const terlaksana = mine.filter((r) => r.status === "terlaksana").length;
 
   const categories: HubCategory[] = [
     {
@@ -29,7 +26,6 @@ export default async function PengajuanPage() {
       icon: UserPlus,
       title: "Permintaan Karyawan",
       description: "Tambah pegawai baru atau pengganti — diproses Human Capital sampai kandidat diterima.",
-      tone: "brand",
       openCount: openOf("rekrutmen"),
     },
     {
@@ -37,7 +33,6 @@ export default async function PengajuanPage() {
       icon: GraduationCap,
       title: "Pengajuan Pelatihan",
       description: "Program pelatihan & pengembangan tim — ACC Human Capital, lalu Finance menyetujui dananya.",
-      tone: "cyan",
       openCount: openOf("pelatihan"),
     },
   ];
@@ -51,7 +46,6 @@ export default async function PengajuanPage() {
       icon: FileUp,
       title: "Pengajuan Dokumen",
       description: "BPJS, PKWT, surat teguran/SP, surat keterangan, dan dokumen kepegawaian lainnya.",
-      tone: "amber",
     });
   }
   if (canReachMenu(user, "sys_submit")) {
@@ -60,7 +54,6 @@ export default async function PengajuanPage() {
       icon: MonitorCog,
       title: "Pengajuan System",
       description: "Kendala perangkat, akses aplikasi, dan permintaan bantuan tim System Support.",
-      tone: "violet",
     });
   }
 
@@ -77,13 +70,6 @@ export default async function PengajuanPage() {
         title="Pengajuan & Permintaan"
         description="Pilih kategori pengajuan di bawah ini. Riwayat dan status persetujuan tersedia di setiap kategori."
       />
-
-      <div className="mt-4 grid grid-cols-2 gap-3 lg:grid-cols-4">
-        <StatTile icon={Inbox} label="Total Pengajuan" value={mine.length} sub={`Departemen ${department}`} />
-        <StatTile icon={Clock} label="Berjalan" value={berjalan} sub="Menunggu persetujuan / proses" />
-        <StatTile icon={CheckCircle2} label="Terlaksana" value={terlaksana} sub="Sudah selesai dijalankan" />
-        <StatTile icon={Send} label="Kategori" value={categories.length} sub="Jenis pengajuan tersedia" />
-      </div>
 
       <HubSectionTitle hint={`${categories.length} kategori`}>Kategori Pengajuan</HubSectionTitle>
       <HubCategories items={categories} />
