@@ -1,13 +1,12 @@
 "use client";
 
 import * as React from "react";
-import { Check, ChevronDown, FileText, Image as ImageIcon, Paperclip, Upload, Users, X } from "lucide-react";
+import { Check, ChevronDown, FileText, GraduationCap, Image as ImageIcon, Paperclip, Upload, UserPlus, Users, X } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
 import { uploadHcRequestFileAction } from "@/lib/actions/hc-requests";
 import {
-  HC_REQUEST_KIND_LABEL,
   HC_REQUEST_STATUS_META,
   fmtRupiah,
   requestSteps,
@@ -233,65 +232,65 @@ function RequestDetail({ r }: { r: HcRequest }) {
   );
 }
 
-/** Satu baris pengajuan di dalam daftar. Tertutup: judul, status, dan langkah
- *  yang sedang berjalan. Terbuka: rincian penuh + alur persetujuan. */
-function RequestRow({
+/** Satu kartu pengajuan — bentuknya sama persis dengan kartu di Pengajuan
+ *  Dokumen: tile ikon, judul, subjudul, badge status, keterangan di kanan.
+ *  Diketuk untuk membuka rincian & alur persetujuan. */
+function RequestCard({
   r,
   open,
   onToggle,
   actions,
-  first,
 }: {
   r: HcRequest;
   open: boolean;
   onToggle: () => void;
   actions?: React.ReactNode;
-  first: boolean;
 }) {
   const st = HC_REQUEST_STATUS_META[r.status];
   const steps = requestSteps(r);
   const active = steps.find((s) => s.state === "current" || s.state === "rejected");
-  const doneCount = steps.filter((s) => s.state === "done").length;
+  const Icon = r.kind === "pelatihan" ? GraduationCap : UserPlus;
   const bodyId = `req-${r.id}`;
 
   const subtitle =
     r.kind === "rekrutmen"
-      ? `${r.position || "Posisi belum diisi"} · ${r.headcount} orang`
-      : `${r.trainingType || "Jenis belum diisi"} · ${r.participants} peserta`;
+      ? `${r.position || "Posisi belum diisi"} · ${r.headcount} orang · ${fmtDate(r.createdAt)}`
+      : `${r.trainingType || "Jenis belum diisi"} · ${r.participants} peserta · ${fmtDate(r.createdAt)}`;
 
   return (
-    <div className={cn(!first && "border-t border-border", open && "bg-muted/25")}>
-      <div className="flex flex-wrap items-start gap-3 px-4 py-3.5">
+    <div className="rounded-xl border border-border bg-card p-3.5">
+      <div className="flex flex-wrap items-center gap-3">
         <button
           type="button"
           onClick={onToggle}
           aria-expanded={open}
           aria-controls={bodyId}
-          className="flex min-w-0 flex-1 items-start gap-3 text-left"
+          className="flex min-w-0 flex-1 items-center gap-3 text-left"
         >
-          <span className="mt-0.5 grid size-6 shrink-0 place-items-center rounded-lg bg-muted ring-1 ring-border">
-            <ChevronDown className={cn("size-3.5 text-muted-foreground transition-transform duration-200", open && "rotate-180")} />
+          <span className="grid size-9 shrink-0 place-items-center rounded-lg bg-muted text-muted-foreground">
+            <Icon className="size-4" />
           </span>
           <span className="min-w-0 flex-1">
-            <span className="flex flex-wrap items-center gap-2">
-              <span className="text-sm font-medium text-foreground">{r.title}</span>
-              <Badge tone={st.tone}>{st.label}</Badge>
-            </span>
-            <span className="mt-0.5 block text-xs text-muted-foreground">
-              {HC_REQUEST_KIND_LABEL[r.kind]} · {subtitle}
-            </span>
-            <span className="mt-0.5 block text-[11px] text-muted-foreground">
-              {r.department} · {r.requesterName} · {fmtDate(r.createdAt)} ·{" "}
-              {active ? `menunggu ${active.label}` : `${doneCount}/${steps.length} langkah selesai`}
-            </span>
+            <span className="block truncate text-sm font-medium text-foreground">{r.title}</span>
+            <span className="block truncate text-xs text-muted-foreground">{subtitle}</span>
           </span>
         </button>
-        {actions && <div className="flex shrink-0 flex-wrap items-center gap-2">{actions}</div>}
+        <Badge tone={st.tone}>{st.label}</Badge>
+        {active && <span className="text-xs text-muted-foreground">Menunggu {active.label}</span>}
+        {actions}
+        <button
+          type="button"
+          onClick={onToggle}
+          aria-label={open ? "Tutup rincian" : "Lihat rincian"}
+          className="grid size-8 shrink-0 place-items-center rounded-lg text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+        >
+          <ChevronDown className={cn("size-4 transition-transform duration-200", open && "rotate-180")} />
+        </button>
       </div>
 
       <div id={bodyId} className={cn("grid transition-[grid-template-rows] duration-200", open ? "grid-rows-[1fr]" : "grid-rows-[0fr]")}>
         <div className="overflow-hidden">
-          <div className="border-t border-border/60 px-4 py-4">
+          <div className="mt-3 border-t border-border pt-3">
             <RequestDetail r={r} />
           </div>
         </div>
@@ -300,11 +299,7 @@ function RequestRow({
   );
 }
 
-/**
- * Daftar pengajuan sebagai satu kartu berbaris — bentuk yang sama dipakai tabel
- * lain di aplikasi. Hanya satu baris terbuka sekaligus: membuka yang lain
- * menutup yang sedang terbuka.
- */
+/** Daftar pengajuan. Hanya satu kartu terbuka sekaligus. */
 export function RequestList({
   rows,
   actions,
@@ -314,17 +309,25 @@ export function RequestList({
 }) {
   const [openId, setOpenId] = React.useState<string | null>(null);
   return (
-    <div className="glass overflow-hidden rounded-2xl border border-border">
-      {rows.map((r, i) => (
-        <RequestRow
+    <div className="space-y-2.5">
+      {rows.map((r) => (
+        <RequestCard
           key={r.id}
           r={r}
-          first={i === 0}
           open={openId === r.id}
           onToggle={() => setOpenId((cur) => (cur === r.id ? null : r.id))}
           actions={actions?.(r)}
         />
       ))}
+    </div>
+  );
+}
+
+/** Kotak kosong bergaris putus-putus — sama dengan daftar Pengajuan Dokumen. */
+export function RequestEmpty({ children }: { children: React.ReactNode }) {
+  return (
+    <div className="rounded-xl border border-dashed border-border p-10 text-center text-sm text-muted-foreground">
+      {children}
     </div>
   );
 }

@@ -12,25 +12,22 @@ import { Field, Input, Textarea } from "@/components/ui/input";
 import { MultiCombobox } from "@/components/ui/multi-combobox";
 import { SegmentedTabs } from "@/components/ui/segmented-tabs";
 import { Dialog, DialogContent, DialogTrigger, useDialogControl } from "@/components/ui/dialog";
-import { EmptyState } from "@/components/ui/page-header";
-import { myHcRequestsAction, submitHcRequestAction } from "@/lib/actions/hc-requests";
-import { TRAINING_TYPES, fmtRupiah, isOpen, type HcRequest, type HcRequestKind } from "@/lib/hc-request";
-import { FilePicker, RequestList, uploadAll } from "./request-shared";
+import { submitHcRequestAction } from "@/lib/actions/hc-requests";
+import { TRAINING_TYPES, fmtRupiah, type HcRequest, type HcRequestKind } from "@/lib/hc-request";
+import { FilePicker, RequestEmpty, RequestList, uploadAll } from "./request-shared";
 
-type Tab = "open" | "done";
-
-const COPY: Record<HcRequestKind, { new: string; title: string; sheetDesc: string; empty: string }> = {
+const COPY: Record<HcRequestKind, { new: string; title: string; formDesc: string; empty: string }> = {
   rekrutmen: {
     new: "Permintaan Baru",
     title: "Permintaan Karyawan",
-    sheetDesc: "Diproses Human Capital. Jumlah yang benar-benar direkrut dihitung otomatis ke KPI Jumlah Rekrutmen.",
-    empty: "Ajukan penambahan atau pengganti pegawai — Human Capital akan memprosesnya sampai kandidat diterima.",
+    formDesc: "Diproses Human Capital. Jumlah yang benar-benar direkrut dihitung otomatis ke KPI Jumlah Rekrutmen.",
+    empty: "Belum ada permintaan. Klik “Permintaan Baru” untuk mengirim permintaan pegawai ke Human Capital.",
   },
   pelatihan: {
     new: "Ajukan Pelatihan",
     title: "Pengajuan Pelatihan",
-    sheetDesc: "Disetujui Human Capital, lalu Finance menyetujui dananya sebelum pelatihan dijalankan.",
-    empty: "Ajukan program pelatihan untuk tim Anda — mulai dari ACC Human Capital hingga persetujuan dana Finance.",
+    formDesc: "Disetujui Human Capital, lalu Finance menyetujui dananya sebelum pelatihan dijalankan.",
+    empty: "Belum ada pengajuan. Klik “Ajukan Pelatihan” untuk mengirim program pelatihan ke Human Capital.",
   },
 };
 
@@ -41,69 +38,15 @@ export interface DeptMember {
   jabatan?: string | null;
 }
 
-/** Daftar + formulir satu jenis pengajuan (satu halaman per kategori). */
-export function HcRequestBoard({ kind, members = [] }: { kind: HcRequestKind; members?: DeptMember[] }) {
-  const [rows, setRows] = React.useState<HcRequest[] | null>(null);
-  const [tab, setTab] = React.useState<Tab>("open");
-  const copy = COPY[kind];
-
-  const load = React.useCallback(async () => {
-    const all = await myHcRequestsAction();
-    setRows(all.filter((r) => r.kind === kind));
-  }, [kind]);
-  React.useEffect(() => {
-    void load();
-  }, [load]);
-
-  const open = (rows ?? []).filter((r) => isOpen(r.status));
-  const done = (rows ?? []).filter((r) => !isOpen(r.status));
-  const shown = tab === "open" ? open : done;
-
-  return (
-    <div>
-      <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
-        <div className="inline-grid grid-cols-2 gap-1 rounded-xl border border-border bg-muted/50 p-1">
-          {([
-            { id: "open" as Tab, label: `Berjalan (${open.length})` },
-            { id: "done" as Tab, label: `Riwayat (${done.length})` },
-          ]).map((t) => (
-            <button
-              key={t.id}
-              type="button"
-              onClick={() => setTab(t.id)}
-              aria-pressed={tab === t.id}
-              className={cn(
-                "inline-flex items-center justify-center rounded-lg px-3 py-1.5 text-sm font-medium transition-colors",
-                tab === t.id ? "bg-background text-foreground shadow-md ring-1 ring-border" : "text-muted-foreground hover:bg-muted/60 hover:text-foreground",
-              )}
-            >
-              {t.label}
-            </button>
-          ))}
-        </div>
-        <NewRequestButton kind={kind} members={members} onDone={load} />
-      </div>
-
-      {rows === null ? (
-        <div className="flex items-center gap-2 py-10 text-sm text-muted-foreground">
-          <Loader2 className="size-4 animate-spin" /> Memuat pengajuan…
-        </div>
-      ) : shown.length === 0 ? (
-        <EmptyState
-          icon={Plus}
-          title={tab === "open" ? "Belum ada pengajuan berjalan" : "Belum ada riwayat"}
-          description={tab === "open" ? copy.empty : "Pengajuan yang sudah selesai atau ditolak muncul di sini."}
-        />
-      ) : (
-        <RequestList rows={shown} />
-      )}
-    </div>
-  );
+/** Daftar pengajuan milik departemen, dirender dari data halaman. */
+export function HcRequestList({ rows, kind }: { rows: HcRequest[]; kind: HcRequestKind }) {
+  if (rows.length === 0) return <RequestEmpty>{COPY[kind].empty}</RequestEmpty>;
+  return <RequestList rows={rows} />;
 }
 
 /** Dialog terpusat — bentuk yang sama dengan Pengajuan Dokumen & Pengajuan
  *  System, supaya seluruh formulir pengajuan terasa satu keluarga. */
-function NewRequestButton({ kind, members, onDone }: { kind: HcRequestKind; members: DeptMember[]; onDone: () => void }) {
+export function NewRequestButton({ kind, members = [] }: { kind: HcRequestKind; members?: DeptMember[] }) {
   const copy = COPY[kind];
   return (
     <Dialog>
@@ -112,8 +55,8 @@ function NewRequestButton({ kind, members, onDone }: { kind: HcRequestKind; memb
           <Plus /> {copy.new}
         </Button>
       </DialogTrigger>
-      <DialogContent title={copy.title} description={copy.sheetDesc} align="center" className="max-w-lg">
-        <RequestForm kind={kind} members={members} onDone={onDone} />
+      <DialogContent title={copy.title} description={copy.formDesc} align="center" className="max-w-lg">
+        <RequestForm kind={kind} members={members} />
       </DialogContent>
     </Dialog>
   );
@@ -131,7 +74,7 @@ function FieldError({ children }: { children?: string }) {
 
 type Errors = Partial<Record<"title" | "position" | "headcount" | "trainingType" | "participants", string>>;
 
-function RequestForm({ kind, members, onDone }: { kind: HcRequestKind; members: DeptMember[]; onDone: () => void }) {
+function RequestForm({ kind, members }: { kind: HcRequestKind; members: DeptMember[] }) {
   const router = useRouter();
   const { setOpen } = useDialogControl();
   const isTraining = kind === "pelatihan";
@@ -198,7 +141,6 @@ function RequestForm({ kind, members, onDone }: { kind: HcRequestKind; members: 
       if (res.error) return toast.error(res.error);
       toast.success("Pengajuan terkirim ke Human Capital");
       setOpen(false);
-      onDone();
       router.refresh();
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Gagal mengirim pengajuan.");

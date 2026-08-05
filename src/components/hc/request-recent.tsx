@@ -2,12 +2,11 @@
 
 import * as React from "react";
 import Link from "next/link";
-import { Inbox, Loader2 } from "lucide-react";
+import { Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { EmptyState } from "@/components/ui/page-header";
 import { myHcRequestsAction } from "@/lib/actions/hc-requests";
 import type { HcRequest } from "@/lib/hc-request";
-import { RequestList } from "./request-shared";
+import { RequestEmpty, RequestList } from "./request-shared";
 
 const LIMIT = 4;
 
@@ -28,13 +27,7 @@ export function RecentRequests() {
   }
 
   if (rows.length === 0) {
-    return (
-      <EmptyState
-        icon={Inbox}
-        title="Belum ada pengajuan"
-        description="Pilih salah satu kategori di atas untuk membuat pengajuan pertama departemen Anda."
-      />
-    );
+    return <RequestEmpty>Belum ada pengajuan. Pilih salah satu kategori di atas untuk membuat pengajuan pertama departemen Anda.</RequestEmpty>;
   }
 
   return (

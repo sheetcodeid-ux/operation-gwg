@@ -3,22 +3,27 @@ import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 import { getSessionUser } from "@/lib/auth";
 import { canReachMenu } from "@/lib/nav";
+import { listHcRequests } from "@/lib/data/hc-requests";
 import { PageHeader } from "@/components/ui/page-header";
-import { HcRequestBoard } from "@/components/hc/request-submit";
+import { HcRequestList, NewRequestButton } from "@/components/hc/request-submit";
 
 export const metadata: Metadata = { title: "Permintaan Karyawan" };
 
 export default async function PermintaanKaryawanPage() {
   const user = (await getSessionUser())!;
   if (!canReachMenu(user, "hc_request")) redirect("/dashboard");
+
+  const rows = await listHcRequests({ department: user.department ?? "—", kind: "rekrutmen" });
+
   return (
     <div className="w-full">
       <PageHeader
         icon={UserPlus}
         title="Permintaan Karyawan"
-        description={`Penambahan & pengganti pegawai departemen ${user.department ?? "Anda"} — diproses Human Capital.`}
+        description="Ajukan penambahan atau pengganti pegawai ke tim Human Capital. Status persetujuan terlihat di setiap kartu."
+        actions={<NewRequestButton kind="rekrutmen" />}
       />
-      <HcRequestBoard kind="rekrutmen" />
+      <HcRequestList rows={rows} kind="rekrutmen" />
     </div>
   );
 }

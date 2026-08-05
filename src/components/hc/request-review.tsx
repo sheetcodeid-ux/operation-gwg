@@ -7,7 +7,6 @@ import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { Field, Input, Textarea } from "@/components/ui/input";
-import { EmptyState } from "@/components/ui/page-header";
 import {
   allHcRequestsAction,
   completeHcRequestAction,
@@ -16,7 +15,7 @@ import {
   hcDecideRequestAction,
 } from "@/lib/actions/hc-requests";
 import { fmtRupiah, isOpen, nextActions, type HcRequest, type HcRequestKind } from "@/lib/hc-request";
-import { FilePicker, RequestList, uploadAll } from "./request-shared";
+import { FilePicker, RequestEmpty, RequestList, uploadAll } from "./request-shared";
 
 type Mode = "hc" | "finance";
 type Tab = "open" | "done";
@@ -64,17 +63,13 @@ export function HcRequestReview({ mode, kind }: { mode: Mode; kind?: HcRequestKi
           <Loader2 className="size-4 animate-spin" /> Memuat…
         </div>
       ) : shown.length === 0 ? (
-        <EmptyState
-          icon={mode === "hc" ? ClipboardCheck : Wallet}
-          title={tab === "open" ? "Tidak ada antrian" : "Belum ada riwayat"}
-          description={
-            tab === "open"
-              ? mode === "hc"
-                ? "Semua pengajuan departemen sudah diproses."
-                : "Tidak ada pengajuan pelatihan yang menunggu persetujuan dana."
-              : "Pengajuan yang sudah selesai akan muncul di sini."
-          }
-        />
+        <RequestEmpty>
+          {tab === "open"
+            ? mode === "hc"
+              ? "Tidak ada antrian — semua pengajuan departemen sudah diproses."
+              : "Tidak ada pengajuan pelatihan yang menunggu persetujuan dana."
+            : "Pengajuan yang sudah selesai akan muncul di sini."}
+        </RequestEmpty>
       ) : (
         <RequestList rows={shown} actions={(r) => <Actions r={r} mode={mode} onDone={load} />} />
       )}
