@@ -157,7 +157,7 @@ export const ROLE_MENUS: Record<Role, MenuKey[]> = {
   data_operation: ["work", "op_analysis", "assessment"],
   pos_operation: ["work", "op_analysis", "assessment"],
   admin_operation: ["work", "complaints", "op_analysis", "assessment"],
-  supervisor: ["hospitality", "hygiene", "complaints", "hc_submit", "sys_submit"], // field SPV — visits + HC docs + system requests
+  supervisor: ["events", "hospitality", "hygiene", "complaints", "hc_submit", "sys_submit"], // field SPV — event/promo proposals + visits + HC docs + system requests
   head_bar_rnd: ["hpp_dash", "work", "hpp", "hpp_db", "hpp_bahan", "hpp_price", "assessment"],
   bar_rnd: ["hpp_dash", "work", "hpp", "hpp_db", "hpp_bahan", "hpp_price", "assessment"],
   kitchen_rnd: ["hpp_dash", "work", "hpp", "hpp_db", "hpp_bahan", "hpp_price", "assessment"],
@@ -172,7 +172,7 @@ const DIVISION_MENUS: { division: Division; menus: MenuKey[] }[] = [
   // sys_review sits under Operation for placement, but access is jabatan-gated
   // (System Support) via an injected grant — it is NOT a general Operation menu.
   { division: "Operation", menus: [...OPERATION_FULL, "sys_review", "elearning", "elearning_admin"] },
-  { division: "Supervisor", menus: ["hospitality", "hygiene", "complaints", "hc_submit", "sys_submit"] },
+  { division: "Supervisor", menus: ["events", "hospitality", "hygiene", "complaints", "hc_submit", "sys_submit"] },
   { division: "Product Development & Quality", menus: ["hpp_dash", "work", "hpp", "hpp_db", "hpp_bahan", "hpp_price"] },
   { division: "Human Capital", menus: ["work", "hc_review", "assessment"] },
   // New department-aligned divisions — Work Tracker only for now.

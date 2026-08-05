@@ -13,10 +13,13 @@ export default async function EventsPage() {
   const user = (await getSessionUser())!;
   if (!canReachMenu(user, "events")) redirect("/dashboard");
 
+  // A Supervisor may only propose for the branches they cover; head-office roles
+  // (Coordinator Area, Operation) keep the full outlet list.
+  const scoped = user.role === "supervisor";
   const [events, products, outlets] = await Promise.all([
     listReviewableEvents(),
     productOptions(),
-    Promise.resolve(outletOptions()),
+    Promise.resolve(outletOptions(scoped ? user : undefined)),
   ]);
 
   return (
@@ -24,7 +27,7 @@ export default async function EventsPage() {
       <PageHeader
         icon={CalendarRange}
         title="Event & Promo Tracker"
-        description="Ajukan event (outlet) atau promo (produk) dengan form yang sama seperti Marketing Communication. Setelah diajukan, Marketing Communication akan meng-ACC dan menetapkan budget."
+        description="Ajukan event (outlet) atau promo (produk) lengkap dengan lampiran PDF/PNG. Setelah diajukan, Marketing Communication akan meng-ACC dan menetapkan budget."
       />
       <MarcommEvents events={events} products={products} outlets={outlets} impacts={[]} canAcc={false} />
     </div>

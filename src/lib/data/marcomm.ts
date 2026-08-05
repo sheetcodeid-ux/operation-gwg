@@ -3,11 +3,12 @@ import "server-only";
 import { randomUUID } from "node:crypto";
 import { db, dbEnabled } from "./db";
 import { markLocalWrite } from "./hydrate";
-import { getOutlets, outletName, userName } from "./store";
+import { getOutlets, outletName, userName, visibleOutlets } from "./store";
 import { eventFromRow } from "./rows";
 import { listHpp } from "./hpp";
 import { listEsbMenus } from "./esb-menu";
 import { isR2Key, presignGet, r2KeyOf } from "@/lib/storage/r2";
+import type { UserProfile } from "@/lib/types";
 import type { MarcommAttachment, MarcommEventType, MarcommReview, MarcommStatus, ProductOption, ReviewableEvent } from "@/lib/marcomm-shared";
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
@@ -288,6 +289,10 @@ export async function productOptions(): Promise<ProductOption[]> {
   return out.sort((a, b) => a.category.localeCompare(b.category) || a.name.localeCompare(b.name));
 }
 
-export function outletOptions(): { id: string; name: string }[] {
-  return getOutlets().map((o) => ({ id: o.id, name: o.name })).sort((a, b) => a.name.localeCompare(b.name));
+/** Outlets selectable when proposing an event. Pass the signed-in user to scope
+ *  the list to the branches they actually cover (a Supervisor only sees theirs);
+ *  omit it for head-office roles that may target any outlet. */
+export function outletOptions(user?: UserProfile): { id: string; name: string }[] {
+  const list = user ? visibleOutlets(user) : getOutlets();
+  return list.map((o) => ({ id: o.id, name: o.name })).sort((a, b) => a.name.localeCompare(b.name));
 }
