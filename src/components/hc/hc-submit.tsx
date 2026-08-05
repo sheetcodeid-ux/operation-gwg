@@ -16,7 +16,8 @@ import {
   HC_DOC_LABEL,
   HC_DOC_TYPES,
   HC_STATUS_META,
-  HC_WARNING_LEVELS,
+  HC_NEEDS_CHRONOLOGY,
+  HC_CONTRACT_LIKE,
   type HcDetails,
   type HcDocType,
   type HcSubmission,
@@ -63,7 +64,7 @@ function SubmissionForm({ outlets }: { outlets: { id: string; name: string }[] }
     if (!employeeName.trim()) return toast.error("Nama karyawan wajib diisi.");
     if (!outletId) return toast.error("Cabang wajib dipilih.");
     if (docType === "bpjs" && !details.motherName?.trim()) return toast.error("Nama ibu kandung wajib untuk BPJS.");
-    if (docType === "teguran" && !details.chronology?.trim()) return toast.error("Kronologi pelanggaran wajib diisi.");
+    if (HC_NEEDS_CHRONOLOGY.includes(docType) && !details.chronology?.trim()) return toast.error("Kronologi wajib diisi.");
 
     startTransition(async () => {
       let ktpPath: string | null = null;
@@ -126,7 +127,7 @@ function SubmissionForm({ outlets }: { outlets: { id: string; name: string }[] }
         </Field>
       )}
 
-      {docType === "pkwt" && (
+      {HC_CONTRACT_LIKE.includes(docType) && (
         <div className="grid gap-3 sm:grid-cols-2">
           <Field label="Posisi / Jabatan">
             <Input value={details.position ?? ""} onChange={(e) => setD({ position: e.target.value })} placeholder="cth. Barista" />
@@ -143,24 +144,15 @@ function SubmissionForm({ outlets }: { outlets: { id: string; name: string }[] }
         </div>
       )}
 
-      {docType === "teguran" && (
-        <>
-          <Field label="Tingkat Teguran">
-            <Combobox
-              value={details.warningLevel ?? HC_WARNING_LEVELS[0]}
-              onChange={(v) => setD({ warningLevel: v })}
-              options={HC_WARNING_LEVELS.map((w) => ({ value: w, label: w }))}
-            />
-          </Field>
-          <Field label="Kronologi Pelanggaran">
-            <Textarea
-              value={details.chronology ?? ""}
-              onChange={(e) => setD({ chronology: e.target.value })}
-              placeholder="Jelaskan kronologi & pelanggaran yang dilakukan…"
-              rows={4}
-            />
-          </Field>
-        </>
+      {HC_NEEDS_CHRONOLOGY.includes(docType) && (
+        <Field label={docType === "phk" ? "Alasan / Kronologi PHK" : "Kronologi Pelanggaran"}>
+          <Textarea
+            value={details.chronology ?? ""}
+            onChange={(e) => setD({ chronology: e.target.value })}
+            placeholder="Jelaskan kronologi & pelanggaran yang dilakukan…"
+            rows={4}
+          />
+        </Field>
       )}
 
       <Field label="Scan / Foto KTP" hint="Gambar atau PDF, maks 8 MB. Opsional bila belum tersedia.">

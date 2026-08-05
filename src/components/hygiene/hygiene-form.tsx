@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState, useTransition } from "react";
+import { useEffect, useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { ChevronDown, Loader2, Plus, SprayCan, X } from "lucide-react";
 import { toast } from "sonner";
@@ -8,6 +8,7 @@ import { HYGIENE_PHOTO_GROUPS, HYGIENE_RATING_META, HYGIENE_SECTIONS } from "@/l
 import type { Attachment, HygieneRating, HygieneSection } from "@/lib/types";
 import { createHygieneAction, uploadHygienePhotosAction } from "@/lib/actions/hygiene";
 import { presignHygieneUploadsAction } from "@/lib/actions/uploads";
+import { clearDraft, draftAge, loadDraft, saveDraft } from "@/lib/draft-store";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogTrigger, useDialogControl } from "@/components/ui/dialog";
 import { Field, Input } from "@/components/ui/input";
@@ -20,6 +21,20 @@ import { useI18n } from "@/lib/i18n/provider";
 import { cn } from "@/lib/utils";
 
 const MIN_PHOTOS = 3;
+/** One draft per device — a supervisor fills one inspection at a time. */
+const DRAFT_KEY = "hygiene-form";
+
+interface HygieneDraft {
+  outletId: string;
+  date: string;
+  shift: string;
+  inspectorName: string;
+  ratings: Ratings;
+  findings: string[];
+  /** Captured photos kept as real Files so they survive a reload. */
+  photos: Record<string, File[]>;
+}
+
 // Keep each upload request comfortably under the Server Action body limit.
 const MAX_BATCH_BYTES = 3.5 * 1024 * 1024;
 
@@ -114,6 +129,52 @@ function HygieneForm({ outlets }: { outlets: { id: string; name: string }[] }) {
   const [openSection, setOpenSection] = useState<HygieneSection>("front");
   const [photos, setPhotos] = useState<Record<string, CapturedPhoto[]>>({});
   const outletName = outlets.find((o) => o.id === outletId)?.name;
+
+  // ── Draft autosave (weak-signal safety) ──────────────────────────────────
+  // Photos are stored as real Files in IndexedDB, so losing signal — or the tab
+  // — no longer wipes an inspection that took an hour to shoot.
+  const [restored, setRestored] = useState<number | null>(null);
+  const [hydrating, setHydrating] = useState(true);
+
+  useEffect(() => {
+    let live = true;
+    loadDraft<HygieneDraft>(DRAFT_KEY).then((env) => {
+      if (!live || !env) {
+        if (live) setHydrating(false);
+        return;
+      }
+      const d = env.data;
+      if (d.outletId) setOutletId(d.outletId);
+      if (d.date) setDate(d.date);
+      if (d.shift) setShift(d.shift);
+      if (d.inspectorName) setInspectorName(d.inspectorName);
+      if (d.ratings) setRatings(d.ratings);
+      if (d.findings) setFindings(d.findings);
+      if (d.photos) {
+        // Rebuild preview URLs — object URLs from the old page are dead.
+        const revived: Record<string, CapturedPhoto[]> = {};
+        for (const [label, files] of Object.entries(d.photos)) {
+          revived[label] = files.map((file) => ({ file, url: URL.createObjectURL(file) }));
+        }
+        setPhotos(revived);
+      }
+      setRestored(env.savedAt);
+      setHydrating(false);
+    });
+    return () => { live = false; };
+  }, []);
+
+  // Debounced save — cheap, and only after the initial hydrate so we never
+  // overwrite a good draft with the empty initial state.
+  useEffect(() => {
+    if (hydrating) return;
+    const id = setTimeout(() => {
+      const photoFiles: Record<string, File[]> = {};
+      for (const [label, items] of Object.entries(photos)) photoFiles[label] = items.map((i) => i.file);
+      void saveDraft<HygieneDraft>(DRAFT_KEY, { outletId, date, shift, inspectorName, ratings, findings, photos: photoFiles });
+    }, 600);
+    return () => clearTimeout(id);
+  }, [hydrating, outletId, date, shift, inspectorName, ratings, findings, photos]);
 
   const { score, rated, total } = useMemo(() => {
     let sum = 0;
@@ -224,6 +285,7 @@ function HygieneForm({ outlets }: { outlets: { id: string; name: string }[] }) {
         return;
       }
       toast.success(`Audit saved · hygiene score ${res?.score?.toFixed(1)}`);
+      void clearDraft(DRAFT_KEY); // submitted — the safety copy is no longer needed
       setOpen(false);
       router.refresh();
     });
@@ -231,6 +293,27 @@ function HygieneForm({ outlets }: { outlets: { id: string; name: string }[] }) {
 
   return (
     <div className="max-h-[72vh] overflow-y-auto p-5">
+      {restored !== null && (
+        <div className="mb-3 flex flex-wrap items-center gap-2 rounded-xl border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs text-amber-800 dark:text-amber-200">
+          <span className="min-w-0 flex-1">
+            Draft dipulihkan (tersimpan {draftAge(restored)}) — penilaian &amp; foto Anda tidak hilang.
+          </span>
+          <button
+            type="button"
+            onClick={() => {
+              void clearDraft(DRAFT_KEY);
+              setRatings(emptyRatings());
+              setFindings([]);
+              setPhotos({});
+              setInspectorName("");
+              setRestored(null);
+            }}
+            className="shrink-0 rounded-md bg-amber-600 px-2 py-1 font-semibold text-white hover:bg-amber-700"
+          >
+            Mulai baru
+          </button>
+        </div>
+      )}
       <div className="grid gap-3 sm:grid-cols-2">
         <Field label={t("common.outlet")}>
           <Combobox

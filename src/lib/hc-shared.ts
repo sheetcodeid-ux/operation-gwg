@@ -9,20 +9,56 @@ import type { Tone } from "@/lib/constants";
  * components (`components/hc/*`) can import the enums, labels and row shape.
  */
 
-export type HcDocType = "bpjs" | "pkwt" | "teguran";
+export type HcDocType =
+  | "bpjs"
+  | "pkwt"
+  | "perpanjang_pkwt"
+  | "teguran"
+  | "sp1"
+  | "sp2"
+  | "sp3"
+  | "pengalaman"
+  | "keterangan_kerja"
+  | "tidak_lanjut_kontrak"
+  | "phk"
+  | "sppt";
 export type HcStatus = "waiting" | "processing" | "pending" | "done";
 
 export const HC_DOC_TYPES: { value: HcDocType; label: string }[] = [
   { value: "bpjs", label: "Pendaftaran BPJS" },
   { value: "pkwt", label: "Kontrak PKWT" },
-  { value: "teguran", label: "Surat Teguran / SP" },
+  { value: "perpanjang_pkwt", label: "Perpanjang PKWT" },
+  // Teguran/SP dipecah per tingkat (permintaan HC) — bukan satu dropdown lagi.
+  { value: "teguran", label: "Surat Teguran" },
+  { value: "sp1", label: "Surat Peringatan 1" },
+  { value: "sp2", label: "Surat Peringatan 2" },
+  { value: "sp3", label: "Surat Peringatan 3" },
+  { value: "pengalaman", label: "Surat Pengalaman Kerja" },
+  { value: "keterangan_kerja", label: "Surat Keterangan Kerja" },
+  { value: "tidak_lanjut_kontrak", label: "Surat Keterangan Tidak Dilanjutkan Kontrak" },
+  { value: "phk", label: "PHK" },
+  { value: "sppt", label: "SPPT" },
 ];
 
 export const HC_DOC_LABEL: Record<HcDocType, string> = {
   bpjs: "Pendaftaran BPJS",
   pkwt: "Kontrak PKWT",
-  teguran: "Surat Teguran / SP",
+  perpanjang_pkwt: "Perpanjang PKWT",
+  teguran: "Surat Teguran",
+  sp1: "Surat Peringatan 1",
+  sp2: "Surat Peringatan 2",
+  sp3: "Surat Peringatan 3",
+  pengalaman: "Surat Pengalaman Kerja",
+  keterangan_kerja: "Surat Keterangan Kerja",
+  tidak_lanjut_kontrak: "Surat Keterangan Tidak Dilanjutkan Kontrak",
+  phk: "PHK",
+  sppt: "SPPT",
 };
+
+/** Jenis yang butuh kronologi pelanggaran (Teguran & SP 1–3, PHK). */
+export const HC_NEEDS_CHRONOLOGY: HcDocType[] = ["teguran", "sp1", "sp2", "sp3", "phk"];
+/** Jenis berbasis kontrak — pakai isian posisi/durasi/mulai/gaji seperti PKWT. */
+export const HC_CONTRACT_LIKE: HcDocType[] = ["pkwt", "perpanjang_pkwt"];
 
 export const HC_STATUS_META: Record<HcStatus, { label: string; tone: Tone }> = {
   waiting: { label: "Menunggu", tone: "warning" },
