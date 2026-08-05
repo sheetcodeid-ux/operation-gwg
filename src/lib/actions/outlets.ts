@@ -3,14 +3,28 @@
 import { revalidatePath } from "next/cache";
 import { getSessionUser } from "@/lib/auth";
 import { can } from "@/lib/rbac";
-import { getOutlets, getUsers } from "@/lib/data/store";
-import { createOutlet } from "@/lib/data/mutations";
+import { getAreas, getOutlets, getUsers } from "@/lib/data/store";
+import { createArea, createOutlet } from "@/lib/data/mutations";
 import { persistMessage } from "@/lib/data/persist";
 import { esbConfigured, esbListBranches } from "@/lib/integrations/esb-client";
 
 /** Compare branch names loosely — ESB spacing/punctuation differs from what was
  *  typed into the app, and we must never create a duplicate of an existing one. */
 const normName = (s: string) => s.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+
+/** Holding area for freshly-synced POS branches.
+ *  `outlets.area_id`, `pic_id` and `supervisor_id` are all FOREIGN KEYS, so a
+ *  new outlet cannot be saved with blanks — that is what made the first sync
+ *  fail with "Gagal menyimpan ke database". New branches land here until an
+ *  admin assigns the real area. */
+const UNASSIGNED_AREA = "Belum Ditentukan";
+
+async function unassignedAreaId(adminId: string): Promise<string> {
+  const existing = getAreas().find((a) => a.name === UNASSIGNED_AREA);
+  if (existing) return existing.id;
+  const created = await createArea({ name: UNASSIGNED_AREA, code: "AR-UNSET", coordinatorId: adminId });
+  return created.id;
+}
 
 export interface AssignableOutlet {
   id: string;
@@ -57,11 +71,13 @@ export async function listAssignableOutlets(
         // picker always matches the POS — the promise this dialog makes to the
         // admin. Additive only; existing outlets are never touched.
         const known = new Set(appOutlets.map((o) => normName(o.name)));
-        for (const b of branches) {
+        const missing = branches.filter((b) => (b.name ?? "").trim() && !known.has(normName((b.name ?? "").trim())));
+        const areaId = missing.length > 0 ? await unassignedAreaId(admin.id) : "";
+        for (const b of missing) {
           const name = (b.name ?? "").trim();
-          if (!name || known.has(normName(name))) continue;
+          if (known.has(normName(name))) continue;
           try {
-            const created = await createOutlet({ name, code: b.id ?? "", city: "", areaId: "", picId: "" });
+            const created = await createOutlet({ name, code: b.id ?? "", city: "", areaId, picId: admin.id });
             known.add(normName(name));
             all.push({ id: created.id, name: created.name });
           } catch {
@@ -124,14 +140,13 @@ export async function syncOutletsFromEsbAction(): Promise<OutletSyncResult> {
     const existing = new Set(getOutlets().map((o) => normName(o.name)));
     const added: string[] = [];
     let skipped = 0;
-    for (const b of branches) {
+    const missing = branches.filter((b) => (b.name ?? "").trim() && !existing.has(normName((b.name ?? "").trim())));
+    skipped = branches.length - missing.length;
+    const areaId = missing.length > 0 ? await unassignedAreaId(admin.id) : "";
+    for (const b of missing) {
       const name = (b.name ?? "").trim();
-      if (!name) continue;
-      if (existing.has(normName(name))) {
-        skipped += 1;
-        continue;
-      }
-      await createOutlet({ name, code: b.id ?? "", city: "", areaId: "", picId: "" });
+      if (existing.has(normName(name))) continue;
+      await createOutlet({ name, code: b.id ?? "", city: "", areaId, picId: admin.id });
       existing.add(normName(name));
       added.push(name);
     }
