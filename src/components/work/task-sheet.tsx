@@ -217,6 +217,10 @@ function TaskForm({
   const { setOpen } = useSheetControl();
   const [pending, startTransition] = React.useTransition();
   const [branch, setBranch] = React.useState<boolean>(!!task?.outletId);
+  // Creating a task may target SEVERAL branches at once (one task per outlet, so
+  // each branch stays independently trackable). Editing keeps its single outlet.
+  const [outletIds, setOutletIds] = React.useState<string[]>(task?.outletId ? [task.outletId] : []);
+  const [allOutlets, setAllOutlets] = React.useState(false);
   const initialDivision = task?.division ?? userDepartment ?? defaultDivision ?? divisions[0] ?? "";
   const catsFor = React.useCallback(
     (div: string) => categories?.[div] ?? (WORK_CATEGORIES as readonly string[] as string[]),
@@ -263,8 +267,15 @@ function TaskForm({
       toast.error("Task title is required.");
       return;
     }
-    if (branch && !form.outletId) {
-      toast.error("Pilih outlet, atau ganti ke Tanpa Cabang.");
+    const targets: (string | null)[] = !branch
+      ? [null]
+      : task
+        ? [form.outletId]
+        : allOutlets
+          ? outlets.map((o) => o.id)
+          : outletIds;
+    if (branch && targets.filter(Boolean).length === 0) {
+      toast.error("Pilih minimal satu outlet, centang Semua Outlet, atau ganti ke Tanpa Cabang.");
       return;
     }
     if (!validRange) {
@@ -278,19 +289,29 @@ function TaskForm({
       priority: form.priority,
       status: form.status,
       division: form.division,
-      outletId: branch ? form.outletId : null,
       picIds: form.picIds,
       startDate: new Date(form.startDate).toISOString(),
       dueDate: new Date(form.dueDate).toISOString(),
       progress: form.progress,
     };
     startTransition(async () => {
-      const res = task ? await updateTaskAction(task.id, payload) : await createTaskAction(payload);
-      if (res?.error) {
-        toast.error(res.error);
-        return;
+      if (task) {
+        const res = await updateTaskAction(task.id, { ...payload, outletId: branch ? form.outletId : null });
+        if (res?.error) {
+          toast.error(res.error);
+          return;
+        }
+      } else {
+        // One task per selected branch — created sequentially so a failure is reported.
+        for (const outletId of targets) {
+          const res = await createTaskAction({ ...payload, outletId });
+          if (res?.error) {
+            toast.error(res.error);
+            return;
+          }
+        }
       }
-      toast.success(task ? "Task updated" : "Task created");
+      toast.success(task ? "Task updated" : targets.length > 1 ? `${targets.length} task dibuat` : "Task created");
       setOpen(false);
       router.refresh();
     });
@@ -353,7 +374,7 @@ function TaskForm({
           />
         </div>
 
-        {branch && (
+        {branch && (task ? (
           <Field label="Outlet">
             <Combobox
               value={form.outletId}
@@ -363,7 +384,31 @@ function TaskForm({
               searchPlaceholder="Cari outlet…"
             />
           </Field>
-        )}
+        ) : (
+          <Field label={`Outlet (${allOutlets ? outlets.length : outletIds.length})`} hint="Bisa pilih lebih dari satu cabang — satu task dibuat untuk tiap cabang.">
+            <div className="space-y-2">
+              <label className="flex cursor-pointer items-center gap-2 rounded-lg border border-border p-2.5 text-sm text-foreground">
+                <input type="checkbox" checked={allOutlets} onChange={(e) => setAllOutlets(e.target.checked)} className="size-4 accent-brand-500" />
+                Semua Outlet ({outlets.length})
+              </label>
+              {!allOutlets && (
+                <>
+                  <MultiCombobox
+                    value={outletIds}
+                    onChange={setOutletIds}
+                    options={outlets.map((o) => ({ value: o.id, label: o.name }))}
+                    placeholder="Pilih beberapa outlet…"
+                    searchPlaceholder="Cari outlet…"
+                  />
+                  <SelectionChips
+                    labels={outletIds.map((id) => outlets.find((o) => o.id === id)?.name).filter((n): n is string => !!n)}
+                    onClear={() => setOutletIds([])}
+                  />
+                </>
+              )}
+            </div>
+          </Field>
+        ))}
 
         <div className="grid grid-cols-2 gap-3">
           <Field label="Kategori">

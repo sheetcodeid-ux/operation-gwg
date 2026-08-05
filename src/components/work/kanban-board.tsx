@@ -87,6 +87,24 @@ export function KanbanBoard({
     }
   }
 
+  /** Which column sits under this x position. Falls back to the nearest column
+   *  so a drop just past the first/last one still lands where the user aimed. */
+  function columnAt(x: number): TaskStatus | null {
+    const el = boardRef.current;
+    if (!el) return null;
+    const cols = [...el.querySelectorAll<HTMLElement>("[data-status]")];
+    let nearest: { d: number; status: TaskStatus } | null = null;
+    for (const c of cols) {
+      const r = c.getBoundingClientRect();
+      const status = c.dataset.status as TaskStatus | undefined;
+      if (!status) continue;
+      if (x >= r.left && x <= r.right) return status;
+      const d = x < r.left ? r.left - x : x - r.right;
+      if (!nearest || d < nearest.d) nearest = { d, status };
+    }
+    return nearest?.status ?? null;
+  }
+
   /** While a card is lifted, auto-scroll the board sideways when the finger sits
    *  near a horizontal edge — so a card can reach columns that are off-screen
    *  (previously it felt "stuck" on mobile). */
@@ -106,8 +124,7 @@ export function KanbanBoard({
       if (dx !== 0) {
         el.scrollLeft += dx;
         // Board moved under the finger → re-detect the column beneath it.
-        const col = (document.elementFromPoint(x, posRef.current.y) as HTMLElement | null)?.closest("[data-status]") as HTMLElement | null;
-        setOverCol((col?.dataset.status as TaskStatus | undefined) ?? null);
+        setOverCol(columnAt(x));
       }
       autoRef.current = requestAnimationFrame(step);
     };
@@ -167,8 +184,7 @@ export function KanbanBoard({
     }
     s.moved = true;
     setDrag({ id: s.id, x: e.clientX, y: e.clientY });
-    const col = (document.elementFromPoint(e.clientX, e.clientY) as HTMLElement | null)?.closest("[data-status]") as HTMLElement | null;
-    setOverCol((col?.dataset.status as TaskStatus | undefined) ?? null);
+    setOverCol(columnAt(e.clientX));
   }
 
   function onPointerUp(_e: React.PointerEvent, task: WorkRow) {
