@@ -1,8 +1,11 @@
 "use server";
 
+import { revalidatePath } from "next/cache";
 import { getSessionUser } from "@/lib/auth";
 import { can } from "@/lib/rbac";
 import { getOutlets, getUsers } from "@/lib/data/store";
+import { createOutlet } from "@/lib/data/mutations";
+import { persistMessage } from "@/lib/data/persist";
 import { esbConfigured, esbListBranches } from "@/lib/integrations/esb-client";
 
 export interface AssignableOutlet {
@@ -66,4 +69,60 @@ export async function listAssignableOutlets(
     .filter((o) => !taken.has(o.id) && !seen.has(o.id) && seen.add(o.id))
     .sort((a, b) => a.name.localeCompare(b.name));
   return { ok: true, outlets, source };
+}
+
+/** Compare branch names loosely — ESB spacing/punctuation differs from what was
+ *  typed into the app, and we must never create a duplicate of an existing one. */
+const normName = (s: string) => s.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+
+export interface OutletSyncResult {
+  added: string[];
+  skipped: number;
+  esbTotal: number;
+  error?: string;
+}
+
+/**
+ * Pull the branch list from ESB (the POS source of truth) and add every branch
+ * the app doesn't have yet — so User Management, Work Tracker and every outlet
+ * picker stop lagging behind the POS.
+ *
+ * ADDITIVE on purpose: outlets are referenced by tasks, complaints, hygiene and
+ * more, so nothing is renamed or removed here. New outlets arrive without an
+ * area; assign it afterwards so Coordinator-Area scoping stays correct.
+ */
+export async function syncOutletsFromEsbAction(): Promise<OutletSyncResult> {
+  const admin = await getSessionUser();
+  if (!admin || admin.role !== "super_admin") {
+    return { added: [], skipped: 0, esbTotal: 0, error: "Hanya Admin yang dapat menyinkronkan cabang." };
+  }
+  if (!esbConfigured()) {
+    return { added: [], skipped: 0, esbTotal: 0, error: "Integrasi ESB belum dikonfigurasi." };
+  }
+  try {
+    const branches = await esbListBranches();
+    if (branches.length === 0) {
+      return { added: [], skipped: 0, esbTotal: 0, error: "ESB tidak mengembalikan daftar cabang. Cek koneksi / kredensial ESB." };
+    }
+    const existing = new Set(getOutlets().map((o) => normName(o.name)));
+    const added: string[] = [];
+    let skipped = 0;
+    for (const b of branches) {
+      const name = (b.name ?? "").trim();
+      if (!name) continue;
+      if (existing.has(normName(name))) {
+        skipped += 1;
+        continue;
+      }
+      await createOutlet({ name, code: b.id ?? "", city: "", areaId: "", picId: "" });
+      existing.add(normName(name));
+      added.push(name);
+    }
+    revalidatePath("/outlets");
+    revalidatePath("/work-tracker");
+    revalidatePath("/admin/users");
+    return { added, skipped, esbTotal: branches.length };
+  } catch (e) {
+    return { added: [], skipped: 0, esbTotal: 0, error: persistMessage(e) };
+  }
 }

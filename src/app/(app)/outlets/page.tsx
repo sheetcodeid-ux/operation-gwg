@@ -6,6 +6,7 @@ import { areaName, getAreas, getOutlet, outletRanking, userName } from "@/lib/da
 import { PageHeader } from "@/components/ui/page-header";
 import { StatTile } from "@/components/ui/stat";
 import { OutletsExplorer, type OutletRow } from "@/components/outlets/outlets-explorer";
+import { SyncOutletsButton } from "@/components/outlets/sync-outlets";
 
 export const metadata: Metadata = { title: "Outlets" };
 
@@ -39,7 +40,12 @@ export default async function OutletsPage() {
 
   return (
     <div className="w-full">
-      <PageHeader icon={Store} title="Outlets" description={`${rows.length} outlets within your scope`} />
+      <PageHeader
+        icon={Store}
+        title="Outlets"
+        description={`${rows.length} outlets within your scope`}
+        actions={user.role === "super_admin" ? <SyncOutletsButton /> : undefined}
+      />
 
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         <StatTile icon={Store} label="Total Outlets" value={rows.length} tone="brand" />
