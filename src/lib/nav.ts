@@ -24,6 +24,9 @@ export type MenuKey =
   | "elearning"
   | "elearning_admin"
   | "hc_kpi"
+  | "hc_request"
+  | "hc_reqreview"
+  | "fin_training"
   | "mc_events"
   | "assessment"
   | "hpp_dash"
@@ -83,6 +86,9 @@ export const NAV_MENUS: Omit<NavItem, "section">[] = [
   { key: "elearning", label: "E-Learning", href: "/elearning", icon: "GraduationCap" },
   { key: "elearning_admin", label: "Kelola E-Learning", href: "/elearning/kelola", icon: "LibraryBig" },
   { key: "hc_kpi", label: "KPI Human Capital", href: "/hc/kpi", icon: "Target" },
+  { key: "hc_request", label: "Pengajuan ke HC", href: "/hc/request", icon: "Send" },
+  { key: "hc_reqreview", label: "Permintaan & Pelatihan", href: "/hc/permintaan", icon: "ClipboardCheck" },
+  { key: "fin_training", label: "ACC Dana Pelatihan", href: "/finance/pelatihan", icon: "Wallet" },
   { key: "mc_events", label: "Event Tracker", href: "/marcomm/events", icon: "Megaphone" },
   { key: "reports", label: "Reports", href: "/reports", icon: "FileText" },
   { key: "assessment", label: "Assessment Golongan", href: "/assessment", icon: "Award" },
@@ -164,7 +170,7 @@ export const ROLE_MENUS: Record<Role, MenuKey[]> = {
   bar_rnd: ["hpp_dash", "work", "hpp", "hpp_db", "hpp_bahan", "hpp_price", "assessment"],
   kitchen_rnd: ["hpp_dash", "work", "hpp", "hpp_db", "hpp_bahan", "hpp_price", "assessment"],
   coordinator_rnd: ["hpp_dash", "work", "hpp", "hpp_db", "hpp_bahan", "hpp_price", "assessment"],
-  legal: ["work", "hc_review", "hc_kpi", "assessment"], // HRD — assessment, HC document queue + KPI departemen
+  legal: ["work", "hc_review", "hc_kpi", "hc_reqreview", "hc_request", "assessment"], // HRD — assessment, HC document queue + KPI departemen
   assessor: ["assessment"], // division Head / evaluator — assessment only
   member: ["assessment"], // HO staff — assessment; other access via `department`
 };
@@ -176,9 +182,9 @@ const DIVISION_MENUS: { division: Division; menus: MenuKey[] }[] = [
   { division: "Operation", menus: [...OPERATION_FULL, "sys_review", "elearning", "elearning_admin"] },
   { division: "Supervisor", menus: ["events", "hospitality", "hygiene", "complaints", "hc_submit", "sys_submit"] },
   { division: "Product Development & Quality", menus: ["hpp_dash", "work", "hpp", "hpp_db", "hpp_bahan", "hpp_price"] },
-  { division: "Human Capital", menus: ["work", "hc_review", "hc_kpi", "assessment"] },
+  { division: "Human Capital", menus: ["work", "hc_review", "hc_kpi", "hc_reqreview", "hc_request", "assessment"] },
   // New department-aligned divisions — Work Tracker only for now.
-  { division: "Finance", menus: ["work"] },
+  { division: "Finance", menus: ["work", "fin_training", "hc_request"] },
   { division: "Creative", menus: ["work"] },
   { division: "Project Manager", menus: ["work"] },
   { division: "Auditor", menus: ["work"] },
@@ -322,8 +328,14 @@ export function canOpenMenu(role: Role, key: MenuKey, grants?: string[]): boolea
   return role === "super_admin" || canSeeMenu(role, key) || hasMenuGrant(grants, key);
 }
 
+/** Menus every department gets automatically — including divisions an admin
+ *  adds later. "Pengajuan ke HC" is company-wide by design: any team must be
+ *  able to request headcount or a training programme without being wired up. */
+export const UNIVERSAL_MENUS: MenuKey[] = ["hc_request"];
+
 /** Does the division named `division` (built-in or admin-defined) include `key`? */
 export function divisionHasMenu(division: string, key: MenuKey): boolean {
+  if (UNIVERSAL_MENUS.includes(key)) return true;
   if (DIVISION_MENUS.some((d) => d.division === division && d.menus.includes(key))) return true;
   return EXTRA_DIVISIONS.some((d) => d.name === division && d.menus.includes(key));
 }

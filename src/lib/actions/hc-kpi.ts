@@ -7,6 +7,7 @@ import { db, dbEnabled } from "@/lib/data/db";
 import { canReachMenu } from "@/lib/nav";
 import { persistMessage } from "@/lib/data/persist";
 import { listKpiEntries, saveKpiEntry, kpiTrend } from "@/lib/data/hc-kpi";
+import { kpiAutoFigures, type KpiAuto } from "@/lib/data/hc-requests";
 import { r2Enabled, r2Put, R2_PREFIX } from "@/lib/storage/r2";
 import { buildRows, kpiPeriod, totalScore, type KpiAttachment, type KpiEntry, type KpiKey } from "@/lib/hc-kpi";
 import type { UserProfile } from "@/lib/types";
@@ -47,6 +48,8 @@ export interface KpiBoard {
   entries: KpiEntry[];
   /** Total skor beberapa periode terakhir (untuk chart tren). */
   trend: { period: string; score: number }[];
+  /** Angka yang dihitung sistem dari data operasional (lihat `KpiAuto`). */
+  auto: KpiAuto;
 }
 
 /** Data satu periode + tren 6 bulan terakhir. */
@@ -54,7 +57,7 @@ export async function getKpiBoardAction(period: string): Promise<KpiBoard | { er
   const user = await getSessionUser();
   if (!canManage(user)) return { error: "Tidak punya akses." };
   try {
-    const entries = await listKpiEntries(period);
+    const [entries, auto] = await Promise.all([listKpiEntries(period), kpiAutoFigures(period)]);
 
     // Enam periode terakhir sampai bulan yang dipilih.
     const [y, m] = period.split("-").map(Number);
@@ -69,7 +72,7 @@ export async function getKpiBoardAction(period: string): Promise<KpiBoard | { er
       return { period: p, score: totalScore(buildRows(map)) };
     });
 
-    return { period, entries, trend };
+    return { period, entries, trend, auto };
   } catch (e) {
     return { error: persistMessage(e) };
   }

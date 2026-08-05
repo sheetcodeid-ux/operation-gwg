@@ -41,6 +41,25 @@ const TONE_CLASS: Record<string, string> = {
   danger: "text-red-600 dark:text-red-400",
 };
 
+/** Angka realisasi yang dihitung sistem dari data operasional. */
+export interface AutoFigures {
+  rekrutmenDiminta: number;
+  rekrutmenTerpenuhi: number;
+  pelatihanTerlaksana: number;
+  dokumenSelesai: number;
+}
+
+/** Indikator yang realisasinya bisa diambil otomatis + dari mana asalnya. */
+const AUTO_SOURCE: Partial<Record<KpiKey, { label: string; value: (a: AutoFigures) => number; target?: (a: AutoFigures) => number }>> = {
+  rekrutmen: {
+    label: "Permintaan pegawai yang sudah direkrut",
+    value: (a) => a.rekrutmenTerpenuhi,
+    target: (a) => a.rekrutmenDiminta,
+  },
+  development: { label: "Pelatihan berstatus terlaksana", value: (a) => a.pelatihanTerlaksana },
+  administrasi: { label: "Dokumen HC selesai tepat waktu (≤ 7 hari)", value: (a) => a.dokumenSelesai },
+};
+
 const num = (n: number) => n.toLocaleString("id-ID", { maximumFractionDigits: 2 });
 const pct = (n: number) => `${num(Math.round(n * 100) / 100)}%`;
 
@@ -65,6 +84,7 @@ export function KpiBoard({ canEdit }: { canEdit: boolean }) {
 
   const [entries, setEntries] = React.useState<KpiEntry[]>([]);
   const [trend, setTrend] = React.useState<{ period: string; score: number }[]>([]);
+  const [auto, setAuto] = React.useState<AutoFigures>({ rekrutmenDiminta: 0, rekrutmenTerpenuhi: 0, pelatihanTerlaksana: 0, dokumenSelesai: 0 });
   const [loading, setLoading] = React.useState(true);
 
   const load = React.useCallback(async () => {
@@ -77,6 +97,7 @@ export function KpiBoard({ canEdit }: { canEdit: boolean }) {
     } else {
       setEntries(res.entries);
       setTrend(res.trend);
+      setAuto(res.auto);
     }
     setLoading(false);
   }, [period]);
@@ -196,7 +217,7 @@ export function KpiBoard({ canEdit }: { canEdit: boolean }) {
         </Panel>
       </div>
 
-      <KpiTable rows={rows} period={period} canEdit={canEdit} onSaved={load} />
+      <KpiTable rows={rows} period={period} canEdit={canEdit} auto={auto} onSaved={load} />
     </div>
   );
 }
@@ -321,7 +342,7 @@ function TrendTip({ active, payload }: { active?: boolean; payload?: { payload: 
 
 /* ─────────────────────────── tabel KPI ─────────────────────────── */
 
-function KpiTable({ rows, period, canEdit, onSaved }: { rows: KpiRow[]; period: string; canEdit: boolean; onSaved: () => void }) {
+function KpiTable({ rows, period, canEdit, auto, onSaved }: { rows: KpiRow[]; period: string; canEdit: boolean; auto: AutoFigures; onSaved: () => void }) {
   const columns = React.useMemo<ColumnDef<KpiRow>[]>(
     () => [
       { id: "no", header: "No", cell: ({ row }) => <span className="tabular-nums text-muted-foreground">{row.original.indicator.no}</span> },
@@ -381,12 +402,12 @@ function KpiTable({ rows, period, canEdit, onSaved }: { rows: KpiRow[]; period: 
         cell: ({ row }) =>
           canEdit ? (
             <div className="flex justify-end">
-              <KpiEntrySheet row={row.original} period={period} onSaved={onSaved} />
+              <KpiEntrySheet row={row.original} period={period} auto={auto} onSaved={onSaved} />
             </div>
           ) : null,
       },
     ],
-    [canEdit, period, onSaved],
+    [canEdit, period, auto, onSaved],
   );
 
   return <DataTable tableId="hc-kpi" columns={columns} data={rows} searchPlaceholder="Cari indikator…" pageSize={10} stickyHeader={false} showExport />;
@@ -412,7 +433,7 @@ function EvidenceChip({ a }: { a: KpiAttachment }) {
 
 /* ─────────────────────────── form input ─────────────────────────── */
 
-function KpiEntrySheet({ row, period, onSaved }: { row: KpiRow; period: string; onSaved: () => void }) {
+function KpiEntrySheet({ row, period, auto, onSaved }: { row: KpiRow; period: string; auto: AutoFigures; onSaved: () => void }) {
   return (
     <Sheet>
       <SheetTrigger>
@@ -421,13 +442,16 @@ function KpiEntrySheet({ row, period, onSaved }: { row: KpiRow; period: string; 
         </button>
       </SheetTrigger>
       <SheetContent title={row.indicator.name} description={`Realisasi ${kpiPeriodLabel(period)} · bobot ${row.indicator.weight}% · satuan ${row.indicator.unit}`} className="max-w-lg">
-        <KpiEntryForm row={row} period={period} onSaved={onSaved} />
+        <KpiEntryForm row={row} period={period} auto={auto} onSaved={onSaved} />
       </SheetContent>
     </Sheet>
   );
 }
 
-function KpiEntryForm({ row, period, onSaved }: { row: KpiRow; period: string; onSaved: () => void }) {
+function KpiEntryForm({ row, period, auto, onSaved }: { row: KpiRow; period: string; auto: AutoFigures; onSaved: () => void }) {
+  const source = AUTO_SOURCE[row.key];
+  const autoValue = source ? source.value(auto) : null;
+  const autoTarget = source?.target ? source.target(auto) : null;
   const { setOpen } = useSheetControl();
   const [target, setTarget] = React.useState(String(row.target));
   const [realisasi, setRealisasi] = React.useState(String(row.realisasi));
@@ -487,6 +511,27 @@ function KpiEntryForm({ row, period, onSaved }: { row: KpiRow; period: string; o
         <p className="mt-1"><span className="font-medium text-foreground">Kriteria:</span> {row.indicator.criteria}</p>
         <p className="mt-1"><span className="font-medium text-foreground">Bukti pendukung:</span> {row.indicator.evidence}</p>
       </div>
+
+      {source && (
+        <div className="flex flex-wrap items-center gap-2 rounded-xl border border-brand-500/30 bg-brand-500/10 px-3 py-2 text-xs">
+          <span className="min-w-0 flex-1 text-muted-foreground">
+            <span className="font-medium text-foreground">Otomatis dari sistem:</span> {source.label} —{" "}
+            <span className="font-semibold text-foreground">{num(autoValue ?? 0)}</span>
+            {autoTarget !== null && <> (diminta <span className="font-semibold text-foreground">{num(autoTarget)}</span>)</>}
+          </span>
+          <button
+            type="button"
+            onClick={() => {
+              setRealisasi(String(autoValue ?? 0));
+              if (autoTarget !== null && autoTarget > 0) setTarget(String(autoTarget));
+              toast.success("Nilai otomatis diterapkan");
+            }}
+            className="shrink-0 rounded-md bg-brand-600 px-2 py-1 font-semibold text-white hover:bg-brand-700"
+          >
+            Pakai nilai ini
+          </button>
+        </div>
+      )}
 
       <div className="grid grid-cols-2 gap-3">
         <Field label={`Target (${row.indicator.unit})`}>

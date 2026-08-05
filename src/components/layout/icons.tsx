@@ -19,6 +19,7 @@ import {
   LibraryBig,
   Megaphone,
   Target,
+  Send,
   MonitorCog,
   LayoutDashboard,
   ListChecks,
@@ -75,6 +76,7 @@ export const NAV_ICONS: Record<string, LucideIcon> = {
   LibraryBig,
   Megaphone,
   Target,
+  Send,
   // Division (group) icons
   Briefcase,
   ShieldCheck,
