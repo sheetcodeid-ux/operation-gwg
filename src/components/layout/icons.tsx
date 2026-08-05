@@ -18,6 +18,7 @@ import {
   Headset,
   LibraryBig,
   Megaphone,
+  Target,
   MonitorCog,
   LayoutDashboard,
   ListChecks,
@@ -73,6 +74,7 @@ export const NAV_ICONS: Record<string, LucideIcon> = {
   GraduationCap,
   LibraryBig,
   Megaphone,
+  Target,
   // Division (group) icons
   Briefcase,
   ShieldCheck,

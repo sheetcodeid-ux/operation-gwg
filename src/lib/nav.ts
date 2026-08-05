@@ -23,6 +23,7 @@ export type MenuKey =
   | "sys_submit"
   | "elearning"
   | "elearning_admin"
+  | "hc_kpi"
   | "mc_events"
   | "assessment"
   | "hpp_dash"
@@ -81,6 +82,7 @@ export const NAV_MENUS: Omit<NavItem, "section">[] = [
   { key: "sys_submit", label: "Pengajuan System", href: "/system/pengajuan", icon: "MonitorCog" },
   { key: "elearning", label: "E-Learning", href: "/elearning", icon: "GraduationCap" },
   { key: "elearning_admin", label: "Kelola E-Learning", href: "/elearning/kelola", icon: "LibraryBig" },
+  { key: "hc_kpi", label: "KPI Human Capital", href: "/hc/kpi", icon: "Target" },
   { key: "mc_events", label: "Event Tracker", href: "/marcomm/events", icon: "Megaphone" },
   { key: "reports", label: "Reports", href: "/reports", icon: "FileText" },
   { key: "assessment", label: "Assessment Golongan", href: "/assessment", icon: "Award" },
@@ -162,7 +164,7 @@ export const ROLE_MENUS: Record<Role, MenuKey[]> = {
   bar_rnd: ["hpp_dash", "work", "hpp", "hpp_db", "hpp_bahan", "hpp_price", "assessment"],
   kitchen_rnd: ["hpp_dash", "work", "hpp", "hpp_db", "hpp_bahan", "hpp_price", "assessment"],
   coordinator_rnd: ["hpp_dash", "work", "hpp", "hpp_db", "hpp_bahan", "hpp_price", "assessment"],
-  legal: ["work", "hc_review", "assessment"], // HRD — grade-promotion assessment + HC document queue
+  legal: ["work", "hc_review", "hc_kpi", "assessment"], // HRD — assessment, HC document queue + KPI departemen
   assessor: ["assessment"], // division Head / evaluator — assessment only
   member: ["assessment"], // HO staff — assessment; other access via `department`
 };
@@ -174,7 +176,7 @@ const DIVISION_MENUS: { division: Division; menus: MenuKey[] }[] = [
   { division: "Operation", menus: [...OPERATION_FULL, "sys_review", "elearning", "elearning_admin"] },
   { division: "Supervisor", menus: ["events", "hospitality", "hygiene", "complaints", "hc_submit", "sys_submit"] },
   { division: "Product Development & Quality", menus: ["hpp_dash", "work", "hpp", "hpp_db", "hpp_bahan", "hpp_price"] },
-  { division: "Human Capital", menus: ["work", "hc_review", "assessment"] },
+  { division: "Human Capital", menus: ["work", "hc_review", "hc_kpi", "assessment"] },
   // New department-aligned divisions — Work Tracker only for now.
   { division: "Finance", menus: ["work"] },
   { division: "Creative", menus: ["work"] },
