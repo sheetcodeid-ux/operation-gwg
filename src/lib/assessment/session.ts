@@ -32,6 +32,15 @@ export interface EvaluationState {
   updatedAt: string;
 }
 
+/** One Rekan Sejawat's own submission — shown per-reviewer on the dashboard. */
+export interface PeerReviewDetail {
+  reviewerUserId: string;
+  reviewerName: string;
+  score: number;
+  note: string;
+  submitted: boolean;
+}
+
 /** The full live state of one employee's assessment, aggregated across evaluators. */
 export interface SessionState {
   id: string;
@@ -55,6 +64,8 @@ export interface SessionState {
    *  submitted vs how many are expected (drives the "1/5" progress display). */
   peerSubmitted: number;
   peerExpected: number;
+  /** Every assigned peer's individual score + note (for the dashboard & report). */
+  peerDetails: PeerReviewDetail[];
   createdBy: string | null;
   updatedAt: string;
 }

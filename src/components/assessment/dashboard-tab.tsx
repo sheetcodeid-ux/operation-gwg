@@ -111,7 +111,8 @@ export function DashboardTab() {
         jabatan: a.resolved.jabatan,
         golongan: golNow || "—",
         golonganTujuan: golNext || "—",
-        penilai: liveBundle.single ? "Director" : "Atasan, HC, Director",
+        // Label follows the ACTUAL panel (Head = Director/HC/Rekan Sejawat).
+        penilai: liveBundle.evaluators.map((e) => e.name).join(", "),
         status: !liveBundle.allFilled
           ? "Proses Penilaian"
           : Object.keys(a.interview ?? {}).length >= 4 && !!liveBundle.ivRek
@@ -121,7 +122,14 @@ export function DashboardTab() {
         finalScore: liveBundle.final,
         interviewResult: liveBundle.ivRek?.label ?? "—",
         decision: liveBundle.decisionLabel,
-        evaluators: liveBundle.evalScores.map((e) => ({ name: e.name, weight: e.weight, score: e.score })),
+        evaluators: liveBundle.evalScores.map((e) => ({
+          name: e.name,
+          weight: e.weight,
+          score: e.score,
+          contribution: e.contribution,
+          note: a.evaluatorNotes[e.key] ?? a.session?.evaluations.find((x) => x.evaluatorKey === e.key)?.note ?? "",
+        })),
+        peerNotes: (a.session?.peerDetails ?? []).map((p) => ({ name: p.reviewerName, score: p.score, note: p.note, submitted: p.submitted })),
       }
     : null;
 
@@ -330,6 +338,61 @@ function dedupeRecords<T extends AssessmentRecord>(rows: T[]): T[] {
   return out;
 }
 
+/** Accumulated contribution + qualitative note for every evaluator, including
+ *  each Rekan Sejawat individually (owner request: transparansi penuh). */
+function EvaluatorNotes({ record, bundle }: { record?: AssessmentRecord | null; bundle: ResultBundle }) {
+  const rows = record?.evaluators ?? bundle.evalScores.map((e) => ({ name: e.name, weight: e.weight, score: e.score, contribution: e.contribution, note: "" }));
+  const peers = record?.peerNotes ?? [];
+  const totalAkumulasi = rows.reduce((sum, r) => sum + (r.contribution ?? 0), 0);
+
+  return (
+    <>
+      <SectionLabel>Akumulasi & Catatan Penilai</SectionLabel>
+      <Card className="p-0">
+        <div className="divide-y divide-border">
+          {rows.map((r) => (
+            <div key={r.name} className="p-3">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <p className="text-sm font-semibold text-foreground">{r.name} <span className="text-[11px] font-normal text-muted-foreground">· bobot {r.weight}%</span></p>
+                <p className="shrink-0 text-xs text-muted-foreground">
+                  Skor <span className="font-semibold tabular-nums text-foreground">{r.score.toFixed(1)}</span>
+                  {r.contribution !== undefined && <> · akumulasi <span className="font-semibold tabular-nums text-foreground">{r.contribution.toFixed(1)}</span></>}
+                </p>
+              </div>
+              <p className="mt-1 text-xs leading-relaxed text-muted-foreground">{r.note?.trim() ? r.note : <span className="italic opacity-70">Tidak ada catatan.</span>}</p>
+            </div>
+          ))}
+          <div className="flex items-center justify-between gap-2 bg-muted/30 p-3">
+            <span className="text-xs font-medium text-foreground">Total akumulasi (skor final)</span>
+            <span className="text-sm font-bold tabular-nums text-foreground">{totalAkumulasi.toFixed(1)}</span>
+          </div>
+        </div>
+      </Card>
+
+      {peers.length > 0 && (
+        <>
+          <SectionLabel>Catatan per Rekan Sejawat ({peers.filter((p) => p.submitted).length}/{peers.length} terkirim)</SectionLabel>
+          <Card className="p-0">
+            <div className="divide-y divide-border">
+              {peers.map((p, i) => (
+                <div key={`${p.name}-${i}`} className="p-3">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <p className="text-sm font-medium text-foreground">{p.name}</p>
+                    <span className={cn("shrink-0 text-xs", p.submitted ? "text-muted-foreground" : "text-amber-600 dark:text-amber-400")}>
+                      {p.submitted ? <>Skor <span className="font-semibold tabular-nums text-foreground">{p.score.toFixed(1)}</span></> : "Belum dikirim"}
+                    </span>
+                  </div>
+                  <p className="mt-1 text-xs leading-relaxed text-muted-foreground">{p.note?.trim() ? p.note : <span className="italic opacity-70">Tidak ada catatan.</span>}</p>
+                </div>
+              ))}
+            </div>
+          </Card>
+        </>
+      )}
+    </>
+  );
+}
+
 /** Batch-wide tracking tiles + outcome distribution — automatic, precise counts. */
 function BatchTracking({ live, extra = [], sample = [] }: { live: AssessmentRecord | null; extra?: EnrichedRecord[]; sample?: EnrichedRecord[] }) {
   const all = dedupeRecords([...(live ? [live] : []), ...extra, ...sample]);
@@ -520,6 +583,9 @@ function IndividualResult({
           </Card>
         ))}
       </ScrollRow>
+
+      {/* Akumulasi + catatan tiap penilai (Atasan/Director, HC, tiap Rekan Sejawat) */}
+      <EvaluatorNotes record={reportRecord} bundle={b} />
 
       {/* SA & interview summary */}
       <SectionLabel>Self Assessment & Interview (Referensi)</SectionLabel>

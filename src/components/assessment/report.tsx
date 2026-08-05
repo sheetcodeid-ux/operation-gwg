@@ -52,15 +52,27 @@ function fmtDate(iso: string): string {
 }
 
 /** Evaluator cards for the report — Director-only positions carry a single card. */
+function isHeadRecord(r: AssessmentRecord): boolean {
+  return /^head/i.test(r.jabatan) || DIRECTOR_ONLY_POSITIONS.includes(r.jabatan);
+}
+
 function reportEvaluators(r: AssessmentRecord): EvaluatorBreakdown[] {
   if (r.evaluators?.length) return r.evaluators;
-  const directorOnly = /^head/i.test(r.jabatan) || DIRECTOR_ONLY_POSITIONS.includes(r.jabatan);
-  if (directorOnly) return [{ name: "Director", weight: 100, score: r.finalScore }];
   return [
-    { name: "Atasan Langsung", weight: 40, score: r.finalScore },
+    { name: isHeadRecord(r) ? "Director" : "Atasan Langsung", weight: 40, score: r.finalScore },
     { name: "HC / Human Capital", weight: 35, score: r.finalScore },
-    { name: "Director", weight: 25, score: r.finalScore },
+    { name: "Rekan Sejawat", weight: 25, score: r.finalScore },
   ];
+}
+
+/** Signature row: staff are signed off by their Atasan + HC + Director; a Head
+ *  has no Atasan, so only HC + Director sign. */
+function signRow(t: (typeof THEME)[ReportMode], r: AssessmentRecord, sg?: Signatories): string {
+  const hc = signBlock(t, "Human Capital", sg?.hc?.name || HR_NAME, sg?.hc?.image ?? null);
+  const dir = signBlock(t, "Director", sg?.director?.name || DIRECTOR_NAME, sg?.director?.image ?? null);
+  if (isHeadRecord(r)) return hc + dir;
+  const atasan = signBlock(t, "Atasan Langsung", sg?.atasan?.name || r.penilai.split(",")[0].trim(), sg?.atasan?.image ?? null);
+  return atasan + hc + dir;
 }
 
 /** Build a fully self-contained, print-ready HTML document for a report. */
@@ -155,11 +167,7 @@ function buildReportHtml(r: AssessmentRecord, mode: ReportMode, sg?: Signatories
       <div class="sec-title">Keputusan Akhir</div>
       <div style="color:${t.text};font-size:13px;line-height:1.6;padding:4px 0">${r.decision}</div>
 
-      <div class="signs">
-        ${signBlock(t, "Atasan Langsung", sg?.atasan?.name || r.penilai.split(",")[0].trim(), sg?.atasan?.image ?? null)}
-        ${signBlock(t, "Human Capital", sg?.hc?.name || HR_NAME, sg?.hc?.image ?? null)}
-        ${signBlock(t, "Director", sg?.director?.name || DIRECTOR_NAME, sg?.director?.image ?? null)}
-      </div>
+      <div class="signs">${signRow(t, r, sg)}</div>
 
       <div class="foot"><span>Dokumen ini dihasilkan otomatis oleh Sistem Assessment GWG.</span><span>Dicetak: ${today}</span></div>
     </div>
@@ -427,7 +435,7 @@ function buildFullReportHtml(record: AssessmentRecord, b: ResultBundle, mode: Re
       <div class="sec-title">Rekomendasi Tindak Lanjut</div>
       <ul style="list-style:none">${recos}</ul>
 
-      <div class="signs">${signBlock(t, "Atasan Langsung", sg?.atasan?.name || record.penilai.split(",")[0].trim(), sg?.atasan?.image ?? null)}${signBlock(t, "Human Capital", sg?.hc?.name || HR_NAME, sg?.hc?.image ?? null)}${signBlock(t, "Director", sg?.director?.name || DIRECTOR_NAME, sg?.director?.image ?? null)}</div>
+      <div class="signs">${signRow(t, record, sg)}</div>
       <div class="foot"><span>Dokumen ini dihasilkan otomatis oleh Sistem Assessment GWG.</span><span>Dicetak: ${today}</span></div>
     </div>
   </div>

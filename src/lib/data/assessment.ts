@@ -5,11 +5,14 @@ import { db, dbEnabled } from "./db";
 import type {
   EvaluationState,
   EvaluatorIdentity,
+  PeerReviewDetail,
   SessionSeed,
   SessionState,
 } from "../assessment/session";
 import type { DimensionScores, EvaluatorKey, IvRecValue, ParamScores } from "../assessment/config";
 import { aggregatePeerScores, listAssignments, listPeerReviews } from "./assessment-roster";
+import { userName } from "./store";
+import { peerScore } from "../assessment/config";
 
 /** Nominal Rekan Sejawat panel size (spec: rata-rata 5 rekan sejawat). Used as
  *  the expected-peer fallback when a participant has no explicit assignment yet,
@@ -48,6 +51,7 @@ const sessionFromRow = (r: any, loaded: LoadedEvaluations): SessionState => ({
   evaluations: loaded.evals,
   peerSubmitted: loaded.peerSubmitted,
   peerExpected: loaded.peerExpected,
+  peerDetails: loaded.peerDetails,
   createdBy: r.created_by ?? null,
   updatedAt: r.updated_at ?? r.created_at ?? new Date().toISOString(),
 });
@@ -95,6 +99,8 @@ export async function resolveEvaluator(userId: string): Promise<EvaluatorIdentit
 
 interface LoadedEvaluations {
   evals: EvaluationState[];
+  /** Per-reviewer peer submissions (name + score + note). */
+  peerDetails: PeerReviewDetail[];
   /** How many assigned peers have submitted their review. */
   peerSubmitted: number;
   /** How many peers are expected on the panel (assignment size, else nominal 5). */
@@ -115,12 +121,20 @@ async function expectedPeerCount(participantUserId: string): Promise<number> {
 async function peerAggregate(
   sessionId: string,
   participantUserId: string,
-): Promise<{ state: EvaluationState | null; submitted: number; expected: number }> {
+): Promise<{ state: EvaluationState | null; submitted: number; expected: number; details: PeerReviewDetail[] }> {
   const [reviews, expected] = await Promise.all([listPeerReviews(sessionId), expectedPeerCount(participantUserId)]);
   const { scores, submittedCount } = aggregatePeerScores(reviews);
+  // Per-reviewer breakdown so the dashboard/report can show each peer's note.
+  const details: PeerReviewDetail[] = reviews.map((r) => ({
+    reviewerUserId: r.reviewerUserId,
+    reviewerName: userName(r.reviewerUserId),
+    score: peerScore(r.scores),
+    note: r.note ?? "",
+    submitted: r.submitted,
+  }));
   // No review row at all → no synthetic peer column, but still report the panel
   // size so the dashboard can show "0/5".
-  if (reviews.length === 0) return { state: null, submitted: 0, expected };
+  if (reviews.length === 0) return { state: null, submitted: 0, expected, details };
   const state: EvaluationState = {
     evaluatorKey: "peer",
     evaluatorUserId: null,
@@ -137,7 +151,7 @@ async function peerAggregate(
     submittedAt: null,
     updatedAt: new Date().toISOString(),
   };
-  return { state, submitted: submittedCount, expected };
+  return { state, submitted: submittedCount, expected, details };
 }
 
 async function loadEvaluations(sessionId: string, participantUserId: string): Promise<LoadedEvaluations> {
@@ -157,6 +171,7 @@ async function loadEvaluations(sessionId: string, participantUserId: string): Pr
     evals: peer.state ? [...rest, peer.state] : rest,
     peerSubmitted: peer.submitted,
     peerExpected: peer.expected,
+    peerDetails: peer.details,
   };
 }
 
@@ -280,7 +295,7 @@ export async function getOrCreateSession(seed: SessionSeed, createdBy: string | 
   }
   // Brand-new session: no evaluations yet, but report the expected peer panel
   // size so the dashboard shows "0/N" immediately.
-  return sessionFromRow(row, { evals: [], peerSubmitted: 0, peerExpected: await expectedPeerCount(row.participant_user_id ?? "") });
+  return sessionFromRow(row, { evals: [], peerSubmitted: 0, peerExpected: await expectedPeerCount(row.participant_user_id ?? ""), peerDetails: [] });
 }
 
 export async function listSessions(): Promise<SessionState[]> {

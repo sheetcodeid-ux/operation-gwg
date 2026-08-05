@@ -88,17 +88,25 @@ export const DIRECTOR_EVALUATOR: Evaluator = {
 
 /**
  * Evaluator panel for a division Head (and Legal / Business Development):
- * assessed directly by the Director (60%) and HC (40%) — there is no Atasan
- * Langsung or Rekan Sejawat above a Head (kebijakan owner, Juli 2026).
+ * the SAME three-way structure as staff — only the Atasan Langsung slot is
+ * replaced by the Director, since a Head has no direct superior below Director
+ * (revisi owner, Agustus 2026): Director 40% · HC 35% · Rekan Sejawat 25%.
  */
 export const HEAD_EVALUATORS: Evaluator[] = [
-  DIRECTOR_EVALUATOR,
+  { ...DIRECTOR_EVALUATOR, weight: 40 },
   {
     key: "hc",
     no: 2,
     name: "HC / Human Capital",
-    weight: 40,
+    weight: 35,
     note: "Diisi berdasarkan data sistem HR (absensi, SP, tes kompetensi) dan verifikasi dokumen pendukung.",
+  },
+  {
+    key: "peer",
+    no: 3,
+    name: "Rekan Sejawat",
+    weight: 25,
+    note: "Rata-rata penilaian rekan sejawat (peer review) berdasarkan interaksi kerja sehari-hari. Diisi independen tanpa berkoordinasi.",
   },
 ];
 
@@ -457,8 +465,8 @@ const PARAM_BY_KEY = new Map(PARAMETERS.map((p) => [p.key, p]));
 
 /**
  * Which official evaluators score a given position. Heads and the
- * DIRECTOR_ONLY_POSITIONS are assessed by the Director alone (weight 100%);
- * everyone else by the standard trio (40/35/25).
+ * DIRECTOR_ONLY_POSITIONS use the Director/HC/Rekan-Sejawat panel (40/35/25);
+ * everyone else the standard Atasan/HC/Rekan-Sejawat trio (40/35/25).
  */
 export function evaluatorsFor(pos: { isHead: boolean; title: string } | null | undefined): Evaluator[] {
   if (pos && (pos.isHead || DIRECTOR_ONLY_POSITIONS.includes(pos.title))) {

@@ -411,8 +411,15 @@ export function sessionToEnriched(s: SessionState): EnrichedRecord {
     finalScore: bundle.final,
     interviewResult: bundle.ivRek?.label ?? "—",
     decision: bundle.decisionLabel,
-    evaluators: bundle.evalScores.map((e) => ({ name: e.name, weight: e.weight, score: e.score })),
+    evaluators: bundle.evalScores.map((e) => ({
+      name: e.name,
+      weight: e.weight,
+      score: e.score,
+      contribution: e.contribution,
+      note: s.evaluations.find((x) => x.evaluatorKey === e.key)?.note || "",
+    })),
     participantUserId: s.participantUserId || undefined,
+    peerNotes: (s.peerDetails ?? []).map((p) => ({ name: p.reviewerName, score: p.score, note: p.note, submitted: p.submitted })),
   };
   return { ...base, detail, bundle };
 }

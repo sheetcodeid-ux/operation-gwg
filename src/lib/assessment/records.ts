@@ -25,6 +25,18 @@ export interface EvaluatorBreakdown {
   name: string;
   weight: number;
   score: number;
+  /** Weighted points this evaluator adds to the final score. */
+  contribution?: number;
+  /** Qualitative note written by this evaluator. */
+  note?: string;
+}
+
+/** One Rekan Sejawat's individual contribution (score + note). */
+export interface PeerNote {
+  name: string;
+  score: number;
+  note: string;
+  submitted: boolean;
 }
 
 export interface AssessmentRecord {
@@ -48,6 +60,8 @@ export interface AssessmentRecord {
   evaluators?: EvaluatorBreakdown[];
   /** Participant's account id — lets the report resolve their Atasan's TTD. */
   participantUserId?: string;
+  /** Per-reviewer Rekan Sejawat breakdown (score + note). */
+  peerNotes?: PeerNote[];
 }
 
 export const MOCK_ASSESSMENTS: AssessmentRecord[] = [
