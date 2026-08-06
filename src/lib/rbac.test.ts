@@ -48,19 +48,20 @@ describe("menu access matrix", () => {
     for (const r of ["bar_rnd", "kitchen_rnd", "head_bar_rnd", "coordinator_rnd"] as const) {
       // Every non-supervisor role also gets Assessment (org-wide requirement);
       // hpp_price = Referensi Harga & HPP (ESB price vs HPP).
-      expect(ROLE_MENUS[r]).toEqual(["hpp_dash", "work", "hpp", "hpp_db", "hpp_bahan", "hpp_price", "assessment"]);
+      // hpp_comp = Analytics Harga Kompetitor (harga kita vs harga pasar).
+      expect(ROLE_MENUS[r]).toEqual(["hpp_dash", "work", "hpp", "hpp_db", "hpp_bahan", "hpp_price", "hpp_comp", "assessment"]);
     }
   });
 
   it("gives HRD (legal) Work Tracker + HC Document Queue + Assessment Golongan", () => {
-    expect(ROLE_MENUS.legal).toEqual(["work", "hc_review", "assessment"]);
+    expect(ROLE_MENUS.legal).toEqual(["work", "hc_review", "hc_kpi", "hc_reqreview", "hc_training", "assessment"]);
     expect(canSeeMenu("legal", "hc_review")).toBe(true);
     expect(canSeeMenu("legal", "assessment")).toBe(true);
     expect(canSeeMenu("legal", "dashboard")).toBe(false);
   });
 
   it("gives supervisor Hospitality + Hygiene + Complaints + HC Document Requests (field SPV, no dashboard/assessment)", () => {
-    expect(ROLE_MENUS.supervisor).toEqual(["hospitality", "hygiene", "complaints", "hc_submit", "sys_submit"]);
+    expect(ROLE_MENUS.supervisor).toEqual(["events", "hospitality", "hygiene", "complaints", "hc_submit", "sys_submit"]);
     expect(canSeeMenu("supervisor", "hc_submit")).toBe(true);
     expect(canSeeMenu("supervisor", "hygiene")).toBe(true);
     expect(canSeeMenu("supervisor", "hospitality")).toBe(true);

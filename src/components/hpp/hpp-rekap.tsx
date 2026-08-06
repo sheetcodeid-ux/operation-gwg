@@ -23,7 +23,7 @@ import {
   XCircle,
 } from "lucide-react";
 import { toast } from "sonner";
-import { BRANDS, foodCostPct, foodCostStatus, hppPct, hppStatus, type Brand,} from "@/lib/hpp/calc";
+import { BRANDS, CLASS_STEP, classPrices, hppPct, hppStatus, type Brand } from "@/lib/hpp/calc";
 import { HPP_STATUS_META, STATUS_PILL, type StatusTone } from "@/lib/hpp/status";
 import { bulkDeleteHppAction, bulkReviewHppAction, bulkSubmitHppAction, deleteHppAction, reviewHppAction, submitHppAction } from "@/lib/actions/hpp";
 import type { HppRecord, HppStatus } from "@/lib/data/hpp";
@@ -38,7 +38,14 @@ import { cn } from "@/lib/utils";
 
 const rp = (n: number) => "Rp " + Math.round(n || 0).toLocaleString("id-ID");
 const cat = (c: string): "makanan" | "minuman" => (c === "makanan" ? "makanan" : "minuman");
-const marginOf = (r: HppRecord) => (r.chosenPrice > 0 ? (r.chosenPrice - r.hpp) / r.chosenPrice : 0);
+const marginOf = (r: HppRecord, price: number) => (price > 0 ? (price - r.hpp) / price : 0);
+
+/**
+ * Harga menu pada class tertentu. Sistem class Nordu: HPP tetap sama, harga
+ * jual naik Rp5.000 tiap class — jadi hanya menu ber-class yang bergeser, dan
+ * margin-nya ikut naik. Menu tanpa class selalu memakai harga dasarnya.
+ */
+const priceAtClass = (r: HppRecord, cls: number) => (r.useClass ? r.chosenPrice + CLASS_STEP * (cls - 1) : r.chosenPrice);
 
 const BRAND_CHIP: Record<string, string> = {
   Nordu: "bg-emerald-500/12 text-emerald-600 ring-emerald-500/25 dark:text-emerald-400",
@@ -51,7 +58,7 @@ const fcClass = (t: StatusTone | "good" | "warn" | "bad") =>
 const fcBar = (t: "good" | "warn" | "bad") => (t === "good" ? "bg-emerald-500" : t === "warn" ? "bg-amber-500" : "bg-red-500");
 
 type SortKey = "name" | "brand" | "hpp" | "price" | "margin" | "fc" | "status";
-type Row = { r: HppRecord; fc: number; margin: number };
+type Row = { r: HppRecord; fc: number; margin: number; price: number };
 const STATUS_TABS: { key: HppStatus | "all"; label: string }[] = [
   { key: "all", label: "Semua" },
   { key: "draft", label: "Draft" },
@@ -69,6 +76,10 @@ export function HppRekap({ records, canEdit, canVerify }: { records: HppRecord[]
   const [category, setCategory] = React.useState("all");
   const [statusTab, setStatusTab] = React.useState<HppStatus | "all">("all");
   const [overOnly, setOverOnly] = React.useState(false);
+  // Sistem class Nordu: lihat rekap seolah semua menu ber-class dijual di
+  // Class 1/2/3, supaya ketahuan apakah menu masih sehat di tiap class.
+  const [klass, setKlass] = React.useState(1);
+  const [classOnly, setClassOnly] = React.useState(false);
   const [sortKey, setSortKey] = React.useState<SortKey>("name");
   const [sortDir, setSortDir] = React.useState<"asc" | "desc">("asc");
   const [view, setView] = React.useState<"table" | "cards">("table");
@@ -79,15 +90,19 @@ export function HppRekap({ records, canEdit, canVerify }: { records: HppRecord[]
   const baseFiltered = React.useMemo<Row[]>(() => {
     const needle = q.trim().toLowerCase();
     return records
-      .map((r) => ({ r, fc: hppPct(r.hpp, r.chosenPrice), margin: marginOf(r) }))
+      .map((r) => {
+        const price = priceAtClass(r, klass);
+        return { r, price, fc: hppPct(r.hpp, price), margin: marginOf(r, price) };
+      })
       .filter(({ r, fc }) => {
         if (needle && !r.name.toLowerCase().includes(needle)) return false;
         if (brand !== "all" && r.brand !== brand) return false;
         if (category !== "all" && cat(r.category) !== category) return false;
+        if (classOnly && !r.useClass) return false;
         if (overOnly && fc <= 0.7) return false;
         return true;
       });
-  }, [records, q, brand, category, overOnly]);
+  }, [records, q, brand, category, overOnly, klass, classOnly]);
 
   const statusCounts = React.useMemo(() => {
     const c: Record<string, number> = { all: baseFiltered.length, draft: 0, submitted: 0, verified: 0, rejected: 0 };
@@ -103,7 +118,7 @@ export function HppRekap({ records, canEdit, canVerify }: { records: HppRecord[]
         case "name": return row.r.name.toLowerCase();
         case "brand": return row.r.brand;
         case "hpp": return row.r.hpp;
-        case "price": return row.r.chosenPrice;
+        case "price": return row.price;
         case "margin": return row.margin;
         case "fc": return row.fc;
         case "status": return row.r.status;
@@ -118,15 +133,16 @@ export function HppRekap({ records, canEdit, canVerify }: { records: HppRecord[]
   }, [baseFiltered, statusTab, sortKey, sortDir]);
 
   const stats = React.useMemo(() => {
-    let over = 0, ideal = 0, pending = 0;
+    let over = 0, ideal = 0, pending = 0, classMenus = 0;
     for (const r of records) {
-      const fc = hppPct(r.hpp, r.chosenPrice);
+      const fc = hppPct(r.hpp, priceAtClass(r, klass));
       if (fc > 0.7) over++;
       else if (fc > 0 && hppStatus(fc, cat(r.category), r.brand as Brand).tone === "good") ideal++;
       if (r.status === "submitted") pending++;
+      if (r.useClass) classMenus++;
     }
-    return { total: records.length, over, ideal, pending };
-  }, [records]);
+    return { total: records.length, over, ideal, pending, classMenus };
+  }, [records, klass]);
 
   const toggleSort = (k: SortKey) => {
     if (sortKey === k) setSortDir((d) => (d === "asc" ? "desc" : "asc"));
@@ -213,12 +229,13 @@ export function HppRekap({ records, canEdit, canVerify }: { records: HppRecord[]
   };
 
   function exportCsv() {
-    const headers = ["Menu", "Brand", "Kategori", "Status", "HPP", "Harga", "Margin %", "Food Cost %"];
-    const data = rows.map(({ r, fc, margin }) => [
+    const headers = ["Menu", "Brand", "Kategori", "Status", "Class", "HPP", "Harga", "Margin %", "Food Cost %"];
+    const data = rows.map(({ r, fc, margin, price }) => [
       r.name, r.brand, cat(r.category) === "makanan" ? "Makanan" : "Minuman", HPP_STATUS_META[r.status].label,
-      Math.round(r.hpp), Math.round(r.chosenPrice), r.chosenPrice > 0 ? (margin * 100).toFixed(0) : "-", (fc * 100).toFixed(1),
+      r.useClass ? `Class ${klass}` : "-",
+      Math.round(r.hpp), Math.round(price), price > 0 ? (margin * 100).toFixed(0) : "-", (fc * 100).toFixed(1),
     ]);
-    downloadCsv("database-hpp", toCsv(headers, data));
+    downloadCsv(`database-hpp-class-${klass}`, toCsv(headers, data));
   }
 
   // Remember view/sort/tab preferences across visits.
@@ -251,7 +268,7 @@ export function HppRekap({ records, canEdit, canVerify }: { records: HppRecord[]
     };
   }, [router]);
 
-  const hasFilter = q || brand !== "all" || category !== "all" || overOnly;
+  const hasFilter = q || brand !== "all" || category !== "all" || overOnly || classOnly || klass !== 1;
 
   return (
     <div className="space-y-4">
@@ -316,6 +333,35 @@ export function HppRekap({ records, canEdit, canVerify }: { records: HppRecord[]
           <div className="w-40 shrink-0">
             <Combobox portal searchable={false} matchTriggerWidth value={category} onChange={setCategory} options={[{ value: "all", label: "Semua Kategori" }, { value: "makanan", label: "Makanan" }, { value: "minuman", label: "Minuman" }]} />
           </div>
+          {stats.classMenus > 0 && (
+            <>
+              <div className="w-32 shrink-0">
+                <Combobox
+                  portal
+                  searchable={false}
+                  matchTriggerWidth
+                  value={String(klass)}
+                  onChange={(v) => setKlass(Number(v) || 1)}
+                  options={[
+                    { value: "1", label: "Class 1", hint: "harga dasar" },
+                    { value: "2", label: "Class 2", hint: `+${rp(CLASS_STEP)}` },
+                    { value: "3", label: "Class 3", hint: `+${rp(CLASS_STEP * 2)}` },
+                  ]}
+                />
+              </div>
+              <button
+                type="button"
+                onClick={() => setClassOnly((v) => !v)}
+                title={`${stats.classMenus} menu memakai sistem class`}
+                className={cn(
+                  "h-9 shrink-0 whitespace-nowrap rounded-lg border px-3 text-sm font-medium transition-colors",
+                  classOnly ? "border-primary bg-primary/10 text-primary" : "border-border text-muted-foreground hover:text-foreground",
+                )}
+              >
+                Menu class saja
+              </button>
+            </>
+          )}
           <button
             type="button"
             onClick={() => setOverOnly((v) => !v)}
@@ -327,7 +373,7 @@ export function HppRekap({ records, canEdit, canVerify }: { records: HppRecord[]
             Over cost saja
           </button>
           {hasFilter && (
-            <button type="button" onClick={() => { setQ(""); setBrand("all"); setCategory("all"); setOverOnly(false); }} className="h-9 shrink-0 whitespace-nowrap rounded-lg px-2 text-xs font-medium text-muted-foreground hover:text-foreground">
+            <button type="button" onClick={() => { setQ(""); setBrand("all"); setCategory("all"); setOverOnly(false); setClassOnly(false); setKlass(1); }} className="h-9 shrink-0 whitespace-nowrap rounded-lg px-2 text-xs font-medium text-muted-foreground hover:text-foreground">
               Reset filter
             </button>
           )}
@@ -359,7 +405,7 @@ export function HppRekap({ records, canEdit, canVerify }: { records: HppRecord[]
       ) : view === "cards" ? (
         /* ---------- CARD / GALLERY VIEW ---------- */
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
-          {rows.map(({ r, fc, margin }) => {
+          {rows.map(({ r, fc, margin, price }) => {
             const fs = hppStatus(fc, cat(r.category), r.brand as Brand);
             const meta = HPP_STATUS_META[r.status];
             return (
@@ -373,8 +419,13 @@ export function HppRekap({ records, canEdit, canVerify }: { records: HppRecord[]
                       {cat(r.category) === "makanan" ? <UtensilsCrossed className="size-8" /> : <Coffee className="size-8" />}
                     </div>
                   )}
-                  <span className={cn("absolute left-2 top-2 rounded-full px-2 py-0.5 text-[11px] font-semibold ring-1", BRAND_CHIP[r.brand] ?? "bg-muted text-muted-foreground ring-border")}>{r.brand}</span>
-                  <span className={cn("absolute right-2 top-2 rounded-full px-2 py-0.5 text-[10px] font-semibold", STATUS_PILL[meta.tone])}>{meta.label}</span>
+                  {/* Satu baris flex, bukan dua absolute kiri/kanan: brand
+                      panjang ("Lesung Pipi") + status panjang ("Diverifikasi")
+                      dulu bisa saling tindih di tengah kartu sempit. */}
+                  <div className="absolute inset-x-2 top-2 flex items-start justify-between gap-2">
+                    <span className={cn("min-w-0 truncate rounded-full px-2 py-0.5 text-[11px] font-semibold ring-1", BRAND_CHIP[r.brand] ?? "bg-muted text-muted-foreground ring-border")}>{r.brand}</span>
+                    <span className={cn("min-w-0 truncate rounded-full px-2 py-0.5 text-[10px] font-semibold", STATUS_PILL[meta.tone])}>{meta.label}</span>
+                  </div>
                 </div>
                 <div className="flex flex-1 flex-col gap-2 p-3">
                   <p className="truncate font-semibold text-foreground">{r.name || "(tanpa nama)"}</p>
@@ -382,16 +433,16 @@ export function HppRekap({ records, canEdit, canVerify }: { records: HppRecord[]
                     <span className="text-muted-foreground">HPP</span>
                     <span className="tabular-nums text-foreground">{rp(r.hpp)}</span>
                   </div>
-                  <div className="flex items-center justify-between text-sm">
-                    <span className="text-muted-foreground">Harga</span>
-                    <span className="font-semibold tabular-nums text-foreground">{rp(r.chosenPrice)}</span>
+                  <div className="flex items-center justify-between gap-2 text-sm">
+                    <span className="min-w-0 truncate text-muted-foreground">Harga{r.useClass ? ` · Class ${klass}` : ""}</span>
+                    <span className="shrink-0 font-semibold tabular-nums text-foreground">{rp(price)}</span>
                   </div>
                   <div className="mt-auto flex items-center gap-2 border-t border-border/60 pt-2">
                     <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-muted">
                       <div className={cn("h-full rounded-full", fcBar(fs.tone))} style={{ width: `${Math.min(100, fc * 100)}%` }} />
                     </div>
                     <span className={cn("text-[11px] font-semibold tabular-nums", fcClass(fs.tone))}>FC {(fc * 100).toFixed(0)}%</span>
-                    <span className="text-[11px] tabular-nums text-muted-foreground">· M {r.chosenPrice > 0 ? `${(margin * 100).toFixed(0)}%` : "—"}</span>
+                    <span className="text-[11px] tabular-nums text-muted-foreground">· M {price > 0 ? `${(margin * 100).toFixed(0)}%` : "—"}</span>
                   </div>
                 </div>
               </button>
@@ -421,7 +472,7 @@ export function HppRekap({ records, canEdit, canVerify }: { records: HppRecord[]
                 </tr>
               </thead>
               <tbody>
-                {rows.map(({ r, fc, margin }) => {
+                {rows.map(({ r, fc, margin, price }) => {
                   const fs = hppStatus(fc, cat(r.category), r.brand as Brand);
                   const meta = HPP_STATUS_META[r.status];
                   return (
@@ -443,14 +494,17 @@ export function HppRekap({ records, canEdit, canVerify }: { records: HppRecord[]
                           )}
                           <div className="min-w-0">
                             <p className="truncate font-medium text-foreground">{r.name || "(tanpa nama)"}</p>
-                            <p className="truncate text-[11px] text-muted-foreground">{cat(r.category) === "makanan" ? "Makanan" : "Minuman"}</p>
+                            <p className="truncate text-[11px] text-muted-foreground">
+                              {cat(r.category) === "makanan" ? "Makanan" : "Minuman"}
+                              {r.useClass && <span className="ml-1 rounded bg-muted px-1 font-medium">Class {klass}</span>}
+                            </p>
                           </div>
                         </div>
                       </td>
                       <td className="px-3 py-2.5"><span className={cn("inline-block rounded-full px-2 py-0.5 text-[11px] font-semibold ring-1", BRAND_CHIP[r.brand] ?? "bg-muted text-muted-foreground ring-border")}>{r.brand}</span></td>
                       <td className="px-3 py-2.5 text-right tabular-nums text-foreground">{rp(r.hpp)}</td>
-                      <td className="px-3 py-2.5 text-right tabular-nums text-foreground">{rp(r.chosenPrice)}</td>
-                      <td className={cn("px-3 py-2.5 text-right font-medium tabular-nums", margin < 0.3 ? "text-amber-600 dark:text-amber-400" : "text-foreground")}>{r.chosenPrice > 0 ? `${(margin * 100).toFixed(0)}%` : "—"}</td>
+                      <td className="px-3 py-2.5 text-right tabular-nums text-foreground">{rp(price)}</td>
+                      <td className={cn("px-3 py-2.5 text-right font-medium tabular-nums", margin < 0.3 ? "text-amber-600 dark:text-amber-400" : "text-foreground")}>{price > 0 ? `${(margin * 100).toFixed(0)}%` : "—"}</td>
                       <td className="px-3 py-2.5">
                         <div className="flex items-center gap-2">
                           <div className="h-1.5 w-14 overflow-hidden rounded-full bg-muted"><div className={cn("h-full rounded-full", fcBar(fs.tone))} style={{ width: `${Math.min(100, fc * 100)}%` }} /></div>
@@ -485,7 +539,7 @@ export function HppRekap({ records, canEdit, canVerify }: { records: HppRecord[]
       <Sheet open={!!detail} onOpenChange={(v) => !v && setDetail(null)}>
         {detail && (
           <SheetContent title={detail.name || "(tanpa nama)"} description={`${detail.brand} · ${cat(detail.category) === "makanan" ? "Makanan" : "Minuman"}`}>
-            <DetailBody r={detail} canEdit={canEdit} canVerify={canVerify} busy={busy === detail.id} onEdit={() => router.push(`/rnd/hpp?edit=${detail.id}`)} onSubmit={() => submit(detail)} onVerify={() => verify(detail)} onReject={() => reject(detail)} onDelete={() => del(detail)} />
+            <DetailBody r={detail} klass={klass} canEdit={canEdit} canVerify={canVerify} busy={busy === detail.id} onEdit={() => router.push(`/rnd/hpp?edit=${detail.id}`)} onSubmit={() => submit(detail)} onVerify={() => verify(detail)} onReject={() => reject(detail)} onDelete={() => del(detail)} />
           </SheetContent>
         )}
       </Sheet>
@@ -494,10 +548,11 @@ export function HppRekap({ records, canEdit, canVerify }: { records: HppRecord[]
   );
 }
 
-function DetailBody({ r, canEdit, canVerify, busy, onEdit, onSubmit, onVerify, onReject, onDelete }: { r: HppRecord; canEdit: boolean; canVerify: boolean; busy: boolean; onEdit: () => void; onSubmit: () => void; onVerify: () => void; onReject: () => void; onDelete: () => void }) {
-  const fc = hppPct(r.hpp, r.chosenPrice);
+function DetailBody({ r, klass, canEdit, canVerify, busy, onEdit, onSubmit, onVerify, onReject, onDelete }: { r: HppRecord; klass: number; canEdit: boolean; canVerify: boolean; busy: boolean; onEdit: () => void; onSubmit: () => void; onVerify: () => void; onReject: () => void; onDelete: () => void }) {
+  const price = priceAtClass(r, klass);
+  const fc = hppPct(r.hpp, price);
   const fs = hppStatus(fc, cat(r.category), r.brand as Brand);
-  const margin = marginOf(r);
+  const margin = marginOf(r, price);
   const meta = HPP_STATUS_META[r.status];
   return (
     <>
@@ -524,11 +579,26 @@ function DetailBody({ r, canEdit, canVerify, busy, onEdit, onSubmit, onVerify, o
           <DRow label="Target penjualan / bulan" value={`${r.targetSales.toLocaleString("id-ID")} unit`} />
         </div>
         <div className="rounded-xl border border-border bg-muted/20 p-3">
-          <DRow label="Harga jual (tanpa pajak)" value={rp(r.chosenPrice)} strong />
-          <DRow label="Margin" value={r.chosenPrice > 0 ? `${(margin * 100).toFixed(1)}%` : "—"} />
-          <DRow label="Harga after-tax (referensi, PBJT 10%)" value={rp(r.chosenPrice * 1.1)} />
+          <DRow label={`Harga jual (tanpa pajak)${r.useClass ? ` · Class ${klass}` : ""}`} value={rp(price)} strong />
+          <DRow label="Margin" value={price > 0 ? `${(margin * 100).toFixed(1)}%` : "—"} />
+          <DRow label="Harga after-tax (referensi, PBJT 10%)" value={rp(price * 1.1)} />
           <DRow label="Target laba bersih / bulan" value={rp(r.targetProfit)} />
         </div>
+        {r.useClass && (
+          <div className="rounded-xl border border-border bg-muted/20 p-3">
+            <p className="mb-1.5 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+              Sistem Class — HPP tetap {rp(r.hpp)}, harga naik {rp(CLASS_STEP)} tiap class
+            </p>
+            {classPrices(r.chosenPrice, r.hpp).map((c) => (
+              <DRow
+                key={c.cls}
+                label={`${c.label}${c.cls === klass ? " (dilihat)" : ""}`}
+                value={`${rp(c.price)} · margin ${(c.margin * 100).toFixed(0)}% · HPP ${(c.hppPct * 100).toFixed(0)}%`}
+                strong={c.cls === klass}
+              />
+            ))}
+          </div>
+        )}
         <p className="text-[11px] text-muted-foreground">Dibuat {new Date(r.createdAt).toLocaleString("id-ID", { day: "numeric", month: "long", year: "numeric", hour: "2-digit", minute: "2-digit" })}</p>
       </div>
       {(canEdit || canVerify) && (
@@ -557,8 +627,8 @@ function DetailBody({ r, canEdit, canVerify, busy, onEdit, onSubmit, onVerify, o
 function DRow({ label, value, strong }: { label: string; value: string; strong?: boolean }) {
   return (
     <div className="flex items-center justify-between gap-3 py-1 text-sm">
-      <span className="text-muted-foreground">{label}</span>
-      <span className={cn("shrink-0 tabular-nums", strong ? "font-bold text-foreground" : "text-foreground")}>{value}</span>
+      <span className="min-w-0 text-muted-foreground">{label}</span>
+      <span className={cn("shrink-0 text-right tabular-nums", strong ? "font-bold text-foreground" : "text-foreground")}>{value}</span>
     </div>
   );
 }

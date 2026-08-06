@@ -38,6 +38,7 @@ export type MenuKey =
   | "hpp_db"
   | "hpp_bahan"
   | "hpp_price"
+  | "hpp_comp"
   | "users"
   | "audit";
 
@@ -114,6 +115,7 @@ export const NAV_MENUS: Omit<NavItem, "section" | "group" | "groupIcon">[] = [
   { key: "hpp_db", label: "Database HPP", href: "/rnd/hpp/rekap", icon: "Table2" },
   { key: "hpp_bahan", label: "Master Bahan Baku", href: "/rnd/hpp/bahan", icon: "Package" },
   { key: "hpp_price", label: "Referensi Harga & HPP", href: "/rnd/hpp/price", icon: "Scale" },
+  { key: "hpp_comp", label: "Analytics Harga Kompetitor", href: "/rnd/hpp/kompetitor", icon: "Store" },
   { key: "users", label: "User Management", href: "/admin/users", icon: "Users" },
   { key: "audit", label: "Audit Logs", href: "/admin/audit", icon: "ScrollText" },
 ];
@@ -191,10 +193,10 @@ export const ROLE_MENUS: Record<Role, MenuKey[]> = {
   pos_operation: ["work", "op_analysis", "assessment"],
   admin_operation: ["work", "complaints", "op_analysis", "assessment"],
   supervisor: ["events", "hospitality", "hygiene", "complaints", "hc_submit", "sys_submit"], // field SPV — event/promo proposals + visits + HC docs + system requests
-  head_bar_rnd: ["hpp_dash", "work", "hpp", "hpp_db", "hpp_bahan", "hpp_price", "assessment"],
-  bar_rnd: ["hpp_dash", "work", "hpp", "hpp_db", "hpp_bahan", "hpp_price", "assessment"],
-  kitchen_rnd: ["hpp_dash", "work", "hpp", "hpp_db", "hpp_bahan", "hpp_price", "assessment"],
-  coordinator_rnd: ["hpp_dash", "work", "hpp", "hpp_db", "hpp_bahan", "hpp_price", "assessment"],
+  head_bar_rnd: ["hpp_dash", "work", "hpp", "hpp_db", "hpp_bahan", "hpp_price", "hpp_comp", "assessment"],
+  bar_rnd: ["hpp_dash", "work", "hpp", "hpp_db", "hpp_bahan", "hpp_price", "hpp_comp", "assessment"],
+  kitchen_rnd: ["hpp_dash", "work", "hpp", "hpp_db", "hpp_bahan", "hpp_price", "hpp_comp", "assessment"],
+  coordinator_rnd: ["hpp_dash", "work", "hpp", "hpp_db", "hpp_bahan", "hpp_price", "hpp_comp", "assessment"],
   legal: ["work", "hc_review", "hc_kpi", "hc_reqreview", "hc_training", "assessment"], // HRD — assessment, HC document queue + KPI departemen
   assessor: ["assessment"], // division Head / evaluator — assessment only
   member: ["assessment"], // HO staff — assessment; other access via `department`
@@ -239,7 +241,7 @@ export const DIVISION_GROUPS: Partial<Record<Division, NavGroupDef[]>> = {
     { name: "Operasional Outlet", icon: "Store", menus: ["hospitality", "hygiene", "complaints"] },
   ],
   "Product Development & Quality": [
-    { name: "Kalkulasi HPP", icon: "Calculator", menus: ["hpp", "hpp_db", "hpp_bahan", "hpp_price"] },
+    { name: "Kalkulasi HPP", icon: "Calculator", menus: ["hpp", "hpp_db", "hpp_bahan", "hpp_price", "hpp_comp"] },
   ],
   "Human Capital": [
     { name: "Talent Acquisition", icon: "UserRound", menus: ["hc_reqreview", "hc_training"] },
@@ -257,7 +259,7 @@ const DIVISION_MENUS: { division: Division; menus: MenuKey[] }[] = [
   // (System Support) via an injected grant — it is NOT a general Operation menu.
   { division: "Operation", menus: [...OPERATION_FULL, "sys_review", "elearning", "elearning_admin"] },
   { division: "Supervisor", menus: ["events", "hospitality", "hygiene", "complaints", "hc_submit", "sys_submit"] },
-  { division: "Product Development & Quality", menus: ["hpp_dash", "work", "hpp", "hpp_db", "hpp_bahan", "hpp_price"] },
+  { division: "Product Development & Quality", menus: ["hpp_dash", "work", "hpp", "hpp_db", "hpp_bahan", "hpp_price", "hpp_comp"] },
   { division: "Human Capital", menus: ["work", "hc_review", "hc_kpi", "hc_reqreview", "hc_training", "assessment"] },
   // New department-aligned divisions — Work Tracker only for now.
   { division: "Finance", menus: ["work", "fin_training"] },

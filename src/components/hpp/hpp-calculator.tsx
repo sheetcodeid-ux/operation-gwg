@@ -103,7 +103,9 @@ const UNIT_OPTIONS = ALL_UNITS.map((u) => ({ value: u, label: u }));
 /** Unit picker — Combobox milik web ini, bukan <select> bawaan browser (yang
  *  memakai menu OS, mengabaikan tema, dan tidak bisa dicari). */
 function UnitSelect({ value, onChange }: { value: string; onChange: (v: string) => void }) {
-  return <Combobox portal matchTriggerWidth searchable value={value} onChange={onChange} options={UNIT_OPTIONS} />;
+  // Tanpa searchable: hanya 5 satuan, dan kotak cari akan memunculkan keyboard
+  // di HP untuk sesuatu yang cukup diketuk.
+  return <Combobox portal matchTriggerWidth value={value} onChange={onChange} options={UNIT_OPTIONS} />;
 }
 
 function NumInput({ value, onChange, className, placeholder }: { value: number; onChange: (n: number) => void; className?: string; placeholder?: string }) {
@@ -622,27 +624,27 @@ export function HppCalculator({
                 {/* Inputs stay side-by-side; on narrow screens the row swipes
                     horizontally with an edge fade (scroll-fade-x) like elsewhere. */}
                 <div className="scroll-fade-x mt-2 flex gap-3 pb-0.5">
-                  <div className="w-[9.5rem] shrink-0">
+                  <div className="w-[10.5rem] shrink-0">
                     <p className="mb-1 text-[10px] font-medium uppercase tracking-wide text-muted-foreground">Takaran / produk</p>
                     <div className="flex gap-1.5">
                       <NumInput value={v.takaran} onChange={(n) => setVar(v.id, { takaran: n })} className="w-full min-w-0" placeholder="0" />
-                      <div className="w-16 shrink-0">
+                      <div className="w-20 shrink-0">
                         <UnitSelect value={v.takaranUnit} onChange={(u) => setVar(v.id, { takaranUnit: u })} />
                       </div>
                     </div>
                   </div>
-                  <div className="w-[13rem] shrink-0">
+                  <div className="w-[14.5rem] shrink-0">
                     <p className="mb-1 text-[10px] font-medium uppercase tracking-wide text-muted-foreground">Harga beli / jml</p>
                     <div className="flex gap-1.5">
                       <NumInput value={v.buyPrice} onChange={(n) => setVar(v.id, { buyPrice: n })} className="w-full min-w-0" placeholder="Rp" />
                       <NumInput value={v.buyQty} onChange={(n) => setVar(v.id, { buyQty: n })} className="w-12 shrink-0" placeholder="1" />
-                      <div className="w-16 shrink-0">
+                      <div className="w-20 shrink-0">
                         <UnitSelect value={v.buyUnit} onChange={(u) => setVar(v.id, { buyUnit: u })} />
                       </div>
                     </div>
                   </div>
                 </div>
-                <div className="mt-2 flex items-center justify-between border-t border-border/60 pt-2 text-xs">
+                <div className="mt-2 flex items-center justify-between gap-2 border-t border-border/60 pt-2 text-xs">
                   <span className="text-muted-foreground">Subtotal per produk</span>
                   <span className="font-semibold tabular-nums text-foreground">{rp(itemSubtotal(v) / divisor)}</span>
                 </div>
@@ -671,7 +673,7 @@ export function HppCalculator({
                 <span className="text-sm font-medium text-muted-foreground">%</span>
               </div>
             </div>
-            <div className="mt-2 flex items-center justify-between border-t border-border/60 pt-2 text-xs">
+            <div className="mt-2 flex items-center justify-between gap-2 border-t border-border/60 pt-2 text-xs">
               <span className="text-muted-foreground">Biaya waste / produk</span>
               <span className="font-semibold tabular-nums text-foreground">{rp(waste)}</span>
             </div>
@@ -864,13 +866,13 @@ export function HppCalculator({
             <Row label="3 · BTKL (dapur/bar)" value={rp(bd.btkl)} hint={btkl > 0 ? `${rp(btkl)} / bulan ÷ ${bd.allocUnits} unit` : "Belum diisi"} />
             <Row label="4 · Overhead" value={rp(bd.overhead)} hint={`Listrik/gas/lain ${rp(bd.overheadOps)} + waste ${wastePct}% ${rp(bd.waste)}`} />
             <Row label="5 · Packing" value={rp(bd.packing)} hint="Kemasan primer — setara HPP dasar" />
-            <div className="mt-1 flex items-center justify-between rounded-xl bg-primary/10 px-3 py-2.5">
-              <span className="font-semibold text-foreground">6 · Total HPP per Produk</span>
-              <span className="text-lg font-bold tabular-nums text-primary">{rp(hpp)}</span>
+            <div className="mt-1 flex items-center justify-between gap-2 rounded-xl bg-primary/10 px-3 py-2.5">
+              <span className="min-w-0 font-semibold text-foreground">6 · Total HPP per Produk</span>
+              <span className="shrink-0 text-lg font-bold tabular-nums text-primary">{rp(hpp)}</span>
             </div>
-            <div className="flex items-center justify-between pt-1 text-xs">
-              <span className="text-muted-foreground">HPP terhadap harga jual</span>
-              <span className={cn("font-semibold tabular-nums", hppSt.tone === "bad" ? "text-red-600 dark:text-red-400" : hppSt.tone === "warn" ? "text-amber-600 dark:text-amber-400" : "text-emerald-600 dark:text-emerald-400")}>
+            <div className="flex flex-wrap items-center justify-between gap-x-2 gap-y-0.5 pt-1 text-xs">
+              <span className="shrink-0 text-muted-foreground">HPP terhadap harga jual</span>
+              <span className={cn("text-right font-semibold tabular-nums", hppSt.tone === "bad" ? "text-red-600 dark:text-red-400" : hppSt.tone === "warn" ? "text-amber-600 dark:text-amber-400" : "text-emerald-600 dark:text-emerald-400")}>
                 {(hppPctVal * 100).toFixed(1)}% · {hppSt.label}
               </span>
             </div>
@@ -961,16 +963,16 @@ export function HppCalculator({
           {/* PBJT reference — pajak di LUAR HPP & harga jual; hanya referensi struk.
               Untuk bar/minuman, harga after-tax tidak ditampilkan ke tamu (makalah). */}
           <div className="mt-3 rounded-xl border border-dashed border-border bg-muted/20 p-3 text-[11px]">
-            <div className="flex items-center justify-between">
-              <span className="text-muted-foreground">Harga jual (tanpa pajak)</span>
+            <div className="flex items-center justify-between gap-2">
+              <span className="min-w-0 truncate text-muted-foreground">Harga jual (tanpa pajak)</span>
               <span className="font-semibold tabular-nums text-foreground">{rp(price)}</span>
             </div>
-            <div className="mt-1 flex items-center justify-between">
-              <span className="text-muted-foreground">+ PBJT 10% (referensi struk)</span>
+            <div className="mt-1 flex items-center justify-between gap-2">
+              <span className="min-w-0 truncate text-muted-foreground">+ PBJT 10% (referensi struk)</span>
               <span className="tabular-nums text-muted-foreground">{rp(price * 0.1)}</span>
             </div>
-            <div className="mt-1 flex items-center justify-between border-t border-border/60 pt-1.5">
-              <span className="text-muted-foreground">Harga after-tax (referensi)</span>
+            <div className="mt-1 flex items-center justify-between gap-2 border-t border-border/60 pt-1.5">
+              <span className="min-w-0 truncate text-muted-foreground">Harga after-tax (referensi)</span>
               <span className="font-semibold tabular-nums text-foreground">{rp(price * 1.1)}</span>
             </div>
             <p className="mt-2 text-[10px] text-muted-foreground">
@@ -1298,13 +1300,15 @@ function OverheadGroup({
 }
 
 function Row({ label, value, hint }: { label: string; value: string; hint?: string }) {
+  // Hint-nya bisa panjang ("Rp 5.000.000 / bulan ÷ 1000 unit"). Tanpa min-w-0
+  // pada label dan shrink-0 pada nilai, nominalnya terdesak keluar baris.
   return (
-    <div className="flex items-center justify-between">
-      <span className="text-muted-foreground">
+    <div className="flex items-start justify-between gap-3">
+      <span className="min-w-0 text-muted-foreground">
         {label}
         {hint && <span className="ml-1 text-[11px] text-muted-foreground/70">({hint})</span>}
       </span>
-      <span className="font-medium tabular-nums text-foreground">{value}</span>
+      <span className="shrink-0 font-medium tabular-nums text-foreground">{value}</span>
     </div>
   );
 }
