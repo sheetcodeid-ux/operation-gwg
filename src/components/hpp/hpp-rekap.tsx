@@ -32,6 +32,7 @@ import { StatTile } from "@/components/ui/stat";
 import { Combobox } from "@/components/ui/combobox";
 import { Sheet, SheetContent } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
+import { useConfirm } from "@/components/ui/confirm";
 import { Reveal } from "@/components/hpp/motion";
 import { cn } from "@/lib/utils";
 
@@ -61,6 +62,8 @@ const STATUS_TABS: { key: HppStatus | "all"; label: string }[] = [
 
 export function HppRekap({ records, canEdit, canVerify }: { records: HppRecord[]; canEdit: boolean; canVerify: boolean }) {
   const router = useRouter();
+  // Konfirmasi & alasan penolakan memakai dialog web ini, bukan popup browser.
+  const { confirm, open: ask, dialog: confirmDialog } = useConfirm();
   const [q, setQ] = React.useState("");
   const [brand, setBrand] = React.useState("all");
   const [category, setCategory] = React.useState("all");
@@ -142,14 +145,19 @@ export function HppRekap({ records, canEdit, canVerify }: { records: HppRecord[]
   }
   const submit = (r: HppRecord) => run(r.id, () => submitHppAction(r.id), "Diajukan ke tim F&B");
   const verify = (r: HppRecord) => run(r.id, () => reviewHppAction(r.id, "verified", ""), "Menu diverifikasi");
-  const reject = (r: HppRecord) => {
-    const note = typeof window !== "undefined" ? window.prompt(`Alasan menolak "${r.name}"?`) : "";
-    if (note == null) return;
-    if (!note.trim()) return toast.error("Beri catatan alasan penolakan.");
+  const reject = async (r: HppRecord) => {
+    const note = await ask({
+      title: `Tolak "${r.name}"?`,
+      description: "Catatan ini dikirim ke pembuat menu agar tahu apa yang harus diperbaiki.",
+      confirmLabel: "Tolak menu",
+      tone: "danger",
+      prompt: { label: "Alasan penolakan", placeholder: "mis. HPP di atas 70%, harga jual perlu dinaikkan", required: true },
+    });
+    if (typeof note !== "string" || !note.trim()) return;
     run(r.id, () => reviewHppAction(r.id, "rejected", note), "Menu ditolak");
   };
-  const del = (r: HppRecord) => {
-    if (typeof window !== "undefined" && !window.confirm(`Hapus "${r.name}"?`)) return;
+  const del = async (r: HppRecord) => {
+    if (!(await confirm({ title: `Hapus "${r.name}"?`, confirmLabel: "Hapus", tone: "danger" }))) return;
     run(r.id, () => deleteHppAction(r.id), "Dihapus");
   };
 
@@ -181,14 +189,26 @@ export function HppRekap({ records, canEdit, canVerify }: { records: HppRecord[]
   }
   const bulkSubmit = () => bulk(() => bulkSubmitHppAction(selDraft), (n) => `${n} menu diajukan ke F&B`);
   const bulkVerify = () => bulk(() => bulkReviewHppAction(selSubmitted, "verified", ""), (n) => `${n} menu diverifikasi`);
-  const bulkReject = () => {
-    const note = typeof window !== "undefined" ? window.prompt(`Alasan menolak ${selSubmitted.length} menu?`) : "";
-    if (note == null) return;
-    if (!note.trim()) return toast.error("Beri catatan alasan penolakan.");
+  const bulkReject = async () => {
+    const note = await ask({
+      title: `Tolak ${selSubmitted.length} menu?`,
+      confirmLabel: "Tolak semua",
+      tone: "danger",
+      prompt: { label: "Alasan penolakan", placeholder: "Catatan untuk pembuat menu", required: true },
+    });
+    if (typeof note !== "string" || !note.trim()) return;
     bulk(() => bulkReviewHppAction(selSubmitted, "rejected", note), (n) => `${n} menu ditolak`);
   };
-  const bulkDelete = () => {
-    if (typeof window !== "undefined" && !window.confirm(`Hapus ${selArr.length} menu terpilih?`)) return;
+  const bulkDelete = async () => {
+    if (
+      !(await confirm({
+        title: `Hapus ${selArr.length} menu terpilih?`,
+        description: "Tindakan ini tidak bisa dibatalkan.",
+        confirmLabel: "Hapus semua",
+        tone: "danger",
+      }))
+    )
+      return;
     bulk(() => bulkDeleteHppAction(selArr.map((r) => r.id)), (n) => `${n} menu dihapus`);
   };
 
@@ -469,6 +489,7 @@ export function HppRekap({ records, canEdit, canVerify }: { records: HppRecord[]
           </SheetContent>
         )}
       </Sheet>
+      {confirmDialog}
     </div>
   );
 }

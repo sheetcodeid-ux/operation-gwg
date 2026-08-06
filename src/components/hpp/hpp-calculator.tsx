@@ -80,6 +80,8 @@ const UMP_SORTED = [...UMP_2026].sort((a, b) => b.ump - a.ump);
 import { Field, Input, Label } from "@/components/ui/input";
 import { StatTile } from "@/components/ui/stat";
 import { Combobox } from "@/components/ui/combobox";
+import { useConfirm } from "@/components/ui/confirm";
+import { recipeUnits } from "@/lib/hpp/units";
 import { cn } from "@/lib/utils";
 
 /* ---------- helpers ---------- */
@@ -96,24 +98,12 @@ const ALL_UNITS = [...MASS, ...VOL, ...COUNT];
 const emptyVar = (): VariableItem => ({ id: uid(), name: "", takaran: 0, takaranUnit: "g", buyPrice: 0, buyQty: 1, buyUnit: "kg" });
 const emptyFixed = (kind: OverheadKind = "fixed"): FixedItem => ({ id: uid(), name: "", monthly: 0, kind });
 
-/** Small inline unit select (native-styled, matches inputs). */
+const UNIT_OPTIONS = ALL_UNITS.map((u) => ({ value: u, label: u }));
+
+/** Unit picker — Combobox milik web ini, bukan <select> bawaan browser (yang
+ *  memakai menu OS, mengabaikan tema, dan tidak bisa dicari). */
 function UnitSelect({ value, onChange }: { value: string; onChange: (v: string) => void }) {
-  return (
-    <div className="relative">
-      <select
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        className="h-9 w-full appearance-none rounded-lg border border-input bg-background/40 pl-2.5 pr-7 text-sm text-foreground focus:border-ring focus:outline-none focus:ring-2 focus:ring-ring/25 dark:bg-input/30"
-      >
-        {ALL_UNITS.map((u) => (
-          <option key={u} value={u}>
-            {u}
-          </option>
-        ))}
-      </select>
-      <ChevronsUpDown className="pointer-events-none absolute right-2 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground" />
-    </div>
-  );
+  return <Combobox portal matchTriggerWidth searchable value={value} onChange={onChange} options={UNIT_OPTIONS} />;
 }
 
 function NumInput({ value, onChange, className, placeholder }: { value: number; onChange: (n: number) => void; className?: string; placeholder?: string }) {
@@ -133,7 +123,16 @@ function NumInput({ value, onChange, className, placeholder }: { value: number; 
   );
 }
 
-export type IngredientOption = { id: string; name: string; buyPrice: number; buyQty: number; buyUnit: string };
+export type IngredientOption = {
+  id: string;
+  name: string;
+  buyPrice: number;
+  buyQty: number;
+  buyUnit: string;
+  /** Isi per kemasan + satuan pakai (barang per dus). */
+  contentQty?: number;
+  contentUnit?: string;
+};
 
 /** Client-safe costing policy (food-cost target + selling margin band per category). */
 export type PolicyOption = { scope: string; foodPct: number; bevPct: number; foodMarginMin: number; foodMarginMax: number; bevMarginMin: number; bevMarginMax: number };
@@ -163,6 +162,9 @@ export function HppCalculator({
   const [saving, startSave] = React.useTransition();
   const [savingTpl, startSaveTpl] = React.useTransition();
   const [appliedTpl, setAppliedTpl] = React.useState<{ id: string; name: string } | null>(null);
+  // Dialog konfirmasi/prompt bertema web ini — bukan popup bawaan browser yang
+  // memblokir main thread dan tampil di luar tema.
+  const { confirm, open: ask, dialog: confirmDialog } = useConfirm();
 
   const [name, setName] = React.useState("");
   // Product source: pick from the ESB catalog, or enter a new/manual product.
@@ -271,12 +273,17 @@ export function HppCalculator({
   const pickIngredient = (vid: string, ingId: string) => {
     const ing = ingredients.find((x) => x.id === ingId);
     if (!ing) return setVar(vid, { ingredientId: undefined });
-    setVar(vid, { ingredientId: ing.id, name: ing.name, buyPrice: ing.buyPrice, buyQty: ing.buyQty, buyUnit: ing.buyUnit });
+    // Kemasan dijabarkan ke satuan pakai: 1 dus Rp120.000 isi 24 pcs masuk
+    // sebagai 24 pcs, sehingga takaran resep dihitung per pcs, bukan per dus.
+    setVar(vid, { ingredientId: ing.id, name: ing.name, ...recipeUnits(ing) });
   };
   const ingredientOptions = React.useMemo(
     () => [
       { value: "", label: "Input manual", hint: "tanpa master" },
-      ...ingredients.map((ing) => ({ value: ing.id, label: ing.name, hint: `${rp(ing.buyPrice)}/${ing.buyQty}${ing.buyUnit}` })),
+      ...ingredients.map((ing) => {
+        const u = recipeUnits(ing);
+        return { value: ing.id, label: ing.name, hint: `${rp(u.buyPrice)}/${u.buyQty}${u.buyUnit}` };
+      }),
     ],
     [ingredients],
   );
@@ -295,7 +302,7 @@ export function HppCalculator({
     setAppliedTpl({ id: t.id, name: t.name });
     toast.success(`Template "${t.name}" diterapkan — nilai masih bisa diedit.`);
   };
-  function saveAsTemplate() {
+  async function saveAsTemplate() {
     const items = fixed
       .filter((f) => f.name.trim())
       .map((f) => ({ name: f.name.trim(), monthly: Math.max(0, Math.round(f.monthly || 0)), kind: (f.kind ?? "fixed") as OverheadKind }));
@@ -303,12 +310,13 @@ export function HppCalculator({
       toast.error("Belum ada biaya overhead untuk disimpan sebagai template.");
       return;
     }
-    const nm = typeof window !== "undefined" ? window.prompt("Nama template overhead:", appliedTpl?.name ?? "") : null;
-    if (nm == null) return;
-    if (!nm.trim()) {
-      toast.error("Nama template wajib diisi.");
-      return;
-    }
+    const nm = await ask({
+      title: "Simpan sebagai template overhead",
+      description: "Template bisa dipakai ulang di menu lain dan tetap bisa diedit.",
+      confirmLabel: "Simpan",
+      prompt: { label: "Nama template", placeholder: "mis. Overhead Nordu Baning", defaultValue: appliedTpl?.name ?? "", required: true },
+    });
+    if (typeof nm !== "string" || !nm.trim()) return;
     startSaveTpl(async () => {
       const res = await saveOverheadTemplateAction({ name: nm.trim(), brand, items });
       if (res?.error) {
@@ -320,8 +328,8 @@ export function HppCalculator({
       router.refresh();
     });
   }
-  function removeTemplate(id: string, label: string) {
-    if (typeof window !== "undefined" && !window.confirm(`Hapus template "${label}"?`)) return;
+  async function removeTemplate(id: string, label: string) {
+    if (!(await confirm({ title: `Hapus template "${label}"?`, confirmLabel: "Hapus", tone: "danger" }))) return;
     startSaveTpl(async () => {
       const res = await deleteOverheadTemplateAction(id);
       if (res?.error) {
@@ -1160,7 +1168,7 @@ export function HppCalculator({
                     <button
                       type="button"
                       onClick={async () => {
-                        if (typeof window !== "undefined" && !window.confirm(`Hapus perhitungan "${r.name}"?`)) return;
+                        if (!(await confirm({ title: `Hapus perhitungan "${r.name}"?`, confirmLabel: "Hapus", tone: "danger" }))) return;
                         const res = await deleteHppAction(r.id);
                         if (res?.error) toast.error(res.error);
                         else {
@@ -1180,6 +1188,7 @@ export function HppCalculator({
           </div>
         )}
       </div>
+      {confirmDialog}
     </div>
   );
 }

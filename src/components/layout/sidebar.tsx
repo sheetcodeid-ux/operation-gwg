@@ -2,7 +2,7 @@
 
 import { useMemo, useState, useTransition } from "react";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { ChevronDown, Lock, LogOut } from "lucide-react";
 import { DIVISION_ICON, type Division, type MenuKey, type NavItem } from "@/lib/nav";
 import { signOut } from "@/lib/actions/auth";
@@ -31,6 +31,7 @@ export function Sidebar({
   department?: string;
 }) {
   const pathname = usePathname();
+  const router = useRouter();
   const { t } = useI18n();
   const { collapsed } = useSidebar();
   const { showLocked } = useNavLock();
@@ -138,10 +139,16 @@ export function Sidebar({
                 <Link
                   key={item.href}
                   href={linkHref}
-                  // Full prefetch (route + data) so clicking is INSTANT. Scoped to
-                  // the expanded section — hidden children don't prefetch until
-                  // their section is opened.
-                  prefetch
+                  // Prefetch on intent (hover/focus/touch) instead of on render.
+                  // Eager prefetch fired every link in a group the moment it
+                  // expanded: 4+ concurrent RSC renders of dynamic routes, whose
+                  // payloads then reconcile on the main thread — which is what
+                  // made the NEXT sidebar click freeze. Hovering still precedes
+                  // any real click, so navigation stays instant.
+                  prefetch={false}
+                  onMouseEnter={() => router.prefetch(linkHref)}
+                  onFocus={() => router.prefetch(linkHref)}
+                  onTouchStart={() => router.prefetch(linkHref)}
                   className={cn(
                     "group relative flex items-center gap-2.5 rounded-lg px-2.5 py-2 text-sm transition-colors",
                     active
@@ -197,7 +204,10 @@ export function Sidebar({
                               type="button"
                               onClick={() => setOpenGroup(groupOpen ? null : groupId)}
                               aria-expanded={groupOpen}
-                              className="flex w-full items-center gap-2 rounded-lg px-2.5 py-1.5 text-left text-[13px] font-medium text-foreground/85 transition-colors hover:bg-muted/50"
+                              // gap-2.5 + px-2.5 + size-4 icon = the exact same
+                              // label offset as the menu links below it, so the
+                              // group title and its children line up vertically.
+                              className="flex w-full items-center gap-2.5 rounded-lg px-2.5 py-1.5 text-left text-[13px] font-medium text-foreground/85 transition-colors hover:bg-muted/50"
                             >
                               {GroupIcon && <GroupIcon className="size-4 shrink-0 text-muted-foreground" />}
                               <span className="min-w-0 flex-1 truncate">{block.name}</span>

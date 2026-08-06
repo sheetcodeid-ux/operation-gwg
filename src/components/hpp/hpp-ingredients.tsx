@@ -2,43 +2,84 @@
 
 import * as React from "react";
 import { useRouter } from "next/navigation";
-import { AlertTriangle, ArrowDown, ArrowUp, ArrowUpDown, BellOff, Check, CheckSquare, Download, FileDown, FileUp, Package, Pencil, Plus, Search, Square, TrendingUp, Trash2, Upload, X } from "lucide-react";
+import { type ColumnDef } from "@tanstack/react-table";
+import { AlertTriangle, BellOff, CheckSquare, FileDown, FileUp, Package, Pencil, Plus, Square, TrendingUp, Trash2, Upload, X } from "lucide-react";
 import { toast } from "sonner";
-import { saveIngredientAction, deleteIngredientAction, clearIngredientAlertAction, importIngredientsAction, bulkDeleteIngredientsAction, bulkClearAlertsAction } from "@/lib/actions/hpp-ingredients";
-import type { HppIngredient } from "@/lib/data/hpp-ingredients";
-import { downloadCsv, toCsv } from "@/lib/csv";
+import {
+  saveIngredientAction,
+  deleteIngredientAction,
+  clearIngredientAlertAction,
+  importIngredientsAction,
+  bulkDeleteIngredientsAction,
+  bulkClearAlertsAction,
+} from "@/lib/actions/hpp-ingredients";
+import { type HppIngredient } from "@/lib/data/hpp-ingredients";
+import { unitPrice } from "@/lib/hpp/units";
 import { Button } from "@/components/ui/button";
-import { Field, Input, Label } from "@/components/ui/input";
+import { Field, Input, Label, Textarea } from "@/components/ui/input";
 import { StatTile } from "@/components/ui/stat";
 import { Combobox } from "@/components/ui/combobox";
+import { DataTable } from "@/components/ui/data-table";
+import { Dialog, DialogContent } from "@/components/ui/dialog";
+import { Sheet, SheetContent } from "@/components/ui/sheet";
+import { useConfirm } from "@/components/ui/confirm";
 import { Reveal } from "@/components/hpp/motion";
-import { cn } from "@/lib/utils";
 
 const rp = (n: number) => "Rp " + Math.round(n || 0).toLocaleString("id-ID");
 const num = (v: string) => Number(String(v).replace(/[^\d.-]/g, "")) || 0;
-const UNITS = ["g", "kg", "ml", "L", "pcs"];
-const perUnit = (i: { buyPrice: number; buyQty: number }) => (i.buyQty ? i.buyPrice / i.buyQty : i.buyPrice);
+
+/** Satuan yang selalu tersedia; satuan lain ikut apa yang ada di data/import. */
+const BASE_UNITS = ["g", "kg", "ml", "L", "pcs", "dus", "pack", "botol", "sachet"];
+
 
 export type MenuUse = { id: string; name: string; ingredientIds: string[] };
 
-type Form = { id?: string; name: string; buyPrice: string; buyQty: string; buyUnit: string; region: string };
-const empty: Form = { name: "", buyPrice: "", buyQty: "1", buyUnit: "kg", region: "" };
+type Form = {
+  id?: string;
+  name: string;
+  buyPrice: string;
+  buyQty: string;
+  buyUnit: string;
+  contentQty: string;
+  contentUnit: string;
+  region: string;
+};
+const empty: Form = { name: "", buyPrice: "", buyQty: "1", buyUnit: "kg", contentQty: "1", contentUnit: "", region: "" };
 
-type SortKey = "name" | "region" | "price" | "usage";
-type ImportRow = { id?: string; name: string; buyPrice: number; buyQty: number; buyUnit: string; region: string | null };
+type ImportRow = {
+  id?: string;
+  name: string;
+  buyPrice: number;
+  buyQty: number;
+  buyUnit: string;
+  contentQty: number;
+  contentUnit: string;
+  region: string | null;
+};
 
-export function HppIngredients({ ingredients, menus, canEdit }: { ingredients: HppIngredient[]; menus: MenuUse[]; canEdit: boolean }) {
+export function HppIngredients({
+  ingredients,
+  menus,
+  canEdit,
+}: {
+  ingredients: HppIngredient[];
+  menus: MenuUse[];
+  canEdit: boolean;
+}) {
   const router = useRouter();
-  const [q, setQ] = React.useState("");
+  const { confirm, dialog } = useConfirm();
+
   const [region, setRegion] = React.useState("all");
-  const [sortKey, setSortKey] = React.useState<SortKey>("name");
-  const [sortDir, setSortDir] = React.useState<"asc" | "desc">("asc");
+  const [status, setStatus] = React.useState("all");
   const [form, setForm] = React.useState<Form>(empty);
+  const [formOpen, setFormOpen] = React.useState(false);
   const [saving, setSaving] = React.useState(false);
   const [showImport, setShowImport] = React.useState(false);
   const [importText, setImportText] = React.useState("");
   const [importing, setImporting] = React.useState(false);
   const [excel, setExcel] = React.useState<{ name: string; rows: ImportRow[] } | null>(null);
+  const [selected, setSelected] = React.useState<Set<string>>(new Set());
+  const [bulkBusy, setBulkBusy] = React.useState(false);
   const fileRef = React.useRef<HTMLInputElement>(null);
 
   const usage = React.useMemo(() => {
@@ -47,41 +88,98 @@ export function HppIngredients({ ingredients, menus, canEdit }: { ingredients: H
     return m;
   }, [menus]);
 
-  const regions = React.useMemo(() => [...new Set(ingredients.map((i) => i.region).filter((x): x is string => !!x))].sort(), [ingredients]);
-  const alerts = ingredients.filter((i) => i.alert);
+  const regions = React.useMemo(
+    () => [...new Set(ingredients.map((i) => i.region).filter((x): x is string => !!x))].sort(),
+    [ingredients],
+  );
+
+  /**
+   * Pilihan satuan mengikuti data yang benar-benar ada — kalau Excel memakai
+   * "dus" atau "renceng", satuan itu langsung muncul di dropdown alih-alih
+   * dipaksa jadi "kg" seperti versi sebelumnya.
+   */
+  const units = React.useMemo(() => {
+    const found = ingredients.flatMap((i) => [i.buyUnit, i.contentUnit]).filter(Boolean);
+    const extra = excel?.rows.flatMap((r) => [r.buyUnit, r.contentUnit]).filter(Boolean) ?? [];
+    return [...new Set([...BASE_UNITS, ...found, ...extra])];
+  }, [ingredients, excel]);
+  const unitOptions = React.useMemo(() => units.map((u) => ({ value: u, label: u })), [units]);
+
+  const alerts = React.useMemo(() => ingredients.filter((i) => i.alert), [ingredients]);
   const affectedMenus = new Set(alerts.flatMap((i) => usage.get(i.id) ?? [])).size;
 
-  const rows = React.useMemo(() => {
-    const needle = q.trim().toLowerCase();
-    const filtered = ingredients.filter((i) => {
-      if (region !== "all" && (i.region ?? "") !== region) return false;
-      if (needle && !i.name.toLowerCase().includes(needle) && !(i.region ?? "").toLowerCase().includes(needle)) return false;
-      return true;
-    });
-    const dir = sortDir === "asc" ? 1 : -1;
-    const val = (i: HppIngredient): number | string => {
-      switch (sortKey) {
-        case "name": return i.name.toLowerCase();
-        case "region": return (i.region ?? "").toLowerCase();
-        case "price": return perUnit(i);
-        case "usage": return (usage.get(i.id) ?? []).length;
-      }
-    };
-    return filtered.sort((a, b) => {
-      const va = val(a);
-      const vb = val(b);
-      if (typeof va === "number" && typeof vb === "number") return (va - vb) * dir;
-      return String(va).localeCompare(String(vb)) * dir;
-    });
-  }, [ingredients, q, region, sortKey, sortDir, usage]);
+  const rows = React.useMemo(
+    () =>
+      ingredients.filter((i) => {
+        if (region !== "all" && (i.region ?? "") !== region) return false;
+        if (status === "alert" && !i.alert) return false;
+        if (status === "stable" && i.alert) return false;
+        return true;
+      }),
+    [ingredients, region, status],
+  );
 
-  const toggleSort = (k: SortKey) => {
-    if (sortKey === k) setSortDir((d) => (d === "asc" ? "desc" : "asc"));
+  // ---- selection ----
+  const toggleRow = (id: string) =>
+    setSelected((s) => {
+      const n = new Set(s);
+      if (n.has(id)) n.delete(id);
+      else n.add(id);
+      return n;
+    });
+  const allShownSelected = rows.length > 0 && rows.every((i) => selected.has(i.id));
+  const toggleAll = () =>
+    setSelected((s) => {
+      const n = new Set(s);
+      if (allShownSelected) rows.forEach((i) => n.delete(i.id));
+      else rows.forEach((i) => n.add(i.id));
+      return n;
+    });
+  const selectedAlertIds = [...selected].filter((id) => ingredients.find((i) => i.id === id)?.alert);
+
+  // ---- mutations ----
+  async function act(fn: () => Promise<{ error?: string }>, ok: string) {
+    const res = await fn();
+    if (res?.error) toast.error(res.error);
     else {
-      setSortKey(k);
-      setSortDir(k === "price" || k === "usage" ? "desc" : "asc");
+      toast.success(ok);
+      router.refresh();
     }
-  };
+  }
+
+  async function bulk(fn: () => Promise<{ error?: string; count?: number }>, okMsg: (n: number) => string) {
+    setBulkBusy(true);
+    try {
+      const res = await fn();
+      if (res?.error) toast.error(res.error);
+      else {
+        toast.success(okMsg(res.count ?? 0));
+        setSelected(new Set());
+        router.refresh();
+      }
+    } finally {
+      setBulkBusy(false);
+    }
+  }
+
+  function openAdd() {
+    setForm(empty);
+    setFormOpen(true);
+  }
+
+  function openEdit(i: HppIngredient) {
+    setForm({
+      id: i.id,
+      name: i.name,
+      buyPrice: String(i.buyPrice),
+      buyQty: String(i.buyQty),
+      buyUnit: i.buyUnit,
+      contentQty: String(i.contentQty || 1),
+      contentUnit: i.contentUnit || i.buyUnit,
+      region: i.region ?? "",
+    });
+    setFormOpen(true);
+  }
 
   async function save() {
     if (!form.name.trim()) return toast.error("Isi nama bahan dulu.");
@@ -93,26 +191,68 @@ export function HppIngredients({ ingredients, menus, canEdit }: { ingredients: H
         buyPrice: num(form.buyPrice),
         buyQty: num(form.buyQty) || 1,
         buyUnit: form.buyUnit,
+        contentQty: num(form.contentQty) || 1,
+        contentUnit: form.contentUnit.trim() || form.buyUnit,
         region: form.region.trim() || null,
       });
       if (res?.error) return toast.error(res.error);
       if (res.priceJump) toast.warning("Harga naik >5% — menu terkait ditandai perlu update HPP.");
       else toast.success(form.id ? "Bahan diperbarui" : "Bahan ditambahkan");
       setForm(empty);
+      setFormOpen(false);
       router.refresh();
     } finally {
       setSaving(false);
     }
   }
 
-  const parsedImport = React.useMemo(() => {
+  async function removeOne(i: HppIngredient) {
+    const used = usage.get(i.id) ?? [];
+    if (
+      !(await confirm({
+        title: `Hapus "${i.name}"?`,
+        description: used.length
+          ? `Bahan ini dipakai ${used.length} menu — HPP-nya akan kehilangan tautan harga.`
+          : "Bahan akan dihapus dari master.",
+        confirmLabel: "Hapus",
+        tone: "danger",
+      }))
+    )
+      return;
+    act(() => deleteIngredientAction(i.id), "Dihapus");
+  }
+
+  async function bulkDelete() {
+    if (
+      !(await confirm({
+        title: `Hapus ${selected.size} bahan terpilih?`,
+        description: "Tindakan ini tidak bisa dibatalkan.",
+        confirmLabel: "Hapus semua",
+        tone: "danger",
+      }))
+    )
+      return;
+    bulk(() => bulkDeleteIngredientsAction([...selected]), (n) => `${n} bahan dihapus`);
+  }
+
+  // ---- import ----
+  const parsedImport = React.useMemo<ImportRow[]>(() => {
     return importText
       .split(/\r?\n/)
       .map((l) => l.trim())
       .filter(Boolean)
       .map((line) => {
-        const [name, price, qty, unit, reg] = line.split(/[\t,;]/).map((s) => s.trim());
-        return { name: name ?? "", buyPrice: num(price ?? "0"), buyQty: num(qty ?? "1") || 1, buyUnit: UNITS.includes(unit) ? unit : "kg", region: reg || null };
+        const [name, price, qty, unit, isi, isiUnit, reg] = line.split(/[\t,;]/).map((s) => s.trim());
+        const buyUnit = unit || "kg";
+        return {
+          name: name ?? "",
+          buyPrice: num(price ?? "0"),
+          buyQty: num(qty ?? "1") || 1,
+          buyUnit,
+          contentQty: num(isi ?? "1") || 1,
+          contentUnit: isiUnit || buyUnit,
+          region: reg || null,
+        };
       })
       .filter((r) => r.name);
   }, [importText]);
@@ -132,18 +272,35 @@ export function HppIngredients({ ingredients, menus, canEdit }: { ingredients: H
       setImporting(false);
     }
   }
-  const runImport = () => doImport(parsedImport);
 
-  /** Download an .xlsx template pre-filled with the current ingredients (with a
-   *  hidden-ish ID column) so users edit prices in Excel and import it back. */
   async function downloadTemplate() {
     const XLSX = await import("xlsx");
     const src = ingredients.length
       ? ingredients
-      : [{ id: "", name: "Contoh: Susu UHT", buyPrice: 18000, buyQty: 1, buyUnit: "L", region: "Umum" } as HppIngredient];
-    const data = src.map((i) => ({ ID: i.id, "Nama Bahan": i.name, "Harga Beli": Math.round(i.buyPrice), Qty: i.buyQty, Satuan: i.buyUnit, Wilayah: i.region ?? "" }));
+      : ([
+          {
+            id: "",
+            name: "Contoh: Susu UHT",
+            buyPrice: 120000,
+            buyQty: 1,
+            buyUnit: "dus",
+            contentQty: 24,
+            contentUnit: "pcs",
+            region: "Umum",
+          },
+        ] as HppIngredient[]);
+    const data = src.map((i) => ({
+      ID: i.id,
+      "Nama Bahan": i.name,
+      "Harga Beli": Math.round(i.buyPrice),
+      Qty: i.buyQty,
+      Satuan: i.buyUnit,
+      Isi: i.contentQty || 1,
+      "Satuan Pakai": i.contentUnit || i.buyUnit,
+      Wilayah: i.region ?? "",
+    }));
     const ws = XLSX.utils.json_to_sheet(data);
-    ws["!cols"] = [{ wch: 26 }, { wch: 26 }, { wch: 12 }, { wch: 6 }, { wch: 8 }, { wch: 16 }];
+    ws["!cols"] = [{ wch: 26 }, { wch: 26 }, { wch: 12 }, { wch: 6 }, { wch: 8 }, { wch: 6 }, { wch: 12 }, { wch: 16 }];
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, "Bahan Baku");
     XLSX.writeFile(wb, "template-bahan-baku.xlsx");
@@ -159,16 +316,24 @@ export function HppIngredients({ ingredients, menus, canEdit }: { ingredients: H
       const wb = XLSX.read(await file.arrayBuffer(), { type: "array" });
       const sheet = wb.Sheets[wb.SheetNames[0]];
       const json = XLSX.utils.sheet_to_json<Record<string, unknown>>(sheet);
-      const pick = (r: Record<string, unknown>, ...keys: string[]) => { for (const k of keys) if (r[k] != null && r[k] !== "") return String(r[k]); return ""; };
+      const pick = (r: Record<string, unknown>, ...keys: string[]) => {
+        for (const k of keys) if (r[k] != null && r[k] !== "") return String(r[k]);
+        return "";
+      };
       const rows: ImportRow[] = json
         .map((r) => {
-          const unit = pick(r, "Satuan", "Unit");
+          // Satuan dipakai apa adanya. Versi lama memaksa satuan di luar daftar
+          // bawaan menjadi "kg", sehingga "dus" di Excel muncul "kg" di tabel.
+          const buyUnit = pick(r, "Satuan", "Unit").trim() || "kg";
+          const contentUnit = pick(r, "Satuan Pakai", "Satuan Isi", "Base Unit").trim();
           return {
             id: pick(r, "ID", "Id", "id") || undefined,
             name: pick(r, "Nama Bahan", "Nama", "Name").trim(),
             buyPrice: num(pick(r, "Harga Beli", "Harga", "Price")),
             buyQty: num(pick(r, "Qty", "Jumlah")) || 1,
-            buyUnit: UNITS.includes(unit) ? unit : "kg",
+            buyUnit,
+            contentQty: num(pick(r, "Isi", "Isi per Dus", "Content")) || 1,
+            contentUnit: contentUnit || buyUnit,
             region: pick(r, "Wilayah", "Region").trim() || null,
           };
         })
@@ -180,50 +345,150 @@ export function HppIngredients({ ingredients, menus, canEdit }: { ingredients: H
     }
   }
 
-  function exportCsv() {
-    const headers = ["Bahan", "Wilayah", "Harga Beli", "Qty", "Satuan", "Harga/Satuan", "Menu Pakai", "Status"];
-    const data = rows.map((i) => [i.name, i.region ?? "", Math.round(i.buyPrice), i.buyQty, i.buyUnit, Math.round(perUnit(i)), (usage.get(i.id) ?? []).length, i.alert ? "naik >5%" : "stabil"]);
-    downloadCsv("master-bahan-baku", toCsv(headers, data));
-  }
-
-  async function act(fn: () => Promise<{ error?: string }>, ok: string) {
-    const res = await fn();
-    if (res?.error) toast.error(res.error);
-    else {
-      toast.success(ok);
-      router.refresh();
+  // ---- table ----
+  const columns = React.useMemo<ColumnDef<HppIngredient>[]>(() => {
+    const cols: ColumnDef<HppIngredient>[] = [];
+    if (canEdit) {
+      cols.push({
+        id: "select",
+        enableSorting: false,
+        header: () => (
+          <button type="button" onClick={toggleAll} title="Pilih semua" className="grid place-items-center text-muted-foreground hover:text-foreground">
+            {allShownSelected ? <CheckSquare className="size-4 text-primary" /> : <Square className="size-4" />}
+          </button>
+        ),
+        cell: ({ row }) => (
+          <button
+            type="button"
+            onClick={() => toggleRow(row.original.id)}
+            className="grid place-items-center text-muted-foreground hover:text-foreground"
+          >
+            {selected.has(row.original.id) ? <CheckSquare className="size-4 text-primary" /> : <Square className="size-4" />}
+          </button>
+        ),
+      });
     }
-  }
-
-  // ---- bulk selection ----
-  const [selected, setSelected] = React.useState<Set<string>>(new Set());
-  const [bulkBusy, setBulkBusy] = React.useState(false);
-  const toggleRow = (id: string) => setSelected((s) => { const n = new Set(s); n.has(id) ? n.delete(id) : n.add(id); return n; });
-  const allShownSelected = rows.length > 0 && rows.every((i) => selected.has(i.id));
-  const toggleAll = () => setSelected((s) => {
-    const n = new Set(s);
-    if (allShownSelected) rows.forEach((i) => n.delete(i.id));
-    else rows.forEach((i) => n.add(i.id));
-    return n;
-  });
-  const selectedAlertIds = [...selected].filter((id) => ingredients.find((i) => i.id === id)?.alert);
-  async function bulk(fn: () => Promise<{ error?: string; count?: number }>, okMsg: (n: number) => string) {
-    setBulkBusy(true);
-    try {
-      const res = await fn();
-      if (res?.error) toast.error(res.error);
-      else { toast.success(okMsg(res.count ?? 0)); setSelected(new Set()); router.refresh(); }
-    } finally {
-      setBulkBusy(false);
+    cols.push(
+      {
+        accessorKey: "name",
+        header: "Bahan",
+        cell: ({ row }) => {
+          const i = row.original;
+          return (
+            <div className="min-w-0">
+              <div className="flex min-w-0 items-center gap-2">
+                <p className="truncate font-medium text-foreground">{i.name}</p>
+                {i.alert && (
+                  <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-amber-500/12 px-1.5 py-0.5 text-[10px] font-semibold text-amber-600 dark:text-amber-400">
+                    <TrendingUp className="size-3" /> naik &gt;5%
+                  </span>
+                )}
+              </div>
+              {i.alert && i.prevPrice != null && <p className="text-[10px] text-muted-foreground">dari {rp(i.prevPrice)}</p>}
+            </div>
+          );
+        },
+      },
+      {
+        accessorKey: "region",
+        header: "Wilayah",
+        cell: ({ getValue }) => <span className="whitespace-nowrap text-muted-foreground">{getValue<string>() || "—"}</span>,
+      },
+      {
+        id: "buy",
+        header: "Harga Beli",
+        accessorFn: (i) => i.buyPrice,
+        cell: ({ row }) => {
+          const i = row.original;
+          return (
+            <div className="whitespace-nowrap text-right">
+              <p className="tabular-nums text-foreground">
+                {rp(i.buyPrice)} <span className="text-[11px] text-muted-foreground">/ {i.buyQty} {i.buyUnit}</span>
+              </p>
+              {i.contentQty > 1 && (
+                <p className="text-[10px] text-muted-foreground">
+                  isi {i.contentQty} {i.contentUnit}
+                </p>
+              )}
+            </div>
+          );
+        },
+      },
+      {
+        id: "unitPrice",
+        header: "Harga/Satuan Pakai",
+        accessorFn: (i) => Math.round(unitPrice(i)),
+        cell: ({ row }) => {
+          const i = row.original;
+          return (
+            <p className="whitespace-nowrap text-right font-medium tabular-nums text-foreground">
+              {rp(unitPrice(i))}
+              <span className="text-[11px] font-normal text-muted-foreground">/{i.contentUnit || i.buyUnit}</span>
+            </p>
+          );
+        },
+      },
+      {
+        id: "usage",
+        header: "Menu Pakai",
+        accessorFn: (i) => (usage.get(i.id) ?? []).length,
+        cell: ({ row }) => {
+          const used = usage.get(row.original.id) ?? [];
+          return used.length > 0 ? (
+            <span className="whitespace-nowrap rounded-full bg-muted px-2 py-0.5 text-[11px] font-medium text-muted-foreground" title={used.join(", ")}>
+              {used.length} menu
+            </span>
+          ) : (
+            <span className="text-[11px] text-muted-foreground">—</span>
+          );
+        },
+      },
+    );
+    if (canEdit) {
+      cols.push({
+        id: "actions",
+        header: "",
+        enableSorting: false,
+        cell: ({ row }) => {
+          const i = row.original;
+          return (
+            <div className="flex items-center justify-end gap-1">
+              {i.alert && (
+                <button
+                  type="button"
+                  onClick={() => act(() => clearIngredientAlertAction(i.id), "Tanda selesai")}
+                  title="Tandai sudah update"
+                  className="grid size-8 place-items-center rounded-lg text-muted-foreground transition-colors hover:bg-emerald-500/10 hover:text-emerald-500"
+                >
+                  <BellOff className="size-4" />
+                </button>
+              )}
+              <button
+                type="button"
+                onClick={() => openEdit(i)}
+                title="Edit"
+                className="grid size-8 place-items-center rounded-lg text-muted-foreground transition-colors hover:bg-blue-500/10 hover:text-blue-500"
+              >
+                <Pencil className="size-4" />
+              </button>
+              <button
+                type="button"
+                onClick={() => removeOne(i)}
+                title="Hapus"
+                className="grid size-8 place-items-center rounded-lg text-muted-foreground transition-colors hover:bg-red-500/10 hover:text-red-500"
+              >
+                <Trash2 className="size-4" />
+              </button>
+            </div>
+          );
+        },
+      });
     }
-  }
-  const bulkDelete = () => {
-    if (typeof window !== "undefined" && !window.confirm(`Hapus ${selected.size} bahan terpilih?`)) return;
-    bulk(() => bulkDeleteIngredientsAction([...selected]), (n) => `${n} bahan dihapus`);
-  };
-  const bulkClear = () => bulk(() => bulkClearAlertsAction(selectedAlertIds), (n) => `${n} tanda selesai`);
+    return cols;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [canEdit, selected, allShownSelected, usage]);
 
-  const hasFilter = q || region !== "all";
+  const preview = form.buyPrice ? unitPrice({ buyPrice: num(form.buyPrice), buyQty: num(form.buyQty) || 1, contentQty: num(form.contentQty) || 1 }) : 0;
 
   return (
     <div className="space-y-4">
@@ -234,279 +499,221 @@ export function HppIngredients({ ingredients, menus, canEdit }: { ingredients: H
         <StatTile icon={Package} label="Wilayah" value={String(regions.length)} />
       </Reveal>
 
-      {/* Rincian dampak >5% ditangani panel HppPriceImpact di atas komponen ini. */}
-
-      {/* Add / edit form */}
       {canEdit && (
-        <div className="glass rounded-2xl border border-border p-5">
-          <div className="mb-3 flex items-center justify-between gap-2">
-            <p className="flex items-center gap-2 text-sm font-semibold text-foreground">
-              <Plus className="size-4 text-muted-foreground" /> {form.id ? "Edit Bahan Baku" : "Tambah Bahan Baku"}
-            </p>
-            <button
-              type="button"
-              onClick={() => setShowImport((v) => !v)}
-              className="inline-flex items-center gap-1.5 rounded-lg border border-border px-2.5 py-1.5 text-xs font-medium text-muted-foreground transition-colors hover:text-foreground"
-            >
-              <Upload className="size-3.5" /> Import massal
-            </button>
-          </div>
-
-          {showImport && (
-            <div className="mb-3 space-y-3 rounded-xl border border-dashed border-border bg-muted/20 p-3">
-              {/* Excel template round-trip (seperti Shopee) */}
-              <div>
-                <p className="text-[11px] text-muted-foreground">
-                  <b className="text-foreground">Cara Excel:</b> unduh template (berisi semua bahan saat ini), ubah harganya di Excel, lalu import kembali — data langsung terupdate & harga naik &gt;5% otomatis ditandai. <b>Kolom ID jangan diubah.</b>
-                </p>
-                <div className="mt-2 flex flex-wrap gap-2">
-                  <Button variant="outline" size="sm" onClick={downloadTemplate}>
-                    <FileDown className="size-4" /> Download Template Excel
-                  </Button>
-                  <input ref={fileRef} type="file" accept=".xlsx,.xls" onChange={onExcelFile} className="hidden" />
-                  <Button variant="outline" size="sm" onClick={() => fileRef.current?.click()}>
-                    <FileUp className="size-4" /> Pilih File Excel
-                  </Button>
-                </div>
-                {excel && (
-                  <div className="mt-2 flex items-center justify-between gap-2 rounded-lg border border-primary/30 bg-primary/[0.05] px-3 py-2">
-                    <span className="min-w-0 flex-1 truncate text-[12px] text-foreground">{excel.name} · <b>{excel.rows.length}</b> baris siap</span>
-                    <div className="flex shrink-0 items-center gap-1.5">
-                      <Button size="sm" onClick={() => doImport(excel.rows)} disabled={importing}><Upload className="size-4" /> Import {excel.rows.length}</Button>
-                      <button type="button" onClick={() => setExcel(null)} className="rounded-lg px-2 py-1 text-xs font-medium text-muted-foreground hover:text-foreground">Batal</button>
-                    </div>
-                  </div>
-                )}
-              </div>
-
-              <div className="flex items-center gap-2 text-[10px] uppercase tracking-wide text-muted-foreground">
-                <span className="h-px flex-1 bg-border" /> atau tempel manual <span className="h-px flex-1 bg-border" />
-              </div>
-
-              {/* Manual paste */}
-              <div>
-                <p className="text-[11px] text-muted-foreground">
-                  Satu bahan per baris: <b>Nama, Harga, Qty, Satuan, Wilayah</b>. Contoh: <code className="rounded bg-muted px-1">Susu UHT, 18000, 1, L, Kalimantan</code>
-                </p>
-                <textarea
-                  value={importText}
-                  onChange={(e) => setImportText(e.target.value)}
-                  rows={4}
-                  placeholder={"Susu UHT, 18000, 1, L, Kalimantan\nKopi Arabica, 150000, 1, kg, Umum"}
-                  className="mt-2 w-full rounded-lg border border-input bg-background/40 p-2.5 text-sm text-foreground focus:border-ring focus:outline-none focus:ring-2 focus:ring-ring/25 dark:bg-input/30"
-                />
-                <div className="mt-2 flex items-center justify-between">
-                  <span className="text-[11px] text-muted-foreground">{parsedImport.length} baris terbaca</span>
-                  <Button onClick={runImport} disabled={importing || parsedImport.length === 0} size="sm" variant="outline">
-                    <Upload className="size-4" /> Import {parsedImport.length || ""}
-                  </Button>
-                </div>
-              </div>
+        <div className="flex flex-wrap items-center gap-2">
+          <Button onClick={openAdd}>
+            <Plus className="size-4" /> Tambah Bahan
+          </Button>
+          <Button variant="outline" onClick={() => setShowImport(true)}>
+            <Upload className="size-4" /> Import massal
+          </Button>
+          {selected.size > 0 && (
+            <div className="ml-auto flex flex-wrap items-center gap-2">
+              <span className="text-sm font-medium text-foreground">{selected.size} dipilih</span>
+              {selectedAlertIds.length > 0 && (
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => bulk(() => bulkClearAlertsAction(selectedAlertIds), (n) => `${n} tanda selesai`)}
+                  disabled={bulkBusy}
+                >
+                  <BellOff className="size-4" /> Tandai selesai ({selectedAlertIds.length})
+                </Button>
+              )}
+              <Button size="sm" variant="outline" onClick={bulkDelete} disabled={bulkBusy} className="text-red-500 hover:text-red-600">
+                <Trash2 className="size-4" /> Hapus ({selected.size})
+              </Button>
+              <button type="button" onClick={() => setSelected(new Set())} className="rounded-lg px-2 py-1 text-xs font-medium text-muted-foreground hover:text-foreground">
+                Batal
+              </button>
             </div>
           )}
+        </div>
+      )}
 
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
-            <Field label="Nama Bahan" className="sm:col-span-2 lg:col-span-1">
+      <DataTable
+        columns={columns as ColumnDef<HppIngredient, unknown>[]}
+        data={rows}
+        tableId="hpp-bahan"
+        pageSize={15}
+        searchPlaceholder="Cari bahan…"
+        toolbar={
+          <>
+            <div className="w-44 shrink-0">
+              <Combobox
+                portal
+                matchTriggerWidth
+                searchable={regions.length > 6}
+                value={region}
+                onChange={setRegion}
+                options={[{ value: "all", label: "Semua Wilayah" }, ...regions.map((r) => ({ value: r, label: r }))]}
+              />
+            </div>
+            <div className="w-40 shrink-0">
+              <Combobox
+                portal
+                matchTriggerWidth
+                value={status}
+                onChange={setStatus}
+                options={[
+                  { value: "all", label: "Semua Status" },
+                  { value: "alert", label: `Naik >5% (${alerts.length})` },
+                  { value: "stable", label: "Stabil" },
+                ]}
+              />
+            </div>
+          </>
+        }
+      />
+
+      {/* Form add/edit — drawer, jadi tombol Edit di baris mana pun langsung
+          membuka form tanpa harus scroll ke atas halaman. */}
+      <Sheet open={formOpen} onOpenChange={setFormOpen}>
+        <SheetContent
+          title={form.id ? "Edit Bahan Baku" : "Tambah Bahan Baku"}
+          description="Harga beli dicatat apa adanya; isi kemasan dipakai untuk menghitung harga per satuan pakai."
+        >
+          <div className="space-y-4">
+            <Field label="Nama Bahan">
               <Input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="mis. Susu UHT" />
             </Field>
-            <div>
-              <Label>Harga Beli / Jumlah</Label>
-              <div className="mt-1.5 flex gap-1.5">
-                <Input value={form.buyPrice} onChange={(e) => setForm({ ...form, buyPrice: e.target.value })} placeholder="Rp" inputMode="numeric" className="min-w-0 flex-1" />
-                <Input value={form.buyQty} onChange={(e) => setForm({ ...form, buyQty: e.target.value })} placeholder="1" inputMode="numeric" className="w-12 shrink-0" />
-                <select
-                  value={form.buyUnit}
-                  onChange={(e) => setForm({ ...form, buyUnit: e.target.value })}
-                  className="h-9 w-16 shrink-0 rounded-lg border border-input bg-background/40 px-2 text-sm text-foreground focus:border-ring focus:outline-none focus:ring-2 focus:ring-ring/25 dark:bg-input/30"
-                >
-                  {UNITS.map((u) => (
-                    <option key={u} value={u}>{u}</option>
-                  ))}
-                </select>
+
+            <div className="grid grid-cols-2 gap-3">
+              <Field label="Harga Beli">
+                <Input value={form.buyPrice} onChange={(e) => setForm({ ...form, buyPrice: e.target.value })} placeholder="Rp" inputMode="numeric" />
+              </Field>
+              <div className="grid grid-cols-2 gap-2">
+                <Field label="Qty">
+                  <Input value={form.buyQty} onChange={(e) => setForm({ ...form, buyQty: e.target.value })} placeholder="1" inputMode="numeric" />
+                </Field>
+                <div>
+                  <Label>Satuan</Label>
+                  <div className="mt-1.5">
+                    <Combobox
+                      portal
+                      matchTriggerWidth
+                      searchable
+                      value={form.buyUnit}
+                      onChange={(v) => setForm({ ...form, buyUnit: v })}
+                      options={unitOptions}
+                    />
+                  </div>
+                </div>
               </div>
             </div>
+
+            <div className="rounded-xl border border-dashed border-border bg-muted/20 p-3">
+              <p className="text-[11px] text-muted-foreground">
+                <b className="text-foreground">Isi kemasan.</b> Barang datang per dus tapi resep memakai pcs — isi 1 dus berapa pcs?
+                Barang satuan cukup diisi <b>1</b>.
+              </p>
+              <div className="mt-2 grid grid-cols-2 gap-2">
+                <Field label="Isi per kemasan">
+                  <Input value={form.contentQty} onChange={(e) => setForm({ ...form, contentQty: e.target.value })} placeholder="24" inputMode="numeric" />
+                </Field>
+                <div>
+                  <Label>Satuan pakai</Label>
+                  <div className="mt-1.5">
+                    <Combobox
+                      portal
+                      matchTriggerWidth
+                      searchable
+                      value={form.contentUnit || form.buyUnit}
+                      onChange={(v) => setForm({ ...form, contentUnit: v })}
+                      options={unitOptions}
+                    />
+                  </div>
+                </div>
+              </div>
+              {preview > 0 && (
+                <p className="mt-2 text-xs text-foreground">
+                  Harga per satuan pakai: <b className="tabular-nums">{rp(preview)}</b>
+                  <span className="text-muted-foreground">/{form.contentUnit || form.buyUnit}</span>
+                </p>
+              )}
+            </div>
+
             <Field label="Wilayah (harga tertinggi)">
               <Input value={form.region} onChange={(e) => setForm({ ...form, region: e.target.value })} placeholder="mis. Kalimantan" />
             </Field>
-            <div className="flex items-end gap-2">
+
+            <div className="flex gap-2 pt-1">
               <Button onClick={save} disabled={saving} className="flex-1">
-                {form.id ? <Check className="size-4" /> : <Plus className="size-4" />} {form.id ? "Simpan" : "Tambah"}
+                {saving ? "Menyimpan…" : form.id ? "Simpan Perubahan" : "Tambah Bahan"}
               </Button>
-              {form.id && (
-                <Button variant="outline" onClick={() => setForm(empty)}>
-                  <X className="size-4" /> Batal
-                </Button>
-              )}
+              <Button variant="outline" onClick={() => setFormOpen(false)}>
+                <X className="size-4" /> Batal
+              </Button>
             </div>
           </div>
-        </div>
-      )}
+        </SheetContent>
+      </Sheet>
 
-      {/* Toolbar */}
-      <div className="glass space-y-2 rounded-2xl border border-border p-3">
-        <div className="flex items-center gap-2">
-          <div className="relative flex-1">
-            <Search className="pointer-events-none absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
-            <input
-              value={q}
-              onChange={(e) => setQ(e.target.value)}
-              placeholder="Cari bahan atau wilayah…"
-              className="h-9 w-full rounded-lg border border-input bg-background/40 pl-8 pr-3 text-sm text-foreground focus:border-ring focus:outline-none focus:ring-2 focus:ring-ring/25 dark:bg-input/30"
-            />
-          </div>
-          <button type="button" onClick={exportCsv} title="Export CSV" className="grid h-9 w-9 shrink-0 place-items-center rounded-lg border border-border text-muted-foreground transition-colors hover:text-foreground">
-            <Download className="size-4" />
-          </button>
-        </div>
-        <div className="scroll-fade-x -mx-1 flex items-center gap-2 overflow-x-auto px-1 pb-0.5">
-          <div className="w-44 shrink-0">
-            <Combobox portal searchable={regions.length > 6} matchTriggerWidth value={region} onChange={setRegion} options={[{ value: "all", label: "Semua Wilayah" }, ...regions.map((r) => ({ value: r, label: r }))]} />
-          </div>
-          <span className="shrink-0 whitespace-nowrap px-1 text-[11px] text-muted-foreground">{rows.length} bahan{hasFilter ? " (terfilter)" : ""}</span>
-          {hasFilter && (
-            <button type="button" onClick={() => { setQ(""); setRegion("all"); }} className="shrink-0 whitespace-nowrap rounded-lg border border-border px-2.5 py-1.5 text-xs font-medium text-muted-foreground hover:text-foreground">
-              Reset
-            </button>
-          )}
-        </div>
-      </div>
-
-      {/* Bulk action bar */}
-      {canEdit && selected.size > 0 && (
-        <div className="glass sticky top-20 z-20 flex flex-wrap items-center gap-2 rounded-2xl border border-primary/30 p-3 shadow-lg">
-          <span className="text-sm font-semibold text-foreground">{selected.size} dipilih</span>
-          <div className="ml-auto flex flex-wrap items-center gap-2">
-            {selectedAlertIds.length > 0 && <Button size="sm" variant="outline" onClick={bulkClear} disabled={bulkBusy}><BellOff className="size-4" /> Tandai selesai ({selectedAlertIds.length})</Button>}
-            <Button size="sm" variant="outline" onClick={bulkDelete} disabled={bulkBusy} className="text-red-500 hover:text-red-600"><Trash2 className="size-4" /> Hapus ({selected.size})</Button>
-            <button type="button" onClick={() => setSelected(new Set())} className="rounded-lg px-2 py-1 text-xs font-medium text-muted-foreground hover:text-foreground">Batal</button>
-          </div>
-        </div>
-      )}
-
-      {/* Table */}
-      <div className="glass overflow-hidden rounded-2xl border border-border">
-        <div className="overflow-x-auto">
-          <table className="w-full min-w-[760px] text-sm">
-            <thead className="border-b border-border bg-muted/40 text-left text-[11px] uppercase tracking-wide text-muted-foreground">
-              <tr>
-                {canEdit && (
-                  <th className="w-10 px-4 py-2.5">
-                    <button type="button" onClick={toggleAll} title="Pilih semua" className="grid place-items-center text-muted-foreground hover:text-foreground">
-                      {allShownSelected ? <CheckSquare className="size-4 text-primary" /> : <Square className="size-4" />}
+      {/* Import massal */}
+      <Dialog open={showImport} onOpenChange={setShowImport}>
+        <DialogContent title="Import Bahan Baku" description="Lewat template Excel, atau tempel manual." className="max-w-xl">
+          <div className="space-y-4">
+            <div>
+              <p className="text-[11px] text-muted-foreground">
+                <b className="text-foreground">Cara Excel:</b> unduh template (berisi semua bahan saat ini), ubah harganya di Excel, lalu import kembali —
+                data langsung terupdate & harga naik &gt;5% otomatis ditandai. <b>Kolom ID jangan diubah.</b> Kolom <b>Isi</b> dan <b>Satuan Pakai</b> untuk
+                barang yang dibeli per dus.
+              </p>
+              <div className="mt-2 flex flex-wrap gap-2">
+                <Button variant="outline" size="sm" onClick={downloadTemplate}>
+                  <FileDown className="size-4" /> Download Template Excel
+                </Button>
+                <input ref={fileRef} type="file" accept=".xlsx,.xls" onChange={onExcelFile} className="hidden" />
+                <Button variant="outline" size="sm" onClick={() => fileRef.current?.click()}>
+                  <FileUp className="size-4" /> Pilih File Excel
+                </Button>
+              </div>
+              {excel && (
+                <div className="mt-2 flex items-center justify-between gap-2 rounded-lg border border-primary/30 bg-primary/[0.05] px-3 py-2">
+                  <span className="min-w-0 flex-1 truncate text-[12px] text-foreground">
+                    {excel.name} · <b>{excel.rows.length}</b> baris siap
+                  </span>
+                  <div className="flex shrink-0 items-center gap-1.5">
+                    <Button size="sm" onClick={() => doImport(excel.rows)} disabled={importing}>
+                      <Upload className="size-4" /> Import {excel.rows.length}
+                    </Button>
+                    <button type="button" onClick={() => setExcel(null)} className="rounded-lg px-2 py-1 text-xs font-medium text-muted-foreground hover:text-foreground">
+                      Batal
                     </button>
-                  </th>
-                )}
-                <Th label="Bahan" k="name" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} className={canEdit ? "px-1" : "px-4"} />
-                <Th label="Wilayah" k="region" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} />
-                <Th label="Harga Beli" k="price" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} align="right" />
-                <Th label="Menu Pakai" k="usage" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} />
-                <th className="px-4 py-2.5 text-right font-medium">Aksi</th>
-              </tr>
-            </thead>
-            <tbody>
-              {rows.length === 0 && (
-                <tr>
-                  <td colSpan={canEdit ? 6 : 5} className="px-4 py-12 text-center text-sm text-muted-foreground">
-                    {hasFilter ? "Tidak ada bahan yang cocok." : "Belum ada bahan baku. Tambahkan lewat form di atas."}
-                  </td>
-                </tr>
+                  </div>
+                </div>
               )}
-              {rows.map((i) => {
-                const used = usage.get(i.id) ?? [];
-                return (
-                  <tr key={i.id} className={cn("border-b border-border/60 last:border-0 hover:bg-muted/25", selected.has(i.id) && "bg-primary/[0.06]")}>
-                    {canEdit && (
-                      <td className="w-10 px-4 py-2.5">
-                        <button type="button" onClick={() => toggleRow(i.id)} className="grid place-items-center text-muted-foreground hover:text-foreground">
-                          {selected.has(i.id) ? <CheckSquare className="size-4 text-primary" /> : <Square className="size-4" />}
-                        </button>
-                      </td>
-                    )}
-                    <td className={cn("py-2.5", canEdit ? "px-1" : "px-4")}>
-                      <div className="flex items-center gap-2">
-                        <p className="font-medium text-foreground">{i.name}</p>
-                        {i.alert && (
-                          <span className="inline-flex items-center gap-1 rounded-full bg-amber-500/12 px-1.5 py-0.5 text-[10px] font-semibold text-amber-600 dark:text-amber-400">
-                            <TrendingUp className="size-3" /> naik &gt;5%
-                          </span>
-                        )}
-                      </div>
-                      {i.alert && i.prevPrice != null && <p className="text-[10px] text-muted-foreground">dari {rp(i.prevPrice)}</p>}
-                    </td>
-                    <td className="px-3 py-2.5 text-muted-foreground">{i.region || "—"}</td>
-                    <td className="px-3 py-2.5 text-right">
-                      <p className="tabular-nums text-foreground">{rp(i.buyPrice)} <span className="text-[11px] text-muted-foreground">/ {i.buyQty} {i.buyUnit}</span></p>
-                      <p className="text-[10px] text-muted-foreground">≈ {rp(perUnit(i))}/{i.buyUnit}</p>
-                    </td>
-                    <td className="px-3 py-2.5">
-                      {used.length > 0 ? (
-                        <span className="rounded-full bg-muted px-2 py-0.5 text-[11px] font-medium text-muted-foreground" title={used.join(", ")}>{used.length} menu</span>
-                      ) : (
-                        <span className="text-[11px] text-muted-foreground">—</span>
-                      )}
-                    </td>
-                    <td className="px-4 py-2.5">
-                      <div className="flex items-center justify-end gap-1">
-                        {canEdit && i.alert && (
-                          <button type="button" onClick={() => act(() => clearIngredientAlertAction(i.id), "Tanda selesai")} title="Tandai sudah update" className="grid size-8 place-items-center rounded-lg text-muted-foreground transition-colors hover:bg-emerald-500/10 hover:text-emerald-500">
-                            <BellOff className="size-4" />
-                          </button>
-                        )}
-                        {canEdit && (
-                          <button type="button" onClick={() => setForm({ id: i.id, name: i.name, buyPrice: String(i.buyPrice), buyQty: String(i.buyQty), buyUnit: i.buyUnit, region: i.region ?? "" })} title="Edit" className="grid size-8 place-items-center rounded-lg text-muted-foreground transition-colors hover:bg-blue-500/10 hover:text-blue-500">
-                            <Pencil className="size-4" />
-                          </button>
-                        )}
-                        {canEdit && (
-                          <button
-                            type="button"
-                            onClick={() => {
-                              if (typeof window !== "undefined" && !window.confirm(`Hapus bahan "${i.name}"?`)) return;
-                              act(() => deleteIngredientAction(i.id), "Dihapus");
-                            }}
-                            title="Hapus"
-                            className="grid size-8 place-items-center rounded-lg text-muted-foreground transition-colors hover:bg-red-500/10 hover:text-red-500"
-                          >
-                            <Trash2 className="size-4" />
-                          </button>
-                        )}
-                      </div>
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
-      </div>
+            </div>
+
+            <div className="flex items-center gap-2 text-[10px] uppercase tracking-wide text-muted-foreground">
+              <span className="h-px flex-1 bg-border" /> atau tempel manual <span className="h-px flex-1 bg-border" />
+            </div>
+
+            <div>
+              <p className="text-[11px] text-muted-foreground">
+                Satu bahan per baris: <b>Nama, Harga, Qty, Satuan, Isi, Satuan Pakai, Wilayah</b>. Contoh:{" "}
+                <code className="rounded bg-muted px-1">Susu UHT, 120000, 1, dus, 24, pcs, Kalimantan</code>
+              </p>
+              <Textarea
+                value={importText}
+                onChange={(e) => setImportText(e.target.value)}
+                rows={4}
+                placeholder={"Susu UHT, 120000, 1, dus, 24, pcs, Kalimantan\nKopi Arabica, 150000, 1, kg, 1, kg, Umum"}
+                className="mt-2"
+              />
+              <div className="mt-2 flex items-center justify-between">
+                <span className="text-[11px] text-muted-foreground">{parsedImport.length} baris terbaca</span>
+                <Button onClick={() => doImport(parsedImport)} disabled={importing || parsedImport.length === 0} size="sm" variant="outline">
+                  <Upload className="size-4" /> Import {parsedImport.length || ""}
+                </Button>
+              </div>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {dialog}
     </div>
   );
 }
 
-function Th({
-  label,
-  k,
-  sortKey,
-  sortDir,
-  onSort,
-  align = "left",
-  className,
-}: {
-  label: string;
-  k: SortKey;
-  sortKey: SortKey;
-  sortDir: "asc" | "desc";
-  onSort: (k: SortKey) => void;
-  align?: "left" | "right";
-  className?: string;
-}) {
-  const activeSort = sortKey === k;
-  return (
-    <th className={cn("py-2.5 font-medium", align === "right" ? "px-3 text-right" : "px-3", className)}>
-      <button type="button" onClick={() => onSort(k)} className={cn("inline-flex items-center gap-1 uppercase transition-colors hover:text-foreground", activeSort && "text-foreground", align === "right" && "flex-row-reverse")}>
-        {label}
-        {activeSort ? (sortDir === "asc" ? <ArrowUp className="size-3" /> : <ArrowDown className="size-3" />) : <ArrowUpDown className="size-3 opacity-40" />}
-      </button>
-    </th>
-  );
-}

@@ -20,7 +20,9 @@ export default async function HppIngredientsPage() {
     user.department === "Food & Beverage";
   if (!canEdit) redirect("/dashboard");
 
-  const [ingredients, records, alerts] = await Promise.all([listIngredients(), listHpp(), listHppPriceAlerts()]);
+  // Two queries, not four: the alert module reuses the lists fetched here.
+  const [ingredients, records] = await Promise.all([listIngredients(), listHpp()]);
+  const alerts = await listHppPriceAlerts({ ingredients, records });
   // Which saved menus reference each master ingredient (for the >5% impact view).
   const menus: MenuUse[] = records.map((r) => ({
     id: r.id,

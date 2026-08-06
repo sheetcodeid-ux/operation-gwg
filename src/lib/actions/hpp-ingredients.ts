@@ -21,6 +21,7 @@ export async function saveIngredientAction(input: IngredientDraft) {
   const user = await getSessionUser();
   if (!allowed(user)) return { error: "Not authorized" };
   if (!input.name.trim()) return { error: "Nama bahan wajib diisi." };
+  if (input.contentQty != null && input.contentQty <= 0) return { error: "Isi per kemasan minimal 1." };
   const { rec, priceJump } = await upsertIngredient({ ...input, name: input.name.trim() }, user.id);
   revalidate();
   return { ok: true, id: rec.id, priceJump };

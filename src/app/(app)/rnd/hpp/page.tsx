@@ -53,6 +53,8 @@ export default async function HppPage({ searchParams }: { searchParams: Promise<
     buyPrice: i.buyPrice,
     buyQty: i.buyQty,
     buyUnit: i.buyUnit,
+    contentQty: i.contentQty,
+    contentUnit: i.contentUnit,
   }));
 
   // Live stats for the data-driven guide (auto-adjusts as the team works).

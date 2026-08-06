@@ -158,7 +158,7 @@ export function MobileNav({
                                 type="button"
                                 onClick={() => setOpenGroup(groupOpen ? null : groupId)}
                                 aria-expanded={groupOpen}
-                                className="flex w-full items-center gap-2 rounded-lg px-2.5 py-1.5 text-left text-[13px] font-medium text-foreground/85 hover:bg-muted/50"
+                                className="flex w-full items-center gap-2.5 rounded-lg px-2.5 py-1.5 text-left text-[13px] font-medium text-foreground/85 hover:bg-muted/50"
                               >
                                 {GroupIcon && <GroupIcon className="size-4 shrink-0 text-muted-foreground" />}
                                 <span className="min-w-0 flex-1 truncate">{block.name}</span>

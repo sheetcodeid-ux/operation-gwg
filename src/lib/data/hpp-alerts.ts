@@ -1,7 +1,7 @@
 import "server-only";
 
-import { listHpp } from "./hpp";
-import { listIngredients, type HppIngredient } from "./hpp-ingredients";
+import { listHpp, type HppRecord } from "./hpp";
+import { listIngredients, recipeUnits, unitPrice, type HppIngredient } from "./hpp-ingredients";
 import { calcHppV2, hppPct, hppStatus, itemSubtotal, type Brand, type VariableItem } from "@/lib/hpp/calc";
 
 /**
@@ -51,21 +51,30 @@ export interface HppPriceAlerts {
   menus: AffectedMenu[];
 }
 
-const perUnit = (i: { buyPrice: number; buyQty: number }) => (i.buyQty ? i.buyPrice / i.buyQty : i.buyPrice);
-
-/** Ganti harga baris bahan dengan harga master terkini. */
+/**
+ * Ganti harga baris bahan dengan harga master terkini. Resep memakai satuan
+ * PAKAI, jadi kemasan dijabarkan dulu: 1 dus isi 24 pcs → qty 24, satuan pcs.
+ */
 function withCurrentPrice(v: VariableItem, master: Map<string, HppIngredient>): VariableItem {
   const ing = v.ingredientId ? master.get(v.ingredientId) : undefined;
   if (!ing) return v;
-  return { ...v, buyPrice: ing.buyPrice, buyQty: ing.buyQty, buyUnit: ing.buyUnit };
+  return { ...v, ...recipeUnits(ing) };
 }
 
 /**
  * Daftar bahan yang sedang bertanda naik >5% beserta menu yang memakainya.
  * Menu tanpa perubahan HPP (mis. bahan tertaut tapi takarannya nol) dibuang.
  */
-export async function listHppPriceAlerts(): Promise<HppPriceAlerts> {
-  const [all, records] = await Promise.all([listIngredients(), listHpp()]);
+export async function listHppPriceAlerts(preloaded?: {
+  ingredients?: HppIngredient[];
+  records?: HppRecord[];
+}): Promise<HppPriceAlerts> {
+  // Pages that already hold these lists pass them in — otherwise this module
+  // would re-query both tables and double the page's database round trips.
+  const [all, records] = await Promise.all([
+    preloaded?.ingredients ?? listIngredients(),
+    preloaded?.records ?? listHpp(),
+  ]);
   const flagged = all.filter((i) => i.alert);
   if (flagged.length === 0) return { ingredients: [], menus: [] };
 
@@ -80,9 +89,7 @@ export async function listHppPriceAlerts(): Promise<HppPriceAlerts> {
     buyQty: i.buyQty,
     buyUnit: i.buyUnit,
     risePct:
-      i.prevPrice && i.prevPrice > 0
-        ? perUnit(i) / perUnit({ buyPrice: i.prevPrice, buyQty: i.buyQty }) - 1
-        : 0,
+      i.prevPrice && i.prevPrice > 0 ? unitPrice(i) / unitPrice({ ...i, buyPrice: i.prevPrice }) - 1 : 0,
   }));
 
   const menus: AffectedMenu[] = [];
