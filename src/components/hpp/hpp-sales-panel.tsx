@@ -15,7 +15,7 @@ import {
   TrendingUp,
   Trophy,
 } from "lucide-react";
-import { foodCostStatus } from "@/lib/hpp/calc";
+import { foodCostStatus, hppStatus,} from "@/lib/hpp/calc";
 import { Reveal } from "@/components/hpp/motion";
 import { syncSalesAction } from "@/lib/actions/hpp-sales";
 import { cn } from "@/lib/utils";
@@ -257,7 +257,7 @@ export function HppSalesPanel({
               <div className="space-y-1.5">
                 {d.top.map((m) => {
                   const fc = m.price > 0 ? m.varCost / m.price : 0;
-                  const st = foodCostStatus(fc, cat(m.category));
+                  const st = hppStatus(fc, cat(m.category));
                   const att = m.target > 0 ? m.qty / m.target : 0;
                   return (
                     <div key={m.name} className="rounded-xl border border-border bg-muted/20 px-3 py-2">

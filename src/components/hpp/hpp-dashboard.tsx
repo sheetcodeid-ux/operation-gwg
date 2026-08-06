@@ -19,7 +19,7 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
-import { BRANDS, BRAND_MARGIN, foodCostPct, foodCostStatus, type Brand } from "@/lib/hpp/calc";
+import { BRANDS, BRAND_MARGIN, foodCostPct, foodCostStatus, type Brand, hppPct, hppStatus,} from "@/lib/hpp/calc";
 import { KpiCarousel, type Kpi } from "@/components/dashboard/kpi-card";
 import { Reveal } from "@/components/hpp/motion";
 import { HppSalesPanel, type SalesMenu, type SalesRowLite } from "@/components/hpp/hpp-sales-panel";
@@ -63,7 +63,7 @@ export function HppDashboard({ menus, ingredients, sales }: { menus: DashMenu[];
 
   const d = React.useMemo(() => {
     const priced = fm.filter((m) => m.price > 0);
-    const fcOf = (m: DashMenu) => foodCostPct(m.variableCost, m.price);
+    const fcOf = (m: DashMenu) => hppPct(m.hpp, m.price);
     const marginOf = (m: DashMenu) => (m.price > 0 ? (m.price - m.hpp) / m.price : 0);
     const byStatus = (s: string) => fm.filter((m) => m.status === s).length;
 
@@ -74,7 +74,7 @@ export function HppDashboard({ menus, ingredients, sales }: { menus: DashMenu[];
     const verCur = verifiedIn(now - 30 * DAY, now + DAY), verPrev = verifiedIn(now - 60 * DAY, now - 30 * DAY);
 
     const overCount = priced.filter((m) => fcOf(m) > 0.7).length;
-    const idealCount = priced.filter((m) => fcOf(m) > 0 && foodCostStatus(fcOf(m), cat(m.category)).tone === "good").length;
+    const idealCount = priced.filter((m) => fcOf(m) > 0 && hppStatus(fcOf(m), cat(m.category)).tone === "good").length;
     const avgFc = priced.length ? priced.reduce((a, m) => a + fcOf(m), 0) / priced.length : 0;
     const avgMargin = priced.length ? priced.reduce((a, m) => a + marginOf(m), 0) / priced.length : 0;
     const alertsCount = ingredients.filter((i) => i.alert).length;

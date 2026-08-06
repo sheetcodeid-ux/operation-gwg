@@ -45,8 +45,15 @@ import {
   UNITS,
   bepSeries,
   calcHpp,
+  calcHppV2,
   foodCostPct,
   foodCostStatus,
+  hppPct,
+  hppStatus,
+  minPriceForCategory,
+  classPrices,
+  MIN_MARGIN,
+  WASTE_NORMAL_MAX,
   itemSubtotal,
   priceTiers,
   projection,
@@ -76,6 +83,7 @@ import { Combobox } from "@/components/ui/combobox";
 import { cn } from "@/lib/utils";
 
 /* ---------- helpers ---------- */
+const round0 = (n: number) => Math.round((n + Number.EPSILON) * 100) / 100;
 const rp = (n: number) => "Rp " + Math.round(n || 0).toLocaleString("id-ID");
 const uid = () => Math.random().toString(36).slice(2, 9);
 const num = (v: string) => Number(String(v).replace(/[^\d.-]/g, "")) || 0;
@@ -190,17 +198,33 @@ export function HppCalculator({
     () => (btkl > 0 ? [...fixed, { id: "__btkl", name: "BTKL (dapur/bar)", monthly: btkl }] : fixed),
     [fixed, btkl],
   );
+  // Mesin tujuh langkah makalah: bahan baku → BTKL → overhead (termasuk waste)
+  // → packing → Total HPP. BTKL tidak lagi diselundupkan sebagai baris overhead.
+  const bd = React.useMemo(
+    () =>
+      calcHppV2({
+        variables,
+        fixed,
+        btklMonthly: btkl,
+        wastePct,
+        allocMode,
+        targetSales,
+        totalUnitsAllProducts: totalUnitsAll,
+        yieldPcs: mode === "per_resep" ? yieldPcs : 1,
+      }),
+    [variables, fixed, btkl, wastePct, allocMode, targetSales, totalUnitsAll, mode, yieldPcs],
+  );
   const base = React.useMemo(
     () => calcHpp({ variables, fixed: fixedAll, allocMode, targetSales, totalUnitsAllProducts: totalUnitsAll }),
     [variables, fixedAll, allocMode, targetSales, totalUnitsAll],
   );
-  // Per resep: variable cost is per batch → divide by yield to get per-pcs.
+  // Per resep: biaya satu batch dibagi hasil porsi.
   const divisor = mode === "per_resep" ? Math.max(1, yieldPcs) : 1;
-  const rawVariable = base.variableCost / divisor; // bahan baku + packing / produk
-  const waste = wasteCost(rawVariable, wastePct); // waste 5% dari bahan baku
-  const variableCost = rawVariable + waste; // biaya variabel efektif (incl. waste)
-  const fixedAlloc = base.fixedAlloc;
-  const hpp = variableCost + fixedAlloc;
+  const rawVariable = bd.hppDasar; // bahan baku + packing per produk
+  const waste = bd.waste;
+  const variableCost = round0(bd.bahanBaku + bd.waste + bd.packing);
+  const fixedAlloc = round0(bd.overheadOps + bd.btkl);
+  const hpp = bd.totalHpp;
 
   // Costing policy for this brand (override wins, else default).
   const policy = React.useMemo(() => {
@@ -221,6 +245,10 @@ export function HppCalculator({
   const targetFc = (category === "minuman" ? policy.bevPct : policy.foodPct) / 100;
   const policyCustom = policy.scope === brand;
   const fcStatus = foodCostStatus(fc, category, targetFc);
+  // Penilaian over cost memakai HPP total ÷ harga jual (kebijakan ≤70%),
+  // bukan food cost bahan baku saja.
+  const hppPctVal = hppPct(hpp, price);
+  const hppSt = hppStatus(hppPctVal, category, brand);
   // Pick an ESB catalog product: fill name + category, and recommend the
   // monthly sales target from the last-30-day qty (avg/day × 30 ≈ the 30d total).
   const pickEsbProduct = React.useCallback((menuName: string) => {
@@ -637,9 +665,9 @@ export function HppCalculator({
               <span className="text-muted-foreground">Biaya waste / produk</span>
               <span className="font-semibold tabular-nums text-foreground">{rp(waste)}</span>
             </div>
-            {wastePct > 5 && (
+            {wastePct > WASTE_NORMAL_MAX && (
               <p className="mt-2 flex items-center gap-1.5 rounded-lg bg-amber-500/10 px-2 py-1.5 text-[11px] font-medium text-amber-600 dark:text-amber-400">
-                <AlertTriangle className="size-3.5 shrink-0" /> Waste {wastePct}% melebihi batas normal 5% — hanya menu berbahan mudah rusak (mis. nasi telur) yang boleh standar lebih tinggi; kelebihan lain dicatat sebagai waste abnormal (beban operasional terpisah, di luar HPP).
+                <AlertTriangle className="size-3.5 shrink-0" /> Waste {wastePct}% melebihi batas normal {WASTE_NORMAL_MAX}% — hanya menu berbahan mudah rusak (mis. nasi telur) yang boleh standar lebih tinggi; kelebihan lain dicatat sebagai waste abnormal (beban operasional terpisah, di luar HPP).
               </p>
             )}
           </div>
@@ -820,15 +848,26 @@ export function HppCalculator({
           <p className="mb-3 flex items-center gap-2 text-sm font-semibold text-foreground">
             <Calculator className="size-4 text-muted-foreground" /> Rincian HPP per Produk
           </p>
+          {/* Urutan mengikuti tujuh langkah makalah GWG (Bab IV.2.A). */}
           <div className="space-y-1.5 text-sm">
-            <Row label="Bahan Baku + Packing" value={rp(rawVariable)} />
-            <Row label={`Waste (${wastePct}%)`} value={rp(waste)} />
-            <Row label="Biaya Variabel Efektif" value={rp(variableCost)} />
-            <Row label="Alokasi Biaya Tetap" value={rp(fixedAlloc)} hint={`Overhead${btkl > 0 ? " + BTKL" : ""} ${rp(base.totalFixed)} / ${allocMode === "even" ? totalUnitsAll : targetSales} unit`} />
+            <Row label="1–2 · Bahan Baku" value={rp(bd.bahanBaku)} hint="Harga tertinggi wilayah setempat" />
+            <Row label="3 · BTKL (dapur/bar)" value={rp(bd.btkl)} hint={btkl > 0 ? `${rp(btkl)} / bulan ÷ ${bd.allocUnits} unit` : "Belum diisi"} />
+            <Row label="4 · Overhead" value={rp(bd.overhead)} hint={`Listrik/gas/lain ${rp(bd.overheadOps)} + waste ${wastePct}% ${rp(bd.waste)}`} />
+            <Row label="5 · Packing" value={rp(bd.packing)} hint="Kemasan primer — setara HPP dasar" />
             <div className="mt-1 flex items-center justify-between rounded-xl bg-primary/10 px-3 py-2.5">
-              <span className="font-semibold text-foreground">Total HPP per Produk</span>
+              <span className="font-semibold text-foreground">6 · Total HPP per Produk</span>
               <span className="text-lg font-bold tabular-nums text-primary">{rp(hpp)}</span>
             </div>
+            <div className="flex items-center justify-between pt-1 text-xs">
+              <span className="text-muted-foreground">HPP terhadap harga jual</span>
+              <span className={cn("font-semibold tabular-nums", hppSt.tone === "bad" ? "text-red-600 dark:text-red-400" : hppSt.tone === "warn" ? "text-amber-600 dark:text-amber-400" : "text-emerald-600 dark:text-emerald-400")}>
+                {(hppPctVal * 100).toFixed(1)}% · {hppSt.label}
+              </span>
+            </div>
+            <p className="text-[11px] text-muted-foreground">
+              Harga jual minimum agar margin {category === "minuman" ? "minuman" : "makanan"} ≥{MIN_MARGIN[category] * 100}%:{" "}
+              <span className="font-semibold text-foreground">{rp(minPriceForCategory(hpp, category))}</span> (sebelum pajak)
+            </p>
           </div>
         </div>
 
@@ -952,18 +991,18 @@ export function HppCalculator({
           <p className="mt-1 text-[11px] text-muted-foreground">HPP tetap sama; harga jual naik +Rp5.000 tiap class dari Class 1 (terendah).</p>
           {useClass && (
             <div className="mt-3 space-y-2">
-              {[0, 1, 2].map((i) => {
-                const cp = price + i * 5000;
-                const m = cp > 0 ? (cp - hpp) / cp : 0;
+              {classPrices(price, hpp).map((c) => {
+                const st = hppStatus(c.hppPct, category, brand);
                 return (
-                  <div key={i} className="flex items-center justify-between gap-3 rounded-xl border border-border bg-muted/20 p-3">
+                  <div key={c.cls} className="flex items-center justify-between gap-3 rounded-xl border border-border bg-muted/20 p-3">
                     <div className="min-w-0">
-                      <span className="rounded-md bg-muted px-2 py-0.5 text-[11px] font-semibold text-foreground">Class {i + 1}</span>
+                      <span className="rounded-md bg-muted px-2 py-0.5 text-[11px] font-semibold text-foreground">{c.label}</span>
                       <p className="mt-1 text-[11px] text-muted-foreground">
-                        {i === 0 ? "Base price" : `+Rp ${(i * 5000).toLocaleString("id-ID")} dari Class 1`} · Margin {(m * 100).toFixed(1)}%
+                        {c.cls === 1 ? "Base price" : `+Rp ${((c.cls - 1) * 5000).toLocaleString("id-ID")} dari Class 1`} · HPP {(c.hppPct * 100).toFixed(1)}% · Margin {(c.margin * 100).toFixed(1)}%
                       </p>
+                      <p className={cn("text-[10px]", st.tone === "bad" ? "text-red-600 dark:text-red-400" : st.tone === "warn" ? "text-amber-600 dark:text-amber-400" : "text-emerald-600 dark:text-emerald-400")}>{st.label}</p>
                     </div>
-                    <span className="shrink-0 text-base font-bold tabular-nums text-foreground">{rp(cp)}</span>
+                    <span className="shrink-0 text-base font-bold tabular-nums text-foreground">{rp(c.price)}</span>
                   </div>
                 );
               })}

@@ -23,7 +23,7 @@ import {
   XCircle,
 } from "lucide-react";
 import { toast } from "sonner";
-import { BRANDS, foodCostPct, foodCostStatus } from "@/lib/hpp/calc";
+import { BRANDS, foodCostPct, foodCostStatus, hppPct, hppStatus, type Brand,} from "@/lib/hpp/calc";
 import { HPP_STATUS_META, STATUS_PILL, type StatusTone } from "@/lib/hpp/status";
 import { bulkDeleteHppAction, bulkReviewHppAction, bulkSubmitHppAction, deleteHppAction, reviewHppAction, submitHppAction } from "@/lib/actions/hpp";
 import type { HppRecord, HppStatus } from "@/lib/data/hpp";
@@ -76,7 +76,7 @@ export function HppRekap({ records, canEdit, canVerify }: { records: HppRecord[]
   const baseFiltered = React.useMemo<Row[]>(() => {
     const needle = q.trim().toLowerCase();
     return records
-      .map((r) => ({ r, fc: foodCostPct(r.variableCost, r.chosenPrice), margin: marginOf(r) }))
+      .map((r) => ({ r, fc: hppPct(r.hpp, r.chosenPrice), margin: marginOf(r) }))
       .filter(({ r, fc }) => {
         if (needle && !r.name.toLowerCase().includes(needle)) return false;
         if (brand !== "all" && r.brand !== brand) return false;
@@ -117,9 +117,9 @@ export function HppRekap({ records, canEdit, canVerify }: { records: HppRecord[]
   const stats = React.useMemo(() => {
     let over = 0, ideal = 0, pending = 0;
     for (const r of records) {
-      const fc = foodCostPct(r.variableCost, r.chosenPrice);
+      const fc = hppPct(r.hpp, r.chosenPrice);
       if (fc > 0.7) over++;
-      else if (fc > 0 && foodCostStatus(fc, cat(r.category)).tone === "good") ideal++;
+      else if (fc > 0 && hppStatus(fc, cat(r.category), r.brand as Brand).tone === "good") ideal++;
       if (r.status === "submitted") pending++;
     }
     return { total: records.length, over, ideal, pending };
@@ -340,7 +340,7 @@ export function HppRekap({ records, canEdit, canVerify }: { records: HppRecord[]
         /* ---------- CARD / GALLERY VIEW ---------- */
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
           {rows.map(({ r, fc, margin }) => {
-            const fs = foodCostStatus(fc, cat(r.category));
+            const fs = hppStatus(fc, cat(r.category), r.brand as Brand);
             const meta = HPP_STATUS_META[r.status];
             return (
               <button key={r.id} type="button" onClick={() => setDetail(r)} className="glass group flex flex-col overflow-hidden rounded-2xl border border-border text-left transition-colors hover:border-primary/40">
@@ -402,7 +402,7 @@ export function HppRekap({ records, canEdit, canVerify }: { records: HppRecord[]
               </thead>
               <tbody>
                 {rows.map(({ r, fc, margin }) => {
-                  const fs = foodCostStatus(fc, cat(r.category));
+                  const fs = hppStatus(fc, cat(r.category), r.brand as Brand);
                   const meta = HPP_STATUS_META[r.status];
                   return (
                     <tr key={r.id} className={cn("group cursor-pointer border-b border-border/60 last:border-0 hover:bg-muted/25", selected.has(r.id) && "bg-primary/[0.06]")} onClick={() => setDetail(r)}>
@@ -474,8 +474,8 @@ export function HppRekap({ records, canEdit, canVerify }: { records: HppRecord[]
 }
 
 function DetailBody({ r, canEdit, canVerify, busy, onEdit, onSubmit, onVerify, onReject, onDelete }: { r: HppRecord; canEdit: boolean; canVerify: boolean; busy: boolean; onEdit: () => void; onSubmit: () => void; onVerify: () => void; onReject: () => void; onDelete: () => void }) {
-  const fc = foodCostPct(r.variableCost, r.chosenPrice);
-  const fs = foodCostStatus(fc, cat(r.category));
+  const fc = hppPct(r.hpp, r.chosenPrice);
+  const fs = hppStatus(fc, cat(r.category), r.brand as Brand);
   const margin = marginOf(r);
   const meta = HPP_STATUS_META[r.status];
   return (

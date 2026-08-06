@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { calcHpp, foodCostStatus, priceTiers, projection, sensitivity, type HppInput } from "./calc";
+import { calcHpp, foodCostStatus, priceTiers, projection, sensitivity, type HppInput, calcHppV2, hppPct, hppStatus, classPrices} from "./calc";
 
 // "kopi susu gula aren" from the reference screenshot.
 const input: HppInput = {
@@ -74,13 +74,75 @@ describe("foodCostStatus vs costing-policy target", () => {
   it("uses category defaults when no target given (35% food / 25% bev)", () => {
     expect(foodCostStatus(0.34, "makanan").tone).toBe("good");
     expect(foodCostStatus(0.36, "makanan").tone).toBe("warn");
-    expect(foodCostStatus(0.24, "minuman").tone).toBe("good"); // ≤25% target
-    expect(foodCostStatus(0.30, "minuman").tone).toBe("warn"); // above 25%
+    expect(foodCostStatus(0.24, "minuman").tone).toBe("good"); // ≤35% target
+    expect(foodCostStatus(0.30, "minuman").tone).toBe("good"); // masih di dalam 25–35% (makalah 2026)
+    expect(foodCostStatus(0.72, "minuman").tone).toBe("bad"); // above 25%
   });
 
   it("respects a custom brand target (e.g. Beverage 28%)", () => {
     expect(foodCostStatus(0.27, "minuman", 0.28).tone).toBe("good");
     expect(foodCostStatus(0.29, "minuman", 0.28).tone).toBe("warn");
     expect(foodCostStatus(0.71, "makanan", 0.35).tone).toBe("bad"); // >70% over cost
+  });
+});
+
+describe("mesin HPP tujuh langkah (makalah Juli 2026)", () => {
+  const bahan = {
+    id: "a",
+    name: "Kopi",
+    role: "bahan" as const,
+    takaran: 20,
+    takaranUnit: "g",
+    buyPrice: 100_000,
+    buyQty: 1,
+    buyUnit: "kg",
+  };
+  const packing = {
+    id: "b",
+    name: "Paper cup",
+    role: "packing" as const,
+    takaran: 1,
+    takaranUnit: "pcs",
+    buyPrice: 1_000,
+    buyQty: 1,
+    buyUnit: "pcs",
+  };
+
+  it("menjumlahkan bahan baku, BTKL, overhead+waste, dan packing", () => {
+    const bd = calcHppV2({
+      variables: [bahan, packing],
+      fixed: [{ id: "f", name: "Listrik", monthly: 1_000_000 }],
+      btklMonthly: 2_000_000,
+      wastePct: 5,
+      allocMode: "product",
+      targetSales: 1_000,
+    });
+    expect(bd.bahanBaku).toBe(2_000); // 20 g dari Rp100.000/kg
+    expect(bd.packing).toBe(1_000);
+    expect(bd.hppDasar).toBe(3_000); // packing setara HPP dasar
+    expect(bd.btkl).toBe(2_000); // 2 juta / 1.000 unit
+    expect(bd.overheadOps).toBe(1_000); // 1 juta / 1.000 unit
+    expect(bd.waste).toBe(100); // 5% dari bahan baku saja, bukan packing
+    expect(bd.overhead).toBe(1_100);
+    expect(bd.totalHpp).toBe(6_100);
+  });
+
+  it("menandai over cost saat HPP melebihi 70% harga jual", () => {
+    expect(hppStatus(hppPct(7_500, 10_000), "makanan").tone).toBe("bad");
+    expect(hppStatus(hppPct(6_000, 10_000), "makanan").tone).toBe("good"); // margin 40%
+  });
+
+  it("menolak margin di bawah minimum kategori", () => {
+    // Minuman wajib margin ≥60% ⇒ HPP maksimal 40%.
+    expect(hppStatus(hppPct(5_000, 10_000), "minuman").tone).toBe("bad");
+    expect(hppStatus(hppPct(3_500, 10_000), "minuman").tone).toBe("good");
+  });
+
+  it("class Nordu menaikkan harga Rp5.000 per class dengan HPP tetap", () => {
+    const cs = classPrices(20_000, 12_000);
+    expect(cs.map((c) => c.price)).toEqual([20_000, 25_000, 30_000]);
+    // HPP rupiah tetap ⇒ persentase HPP turun, margin naik tiap class.
+    expect(cs[0].margin).toBeLessThan(cs[1].margin);
+    expect(cs[1].margin).toBeLessThan(cs[2].margin);
   });
 });

@@ -1,11 +1,23 @@
 /**
- * HPP (Harga Pokok Produksi) engine — GWG Group formula (makalah Juni 2026).
+ * Mesin HPP GWG Group — mengikuti makalah "Analisis Penetapan Harga Pokok
+ * Penjualan (HPP) All Menu", Juli 2026 (MoM 19/22/25 & rangkuman 29 Juni 2026).
  *
- *   HPP = Biaya Variabel (bahan baku + packing) + Alokasi Biaya Tetap per produk
- *   Harga Jual = HPP + %Margin (tanpa pajak)
+ * Tujuh langkah resmi (Bab IV.2.A):
+ *   1. HPP Dasar ............ bahan baku, memakai HARGA TERTINGGI wilayah
+ *   2. + Bahan Baku ......... komposisi penyusun menu
+ *   3. + BTKL ............... biaya tenaga kerja langsung (dapur/bar)
+ *   4. + Overhead ........... listrik + gas + waste (5%) + lain-lain
+ *   5. + Packing ............ kemasan primer, setara HPP dasar
+ *   6. = Total HPP
+ *   7. Harga Jual ........... Total HPP + %margin (SEBELUM pajak)
  *
- * Kebijakan: sewa & pajak (PBJT) TIDAK masuk HPP; waste normal ≤5%; margin
- * minimal 30%; food cost sehat ≤35%. Semua deterministik (tanpa AI eksternal).
+ * Keputusan final (Lampiran makalah):
+ *   • PBJT dan sewa bangunan DIKELUARKAN dari HPP maupun overhead
+ *   • Waste normal maksimal 5%, diukur nyata; waste abnormal = beban periode
+ *   • HPP (food & drink) maksimal 70% dari harga jual — di atas itu over cost
+ *   • Margin makanan minimal 35%, minuman/bar minimal 60%, maksimal tanpa batas
+ *   • Class Nordu: harga jual naik Rp5.000 per class, HPP tetap
+ *   • HPP wajib diperbarui bila harga bahan naik lebih dari 5%
  */
 
 export type UnitDim = "mass" | "volume" | "count";
@@ -19,9 +31,16 @@ export const UNITS: Record<string, { dim: UnitDim; factor: number; label: string
   pcs: { dim: "count", factor: 1, label: "pcs" },
 };
 
+/** Peran satu baris biaya langsung: bahan baku, atau kemasan primer.
+ *  Makalah menempatkan packing setara HPP dasar tapi tetap dilaporkan sebagai
+ *  komponen tersendiri (langkah 5), jadi keduanya dibedakan di sini. */
+export type CostRole = "bahan" | "packing";
+
 export interface VariableItem {
   id: string;
   name: string;
+  /** Default `bahan` bila kosong — kompatibel dengan data lama. */
+  role?: CostRole;
   takaran: number; // amount used to make ONE product
   takaranUnit: string; // g / ml / pcs / kg / L
   buyPrice: number; // purchase price
@@ -92,6 +111,172 @@ export function calcHpp(input: HppInput): HppResult {
   return { variableCost, totalFixed, fixedAlloc, hpp, target: Math.max(1, input.targetSales || 0) };
 }
 
+/* ═══════════════════ kebijakan resmi (Lampiran makalah) ═══════════════════ */
+
+/** HPP di atas 70% dari harga jual = over cost, wajib evaluasi ulang. */
+export const HPP_OVER_COST = 0.7;
+/** Margin minimum per kategori; maksimal tanpa batas. */
+export const MIN_MARGIN: Record<"makanan" | "minuman", number> = { makanan: 0.35, minuman: 0.6 };
+/** Waste normal maksimal 5% dari bahan baku. */
+export const WASTE_NORMAL_MAX = 5;
+/** HPP wajib diperbarui bila harga bahan naik lebih dari 5%. */
+export const PRICE_UPDATE_TRIGGER = 0.05;
+/** Sistem class Nordu: tiap naik satu class, harga jual +Rp5.000. */
+export const CLASS_STEP = 5000;
+
+/* ═══════════════════════ mesin HPP tujuh langkah ═══════════════════════ */
+
+export interface HppV2Input {
+  /** Bahan baku & kemasan; dibedakan lewat `role`. */
+  variables: VariableItem[];
+  /** Overhead operasional per bulan (listrik, gas, air, lain-lain). */
+  fixed: FixedItem[];
+  /** Biaya tenaga kerja langsung dapur/bar per bulan. */
+  btklMonthly: number;
+  /** Persen waste normal terhadap bahan baku (maksimal 5%). */
+  wastePct: number;
+  allocMode: AllocMode;
+  targetSales: number;
+  totalUnitsAllProducts?: number;
+  /** Mode per resep: hasil satu batch, untuk membagi biaya ke per porsi. */
+  yieldPcs?: number;
+}
+
+/** Rincian HPP per produk, mengikuti urutan langkah pada makalah. */
+export interface HppBreakdown {
+  /** Langkah 1–2: bahan baku (harga tertinggi). */
+  bahanBaku: number;
+  /** Langkah 3: BTKL per produk. */
+  btkl: number;
+  /** Overhead operasional per produk (listrik, gas, air, lain-lain). */
+  overheadOps: number;
+  /** Waste normal — bagian dari overhead (langkah 4). */
+  waste: number;
+  /** Langkah 4 total: overhead operasional + waste. */
+  overhead: number;
+  /** Langkah 5: kemasan primer. */
+  packing: number;
+  /** Langkah 6. */
+  totalHpp: number;
+  /** HPP dasar = bahan baku + packing (makalah: packing setara HPP dasar). */
+  hppDasar: number;
+  /** Total overhead bulanan sebelum dialokasikan (untuk pelaporan). */
+  totalFixedMonthly: number;
+  /** Pembagi alokasi yang dipakai. */
+  allocUnits: number;
+}
+
+/** Hitung HPP satu produk mengikuti tujuh langkah makalah. */
+export function calcHppV2(input: HppV2Input): HppBreakdown {
+  const divisor = Math.max(1, input.yieldPcs && input.yieldPcs > 1 ? input.yieldPcs : 1);
+  const sumRole = (role: CostRole) =>
+    input.variables.filter((v) => (v.role ?? "bahan") === role).reduce((s, v) => s + itemSubtotal(v), 0) / divisor;
+
+  const bahanBaku = round2(sumRole("bahan"));
+  const packing = round2(sumRole("packing"));
+
+  const totalFixedMonthly = round2(input.fixed.reduce((s, f) => s + (f.monthly || 0), 0));
+  const allocUnits =
+    input.allocMode === "even"
+      ? Math.max(1, input.totalUnitsAllProducts || input.targetSales || 0)
+      : Math.max(1, input.targetSales || 0);
+
+  const overheadOps = round2(totalFixedMonthly / allocUnits);
+  const btkl = round2(Math.max(0, input.btklMonthly || 0) / allocUnits);
+  // Waste normal dihitung dari bahan baku saja — kemasan tidak menyusut.
+  const waste = round2(bahanBaku * (Math.max(0, input.wastePct) / 100));
+  const overhead = round2(overheadOps + waste);
+
+  const totalHpp = round2(bahanBaku + btkl + overhead + packing);
+  return {
+    bahanBaku,
+    btkl,
+    overheadOps,
+    waste,
+    overhead,
+    packing,
+    totalHpp,
+    hppDasar: round2(bahanBaku + packing),
+    totalFixedMonthly,
+    allocUnits,
+  };
+}
+
+/** Persentase HPP terhadap harga jual — inilah angka yang dipakai kebijakan
+ *  over cost (>70%), bukan food cost bahan baku saja. */
+export function hppPct(totalHpp: number, price: number): number {
+  return price > 0 ? totalHpp / price : 0;
+}
+
+/** Target HPP per brand (Bab IV.3). Cattu tidak punya batas bawah. */
+export const BRAND_HPP_TARGET: Record<Brand, { min: number; max: number }> = {
+  Nordu: { min: 0.6, max: 0.65 },
+  Cattu: { min: 0, max: 0.65 },
+  Busari: { min: 0.65, max: 0.7 },
+  "Lesung Pipi": { min: 0.6, max: 0.65 },
+};
+
+/**
+ * Status kesehatan satu menu berdasarkan HPP% dan margin minimum kategori.
+ * Urutan penilaian: over cost (>70%) → margin di bawah minimum → di atas target
+ * brand → aman.
+ */
+export function hppStatus(
+  pct: number,
+  category: "makanan" | "minuman",
+  brand?: Brand,
+): { tone: CostTone; label: string } {
+  const p = pct * 100;
+  if (p <= 0) return { tone: "warn", label: "Isi harga & bahan" };
+  if (pct > HPP_OVER_COST) return { tone: "bad", label: `Over cost (>${HPP_OVER_COST * 100}%)` };
+
+  const minMargin = MIN_MARGIN[category];
+  const margin = 1 - pct;
+  if (margin < minMargin) {
+    return { tone: "bad", label: `Margin ${(margin * 100).toFixed(1)}% < minimum ${minMargin * 100}%` };
+  }
+
+  const target = brand ? BRAND_HPP_TARGET[brand] : null;
+  if (target && pct > target.max) {
+    return { tone: "warn", label: `Di atas target brand (${target.max * 100}%)` };
+  }
+  return { tone: "good", label: `Aman — margin ${(margin * 100).toFixed(1)}%` };
+}
+
+/** Harga jual minimum agar margin kategori terpenuhi. */
+export function minPriceForCategory(totalHpp: number, category: "makanan" | "minuman"): number {
+  const m = MIN_MARGIN[category];
+  return totalHpp > 0 ? roundPrice(totalHpp / (1 - m)) : 0;
+}
+
+export interface ClassPrice {
+  cls: 1 | 2 | 3;
+  label: string;
+  price: number;
+  hppPct: number;
+  margin: number;
+  profit: number;
+}
+
+/**
+ * Sistem class Nordu: HPP tetap sama, harga jual naik Rp5.000 tiap class.
+ * Class 1 memakai harga dasar, Class 2 = +Rp5.000, Class 3 = +Rp5.000 lagi.
+ */
+export function classPrices(basePrice: number, totalHpp: number, step = CLASS_STEP): ClassPrice[] {
+  return ([1, 2, 3] as const).map((cls) => {
+    const price = basePrice + step * (cls - 1);
+    const profit = price - totalHpp;
+    return {
+      cls,
+      label: `Class ${cls}`,
+      price,
+      hppPct: hppPct(totalHpp, price),
+      margin: price > 0 ? profit / price : 0,
+      profit,
+    };
+  });
+}
+
 export interface PriceTier {
   key: "kompetitif" | "standar" | "premium";
   label: string;
@@ -110,9 +295,9 @@ export function roundPrice(p: number, step = 500): number {
 export type Brand = "Nordu" | "Cattu" | "Busari" | "Lesung Pipi";
 export const BRANDS: Brand[] = ["Nordu", "Cattu", "Busari", "Lesung Pipi"];
 
-/** Gross-margin bands per brand (on selling price), from the GWG makalah:
- *  Nordu 35–40%, Cattu 35–40% (min 35%), Busari 30–35% (min 30%). Bar ≥30%.
- *  Lesung Pipi follows the group default (min 30%, ideal 35–40%). */
+/** Rentang margin harga jual per brand (makalah Bab IV.3):
+ *  Nordu 35–40%, Cattu minimal 35%, Busari 30–35%. Menu bar mengikuti
+ *  MIN_MARGIN.minuman (≥60%), bukan angka brand. Lesung Pipi ikut Nordu. */
 export const BRAND_MARGIN: Record<Brand, { min: number; idealLow: number; idealHigh: number }> = {
   Nordu: { min: 0.35, idealLow: 0.35, idealHigh: 0.4 },
   Cattu: { min: 0.35, idealLow: 0.35, idealHigh: 0.4 },
@@ -232,7 +417,9 @@ export function bepSeries(price: number, variableCost: number, totalFixed: numbe
   return out;
 }
 
-/** Food cost % = variable cost ÷ price (health: ≤35% ideal, >70% over cost). */
+/** Food cost % = biaya bahan baku ÷ harga jual. Dipakai sebagai indikator
+ *  pendamping; penilaian over cost memakai `hppPct` (HPP total), bukan ini.
+ *  Standar makalah: makanan ≤35%, minuman 25–35%. */
 export function foodCostPct(variableCost: number, price: number): number {
   return price > 0 ? variableCost / price : 0;
 }
@@ -245,9 +432,9 @@ export type CostTone = "good" | "warn" | "bad";
  *  A small tolerance above target counts as "sedikit di atas" (warn), not bad. */
 export function foodCostStatus(fc: number, category: "makanan" | "minuman", targetPct?: number): { tone: CostTone; label: string } {
   const pct = fc * 100;
-  const target = (targetPct ?? (category === "minuman" ? 0.25 : 0.35)) * 100;
+  const target = (targetPct ?? (category === "minuman" ? 0.35 : 0.35)) * 100;
   if (pct <= 0) return { tone: "warn", label: "Isi harga & bahan" };
-  if (pct > 70) return { tone: "bad", label: "Over cost (>70%)" };
+  if (pct > HPP_OVER_COST * 100) return { tone: "bad", label: `Over cost (>${HPP_OVER_COST * 100}%)` };
   if (pct <= target) return { tone: "good", label: `Sesuai target (≤${target.toFixed(0)}%)` };
   if (pct <= target + 5) return { tone: "warn", label: `Sedikit di atas target (${target.toFixed(0)}%)` };
   return { tone: "warn", label: `Perlu evaluasi (>${target.toFixed(0)}%)` };
