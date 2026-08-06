@@ -17,6 +17,8 @@ export type MenuKey =
   | "op_fraud"
   | "op_seasonal"
   | "op_analysis"
+  | "op_pnl"
+  | "op_kpi"
   | "sys_review"
   | "hc_submit"
   | "hc_review"
@@ -88,6 +90,8 @@ export const NAV_MENUS: Omit<NavItem, "section" | "group" | "groupIcon">[] = [
   { key: "op_fraud", label: "Analisis Fraud", href: "/operation/fraud", icon: "ShieldAlert" },
   { key: "op_seasonal", label: "Musiman", href: "/operation/musiman", icon: "Waves" },
   { key: "op_analysis", label: "Data Analysis", href: "/operation/analysis", icon: "ChartColumnBig" },
+  { key: "op_pnl", label: "Laba Rugi", href: "/operation/laba-rugi", icon: "Banknote" },
+  { key: "op_kpi", label: "KPI Coordinator Area", href: "/operation/kpi", icon: "Target" },
   { key: "sys_review", label: "Antrian System", href: "/system/antrian", icon: "Headset" },
   // Kedua "pengajuan" ini kini menjadi kategori DI DALAM halaman Pengajuan —
   // tetap punya rute sendiri, tapi tidak lagi muncul terpisah di sidebar.
@@ -171,6 +175,8 @@ const OPERATION_FULL: MenuKey[] = [
   "op_fraud",
   "op_seasonal",
   "op_analysis",
+  "op_pnl",
+  "op_kpi",
   "reports",
 ];
 
@@ -224,8 +230,8 @@ export interface NavGroupDef {
 export const DIVISION_GROUPS: Partial<Record<Division, NavGroupDef[]>> = {
   Operation: [
     { name: "Monitoring Outlet", icon: "Store", menus: ["outlets", "hospitality", "hygiene", "complaints"] },
-    { name: "Keuangan Operasional", icon: "Wallet", menus: ["op_beban", "op_pembelian", "op_settings"] },
-    { name: "Analisis & Laporan", icon: "ChartColumnBig", menus: ["analytics", "op_analysis", "op_fraud", "op_seasonal", "reports"] },
+    { name: "Keuangan Operasional", icon: "Wallet", menus: ["op_beban", "op_pembelian", "op_pnl", "op_settings"] },
+    { name: "Analisis & Laporan", icon: "ChartColumnBig", menus: ["analytics", "op_analysis", "op_fraud", "op_seasonal", "op_kpi", "reports"] },
     { name: "Pembelajaran", icon: "GraduationCap", menus: ["elearning", "elearning_admin"] },
     { name: "System Support", icon: "Headset", menus: ["sys_review"] },
   ],
