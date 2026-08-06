@@ -1,16 +1,21 @@
 import type { Tone } from "@/lib/constants";
 
 /**
- * Pengajuan departemen ke Human Capital.
+ * Pengajuan antar-departemen.
  *
- * Dua jenis, dua alur persetujuan:
+ * Tiga jenis, tiga alur persetujuan:
  *  • rekrutmen — permintaan pegawai. HC ACC → direkrut. Menyuplai KPI
  *    "Jumlah Rekrutmen" (target = jumlah yang diminta, realisasi = yang direkrut).
  *  • pelatihan — permintaan program pelatihan. HC ACC → Finance ACC dana →
  *    dilaksanakan. Menyuplai KPI "Development / Pelatihan".
+ *  • design — permintaan materi desain ke tim Creative. Creative ACC →
+ *    dikerjakan → selesai. Tidak melewati Finance.
+ *
+ * Ketiganya memakai satu mesin status yang sama; hanya labelnya yang
+ * menyesuaikan jenis (lihat `statusMeta`).
  */
 
-export type HcRequestKind = "rekrutmen" | "pelatihan";
+export type HcRequestKind = "rekrutmen" | "pelatihan" | "design";
 
 export type HcRequestStatus =
   | "menunggu_hc"
@@ -22,8 +27,16 @@ export type HcRequestStatus =
   | "terlaksana";
 
 export const HC_REQUEST_KIND_LABEL: Record<HcRequestKind, string> = {
-  rekrutmen: "Permintaan Pegawai",
+  rekrutmen: "Permintaan Karyawan",
   pelatihan: "Pengajuan Pelatihan",
+  design: "Pengajuan Design",
+};
+
+/** Tim yang meninjau tiap jenis pengajuan (dipakai di label status & alur). */
+export const REVIEWER_LABEL: Record<HcRequestKind, string> = {
+  rekrutmen: "Human Capital",
+  pelatihan: "Human Capital",
+  design: "Creative",
 };
 
 export const HC_REQUEST_STATUS_META: Record<HcRequestStatus, { label: string; tone: Tone }> = {
@@ -36,6 +49,26 @@ export const HC_REQUEST_STATUS_META: Record<HcRequestStatus, { label: string; to
   terlaksana: { label: "Terlaksana", tone: "success" },
 };
 
+/** Label status yang menyesuaikan jenis pengajuan (desain tidak lewat HC/Finance). */
+export function statusMeta(kind: HcRequestKind, status: HcRequestStatus): { label: string; tone: Tone } {
+  if (kind !== "design") {
+    if (status === "terlaksana" && kind === "rekrutmen") return { label: "Terpenuhi", tone: "success" };
+    return HC_REQUEST_STATUS_META[status];
+  }
+  switch (status) {
+    case "menunggu_hc":
+      return { label: "Menunggu Creative", tone: "warning" };
+    case "ditolak_hc":
+      return { label: "Ditolak Creative", tone: "danger" };
+    case "disetujui_hc":
+      return { label: "Sedang Dikerjakan", tone: "cyan" };
+    case "terlaksana":
+      return { label: "Selesai", tone: "success" };
+    default:
+      return HC_REQUEST_STATUS_META[status];
+  }
+}
+
 /** Jenis pelatihan yang bisa dipilih (bebas ditambah lewat "Lainnya"). */
 export const TRAINING_TYPES = [
   "Onboarding / Orientasi",
@@ -45,6 +78,19 @@ export const TRAINING_TYPES = [
   "Barista / Kitchen Skill",
   "Hygiene & Food Safety",
   "Administrasi & Sistem",
+  "Lainnya",
+];
+
+/** Jenis materi desain — disamakan dengan kategori kerja tim Creative. */
+export const DESIGN_TYPES = [
+  "Instagram Post",
+  "Instagram Story",
+  "Instagram Reels",
+  "Poster / Print Out",
+  "Banner / Spanduk",
+  "Menu / Daftar Harga",
+  "Logo & Branding",
+  "Gojek / Website",
   "Lainnya",
 ];
 
@@ -62,6 +108,8 @@ export interface HcRequest {
   requesterName: string;
   title: string;
   description: string;
+  /** Nama orang yang dituju pengajuan ini (peserta, penerima desain, dsb). */
+  subjectName: string;
   /** rekrutmen */
   position: string | null;
   headcount: number;
@@ -73,6 +121,10 @@ export interface HcRequest {
   participantNames: string[];
   budget: number;
   budgetApproved: number;
+  /** design */
+  designType: string | null;
+  designSize: string | null;
+  /** Rencana pelaksanaan (pelatihan) / target mulai (rekrutmen) / deadline (design). */
   plannedDate: string | null;
   attachments: HcRequestAttachment[];
   status: HcRequestStatus;
@@ -87,14 +139,15 @@ export interface HcRequest {
 
 /** Langkah berikutnya yang wajar untuk sebuah pengajuan (dipakai tombol aksi). */
 export function nextActions(r: HcRequest): { hc: boolean; finance: boolean; complete: boolean } {
-  if (r.kind === "rekrutmen") {
-    return { hc: r.status === "menunggu_hc", finance: false, complete: r.status === "disetujui_hc" };
+  if (r.kind === "pelatihan") {
+    return {
+      hc: r.status === "menunggu_hc",
+      finance: r.status === "menunggu_finance",
+      complete: r.status === "disetujui_finance",
+    };
   }
-  return {
-    hc: r.status === "menunggu_hc",
-    finance: r.status === "menunggu_finance",
-    complete: r.status === "disetujui_finance",
-  };
+  // Rekrutmen & design: satu kali persetujuan, lalu ditutup saat selesai.
+  return { hc: r.status === "menunggu_hc", finance: false, complete: r.status === "disetujui_hc" };
 }
 
 export const isOpen = (s: HcRequestStatus) => s !== "terlaksana" && s !== "ditolak_hc" && s !== "ditolak_finance";
@@ -117,13 +170,13 @@ export interface RequestStep {
  * pemohon selalu tahu posisi berkasnya, bukan sekadar satu label status.
  */
 export function requestSteps(r: HcRequest): RequestStep[] {
-  const afterHc: HcRequestStatus[] = ["disetujui_hc", "menunggu_finance", "ditolak_finance", "disetujui_finance", "terlaksana"];
-  const hcState: StepState =
-    r.status === "ditolak_hc" ? "rejected" : afterHc.includes(r.status) ? "done" : "current";
+  const afterReview: HcRequestStatus[] = ["disetujui_hc", "menunggu_finance", "ditolak_finance", "disetujui_finance", "terlaksana"];
+  const reviewState: StepState =
+    r.status === "ditolak_hc" ? "rejected" : afterReview.includes(r.status) ? "done" : "current";
 
   const steps: RequestStep[] = [
     { label: "Diajukan", state: "done", detail: r.requesterName },
-    { label: "Persetujuan HC", state: hcState, detail: r.hcByName ?? undefined },
+    { label: `Persetujuan ${REVIEWER_LABEL[r.kind]}`, state: reviewState, detail: r.hcByName ?? undefined },
   ];
 
   if (r.kind === "pelatihan") {
@@ -142,9 +195,11 @@ export function requestSteps(r: HcRequest): RequestStep[] {
     });
   }
 
-  const readyToRun = r.kind === "rekrutmen" ? r.status === "disetujui_hc" : r.status === "disetujui_finance";
+  const readyToRun = r.kind === "pelatihan" ? r.status === "disetujui_finance" : r.status === "disetujui_hc";
+  const lastLabel =
+    r.kind === "rekrutmen" ? "Pegawai Diterima" : r.kind === "design" ? "Design Selesai" : "Pelatihan Terlaksana";
   steps.push({
-    label: r.kind === "rekrutmen" ? "Pegawai Diterima" : "Pelatihan Terlaksana",
+    label: lastLabel,
     state: r.status === "terlaksana" ? "done" : readyToRun ? "current" : "todo",
     detail:
       r.status === "terlaksana" && r.kind === "rekrutmen" ? `${r.recruited} dari ${r.headcount} orang` : undefined,

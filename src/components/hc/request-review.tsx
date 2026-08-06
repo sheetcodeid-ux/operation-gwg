@@ -96,7 +96,7 @@ function Actions({ r, mode, onDone }: { r: HcRequest; mode: Mode; onDone: () => 
         )}
         {step.complete && (
           <Button size="sm" onClick={() => setDialog("complete")}>
-            <CheckCircle2 className="size-4" /> Tandai Terlaksana
+            <CheckCircle2 className="size-4" /> {r.kind === "design" ? "Tandai Selesai" : "Tandai Terlaksana"}
           </Button>
         )}
         {dialog === "hc" && <HcDecideDialog r={r} onClose={() => setDialog(null)} onDone={onDone} />}
@@ -126,7 +126,15 @@ function HcDecideDialog({ r, onClose, onDone }: { r: HcRequest; onClose: () => v
     const res = await hcDecideRequestAction({ id: r.id, approve, note });
     setBusy(false);
     if (res.error) return toast.error(res.error);
-    toast.success(approve ? (r.kind === "pelatihan" ? "Disetujui — diteruskan ke Finance" : "Permintaan pegawai disetujui") : "Pengajuan ditolak");
+    toast.success(
+      approve
+        ? r.kind === "pelatihan"
+          ? "Disetujui — diteruskan ke Finance"
+          : r.kind === "design"
+            ? "Disetujui — design masuk antrian pengerjaan"
+            : "Permintaan pegawai disetujui"
+        : "Pengajuan ditolak",
+    );
     onClose();
     onDone();
   }
@@ -138,7 +146,9 @@ function HcDecideDialog({ r, onClose, onDone }: { r: HcRequest; onClose: () => v
           <p className="rounded-lg bg-muted/50 px-3 py-2 text-xs text-muted-foreground">
             {r.kind === "pelatihan"
               ? "Disetujui → diteruskan ke Finance untuk persetujuan dana."
-              : "Disetujui → permintaan masuk proses rekrutmen. Setelah pegawai diterima, tandai Terlaksana dan isi jumlah yang direkrut."}
+              : r.kind === "design"
+                ? "Disetujui → design masuk antrian pengerjaan tim Creative. Setelah jadi, tandai Selesai dan lampirkan hasilnya."
+                : "Disetujui → permintaan masuk proses rekrutmen. Setelah pegawai diterima, tandai Terlaksana dan isi jumlah yang direkrut."}
           </p>
           <Field label="Catatan (opsional)">
             <Textarea rows={3} value={note} onChange={(e) => setNote(e.target.value)} placeholder="Alasan / arahan…" />
@@ -204,6 +214,7 @@ function FinanceDecideDialog({ r, onClose, onDone }: { r: HcRequest; onClose: ()
 
 function CompleteDialog({ r, onClose, onDone }: { r: HcRequest; onClose: () => void; onDone: () => void }) {
   const isRecruit = r.kind === "rekrutmen";
+  const isDesign = r.kind === "design";
   const [recruited, setRecruited] = React.useState(String(r.headcount || 0));
   const [note, setNote] = React.useState("");
   const [files, setFiles] = React.useState<File[]>([]);
@@ -220,7 +231,7 @@ function CompleteDialog({ r, onClose, onDone }: { r: HcRequest; onClose: () => v
         attachments,
       });
       if (res.error) return toast.error(res.error);
-      toast.success("Ditandai terlaksana — masuk ke KPI Human Capital");
+      toast.success(isDesign ? "Design ditandai selesai" : "Ditandai terlaksana — masuk ke KPI Human Capital");
       onClose();
       onDone();
     } catch (e) {
@@ -237,7 +248,9 @@ function CompleteDialog({ r, onClose, onDone }: { r: HcRequest; onClose: () => v
           <p className="rounded-lg bg-brand-500/10 px-3 py-2 text-xs text-muted-foreground">
             {isRecruit
               ? "Jumlah yang direkrut dihitung otomatis sebagai realisasi KPI Jumlah Rekrutmen bulan ini."
-              : "Program yang terlaksana dihitung otomatis sebagai realisasi KPI Development / Pelatihan bulan ini."}
+              : isDesign
+                ? "Lampirkan hasil designnya agar pemohon bisa langsung mengunduh dari halaman pengajuannya."
+                : "Program yang terlaksana dihitung otomatis sebagai realisasi KPI Development / Pelatihan bulan ini."}
           </p>
           {isRecruit && (
             <Field label={`Jumlah Direkrut (dari ${r.headcount} diminta)`}>
@@ -245,10 +258,10 @@ function CompleteDialog({ r, onClose, onDone }: { r: HcRequest; onClose: () => v
             </Field>
           )}
           <Field
-            label={isRecruit ? "Bukti (offering letter / SK)" : "Bukti (laporan, daftar hadir, foto kegiatan)"}
+            label={isRecruit ? "Bukti (offering letter / SK)" : isDesign ? "Hasil design (JPG / PNG / PDF)" : "Bukti (laporan, daftar hadir, foto kegiatan)"}
             hint="PDF / JPG / PNG, maks 10 MB per berkas."
           >
-            <FilePicker files={files} onChange={setFiles} disabled={busy} label="Unggah bukti" />
+            <FilePicker files={files} onChange={setFiles} disabled={busy} label={isDesign ? "Unggah hasil design" : "Unggah bukti"} />
           </Field>
           <Field label="Catatan (opsional)">
             <Textarea rows={3} value={note} onChange={(e) => setNote(e.target.value)} />

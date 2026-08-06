@@ -24,6 +24,7 @@ const fromRow = (r: any): HcRequest => ({
   requesterName: r.requester_id ? userName(r.requester_id) : "—",
   title: r.title ?? "",
   description: r.description ?? "",
+  subjectName: r.subject_name ?? "",
   position: r.position ?? null,
   headcount: Number(r.headcount ?? 0),
   recruited: Number(r.recruited ?? 0),
@@ -32,6 +33,8 @@ const fromRow = (r: any): HcRequest => ({
   participantNames: (Array.isArray(r.participant_names) ? r.participant_names : []).map((n: any) => String(n)),
   budget: Number(r.budget ?? 0),
   budgetApproved: Number(r.budget_approved ?? 0),
+  designType: r.design_type ?? null,
+  designSize: r.design_size ?? null,
   plannedDate: r.planned_date ?? null,
   attachments: rawAttachments(r.attachments),
   status: (r.status ?? "menunggu_hc") as HcRequestStatus,
@@ -106,12 +109,15 @@ export interface CreateRequestInput {
   requesterId: string;
   title: string;
   description: string;
+  subjectName?: string;
   position?: string | null;
   headcount?: number;
   trainingType?: string | null;
   participants?: number;
   participantNames?: string[];
   budget?: number;
+  designType?: string | null;
+  designSize?: string | null;
   plannedDate?: string | null;
   attachments: HcRequestAttachment[];
 }
@@ -125,6 +131,7 @@ export async function createHcRequest(input: CreateRequestInput): Promise<{ id?:
     requester_id: input.requesterId,
     title: input.title,
     description: input.description ?? "",
+    subject_name: input.subjectName ?? "",
     position: input.position ?? null,
     headcount: input.headcount ?? 0,
     recruited: 0,
@@ -133,6 +140,8 @@ export async function createHcRequest(input: CreateRequestInput): Promise<{ id?:
     participant_names: (input.participantNames ?? []).map((n) => String(n).trim()).filter(Boolean).slice(0, 100),
     budget: input.budget ?? 0,
     budget_approved: 0,
+    design_type: input.designType ?? null,
+    design_size: input.designSize ?? null,
     planned_date: input.plannedDate || null,
     attachments: input.attachments.filter((a) => a?.path && a?.name).map((a) => ({ path: a.path, name: a.name })),
     status: "menunggu_hc" as HcRequestStatus,

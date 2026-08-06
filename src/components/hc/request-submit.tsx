@@ -13,7 +13,7 @@ import { MultiCombobox } from "@/components/ui/multi-combobox";
 import { SegmentedTabs } from "@/components/ui/segmented-tabs";
 import { Dialog, DialogContent, DialogTrigger, useDialogControl } from "@/components/ui/dialog";
 import { submitHcRequestAction } from "@/lib/actions/hc-requests";
-import { TRAINING_TYPES, fmtRupiah, type HcRequest, type HcRequestKind } from "@/lib/hc-request";
+import { DESIGN_TYPES, REVIEWER_LABEL, TRAINING_TYPES, fmtRupiah, type HcRequest, type HcRequestKind } from "@/lib/hc-request";
 import { FilePicker, RequestEmpty, RequestList, uploadAll } from "./request-shared";
 
 const COPY: Record<HcRequestKind, { new: string; title: string; formDesc: string; empty: string }> = {
@@ -28,6 +28,12 @@ const COPY: Record<HcRequestKind, { new: string; title: string; formDesc: string
     title: "Pengajuan Pelatihan",
     formDesc: "Disetujui Human Capital, lalu Finance menyetujui dananya sebelum pelatihan dijalankan.",
     empty: "Belum ada pengajuan. Klik “Ajukan Pelatihan” untuk mengirim program pelatihan ke Human Capital.",
+  },
+  design: {
+    new: "Ajukan Design",
+    title: "Pengajuan Design",
+    formDesc: "Diteruskan ke tim Creative. Lengkapi brief dan tenggat agar materi bisa dikerjakan tanpa bolak-balik.",
+    empty: "Belum ada pengajuan. Klik “Ajukan Design” untuk mengirim kebutuhan materi ke tim Creative.",
   },
 };
 
@@ -72,7 +78,7 @@ function FieldError({ children }: { children?: string }) {
   );
 }
 
-type Errors = Partial<Record<"title" | "position" | "headcount" | "trainingType" | "participants", string>>;
+type Errors = Partial<Record<"title" | "position" | "headcount" | "trainingType" | "participants" | "designType" | "subjectName", string>>;
 
 function RequestForm({ kind, members }: { kind: HcRequestKind; members: DeptMember[] }) {
   const router = useRouter();
@@ -85,6 +91,10 @@ function RequestForm({ kind, members }: { kind: HcRequestKind; members: DeptMemb
   const [headcount, setHeadcount] = React.useState("1");
   const [trainingType, setTrainingType] = React.useState(TRAINING_TYPES[0]);
   const [customType, setCustomType] = React.useState("");
+  const [designType, setDesignType] = React.useState(DESIGN_TYPES[0]);
+  const [customDesign, setCustomDesign] = React.useState("");
+  const [designSize, setDesignSize] = React.useState("");
+  const [subjectName, setSubjectName] = React.useState("");
   const [participantIds, setParticipantIds] = React.useState<string[]>([]);
   const [participants, setParticipants] = React.useState("");
   const [budget, setBudget] = React.useState("");
@@ -93,7 +103,9 @@ function RequestForm({ kind, members }: { kind: HcRequestKind; members: DeptMemb
   const [errors, setErrors] = React.useState<Errors>({});
   const [busy, setBusy] = React.useState(false);
 
+  const isDesign = kind === "design";
   const resolvedType = trainingType === "Lainnya" ? customType.trim() : trainingType;
+  const resolvedDesign = designType === "Lainnya" ? customDesign.trim() : designType;
   const budgetNum = Number(budget) || 0;
 
   // Peserta boleh dipilih dari anggota departemen; bila tidak ada yang dipilih
@@ -110,6 +122,12 @@ function RequestForm({ kind, members }: { kind: HcRequestKind; members: DeptMemb
     if (isTraining) {
       if (!resolvedType) e.trainingType = "Sebutkan jenis pelatihannya.";
       if (participantCount < 1) e.participants = "Pilih pesertanya atau isi jumlah peserta.";
+      if (participantNames.length === 0 && !subjectName.trim()) {
+        e.subjectName = "Tulis nama peserta agar jelas pelatihan ini untuk siapa.";
+      }
+    } else if (isDesign) {
+      if (!resolvedDesign) e.designType = "Sebutkan jenis designnya.";
+      if (!subjectName.trim()) e.subjectName = "Tulis nama pemohon atau untuk siapa design ini.";
     } else {
       if (!position.trim()) e.position = "Posisi yang diminta wajib diisi.";
       if (Number(headcount) < 1) e.headcount = "Jumlah minimal 1 orang.";
@@ -131,15 +149,18 @@ function RequestForm({ kind, members }: { kind: HcRequestKind; members: DeptMemb
         description: description.trim(),
         position: position.trim(),
         headcount: Number(headcount) || 0,
-        trainingType: resolvedType,
+        subjectName: subjectName.trim(),
+        trainingType: isTraining ? resolvedType : "",
         participants: participantCount,
         participantNames,
         budget: budgetNum,
+        designType: isDesign ? resolvedDesign : "",
+        designSize: designSize.trim(),
         plannedDate,
         attachments,
       });
       if (res.error) return toast.error(res.error);
-      toast.success("Pengajuan terkirim ke Human Capital");
+      toast.success(`Pengajuan terkirim ke ${REVIEWER_LABEL[kind]}`);
       setOpen(false);
       router.refresh();
     } catch (err) {
@@ -157,12 +178,63 @@ function RequestForm({ kind, members }: { kind: HcRequestKind; members: DeptMemb
             onChange={(e) => setTitle(e.target.value)}
             aria-invalid={!!errors.title}
             className={cn(errors.title && "border-red-500/60")}
-            placeholder={isTraining ? "cth. Pelatihan Service Excellence Batch 1" : "cth. Penambahan Barista Outlet Ketapang"}
+            placeholder={
+              isTraining
+                ? "cth. Pelatihan Service Excellence Batch 1"
+                : isDesign
+                  ? "cth. Poster Promo Ramadan Nordu Coffee"
+                  : "cth. Penambahan Barista Outlet Ketapang"
+            }
           />
         <FieldError>{errors.title}</FieldError>
       </Field>
 
-      {isTraining ? (
+      {isDesign ? (
+        <>
+          <Field label="Jenis Design">
+            <SegmentedTabs
+              value={designType === "Lainnya" ? "Lainnya" : "preset"}
+              onChange={(v) => setDesignType(v === "Lainnya" ? "Lainnya" : DESIGN_TYPES[0])}
+              items={[
+                { value: "preset", label: "Pilih dari daftar" },
+                { value: "Lainnya", label: "Lainnya" },
+              ]}
+            />
+            <div className="mt-2">
+              {designType === "Lainnya" ? (
+                <Input value={customDesign} onChange={(e) => setCustomDesign(e.target.value)} placeholder="Tulis jenis design…" />
+              ) : (
+                <Combobox
+                  value={designType}
+                  onChange={setDesignType}
+                  options={DESIGN_TYPES.filter((t) => t !== "Lainnya").map((t) => ({ value: t, label: t }))}
+                  searchPlaceholder="Cari jenis…"
+                />
+              )}
+            </div>
+            <FieldError>{errors.designType}</FieldError>
+          </Field>
+
+          <Field label="Nama Pemohon / Untuk Siapa" hint="Nama orang atau outlet yang memakai design ini.">
+            <Input
+              value={subjectName}
+              onChange={(e) => setSubjectName(e.target.value)}
+              className={cn(errors.subjectName && "border-red-500/60")}
+              placeholder="cth. Nordu Coffee Banjarbaru — SPV Adan"
+            />
+            <FieldError>{errors.subjectName}</FieldError>
+          </Field>
+
+          <div className="grid gap-3 sm:grid-cols-2">
+            <Field label="Ukuran / Format" hint="Kosongkan bila mengikuti standar tim Creative.">
+              <Input value={designSize} onChange={(e) => setDesignSize(e.target.value)} placeholder="cth. 1080 x 1350 px" />
+            </Field>
+            <Field label="Dibutuhkan Tanggal">
+              <DatePicker value={plannedDate} onChange={setPlannedDate} />
+            </Field>
+          </div>
+        </>
+      ) : isTraining ? (
         <>
           <Field label="Jenis Pelatihan">
             <SegmentedTabs
@@ -214,6 +286,17 @@ function RequestForm({ kind, members }: { kind: HcRequestKind; members: DeptMemb
             )}
             <FieldError>{errors.participants}</FieldError>
           </Field>
+          {participantNames.length === 0 && (
+            <Field label="Nama Peserta" hint="Isi bila peserta tidak ada di daftar anggota departemen.">
+              <Input
+                value={subjectName}
+                onChange={(e) => setSubjectName(e.target.value)}
+                className={cn(errors.subjectName && "border-red-500/60")}
+                placeholder="cth. Gita Ramahdani, Bryan Jourberts"
+              />
+              <FieldError>{errors.subjectName}</FieldError>
+            </Field>
+          )}
           <div className="grid gap-3 sm:grid-cols-2">
             <Field
               label="Jumlah Peserta"
@@ -266,26 +349,40 @@ function RequestForm({ kind, members }: { kind: HcRequestKind; members: DeptMemb
         </>
       )}
 
-      <Field label={isTraining ? "Tujuan Pelatihan" : "Alasan Permintaan"}>
+      <Field label={isDesign ? "Brief Design" : isTraining ? "Tujuan Pelatihan" : "Alasan Permintaan"}>
         <Textarea
           rows={3}
           value={description}
           onChange={(e) => setDescription(e.target.value)}
-          placeholder={isTraining ? "Tujuan pelatihan, materi, narasumber…" : "Alasan penambahan, beban kerja saat ini…"}
+          placeholder={
+            isDesign
+              ? "Pesan yang ingin disampaikan, teks/copy yang harus tampil, warna atau gaya yang diinginkan…"
+              : isTraining
+                ? "Tujuan pelatihan, materi, narasumber…"
+                : "Alasan penambahan, beban kerja saat ini…"
+          }
         />
       </Field>
 
       <Field
-        label={isTraining ? "Lampiran (proposal / materi / foto)" : "Lampiran (formulir permintaan pegawai)"}
+        label={
+          isDesign
+            ? "Referensi (contoh design, foto produk, logo)"
+            : isTraining
+              ? "Lampiran (proposal / materi / foto)"
+              : "Lampiran (formulir permintaan pegawai)"
+        }
         hint="PDF / JPG / PNG, maks 10 MB per berkas."
       >
         <FilePicker files={files} onChange={setFiles} disabled={busy} />
       </Field>
 
       <p className="rounded-lg bg-muted/50 px-3 py-2 text-xs text-muted-foreground">
-        {isTraining
-          ? "Setelah dikirim: ACC Human Capital → persetujuan dana Finance → pelatihan dijalankan → HC menandai terlaksana."
-          : "Setelah dikirim: ACC Human Capital → proses rekrutmen → HC menandai jumlah pegawai yang diterima."}
+        {isDesign
+          ? "Setelah dikirim: ACC tim Creative → design dikerjakan → ditandai selesai beserta hasilnya."
+          : isTraining
+            ? "Setelah dikirim: ACC Human Capital → persetujuan dana Finance → pelatihan dijalankan → HC menandai terlaksana."
+            : "Setelah dikirim: ACC Human Capital → proses rekrutmen → HC menandai jumlah pegawai yang diterima."}
       </p>
 
       <div className="flex justify-end gap-2 pt-1">

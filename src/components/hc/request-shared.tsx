@@ -1,15 +1,16 @@
 "use client";
 
 import * as React from "react";
-import { Check, ChevronDown, FileText, GraduationCap, Image as ImageIcon, Paperclip, Upload, UserPlus, Users, X } from "lucide-react";
+import { Check, ChevronDown, FileText, GraduationCap, Image as ImageIcon, Palette, Paperclip, Upload, UserPlus, Users, X } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
+import { DetailRows, DetailTitle, type DetailRow } from "@/components/ui/detail-rows";
 import { uploadHcRequestFileAction } from "@/lib/actions/hc-requests";
 import {
-  HC_REQUEST_STATUS_META,
   fmtRupiah,
   requestSteps,
+  statusMeta,
   type HcRequest,
   type HcRequestAttachment,
   type StepState,
@@ -143,65 +144,70 @@ export function RequestTimeline({ r }: { r: HcRequest }) {
   );
 }
 
-/** Satu baris ringkas "Label — isi", tanpa pemotongan teks. */
-function Line({ label, children }: { label: string; children: React.ReactNode }) {
-  return (
-    <div className="flex flex-wrap gap-x-1.5 text-xs">
-      <span className="text-muted-foreground">{label}</span>
-      <span className="min-w-0 font-medium text-foreground">{children}</span>
-    </div>
-  );
-}
-
 /** Detail lengkap satu pengajuan (isi panel yang terbuka saat kartu diklik). */
 function RequestDetail({ r }: { r: HcRequest }) {
+  const rows: DetailRow[] = [
+    { label: "Departemen", value: r.department || "—" },
+    { label: "Pemohon", value: r.requesterName },
+    { label: "Diajukan", value: fmtDate(r.createdAt) },
+  ];
+
+  if (r.kind === "rekrutmen") {
+    rows.push({ label: "Posisi", value: r.position || "—" });
+    rows.push({ label: "Jumlah diminta", value: `${r.headcount} orang` });
+    if (r.plannedDate) rows.push({ label: "Target mulai kerja", value: fmtDate(r.plannedDate) });
+    if (r.status === "terlaksana") rows.push({ label: "Direkrut", value: `${r.recruited} orang` });
+  } else if (r.kind === "pelatihan") {
+    rows.push({ label: "Jenis pelatihan", value: r.trainingType || "—" });
+    rows.push({ label: "Jumlah peserta", value: `${r.participants} orang` });
+    rows.push({ label: "Estimasi biaya", value: fmtRupiah(r.budget) });
+    if (r.budgetApproved > 0) rows.push({ label: "Dana disetujui", value: fmtRupiah(r.budgetApproved) });
+    if (r.plannedDate) rows.push({ label: "Rencana pelaksanaan", value: fmtDate(r.plannedDate) });
+  } else {
+    rows.push({ label: "Jenis design", value: r.designType || "—" });
+    if (r.designSize) rows.push({ label: "Ukuran / format", value: r.designSize });
+    if (r.subjectName) rows.push({ label: "Untuk", value: r.subjectName });
+    if (r.plannedDate) rows.push({ label: "Dibutuhkan", value: fmtDate(r.plannedDate) });
+  }
+
+  const noteLabel = r.kind === "design" ? "Catatan Creative" : "Catatan HC";
+
   return (
     <div className="grid gap-4 sm:grid-cols-2">
-      <div className="space-y-2">
-        <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Rincian</p>
-        <Line label="Departemen">{r.department}</Line>
-        <Line label="Pemohon">{r.requesterName}</Line>
-        <Line label="Diajukan">{fmtDate(r.createdAt)}</Line>
-        {r.kind === "rekrutmen" ? (
-          <>
-            <Line label="Posisi">{r.position || "—"}</Line>
-            <Line label="Jumlah diminta">{r.headcount} orang</Line>
-            {r.plannedDate && <Line label="Target mulai kerja">{fmtDate(r.plannedDate)}</Line>}
-            {r.status === "terlaksana" && <Line label="Direkrut">{r.recruited} orang</Line>}
-          </>
-        ) : (
-          <>
-            <Line label="Jenis pelatihan">{r.trainingType || "—"}</Line>
-            <Line label="Jumlah peserta">{r.participants} orang</Line>
-            <Line label="Estimasi biaya">{fmtRupiah(r.budget)}</Line>
-            {r.budgetApproved > 0 && <Line label="Dana disetujui">{fmtRupiah(r.budgetApproved)}</Line>}
-            {r.plannedDate && <Line label="Rencana pelaksanaan">{fmtDate(r.plannedDate)}</Line>}
-          </>
-        )}
+      <div className="space-y-3">
+        <div>
+          <DetailTitle>Rincian</DetailTitle>
+          <DetailRows rows={rows} />
+        </div>
 
         {r.participantNames.length > 0 && (
-          <div className="pt-1">
-            <p className="mb-1 flex items-center gap-1 text-[11px] text-muted-foreground">
-              <Users className="size-3" /> Peserta
-            </p>
+          <div>
+            <DetailTitle>Peserta</DetailTitle>
             <div className="flex flex-wrap gap-1">
               {r.participantNames.map((n) => (
-                <span key={n} className="rounded-md border border-border bg-muted/40 px-1.5 py-0.5 text-[11px] text-foreground/85">{n}</span>
+                <span key={n} className="inline-flex items-center gap-1 rounded-md border border-border bg-muted/40 px-1.5 py-0.5 text-[11px] text-foreground/85">
+                  <Users className="size-3 shrink-0 text-muted-foreground" />
+                  {n}
+                </span>
               ))}
             </div>
           </div>
         )}
 
         {r.description && (
-          <div className="pt-1">
-            <p className="mb-1 text-[11px] text-muted-foreground">{r.kind === "rekrutmen" ? "Alasan permintaan" : "Tujuan pelatihan"}</p>
-            <p className="whitespace-pre-wrap text-xs leading-relaxed text-foreground/85">{r.description}</p>
+          <div>
+            <DetailTitle>
+              {r.kind === "rekrutmen" ? "Alasan permintaan" : r.kind === "design" ? "Brief design" : "Tujuan pelatihan"}
+            </DetailTitle>
+            <p className="whitespace-pre-wrap rounded-xl border border-border bg-muted/40 px-3 py-2 text-xs leading-relaxed text-foreground/85">
+              {r.description}
+            </p>
           </div>
         )}
 
         {r.attachments.length > 0 && (
-          <div className="pt-1">
-            <p className="mb-1 text-[11px] text-muted-foreground">Lampiran</p>
+          <div>
+            <DetailTitle>Lampiran</DetailTitle>
             <div className="flex flex-wrap gap-1.5">
               {r.attachments.map((a, i) => <FileChip key={i} a={a} />)}
             </div>
@@ -209,23 +215,20 @@ function RequestDetail({ r }: { r: HcRequest }) {
         )}
 
         {(r.hcNote || r.financeNote) && (
-          <div className="space-y-1 pt-1">
-            {r.hcNote && (
-              <p className="rounded-lg bg-muted/60 px-2.5 py-1.5 text-[11px] leading-relaxed text-muted-foreground">
-                <span className="font-medium text-foreground">Catatan HC:</span> {r.hcNote}
-              </p>
-            )}
-            {r.financeNote && (
-              <p className="rounded-lg bg-muted/60 px-2.5 py-1.5 text-[11px] leading-relaxed text-muted-foreground">
-                <span className="font-medium text-foreground">Catatan Finance:</span> {r.financeNote}
-              </p>
-            )}
+          <div>
+            <DetailTitle>Catatan</DetailTitle>
+            <DetailRows
+              rows={[
+                { label: noteLabel, value: r.hcNote, skipEmpty: true },
+                { label: "Catatan Finance", value: r.financeNote, skipEmpty: true },
+              ]}
+            />
           </div>
         )}
       </div>
 
       <div>
-        <p className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Alur Persetujuan</p>
+        <DetailTitle>Alur Persetujuan</DetailTitle>
         <RequestTimeline r={r} />
       </div>
     </div>
@@ -246,26 +249,33 @@ function RequestCard({
   onToggle: () => void;
   actions?: React.ReactNode;
 }) {
-  const st = HC_REQUEST_STATUS_META[r.status];
+  const st = statusMeta(r.kind, r.status);
   const steps = requestSteps(r);
-  const active = steps.find((s) => s.state === "current" || s.state === "rejected");
-  const Icon = r.kind === "pelatihan" ? GraduationCap : UserPlus;
+  const active = steps.find((s) => s.state === "current");
+  const Icon = r.kind === "pelatihan" ? GraduationCap : r.kind === "design" ? Palette : UserPlus;
   const bodyId = `req-${r.id}`;
 
+  // Nama yang dituju selalu ikut tampil — supaya jelas ini untuk siapa.
+  const who = r.subjectName || (r.participantNames.length > 0 ? r.participantNames.join(", ") : "");
   const subtitle =
     r.kind === "rekrutmen"
-      ? `${r.position || "Posisi belum diisi"} · ${r.headcount} orang · ${fmtDate(r.createdAt)}`
-      : `${r.trainingType || "Jenis belum diisi"} · ${r.participants} peserta · ${fmtDate(r.createdAt)}`;
+      ? `${r.position || "Posisi belum diisi"} · ${r.headcount} orang`
+      : r.kind === "design"
+        ? `${r.designType || "Jenis belum diisi"}${who ? ` · ${who}` : ""}`
+        : `${r.trainingType || "Jenis belum diisi"} · ${r.participants} peserta${who ? ` · ${who}` : ""}`;
 
   return (
     <div className="rounded-xl border border-border bg-card p-3.5">
-      <div className="flex flex-wrap items-center gap-3">
+      {/* Badge diletakkan di baris sendiri di bawah judul: label status di sini
+          bisa sepanjang "Menunggu ACC Finance", dan bila diletakkan sebaris ia
+          menyusutkan judul sampai hilang di layar ponsel. */}
+      <div className="flex items-start gap-3">
         <button
           type="button"
           onClick={onToggle}
           aria-expanded={open}
           aria-controls={bodyId}
-          className="flex min-w-0 flex-1 items-center gap-3 text-left"
+          className="flex min-w-0 flex-1 items-start gap-3 text-left"
         >
           <span className="grid size-9 shrink-0 place-items-center rounded-lg bg-muted text-muted-foreground">
             <Icon className="size-4" />
@@ -273,19 +283,26 @@ function RequestCard({
           <span className="min-w-0 flex-1">
             <span className="block truncate text-sm font-medium text-foreground">{r.title}</span>
             <span className="block truncate text-xs text-muted-foreground">{subtitle}</span>
+            <span className="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-1">
+              <Badge tone={st.tone}>{st.label}</Badge>
+              <span className="text-[11px] text-muted-foreground">
+                {r.requesterName} · {fmtDate(r.createdAt)}
+                {active ? ` · menunggu ${active.label}` : ""}
+              </span>
+            </span>
           </span>
         </button>
-        <Badge tone={st.tone}>{st.label}</Badge>
-        {active && <span className="text-xs text-muted-foreground">Menunggu {active.label}</span>}
-        {actions}
-        <button
-          type="button"
-          onClick={onToggle}
-          aria-label={open ? "Tutup rincian" : "Lihat rincian"}
-          className="grid size-8 shrink-0 place-items-center rounded-lg text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-        >
-          <ChevronDown className={cn("size-4 transition-transform duration-200", open && "rotate-180")} />
-        </button>
+        <div className="flex shrink-0 items-center gap-2">
+          {actions}
+          <button
+            type="button"
+            onClick={onToggle}
+            aria-label={open ? "Tutup rincian" : "Lihat rincian"}
+            className="grid size-8 shrink-0 place-items-center rounded-lg text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+          >
+            <ChevronDown className={cn("size-4 transition-transform duration-200", open && "rotate-180")} />
+          </button>
+        </div>
       </div>
 
       <div id={bodyId} className={cn("grid transition-[grid-template-rows] duration-200", open ? "grid-rows-[1fr]" : "grid-rows-[0fr]")}>

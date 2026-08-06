@@ -1,31 +1,15 @@
 "use client";
 
-import * as React from "react";
 import Link from "next/link";
-import { Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { myHcRequestsAction } from "@/lib/actions/hc-requests";
 import type { HcRequest } from "@/lib/hc-request";
 import { RequestEmpty, RequestList } from "./request-shared";
 
 const LIMIT = 4;
 
-/** Empat pengajuan terakhir departemen — pintasan dari halaman Pengajuan. */
-export function RecentRequests() {
-  const [rows, setRows] = React.useState<HcRequest[] | null>(null);
-
-  React.useEffect(() => {
-    void myHcRequestsAction().then(setRows);
-  }, []);
-
-  if (rows === null) {
-    return (
-      <div className="flex items-center gap-2 py-8 text-sm text-muted-foreground">
-        <Loader2 className="size-4 animate-spin" /> Memuat pengajuan…
-      </div>
-    );
-  }
-
+/** Pengajuan terakhir departemen — datanya ikut dari halaman (tanpa muat ulang
+ *  di sisi peramban) supaya halaman langsung tampil begitu dibuka. */
+export function RecentRequests({ rows }: { rows: HcRequest[] }) {
   if (rows.length === 0) {
     return <RequestEmpty>Belum ada pengajuan. Pilih salah satu kategori di atas untuk membuat pengajuan pertama departemen Anda.</RequestEmpty>;
   }
@@ -35,11 +19,14 @@ export function RecentRequests() {
       <RequestList rows={rows.slice(0, LIMIT)} />
       {rows.length > LIMIT && (
         <div className="flex flex-wrap gap-2">
-          <Button size="sm" variant="outline" render={<Link href="/pengajuan/karyawan" />}>
-            Lihat permintaan karyawan
+          <Button size="sm" variant="outline" render={<Link href="/pengajuan/karyawan" prefetch />}>
+            Permintaan karyawan
           </Button>
-          <Button size="sm" variant="outline" render={<Link href="/pengajuan/pelatihan" />}>
-            Lihat pengajuan pelatihan
+          <Button size="sm" variant="outline" render={<Link href="/pengajuan/pelatihan" prefetch />}>
+            Pengajuan pelatihan
+          </Button>
+          <Button size="sm" variant="outline" render={<Link href="/pengajuan/design" prefetch />}>
+            Pengajuan design
           </Button>
         </div>
       )}

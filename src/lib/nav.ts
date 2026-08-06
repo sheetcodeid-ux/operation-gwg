@@ -28,6 +28,7 @@ export type MenuKey =
   | "hc_reqreview"
   | "hc_training"
   | "fin_training"
+  | "creative_design"
   | "mc_events"
   | "assessment"
   | "hpp_dash"
@@ -100,6 +101,7 @@ export const NAV_MENUS: Omit<NavItem, "section" | "group" | "groupIcon">[] = [
   { key: "hc_reqreview", label: "Permintaan Karyawan", href: "/hc/permintaan", icon: "ClipboardCheck" },
   { key: "hc_training", label: "Pelatihan", href: "/hc/pelatihan", icon: "GraduationCap" },
   { key: "fin_training", label: "ACC Dana Pelatihan", href: "/finance/pelatihan", icon: "Wallet" },
+  { key: "creative_design", label: "Antrian Design", href: "/creative/design", icon: "Palette" },
   { key: "mc_events", label: "Event Tracker", href: "/marcomm/events", icon: "Megaphone" },
   { key: "reports", label: "Reports", href: "/reports", icon: "FileText" },
   { key: "assessment", label: "Assessment Golongan", href: "/assessment", icon: "Award" },
@@ -238,6 +240,7 @@ export const DIVISION_GROUPS: Partial<Record<Division, NavGroupDef[]>> = {
     { name: "Administrasi Personalia", icon: "FolderInput", menus: ["hc_review"] },
     { name: "Kinerja & Penilaian", icon: "Target", menus: ["hc_kpi", "assessment"] },
   ],
+  Creative: [{ name: "Permintaan Masuk", icon: "Palette", menus: ["creative_design"] }],
   Finance: [{ name: "Persetujuan Dana", icon: "Wallet", menus: ["fin_training"] }],
   "Marketing Communication": [{ name: "Event & Promo", icon: "Megaphone", menus: ["mc_events"] }],
 };
@@ -252,7 +255,7 @@ const DIVISION_MENUS: { division: Division; menus: MenuKey[] }[] = [
   { division: "Human Capital", menus: ["work", "hc_review", "hc_kpi", "hc_reqreview", "hc_training", "assessment"] },
   // New department-aligned divisions — Work Tracker only for now.
   { division: "Finance", menus: ["work", "fin_training"] },
-  { division: "Creative", menus: ["work"] },
+  { division: "Creative", menus: ["work", "creative_design"] },
   { division: "Project Manager", menus: ["work"] },
   { division: "Auditor", menus: ["work"] },
   { division: "Executive Assistant", menus: ["work"] },

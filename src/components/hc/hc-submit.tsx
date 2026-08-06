@@ -2,7 +2,7 @@
 
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { Download, FileText, FileUp, Loader2, Paperclip, Plus, X } from "lucide-react";
+import { ChevronDown, Download, FileText, FileUp, Loader2, Paperclip, Plus, X } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -10,6 +10,9 @@ import { Dialog, DialogContent, DialogTrigger, useDialogControl } from "@/compon
 import { Field, Input, Textarea } from "@/components/ui/input";
 import { Combobox } from "@/components/ui/combobox";
 import { DatePicker } from "@/components/ui/date-picker";
+import { DetailRows, DetailTitle } from "@/components/ui/detail-rows";
+import { StatusFilter } from "@/components/ui/status-filter";
+import { cn } from "@/lib/utils";
 import { submitHcRequestAction, uploadHcKtpAction } from "@/lib/actions/hc";
 import {
   forceDownload,
@@ -20,6 +23,7 @@ import {
   HC_CONTRACT_LIKE,
   type HcDetails,
   type HcDocType,
+  type HcStatus,
   type HcSubmission,
 } from "@/lib/hc-shared";
 
@@ -198,8 +202,12 @@ function FilePick({ file, onPick, accept }: { file: File | null; onPick: (f: Fil
   );
 }
 
-/** The supervisor's own list of submissions (read-only, download when done). */
+/** Daftar pengajuan dokumen milik pemohon — kartu yang bisa dibuka + penyaring
+ *  status, seragam dengan halaman Pengajuan lainnya. */
 export function SubmissionList({ rows }: { rows: HcSubmission[] }) {
+  const [status, setStatus] = useState("");
+  const [openId, setOpenId] = useState<string | null>(null);
+
   if (rows.length === 0) {
     return (
       <div className="rounded-xl border border-dashed border-border p-10 text-center text-sm text-muted-foreground">
@@ -207,42 +215,141 @@ export function SubmissionList({ rows }: { rows: HcSubmission[] }) {
       </div>
     );
   }
+
+  const counts = (v: HcStatus) => rows.filter((r) => r.status === v).length;
+  const shown = status ? rows.filter((r) => r.status === status) : rows;
+
   return (
-    <div className="space-y-2.5">
-      {rows.map((r) => {
-        const st = HC_STATUS_META[r.status];
-        return (
-          <div key={r.id} className="rounded-xl border border-border bg-card p-3.5">
-            <div className="flex flex-wrap items-center gap-3">
-              <div className="grid size-9 shrink-0 place-items-center rounded-lg bg-muted text-muted-foreground">
-                <FileText className="size-4" />
+    <div className="space-y-3">
+      <StatusFilter
+        value={status}
+        onChange={setStatus}
+        allCount={rows.length}
+        options={(["waiting", "processing", "pending", "done"] as HcStatus[]).map((v) => ({
+          value: v,
+          label: HC_STATUS_META[v].label,
+          count: counts(v),
+        }))}
+      />
+
+      {shown.length === 0 ? (
+        <div className="rounded-xl border border-dashed border-border p-10 text-center text-sm text-muted-foreground">
+          Tidak ada pengajuan dengan status ini.
+        </div>
+      ) : (
+        <div className="space-y-2.5">
+          {shown.map((r) => {
+            const st = HC_STATUS_META[r.status];
+            const open = openId === r.id;
+            const toggle = () => setOpenId((cur) => (cur === r.id ? null : r.id));
+            const d = r.details ?? {};
+            return (
+              <div key={r.id} className="rounded-xl border border-border bg-card p-3.5">
+                <div className="flex items-start gap-3">
+                  <button
+                    type="button"
+                    onClick={toggle}
+                    aria-expanded={open}
+                    aria-controls={`doc-${r.id}`}
+                    className="flex min-w-0 flex-1 items-start gap-3 text-left"
+                  >
+                    <span className="grid size-9 shrink-0 place-items-center rounded-lg bg-muted text-muted-foreground">
+                      <FileText className="size-4" />
+                    </span>
+                    <span className="min-w-0 flex-1">
+                      <span className="block truncate text-sm font-medium text-foreground">{r.employeeName}</span>
+                      <span className="block truncate text-xs text-muted-foreground">
+                        {HC_DOC_LABEL[r.docType]} · {r.outletName}
+                      </span>
+                      <span className="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-1">
+                        <Badge tone={st.tone}>{st.label}</Badge>
+                        <span className="text-[11px] text-muted-foreground">
+                          {r.supervisorName} · {fmtDate(r.createdAt)}
+                        </span>
+                      </span>
+                    </span>
+                  </button>
+                  <div className="flex shrink-0 items-center gap-2">
+                    {r.status === "done" && r.finalDocUrl && (
+                      <a href={forceDownload(r.finalDocUrl, `${r.employeeName} - ${HC_DOC_LABEL[r.docType]}.pdf`)} download>
+                        <Button size="sm" variant="subtle">
+                          <Download className="size-4" /> Unduh
+                        </Button>
+                      </a>
+                    )}
+                    <button
+                      type="button"
+                      onClick={toggle}
+                      aria-label={open ? "Tutup rincian" : "Lihat rincian"}
+                      className="grid size-8 shrink-0 place-items-center rounded-lg text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+                    >
+                      <ChevronDown className={cn("size-4 transition-transform duration-200", open && "rotate-180")} />
+                    </button>
+                  </div>
+                </div>
+
+                <div id={`doc-${r.id}`} className={cn("grid transition-[grid-template-rows] duration-200", open ? "grid-rows-[1fr]" : "grid-rows-[0fr]")}>
+                  <div className="overflow-hidden">
+                    <div className="mt-3 space-y-3 border-t border-border pt-3">
+                      <DetailRows
+                        rows={[
+                          { label: "Nama karyawan", value: r.employeeName },
+                          { label: "Jenis dokumen", value: HC_DOC_LABEL[r.docType] },
+                          { label: "Cabang", value: r.outletName },
+                          { label: "Diajukan oleh", value: r.supervisorName },
+                          { label: "Tanggal pengajuan", value: fmtDate(r.createdAt) },
+                          { label: "Nama ibu kandung", value: d.motherName, skipEmpty: true },
+                          { label: "Posisi / jabatan", value: d.position, skipEmpty: true },
+                          { label: "Durasi kontrak", value: d.contractDuration, skipEmpty: true },
+                          { label: "Tanggal mulai", value: d.startDate ? fmtDate(d.startDate) : "", skipEmpty: true },
+                          { label: "Gaji", value: d.salary, skipEmpty: true },
+                          { label: "Tingkat teguran", value: d.warningLevel, skipEmpty: true },
+                          { label: "Diproses oleh", value: r.processedByName, skipEmpty: true },
+                          { label: "Diselesaikan oleh", value: r.completedByName, skipEmpty: true },
+                          { label: "Tanggal selesai", value: r.completedAt ? fmtDate(r.completedAt) : "", skipEmpty: true },
+                        ]}
+                      />
+
+                      {d.chronology && (
+                        <div>
+                          <DetailTitle>Kronologi</DetailTitle>
+                          <p className="whitespace-pre-wrap rounded-xl border border-border bg-muted/40 px-3 py-2 text-xs leading-relaxed text-foreground/85">
+                            {d.chronology}
+                          </p>
+                        </div>
+                      )}
+
+                      {r.hcNote && (
+                        <div>
+                          <DetailTitle>Keterangan Human Capital</DetailTitle>
+                          <p className="whitespace-pre-wrap rounded-xl border border-border bg-muted/40 px-3 py-2 text-xs leading-relaxed text-foreground/85">
+                            {r.hcNote}
+                          </p>
+                        </div>
+                      )}
+
+                      {r.ktpUrl && (
+                        <div>
+                          <DetailTitle>Berkas KTP</DetailTitle>
+                          <a
+                            href={r.ktpUrl}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="inline-flex max-w-full items-center gap-1.5 rounded-md border border-border bg-background/40 px-2 py-1 text-[11px] text-foreground/80 hover:bg-muted/50"
+                          >
+                            <Paperclip className="size-3 shrink-0" />
+                            <span className="truncate">{d.ktpName ?? "Buka berkas KTP"}</span>
+                          </a>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
               </div>
-              <div className="min-w-0 flex-1">
-                <p className="truncate text-sm font-medium text-foreground">{r.employeeName}</p>
-                <p className="truncate text-xs text-muted-foreground">
-                  {HC_DOC_LABEL[r.docType]} · {r.outletName} · {fmtDate(r.createdAt)}
-                </p>
-              </div>
-              <Badge tone={st.tone}>{st.label}</Badge>
-              {r.status === "done" && r.finalDocUrl ? (
-                <a href={forceDownload(r.finalDocUrl, `${r.employeeName} - ${HC_DOC_LABEL[r.docType]}.pdf`)} download>
-                  <Button size="sm" variant="subtle">
-                    <Download className="size-4" /> Unduh
-                  </Button>
-                </a>
-              ) : r.status === "waiting" || r.status === "processing" ? (
-                <span className="text-xs text-muted-foreground">Menunggu HC</span>
-              ) : null}
-            </div>
-            {/* Awaiting the file, or done via note only (e.g. BPJS): show HC's keterangan. */}
-            {(r.status === "pending" || (r.status === "done" && !r.finalDocUrl)) && r.hcNote && (
-              <p className="mt-2 whitespace-pre-wrap rounded-lg bg-amber-500/10 px-3 py-2 text-xs text-amber-700 dark:text-amber-300">
-                <span className="font-medium">Keterangan HC:</span> {r.hcNote}
-              </p>
-            )}
-          </div>
-        );
-      })}
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 }

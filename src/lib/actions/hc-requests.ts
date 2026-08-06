@@ -15,15 +15,19 @@ import type { UserProfile } from "@/lib/types";
 const canSubmit = (u: UserProfile | null) => !!u && canReachMenu(u, "hc_request");
 /** HC memproses pengajuan — permintaan karyawan maupun pelatihan. */
 const canHc = (u: UserProfile | null) => !!u && (canReachMenu(u, "hc_reqreview") || canReachMenu(u, "hc_training"));
+/** Creative meninjau pengajuan design (menu creative_design). */
+const canCreative = (u: UserProfile | null) => !!u && canReachMenu(u, "creative_design");
 /** Finance menyetujui dana pelatihan (menu fin_training). */
 const canFinance = (u: UserProfile | null) => !!u && canReachMenu(u, "fin_training");
+/** Peninjau yang berhak untuk satu jenis pengajuan. */
+const canReview = (u: UserProfile | null, kind: HcRequestKind) => (kind === "design" ? canCreative(u) : canHc(u));
 
 const MAX_BYTES = 10 * 1024 * 1024;
 
 /** Unggah lampiran pengajuan (foto kegiatan, formulir, proposal…). */
 export async function uploadHcRequestFileAction(formData: FormData): Promise<{ path?: string; name?: string; error?: string }> {
   const user = await getSessionUser();
-  if (!canSubmit(user) && !canHc(user)) return { error: "Tidak punya akses." };
+  if (!canSubmit(user) && !canHc(user) && !canCreative(user)) return { error: "Tidak punya akses." };
   if (!dbEnabled) return { error: "Storage belum aktif." };
   const file = formData.get("file");
   if (!(file instanceof File)) return { error: "Tidak ada berkas." };
@@ -51,12 +55,15 @@ export interface SubmitRequestInput {
   kind: HcRequestKind;
   title: string;
   description: string;
+  subjectName?: string;
   position?: string;
   headcount?: number;
   trainingType?: string;
   participants?: number;
   participantNames?: string[];
   budget?: number;
+  designType?: string;
+  designSize?: string;
   plannedDate?: string;
   attachments: HcRequestAttachment[];
 }
@@ -71,6 +78,12 @@ export async function submitHcRequestAction(input: SubmitRequestInput): Promise<
   if (input.kind === "pelatihan" && !input.trainingType?.trim()) {
     return { error: "Jenis pelatihan wajib dipilih." };
   }
+  if (input.kind === "design" && !input.designType?.trim()) {
+    return { error: "Jenis design wajib dipilih." };
+  }
+  if (input.kind === "design" && !input.subjectName?.trim()) {
+    return { error: "Nama pemohon design wajib diisi." };
+  }
   try {
     const res = await createHcRequest({
       kind: input.kind,
@@ -78,12 +91,15 @@ export async function submitHcRequestAction(input: SubmitRequestInput): Promise<
       requesterId: user!.id,
       title: input.title.trim(),
       description: input.description?.trim() ?? "",
+      subjectName: input.subjectName?.trim() ?? "",
       position: input.position?.trim() || null,
       headcount: input.headcount ?? 0,
       trainingType: input.trainingType?.trim() || null,
       participants: input.participants ?? 0,
       participantNames: input.participantNames ?? [],
       budget: input.budget ?? 0,
+      designType: input.designType?.trim() || null,
+      designSize: input.designSize?.trim() || null,
       plannedDate: input.plannedDate || null,
       attachments: input.attachments ?? [],
     });
@@ -102,6 +118,8 @@ function revalidateAll() {
   revalidatePath("/hc/permintaan");
   revalidatePath("/hc/pelatihan");
   revalidatePath("/finance/pelatihan");
+  revalidatePath("/pengajuan/design");
+  revalidatePath("/creative/design");
   revalidatePath("/hc/kpi");
 }
 
@@ -116,7 +134,7 @@ export async function myHcRequestsAction(): Promise<HcRequest[]> {
 /** Pengajuan yang masuk ke HC — dibatasi satu jenis bila diminta. */
 export async function allHcRequestsAction(kind?: HcRequestKind): Promise<HcRequest[]> {
   const user = await getSessionUser();
-  if (!canHc(user)) return [];
+  if (kind === "design" ? !canCreative(user) : !canHc(user)) return [];
   return listHcRequests(kind ? { kind } : {});
 }
 
@@ -132,9 +150,9 @@ export async function financeTrainingRequestsAction(): Promise<HcRequest[]> {
 /** HC menyetujui / menolak. Pelatihan yang disetujui diteruskan ke Finance. */
 export async function hcDecideRequestAction(input: { id: string; approve: boolean; note: string }): Promise<{ ok?: true; error?: string }> {
   const user = await getSessionUser();
-  if (!canHc(user)) return { error: "Tidak punya akses." };
   const req = await getHcRequest(input.id);
   if (!req) return { error: "Pengajuan tidak ditemukan." };
+  if (!canReview(user, req.kind)) return { error: "Tidak punya akses." };
   if (req.status !== "menunggu_hc") return { error: "Pengajuan ini sudah diproses." };
   const status = !input.approve ? "ditolak_hc" : req.kind === "pelatihan" ? "menunggu_finance" : "disetujui_hc";
   const res = await updateHcRequest(input.id, { status, hcNote: input.note ?? "", hcBy: user!.id });
@@ -180,10 +198,10 @@ export async function completeHcRequestAction(input: {
   attachments?: HcRequestAttachment[];
 }): Promise<{ ok?: true; error?: string }> {
   const user = await getSessionUser();
-  if (!canHc(user)) return { error: "Tidak punya akses." };
   const req = await getHcRequest(input.id);
   if (!req) return { error: "Pengajuan tidak ditemukan." };
-  const ready = req.kind === "rekrutmen" ? req.status === "disetujui_hc" : req.status === "disetujui_finance";
+  if (!canReview(user, req.kind)) return { error: "Tidak punya akses." };
+  const ready = req.kind === "pelatihan" ? req.status === "disetujui_finance" : req.status === "disetujui_hc";
   if (!ready) return { error: "Pengajuan belum siap ditandai terlaksana." };
 
   // Lampiran tambahan (laporan, daftar hadir, foto kegiatan) digabung.

@@ -11,24 +11,6 @@ export interface HubCategory {
   openCount?: number;
 }
 
-/** Banner pengantar halaman Pengajuan — permukaan kartu standar, tanpa warna
- *  tambahan, supaya senada dengan kartu lain di aplikasi. */
-export function HubBanner({ icon: Icon, title, description }: { icon: LucideIcon; title: string; description: string }) {
-  return (
-    <div className="card-gradient rounded-2xl p-5">
-      <div className="flex items-start gap-4">
-        <div className="grid size-11 shrink-0 place-items-center rounded-xl bg-muted ring-1 ring-border">
-          <Icon className="size-5 text-foreground/70" />
-        </div>
-        <div className="min-w-0">
-          <p className="text-sm font-semibold text-foreground">{title}</p>
-          <p className="mt-1 max-w-2xl text-sm text-muted-foreground">{description}</p>
-        </div>
-      </div>
-    </div>
-  );
-}
-
 /** Daftar kategori pengajuan — satu baris penuh per kategori, satu ketuk menuju
  *  formulirnya. */
 export function HubCategories({ items }: { items: HubCategory[] }) {
@@ -38,6 +20,7 @@ export function HubCategories({ items }: { items: HubCategory[] }) {
         <Link
           key={c.href}
           href={c.href}
+          prefetch
           className={`group flex items-center gap-4 px-4 py-3.5 transition-colors hover:bg-muted/50 ${i > 0 ? "border-t border-border" : ""}`}
         >
           <div className="grid size-10 shrink-0 place-items-center rounded-xl bg-muted ring-1 ring-border">

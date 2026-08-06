@@ -18,8 +18,11 @@ export default async function PengajuanPelatihanPage() {
   const rows = await listHcRequests({ department, kind: "pelatihan" });
 
   // Kandidat peserta = anggota aktif departemen pemohon, sesuai User Management.
-  const members = getUsers()
-    .filter((u) => u.active && u.department === department)
+  // Akun tanpa departemen (mis. Super Admin) melihat seluruh karyawan aktif —
+  // kalau tidak, daftar pesertanya kosong dan nama tidak bisa dipilih sama sekali.
+  const active = getUsers().filter((u) => u.active);
+  const scoped = department && department !== "—" ? active.filter((u) => u.department === department) : active;
+  const members = (scoped.length > 0 ? scoped : active)
     .map((u) => ({ id: u.id, name: u.name, jabatan: u.jabatan ?? null }))
     .sort((a, b) => a.name.localeCompare(b.name, "id"));
 
