@@ -113,7 +113,13 @@ export function calcHpp(input: HppInput): HppResult {
 
 /* ═══════════════════ kebijakan resmi (Lampiran makalah) ═══════════════════ */
 
-/** HPP di atas 70% dari harga jual = over cost, wajib evaluasi ulang. */
+/**
+ * HPP di atas 70% dari harga jual = over cost, wajib evaluasi ulang.
+ *
+ * Keputusan manajemen: pemicu over cost adalah HPP 70%, bukan food cost 35%.
+ * Makalah menyebut keduanya; food cost 25–35% dipakai sebagai target brand
+ * (lihat BRAND_HPP_TARGET), sedangkan 70% adalah batas merah menu.
+ */
 export const HPP_OVER_COST = 0.7;
 /** Margin minimum per kategori; maksimal tanpa batas. */
 export const MIN_MARGIN: Record<"makanan" | "minuman", number> = { makanan: 0.35, minuman: 0.6 };
@@ -261,6 +267,10 @@ export interface ClassPrice {
 /**
  * Sistem class Nordu: HPP tetap sama, harga jual naik Rp5.000 tiap class.
  * Class 1 memakai harga dasar, Class 2 = +Rp5.000, Class 3 = +Rp5.000 lagi.
+ *
+ * Keputusan manajemen atas kontradiksi makalah (hal.20 "HPP tetap sama" vs
+ * Lampiran no.7 "HPP berbeda"): yang berlaku adalah HPP tetap — resepnya sama,
+ * yang naik hanya harga jual, sehingga margin tiap class ikut naik.
  */
 export function classPrices(basePrice: number, totalHpp: number, step = CLASS_STEP): ClassPrice[] {
   return ([1, 2, 3] as const).map((cls) => {
