@@ -23,11 +23,12 @@ export function InterviewTab() {
   const a = useAssessment();
   const score = interviewScore(a.interview);
   const myKey = a.evaluator?.evaluatorKey;
+  // Interview yang sudah dikirim tetap bisa diubah — tidak ada penguncian.
   const myRow = a.session?.evaluations.find((x) => x.evaluatorKey === myKey);
-  const myLocked = !!myKey && !!myRow?.submitted && !!myRow?.ivVote;
+  const mySubmitted = !!myKey && !!myRow?.submitted && !!myRow?.ivVote;
 
   return (
-    <div className={cn("space-y-4", myLocked && "[&_.iv-form]:pointer-events-none [&_.iv-form]:opacity-70")}>
+    <div className="space-y-4">
       <Banner tone="amber" icon={<Mic className="size-4" />}>
         <strong>Interview Akhir</strong> dilakukan setelah semua penilaian selesai. Interviewer membaca Self Assessment
         karyawan lebih dulu. Durasi ideal 30–45 menit. Hasil interview memverifikasi & memperkuat bukti — bukan pengganti skor.
@@ -54,9 +55,9 @@ export function InterviewTab() {
         <p className="shrink-0 text-2xl font-semibold tabular-nums text-foreground">{score.toFixed(1)}</p>
       </Card>
 
-      {myLocked && (
+      {mySubmitted && (
         <Banner tone="success" icon={<CheckCircle2 className="size-4" />}>
-          Interview Anda sudah <strong>dikirim &amp; dikunci</strong> — tidak dapat diedit lagi.
+          Interview Anda sudah <strong>terkirim</strong>. Masih bisa diubah — perbaiki lalu kirim ulang.
         </Banner>
       )}
 
@@ -243,29 +244,27 @@ function MyInterviewSave({ dimsDone }: { dimsDone: boolean }) {
   const onSave = async () => {
     setMsg(null);
     const res = await a.submitMine({ interview: a.interview, ivVote: myVote, submitted: true });
-    setMsg(res.ok ? "Interview Anda tersimpan." : res.error ?? "Gagal menyimpan.");
+    setMsg(res.ok ? (saved ? "Interview Anda diperbarui." : "Interview Anda tersimpan.") : res.error ?? "Gagal menyimpan.");
   };
 
-  // Submitted = final & locked (no edits, integrity).
-  if (saved) {
-    return (
-      <div className="space-y-2">
+  // Sudah dikirim pun tetap bisa diperbarui — tombol kirim tidak pernah hilang.
+  return (
+    <div className="space-y-2">
+      {saved && (
         <div className="rounded-xl border border-brand-500/40 bg-brand-500/5 p-3 text-center text-sm font-medium text-brand-600 dark:text-brand-400">
-          <CheckCircle2 className="mr-1.5 inline size-4" /> Interview Anda sudah dikirim &amp; dikunci — tidak dapat diedit.
+          <CheckCircle2 className="mr-1.5 inline size-4" /> Interview Anda sudah terkirim — masih bisa diubah.
         </div>
+      )}
+      <Button className="h-12 w-full text-base" onClick={onSave} disabled={!ready || a.sessionBusy}>
+        {a.sessionBusy ? <Loader2 className="size-5 animate-spin" /> : <CheckCircle2 className="size-5" />}
+        {saved ? "Perbarui Interview" : "Kirim Interview"}
+      </Button>
+      {saved && (
         <Button variant="outline" className="h-11 w-full" onClick={a.finishInterview}>
           Lihat Hasil di Dashboard <ArrowRight className="size-4" />
         </Button>
-      </div>
-    );
-  }
-  return (
-    <div className="space-y-2">
-      <Button className="h-12 w-full text-base" onClick={onSave} disabled={!ready || a.sessionBusy}>
-        {a.sessionBusy ? <Loader2 className="size-5 animate-spin" /> : <CheckCircle2 className="size-5" />}
-        Kirim &amp; Kunci Interview
-      </Button>
-      {!ready && <p className="text-center text-xs text-muted-foreground">Lengkapi 4 dimensi & pilih rekomendasi Anda dulu. Setelah dikirim tidak bisa diedit.</p>}
+      )}
+      {!ready && <p className="text-center text-xs text-muted-foreground">Lengkapi 4 dimensi &amp; pilih rekomendasi Anda dulu.</p>}
       {msg && <p className="text-center text-xs text-muted-foreground">{msg}</p>}
     </div>
   );

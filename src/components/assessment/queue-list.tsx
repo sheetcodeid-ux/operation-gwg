@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { BadgeCheck, Check, ChevronDown, ChevronRight, ListTodo, Lock, type LucideIcon } from "lucide-react";
+import { BadgeCheck, Check, ChevronDown, ChevronRight, ListTodo, type LucideIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 export interface QueueItem {
@@ -65,7 +65,7 @@ export function AssessmentQueueList({
       {done.length > 0 && (
         <Section icon={BadgeCheck} label="Selesai" count={done.length} tone="done" open={openDone} onToggle={() => setOpenDone((v) => !v)}>
           {done.map((t) => (
-            <Row key={t.id} item={t} active={selectedId === t.id} onClick={() => onPick(t)} locked />
+            <Row key={t.id} item={t} active={selectedId === t.id} onClick={() => onPick(t)} done />
           ))}
         </Section>
       )}
@@ -112,7 +112,7 @@ function Section({
   );
 }
 
-function Row({ item, active, onClick, locked }: { item: QueueItem; active: boolean; onClick: () => void; locked?: boolean }) {
+function Row({ item, active, onClick, done }: { item: QueueItem; active: boolean; onClick: () => void; done?: boolean }) {
   return (
     <button
       type="button"
@@ -125,10 +125,10 @@ function Row({ item, active, onClick, locked }: { item: QueueItem; active: boole
       <span
         className={cn(
           "grid size-10 shrink-0 place-items-center rounded-xl text-[11px] font-bold ring-1 transition-colors",
-          locked ? "bg-brand-500/10 text-brand-600 ring-brand-500/20 dark:text-brand-400" : "bg-muted text-foreground ring-border group-hover:ring-foreground/20",
+          done ? "bg-brand-500/10 text-brand-600 ring-brand-500/20 dark:text-brand-400" : "bg-muted text-foreground ring-border group-hover:ring-foreground/20",
         )}
       >
-        {locked ? <Check className="size-5" strokeWidth={2.5} /> : initials(item.name)}
+        {done ? <Check className="size-5" strokeWidth={2.5} /> : initials(item.name)}
       </span>
       <div className="min-w-0 flex-1">
         <p className="flex items-center gap-1.5 truncate text-sm font-semibold text-foreground">
@@ -137,11 +137,8 @@ function Row({ item, active, onClick, locked }: { item: QueueItem; active: boole
         </p>
         <p className="truncate text-[11px] text-muted-foreground">{[item.department, item.jabatan].filter(Boolean).join(" · ") || "—"}</p>
       </div>
-      {locked ? (
-        <span className="inline-flex shrink-0 items-center gap-1 text-[11px] font-medium text-muted-foreground"><Lock className="size-3" /> Terkunci</span>
-      ) : (
-        <ChevronRight className="size-4 shrink-0 text-muted-foreground/60 transition-transform group-hover:translate-x-0.5 group-hover:text-muted-foreground" />
-      )}
+      {done && <span className="shrink-0 text-[11px] font-medium text-muted-foreground">Terkirim</span>}
+      <ChevronRight className="size-4 shrink-0 text-muted-foreground/60 transition-transform group-hover:translate-x-0.5 group-hover:text-muted-foreground" />
     </button>
   );
 }
