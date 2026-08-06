@@ -63,6 +63,9 @@ export const taskInputSchema = z.object({
   // Department/division name (Finance, Creative, …), not a role enum.
   division: z.string().trim().min(1, "Divisi wajib dipilih.").max(120),
   outletId: id.nullable(),
+  /** Semua cabang yang tersentuh satu tugas — bukan satu tugas per cabang. */
+  outletIds: z.array(id).max(200).default([]),
+  brands: z.array(z.string().trim().max(60)).max(20).default([]),
   picIds: z.array(id).max(50).default([]),
   startDate: isoDate.default(""),
   dueDate: isoDate.default(""),

@@ -7,6 +7,8 @@ import { db, dbEnabled } from "@/lib/data/db";
 import { canReachMenu } from "@/lib/nav";
 import { persistMessage } from "@/lib/data/persist";
 import { createHcRequest, getHcRequest, listHcRequests, updateHcRequest } from "@/lib/data/hc-requests";
+import { getUsers } from "@/lib/data/store";
+import { createTask, getTask, updateTask, updateTaskStatus } from "@/lib/data/mutations";
 import { r2Enabled, r2Put, R2_PREFIX } from "@/lib/storage/r2";
 import type { HcRequest, HcRequestAttachment, HcRequestKind } from "@/lib/hc-request";
 import type { UserProfile } from "@/lib/types";
@@ -220,6 +222,105 @@ export async function completeHcRequestAction(input: {
     completedAt: new Date().toISOString(),
   });
   if (res.error) return { error: res.error };
+
+  // Design yang ditutup dari sisi pengajuan ikut menutup tugas Work Tracker-nya.
+  if (req.workTaskId) updateTaskStatus(req.workTaskId, "done", 100);
   revalidateAll();
   return { ok: true };
+}
+
+/* ─────────────────── penugasan design → Work Tracker ─────────────────── */
+
+/**
+ * Creative memilih siapa yang mengerjakan satu permintaan design.
+ *
+ * Penugasan tidak berhenti sebagai catatan: sistem sekaligus membuat tugas di
+ * Work Tracker atas nama PIC tersebut, dan menautkannya balik ke pengajuan.
+ * Dengan begitu beban kerja tim Creative terlihat di satu tempat, dan status
+ * kedua sisi tidak bisa berbeda — menutup salah satunya menutup keduanya.
+ */
+export async function assignDesignRequestAction(input: {
+  id: string;
+  assigneeId: string;
+}): Promise<{ ok?: true; taskId?: string; error?: string }> {
+  const user = await getSessionUser();
+  const req = await getHcRequest(input.id);
+  if (!req) return { error: "Pengajuan tidak ditemukan." };
+  if (req.kind !== "design") return { error: "Penugasan PIC hanya untuk pengajuan design." };
+  if (!canCreative(user)) return { error: "Tidak punya akses." };
+  if (req.status === "terlaksana" || req.status === "ditolak_hc") return { error: "Pengajuan ini sudah selesai." };
+  if (!input.assigneeId) return { error: "Pilih PIC yang mengerjakan." };
+
+  const pic = getUsers().find((u) => u.id === input.assigneeId);
+  if (!pic) return { error: "PIC tidak ditemukan." };
+
+  // Ganti PIC pada pengajuan yang sudah punya tugas: perbarui tugas yang ada,
+  // jangan buat tugas kedua untuk pekerjaan yang sama.
+  if (req.workTaskId) {
+    const existing = getTask(req.workTaskId);
+    if (existing) {
+      updateTask(req.workTaskId, {
+        title: existing.title,
+        description: existing.description,
+        category: existing.category,
+        priority: existing.priority,
+        status: existing.status,
+        division: existing.division,
+        outletId: existing.outletId,
+        outletIds: existing.outletIds,
+        brands: existing.brands,
+        picIds: [pic.id],
+        picId: pic.id,
+        startDate: existing.startDate,
+        dueDate: existing.dueDate,
+        progress: existing.progress,
+      });
+      await updateHcRequest(input.id, { assigneeId: pic.id });
+      revalidateAssignment();
+      return { ok: true, taskId: req.workTaskId };
+    }
+  }
+
+  const due = req.plannedDate ? new Date(req.plannedDate).toISOString() : new Date(Date.now() + 7 * 86_400_000).toISOString();
+  let task;
+  try {
+    task = await createTask({
+      title: req.title || "Permintaan design",
+      description: [req.description, req.designType && `Jenis: ${req.designType}`, req.designSize && `Ukuran: ${req.designSize}`]
+        .filter(Boolean)
+        .join("\n"),
+      category: "Marketing",
+      priority: "medium",
+      status: "ongoing",
+      division: "Creative",
+      outletId: null,
+      outletIds: [],
+      brands: [],
+      picIds: [pic.id],
+      picId: pic.id,
+      startDate: new Date().toISOString(),
+      dueDate: due,
+      progress: 0,
+    });
+  } catch (e) {
+    return { error: persistMessage(e) };
+  }
+
+  // Menugaskan berarti pekerjaan sudah berjalan.
+  await updateHcRequest(input.id, {
+    assigneeId: pic.id,
+    workTaskId: task.id,
+    status: req.status === "menunggu_hc" ? "disetujui_hc" : req.status,
+    hcBy: user!.id,
+  });
+  revalidateAssignment();
+  return { ok: true, taskId: task.id };
+}
+
+function revalidateAssignment() {
+  revalidatePath("/creative/design");
+  revalidatePath("/pengajuan/design");
+  revalidatePath("/pengajuan");
+  revalidatePath("/work-tracker");
+  revalidatePath("/work-tracker/kanban");
 }

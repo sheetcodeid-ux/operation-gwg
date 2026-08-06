@@ -167,6 +167,15 @@ export interface WorkTask {
   division: string;
   /** Branch is optional — null = division/HQ-level task (no branch). */
   outletId: string | null;
+  /**
+   * Cabang yang tersentuh tugas ini. Satu kerjaan yang berdampak ke banyak
+   * cabang tetap SATU tugas — sebelumnya tiap cabang dibuatkan barisnya sendiri,
+   * sehingga satu pekerjaan marketing muncul puluhan kali di Work Tracker.
+   * `outletId` dipertahankan sebagai cabang pertama untuk data lama.
+   */
+  outletIds: string[];
+  /** Brand yang tersentuh: Nordu, Cattu, Busari, Lesung Pipi. */
+  brands: string[];
   areaId: string | null;
   /** Assigned people (PIC) — manually picked from the division's members; can be 1 or many. */
   picIds: string[];

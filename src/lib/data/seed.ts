@@ -211,6 +211,8 @@ for (const outlet of outlets) {
       status,
       division,
       outletId: noBranch ? null : outlet.id,
+      outletIds: noBranch ? [] : [outlet.id],
+      brands: [],
       areaId: noBranch ? null : outlet.areaId,
       picIds,
       picId: picIds[0] ?? null,

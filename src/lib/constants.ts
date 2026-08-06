@@ -253,6 +253,10 @@ export const KPI_TARGETS = {
   resolution: 90,
 } as const;
 
+/** Brand milik GWG Group — dipakai Work Tracker untuk kerjaan yang menyentuh
+ *  satu brand penuh, bukan cabang tertentu. */
+export const WORK_BRANDS = ["Nordu", "Cattu", "Busari", "Lesung Pipi"] as const;
+
 export const WORK_CATEGORIES = [
   "Maintenance",
   "Renovation",

@@ -23,6 +23,9 @@ export interface WorkRow {
   division: string;
   outletId: string;
   outlet: string;
+  /** Semua cabang yang tersentuh — satu tugas bisa menyentuh banyak cabang. */
+  outletIds: string[];
+  brands: string[];
   area: string;
   picIds: string[];
   pic: string;

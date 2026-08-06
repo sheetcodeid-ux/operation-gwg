@@ -18,6 +18,7 @@ import {
   Headset,
   LibraryBig,
   Megaphone,
+  Gauge,
   Target,
   Send,
   MonitorCog,
@@ -75,6 +76,7 @@ export const NAV_ICONS: Record<string, LucideIcon> = {
   GraduationCap,
   LibraryBig,
   Megaphone,
+  Gauge,
   Target,
   Send,
   // Division (group) icons

@@ -110,6 +110,10 @@ export async function createTask(input: {
   status: WorkTask["status"];
   division: WorkTask["division"];
   outletId: string | null;
+  /** Semua cabang yang tersentuh; kosong = tugas tanpa cabang. */
+  outletIds?: string[];
+  /** Brand yang tersentuh (Nordu, Cattu, Busari, Lesung Pipi). */
+  brands?: string[];
   picIds: string[];
   picId: string | null;
   startDate: string;
@@ -125,6 +129,8 @@ export async function createTask(input: {
     status: input.status,
     division: input.division,
     outletId: input.outletId,
+    outletIds: input.outletIds?.length ? input.outletIds : input.outletId ? [input.outletId] : [],
+    brands: input.brands ?? [],
     areaId: input.outletId ? areaForOutlet(input.outletId) : null,
     picIds: input.picIds,
     picId: input.picIds[0] ?? input.picId,
@@ -139,6 +145,11 @@ export async function createTask(input: {
   return commitInsert(SEED.tasks, record, saveTask(record));
 }
 
+/** Satu tugas berdasarkan id — dipakai saat menyinkronkan status dengan modul lain. */
+export function getTask(id: string): WorkTask | undefined {
+  return SEED.tasks.find((t) => t.id === id);
+}
+
 export function updateTask(
   id: string,
   input: {
@@ -149,6 +160,8 @@ export function updateTask(
     status: WorkTask["status"];
     division: WorkTask["division"];
     outletId: string | null;
+    outletIds?: string[];
+    brands?: string[];
     picIds: string[];
     picId: string | null;
     startDate: string;
@@ -165,6 +178,8 @@ export function updateTask(
   task.status = input.status;
   task.division = input.division;
   task.outletId = input.outletId;
+  task.outletIds = input.outletIds?.length ? input.outletIds : input.outletId ? [input.outletId] : [];
+  task.brands = input.brands ?? [];
   task.areaId = input.outletId ? areaForOutlet(input.outletId) : null;
   task.picIds = input.picIds;
   task.picId = input.picIds[0] ?? input.picId;

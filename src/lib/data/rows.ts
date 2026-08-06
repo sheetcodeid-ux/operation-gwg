@@ -107,6 +107,8 @@ export const taskToRow = (t: WorkTask) => ({
   status: t.status,
   division: t.division,
   outlet_id: t.outletId,
+  outlet_ids: t.outletIds ?? [],
+  brands: t.brands ?? [],
   area_id: t.areaId,
   pic_ids: t.picIds,
   pic_id: t.picId,
@@ -126,6 +128,9 @@ export const taskFromRow = (r: any): WorkTask => ({
   status: r.status,
   division: r.division,
   outletId: r.outlet_id,
+  // Baris lama hanya punya outlet_id tunggal — perlakukan sebagai daftar satu isi.
+  outletIds: r.outlet_ids?.length ? r.outlet_ids : r.outlet_id ? [r.outlet_id] : [],
+  brands: r.brands ?? [],
   areaId: r.area_id,
   picIds: r.pic_ids ?? [],
   picId: r.pic_id,

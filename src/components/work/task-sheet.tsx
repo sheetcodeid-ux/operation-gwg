@@ -4,7 +4,7 @@ import * as React from "react";
 import { useRouter } from "next/navigation";
 import { CalendarClock, Loader2, Plus, Trash2 } from "lucide-react";
 import { toast } from "sonner";
-import { PRIORITY_META, TASK_STATUS_META, WORK_CATEGORIES } from "@/lib/constants";
+import { PRIORITY_META, TASK_STATUS_META, WORK_CATEGORIES, WORK_BRANDS } from "@/lib/constants";
 import type { Priority, TaskStatus } from "@/lib/types";
 import { addTaskCategoryAction, createTaskAction, deleteTaskCategoryAction, updateTaskAction } from "@/lib/actions/work";
 import { cn } from "@/lib/utils";
@@ -32,6 +32,8 @@ export interface EditableTask {
   status: TaskStatus;
   division: string;
   outletId: string | null;
+  outletIds?: string[];
+  brands?: string[];
   picIds: string[];
   start: string;
   due: string;
@@ -216,11 +218,18 @@ function TaskForm({
   const router = useRouter();
   const { setOpen } = useSheetControl();
   const [pending, startTransition] = React.useTransition();
-  const [branch, setBranch] = React.useState<boolean>(!!task?.outletId);
-  // Creating a task may target SEVERAL branches at once (one task per outlet, so
-  // each branch stays independently trackable). Editing keeps its single outlet.
-  const [outletIds, setOutletIds] = React.useState<string[]>(task?.outletId ? [task.outletId] : []);
+  // Cakupan tugas: tanpa cabang, per cabang, atau per brand.
+  type Scope = "none" | "branch" | "brand";
+  const [scope, setScope] = React.useState<Scope>(
+    task?.brands?.length ? "brand" : task?.outletIds?.length || task?.outletId ? "branch" : "none",
+  );
+  // SATU tugas menyentuh banyak cabang. Versi lama membuat satu tugas per
+  // cabang, sehingga satu pekerjaan yang berdampak ke ~50 cabang muncul 50 kali
+  // di Work Tracker padahal kerjaannya cuma satu.
+  const [outletIds, setOutletIds] = React.useState<string[]>(task?.outletIds ?? (task?.outletId ? [task.outletId] : []));
+  const [brands, setBrands] = React.useState<string[]>(task?.brands ?? []);
   const [allOutlets, setAllOutlets] = React.useState(false);
+  const effectiveOutletIds = scope === "branch" ? (allOutlets ? outlets.map((o) => o.id) : outletIds) : [];
   const initialDivision = task?.division ?? userDepartment ?? defaultDivision ?? divisions[0] ?? "";
   const catsFor = React.useCallback(
     (div: string) => categories?.[div] ?? (WORK_CATEGORIES as readonly string[] as string[]),
@@ -267,15 +276,12 @@ function TaskForm({
       toast.error("Task title is required.");
       return;
     }
-    const targets: (string | null)[] = !branch
-      ? [null]
-      : task
-        ? [form.outletId]
-        : allOutlets
-          ? outlets.map((o) => o.id)
-          : outletIds;
-    if (branch && targets.filter(Boolean).length === 0) {
+    if (scope === "branch" && effectiveOutletIds.length === 0) {
       toast.error("Pilih minimal satu outlet, centang Semua Outlet, atau ganti ke Tanpa Cabang.");
+      return;
+    }
+    if (scope === "brand" && brands.length === 0) {
+      toast.error("Pilih minimal satu brand, atau ganti ke Tanpa Cabang.");
       return;
     }
     if (!validRange) {
@@ -293,25 +299,24 @@ function TaskForm({
       startDate: new Date(form.startDate).toISOString(),
       dueDate: new Date(form.dueDate).toISOString(),
       progress: form.progress,
+      // Cabang pertama dipakai sebagai cabang utama (area, tampilan ringkas).
+      outletId: effectiveOutletIds[0] ?? null,
+      outletIds: effectiveOutletIds,
+      brands: scope === "brand" ? brands : [],
     };
     startTransition(async () => {
-      if (task) {
-        const res = await updateTaskAction(task.id, { ...payload, outletId: branch ? form.outletId : null });
-        if (res?.error) {
-          toast.error(res.error);
-          return;
-        }
-      } else {
-        // One task per selected branch — created sequentially so a failure is reported.
-        for (const outletId of targets) {
-          const res = await createTaskAction({ ...payload, outletId });
-          if (res?.error) {
-            toast.error(res.error);
-            return;
-          }
-        }
+      const res = task ? await updateTaskAction(task.id, payload) : await createTaskAction(payload);
+      if (res?.error) {
+        toast.error(res.error);
+        return;
       }
-      toast.success(task ? "Task updated" : targets.length > 1 ? `${targets.length} task dibuat` : "Task created");
+      const cakupan =
+        scope === "branch" && effectiveOutletIds.length > 1
+          ? ` — ${effectiveOutletIds.length} cabang`
+          : scope === "brand" && brands.length > 0
+            ? ` — ${brands.join(", ")}`
+            : "";
+      toast.success((task ? "Task diperbarui" : "Task dibuat") + cakupan);
       setOpen(false);
       router.refresh();
     });
@@ -363,29 +368,23 @@ function TaskForm({
         </Field>
 
         <div>
-          <p className="mb-1.5 text-xs font-medium text-muted-foreground">Cabang</p>
+          <p className="mb-1.5 text-xs font-medium text-muted-foreground">Cakupan</p>
           <SegmentedTabs
-            value={branch ? "branch" : "none"}
-            onChange={(v) => setBranch(v === "branch")}
+            value={scope}
+            onChange={(v) => setScope(v as Scope)}
             items={[
               { value: "none", label: "Tanpa Cabang" },
               { value: "branch", label: "Dengan Cabang" },
+              { value: "brand", label: "Dengan Brand" },
             ]}
           />
         </div>
 
-        {branch && (task ? (
-          <Field label="Outlet">
-            <Combobox
-              value={form.outletId}
-              onChange={(v) => set("outletId", v)}
-              options={outlets.map((o) => ({ value: o.id, label: o.name }))}
-              placeholder="Pilih outlet"
-              searchPlaceholder="Cari outlet…"
-            />
-          </Field>
-        ) : (
-          <Field label={`Outlet (${allOutlets ? outlets.length : outletIds.length})`} hint="Bisa pilih lebih dari satu cabang — satu task dibuat untuk tiap cabang.">
+        {scope === "branch" && (
+          <Field
+            label={`Outlet (${effectiveOutletIds.length})`}
+            hint="Satu task untuk semua cabang yang dipilih — bukan satu task per cabang."
+          >
             <div className="space-y-2">
               <label className="flex cursor-pointer items-center gap-2 rounded-lg border border-border p-2.5 text-sm text-foreground">
                 <input type="checkbox" checked={allOutlets} onChange={(e) => setAllOutlets(e.target.checked)} className="size-4 accent-brand-500" />
@@ -408,7 +407,21 @@ function TaskForm({
               )}
             </div>
           </Field>
-        ))}
+        )}
+
+        {scope === "brand" && (
+          <Field label={`Brand (${brands.length})`} hint="Untuk kerjaan yang menyentuh seluruh brand, bukan cabang tertentu.">
+            <div className="space-y-2">
+              <MultiCombobox
+                value={brands}
+                onChange={setBrands}
+                options={WORK_BRANDS.map((b) => ({ value: b, label: b }))}
+                placeholder="Pilih brand…"
+              />
+              <SelectionChips labels={brands} onClear={() => setBrands([])} />
+            </div>
+          </Field>
+        )}
 
         <div className="grid grid-cols-2 gap-3">
           <Field label="Kategori">

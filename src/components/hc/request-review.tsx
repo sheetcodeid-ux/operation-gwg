@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { CheckCircle2, ClipboardCheck, Loader2, Wallet, XCircle } from "lucide-react";
+import { CheckCircle2, ClipboardCheck, Loader2, UserRound, Wallet, XCircle } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -9,19 +9,28 @@ import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { Field, Input, Textarea } from "@/components/ui/input";
 import {
   allHcRequestsAction,
+  assignDesignRequestAction,
   completeHcRequestAction,
   financeDecideRequestAction,
   financeTrainingRequestsAction,
   hcDecideRequestAction,
 } from "@/lib/actions/hc-requests";
+import { Combobox } from "@/components/ui/combobox";
 import { fmtRupiah, isOpen, nextActions, type HcRequest, type HcRequestKind } from "@/lib/hc-request";
 import { FilePicker, RequestEmpty, RequestList, uploadAll } from "./request-shared";
 
 type Mode = "hc" | "finance";
 type Tab = "open" | "done";
 
+/** Kandidat PIC pengerjaan design (anggota tim Creative). */
+export interface PicOption {
+  id: string;
+  name: string;
+  jabatan?: string | null;
+}
+
 /** Antrian pengajuan — dipakai HC (per jenis) dan Finance (dana pelatihan). */
-export function HcRequestReview({ mode, kind }: { mode: Mode; kind?: HcRequestKind }) {
+export function HcRequestReview({ mode, kind, picOptions = [] }: { mode: Mode; kind?: HcRequestKind; picOptions?: PicOption[] }) {
   const [rows, setRows] = React.useState<HcRequest[] | null>(null);
   const [tab, setTab] = React.useState<Tab>("open");
 
@@ -71,15 +80,16 @@ export function HcRequestReview({ mode, kind }: { mode: Mode; kind?: HcRequestKi
             : "Pengajuan yang sudah selesai akan muncul di sini."}
         </RequestEmpty>
       ) : (
-        <RequestList rows={shown} actions={(r) => <Actions r={r} mode={mode} onDone={load} />} />
+        <RequestList rows={shown} actions={(r) => <Actions r={r} mode={mode} picOptions={picOptions} onDone={load} />} />
       )}
     </div>
   );
 }
 
-function Actions({ r, mode, onDone }: { r: HcRequest; mode: Mode; onDone: () => void }) {
+function Actions({ r, mode, picOptions, onDone }: { r: HcRequest; mode: Mode; picOptions: PicOption[]; onDone: () => void }) {
   const step = nextActions(r);
-  const [dialog, setDialog] = React.useState<null | "hc" | "finance" | "complete">(null);
+  const [dialog, setDialog] = React.useState<null | "hc" | "finance" | "complete" | "assign">(null);
+  const isDesign = r.kind === "design";
 
   if (mode === "hc") {
     return (
@@ -89,17 +99,31 @@ function Actions({ r, mode, onDone }: { r: HcRequest; mode: Mode; onDone: () => 
             <Button size="sm" variant="ghost" className="text-red-600 dark:text-red-400" onClick={() => setDialog("hc")}>
               <XCircle className="size-4" /> Tinjau
             </Button>
-            <Button size="sm" onClick={() => setDialog("hc")}>
-              <ClipboardCheck className="size-4" /> ACC
-            </Button>
+            {/* Design tidak cukup di-ACC — harus jelas siapa yang mengerjakan,
+                karena penugasan itulah yang membuat tugasnya di Work Tracker. */}
+            {isDesign ? (
+              <Button size="sm" onClick={() => setDialog("assign")}>
+                <UserRound className="size-4" /> Tugaskan PIC
+              </Button>
+            ) : (
+              <Button size="sm" onClick={() => setDialog("hc")}>
+                <ClipboardCheck className="size-4" /> ACC
+              </Button>
+            )}
           </>
+        )}
+        {isDesign && !step.hc && r.status !== "terlaksana" && (
+          <Button size="sm" variant="outline" onClick={() => setDialog("assign")}>
+            <UserRound className="size-4" /> {r.assigneeName ? "Ganti PIC" : "Tugaskan PIC"}
+          </Button>
         )}
         {step.complete && (
           <Button size="sm" onClick={() => setDialog("complete")}>
-            <CheckCircle2 className="size-4" /> {r.kind === "design" ? "Tandai Selesai" : "Tandai Terlaksana"}
+            <CheckCircle2 className="size-4" /> {isDesign ? "Tandai Selesai" : "Tandai Terlaksana"}
           </Button>
         )}
         {dialog === "hc" && <HcDecideDialog r={r} onClose={() => setDialog(null)} onDone={onDone} />}
+        {dialog === "assign" && <AssignDialog r={r} picOptions={picOptions} onClose={() => setDialog(null)} onDone={onDone} />}
         {dialog === "complete" && <CompleteDialog r={r} onClose={() => setDialog(null)} onDone={onDone} />}
       </>
     );
@@ -270,6 +294,84 @@ function CompleteDialog({ r, onClose, onDone }: { r: HcRequest; onClose: () => v
             <Button variant="ghost" onClick={onClose} disabled={busy}>Batal</Button>
             <Button onClick={submit} disabled={busy}>
               {busy ? <Loader2 className="size-4 animate-spin" /> : <CheckCircle2 className="size-4" />} Simpan
+            </Button>
+          </div>
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+/**
+ * Menugaskan PIC untuk satu permintaan design. Ini bukan sekadar mencatat nama:
+ * begitu disimpan, sistem membuat tugasnya di Work Tracker atas nama PIC
+ * tersebut, sehingga beban kerja tim Creative terlihat di satu tempat.
+ */
+function AssignDialog({
+  r,
+  picOptions,
+  onClose,
+  onDone,
+}: {
+  r: HcRequest;
+  picOptions: PicOption[];
+  onClose: () => void;
+  onDone: () => void;
+}) {
+  const [pic, setPic] = React.useState(r.assigneeId ?? "");
+  const [busy, setBusy] = React.useState(false);
+
+  async function save() {
+    if (!pic) return toast.error("Pilih PIC yang mengerjakan.");
+    setBusy(true);
+    const res = await assignDesignRequestAction({ id: r.id, assigneeId: pic });
+    setBusy(false);
+    if (res?.error) return toast.error(res.error);
+    const name = picOptions.find((p) => p.id === pic)?.name ?? "PIC";
+    toast.success(`Dikerjakan oleh ${name} — tugasnya masuk Work Tracker Creative`);
+    onClose();
+    onDone();
+  }
+
+  return (
+    <Dialog open onOpenChange={(v) => !v && onClose()}>
+      <DialogContent
+        align="center"
+        title={r.assigneeName ? "Ganti PIC Pengerjaan" : "Tugaskan PIC Pengerjaan"}
+        description={r.title}
+        className="max-w-md"
+      >
+        <div className="space-y-4 p-5">
+          {picOptions.length === 0 ? (
+            <p className="rounded-lg border border-dashed border-border p-3 text-xs text-muted-foreground">
+              Belum ada anggota tim Creative di User Management.
+            </p>
+          ) : (
+            <Field label="Dikerjakan oleh">
+              <Combobox
+                portal
+                matchTriggerWidth
+                searchable
+                searchPlaceholder="Cari nama…"
+                value={pic}
+                onChange={setPic}
+                options={picOptions.map((p) => ({ value: p.id, label: p.name, hint: p.jabatan ?? undefined }))}
+                placeholder="Pilih PIC"
+              />
+            </Field>
+          )}
+
+          <p className="rounded-lg border border-border bg-muted/30 p-3 text-[11px] text-muted-foreground">
+            Setelah ditugaskan, tugas otomatis muncul di <b className="text-foreground">Work Tracker Creative</b> atas nama
+            PIC. Menandai tugas itu selesai akan menutup permintaan design ini, begitu pula sebaliknya.
+          </p>
+
+          <div className="flex justify-end gap-2">
+            <Button variant="outline" onClick={onClose} disabled={busy}>
+              Batal
+            </Button>
+            <Button onClick={save} disabled={busy || picOptions.length === 0}>
+              {busy ? <Loader2 className="size-4 animate-spin" /> : <UserRound className="size-4" />} Simpan
             </Button>
           </div>
         </div>

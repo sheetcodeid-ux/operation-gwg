@@ -168,6 +168,8 @@ function RequestDetail({ r }: { r: HcRequest }) {
     if (r.designSize) rows.push({ label: "Ukuran / format", value: r.designSize });
     if (r.subjectName) rows.push({ label: "Untuk", value: r.subjectName });
     if (r.plannedDate) rows.push({ label: "Dibutuhkan", value: fmtDate(r.plannedDate) });
+    // Pemohon berhak tahu siapa yang mengerjakan designnya.
+    if (r.assigneeName) rows.push({ label: "Dikerjakan oleh", value: r.assigneeName });
   }
 
   const noteLabel = r.kind === "design" ? "Catatan Creative" : "Catatan HC";

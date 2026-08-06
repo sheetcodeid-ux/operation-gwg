@@ -17,6 +17,13 @@ import type { Tone } from "@/lib/constants";
 
 export type HcRequestKind = "rekrutmen" | "pelatihan" | "design";
 
+/** Penugasan design: siapa yang mengerjakan, dan tugas Work Tracker-nya. */
+export interface HcRequestAssignment {
+  assigneeId: string | null;
+  assigneeName: string | null;
+  workTaskId: string | null;
+}
+
 export type HcRequestStatus =
   | "menunggu_hc"
   | "ditolak_hc"
@@ -132,6 +139,10 @@ export interface HcRequest {
   financeNote: string;
   hcByName: string | null;
   financeByName: string | null;
+  /** Design: PIC yang mengerjakan + tugas Work Tracker yang terbentuk. */
+  assigneeId: string | null;
+  assigneeName: string | null;
+  workTaskId: string | null;
   createdAt: string;
   updatedAt: string;
   completedAt: string | null;

@@ -92,7 +92,7 @@ export const NAV_MENUS: Omit<NavItem, "section" | "group" | "groupIcon">[] = [
   { key: "op_seasonal", label: "Musiman", href: "/operation/musiman", icon: "Waves" },
   { key: "op_analysis", label: "Data Analysis", href: "/operation/analysis", icon: "ChartColumnBig" },
   { key: "op_pnl", label: "Laba Rugi", href: "/operation/laba-rugi", icon: "Banknote" },
-  { key: "op_kpi", label: "KPI Coordinator Area", href: "/operation/kpi", icon: "Target" },
+  { key: "op_kpi", label: "KPI Coordinator Area", href: "/operation/kpi", icon: "Gauge" },
   { key: "sys_review", label: "Antrian System", href: "/system/antrian", icon: "Headset" },
   // Kedua "pengajuan" ini kini menjadi kategori DI DALAM halaman Pengajuan —
   // tetap punya rute sendiri, tapi tidak lagi muncul terpisah di sidebar.
@@ -101,7 +101,7 @@ export const NAV_MENUS: Omit<NavItem, "section" | "group" | "groupIcon">[] = [
   { key: "sys_submit", label: "Pengajuan System", href: "/system/pengajuan", icon: "MonitorCog", hidden: true },
   { key: "elearning", label: "E-Learning", href: "/elearning", icon: "GraduationCap" },
   { key: "elearning_admin", label: "Kelola E-Learning", href: "/elearning/kelola", icon: "LibraryBig" },
-  { key: "hc_kpi", label: "KPI Human Capital", href: "/hc/kpi", icon: "Target" },
+  { key: "hc_kpi", label: "KPI Human Capital", href: "/hc/kpi", icon: "Gauge" },
   { key: "hc_request", label: "Pengajuan", href: "/pengajuan", icon: "Send" },
   { key: "hc_reqreview", label: "Permintaan Karyawan", href: "/hc/permintaan", icon: "ClipboardCheck" },
   { key: "hc_training", label: "Pelatihan", href: "/hc/pelatihan", icon: "GraduationCap" },

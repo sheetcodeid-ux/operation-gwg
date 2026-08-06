@@ -42,6 +42,9 @@ const fromRow = (r: any): HcRequest => ({
   financeNote: r.finance_note ?? "",
   hcByName: r.hc_by ? userName(r.hc_by) : null,
   financeByName: r.finance_by ? userName(r.finance_by) : null,
+  assigneeId: r.assignee_id ?? null,
+  assigneeName: r.assignee_id ? userName(r.assignee_id) : null,
+  workTaskId: r.work_task_id ?? null,
   createdAt: r.created_at ?? new Date().toISOString(),
   updatedAt: r.updated_at ?? r.created_at ?? new Date().toISOString(),
   completedAt: r.completed_at ?? null,
@@ -167,6 +170,8 @@ export interface UpdateRequestPatch {
   budgetApproved?: number;
   recruited?: number;
   completedAt?: string | null;
+  assigneeId?: string | null;
+  workTaskId?: string | null;
 }
 
 export async function updateHcRequest(id: string, patch: UpdateRequestPatch): Promise<{ error?: string }> {
@@ -179,6 +184,8 @@ export async function updateHcRequest(id: string, patch: UpdateRequestPatch): Pr
   if (patch.budgetApproved !== undefined) row.budget_approved = patch.budgetApproved;
   if (patch.recruited !== undefined) row.recruited = patch.recruited;
   if (patch.completedAt !== undefined) row.completed_at = patch.completedAt;
+  if (patch.assigneeId !== undefined) row.assignee_id = patch.assigneeId;
+  if (patch.workTaskId !== undefined) row.work_task_id = patch.workTaskId;
 
   if (!dbEnabled) {
     const cur = mem.get(id);
@@ -187,6 +194,17 @@ export async function updateHcRequest(id: string, patch: UpdateRequestPatch): Pr
   }
   const { error } = await db().from("hc_requests").update(row).eq("id", id);
   return error ? { error: error.message } : {};
+}
+
+/** Pengajuan yang tertaut ke satu tugas Work Tracker — dipakai saat tugasnya
+ *  ditutup dari sisi Work Tracker, supaya pengajuannya ikut selesai. */
+export async function getHcRequestByTask(taskId: string): Promise<HcRequest | null> {
+  if (!dbEnabled) {
+    for (const r of mem.values()) if (r.work_task_id === taskId) return fromRow(r);
+    return null;
+  }
+  const { data } = await db().from("hc_requests").select("*").eq("work_task_id", taskId).maybeSingle();
+  return data ? fromRow(data) : null;
 }
 
 export async function getHcRequest(id: string): Promise<HcRequest | null> {

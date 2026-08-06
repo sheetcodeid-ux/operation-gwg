@@ -12,6 +12,16 @@ export type DivisionMembers = Record<string, { id: string; name: string; jabatan
 /** Enriched task rows shared by the Work Tracker table, Kanban and Calendar
  *  views — DEPARTMENT-SCOPED (each team sees only its own tasks; Super Admin
  *  sees all). */
+/** Ringkasan cakupan untuk kolom tabel: satu cabang tampil namanya, banyak
+ *  cabang tampil jumlahnya, brand tampil daftar brand-nya. */
+function scopeLabel(t: { outletId: string | null; outletIds?: string[]; brands?: string[] }): string {
+  if (t.brands?.length) return t.brands.join(", ");
+  const ids = t.outletIds?.length ? t.outletIds : t.outletId ? [t.outletId] : [];
+  if (ids.length === 0) return "No branch";
+  if (ids.length === 1) return outletName(ids[0]);
+  return `${ids.length} cabang`;
+}
+
 export function buildWorkRows(user: UserProfile): WorkRow[] {
   const avatarById = new Map(getUsers().map((u) => [u.id, u.avatarUrl ?? null]));
   return listDeptTasks(user).map((t) => ({
@@ -23,7 +33,9 @@ export function buildWorkRows(user: UserProfile): WorkRow[] {
     status: t.status,
     division: t.division,
     outletId: t.outletId ?? "",
-    outlet: t.outletId ? outletName(t.outletId) : "No branch",
+    outlet: scopeLabel(t),
+    outletIds: t.outletIds ?? [],
+    brands: t.brands ?? [],
     area: t.areaId ? areaName(t.areaId) : "—",
     picIds: t.picIds,
     pic: t.picIds.length ? t.picIds.map(userName).join(", ") : "—",

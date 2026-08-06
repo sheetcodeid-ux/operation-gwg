@@ -146,6 +146,8 @@ export function TaskDetail({ task, outlets, coordinators, members, divisions, ca
               status: task.status,
               division: task.division,
               outletId: task.outletId || null,
+              outletIds: task.outletIds ?? [],
+              brands: task.brands ?? [],
               picIds: task.picIds,
               start: task.startDate,
               due: task.dueDate,
