@@ -38,6 +38,10 @@ import {
 
 const g = globalThis as typeof globalThis & {
   __GWG_HYDRATION__?: { at: number; inflight: Promise<void> | null };
+  /** Reference tables refresh on their own slower clock (see REFERENCE_TTL_MS). */
+  __GWG_REF_AT__?: number;
+  /** Avatars refresh slowest of all — they are large and change rarely. */
+  __GWG_AVATARS__?: { at: number; map: Map<string, string | null> };
 };
 
 /**
@@ -48,6 +52,28 @@ const g = globalThis as typeof globalThis & {
  * truth: every instance converges within TTL of any write.
  */
 const HYDRATION_TTL_MS = 3000;
+
+/**
+ * Reference data — users, credentials, areas, outlets — only changes when an
+ * admin edits it, and those paths call `revalidatePath`. Re-reading it every
+ * 3 seconds on every instance was ~20k needless full-table reads a day, so it
+ * gets its own slow clock.
+ */
+const REFERENCE_TTL_MS = 30_000;
+
+/**
+ * Avatars are by far the heaviest thing in `users` (legacy rows hold base64
+ * data URIs of 200 kB+). They are fetched separately and merged back in, so the
+ * per-request hydration never carries them.
+ */
+const AVATAR_TTL_MS = 5 * 60_000;
+
+/** Columns pulled per table — never `*`. Heavy columns are fetched on demand
+ *  instead (users.avatar_url here; hygiene.photos on the Hygiene page). */
+const USER_COLUMNS =
+  "id,name,email,role,area_id,outlet_ids,phone,country,department,jabatan,grants,active,created_at";
+const HYGIENE_COLUMNS =
+  "id,outlet_id,area_id,date,shift,inspector_name,supervisor_name,ratings,findings,is_clean,hygiene_score,created_at";
 
 export function ensureHydrated(): Promise<void> {
   if (!dbEnabled) return Promise.resolve();
@@ -83,48 +109,88 @@ export function ensureHydrated(): Promise<void> {
 export function markLocalWrite() {
   const state = (g.__GWG_HYDRATION__ ??= { at: 0, inflight: null });
   state.at = Date.now();
+  // A write may have touched reference data (users, outlets, areas, logins), so
+  // expire its slower clock: the next hydration reloads it instead of serving a
+  // snapshot up to REFERENCE_TTL_MS old on the instance that just wrote.
+  g.__GWG_REF_AT__ = 0;
+  g.__GWG_AVATARS__ = undefined;
 }
 
 function replaceInPlace<T>(target: T[], next: T[]) {
   target.splice(0, target.length, ...next);
 }
 
+/** Avatar map, refreshed on its own slow clock. */
+async function avatarMap(): Promise<Map<string, string | null>> {
+  const cached = g.__GWG_AVATARS__;
+  if (cached && Date.now() - cached.at < AVATAR_TTL_MS) return cached.map;
+  const { data, error } = await db().from("users").select("id,avatar_url").limit(10000);
+  if (error) return cached?.map ?? new Map();
+  const map = new Map<string, string | null>(
+    ((data ?? []) as { id: string; avatar_url: string | null }[]).map((r) => [r.id, r.avatar_url ?? null]),
+  );
+  g.__GWG_AVATARS__ = { at: Date.now(), map };
+  return map;
+}
+
 async function hydrate() {
   const supabase = db();
-  // Emptiness probe via a real row fetch (count:exact/head proved unreliable
-  // in the build environment and a false "empty" would re-push the seed,
-  // clobbering edits to seeded rows).
-  const { data: probe, error: probeError } = await supabase.from("users").select("id").limit(1);
-  if (probeError) throw new Error(probeError.message);
 
-  if (!probe || probe.length === 0) {
-    await pushSeed();
-    return;
-  }
-
-  const get = async (table: string) => {
-    const { data, error } = await supabase.from(table).select("*").limit(10000);
+  const get = async (table: string, columns = "*") => {
+    const { data, error } = await supabase.from(table).select(columns).limit(10000);
     if (error) throw new Error(`${table}: ${error.message}`);
-    return data ?? [];
+    return (data ?? []) as unknown as Record<string, unknown>[];
   };
 
-  const [users, creds, areas, outlets, hospitality, tasks, events, hygiene, complaints, notifications] =
-    await Promise.all([
-      get("users"),
+  // Reference data changes only through admin actions, so it rides a slower
+  // clock. `at === 0` (cold instance) always loads it.
+  const refDue = Date.now() - (g.__GWG_REF_AT__ ?? 0) >= REFERENCE_TTL_MS;
+
+  const [hospitality, tasks, events, hygiene, complaints, notifications] = await Promise.all([
+    get("hospitality"),
+    get("tasks"),
+    get("events"),
+    get("hygiene", HYGIENE_COLUMNS),
+    get("complaints"),
+    get("notifications"),
+  ]);
+
+  if (refDue) {
+    const [users, creds, areas, outlets, avatars] = await Promise.all([
+      get("users", USER_COLUMNS),
       get("credentials"),
       get("areas"),
       get("outlets"),
-      get("hospitality"),
-      get("tasks"),
-      get("events"),
-      get("hygiene"),
-      get("complaints"),
-      get("notifications"),
+      avatarMap(),
     ]);
 
-  replaceInPlace(SEED.users, users.map(userFromRow));
-  replaceInPlace(SEED.areas, areas.map(areaFromRow));
-  replaceInPlace(SEED.outlets, outlets.map(outletFromRow));
+    // Empty database (first ever boot) → publish the demo seed once.
+    if (users.length === 0) {
+      await pushSeed();
+      g.__GWG_REF_AT__ = Date.now();
+      return;
+    }
+
+    replaceInPlace(
+      SEED.users,
+      users.map((r) => {
+        const u = userFromRow(r);
+        u.avatarUrl = avatars.get(u.id) ?? null;
+        return u;
+      }),
+    );
+    replaceInPlace(SEED.areas, areas.map(areaFromRow));
+    replaceInPlace(SEED.outlets, outlets.map(outletFromRow));
+    loadCredentials(
+      (creds as unknown as { user_id: string; username: string; password_hash: string }[]).map((r) => ({
+        userId: r.user_id,
+        username: r.username,
+        passwordHash: r.password_hash,
+      })),
+    );
+    g.__GWG_REF_AT__ = Date.now();
+  }
+
   replaceInPlace(SEED.hospitality, hospitality.map(hospitalityFromRow));
   replaceInPlace(
     SEED.tasks,
@@ -137,15 +203,6 @@ async function hydrate() {
     SEED.notifications,
     notifications.map(notificationFromRow).sort((a, b) => +new Date(b.createdAt) - +new Date(a.createdAt)),
   );
-  loadCredentials(
-    creds.map((r: { user_id: string; username: string; password_hash: string }) => ({
-      userId: r.user_id,
-      username: r.username,
-      passwordHash: r.password_hash,
-    })),
-  );
-
-  console.log(`[hydrate] loaded from Supabase: ${users.length} users, ${tasks.length} tasks, ${complaints.length} complaints`);
 }
 
 async function pushSeed() {

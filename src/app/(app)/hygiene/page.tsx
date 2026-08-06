@@ -1,6 +1,7 @@
 import { CircleCheck, ClipboardCheck, SprayCan, TriangleAlert } from "lucide-react";
 import type { Metadata } from "next";
 import { getSessionUser } from "@/lib/auth";
+import { hygienePhotosByAudit } from "@/lib/data/hygiene-photos";
 import { listHygiene, outletCoordinatorName, outletName, visibleOutlets } from "@/lib/data/store";
 import { can } from "@/lib/rbac";
 import { PageHeader } from "@/components/ui/page-header";
@@ -28,6 +29,10 @@ export default async function HygienePage() {
   const outlets = visibleOutlets(user).map((o) => ({ id: o.id, name: o.name }));
   const canCreate = can(user, "create_hygiene");
 
+  // Photos are the heaviest column in `hygiene` and are only rendered here, so
+  // they are left out of the shared in-memory cache and fetched per page.
+  const photosById = await hygienePhotosByAudit(audits.map((a) => a.id));
+
   const rows: HygieneRow[] = await Promise.all(
     audits.map(async (a) => ({
       id: a.id,
@@ -41,7 +46,7 @@ export default async function HygienePage() {
       score: a.hygieneScore,
       isClean: a.isClean,
       findings: a.findings.length,
-      photos: await resolvePhotos(a.photos),
+      photos: await resolvePhotos(photosById.get(a.id) ?? a.photos),
     })),
   );
 

@@ -76,21 +76,30 @@ export async function getSessionUser(): Promise<UserProfile | null> {
   // Load persisted data (Supabase) before any read — no-op in pure demo mode.
   await ensureHydrated();
 
-  if (isSupabaseConfigured) {
-    const supabase = await createSupabaseServerClient();
-    const { data } = (await supabase?.auth.getUser()) ?? { data: { user: null } };
-    if (data?.user) {
-      const profile = getUsers().find((u) => u.email.toLowerCase() === data.user!.email?.toLowerCase());
-      if (profile && profile.active) return profile;
-      return null; // authenticated in GoTrue but no active profile
-    }
-    // No/expired Supabase session — fall through to the signed cookie so
-    // sessions survive access-token expiry (hybrid mode).
-  }
-
+  // Signed cookie FIRST. Every successful sign-in mints it (see actions/auth.ts),
+  // including Supabase sign-ins, so it is the authoritative session for this app
+  // and verifying it costs one HMAC — no network. Asking GoTrue first meant a
+  // round trip to Supabase Auth on EVERY render and action, and once the access
+  // token expired every one of those also burned a failing token refresh
+  // ("Invalid Refresh Token"). Both are gone now.
   const store = await cookies();
   const uid = verifySession(store.get(SESSION_COOKIE)?.value);
-  if (!uid) return null;
-  const user = getUser(uid);
-  return user && user.active ? user : null;
+  if (uid) {
+    const user = getUser(uid);
+    if (user && user.active) return user;
+  }
+
+  // No valid signed cookie — fall back to the Supabase session, and only when
+  // its cookies are actually present (otherwise there is nothing to verify).
+  if (isSupabaseConfigured && store.getAll().some((c) => c.name.startsWith("sb-") && c.name.includes("auth-token"))) {
+    const supabase = await createSupabaseServerClient();
+    const { data } = (await supabase?.auth.getUser()) ?? { data: { user: null } };
+    const email = data?.user?.email?.toLowerCase();
+    if (email) {
+      const profile = getUsers().find((u) => u.email.toLowerCase() === email);
+      if (profile && profile.active) return profile;
+    }
+  }
+
+  return null;
 }
