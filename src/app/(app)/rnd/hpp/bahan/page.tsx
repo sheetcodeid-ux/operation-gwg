@@ -5,8 +5,10 @@ import { getSessionUser } from "@/lib/auth";
 import { canOpenMenu } from "@/lib/nav";
 import { listHpp } from "@/lib/data/hpp";
 import { listIngredients } from "@/lib/data/hpp-ingredients";
+import { listHppPriceAlerts } from "@/lib/data/hpp-alerts";
 import { PageHeader } from "@/components/ui/page-header";
 import { HppIngredients, type MenuUse } from "@/components/hpp/hpp-ingredients";
+import { HppPriceImpact } from "@/components/hpp/hpp-price-impact";
 
 export const metadata: Metadata = { title: "Master Bahan Baku" };
 
@@ -18,7 +20,7 @@ export default async function HppIngredientsPage() {
     user.department === "Food & Beverage";
   if (!canEdit) redirect("/dashboard");
 
-  const [ingredients, records] = await Promise.all([listIngredients(), listHpp()]);
+  const [ingredients, records, alerts] = await Promise.all([listIngredients(), listHpp(), listHppPriceAlerts()]);
   // Which saved menus reference each master ingredient (for the >5% impact view).
   const menus: MenuUse[] = records.map((r) => ({
     id: r.id,
@@ -33,7 +35,10 @@ export default async function HppIngredientsPage() {
         title="Master Bahan Baku"
         description="Library bahan baku dengan harga tertinggi per wilayah — deteksi otomatis kenaikan >5%"
       />
-      <HppIngredients ingredients={ingredients} menus={menus} canEdit={canEdit} />
+      <div className="space-y-4">
+        <HppPriceImpact alerts={alerts} canEdit={canEdit} />
+        <HppIngredients ingredients={ingredients} menus={menus} canEdit={canEdit} />
+      </div>
     </div>
   );
 }

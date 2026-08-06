@@ -379,6 +379,7 @@ export function HppCalculator({
         wastePct,
         btkl,
         useClass,
+        yieldPcs,
         variables,
         fixed,
         chosenPrice: price,
@@ -435,6 +436,7 @@ export function HppCalculator({
     setFixed(r.fixed);
     setAllocMode(r.allocMode);
     setTargetSales(r.targetSales || 1000);
+    setYieldPcs(r.yieldPcs ?? 1);
     setWastePct(r.wastePct ?? 5);
     setBtkl(r.btkl ?? 0);
     setUseClass(!!r.useClass);

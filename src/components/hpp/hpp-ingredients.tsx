@@ -234,14 +234,7 @@ export function HppIngredients({ ingredients, menus, canEdit }: { ingredients: H
         <StatTile icon={Package} label="Wilayah" value={String(regions.length)} />
       </Reveal>
 
-      {alerts.length > 0 && (
-        <div className="flex items-start gap-2 rounded-2xl border border-amber-500/30 bg-amber-500/10 p-4 text-sm text-amber-700 dark:text-amber-300">
-          <AlertTriangle className="mt-0.5 size-4 shrink-0" />
-          <p>
-            <span className="font-semibold">{alerts.length} bahan baku naik &gt;5%</span> — {affectedMenus} menu perlu dihitung ulang HPP-nya. Buka menu terkait di Kalkulator HPP, lalu tandai selesai dengan tombol lonceng.
-          </p>
-        </div>
-      )}
+      {/* Rincian dampak >5% ditangani panel HppPriceImpact di atas komponen ini. */}
 
       {/* Add / edit form */}
       {canEdit && (

@@ -17,6 +17,8 @@ export interface HppRecord {
   reviewedBy: string | null;
   reviewedAt: string | null;
   mode: string; // per_pcs | per_resep
+  /** Hasil porsi satu resep — wajib agar menu per_resep bisa dihitung ulang. */
+  yieldPcs: number;
   allocMode: AllocMode;
   targetSales: number;
   wastePct: number; // waste normal ≤5% (GWG policy)
@@ -106,6 +108,7 @@ const toRow = (r: HppRecord) => ({
   reviewed_by: r.reviewedBy,
   reviewed_at: r.reviewedAt,
   mode: r.mode,
+  yield_pcs: r.yieldPcs || 1,
   alloc_mode: r.allocMode,
   target_sales: r.targetSales,
   waste_pct: r.wastePct,
@@ -132,6 +135,7 @@ interface HppRow {
   reviewed_by: string | null;
   reviewed_at: string | null;
   mode: string;
+  yield_pcs?: number | string | null;
   alloc_mode: AllocMode;
   target_sales: number;
   waste_pct: number | string | null;
@@ -158,6 +162,7 @@ const fromRow = (r: HppRow): HppRecord => ({
   reviewedBy: r.reviewed_by,
   reviewedAt: r.reviewed_at,
   mode: r.mode,
+  yieldPcs: Number(r.yield_pcs) || 1,
   allocMode: r.alloc_mode,
   targetSales: r.target_sales,
   wastePct: r.waste_pct == null ? 5 : Number(r.waste_pct),
