@@ -7,7 +7,7 @@ import { toast } from "sonner";
 import { saveCompetitorPriceAction, deleteCompetitorPriceAction } from "@/lib/actions/hpp-competitors";
 import type { CompetitorInsight, CompetitorPrice, PricePosition } from "@/lib/data/hpp-competitors";
 import { Button } from "@/components/ui/button";
-import { Field, Input, Label, Textarea } from "@/components/ui/input";
+import { Field, Input, Textarea } from "@/components/ui/input";
 import { StatTile } from "@/components/ui/stat";
 import { Combobox } from "@/components/ui/combobox";
 import { Sheet, SheetContent } from "@/components/ui/sheet";
@@ -289,24 +289,22 @@ export function HppCompetitors({
 
       <Sheet open={formOpen} onOpenChange={setFormOpen}>
         <SheetContent title="Catat Harga Kompetitor" description="Satu baris = satu harga dari satu kompetitor. Makin banyak pembanding, makin akurat posisinya.">
-          <div className="space-y-4">
-            <div>
-              <Label>Menu kita</Label>
-              <div className="mt-1.5">
-                <Combobox
-                  portal
-                  matchTriggerWidth
-                  searchable
-                  searchPlaceholder="Cari menu…"
-                  value={form.menuId}
-                  onChange={(v) => {
-                    const m = menus.find((x) => x.id === v);
-                    setForm((f) => ({ ...f, menuId: v, menuName: m ? m.name : f.menuName }));
-                  }}
-                  options={[{ value: "", label: "Tulis manual (menu belum ada)" }, ...menus.map((m) => ({ value: m.id, label: m.name, hint: m.brand }))]}
-                />
-              </div>
-            </div>
+          {/* Sheet merender children apa adanya — padding & scroll dari sini. */}
+          <div className="flex-1 space-y-4 overflow-y-auto p-5">
+            <Field label="Menu kita">
+              <Combobox
+                portal
+                matchTriggerWidth
+                searchable
+                searchPlaceholder="Cari menu…"
+                value={form.menuId}
+                onChange={(v) => {
+                  const m = menus.find((x) => x.id === v);
+                  setForm((f) => ({ ...f, menuId: v, menuName: m ? m.name : f.menuName }));
+                }}
+                options={[{ value: "", label: "Tulis manual (menu belum ada)" }, ...menus.map((m) => ({ value: m.id, label: m.name, hint: m.brand }))]}
+              />
+            </Field>
 
             <Field label="Nama menu">
               <Input
@@ -329,12 +327,9 @@ export function HppCompetitors({
               <Field label="Kota">
                 <Input value={form.city} onChange={(e) => setForm({ ...form, city: e.target.value })} placeholder="mis. Sintang" />
               </Field>
-              <div>
-                <Label>Sumber</Label>
-                <div className="mt-1.5">
-                  <Combobox portal matchTriggerWidth value={form.source} onChange={(v) => setForm({ ...form, source: v })} options={SOURCES.map((s) => ({ value: s, label: s }))} />
-                </div>
-              </div>
+              <Field label="Sumber">
+                <Combobox portal matchTriggerWidth value={form.source} onChange={(v) => setForm({ ...form, source: v })} options={SOURCES.map((s) => ({ value: s, label: s }))} />
+              </Field>
             </div>
 
             <Field label="Tanggal pengamatan">
@@ -345,7 +340,7 @@ export function HppCompetitors({
               <Textarea rows={3} value={form.note} onChange={(e) => setForm({ ...form, note: e.target.value })} placeholder="mis. ukuran cup lebih kecil, promo bundling" />
             </Field>
 
-            <div className="flex gap-2 pt-1">
+            <div className="flex flex-wrap gap-2 pt-2">
               <Button onClick={save} disabled={saving} className="flex-1">
                 {saving ? "Menyimpan…" : "Simpan"}
               </Button>

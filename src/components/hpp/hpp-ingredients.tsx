@@ -573,7 +573,9 @@ export function HppIngredients({
           title={form.id ? "Edit Bahan Baku" : "Tambah Bahan Baku"}
           description="Harga beli dicatat apa adanya; isi kemasan dipakai untuk menghitung harga per satuan pakai."
         >
-          <div className="space-y-4">
+          {/* Sheet merender children apa adanya — padding & scroll dari sini,
+              kalau tidak isinya mepet tepi dan tombol Batal terpotong. */}
+          <div className="flex-1 space-y-4 overflow-y-auto p-5">
             <Field label="Nama Bahan">
               <Input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="mis. Susu UHT" />
             </Field>
@@ -586,19 +588,16 @@ export function HppIngredients({
                 <Field label="Qty">
                   <Input value={form.buyQty} onChange={(e) => setForm({ ...form, buyQty: e.target.value })} placeholder="1" inputMode="numeric" />
                 </Field>
-                <div>
-                  <Label>Satuan</Label>
-                  <div className="mt-1.5">
-                    <Combobox
-                      portal
-                      matchTriggerWidth
-                      searchable
-                      value={form.buyUnit}
-                      onChange={(v) => setForm({ ...form, buyUnit: v })}
-                      options={unitOptions}
-                    />
-                  </div>
-                </div>
+                <Field label="Satuan">
+                  <Combobox
+                    portal
+                    matchTriggerWidth
+                    searchable
+                    value={form.buyUnit}
+                    onChange={(v) => setForm({ ...form, buyUnit: v })}
+                    options={unitOptions}
+                  />
+                </Field>
               </div>
             </div>
 
@@ -611,19 +610,16 @@ export function HppIngredients({
                 <Field label="Isi per kemasan">
                   <Input value={form.contentQty} onChange={(e) => setForm({ ...form, contentQty: e.target.value })} placeholder="24" inputMode="numeric" />
                 </Field>
-                <div>
-                  <Label>Satuan pakai</Label>
-                  <div className="mt-1.5">
-                    <Combobox
-                      portal
-                      matchTriggerWidth
-                      searchable
-                      value={form.contentUnit || form.buyUnit}
-                      onChange={(v) => setForm({ ...form, contentUnit: v })}
-                      options={unitOptions}
-                    />
-                  </div>
-                </div>
+                <Field label="Satuan pakai">
+                  <Combobox
+                    portal
+                    matchTriggerWidth
+                    searchable
+                    value={form.contentUnit || form.buyUnit}
+                    onChange={(v) => setForm({ ...form, contentUnit: v })}
+                    options={unitOptions}
+                  />
+                </Field>
               </div>
               {preview > 0 && (
                 <p className="mt-2 text-xs text-foreground">
@@ -637,7 +633,7 @@ export function HppIngredients({
               <Input value={form.region} onChange={(e) => setForm({ ...form, region: e.target.value })} placeholder="mis. Kalimantan" />
             </Field>
 
-            <div className="flex gap-2 pt-1">
+            <div className="flex flex-wrap gap-2 pt-2">
               <Button onClick={save} disabled={saving} className="flex-1">
                 {saving ? "Menyimpan…" : form.id ? "Simpan Perubahan" : "Tambah Bahan"}
               </Button>
@@ -652,7 +648,7 @@ export function HppIngredients({
       {/* Import massal */}
       <Dialog open={showImport} onOpenChange={setShowImport}>
         <DialogContent title="Import Bahan Baku" description="Lewat template Excel, atau tempel manual." className="max-w-xl">
-          <div className="space-y-4">
+          <div className="max-h-[70vh] space-y-4 overflow-y-auto p-5">
             <div>
               <p className="text-[11px] text-muted-foreground">
                 <b className="text-foreground">Cara Excel:</b> unduh template (berisi semua bahan saat ini), ubah harganya di Excel, lalu import kembali —
