@@ -6,7 +6,7 @@ import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
 import { DetailRows, DetailTitle, type DetailRow } from "@/components/ui/detail-rows";
-import { uploadHcRequestFileAction } from "@/lib/actions/hc-requests";
+import { presignHcUploadAction, uploadHcRequestFileAction } from "@/lib/actions/hc-requests";
 import {
   fmtRupiah,
   requestSteps,
@@ -88,10 +88,47 @@ export function FilePicker({ files, onChange, disabled, label = "Unggah berkas /
   );
 }
 
-/** Unggah semua berkas → daftar lampiran tersimpan. Melempar bila ada yang gagal. */
+/**
+ * Ambang aman untuk melewati server action.
+ *
+ * Badan permintaan menuju fungsi serverless dibatasi beberapa MB dan ditolak
+ * di lapisan platform — sebelum kode kita jalan — sehingga error-nya muncul
+ * sebagai "an unexpected response was received from the server", bukan pesan
+ * kita sendiri. Berkas di atas ambang ini naik langsung ke R2.
+ */
+const DIRECT_UPLOAD_MIN = 3 * 1024 * 1024;
+
+/** Unggah satu berkas langsung ke R2 memakai presigned URL. */
+async function uploadDirect(file: File): Promise<HcRequestAttachment | null> {
+  const signed = await presignHcUploadAction({
+    name: file.name,
+    contentType: file.type || "application/octet-stream",
+    size: file.size,
+  });
+  if (signed.error || !signed.url || !signed.path) {
+    // R2 mati / tidak dikonfigurasi ⇒ biar pemanggil mencoba jalur biasa.
+    if (signed.error && !signed.error.includes("R2 belum aktif")) throw new Error(signed.error);
+    return null;
+  }
+  const res = await fetch(signed.url, {
+    method: "PUT",
+    body: file,
+    headers: { "content-type": file.type || "application/octet-stream" },
+  });
+  if (!res.ok) throw new Error(`Gagal mengunggah "${file.name}" (${res.status}).`);
+  return { path: signed.path, name: file.name };
+}
+
 export async function uploadAll(files: File[]): Promise<HcRequestAttachment[]> {
   const out: HcRequestAttachment[] = [];
   for (const file of files) {
+    if (file.size > DIRECT_UPLOAD_MIN) {
+      const direct = await uploadDirect(file);
+      if (direct) {
+        out.push(direct);
+        continue;
+      }
+    }
     const fd = new FormData();
     fd.append("file", file);
     const up = await uploadHcRequestFileAction(fd);

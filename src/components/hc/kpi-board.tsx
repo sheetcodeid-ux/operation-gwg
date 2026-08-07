@@ -13,6 +13,7 @@ import { DataTable } from "@/components/ui/data-table";
 import { Field, Input, Textarea } from "@/components/ui/input";
 import { Sheet, SheetContent, SheetTrigger, useSheetControl } from "@/components/ui/sheet";
 import { getKpiBoardAction, saveKpiEntryAction, uploadKpiEvidenceAction } from "@/lib/actions/hc-kpi";
+import { uploadMany } from "@/lib/upload-client";
 import {
   KPI_INDICATORS,
   KPI_MONTHS,
@@ -506,12 +507,12 @@ function KpiEntryForm({ row, period, auto, onSaved }: { row: KpiRow; period: str
     setBusy(true);
     try {
       const attachments: KpiAttachment[] = [...kept];
-      for (const file of files) {
-        const fd = new FormData();
-        fd.append("file", file);
-        const up = await uploadKpiEvidenceAction(fd);
-        if (up.error) return toast.error(up.error);
-        if (up.path && up.name) attachments.push({ path: up.path, name: up.name });
+      try {
+        // Berkas besar naik langsung ke R2 — lewat server action akan ditolak
+        // di lapisan platform sebelum kodenya sempat jalan.
+        attachments.push(...(await uploadMany("hckpi", files, uploadKpiEvidenceAction)));
+      } catch (e) {
+        return toast.error(e instanceof Error ? e.message : "Gagal mengunggah berkas.");
       }
       const res = await saveKpiEntryAction({ period, key: row.key, target: t, realisasi: r, note, attachments });
       if (res.error) return toast.error(res.error);

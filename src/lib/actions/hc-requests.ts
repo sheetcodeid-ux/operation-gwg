@@ -9,7 +9,7 @@ import { persistMessage } from "@/lib/data/persist";
 import { createHcRequest, getHcRequest, listHcRequests, updateHcRequest } from "@/lib/data/hc-requests";
 import { getUsers } from "@/lib/data/store";
 import { createTask, getTask, updateTask, updateTaskStatus } from "@/lib/data/mutations";
-import { r2Enabled, r2Put, R2_PREFIX } from "@/lib/storage/r2";
+import { presignPut, r2Enabled, r2Put, R2_PREFIX } from "@/lib/storage/r2";
 import type { HcRequest, HcRequestAttachment, HcRequestKind } from "@/lib/hc-request";
 import type { UserProfile } from "@/lib/types";
 
@@ -51,6 +51,38 @@ export async function uploadHcRequestFileAction(formData: FormData): Promise<{ p
   const { error } = await db().storage.from("system-attachments").upload(`hc/${name}`, file, { contentType: file.type });
   if (error) return { error: `Upload gagal: ${error.message}` };
   return { path: `hc/${name}`, name: file.name };
+}
+
+/**
+ * URL unggah langsung ke R2 untuk satu berkas.
+ *
+ * Berkas besar tidak boleh melewati server action: badan permintaan menuju
+ * fungsi serverless dibatasi beberapa MB dan ditolak di lapisan platform —
+ * sebelum kode kita sempat jalan — sehingga yang terlihat pengguna hanyalah
+ * "an unexpected response was received from the server". Dengan presigned URL,
+ * berkasnya naik dari browser langsung ke R2 dan server hanya menandatangani.
+ */
+export async function presignHcUploadAction(input: {
+  name: string;
+  contentType: string;
+  size: number;
+}): Promise<{ url?: string; path?: string; error?: string }> {
+  const user = await getSessionUser();
+  if (!canSubmit(user) && !canHc(user) && !canCreative(user)) return { error: "Tidak punya akses." };
+  if (!r2Enabled()) return { error: "R2 belum aktif." };
+  if (input.size > MAX_BYTES) return { error: `Berkas "${input.name}" melebihi 10 MB.` };
+  if (input.contentType !== "application/pdf" && !input.contentType.startsWith("image/")) {
+    return { error: `"${input.name}" harus PDF atau gambar (JPG/PNG).` };
+  }
+  const safe = input.name.replace(/[^a-zA-Z0-9._-]/g, "_").slice(-60);
+  const key = `hc/request/${user!.id}/${Date.now()}-${randomUUID().slice(0, 8)}-${safe}`;
+  try {
+    const url = await presignPut(key, input.contentType || "application/octet-stream");
+    return { url, path: `${R2_PREFIX}${key}` };
+  } catch (e) {
+    console.error("[hc-request] gagal menandatangani URL unggah:", e);
+    return { error: "Gagal menyiapkan unggahan." };
+  }
 }
 
 export interface SubmitRequestInput {

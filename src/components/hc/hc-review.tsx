@@ -20,6 +20,7 @@ import {
   X,
 } from "lucide-react";
 import { toast } from "sonner";
+import { uploadOne } from "@/lib/upload-client";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Field, Textarea } from "@/components/ui/input";
@@ -270,14 +271,14 @@ function DetailPanel({ row, canDelete, onDeleted }: { row: HcSubmission; canDele
       return;
     }
     startTransition(async () => {
-      const fd = new FormData();
-      fd.append("file", finalFile);
-      const up = await uploadHcFinalAction(fd);
-      if (up.error) {
-        toast.error(up.error);
+      let finalPath: string;
+      try {
+        finalPath = (await uploadOne("hcdoc", finalFile, uploadHcFinalAction)).path;
+      } catch (e) {
+        toast.error(e instanceof Error ? e.message : "Gagal mengunggah berkas.");
         return;
       }
-      const res = await completeHcRequestAction({ id: row.id, note, finalDocPath: up.path ?? "" });
+      const res = await completeHcRequestAction({ id: row.id, note, finalDocPath: finalPath });
       if (res?.error) {
         toast.error(res.error);
         return;

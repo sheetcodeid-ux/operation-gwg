@@ -14,6 +14,7 @@ import { DetailRows, DetailTitle } from "@/components/ui/detail-rows";
 import { StatusFilter } from "@/components/ui/status-filter";
 import { cn } from "@/lib/utils";
 import { submitHcRequestAction, uploadHcKtpAction } from "@/lib/actions/hc";
+import { uploadOne } from "@/lib/upload-client";
 import {
   forceDownload,
   HC_DOC_LABEL,
@@ -74,14 +75,12 @@ function SubmissionForm({ outlets }: { outlets: { id: string; name: string }[] }
       let ktpPath: string | null = null;
       const outgoing: HcDetails = { ...details };
       if (ktp) {
-        const fd = new FormData();
-        fd.append("file", ktp);
-        const up = await uploadHcKtpAction(fd);
-        if (up.error) {
-          toast.error(up.error);
+        try {
+          ktpPath = (await uploadOne("hcdoc", ktp, uploadHcKtpAction)).path;
+        } catch (e) {
+          toast.error(e instanceof Error ? e.message : "Gagal mengunggah berkas.");
           return;
         }
-        ktpPath = up.path ?? null;
         outgoing.ktpName = ktp.name; // keep the original filename (e.g. dfsfs.jpg)
       }
       const res = await submitHcRequestAction({ employeeName: employeeName.trim(), docType, outletId, ktpPath, details: outgoing });

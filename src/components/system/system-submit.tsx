@@ -12,6 +12,7 @@ import { Combobox } from "@/components/ui/combobox";
 import { DatePicker } from "@/components/ui/date-picker";
 import { cn } from "@/lib/utils";
 import { submitSystemRequestAction, uploadSystemAttachmentAction } from "@/lib/actions/system";
+import { uploadOne } from "@/lib/upload-client";
 import { ProofGrid } from "@/components/system/system-review";
 import { DetailRows, DetailTitle } from "@/components/ui/detail-rows";
 import { StatusFilter } from "@/components/ui/status-filter";
@@ -86,15 +87,14 @@ function SystemRequestForm({ requesterName, outlets }: { requesterName: string; 
       let attachmentPath: string | null = null;
       let attachmentName: string | null = null;
       if (file) {
-        const fd = new FormData();
-        fd.append("file", file);
-        const up = await uploadSystemAttachmentAction(fd);
-        if (up.error) {
-          toast.error(up.error);
+        try {
+          const up = await uploadOne("system", file, uploadSystemAttachmentAction);
+          attachmentPath = up.path;
+          attachmentName = up.name;
+        } catch (e) {
+          toast.error(e instanceof Error ? e.message : "Gagal mengunggah berkas.");
           return;
         }
-        attachmentPath = up.path ?? null;
-        attachmentName = up.name ?? file.name;
       }
       const res = await submitSystemRequestAction({
         outletId,

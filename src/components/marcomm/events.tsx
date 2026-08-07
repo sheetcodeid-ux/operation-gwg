@@ -16,6 +16,7 @@ import {
 } from "@/lib/marcomm-shared";
 import { ImpactView } from "./impact";
 import { approveEventAction, createMarcommProposalAction, rejectEventAction, resetReviewAction, uploadMarcommAttachmentAction } from "@/lib/actions/marcomm";
+import { uploadMany } from "@/lib/upload-client";
 import type { MarcommAttachment } from "@/lib/marcomm-shared";
 import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
@@ -191,12 +192,10 @@ function NewEventDialog({ products, outlets, onClose }: { products: ProductOptio
     try {
       // Upload each PDF/PNG first → collect its storage path.
       const attachments: MarcommAttachment[] = [];
-      for (const file of files) {
-        const fd = new FormData();
-        fd.append("file", file);
-        const up = await uploadMarcommAttachmentAction(fd);
-        if (up.error) return toast.error(up.error);
-        if (up.path && up.name) attachments.push({ path: up.path, name: up.name });
+      try {
+        attachments.push(...(await uploadMany("marcomm", files, uploadMarcommAttachmentAction)));
+      } catch (e) {
+        return toast.error(e instanceof Error ? e.message : "Gagal mengunggah berkas.");
       }
       const res = await createMarcommProposalAction({ title: name, description, eventType: type, productNames, outletIds, allOutlets, startDate: start, endDate: end, attachments });
       if (res?.error) return toast.error(res.error);
