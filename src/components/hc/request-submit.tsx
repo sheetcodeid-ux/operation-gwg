@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import { useRouter } from "next/navigation";
-import { AlertCircle, Loader2, Plus } from "lucide-react";
+import { AlertCircle, Loader2, Plus, RotateCcw } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -12,7 +12,7 @@ import { Field, Input, Textarea } from "@/components/ui/input";
 import { MultiCombobox } from "@/components/ui/multi-combobox";
 import { SegmentedTabs } from "@/components/ui/segmented-tabs";
 import { Dialog, DialogContent, DialogTrigger, useDialogControl } from "@/components/ui/dialog";
-import { submitHcRequestAction } from "@/lib/actions/hc-requests";
+import { requestDesignRevisionAction, submitHcRequestAction } from "@/lib/actions/hc-requests";
 import { DESIGN_TYPES, REVIEWER_LABEL, TRAINING_TYPES, fmtRupiah, type HcRequest, type HcRequestKind } from "@/lib/hc-request";
 import { FilePicker, RequestEmpty, RequestList, uploadAll } from "./request-shared";
 
@@ -46,8 +46,79 @@ export interface DeptMember {
 
 /** Daftar pengajuan milik departemen, dirender dari data halaman. */
 export function HcRequestList({ rows, kind }: { rows: HcRequest[]; kind: HcRequestKind }) {
+  const router = useRouter();
   if (rows.length === 0) return <RequestEmpty>{COPY[kind].empty}</RequestEmpty>;
-  return <RequestList rows={rows} />;
+  return (
+    <RequestList
+      rows={rows}
+      actions={(r) =>
+        // Design yang sudah dikirim boleh dikembalikan ke tim Creative dengan
+        // catatan revisi — dalam pengajuan yang sama, bukan pengajuan baru.
+        r.kind === "design" && r.status === "terlaksana" ? (
+          <ReviseButton r={r} onDone={() => router.refresh()} />
+        ) : null
+      }
+    />
+  );
+}
+
+/** Tombol + dialog "Minta Revisi" untuk hasil design yang sudah diterima. */
+function ReviseButton({ r, onDone }: { r: HcRequest; onDone: () => void }) {
+  const [open, setOpen] = React.useState(false);
+  const [note, setNote] = React.useState("");
+  const [busy, setBusy] = React.useState(false);
+
+  async function submit() {
+    if (!note.trim()) return toast.error("Tulis dulu apa yang perlu direvisi.");
+    setBusy(true);
+    const res = await requestDesignRevisionAction({ id: r.id, note });
+    setBusy(false);
+    if (res?.error) return toast.error(res.error);
+    toast.success(`Dikembalikan ke ${r.assigneeName ?? "tim Creative"} untuk direvisi`);
+    setNote("");
+    setOpen(false);
+    onDone();
+  }
+
+  return (
+    <>
+      <Button size="sm" variant="outline" onClick={() => setOpen(true)}>
+        <RotateCcw className="size-4" /> Minta Revisi
+      </Button>
+      <Dialog open={open} onOpenChange={setOpen}>
+        <DialogContent
+          align="center"
+          title="Minta Revisi Design"
+          description={r.title}
+          className="max-w-md"
+        >
+          <div className="space-y-4 p-5">
+            <Field label="Apa yang perlu direvisi?">
+              <Textarea
+                rows={4}
+                value={note}
+                onChange={(e) => setNote(e.target.value)}
+                placeholder="mis. warna logo terlalu gelap, ukuran teks judul diperbesar"
+              />
+            </Field>
+            <p className="rounded-lg border border-border bg-muted/30 p-3 text-[11px] text-muted-foreground">
+              Pengajuan ini kembali ke{" "}
+              <b className="text-foreground">{r.assigneeName ?? "tim Creative"}</b> beserta catatan Anda, dan tugasnya di
+              Work Tracker dibuka lagi. Riwayat revisi sebelumnya tetap tersimpan.
+            </p>
+            <div className="flex justify-end gap-2">
+              <Button variant="outline" onClick={() => setOpen(false)} disabled={busy}>
+                Batal
+              </Button>
+              <Button onClick={submit} disabled={busy}>
+                {busy ? "Mengirim…" : "Kirim Revisi"}
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+    </>
+  );
 }
 
 /** Dialog terpusat — bentuk yang sama dengan Pengajuan Dokumen & Pengajuan

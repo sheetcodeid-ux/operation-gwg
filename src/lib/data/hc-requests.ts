@@ -45,6 +45,9 @@ const fromRow = (r: any): HcRequest => ({
   assigneeId: r.assignee_id ?? null,
   assigneeName: r.assignee_id ? userName(r.assignee_id) : null,
   workTaskId: r.work_task_id ?? null,
+  revisions: (Array.isArray(r.revisions) ? r.revisions : [])
+    .filter((v: any) => v && v.note)
+    .map((v: any) => ({ at: String(v.at ?? ""), byName: String(v.byName ?? "—"), note: String(v.note) })),
   createdAt: r.created_at ?? new Date().toISOString(),
   updatedAt: r.updated_at ?? r.created_at ?? new Date().toISOString(),
   completedAt: r.completed_at ?? null,
@@ -172,6 +175,7 @@ export interface UpdateRequestPatch {
   completedAt?: string | null;
   assigneeId?: string | null;
   workTaskId?: string | null;
+  revisions?: { at: string; byName: string; note: string }[];
 }
 
 export async function updateHcRequest(id: string, patch: UpdateRequestPatch): Promise<{ error?: string }> {
@@ -186,6 +190,7 @@ export async function updateHcRequest(id: string, patch: UpdateRequestPatch): Pr
   if (patch.completedAt !== undefined) row.completed_at = patch.completedAt;
   if (patch.assigneeId !== undefined) row.assignee_id = patch.assigneeId;
   if (patch.workTaskId !== undefined) row.work_task_id = patch.workTaskId;
+  if (patch.revisions !== undefined) row.revisions = patch.revisions;
 
   if (!dbEnabled) {
     const cur = mem.get(id);

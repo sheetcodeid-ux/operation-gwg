@@ -17,7 +17,7 @@ import {
 } from "@/lib/actions/hc-requests";
 import { Combobox } from "@/components/ui/combobox";
 import { fmtRupiah, isOpen, nextActions, type HcRequest, type HcRequestKind } from "@/lib/hc-request";
-import { FilePicker, RequestEmpty, RequestList, uploadAll } from "./request-shared";
+import { FilePicker, RequestEmpty, RequestList, uploadAll, type UploadProgress } from "./request-shared";
 
 type Mode = "hc" | "finance";
 type Tab = "open" | "done";
@@ -243,11 +243,13 @@ function CompleteDialog({ r, onClose, onDone }: { r: HcRequest; onClose: () => v
   const [note, setNote] = React.useState("");
   const [files, setFiles] = React.useState<File[]>([]);
   const [busy, setBusy] = React.useState(false);
+  const [progress, setProgress] = React.useState<UploadProgress | null>(null);
 
   async function submit() {
     setBusy(true);
+    setProgress(null);
     try {
-      const attachments = await uploadAll(files);
+      const attachments = await uploadAll(files, setProgress);
       const res = await completeHcRequestAction({
         id: r.id,
         recruited: isRecruit ? Number(recruited) || 0 : undefined,
@@ -262,6 +264,7 @@ function CompleteDialog({ r, onClose, onDone }: { r: HcRequest; onClose: () => v
       toast.error(e instanceof Error ? e.message : "Gagal menyimpan.");
     } finally {
       setBusy(false);
+      setProgress(null);
     }
   }
 
@@ -290,6 +293,28 @@ function CompleteDialog({ r, onClose, onDone }: { r: HcRequest; onClose: () => v
           <Field label="Catatan (opsional)">
             <Textarea rows={3} value={note} onChange={(e) => setNote(e.target.value)} />
           </Field>
+
+          {/* Kemajuan nyata per byte — berkas design bisa beberapa MB dan tanpa
+              ini layarnya tampak menggantung belasan detik. */}
+          {progress && (
+            <div className="rounded-xl border border-border bg-muted/30 p-3">
+              <div className="mb-1.5 flex items-center justify-between gap-2 text-[11px]">
+                <span className="min-w-0 truncate text-foreground/80">
+                  Mengunggah {progress.index}/{progress.total} · {progress.fileName}
+                </span>
+                <span className="shrink-0 font-semibold tabular-nums text-foreground">
+                  {Math.round(progress.ratio * 100)}%
+                </span>
+              </div>
+              <div className="h-1.5 overflow-hidden rounded-full bg-muted">
+                <div
+                  className="h-full rounded-full bg-primary transition-[width] duration-150"
+                  style={{ width: `${Math.round(progress.ratio * 100)}%` }}
+                />
+              </div>
+            </div>
+          )}
+
           <div className="flex justify-end gap-2">
             <Button variant="ghost" onClick={onClose} disabled={busy}>Batal</Button>
             <Button onClick={submit} disabled={busy}>

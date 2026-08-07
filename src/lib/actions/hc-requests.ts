@@ -356,3 +356,46 @@ function revalidateAssignment() {
   revalidatePath("/work-tracker");
   revalidatePath("/work-tracker/kanban");
 }
+
+/**
+ * Pemohon meminta revisi atas hasil design yang sudah dikirim.
+ *
+ * Permintaannya tidak ditutup lalu dibuat baru — ia kembali ke tim Creative
+ * dalam pengajuan yang sama, sehingga riwayat, PIC, dan tugas Work Tracker-nya
+ * tetap satu benang. Catatan tiap putaran disimpan berurutan supaya revisi
+ * kedua tidak menghapus alasan revisi pertama.
+ */
+export async function requestDesignRevisionAction(input: {
+  id: string;
+  note: string;
+}): Promise<{ ok?: true; error?: string }> {
+  const user = await getSessionUser();
+  if (!user) return { error: "Tidak punya akses." };
+  const req = await getHcRequest(input.id);
+  if (!req) return { error: "Pengajuan tidak ditemukan." };
+  if (req.kind !== "design") return { error: "Revisi hanya untuk pengajuan design." };
+  if (req.status !== "terlaksana") return { error: "Revisi hanya bisa diminta setelah designnya dikirim." };
+  const note = input.note.trim();
+  if (!note) return { error: "Tulis dulu apa yang perlu direvisi." };
+
+  // Yang boleh meminta revisi: pemohonnya sendiri, rekan satu departemen
+  // (atasan yang menerima hasilnya), atau tim Creative yang menariknya kembali.
+  const sameDept = !!user.department && user.department === req.department;
+  if (req.requesterId !== user.id && !sameDept && !canCreative(user)) {
+    return { error: "Hanya pemohon atau timnya yang bisa meminta revisi." };
+  }
+
+  const revisions = [...req.revisions, { at: new Date().toISOString(), byName: user.name, note }];
+  const res = await updateHcRequest(input.id, {
+    status: "disetujui_hc", // kembali ke "Sedang Dikerjakan"
+    completedAt: null,
+    revisions,
+  });
+  if (res.error) return { error: res.error };
+
+  // Tugas Work Tracker PIC ikut dibuka kembali — kerjaannya memang belum usai.
+  if (req.workTaskId) updateTaskStatus(req.workTaskId, "ongoing", 60);
+
+  revalidateAssignment();
+  return { ok: true };
+}

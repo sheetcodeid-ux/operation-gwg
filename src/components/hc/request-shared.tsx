@@ -98,8 +98,42 @@ export function FilePicker({ files, onChange, disabled, label = "Unggah berkas /
  */
 const DIRECT_UPLOAD_MIN = 3 * 1024 * 1024;
 
+/** Kemajuan unggahan yang dilaporkan ke pemanggil. */
+export interface UploadProgress {
+  /** Berkas ke berapa (1-based) dari total. */
+  index: number;
+  total: number;
+  fileName: string;
+  /** 0..1 untuk keseluruhan batch. */
+  ratio: number;
+}
+
+/**
+ * PUT ke R2 memakai XMLHttpRequest, bukan fetch.
+ *
+ * fetch tidak melaporkan kemajuan pengiriman, jadi berkas 7 MB tampak diam
+ * belasan detik dan terbaca sebagai aplikasi menggantung. XHR punya
+ * `upload.onprogress`, sehingga bilah kemajuannya benar-benar mengikuti byte
+ * yang sudah terkirim — bukan animasi palsu.
+ */
+function putWithProgress(url: string, file: File, onBytes: (loaded: number) => void): Promise<number> {
+  return new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    xhr.open("PUT", url, true);
+    xhr.setRequestHeader("content-type", file.type || "application/octet-stream");
+    xhr.upload.onprogress = (e) => {
+      if (e.lengthComputable) onBytes(e.loaded);
+    };
+    xhr.onload = () => resolve(xhr.status);
+    xhr.onerror = () =>
+      reject(new Error(`Gagal mengunggah "${file.name}" — koneksi ke penyimpanan ditolak (cek izin CORS bucket R2).`));
+    xhr.onabort = () => reject(new Error(`Unggahan "${file.name}" dibatalkan.`));
+    xhr.send(file);
+  });
+}
+
 /** Unggah satu berkas langsung ke R2 memakai presigned URL. */
-async function uploadDirect(file: File): Promise<HcRequestAttachment | null> {
+async function uploadDirect(file: File, onBytes: (loaded: number) => void): Promise<HcRequestAttachment | null> {
   const signed = await presignHcUploadAction({
     name: file.name,
     contentType: file.type || "application/octet-stream",
@@ -110,30 +144,40 @@ async function uploadDirect(file: File): Promise<HcRequestAttachment | null> {
     if (signed.error && !signed.error.includes("R2 belum aktif")) throw new Error(signed.error);
     return null;
   }
-  let res: Response;
-  try {
-    res = await fetch(signed.url, {
-      method: "PUT",
-      body: file,
-      headers: { "content-type": file.type || "application/octet-stream" },
-    });
-  } catch {
-    // fetch menolak tanpa status = permintaan diblokir browser, hampir selalu
-    // karena CORS bucket belum mengizinkan PUT dari domain ini. Sebutkan itu
-    // supaya tidak terbaca sebagai gangguan acak.
-    throw new Error(`Gagal mengunggah "${file.name}" — koneksi ke penyimpanan ditolak (cek izin CORS bucket R2).`);
+  const status = await putWithProgress(signed.url, file, onBytes);
+  if (status < 200 || status >= 300) {
+    throw new Error(`Gagal mengunggah "${file.name}" — penyimpanan menolak (${status}).`);
   }
-  if (!res.ok) throw new Error(`Gagal mengunggah "${file.name}" — penyimpanan menolak (${res.status}).`);
   return { path: signed.path, name: file.name };
 }
 
-export async function uploadAll(files: File[]): Promise<HcRequestAttachment[]> {
+export async function uploadAll(
+  files: File[],
+  onProgress?: (p: UploadProgress) => void,
+): Promise<HcRequestAttachment[]> {
   const out: HcRequestAttachment[] = [];
-  for (const file of files) {
+  // Kemajuan dihitung dari total byte semua berkas, bukan jumlah berkas —
+  // 1 PDF 7 MB dan 1 JPG 1 MB jelas tidak setara.
+  const totalBytes = files.reduce((sum, f) => sum + f.size, 0) || 1;
+  let doneBytes = 0;
+
+  for (let i = 0; i < files.length; i++) {
+    const file = files[i];
+    const report = (loaded: number) =>
+      onProgress?.({
+        index: i + 1,
+        total: files.length,
+        fileName: file.name,
+        ratio: Math.min(1, (doneBytes + loaded) / totalBytes),
+      });
+    report(0);
+
     if (file.size > DIRECT_UPLOAD_MIN) {
-      const direct = await uploadDirect(file);
+      const direct = await uploadDirect(file, report);
       if (direct) {
         out.push(direct);
+        doneBytes += file.size;
+        report(0);
         continue;
       }
     }
@@ -142,6 +186,8 @@ export async function uploadAll(files: File[]): Promise<HcRequestAttachment[]> {
     const up = await uploadHcRequestFileAction(fd);
     if (up.error) throw new Error(up.error);
     if (up.path && up.name) out.push({ path: up.path, name: up.name });
+    doneBytes += file.size;
+    report(0);
   }
   return out;
 }
@@ -258,6 +304,11 @@ function RequestDetail({ r }: { r: HcRequest }) {
             <div className="flex flex-wrap gap-1.5">
               {r.attachments.map((a, i) => <FileChip key={i} a={a} />)}
             </div>
+            {r.revisions.length > 0 && (
+              <p className="mt-1 text-[10px] text-muted-foreground">
+                Sudah {r.revisions.length}× revisi — berkas hasil terbaru ada di urutan paling akhir.
+              </p>
+            )}
           </div>
         )}
 
@@ -270,6 +321,24 @@ function RequestDetail({ r }: { r: HcRequest }) {
                 { label: "Catatan Finance", value: r.financeNote, skipEmpty: true },
               ]}
             />
+          </div>
+        )}
+
+        {/* Riwayat revisi ditampilkan utuh — tim Creative perlu tahu apa saja
+            yang sudah pernah diminta, bukan hanya permintaan terakhir. */}
+        {r.revisions.length > 0 && (
+          <div>
+            <DetailTitle>Permintaan Revisi ({r.revisions.length})</DetailTitle>
+            <ol className="space-y-1.5">
+              {r.revisions.map((v, i) => (
+                <li key={i} className="rounded-lg border border-amber-500/30 bg-amber-500/[0.07] p-2.5">
+                  <p className="text-[11px] font-semibold text-amber-700 dark:text-amber-300">
+                    Revisi {i + 1} · {v.byName} · {fmtDate(v.at)}
+                  </p>
+                  <p className="mt-0.5 whitespace-pre-wrap text-[12px] text-foreground/85">{v.note}</p>
+                </li>
+              ))}
+            </ol>
           </div>
         )}
       </div>
@@ -308,7 +377,7 @@ function RequestCard({
     r.kind === "rekrutmen"
       ? `${r.position || "Posisi belum diisi"} · ${r.headcount} orang`
       : r.kind === "design"
-        ? `${r.designType || "Jenis belum diisi"}${who ? ` · ${who}` : ""}`
+        ? `${r.designType || "Jenis belum diisi"}${who ? ` · ${who}` : ""}${r.revisions.length ? ` · revisi ke-${r.revisions.length}` : ""}`
         : `${r.trainingType || "Jenis belum diisi"} · ${r.participants} peserta${who ? ` · ${who}` : ""}`;
 
   return (

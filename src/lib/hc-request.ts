@@ -17,11 +17,20 @@ import type { Tone } from "@/lib/constants";
 
 export type HcRequestKind = "rekrutmen" | "pelatihan" | "design";
 
+/** Satu putaran revisi yang diminta pemohon atas hasil design. */
+export interface HcRequestRevision {
+  at: string;
+  byName: string;
+  note: string;
+}
+
 /** Penugasan design: siapa yang mengerjakan, dan tugas Work Tracker-nya. */
 export interface HcRequestAssignment {
   assigneeId: string | null;
   assigneeName: string | null;
   workTaskId: string | null;
+  /** Riwayat revisi — kosong berarti belum pernah direvisi. */
+  revisions: HcRequestRevision[];
 }
 
 export type HcRequestStatus =
@@ -143,6 +152,8 @@ export interface HcRequest {
   assigneeId: string | null;
   assigneeName: string | null;
   workTaskId: string | null;
+  /** Riwayat revisi — kosong berarti belum pernah direvisi. */
+  revisions: HcRequestRevision[];
   createdAt: string;
   updatedAt: string;
   completedAt: string | null;
