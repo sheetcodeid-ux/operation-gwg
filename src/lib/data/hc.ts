@@ -5,7 +5,7 @@ import { db, dbEnabled } from "./db";
 import { markLocalWrite } from "./hydrate";
 import { outletName, userName } from "./store";
 import { isR2Key, presignGet, r2Delete, r2KeyOf } from "@/lib/storage/r2";
-import type { HcDetails, HcDocType, HcSubmission } from "@/lib/hc-shared";
+import { HC_DOC_LABEL, type HcDetails, type HcDocType, type HcSubmission } from "@/lib/hc-shared";
 
 /**
  * Human Capital document workflow — DB-direct (no SEED hydration).
@@ -40,9 +40,24 @@ interface Row {
 
 const SIGN_TTL = 60 * 60; // 1 hour — links are re-signed on every page load.
 
-/** Sign a set of storage paths → path→URL map. R2 keys are presigned locally
- *  (cheap HMAC); Supabase paths are batch-signed in one API call. */
-async function signBatch(paths: string[]): Promise<Map<string, string>> {
+/**
+ * Nama berkas yang aman dipakai di header Content-Disposition, dengan ekstensi
+ * asli dipertahankan supaya berkasnya tetap terbuka di aplikasi yang benar.
+ */
+function safeFileName(base: string, path: string): string {
+  const ext = /\.([a-z0-9]{1,5})$/i.exec(path)?.[1]?.toLowerCase() ?? "pdf";
+  const clean = base.replace(/[^\p{L}\p{N} ._-]/gu, "").replace(/\s+/g, " ").trim().slice(0, 100);
+  return `${clean || "Dokumen"}.${ext}`;
+}
+
+/**
+ * Sign a set of storage paths → path→URL map. R2 keys are presigned locally
+ * (cheap HMAC); Supabase paths are batch-signed in one API call.
+ *
+ * `names` memberi nama unduhan per path. Nama itu HARUS ikut ditandatangani di
+ * sini — menempelkannya ke URL yang sudah jadi membatalkan tanda tangan R2.
+ */
+async function signBatch(paths: string[], names?: Map<string, string>): Promise<Map<string, string>> {
   const map = new Map<string, string>();
   const unique = [...new Set(paths.filter(Boolean))];
   if (unique.length === 0) return map;
@@ -50,18 +65,29 @@ async function signBatch(paths: string[]): Promise<Map<string, string>> {
   for (const p of unique) {
     if (!isR2Key(p)) continue;
     try {
-      const url = await presignGet(r2KeyOf(p), SIGN_TTL);
+      const url = await presignGet(r2KeyOf(p), SIGN_TTL, names?.get(p));
       if (url) map.set(p, url);
     } catch {
       /* leave this file's link empty rather than throwing the page */
     }
   }
-  // Supabase-stored files (legacy / fallback).
+  // Supabase-stored files (legacy / fallback). Namanya juga diberikan saat
+  // menandatangani, bukan ditempel setelahnya — prinsip yang sama dengan R2.
   const sb = unique.filter((p) => !isR2Key(p));
   if (dbEnabled && sb.length > 0) {
     try {
-      const { data } = await db().storage.from("hc-documents").createSignedUrls(sb, SIGN_TTL);
-      for (const d of data ?? []) if (d.path && d.signedUrl) map.set(d.path, d.signedUrl);
+      const withName = sb.filter((p) => names?.get(p));
+      const plain = sb.filter((p) => !names?.get(p));
+      if (plain.length > 0) {
+        const { data } = await db().storage.from("hc-documents").createSignedUrls(plain, SIGN_TTL);
+        for (const d of data ?? []) if (d.path && d.signedUrl) map.set(d.path, d.signedUrl);
+      }
+      for (const p of withName) {
+        const { data } = await db()
+          .storage.from("hc-documents")
+          .createSignedUrl(p, SIGN_TTL, { download: names!.get(p)! });
+        if (data?.signedUrl) map.set(p, data.signedUrl);
+      }
     } catch {
       /* signing unavailable — rows still render, just without a download link */
     }
@@ -106,9 +132,21 @@ export async function listHcSubmissions(opts: ListHcOptions = {}): Promise<HcSub
   if (error || !data) return [];
   const rows = data as Row[];
 
+  // Nama unduhan dirakit di sini — sisi server tahu nama karyawan & jenis
+  // dokumennya, dan hanya di sinilah nama itu masih bisa ikut ditandatangani.
+  const finalNames = new Map<string, string>();
+  const ktpNames = new Map<string, string>();
+  for (const r of rows) {
+    const who = (r.employee_name || "Dokumen").trim();
+    if (r.final_doc_path) finalNames.set(r.final_doc_path, safeFileName(`${who} - ${HC_DOC_LABEL[r.doc_type]}`, r.final_doc_path));
+    if (r.ktp_path) ktpNames.set(r.ktp_path, safeFileName(`KTP ${who}`, r.ktp_path));
+  }
+
   const [finalMap, ktpMap] = await Promise.all([
-    signBatch(rows.map((r) => r.final_doc_path).filter((p): p is string => !!p)),
-    opts.withKtp ? signBatch(rows.map((r) => r.ktp_path).filter((p): p is string => !!p)) : Promise.resolve(new Map<string, string>()),
+    signBatch(rows.map((r) => r.final_doc_path).filter((p): p is string => !!p), finalNames),
+    opts.withKtp
+      ? signBatch(rows.map((r) => r.ktp_path).filter((p): p is string => !!p), ktpNames)
+      : Promise.resolve(new Map<string, string>()),
   ]);
 
   return rows.map((r) =>

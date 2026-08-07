@@ -69,19 +69,6 @@ export const HC_STATUS_META: Record<HcStatus, { label: string; tone: Tone }> = {
 
 export const HC_WARNING_LEVELS = ["Teguran Lisan", "SP 1", "SP 2", "SP 3"] as const;
 
-/** Turn a Supabase signed URL into one that forces a download (attachment)
- *  instead of opening in the browser — so tapping “Unduh” on a phone saves the
- *  file straight to the device. */
-export function forceDownload(url: string, filename?: string): string {
-  // URL R2 ditandatangani AWS SigV4: tanda tangannya mencakup seluruh query
-  // string, jadi menambah parameter apa pun di sini membuat R2 menolaknya
-  // dengan SignatureDoesNotMatch — persis yang terjadi setelah berkas pindah
-  // dari Supabase ke R2. Nama unduhan untuk R2 sudah ikut ditandatangani di
-  // server (response-content-disposition), jadi URL-nya dibiarkan apa adanya.
-  if (!url || url.includes("X-Amz-Signature")) return url;
-  const sep = url.includes("?") ? "&" : "?";
-  return `${url}${sep}download${filename ? `=${encodeURIComponent(filename)}` : ""}`;
-}
 
 /** Whether the signed URL points at an image (for inline preview vs a PDF). */
 export function isImageUrl(url: string): boolean {

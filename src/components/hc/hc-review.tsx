@@ -33,7 +33,6 @@ import {
   uploadHcFinalAction,
 } from "@/lib/actions/hc";
 import {
-  forceDownload,
   HC_CONTRACT_LIKE,
   HC_DOC_LABEL,
   HC_NEEDS_CHRONOLOGY,
@@ -163,7 +162,7 @@ function KtpViewer({ url, name, employeeName }: { url: string; name: string; emp
   const [open, setOpen] = useState(false);
   const isImg = name ? isImageUrl(name) : isImageUrl(url);
   const label = name || (isImg ? "KTP.jpg" : "KTP.pdf");
-  const dl = forceDownload(url, name || `KTP ${employeeName}`);
+  const dl = url;
 
   const openFile = () => {
     if (isImg) setOpen(true);
@@ -418,7 +417,7 @@ function DetailPanel({ row, canDelete, onDeleted }: { row: HcSubmission; canDele
                 </div>
               )}
               {row.finalDocUrl && (
-                <a href={forceDownload(row.finalDocUrl, `${row.employeeName} - ${HC_DOC_LABEL[row.docType]}.pdf`)} download>
+                <a href={row.finalDocUrl} download>
                   <Button variant="subtle" size="sm">
                     <Download className="size-4" /> Unduh Dokumen Jadi
                   </Button>

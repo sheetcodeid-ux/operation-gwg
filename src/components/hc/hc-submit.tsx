@@ -16,7 +16,6 @@ import { cn } from "@/lib/utils";
 import { submitHcRequestAction, uploadHcKtpAction } from "@/lib/actions/hc";
 import { uploadOne } from "@/lib/upload-client";
 import {
-  forceDownload,
   HC_DOC_LABEL,
   HC_DOC_TYPES,
   HC_STATUS_META,
@@ -270,7 +269,7 @@ export function SubmissionList({ rows }: { rows: HcSubmission[] }) {
                   </button>
                   <div className="flex shrink-0 items-center gap-2">
                     {r.status === "done" && r.finalDocUrl && (
-                      <a href={forceDownload(r.finalDocUrl, `${r.employeeName} - ${HC_DOC_LABEL[r.docType]}.pdf`)} download>
+                      <a href={r.finalDocUrl} download>
                         <Button size="sm" variant="subtle">
                           <Download className="size-4" /> Unduh
                         </Button>
