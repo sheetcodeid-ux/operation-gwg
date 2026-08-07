@@ -5,6 +5,10 @@ import type { Role } from "@/lib/types";
 import { Combobox } from "@/components/ui/combobox";
 import type { DivisionMembers } from "./task-sheet";
 
+// Pembantu bulan kini tinggal di lib/month.ts supaya halaman SERVER juga bisa
+// memakainya; di-ekspor ulang di sini agar impor lama tetap berjalan.
+export { monthKey, monthOptions } from "@/lib/month";
+
 /** Label a division value: a department name shows as-is; a legacy role value
  *  falls back to its human role label. */
 export function divisionLabel(d: string) {
@@ -28,25 +32,6 @@ export function membersForDivision(members: DivisionMembers | undefined, divisio
 }
 
 // Sejalan dengan kalender & tanggal di seluruh web ini yang memakai id-ID.
-const MONTH_NAMES = ["Januari", "Februari", "Maret", "April", "Mei", "Juni", "Juli", "Agustus", "September", "Oktober", "November", "Desember"];
-
-/** "YYYY-MM" key for an ISO date (UTC), matching the calendar's UTC convention. */
-export function monthKey(iso: string) {
-  const d = new Date(iso);
-  return `${d.getUTCFullYear()}-${String(d.getUTCMonth()).padStart(2, "0")}`;
-}
-
-function monthKeyLabel(key: string) {
-  const [y, m] = key.split("-");
-  return `${MONTH_NAMES[Number(m)]} ${y}`;
-}
-
-/** Distinct months (newest first) present in the given ISO dates → filter options. */
-export function monthOptions(isoDates: string[]): { value: string; label: string }[] {
-  const keys = [...new Set(isoDates.map(monthKey))].sort().reverse();
-  return keys.map((k) => ({ value: k, label: monthKeyLabel(k) }));
-}
-
 /** Dropdown to filter tasks by month (of their start date). value "all" = no filter. */
 export function MonthFilter({
   options,

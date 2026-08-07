@@ -13,7 +13,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Combobox } from "@/components/ui/combobox";
 import { DataTable } from "@/components/ui/data-table";
 import { Dialog, DialogContent, DialogTrigger } from "@/components/ui/dialog";
-import { MonthFilter, monthKey, monthOptions } from "@/components/work/division-filter";
+import { MonthFilter } from "@/components/work/division-filter";
 import { useI18n } from "@/lib/i18n/provider";
 import { cn, formatDate } from "@/lib/utils";
 
@@ -116,12 +116,44 @@ function AuditPhotoGallery({ photos, caption }: { photos: Attachment[]; caption:
   );
 }
 
-export function HygieneExplorer({ rows, outlets, canDelete = false, showOutletFilter = true }: { rows: HygieneRow[]; outlets: { id: string; name: string }[]; canDelete?: boolean; showOutletFilter?: boolean }) {
+export function HygieneExplorer({
+  rows,
+  outlets,
+  months,
+  month,
+  canDelete = false,
+  showOutletFilter = true,
+}: {
+  rows: HygieneRow[];
+  outlets: { id: string; name: string }[];
+  /** Bulan yang tersedia; disusun server karena ia yang tahu seluruh riwayat. */
+  months: { value: string; label: string }[];
+  /** Bulan yang sedang ditampilkan — server hanya mengirim baris bulan ini. */
+  month: string;
+  canDelete?: boolean;
+  showOutletFilter?: boolean;
+}) {
   const { t } = useI18n();
   const router = useRouter();
-  const [month, setMonth] = React.useState("all");
   const [outlet, setOutlet] = React.useState("all");
   const [deleting, setDeleting] = React.useState<string | null>(null);
+
+  /**
+   * Ganti bulan = minta data baru ke server, bukan menyaring yang sudah ada di
+   * browser: hanya bulan terpilih yang pernah dikirim ke sini.
+   *
+   * `useOptimistic` membuat dropdown langsung menampilkan pilihan baru selagi
+   * server menyiapkan datanya, lalu kembali mengikuti nilai dari server begitu
+   * halaman selesai dimuat — jadi tidak ada nilai sementara yang tertinggal
+   * basi kalau pengguna menekan tombol Back.
+   */
+  const [shownMonth, setShownMonth] = React.useOptimistic(month);
+  const onMonth = (v: string) => {
+    React.startTransition(() => {
+      setShownMonth(v);
+      router.push(v === "all" ? "/hygiene" : `/hygiene?bulan=${encodeURIComponent(v)}`, { scroll: false });
+    });
+  };
 
   async function onDelete(id: string, label: string) {
     if (typeof window !== "undefined" && !window.confirm(`Hapus audit "${label}"? Tindakan ini permanen.`)) return;
@@ -131,11 +163,10 @@ export function HygieneExplorer({ rows, outlets, canDelete = false, showOutletFi
     else { toast.success("Audit dihapus"); router.refresh(); }
     setDeleting(null);
   }
-  const months = React.useMemo(() => monthOptions(rows.map((r) => r.date)), [rows]);
-
+  // Bulan sudah disaring di server; di sini tinggal filter outlet.
   const scoped = React.useMemo(
-    () => rows.filter((r) => (month === "all" || monthKey(r.date) === month) && (outlet === "all" || r.outletId === outlet)),
-    [rows, month, outlet],
+    () => rows.filter((r) => outlet === "all" || r.outletId === outlet),
+    [rows, outlet],
   );
 
   const columns = React.useMemo<ColumnDef<HygieneRow>[]>(
@@ -253,7 +284,7 @@ export function HygieneExplorer({ rows, outlets, canDelete = false, showOutletFi
           searchPlaceholder="Cari outlet / inspector…"
           toolbar={
             <div className="contents">
-              <MonthFilter options={months} value={month} onChange={setMonth} className="w-40 shrink-0" />
+              <MonthFilter options={months} value={shownMonth} onChange={onMonth} className="w-40 shrink-0" />
               {showOutletFilter && (
                 <Combobox
                   portal

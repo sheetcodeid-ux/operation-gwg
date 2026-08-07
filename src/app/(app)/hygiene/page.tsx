@@ -9,6 +9,7 @@ import { StatTile } from "@/components/ui/stat";
 import { NewAuditButton } from "@/components/hygiene/hygiene-form";
 import { HygieneExplorer, type HygieneRow } from "@/components/hygiene/hygiene-explorer";
 import { getT } from "@/lib/i18n/server";
+import { monthKey, monthKeyLabel, monthOptions } from "@/lib/month";
 import { isR2Key, presignGet, r2Enabled, r2KeyOf } from "@/lib/storage/r2";
 import type { Attachment } from "@/lib/types";
 
@@ -22,12 +23,26 @@ async function resolvePhotos(photos: Attachment[]): Promise<Attachment[]> {
 
 export const metadata: Metadata = { title: "Hygiene Monitoring" };
 
-export default async function HygienePage() {
+export default async function HygienePage({ searchParams }: { searchParams: Promise<{ bulan?: string }> }) {
   const t = await getT();
   const user = await requireSessionUser();
-  const audits = listHygiene(user);
+  const all = listHygiene(user);
   const outlets = visibleOutlets(user).map((o) => ({ id: o.id, name: o.name }));
   const canCreate = can(user, "create_hygiene");
+
+  /**
+   * Dibatasi PER BULAN di server, bukan di browser.
+   *
+   * Audit masuk ~60 per hari, jadi memuat seluruh riwayat berarti mengambil
+   * foto dan menandatangani URL untuk ribuan audit setiap kali halaman dibuka —
+   * beban yang terus bertambah tiap hari. Filternya tetap terlihat dan ada opsi
+   * "Semua Bulan", jadi tidak ada data yang disembunyikan diam-diam.
+   */
+  const months = monthOptions(all.map((a) => a.date));
+  const sp = await searchParams;
+  const valid = sp.bulan === "all" || months.some((m) => m.value === sp.bulan);
+  const month = valid && sp.bulan ? sp.bulan : (months[0]?.value ?? "all");
+  const audits = month === "all" ? all : all.filter((a) => monthKey(a.date) === month);
 
   // Photos are the heaviest column in `hygiene` and are only rendered here, so
   // they are left out of the shared in-memory cache and fetched per page.
@@ -61,7 +76,9 @@ export default async function HygienePage() {
       <PageHeader
         icon={SprayCan}
         title={t("hygiene.title")}
-        description={t("hygiene.description")}
+        // Statistik di bawah dihitung untuk periode yang sedang dibuka, jadi
+        // periodenya disebut supaya angkanya tidak terbaca sebagai sepanjang masa.
+        description={`${t("hygiene.description")} — ${month === "all" ? "semua periode" : monthKeyLabel(month)}`}
         actions={canCreate && outlets.length > 0 ? <NewAuditButton outlets={outlets} /> : undefined}
       />
 
@@ -80,7 +97,14 @@ export default async function HygienePage() {
       </div>
 
       <div className="mt-4">
-        <HygieneExplorer rows={rows} outlets={outlets} canDelete={user.role === "super_admin"} showOutletFilter={user.role !== "supervisor"} />
+        <HygieneExplorer
+          rows={rows}
+          outlets={outlets}
+          months={months}
+          month={month}
+          canDelete={user.role === "super_admin"}
+          showOutletFilter={user.role !== "supervisor"}
+        />
       </div>
     </div>
   );
