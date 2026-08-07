@@ -15,6 +15,8 @@ import { isImageAttachment } from "../chat-shared";
 
 const DATA = readFileSync(join(process.cwd(), "src/lib/data/hygiene-followup.ts"), "utf8");
 const ACTIONS = readFileSync(join(process.cwd(), "src/lib/actions/hygiene-followup.ts"), "utf8");
+const SHEET = readFileSync(join(process.cwd(), "src/components/chat/followup-sheet.tsx"), "utf8");
+const CAMERA = readFileSync(join(process.cwd(), "src/components/ui/camera-capture.tsx"), "utf8");
 const code = DATA.replace(/\/\*[\s\S]*?\*\//g, "").replace(/\/\/.*$/gm, "");
 
 function bodyOf(src: string, name: string): string {
@@ -24,25 +26,93 @@ function bodyOf(src: string, name: string): string {
   return src.slice(start, next === -1 ? undefined : next);
 }
 
-describe("penutupan temuan wajib berbukti", () => {
-  const resolve = bodyOf(code, "resolveFollowup");
+describe("pengiriman bukti perbaikan", () => {
+  const submit = bodyOf(code, "submitFollowup");
 
   it("ditolak di server saat tidak ada foto", () => {
-    expect(resolve).toMatch(/photos\.length === 0/);
-    expect(resolve).toContain("Wajib melampirkan foto bukti perbaikan.");
+    expect(submit).toMatch(/photos\.length === 0/);
+    expect(submit).toContain("Wajib melampirkan foto bukti perbaikan.");
   });
 
   it("hanya menerima lampiran yang benar-benar gambar", () => {
     // Tanpa saringan ini, sebuah PDF kosong bisa lewat sebagai "bukti foto".
-    expect(resolve).toMatch(/startsWith\("image\/"\)/);
+    expect(submit).toMatch(/startsWith\("image\/"\)/);
   });
 
-  it("hanya supervisor yang ditugaskan yang boleh menutup", () => {
-    expect(resolve).toMatch(/assigned_to !== input\.userId/);
+  it("hanya supervisor yang ditugaskan yang boleh menindaklanjuti", () => {
+    expect(submit).toMatch(/assigned_to !== input\.userId/);
   });
 
-  it("temuan yang sudah ditutup tidak bisa ditutup dua kali", () => {
-    expect(resolve).toMatch(/status === "selesai"/);
+  it("temuan yang sudah ditutup tidak bisa dibuka lagi", () => {
+    expect(submit).toMatch(/status === "selesai"/);
+  });
+
+  it("bukti yang masih menunggu penilaian tidak bisa ditimpa", () => {
+    // Kalau boleh, supervisor bisa mengirim ulang terus dan penilaian pelapor
+    // selalu menunjuk foto yang sudah bukan yang ia lihat.
+    expect(submit).toMatch(/status === "verifikasi"/);
+  });
+
+  it("TIDAK menutup temuan sendiri — hanya menaikkannya ke verifikasi", () => {
+    // Inti aturannya: orang yang diperiksa tidak boleh jadi penilai hasilnya.
+    expect(submit).toMatch(/status: "verifikasi"/);
+    expect(submit).not.toMatch(/status: "selesai"/);
+    expect(submit).not.toMatch(/resolved_at:/);
+  });
+
+  it("menyimpan setiap putaran sebagai riwayat, bukan menimpanya", () => {
+    // Temuan yang tiga kali dikembalikan harus bisa dibedakan dari yang
+    // sekali langsung beres.
+    expect(submit).toMatch(/attempts\.push\(/);
+    expect(submit).toMatch(/verdict: "menunggu"/);
+  });
+});
+
+describe("penilaian hasil perbaikan", () => {
+  const review = bodyOf(code, "reviewFollowup");
+
+  it("hanya pelapor yang boleh menilai", () => {
+    expect(review).toMatch(/raised_by !== input\.userId/);
+  });
+
+  it("tidak bisa menilai kalau belum ada bukti yang masuk", () => {
+    expect(review).toMatch(/status !== "verifikasi"/);
+  });
+
+  it("pengembalian wajib beralasan", () => {
+    // "Dikembalikan" tanpa alasan membuat supervisornya menebak-nebak bagian
+    // mana yang masih kotor.
+    expect(review).toMatch(/!input\.accept && !input\.note\.trim\(\)/);
+    expect(review).toContain("Tulis alasan pengembaliannya.");
+  });
+
+  it("penolakan mengembalikan temuan ke MENGGANTUNG, bukan menutupnya", () => {
+    expect(review).toMatch(/status: input\.accept \? "selesai" : "menunggu"/);
+    expect(review).toMatch(/resolved_at: input\.accept \? new Date\(\)\.toISOString\(\) : null/);
+  });
+
+  it("mencatat putusannya di putaran terakhir", () => {
+    expect(review).toMatch(/last\.verdict = input\.accept \? "acc" : "tolak"/);
+  });
+});
+
+describe("bukti diambil langsung dari kamera", () => {
+  it("lembar tindak lanjut tidak memakai pemilih berkas biasa", () => {
+    // Foto lama dari galeri tidak membuktikan kondisi hari ini.
+    expect(SHEET).toContain("CameraCapture");
+    expect(SHEET).not.toMatch(/<input[^>]*type="file"/);
+  });
+
+  it("kamera belakang dipaksa, bukan galeri", () => {
+    expect(CAMERA).toMatch(/capture="environment"/);
+    expect(CAMERA).toMatch(/accept="image\/\*"/);
+  });
+
+  it("waktu dibakar ke dalam gambar", () => {
+    // Kalau hanya ditulis di sebelah foto, waktunya bisa dipisahkan dari
+    // gambarnya saat foto diteruskan ke mana-mana.
+    expect(CAMERA).toMatch(/ctx\.fillText\(caption/);
+    expect(CAMERA).toMatch(/toLocaleString\("id-ID"/);
   });
 });
 

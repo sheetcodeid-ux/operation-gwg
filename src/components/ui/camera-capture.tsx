@@ -12,7 +12,13 @@ export interface CapturedPhoto {
 const stampText = () =>
   new Date().toLocaleString("id-ID", { day: "2-digit", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" });
 
-/** Draw the photo onto a canvas and burn a timestamp caption into the bottom bar. */
+/**
+ * Gambar ulang foto ke kanvas dan BAKAR waktunya ke bilah bawah.
+ *
+ * Dibakar ke dalam gambar, bukan ditulis di sebelahnya, supaya waktunya ikut
+ * ke mana pun fotonya diteruskan — bukti perbaikan yang bisa dipisahkan dari
+ * waktunya bukan bukti apa-apa.
+ */
 async function stampPhoto(file: File, prefix?: string): Promise<CapturedPhoto> {
   const dataUrl: string = await new Promise((res, rej) => {
     const r = new FileReader();
@@ -26,9 +32,9 @@ async function stampPhoto(file: File, prefix?: string): Promise<CapturedPhoto> {
     im.onerror = rej;
     im.src = dataUrl;
   });
-  // Documentation photos only need to be legible, not print-quality. Cap at
-  // 1024px so each file is ~80–120 KB — critical when 50 outlets upload
-  // thousands of photos daily (keeps storage + bandwidth small).
+  // Foto dokumentasi cukup terbaca, tidak perlu kualitas cetak. Dibatasi
+  // 1024px supaya tiap berkas ~80–120 KB — penting saat 50 outlet mengunggah
+  // ribuan foto tiap hari (hemat penyimpanan dan kuota).
   const maxW = 1024;
   const scale = Math.min(1, maxW / (img.width || maxW));
   const w = Math.max(1, Math.round(img.width * scale));

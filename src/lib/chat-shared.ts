@@ -38,9 +38,27 @@ export interface ChatRef {
   href: string;
   /** Rujukan yang catatannya sudah dihapus tetap ditampilkan, tapi mati. */
   missing?: boolean;
-  /** Temuan hygiene: foto bagian yang kotor + apakah masih menggantung. */
+  /** Temuan hygiene: foto bagian yang kotor + nada statusnya. */
   photoUrl?: string;
-  pending?: boolean;
+  /** merah = belum ditindaklanjuti · kuning = menunggu verifikasi · hijau = selesai. */
+  tone?: "red" | "amber" | "emerald";
+}
+
+/**
+ * Satu putaran perbaikan: bukti dari supervisor + penilaian pelapor.
+ *
+ * Disimpan sebagai riwayat, bukan ditimpa — temuan yang tiga kali ditolak
+ * harus bisa dibedakan dari yang sekali langsung beres.
+ */
+export interface FollowupAttempt {
+  at: string;
+  byName: string;
+  note: string;
+  proof: ChatAttachment[];
+  verdict: "menunggu" | "acc" | "tolak";
+  reviewedAt?: string;
+  reviewedByName?: string;
+  reviewNote?: string;
 }
 
 /** Satu temuan hygiene yang dikirim untuk ditindaklanjuti. */
@@ -52,15 +70,29 @@ export interface HygieneFollowup {
   note: string;
   photoUrl?: string;
   raisedByName: string;
+  /** Pelapor — dialah yang menilai hasil perbaikannya. */
+  raisedBy: string;
   assignedToName: string;
   assignedTo: string;
-  status: "menunggu" | "selesai";
+  /** menunggu = SPV harus bertindak · verifikasi = menunggu ACC · selesai. */
+  status: "menunggu" | "verifikasi" | "selesai";
   resolution: string;
   proof: ChatAttachment[];
+  attempts: FollowupAttempt[];
   resolvedAt: string | null;
   createdAt: string;
   threadId: string | null;
 }
+
+/** Label + warna satu status temuan. */
+export const FOLLOWUP_STATUS: Record<
+  HygieneFollowup["status"],
+  { label: string; tone: "red" | "amber" | "emerald" }
+> = {
+  menunggu: { label: "Belum ditindaklanjuti", tone: "red" },
+  verifikasi: { label: "Menunggu verifikasi", tone: "amber" },
+  selesai: { label: "Sudah ditindaklanjuti", tone: "emerald" },
+};
 
 export interface ChatMessage {
   id: string;

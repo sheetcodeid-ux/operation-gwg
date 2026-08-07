@@ -27,7 +27,7 @@ interface Stat {
  */
 export function ReplyStatsSheet({ open, onOpenChange }: { open: boolean; onOpenChange: (v: boolean) => void }) {
   const [stats, setStats] = React.useState<Stat[] | null>(null);
-  const [pending, setPending] = React.useState<HygieneFollowup[] | null>(null);
+  const [pending, setPending] = React.useState<{ toFix: HygieneFollowup[]; toReview: HygieneFollowup[] } | null>(null);
 
   React.useEffect(() => {
     if (!open) return;
@@ -59,20 +59,19 @@ export function ReplyStatsSheet({ open, onOpenChange }: { open: boolean; onOpenC
           </div>
         ) : (
           <>
-            {pending && pending.length > 0 && (
-              <div className="mb-5 rounded-xl border border-red-500/40 bg-red-500/5 p-3">
-                <p className="flex items-center gap-1.5 text-xs font-semibold text-red-700 dark:text-red-300">
-                  <TriangleAlert className="size-4" />
-                  {pending.length} temuan hygiene belum ditindaklanjuti
-                </p>
-                <ul className="mt-2 space-y-1">
-                  {pending.slice(0, 5).map((f) => (
-                    <li key={f.id} className="truncate text-[11px] text-muted-foreground">
-                      {f.area || "Area"} · {f.outletName} — dari {f.raisedByName}
-                    </li>
-                  ))}
-                </ul>
-              </div>
+            {pending && pending.toFix.length > 0 && (
+              <TaskBox
+                tone="red"
+                title={`${pending.toFix.length} temuan menunggu Anda perbaiki`}
+                items={pending.toFix.map((f) => `${f.area || "Area"} · ${f.outletName} — dari ${f.raisedByName}`)}
+              />
+            )}
+            {pending && pending.toReview.length > 0 && (
+              <TaskBox
+                tone="amber"
+                title={`${pending.toReview.length} perbaikan menunggu Anda nilai`}
+                items={pending.toReview.map((f) => `${f.area || "Area"} · ${f.outletName} — oleh ${f.assignedToName}`)}
+              />
             )}
 
             {stats.length === 0 ? (
@@ -119,6 +118,35 @@ export function ReplyStatsSheet({ open, onOpenChange }: { open: boolean; onOpenC
         )}
       </div>
     </BottomSheet>
+  );
+}
+
+/** Kotak "yang menuntut tindakan Anda" — merah untuk perbaikan, kuning untuk penilaian. */
+function TaskBox({ tone, title, items }: { tone: "red" | "amber"; title: string; items: string[] }) {
+  return (
+    <div
+      className={cn(
+        "mb-4 rounded-xl border p-3",
+        tone === "red" ? "border-red-500/40 bg-red-500/5" : "border-amber-500/40 bg-amber-500/5",
+      )}
+    >
+      <p
+        className={cn(
+          "flex items-center gap-1.5 text-xs font-semibold",
+          tone === "red" ? "text-red-700 dark:text-red-300" : "text-amber-700 dark:text-amber-300",
+        )}
+      >
+        <TriangleAlert className="size-4" />
+        {title}
+      </p>
+      <ul className="mt-2 space-y-1">
+        {items.slice(0, 5).map((t, i) => (
+          <li key={i} className="truncate text-[11px] text-muted-foreground">
+            {t}
+          </li>
+        ))}
+      </ul>
+    </div>
   );
 }
 

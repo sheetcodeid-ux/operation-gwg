@@ -8,7 +8,7 @@ import { getFollowups } from "./hygiene-followup";
 import { isR2Key, presignGet, r2KeyOf } from "@/lib/storage/r2";
 import { ROLE_LABEL } from "@/lib/constants";
 import { HC_REQUEST_KIND_LABEL, statusMeta, type HcRequestKind, type HcRequestStatus } from "@/lib/hc-request";
-import { previewOf, type ChatAttachment, type ChatMessage, type ChatPerson, type ChatRef, type ChatThread } from "@/lib/chat-shared";
+import { FOLLOWUP_STATUS, previewOf, type ChatAttachment, type ChatMessage, type ChatPerson, type ChatRef, type ChatThread } from "@/lib/chat-shared";
 import type { Role, UserProfile } from "@/lib/types";
 
 /**
@@ -302,16 +302,17 @@ async function hygieneRefMap(ids: string[]): Promise<Map<string, ChatRef>> {
       });
       continue;
     }
+    const meta = FOLLOWUP_STATUS[f.status];
     out.set(id, {
       kind: "hygiene",
       id,
       title: `${f.area || "Area"} — ${f.outletName}`,
       kindLabel: "Temuan Hygiene",
-      statusLabel: f.status === "selesai" ? "Sudah ditindaklanjuti" : "Belum ditindaklanjuti",
+      statusLabel: meta.label,
       requesterName: f.raisedByName,
       href: "/hygiene",
       photoUrl: f.photoUrl,
-      pending: f.status !== "selesai",
+      tone: meta.tone,
     });
   }
   return out;

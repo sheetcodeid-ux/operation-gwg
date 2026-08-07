@@ -7,9 +7,11 @@ import { openDirectThread, sendMessage } from "@/lib/data/chat";
 import {
   followupCountsByAudit,
   getFollowup,
+  awaitingReviewFor,
   pendingFollowupsFor,
   raiseFollowup,
-  resolveFollowup,
+  reviewFollowup,
+  submitFollowup,
 } from "@/lib/data/hygiene-followup";
 import { getOutlets, getUsers } from "@/lib/data/store";
 import { canAccessOutlet } from "@/lib/rbac";
@@ -127,21 +129,22 @@ export async function hygieneResolveFollowupAction(input: {
   const before = await getFollowup(input.id);
   if (!before) return { error: "Temuan tidak ditemukan." };
 
-  const res = await resolveFollowup({
+  const res = await submitFollowup({
     id: input.id,
     userId: user.id,
-    resolution: input.resolution,
+    userName: user.name,
+    note: input.resolution,
     proof: input.proof,
   });
   if (res.error) return { error: res.error };
 
   // Bukti ikut dikirim ke obrolan yang sama, supaya pelapor melihatnya tanpa
-  // harus membuka halaman lain.
+  // membuka halaman lain — dan tahu ada yang perlu ia nilai.
   if (before.threadId) {
     await sendMessage({
       threadId: before.threadId,
       senderId: user.id,
-      body: input.resolution.trim() || "Sudah ditindaklanjuti.",
+      body: input.resolution.trim() || "Sudah ditindaklanjuti, mohon diperiksa.",
       attachments: input.proof,
       ref: { kind: "hygiene", id: input.id },
     });
@@ -152,11 +155,63 @@ export async function hygieneResolveFollowupAction(input: {
   return { ok: true };
 }
 
-/** Temuan yang masih menggantung untuk pengguna ini — dasar lencana merah. */
-export async function hygienePendingFollowupsAction(): Promise<HygieneFollowup[]> {
+/**
+ * Pelapor menilai hasil perbaikan: ACC, atau kembalikan untuk dibersihkan ulang.
+ *
+ * Ditolak berarti temuan kembali menggantung dan supervisornya harus mengirim
+ * bukti baru — bukan sekadar dicatat lalu ditutup.
+ */
+export async function hygieneReviewFollowupAction(input: {
+  id: string;
+  accept: boolean;
+  note: string;
+}): Promise<{ ok?: true; error?: string }> {
   const user = await getSessionUser();
-  if (!user || !dbEnabled) return [];
-  return pendingFollowupsFor(user.id);
+  if (!user || !dbEnabled) return { error: "Tidak punya akses." };
+
+  const before = await getFollowup(input.id);
+  if (!before) return { error: "Temuan tidak ditemukan." };
+
+  const res = await reviewFollowup({
+    id: input.id,
+    userId: user.id,
+    userName: user.name,
+    accept: input.accept,
+    note: input.note,
+  });
+  if (res.error) return { error: res.error };
+
+  if (before.threadId) {
+    await sendMessage({
+      threadId: before.threadId,
+      senderId: user.id,
+      body: input.accept
+        ? `Hasil perbaikan diterima. ${input.note.trim()}`.trim()
+        : `Belum sesuai — mohon dibersihkan ulang. ${input.note.trim()}`.trim(),
+      ref: { kind: "hygiene", id: input.id },
+    });
+  }
+
+  revalidatePath("/pesan");
+  revalidatePath("/hygiene");
+  return { ok: true };
+}
+
+/**
+ * Temuan yang menuntut TINDAKAN pengguna ini.
+ *
+ * Dua sisi sekaligus: yang harus ia perbaiki (sebagai supervisor) dan yang
+ * harus ia nilai (sebagai pelapor). Menampilkan hanya salah satunya membuat
+ * separuh alurnya menggantung tanpa ada yang tahu.
+ */
+export async function hygienePendingFollowupsAction(): Promise<{
+  toFix: HygieneFollowup[];
+  toReview: HygieneFollowup[];
+}> {
+  const user = await getSessionUser();
+  if (!user || !dbEnabled) return { toFix: [], toReview: [] };
+  const [toFix, toReview] = await Promise.all([pendingFollowupsFor(user.id), awaitingReviewFor(user.id)]);
+  return { toFix, toReview };
 }
 
 /** Berapa temuan sudah dikirim per audit — menandai tombol di halaman Hygiene. */

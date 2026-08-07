@@ -501,7 +501,9 @@ function Attachment({
  * bukan sekadar lampiran.
  */
 function RequestCard({ r, mine, onOpen }: { r: ChatRef; mine: boolean; onOpen: (ref: ChatRef) => void }) {
-  const alert = r.kind === "hygiene" && r.pending;
+  const alert = r.tone === "red";
+  const warn = r.tone === "amber";
+  const done = r.tone === "emerald";
 
   const body = (
     <>
@@ -515,7 +517,13 @@ function RequestCard({ r, mine, onOpen }: { r: ChatRef; mine: boolean; onOpen: (
         <span
           className={cn(
             "rounded-md px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide",
-            alert ? "bg-red-500/15 text-red-700 dark:text-red-300" : "bg-muted text-muted-foreground",
+            alert
+              ? "bg-red-500/15 text-red-700 dark:text-red-300"
+              : warn
+                ? "bg-amber-500/15 text-amber-700 dark:text-amber-300"
+                : done
+                  ? "bg-emerald-500/15 text-emerald-700 dark:text-emerald-300"
+                  : "bg-muted text-muted-foreground",
           )}
         >
           {r.kindLabel}
@@ -529,11 +537,15 @@ function RequestCard({ r, mine, onOpen }: { r: ChatRef; mine: boolean; onOpen: (
         <span
           className={cn(
             "mt-1 flex items-center gap-1 text-[11px]",
-            alert ? "font-semibold text-red-600 dark:text-red-400" : "text-muted-foreground",
+            alert
+              ? "font-semibold text-red-600 dark:text-red-400"
+              : warn
+                ? "font-semibold text-amber-600 dark:text-amber-400"
+                : "text-muted-foreground",
           )}
         >
           {alert && <TriangleAlert className="size-3 shrink-0" />}
-          {alert ? r.statusLabel : `${r.requesterName} · ${r.statusLabel}`}
+          {alert || warn ? r.statusLabel : `${r.requesterName} · ${r.statusLabel}`}
         </span>
       )}
     </>
@@ -541,7 +553,13 @@ function RequestCard({ r, mine, onOpen }: { r: ChatRef; mine: boolean; onOpen: (
 
   const cls = cn(
     "block w-full max-w-full rounded-xl border p-3 text-left transition-colors",
-    alert ? "border-red-500/50 bg-red-500/5" : mine ? "border-brand-500/40 bg-brand-500/10" : "border-border bg-card",
+    alert
+      ? "border-red-500/50 bg-red-500/5"
+      : warn
+        ? "border-amber-500/50 bg-amber-500/5"
+        : mine
+          ? "border-brand-500/40 bg-brand-500/10"
+          : "border-border bg-card",
     r.missing ? "opacity-70" : "hover:bg-muted/50",
   );
 
