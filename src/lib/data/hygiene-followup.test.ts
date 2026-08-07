@@ -77,3 +77,30 @@ describe("pengenalan lampiran gambar", () => {
     expect(isImageAttachment({ name: "tanpa-ekstensi" })).toBe(false);
   });
 });
+
+describe("pencarian supervisor outlet", () => {
+  const fn = ACTIONS.slice(ACTIONS.indexOf("function supervisorOf"), ACTIONS.indexOf("export async function hygieneSupervisorAction"));
+
+  it("memakai penugasan di users.outletIds LEBIH DULU", () => {
+    // `outlets.supervisorId` di basis data ini menunjuk akun Admin untuk SETIAP
+    // outlet, jadi memakainya lebih dulu membuat semua temuan terkirim ke Admin
+    // alih-alih ke supervisor cabangnya.
+    const byAssignment = fn.indexOf("outletIds");
+    const legacy = fn.indexOf("outlet.supervisorId");
+    expect(byAssignment).toBeGreaterThan(-1);
+    expect(legacy).toBeGreaterThan(-1);
+    expect(byAssignment).toBeLessThan(legacy);
+  });
+
+  it("tidak pernah mengembalikan akun yang bukan supervisor", () => {
+    // Termasuk lewat jalur cadangan — kalau tidak, temuan bisa terkirim ke akun
+    // Admin dan supervisor cabangnya tidak pernah tahu.
+    const checks = [...fn.matchAll(/role === "supervisor"/g)];
+    expect(checks.length).toBeGreaterThanOrEqual(2);
+  });
+
+  it("hanya pengguna aktif", () => {
+    const checks = [...fn.matchAll(/u\.active/g)];
+    expect(checks.length).toBeGreaterThanOrEqual(2);
+  });
+});

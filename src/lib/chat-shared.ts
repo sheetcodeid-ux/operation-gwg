@@ -135,9 +135,13 @@ export function clockTime(iso: string): string {
 }
 
 /** Ringkasan satu pesan untuk daftar percakapan. */
-export function previewOf(m: { body: string; attachments: unknown[]; ref: unknown }): string {
+export function previewOf(m: {
+  body: string;
+  attachments: unknown[];
+  ref: { kind?: string } | null | undefined;
+}): string {
   if (m.body.trim()) return m.body.trim();
-  if (m.ref) return "Meneruskan sebuah pengajuan";
+  if (m.ref) return m.ref.kind === "hygiene" ? "Temuan hygiene" : "Meneruskan sebuah pengajuan";
   if (m.attachments.length > 0) return `${m.attachments.length} lampiran`;
   return "";
 }

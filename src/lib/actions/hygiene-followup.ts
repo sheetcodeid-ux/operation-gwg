@@ -23,18 +23,33 @@ import type { ChatAttachment, HygieneFollowup } from "@/lib/chat-shared";
  * DENGAN foto bukti.
  */
 
-/** Supervisor yang bertanggung jawab atas sebuah outlet. */
+/**
+ * Supervisor yang bertanggung jawab atas sebuah outlet.
+ *
+ * Penugasan yang BENAR ada di `users.outletIds` — itu yang diisi lewat User
+ * Management. Kolom `outlets.supervisorId` adalah peninggalan lama yang di
+ * basis data ini menunjuk akun Admin untuk SETIAP outlet; memakainya lebih dulu
+ * membuat semua temuan terkirim ke Admin, bukan ke supervisor cabangnya.
+ *
+ * Kolom lama tetap dipakai sebagai cadangan, tapi hanya kalau orangnya memang
+ * seorang supervisor — bukan akun admin.
+ */
 function supervisorOf(outletId: string): { id: string; name: string } | null {
   const outlet = getOutlets().find((o) => o.id === outletId);
   if (!outlet) return null;
-  // Ditugaskan langsung di data outlet; kalau kosong, cari yang outletIds-nya
-  // memuat outlet ini (penugasan lama disimpan begitu).
-  const direct = outlet.supervisorId ? getUsers().find((u) => u.id === outlet.supervisorId && u.active) : null;
-  if (direct) return { id: direct.id, name: direct.name };
-  const byList = getUsers().find(
-    (u) => u.active && u.role === "supervisor" && (u.outletIds ?? []).some((id) => id === outlet.id || id === outlet.code),
+
+  const byAssignment = getUsers().find(
+    (u) =>
+      u.active &&
+      u.role === "supervisor" &&
+      (u.outletIds ?? []).some((id) => id === outlet.id || id === outlet.code),
   );
-  return byList ? { id: byList.id, name: byList.name } : null;
+  if (byAssignment) return { id: byAssignment.id, name: byAssignment.name };
+
+  const legacy = outlet.supervisorId
+    ? getUsers().find((u) => u.id === outlet.supervisorId && u.active && u.role === "supervisor")
+    : null;
+  return legacy ? { id: legacy.id, name: legacy.name } : null;
 }
 
 /** Siapa yang akan menerima temuan untuk outlet ini (dipakai label tombol). */

@@ -82,6 +82,13 @@ export function Messenger({
   const [cache, setCache] = React.useState<Record<string, ChatMessage[]>>({});
   const peopleCache = React.useRef<Record<string, ChatPerson[]>>({});
 
+  // Percakapan yang sedang dibuka, dibaca dari efek/callback tanpa memicu
+  // pembuatan ulang fungsinya.
+  const activeRef = React.useRef<string | null>(activeId);
+  React.useEffect(() => {
+    activeRef.current = activeId;
+  }, [activeId]);
+
   const active = threads.find((t) => t.id === activeId) ?? null;
   const messages = activeId ? (cache[activeId] ?? []) : [];
   const activePending = pending.filter((p) => p.threadId === activeId);
@@ -90,6 +97,7 @@ export function Messenger({
   const open = React.useCallback(
     async (id: string) => {
       setActiveId(id);
+      activeRef.current = id;
       setMembers(peopleCache.current[id] ?? []);
       // Hanya tampilkan keadaan memuat kalau memang belum ada apa-apa untuk
       // digambar — kalau tidak, layar berkedip tiap kali berpindah.
@@ -107,11 +115,10 @@ export function Messenger({
       peopleCache.current[id] = res.people;
       setCache((cur) => ({ ...cur, [id]: res.messages }));
       // Jangan menimpa percakapan lain kalau pengguna sudah berpindah lagi
-      // selagi permintaan ini berjalan.
-      setActiveId((cur) => {
-        if (cur === id) setMembers(res.people);
-        return cur;
-      });
+      // selagi permintaan ini berjalan. Dibaca dari ref, BUKAN dari dalam
+      // pembaru state — React boleh menjalankan pembaru lebih dari sekali,
+      // jadi efek samping di dalamnya tidak sah.
+      if (activeRef.current === id) setMembers(res.people);
       setLoading(false);
     },
     [],

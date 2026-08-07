@@ -470,7 +470,7 @@ function Attachment({
           src={url}
           alt={a.name}
           loading="lazy"
-          className="h-auto max-h-72 w-full max-w-[16rem] object-cover sm:max-w-[18rem]"
+          className="h-auto max-h-80 w-auto max-w-[15rem] object-contain sm:max-w-[18rem]"
         />
       </button>
     );
@@ -506,9 +506,9 @@ function RequestCard({ r, mine, onOpen }: { r: ChatRef; mine: boolean; onOpen: (
   const body = (
     <>
       {r.photoUrl && (
-        <span className="mb-2 block overflow-hidden rounded-lg">
+        <span className="mb-2 flex justify-center overflow-hidden rounded-lg bg-muted/40">
           {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src={r.photoUrl} alt={r.title} loading="lazy" className="h-32 w-full object-cover" />
+          <img src={r.photoUrl} alt={r.title} loading="lazy" className="max-h-44 w-auto max-w-full object-contain" />
         </span>
       )}
       <span className="flex items-center gap-2">

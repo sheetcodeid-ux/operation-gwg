@@ -162,7 +162,10 @@ function RequestPicker({
       title={title}
       description="Pilih yang ingin diteruskan ke obrolan."
     >
-      <div className="flex max-h-[70dvh] flex-col px-5 pb-5">
+      <div className="px-5 pb-5">
+        {/* Kolom cari menempel di atas: daftar pengajuan bisa panjang, dan
+            menggulir balik ke atas hanya untuk menyaring itu melelahkan. */}
+        <div className="sticky top-0 z-10 -mx-1 bg-card/95 px-1 pb-2 pt-1 backdrop-blur-sm">
           <div className="relative">
             <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
             <input
@@ -172,39 +175,38 @@ function RequestPicker({
               className="h-9 w-full rounded-lg border border-border bg-background pl-9 pr-3 text-sm text-foreground outline-none placeholder:text-muted-foreground focus:border-brand-500"
             />
           </div>
-
-          <div className="-mx-1 mt-3 min-h-0 flex-1 overflow-y-auto px-1">
-            {rows === null ? (
-              <div className="flex items-center justify-center py-10 text-muted-foreground">
-                <Loader2 className="size-5 animate-spin" />
-              </div>
-            ) : shown.length === 0 ? (
-              <p className="py-10 text-center text-xs text-muted-foreground">
-                {rows.length === 0 ? "Belum ada pengajuan jenis ini." : "Tidak ada yang cocok."}
-              </p>
-            ) : (
-              <div className="space-y-1">
-                {shown.map((r) => (
-                  <button
-                    key={r.id}
-                    type="button"
-                    onClick={() => onPick(r)}
-                    className="w-full rounded-xl border border-border p-3 text-left transition-colors hover:border-brand-500/40 hover:bg-brand-500/5"
-                  >
-                    <div className="flex items-start justify-between gap-2">
-                      <p className="line-clamp-2 text-sm font-medium text-foreground">{r.title}</p>
-                      <span className="shrink-0 text-[10px] tabular-nums text-muted-foreground">
-                        {shortTime(r.createdAt)}
-                      </span>
-                    </div>
-                    <p className="mt-1 text-[11px] text-muted-foreground">
-                      {r.requesterName} · <span className="font-medium text-foreground">{r.statusLabel}</span>
-                    </p>
-                  </button>
-                ))}
-              </div>
-            )}
         </div>
+
+        {rows === null ? (
+          <div className="flex items-center justify-center py-10 text-muted-foreground">
+            <Loader2 className="size-5 animate-spin" />
+          </div>
+        ) : shown.length === 0 ? (
+          <p className="py-10 text-center text-xs text-muted-foreground">
+            {rows.length === 0 ? "Belum ada pengajuan jenis ini." : "Tidak ada yang cocok."}
+          </p>
+        ) : (
+          <div className="space-y-1">
+            {shown.map((r) => (
+              <button
+                key={r.id}
+                type="button"
+                onClick={() => onPick(r)}
+                className="w-full rounded-xl border border-border p-3 text-left transition-colors hover:border-brand-500/40 hover:bg-brand-500/5"
+              >
+                <div className="flex items-start justify-between gap-2">
+                  <p className="line-clamp-2 text-sm font-medium text-foreground">{r.title}</p>
+                  <span className="shrink-0 text-[10px] tabular-nums text-muted-foreground">
+                    {shortTime(r.createdAt)}
+                  </span>
+                </div>
+                <p className="mt-1 text-[11px] text-muted-foreground">
+                  {r.requesterName} · <span className="font-medium text-foreground">{r.statusLabel}</span>
+                </p>
+              </button>
+            ))}
+          </div>
+        )}
       </div>
     </BottomSheet>
   );

@@ -27,7 +27,10 @@ export function LanguageToggle() {
               lebarnya dibutuhkan tombol lain di topbar. */}
           <span className="hidden font-medium sm:inline">{lang.toUpperCase()}</span>
           <ChevronDown
-            className={cn("size-3.5 text-muted-foreground transition-transform duration-200", open && "rotate-180")}
+            className={cn(
+              "hidden size-3.5 text-muted-foreground transition-transform duration-200 sm:block",
+              open && "rotate-180",
+            )}
           />
         </button>
       )}

@@ -30,6 +30,8 @@ export interface HygieneRow {
   score: number;
   isClean: boolean;
   findings: number;
+  /** Isi temuannya — dibuka dari kolom Temuan. */
+  findingList: string[];
   photos: Attachment[];
 }
 
@@ -41,11 +43,13 @@ function AuditPhotoGallery({
   caption,
   auditId,
   outletId,
+  canFollowup,
 }: {
   photos: Attachment[];
   caption: string;
   auditId: string;
   outletId: string;
+  canFollowup: boolean;
 }) {
   const groups = React.useMemo(() => {
     const map = new Map<string, Attachment[]>();
@@ -94,7 +98,9 @@ function AuditPhotoGallery({
                     </button>
                     {/* Temuan dikirim per FOTO: "ada yang kotor di outlet X" tanpa
                         menunjuk bagian mana tidak bisa ditindaklanjuti. */}
-                    <FollowupButton hygieneId={auditId} outletId={outletId} photo={p} area={label} />
+                    {canFollowup && (
+                      <FollowupButton hygieneId={auditId} outletId={outletId} photo={p} area={label} />
+                    )}
                   </div>
                 ))}
               </div>
@@ -137,6 +143,7 @@ export function HygieneExplorer({
   months,
   month,
   canDelete = false,
+  canFollowup = false,
   showOutletFilter = true,
 }: {
   rows: HygieneRow[];
@@ -146,6 +153,14 @@ export function HygieneExplorer({
   /** Bulan yang sedang ditampilkan — server hanya mengirim baris bulan ini. */
   month: string;
   canDelete?: boolean;
+  /**
+   * Boleh mengirim temuan ke supervisor outlet.
+   *
+   * Supervisor tidak: penerima temuan sebuah outlet adalah supervisornya
+   * sendiri, jadi tombol itu tidak pernah bisa dipakai olehnya. Yang memerlukan
+   * adalah peran yang membawahi banyak outlet.
+   */
+  canFollowup?: boolean;
   showOutletFilter?: boolean;
 }) {
   const { t } = useI18n();
@@ -206,9 +221,37 @@ export function HygieneExplorer({
       {
         accessorKey: "findings",
         header: t("hygiene.colFindings"),
-        cell: ({ getValue }) => {
-          const n = getValue<number>();
-          return n > 0 ? <Badge tone="warning">{n}</Badge> : <span className="text-muted-foreground">—</span>;
+        cell: ({ row }) => {
+          // Angka saja tidak menjawab apa pun — yang dicari orang adalah
+          // temuannya APA, jadi angkanya dibuat bisa dibuka.
+          const list = row.original.findingList ?? [];
+          if (list.length === 0) return <span className="text-muted-foreground">—</span>;
+          return (
+            <Dialog>
+              <DialogTrigger>
+                <button type="button" className="rounded-md transition-opacity hover:opacity-80">
+                  <Badge tone="warning">{list.length}</Badge>
+                </button>
+              </DialogTrigger>
+              <DialogContent
+                title="Temuan Audit"
+                description={`${row.original.outlet} · ${formatDate(row.original.date)}`}
+                align="center"
+                className="max-w-md"
+              >
+                <ul className="max-h-[60vh] space-y-2 overflow-y-auto p-5">
+                  {list.map((f, i) => (
+                    <li key={i} className="flex gap-2.5 rounded-xl border border-border p-3">
+                      <span className="grid size-5 shrink-0 place-items-center rounded-full bg-amber-500/15 text-[10px] font-bold text-amber-700 dark:text-amber-300">
+                        {i + 1}
+                      </span>
+                      <span className="text-sm leading-relaxed text-foreground">{f}</span>
+                    </li>
+                  ))}
+                </ul>
+              </DialogContent>
+            </Dialog>
+          );
         },
       },
       {
@@ -234,6 +277,7 @@ export function HygieneExplorer({
                   caption={`${row.original.outlet} · ${formatDate(row.original.date)}`}
                   auditId={row.original.id}
                   outletId={row.original.outletId}
+                  canFollowup={canFollowup}
                 />
               </DialogContent>
             </Dialog>

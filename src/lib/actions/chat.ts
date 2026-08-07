@@ -244,7 +244,9 @@ export async function chatPresignAction(input: {
 }
 
 /** Jalur cadangan saat R2 belum aktif: unggah kecil lewat server action. */
-export async function chatUploadAction(formData: FormData): Promise<{ path?: string; name?: string; error?: string }> {
+export async function chatUploadAction(
+  formData: FormData,
+): Promise<{ path?: string; name?: string; type?: string; error?: string }> {
   const user = await getSessionUser();
   if (!user) return { error: "Tidak punya akses." };
   if (!dbEnabled) return { error: "Penyimpanan belum aktif." };
@@ -255,7 +257,7 @@ export async function chatUploadAction(formData: FormData): Promise<{ path?: str
   const path = `chat/${user.id}/${Date.now()}-${randomUUID().slice(0, 8)}-${safe}`;
   const { error } = await db().storage.from("system-attachments").upload(path, file, { contentType: file.type });
   if (error) return { error: `Upload gagal: ${error.message}` };
-  return { path, name: file.name };
+  return { path, name: file.name, type: file.type || undefined };
 }
 
 /**

@@ -61,6 +61,7 @@ export default async function HygienePage({ searchParams }: { searchParams: Prom
       score: a.hygieneScore,
       isClean: a.isClean,
       findings: a.findings.length,
+      findingList: a.findings,
       photos: await resolvePhotos(photosById.get(a.id) ?? a.photos),
     })),
   );
@@ -100,6 +101,7 @@ export default async function HygienePage({ searchParams }: { searchParams: Prom
         <HygieneExplorer
           rows={rows}
           outlets={outlets}
+          canFollowup={user.role !== "supervisor"}
           months={months}
           month={month}
           canDelete={user.role === "super_admin"}

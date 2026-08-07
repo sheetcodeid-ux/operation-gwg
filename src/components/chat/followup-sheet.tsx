@@ -100,9 +100,18 @@ export function FollowupSheet({
           </div>
 
           {data.photoUrl && (
-            <a href={data.photoUrl} target="_blank" rel="noopener noreferrer" className="block overflow-hidden rounded-xl ring-1 ring-border">
+            <a
+              href={data.photoUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex justify-center overflow-hidden rounded-xl bg-muted/40 ring-1 ring-border"
+            >
+              {/* object-contain, bukan cover: foto potret dari ponsel akan
+                  terpotong jadi kotak landscape kalau dipangkas, dan justru
+                  bagian yang kotor yang hilang. Tingginya dibatasi supaya panel
+                  tetap bisa digulir. */}
               {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src={data.photoUrl} alt={data.area} className="max-h-72 w-full object-cover" />
+              <img src={data.photoUrl} alt={data.area} className="max-h-[55dvh] w-auto max-w-full object-contain" />
             </a>
           )}
 
@@ -126,10 +135,10 @@ export function FollowupSheet({
                     href={a.url ?? "#"}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="block overflow-hidden rounded-xl ring-1 ring-border"
+                    className="flex justify-center overflow-hidden rounded-xl bg-muted/40 ring-1 ring-border"
                   >
                     {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img src={a.url} alt={a.name} className="aspect-square w-full object-cover" />
+                    <img src={a.url} alt={a.name} className="max-h-56 w-auto max-w-full object-contain" />
                   </a>
                 ))}
               </div>

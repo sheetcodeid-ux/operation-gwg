@@ -18,14 +18,19 @@ export function UserMenu({ name, email, role, avatarUrl }: { name: string; email
       trigger={({ toggle, open }) => (
         <button
           onClick={toggle}
-          className="flex items-center gap-2 rounded-lg border border-border bg-card p-1 pr-2 text-left transition-colors hover:bg-muted"
+          className="flex shrink-0 items-center gap-2 rounded-lg border border-border bg-card p-1 text-left transition-colors hover:bg-muted sm:pr-2"
         >
           <Avatar name={name} src={avatarUrl} size={28} className="rounded-md" />
           <span className="hidden max-w-28 truncate text-sm font-medium text-foreground sm:inline">
             {name.split(" ")[0]}
           </span>
+          {/* Chevron disembunyikan di ponsel: avatarnya sendiri sudah jelas bisa
+              ditekan, dan lebarnya dibutuhkan supaya tombol ini tidak terpotong. */}
           <ChevronDown
-            className={cn("size-3.5 text-muted-foreground transition-transform duration-200", open && "rotate-180")}
+            className={cn(
+              "hidden size-3.5 text-muted-foreground transition-transform duration-200 sm:block",
+              open && "rotate-180",
+            )}
           />
         </button>
       )}

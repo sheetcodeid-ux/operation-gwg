@@ -45,7 +45,9 @@ export function Topbar({
       </div>
 
       {/* Controls */}
-      <div className="ml-auto flex items-center gap-2 px-4 sm:px-6">
+      {/* min-w-0 + gap kecil di ponsel: tanpa itu deretan tombol lebih lebar
+          dari layar 360px dan menu pengguna terpotong di tepi kanan. */}
+      <div className="ml-auto flex min-w-0 items-center gap-1 px-3 sm:gap-2 sm:px-6">
         <button
           type="button"
           data-command-trigger

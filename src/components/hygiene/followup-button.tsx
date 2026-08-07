@@ -83,9 +83,11 @@ export function FollowupButton({
 
       <BottomSheet open={open} onOpenChange={setOpen} title="Kirim Temuan" description={area} className="sm:max-w-md">
         <div className="px-5 pb-6">
-          <div className="overflow-hidden rounded-xl ring-1 ring-border">
+          <div className="flex justify-center overflow-hidden rounded-xl bg-muted/40 ring-1 ring-border">
+            {/* object-contain: foto potret tidak dipangkas jadi landscape —
+                bagian yang kotor justru sering ada di tepi atas atau bawah. */}
             {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src={photo.url} alt={area} className="max-h-56 w-full object-cover" />
+            <img src={photo.url} alt={area} className="max-h-[45dvh] w-auto max-w-full object-contain" />
           </div>
 
           <p className="mt-3 text-xs text-muted-foreground">

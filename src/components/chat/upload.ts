@@ -34,7 +34,10 @@ async function direct(file: File): Promise<ChatAttachment | null> {
     throw new Error(`Gagal mengunggah "${file.name}" — koneksi ke penyimpanan ditolak (cek izin CORS bucket R2).`);
   }
   if (!res.ok) throw new Error(`Gagal mengunggah "${file.name}" — penyimpanan menolak (${res.status}).`);
-  return { path: signed.path, name: file.name };
+  // Tipe MIME ikut disimpan: nama berkas dari kamera ponsel sering tanpa
+  // ekstensi, dan tanpa tipe ini foto tampil sebagai kartu berkas — juga
+  // membuat saringan "bukti wajib foto" kehilangan dasarnya.
+  return { path: signed.path, name: file.name, type: file.type || undefined };
 }
 
 export async function uploadChatFiles(files: File[]): Promise<ChatAttachment[]> {
@@ -52,7 +55,7 @@ export async function uploadChatFiles(files: File[]): Promise<ChatAttachment[]> 
     const res = await chatUploadAction(fd);
     if (res.error) throw new Error(res.error);
     if (!res.path) throw new Error(`Gagal mengunggah "${f.name}".`);
-    out.push({ path: res.path, name: res.name ?? f.name });
+    out.push({ path: res.path, name: res.name ?? f.name, type: f.type || undefined });
   }
   return out;
 }
