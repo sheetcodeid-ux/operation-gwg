@@ -2,7 +2,7 @@ import "server-only";
 
 import { db, dbEnabled } from "./db";
 import { selectAll } from "./paged";
-import { esbConfigured, esbFetchSales, esbListBranches } from "@/lib/integrations/esb-client";
+import { esbConfigured, esbFetchSales, esbListBranches, esbEnsureDeadline } from "@/lib/integrations/esb-client";
 
 /**
  * Seasonal (Musiman) sales — daily gross & net sales for a whole year, cached in
@@ -116,6 +116,7 @@ export async function syncSeasonalDays(from: string, to: string, branch = "", bu
   }
   if (pending.length === 0) return { synced: 0, remaining: 0 };
   const started = Date.now();
+  esbEnsureDeadline(budgetMs); // batas waktu ikut berlaku di dalam klien ESB
   let synced = 0;
   let fails = 0;
   let error: string | undefined;

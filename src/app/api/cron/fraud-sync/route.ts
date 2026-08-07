@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { syncFraudRange, syncSalesDaily, syncSalesPeriod } from "@/lib/data/fraud";
+import { esbSetDeadline } from "@/lib/integrations/esb-client";
 import { syncSeasonalDays } from "@/lib/data/seasonal";
 import { getAppConfig } from "@/lib/data/app-config";
 
@@ -80,6 +81,12 @@ export async function GET(req: Request) {
 
   const started = Date.now();
   const left = () => 52_000 - (Date.now() - started);
+  // Tenggat KERAS untuk seluruh panggilan ESB pada permintaan ini. Tanpa ini,
+  // satu permintaan ESB yang menggantung — `fetch` Node tidak punya batas waktu —
+  // atau loop tunggu ekspor (22 × 2 detik) menahan seluruh cron sampai Vercel
+  // mematikannya di detik ke-60, dan hasil kerjanya hangus semua. Dipasang di
+  // sini karena hanya route yang tahu batas sesungguhnya.
+  esbSetDeadline(left());
   const results: Record<string, unknown> = {};
   const job = new URL(req.url).searchParams.get("job");
 

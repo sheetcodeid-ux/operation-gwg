@@ -26,6 +26,67 @@ const PASS = process.env.ESB_PASSWORD;
 
 export const esbConfigured = () => !!(USER && PASS);
 
+/**
+ * Batas waktu SATU permintaan ke ESB.
+ *
+ * `fetch` bawaan Node tidak punya batas waktu sama sekali. Satu permintaan yang
+ * menggantung ikut menggantungkan seluruh cron: pemeriksaan anggaran waktu di
+ * /api/cron/fraud-sync tidak pernah kebagian jalan, lalu Vercel mematikan
+ * fungsinya di detik ke-60 dan sinkronisasi hari itu batal seluruhnya.
+ */
+const REQUEST_TIMEOUT_MS = 15_000;
+
+/**
+ * Tenggat untuk SELURUH rangkaian panggilan ESB pada satu permintaan server.
+ *
+ * Loop tunggu ekspor di bawah bisa menghabiskan 22 × 2 detik hanya untuk
+ * menunggu — itu saja sudah melewati batas 60 detik Vercel sebelum sempat
+ * mengembalikan apa pun. Dengan tenggat, loop itu berhenti lebih awal dan
+ * pemanggilnya mencatat sisanya sebagai "belum selesai", sehingga jalannya
+ * berikutnya melanjutkan alih-alih mengulang dari nol.
+ *
+ * Nilainya tunggal per proses; itu aman karena semua akses ekspor ESB sudah
+ * diserialkan lewat `serialized()` di bawah, dan cron menjalankan fasenya
+ * berurutan.
+ */
+let deadlineAt = 0;
+
+/**
+ * Pasang tenggat baru sepanjang `ms` (0 = tanpa tenggat).
+ *
+ * Dipanggil di TITIK MASUK permintaan (route cron), karena di situlah batas
+ * sebenarnya diketahui — 60 detik dari Vercel, bukan anggaran satu tahap.
+ */
+export function esbSetDeadline(ms: number): void {
+  deadlineAt = ms > 0 ? Date.now() + ms : 0;
+}
+
+/**
+ * Pasang tenggat HANYA kalau belum ada yang berlaku.
+ *
+ * Ini yang dipakai lapisan data. Anggaran satu tahap (misal 12 detik) tidak
+ * boleh memperpendek tenggat permintaan yang lebih panjang: memutus satu
+ * panggilan ESB di tengah jalan membuang SELURUH hasilnya, jadi memperpendek
+ * tenggat justru memperlambat, bukan menghemat.
+ *
+ * Tenggat yang sudah lewat dianggap tidak ada — nilai ini hidup di memori
+ * proses dan bisa tersisa dari permintaan sebelumnya pada instance yang sama.
+ */
+export function esbEnsureDeadline(ms: number): void {
+  if (deadlineAt === 0 || deadlineAt <= Date.now()) esbSetDeadline(ms);
+}
+
+/** Sisa waktu sebelum tenggat; `Infinity` bila tidak ada tenggat terpasang. */
+export function esbTimeLeft(): number {
+  return deadlineAt ? deadlineAt - Date.now() : Infinity;
+}
+
+/** `fetch` ke ESB yang selalu punya batas waktu, dan tidak pernah melewati tenggat. */
+function esbFetch(url: string, init: RequestInit = {}): Promise<Response> {
+  const budget = Math.max(1_000, Math.min(REQUEST_TIMEOUT_MS, esbTimeLeft()));
+  return fetch(url, { ...init, signal: AbortSignal.timeout(budget) });
+}
+
 const CSRF_META = /name="csrf-token"\s+content="([^"]+)"/;
 const CSRF_INPUT = /"_csrf-esb-fnb-backend"\s+value="([^"]+)"/;
 // POST_USER_SESSION is a per-session anti-replay token embedded in the report
@@ -78,7 +139,7 @@ async function login(): Promise<Session> {
   if (!USER || !PASS) throw new Error("ESB credentials not configured");
   const jar = new Map<string, string>();
 
-  const g = await fetch(`${BASE}/site/login`, { headers: { Accept: "text/html" }, cache: "no-store" });
+  const g = await esbFetch(`${BASE}/site/login`, { headers: { Accept: "text/html" }, cache: "no-store" });
   const nGet = absorbCookies(jar, g);
   const loginHtml = await g.text();
   const csrf = CSRF_META.exec(loginHtml)?.[1] ?? CSRF_INPUT.exec(loginHtml)?.[1];
@@ -94,7 +155,7 @@ async function login(): Promise<Session> {
   fields[passKey] = PASS;
   if (!fields["_csrf-esb-fnb-backend"]) fields["_csrf-esb-fnb-backend"] = csrf;
   const body = new URLSearchParams(fields);
-  const p = await fetch(`${BASE}/site/login`, {
+  const p = await esbFetch(`${BASE}/site/login`, {
     method: "POST",
     redirect: "manual",
     headers: {
@@ -112,7 +173,7 @@ async function login(): Promise<Session> {
   // cookies are only set on the redirected response.
   const loc = p.headers.get("location");
   if (!jar.has("_jwt-token") && !jar.has("_identity") && loc && (p.status === 301 || p.status === 302)) {
-    const f = await fetch(new URL(loc, BASE).toString(), { headers: { Cookie: cookieHeader(jar), Accept: "text/html" }, redirect: "manual", cache: "no-store" });
+    const f = await esbFetch(new URL(loc, BASE).toString(), { headers: { Cookie: cookieHeader(jar), Accept: "text/html" }, redirect: "manual", cache: "no-store" });
     absorbCookies(jar, f);
   }
   if (!jar.has("_jwt-token") && !jar.has("_identity")) {
@@ -124,7 +185,7 @@ async function login(): Promise<Session> {
   }
 
   // Fresh CSRF + POST_USER_SESSION from the authenticated report page.
-  const rp = await fetch(`${BASE}/report/report-cancel-menu-detail`, { headers: { Accept: "text/html", Cookie: cookieHeader(jar) }, cache: "no-store" });
+  const rp = await esbFetch(`${BASE}/report/report-cancel-menu-detail`, { headers: { Accept: "text/html", Cookie: cookieHeader(jar) }, cache: "no-store" });
   absorbCookies(jar, rp);
   const rpHtml = await rp.text();
   const csrf2 = CSRF_META.exec(rpHtml)?.[1] ?? csrf;
@@ -151,7 +212,7 @@ async function ensureSession(): Promise<Session> {
  *  SESSION always match the session actually used (incl. after a re-login). */
 async function postForm(path: string, build: (s: Session) => Record<string, string>): Promise<Response> {
   const call = (s: Session) =>
-    fetch(`${BASE}${path}`, {
+    esbFetch(`${BASE}${path}`, {
       method: "POST",
       redirect: "manual",
       headers: {
@@ -221,7 +282,7 @@ async function pokeQueue(): Promise<void> {
   try {
     const s = await ensureSession();
     const qs = new URLSearchParams({ draw: "1", start: "0", length: "10", _: String(Date.now()) });
-    await fetch(`${BASE}/site/get-data-report-queue?${qs.toString()}`, {
+    await esbFetch(`${BASE}/site/get-data-report-queue?${qs.toString()}`, {
       headers: { "X-Requested-With": "XMLHttpRequest", "X-Csrf-Token": s.csrf, Cookie: s.cookie, Referer: `${BASE}/report/report-cancel-menu-detail`, Accept: "application/json" },
       cache: "no-store",
     });
@@ -247,6 +308,10 @@ async function readExportPageRaw(url: string, page: number, maxAttempts = 22, po
     }
     last = text.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim().slice(0, 140);
     if (attempt < maxAttempts - 1) {
+      // Menunggu 22 × 2 detik saja sudah melewati batas 60 detik Vercel. Berhenti
+      // selagi masih sempat mengembalikan hasil: pemanggilnya mencatat hari ini
+      // sebagai belum selesai, dan jalannya berikutnya melanjutkan dari sini.
+      if (esbTimeLeft() < 5_000) throw new Error("ESB: waktu habis sebelum ekspor siap — dilanjutkan di sinkronisasi berikutnya");
       if (poke) await pokeQueue(); // advance the async worker like the browser does
       await sleep(2000); // export still generating — "try again later"
       continue;
@@ -371,7 +436,7 @@ async function getCompanyIds(): Promise<string[]> {
   if (companyIds) return companyIds;
   try {
     const s = await ensureSession();
-    const res = await fetch(`${BASE}/sales-dashboard`, { headers: { Accept: "text/html", Cookie: s.cookie }, cache: "no-store" });
+    const res = await esbFetch(`${BASE}/sales-dashboard`, { headers: { Accept: "text/html", Cookie: s.cookie }, cache: "no-store" });
     const html = await res.text();
     const ids = new Set<string>();
     for (const m of html.matchAll(/companyID(?:\[\]|%5B%5D)?["']?\s*(?:value=|[:=,]\s*)["']?(\d{3,10})/g)) ids.add(m[1]);
@@ -390,7 +455,7 @@ export async function esbListBranches(): Promise<EsbBranch[]> {
   const body = new URLSearchParams();
   for (const c of await getCompanyIds()) body.append("companyID[]", c);
   body.append("brandID", "");
-  const res = await fetch(`${BASE}/branch/get-multi-company-branch`, {
+  const res = await esbFetch(`${BASE}/branch/get-multi-company-branch`, {
     method: "POST",
     headers: { "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8", "X-Requested-With": "XMLHttpRequest", "X-Csrf-Token": s.csrf, Cookie: s.cookie, Referer: `${BASE}/sales-dashboard` },
     body,
@@ -410,7 +475,7 @@ export async function esbFetchNetSales(dateFromYmd: string, dateToYmd: string, b
   body.append("reportDateStart", toEsbDate(dateFromYmd));
   body.append("reportDateEnd", toEsbDate(dateToYmd));
   for (const c of await getCompanyIds()) body.append("companyID[]", c);
-  const res = await fetch(`${BASE}/sales-dashboard/get-today-highlight`, {
+  const res = await esbFetch(`${BASE}/sales-dashboard/get-today-highlight`, {
     method: "POST",
     headers: { "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8", "X-Requested-With": "XMLHttpRequest", "X-Csrf-Token": s.csrf, Cookie: s.cookie, Referer: `${BASE}/sales-dashboard` },
     body,
@@ -441,7 +506,7 @@ export async function esbFetchSales(dateFromYmd: string, dateToYmd: string, bran
   body.append("reportDateStart", toEsbDate(dateFromYmd));
   body.append("reportDateEnd", toEsbDate(dateToYmd));
   for (const c of await getCompanyIds()) body.append("companyID[]", c);
-  const res = await fetch(`${BASE}/sales-dashboard/get-today-highlight`, {
+  const res = await esbFetch(`${BASE}/sales-dashboard/get-today-highlight`, {
     method: "POST",
     headers: { "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8", "X-Requested-With": "XMLHttpRequest", "X-Csrf-Token": s.csrf, Cookie: s.cookie, Referer: `${BASE}/sales-dashboard` },
     body,

@@ -1,6 +1,6 @@
 import "server-only";
 
-import { esbConfigured, esbFetchCancelRows, esbFetchNetSales, esbListBranches, type EsbCancelResult } from "@/lib/integrations/esb-client";
+import { esbConfigured, esbFetchCancelRows, esbFetchNetSales, esbListBranches, esbEnsureDeadline, type EsbCancelResult } from "@/lib/integrations/esb-client";
 import { fraudAgg, fraudStoreEnabled, fraudTopOrders, getFraudReportCache, getFraudRows, getSalesDaily, getSalesPeriod, getSyncStates, replaceFraudDay, setFraudReportCache, upsertSalesDay, upsertSalesPeriod, type FraudKindGroup, type FraudSyncState } from "./fraud-store";
 
 /**
@@ -364,6 +364,10 @@ export async function syncFraudRange(from: string, to: string, kind: FraudKind, 
   const pending = pendingSyncDays(states, from, to).sort().reverse(); // newest first
   if (pending.length === 0) return { synced: 0, remaining: 0 };
   const started = Date.now();
+  // Anggaran waktu diteruskan ke klien ESB. Tanpa ini loop tunggu ekspor di sana
+  // bisa menahan 44 detik sendirian, sehingga cron dibunuh Vercel di detik ke-60
+  // sebelum sempat menyimpan apa pun.
+  esbEnsureDeadline(budgetMs);
   let synced = 0;
   let error: string | undefined;
   // STRICTLY one day at a time: ESB serves a single export per session, and
@@ -455,6 +459,7 @@ export async function syncSalesDaily(from: string, to: string, budgetMs = 20_000
     .sort()
     .reverse();
   const started = Date.now();
+  esbEnsureDeadline(budgetMs);
   let synced = 0;
   for (const day of pending) {
     if (synced > 0 && Date.now() - started > budgetMs) break;
@@ -486,6 +491,7 @@ export async function syncSalesPeriod(period: FraudPeriod, date: string, budgetM
   }
   const queue = targets.filter((t) => !fresh(t.name));
   const started = Date.now();
+  esbEnsureDeadline(budgetMs);
   let synced = 0;
   let failures = 0;
   let error: string | undefined;

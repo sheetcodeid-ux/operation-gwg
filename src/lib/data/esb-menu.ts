@@ -2,7 +2,7 @@ import "server-only";
 
 import { db, dbEnabled } from "./db";
 import { selectAll } from "./paged";
-import { esbConfigured, esbGenerateMenuRecap, esbReadMenuPages } from "@/lib/integrations/esb-client";
+import { esbConfigured, esbGenerateMenuRecap, esbReadMenuPages, esbEnsureDeadline } from "@/lib/integrations/esb-client";
 import { classifyMenuCategory, type MenuRecapRow } from "@/lib/integrations/esb";
 import { getAppConfig, setAppConfig } from "./app-config";
 
@@ -138,6 +138,7 @@ async function applyRecapRows(rows: MenuRecapRow[], windowDays: number, resetQty
 export async function syncEsbMenus(windowDays = 30, budgetMs = 48_000): Promise<{ menus: number; complete?: boolean; nextPage?: number; totalPages?: number; skipped?: string }> {
   if (!dbEnabled || !esbConfigured()) return { menus: 0, skipped: "not configured" };
   const started = Date.now();
+  esbEnsureDeadline(budgetMs); // batas waktu ikut berlaku di dalam klien ESB
 
   let cursor: Cursor | null = null;
   try {
