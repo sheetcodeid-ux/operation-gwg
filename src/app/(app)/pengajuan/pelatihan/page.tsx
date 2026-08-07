@@ -5,6 +5,7 @@ import { requireSessionUser } from "@/lib/auth";
 import { canReachMenu } from "@/lib/nav";
 import { getUsers } from "@/lib/data/store";
 import { listHcRequests } from "@/lib/data/hc-requests";
+import { requestScopeFor } from "@/lib/data/request-scope";
 import { PageHeader } from "@/components/ui/page-header";
 import { HcRequestList, NewRequestButton } from "@/components/hc/request-submit";
 
@@ -15,7 +16,7 @@ export default async function PengajuanPelatihanPage() {
   if (!canReachMenu(user, "hc_request")) redirect("/dashboard");
 
   const department = user.department ?? "—";
-  const rows = await listHcRequests({ department, kind: "pelatihan" });
+  const rows = await listHcRequests({ ...requestScopeFor(user), kind: "pelatihan" });
 
   // Kandidat peserta = anggota aktif departemen pemohon, sesuai User Management.
   // Akun tanpa departemen (mis. Super Admin) melihat seluruh karyawan aktif —
@@ -34,7 +35,7 @@ export default async function PengajuanPelatihanPage() {
         description="Ajukan program pelatihan ke Human Capital. Setelah disetujui, Finance memutuskan dananya."
         actions={<NewRequestButton kind="pelatihan" members={members} />}
       />
-      <HcRequestList rows={rows} kind="pelatihan" />
+      <HcRequestList rows={rows} kind="pelatihan" canDelete={user.role === "super_admin"} />
     </div>
   );
 }

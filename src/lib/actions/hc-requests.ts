@@ -6,7 +6,8 @@ import { getSessionUser } from "@/lib/auth";
 import { db, dbEnabled } from "@/lib/data/db";
 import { canReachMenu } from "@/lib/nav";
 import { persistMessage } from "@/lib/data/persist";
-import { createHcRequest, getHcRequest, listHcRequests, updateHcRequest } from "@/lib/data/hc-requests";
+import { createHcRequest, deleteHcRequest, getHcRequest, listHcRequests, updateHcRequest } from "@/lib/data/hc-requests";
+import { canSeeRequest, requestScopeFor } from "@/lib/data/request-scope";
 import { getUsers } from "@/lib/data/store";
 import { createTask, getTask, updateTask, updateTaskStatus } from "@/lib/data/mutations";
 import { presignPut, r2Enabled, r2Put, R2_PREFIX } from "@/lib/storage/r2";
@@ -161,8 +162,10 @@ function revalidateAll() {
 export async function myHcRequestsAction(): Promise<HcRequest[]> {
   const user = await getSessionUser();
   if (!canSubmit(user)) return [];
-  // Semua pengajuan dari departemen yang sama, agar satu tim melihat antreannya.
-  return listHcRequests({ department: user!.department ?? "—" });
+  // Cakupan mengikuti jangkauan orangnya, bukan label departemennya — semua
+  // supervisor memakai department yang sama, jadi menyaring dengan itu membuat
+  // satu supervisor melihat pengajuan seluruh cabang.
+  return listHcRequests(requestScopeFor(user!));
 }
 
 /** Pengajuan yang masuk ke HC — dibatasi satu jenis bila diminta. */
@@ -378,10 +381,11 @@ export async function requestDesignRevisionAction(input: {
   const note = input.note.trim();
   if (!note) return { error: "Tulis dulu apa yang perlu direvisi." };
 
-  // Yang boleh meminta revisi: pemohonnya sendiri, rekan satu departemen
-  // (atasan yang menerima hasilnya), atau tim Creative yang menariknya kembali.
-  const sameDept = !!user.department && user.department === req.department;
-  if (req.requesterId !== user.id && !sameDept && !canCreative(user)) {
+  // Yang boleh meminta revisi: pemohonnya sendiri, rekan yang memang berhak
+  // melihat pengajuan itu (atasan yang menerima hasilnya), atau tim Creative
+  // yang menariknya kembali. Dulu ini memakai "satu departemen", yang berarti
+  // supervisor cabang lain pun bisa merevisi design bukan miliknya.
+  if (req.requesterId !== user.id && !canSeeRequest(user, req) && !canCreative(user)) {
     return { error: "Hanya pemohon atau timnya yang bisa meminta revisi." };
   }
 
@@ -397,5 +401,36 @@ export async function requestDesignRevisionAction(input: {
   if (req.workTaskId) updateTaskStatus(req.workTaskId, "ongoing", 60);
 
   revalidateAssignment();
+  return { ok: true };
+}
+
+/**
+ * Hapus pengajuan — KHUSUS Super Admin.
+ *
+ * Sengaja tidak diberikan ke pemohon atau peninjau: pengajuan adalah jejak
+ * keputusan (siapa mengajukan, siapa menyetujui, kapan selesai) yang ikut
+ * menyusun KPI HC. Menghapusnya menghilangkan jejak itu, jadi hanya pemilik
+ * sistem yang boleh melakukannya.
+ */
+export async function deleteRequestAction(id: string): Promise<{ ok?: true; error?: string }> {
+  const user = await getSessionUser();
+  if (!user || user.role !== "super_admin") return { error: "Hanya Super Admin yang bisa menghapus pengajuan." };
+
+  const res = await deleteHcRequest(id);
+  if (res.error) return { error: res.error };
+
+  // Pengajuan bisa tampil di banyak halaman sekaligus (milik pemohon, antrean
+  // peninjau, Work Tracker); semuanya disegarkan supaya tidak ada yang menyisakan
+  // baris yang sudah tidak ada.
+  revalidatePath("/pengajuan");
+  revalidatePath("/pengajuan/karyawan");
+  revalidatePath("/pengajuan/pelatihan");
+  revalidatePath("/pengajuan/design");
+  revalidatePath("/hc/permintaan");
+  revalidatePath("/hc/pelatihan");
+  revalidatePath("/finance/pelatihan");
+  revalidatePath("/creative/design");
+  revalidatePath("/hc/kpi");
+  revalidatePath("/work-tracker");
   return { ok: true };
 }

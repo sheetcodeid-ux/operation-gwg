@@ -4,6 +4,7 @@ import { redirect } from "next/navigation";
 import { requireSessionUser } from "@/lib/auth";
 import { canReachMenu } from "@/lib/nav";
 import { listHcRequests } from "@/lib/data/hc-requests";
+import { requestScopeFor } from "@/lib/data/request-scope";
 import { isOpen } from "@/lib/hc-request";
 import { PageHeader } from "@/components/ui/page-header";
 import { HubCategories, HubSectionTitle, type HubCategory } from "@/components/hc/request-hub";
@@ -16,7 +17,13 @@ export default async function PengajuanPage() {
   if (!canReachMenu(user, "hc_request")) redirect("/dashboard");
 
   const department = user.department ?? "—";
-  const mine = await listHcRequests({ department });
+  // Supervisor memegang satu cabang, jadi yang tampil hanya pengajuannya
+  // sendiri; peran kantor tetap melihat antrean satu departemen.
+  const scopeLabel =
+    user.role === "supervisor"
+      ? "Semua permintaan Anda berangkat dari sini."
+      : `Semua permintaan departemen ${department} berangkat dari sini.`;
+  const mine = await listHcRequests(requestScopeFor(user));
   const openOf = (kind: "rekrutmen" | "pelatihan" | "design") =>
     mine.filter((r) => r.kind === kind && isOpen(r.status)).length;
 
@@ -69,7 +76,7 @@ export default async function PengajuanPage() {
       <PageHeader
         icon={Send}
         title="Pengajuan"
-        description={`Semua permintaan departemen ${department} berangkat dari sini.`}
+        description={scopeLabel}
       />
 
       <HubSectionTitle hint={`${categories.length} kategori`}>Kategori Pengajuan</HubSectionTitle>

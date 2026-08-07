@@ -83,27 +83,42 @@ export interface ListRequestOpts {
   kind?: HcRequestKind;
   department?: string;
   requesterId?: string;
+  /**
+   * Batasi ke pengaju tertentu. Dipakai penyaringan per cabang: department tidak
+   * bisa dipakai karena SEMUA supervisor memakai department yang sama, sehingga
+   * menyaring dengannya membuat setiap supervisor melihat seluruh cabang.
+   *
+   * Daftar kosong berarti "tidak ada yang boleh dilihat" — bukan "tanpa filter".
+   */
+  requesterIds?: string[];
 }
 
 export async function listHcRequests(opts: ListRequestOpts = {}): Promise<HcRequest[]> {
+  // Daftar pengaju kosong = tidak ada yang boleh dilihat. Membedakannya dari
+  // "tanpa filter" itu penting: keliru sedikit di sini artinya membuka seluruh
+  // pengajuan ke orang yang seharusnya tidak melihat satu pun.
+  if (opts.requesterIds && opts.requesterIds.length === 0) return [];
+
   let rows: HcRequest[];
   if (!dbEnabled) {
-    rows = [...mem.values()].map(fromRow);
+    rows = [...mem.values()]
+      .map(fromRow)
+      .filter(
+        (r) =>
+          (!opts.kind || r.kind === opts.kind) &&
+          (!opts.department || r.department === opts.department) &&
+          (!opts.requesterId || r.requesterId === opts.requesterId) &&
+          (!opts.requesterIds || opts.requesterIds.includes(r.requesterId)),
+      )
+      .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
   } else {
     let q = db().from("hc_requests").select("*").order("created_at", { ascending: false }).limit(500);
     if (opts.kind) q = q.eq("kind", opts.kind);
     if (opts.department) q = q.eq("department", opts.department);
     if (opts.requesterId) q = q.eq("requester_id", opts.requesterId);
+    if (opts.requesterIds) q = q.in("requester_id", opts.requesterIds);
     const { data } = await q;
     rows = ((data ?? []) as any[]).map(fromRow);
-  }
-  if (!dbEnabled) {
-    rows = rows.filter(
-      (r) =>
-        (!opts.kind || r.kind === opts.kind) &&
-        (!opts.department || r.department === opts.department) &&
-        (!opts.requesterId || r.requesterId === opts.requesterId),
-    );
   }
   await signAll(rows);
   return rows;
@@ -219,6 +234,30 @@ export async function getHcRequest(id: string): Promise<HcRequest | null> {
   }
   const { data } = await db().from("hc_requests").select("*").eq("id", id).maybeSingle();
   return data ? fromRow(data) : null;
+}
+
+/**
+ * Hapus satu pengajuan berikut tugas Work Tracker yang tertaut.
+ *
+ * Tugasnya ikut dihapus supaya tidak tertinggal sebagai pekerjaan yatim yang
+ * merujuk pengajuan yang sudah tidak ada. Lampiran di penyimpanan sengaja
+ * DIBIARKAN: berkas yang sama bisa dipakai catatan lain, dan menghapus berkas
+ * orang lain jauh lebih sulit dipulihkan daripada menyisakan satu objek.
+ */
+export async function deleteHcRequest(id: string): Promise<{ error?: string }> {
+  const req = await getHcRequest(id);
+  if (!req) return { error: "Pengajuan tidak ditemukan." };
+
+  if (!dbEnabled) {
+    mem.delete(id);
+    return {};
+  }
+  if (req.workTaskId) {
+    const t = await db().from("tasks").delete().eq("id", req.workTaskId);
+    if (t.error) return { error: `Gagal menghapus tugas terkait: ${t.error.message}` };
+  }
+  const { error } = await db().from("hc_requests").delete().eq("id", id);
+  return error ? { error: error.message } : {};
 }
 
 /* ─────────────────── agregasi otomatis untuk KPI HC ─────────────────── */

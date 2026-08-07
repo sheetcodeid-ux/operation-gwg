@@ -4,6 +4,7 @@ import { redirect } from "next/navigation";
 import { requireSessionUser } from "@/lib/auth";
 import { canReachMenu } from "@/lib/nav";
 import { listHcRequests } from "@/lib/data/hc-requests";
+import { requestScopeFor } from "@/lib/data/request-scope";
 import { PageHeader } from "@/components/ui/page-header";
 import { HcRequestList, NewRequestButton } from "@/components/hc/request-submit";
 
@@ -13,7 +14,7 @@ export default async function PermintaanKaryawanPage() {
   const user = await requireSessionUser();
   if (!canReachMenu(user, "hc_request")) redirect("/dashboard");
 
-  const rows = await listHcRequests({ department: user.department ?? "—", kind: "rekrutmen" });
+  const rows = await listHcRequests({ ...requestScopeFor(user), kind: "rekrutmen" });
 
   return (
     <div className="w-full">
@@ -23,7 +24,7 @@ export default async function PermintaanKaryawanPage() {
         description="Ajukan penambahan atau pengganti pegawai ke tim Human Capital. Status persetujuan terlihat di setiap kartu."
         actions={<NewRequestButton kind="rekrutmen" />}
       />
-      <HcRequestList rows={rows} kind="rekrutmen" />
+      <HcRequestList rows={rows} kind="rekrutmen" canDelete={user.role === "super_admin"} />
     </div>
   );
 }

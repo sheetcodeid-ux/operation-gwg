@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import { useRouter } from "next/navigation";
-import { AlertCircle, Loader2, Plus, RotateCcw } from "lucide-react";
+import { AlertCircle, Loader2, Plus, RotateCcw, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -11,8 +11,9 @@ import { DatePicker } from "@/components/ui/date-picker";
 import { Field, Input, Textarea } from "@/components/ui/input";
 import { MultiCombobox } from "@/components/ui/multi-combobox";
 import { SegmentedTabs } from "@/components/ui/segmented-tabs";
+import { useConfirm } from "@/components/ui/confirm";
 import { Dialog, DialogContent, DialogTrigger, useDialogControl } from "@/components/ui/dialog";
-import { requestDesignRevisionAction, submitHcRequestAction } from "@/lib/actions/hc-requests";
+import { deleteRequestAction, requestDesignRevisionAction, submitHcRequestAction } from "@/lib/actions/hc-requests";
 import { DESIGN_TYPES, REVIEWER_LABEL, TRAINING_TYPES, fmtRupiah, type HcRequest, type HcRequestKind } from "@/lib/hc-request";
 import { FilePicker, RequestEmpty, RequestList, uploadAll } from "./request-shared";
 
@@ -44,21 +45,66 @@ export interface DeptMember {
   jabatan?: string | null;
 }
 
-/** Daftar pengajuan milik departemen, dirender dari data halaman. */
-export function HcRequestList({ rows, kind }: { rows: HcRequest[]; kind: HcRequestKind }) {
+/** Daftar pengajuan yang boleh dilihat pengguna, dirender dari data halaman. */
+export function HcRequestList({
+  rows,
+  kind,
+  canDelete = false,
+}: {
+  rows: HcRequest[];
+  kind: HcRequestKind;
+  /** Super Admin boleh membersihkan pengajuan uji coba / salah kirim. */
+  canDelete?: boolean;
+}) {
   const router = useRouter();
+  const { confirm, dialog } = useConfirm();
+  const [deleting, setDeleting] = React.useState<string | null>(null);
+
+  async function onDelete(r: HcRequest) {
+    const ok = await confirm({
+      title: "Hapus pengajuan ini?",
+      description: `“${r.title}” dari ${r.requesterName} akan dihapus permanen, termasuk tugas Work Tracker yang tertaut. Riwayat persetujuannya ikut hilang dan tidak bisa dikembalikan.`,
+      confirmLabel: "Hapus",
+      tone: "danger",
+    });
+    if (!ok) return;
+    setDeleting(r.id);
+    const res = await deleteRequestAction(r.id);
+    setDeleting(null);
+    if (res?.error) return toast.error(res.error);
+    toast.success("Pengajuan dihapus");
+    router.refresh();
+  }
+
   if (rows.length === 0) return <RequestEmpty>{COPY[kind].empty}</RequestEmpty>;
   return (
-    <RequestList
-      rows={rows}
-      actions={(r) =>
-        // Design yang sudah dikirim boleh dikembalikan ke tim Creative dengan
-        // catatan revisi — dalam pengajuan yang sama, bukan pengajuan baru.
-        r.kind === "design" && r.status === "terlaksana" ? (
-          <ReviseButton r={r} onDone={() => router.refresh()} />
-        ) : null
-      }
-    />
+    <>
+      <RequestList
+        rows={rows}
+        actions={(r) => (
+          <div className="flex items-center gap-2">
+            {/* Design yang sudah dikirim boleh dikembalikan ke tim Creative dengan
+                catatan revisi — dalam pengajuan yang sama, bukan pengajuan baru. */}
+            {r.kind === "design" && r.status === "terlaksana" && (
+              <ReviseButton r={r} onDone={() => router.refresh()} />
+            )}
+            {canDelete && (
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={deleting === r.id}
+                onClick={() => onDelete(r)}
+                className="gap-1.5 text-destructive hover:bg-destructive/10 hover:text-destructive"
+              >
+                {deleting === r.id ? <Loader2 className="size-3.5 animate-spin" /> : <Trash2 className="size-3.5" />}
+                Hapus
+              </Button>
+            )}
+          </div>
+        )}
+      />
+      {dialog}
+    </>
   );
 }
 
