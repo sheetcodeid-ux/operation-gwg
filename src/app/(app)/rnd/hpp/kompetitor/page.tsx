@@ -22,11 +22,25 @@ export default async function HppCompetitorPage() {
   // Dua sumber menu: hasil Kalkulator HPP (punya HPP, bisa diuji marginnya) dan
   // katalog ESB (semua menu yang benar-benar dijual, termasuk yang belum
   // dihitung HPP-nya). Nama yang sudah ada di HPP tidak diulang dari ESB.
-  const fromHpp: MenuOption[] = records.map((r) => ({ id: r.id, name: r.name, brand: r.brand, source: "hpp" }));
+  const fromHpp: MenuOption[] = records.map((r) => ({
+    id: r.id,
+    name: r.name,
+    brand: r.brand,
+    source: "hpp",
+    category: r.category === "makanan" ? "makanan" : "minuman",
+    price: r.chosenPrice,
+  }));
   const taken = new Set(fromHpp.map((m) => m.name.trim().toLowerCase()));
   const fromEsb: MenuOption[] = esbMenus
     .filter((m) => m.menu && !taken.has(m.menu.trim().toLowerCase()))
-    .map((m) => ({ id: `esb:${m.menuCode || m.menu}`, name: m.menu, brand: m.categoryDetail || m.category || "ESB", source: "esb" }));
+    .map((m) => ({
+      id: `esb:${m.menuCode || m.menu}`,
+      name: m.menu,
+      brand: m.categoryDetail || m.category || "ESB",
+      source: "esb",
+      category: m.foodBev,
+      price: m.unitPrice || 0,
+    }));
   const menus: MenuOption[] = [...fromHpp, ...fromEsb];
 
   return (

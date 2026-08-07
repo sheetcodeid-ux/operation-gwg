@@ -11,6 +11,7 @@ import { Field, Input } from "@/components/ui/input";
 import { StatTile } from "@/components/ui/stat";
 import { Combobox } from "@/components/ui/combobox";
 import { SegmentedTabs } from "@/components/ui/segmented-tabs";
+import { HppCompetitorAnalytics } from "@/components/hpp/hpp-competitor-analytics";
 import { DatePicker } from "@/components/ui/date-picker";
 import { Sheet, SheetContent } from "@/components/ui/sheet";
 import { useConfirm } from "@/components/ui/confirm";
@@ -33,15 +34,25 @@ const POSITION_META: Record<PricePosition, { label: string; pill: string; icon: 
 type Form = {
   menuId: string;
   menuName: string;
+  /** Harga jual kita saat menu dipilih — ditampilkan sebagai pembanding. */
+  ourPrice: number;
   city: string;
   source: string;
   observedAt: string;
 };
 
 const today = () => new Date().toISOString().slice(0, 10);
-const empty = (): Form => ({ menuId: "", menuName: "", city: "", source: "GoFood", observedAt: today() });
+const empty = (): Form => ({ menuId: "", menuName: "", ourPrice: 0, city: "", source: "GoFood", observedAt: today() });
 
-export type MenuOption = { id: string; name: string; brand: string; source: "hpp" | "esb" };
+export type MenuOption = {
+  id: string;
+  name: string;
+  brand: string;
+  source: "hpp" | "esb";
+  category: "makanan" | "minuman";
+  /** Harga jual kita — dipakai mengisi otomatis saat menu dipilih. */
+  price: number;
+};
 
 /** Satu baris kompetitor di dalam form — sekali input bisa banyak sekaligus. */
 type CompetitorRow = { key: string; competitor: string; price: string; note: string };
@@ -68,12 +79,14 @@ export function HppCompetitors({
   const [form, setForm] = React.useState<Form>(empty);
   // Menu kita bisa diambil dari hasil Kalkulator HPP atau dari katalog ESB.
   const [menuSource, setMenuSource] = React.useState<"hpp" | "esb">("hpp");
+  const [menuCat, setMenuCat] = React.useState<"all" | "makanan" | "minuman">("all");
   // Survei harga selalu mengumpulkan beberapa kompetitor sekaligus; memaksa
   // satu-satu berarti mengisi menu, kota, sumber dan tanggal berulang kali.
   const [rows2, setRows2] = React.useState<CompetitorRow[]>([blankRow(), blankRow(), blankRow()]);
   const [formOpen, setFormOpen] = React.useState(false);
   const [saving, setSaving] = React.useState(false);
   const [position, setPosition] = React.useState("all");
+  const [view, setView] = React.useState<"daftar" | "analytics">("daftar");
   const [expanded, setExpanded] = React.useState<string | null>(null);
 
   const tracked = insights.filter((i) => i.samples > 0);
@@ -84,6 +97,12 @@ export function HppCompetitors({
   const rows = React.useMemo(
     () => (position === "all" ? insights.filter((i) => i.samples > 0) : insights.filter((i) => i.position === position)),
     [insights, position],
+  );
+
+  const pickable = React.useMemo(() => menus.filter((m) => m.source === menuSource), [menus, menuSource]);
+  const menuChoices = React.useMemo(
+    () => (menuCat === "all" ? pickable : pickable.filter((m) => m.category === menuCat)),
+    [pickable, menuCat],
   );
 
   async function save() {
@@ -150,6 +169,19 @@ export function HppCompetitors({
         <StatTile icon={Scale} label="Rata-rata Selisih" value={tracked.length ? pct(avgGap) : "—"} sub="vs harga pasar" />
       </Reveal>
 
+      <SegmentedTabs
+        value={view}
+        onChange={(v) => setView(v as "daftar" | "analytics")}
+        items={[
+          { value: "daftar", label: "Daftar Menu" },
+          { value: "analytics", label: "Analytics Lanjutan" },
+        ]}
+      />
+
+      {view === "analytics" ? (
+        <HppCompetitorAnalytics insights={insights} />
+      ) : (
+      <>
       <div className="flex flex-wrap items-center gap-2">
         {canEdit && (
           <Button
@@ -179,6 +211,40 @@ export function HppCompetitors({
         </div>
         <span className="text-[11px] text-muted-foreground">Ambang kemahalan/kemurahan: ±10% dari rata-rata pasar</span>
       </div>
+
+      {(overpriced.length > 0 || underpriced.length > 0) && (
+        <div className="grid gap-2 sm:grid-cols-2">
+          {overpriced.length > 0 && (
+            <AlertCard
+              tone="bad"
+              icon={ArrowUpRight}
+              title={`${overpriced.length} menu kemahalan`}
+              body={
+                <>
+                  Harganya lewat 10% di atas rata-rata pasar
+                  {overpriced.filter((i) => i.canMatchMarket).length > 0 && (
+                    <> — {overpriced.filter((i) => i.canMatchMarket).length} di antaranya masih aman kalau diturunkan</>
+                  )}
+                  . Menu termahal: <b>{overpriced[0].menuName}</b> ({pct(overpriced[0].gapPct)}).
+                </>
+              }
+            />
+          )}
+          {underpriced.length > 0 && (
+            <AlertCard
+              tone="info"
+              icon={ArrowDownRight}
+              title={`${underpriced.length} menu kemurahan`}
+              body={
+                <>
+                  Dijual lebih dari 10% di bawah pasar — ada ruang menaikkan harga tanpa keluar dari harga wajar. Paling
+                  murah: <b>{underpriced[underpriced.length - 1].menuName}</b> ({pct(underpriced[underpriced.length - 1].gapPct)}).
+                </>
+              }
+            />
+          )}
+        </div>
+      )}
 
       {rows.length === 0 ? (
         <div className="glass rounded-2xl border border-border px-4 py-12 text-center text-sm text-muted-foreground">
@@ -261,6 +327,50 @@ export function HppCompetitors({
                       </div>
                     )}
 
+                    {i.options.length > 0 && (
+                      <div>
+                        <p className="mb-1.5 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+                          Pilihan harga
+                          {i.recommended && (
+                            <span className="ml-1.5 rounded-full bg-emerald-500/12 px-1.5 py-0.5 text-[10px] font-semibold normal-case text-emerald-600 dark:text-emerald-400">
+                              disarankan: {i.recommended.label} {rp(i.recommended.price)}
+                            </span>
+                          )}
+                        </p>
+                        <div className="grid gap-2 sm:grid-cols-3">
+                          {i.options.map((o) => (
+                            <div
+                              key={o.key}
+                              className={cn(
+                                "rounded-xl border p-3",
+                                i.recommended?.key === o.key
+                                  ? "border-emerald-500/40 bg-emerald-500/[0.06]"
+                                  : o.safe
+                                    ? "border-border bg-muted/20"
+                                    : "border-red-500/30 bg-red-500/[0.06]",
+                              )}
+                            >
+                              <div className="flex items-center justify-between gap-2">
+                                <p className="min-w-0 truncate text-[11px] font-medium text-muted-foreground">{o.label}</p>
+                                {!o.safe && <span className="shrink-0 text-[10px] font-semibold text-red-600 dark:text-red-400">tidak aman</span>}
+                              </div>
+                              <p className="mt-0.5 text-lg font-semibold tabular-nums text-foreground">{rp(o.price)}</p>
+                              <p className="text-[10px] tabular-nums text-muted-foreground">
+                                HPP {(o.hppPct * 100).toFixed(0)}% · margin {(o.margin * 100).toFixed(0)}%
+                              </p>
+                              <p className="mt-1 text-[10px] text-muted-foreground">{o.note}</p>
+                            </div>
+                          ))}
+                        </div>
+                        {i.ourPrice > 0 && i.recommended && (
+                          <p className="mt-2 text-[11px] text-muted-foreground">
+                            Dari {rp(i.ourPrice)} {i.recommended.price > i.ourPrice ? "naik" : "turun"} ke{" "}
+                            <b className="text-foreground">{rp(i.recommended.price)}</b> ({pct(i.recommended.price / i.ourPrice - 1)}).
+                          </p>
+                        )}
+                      </div>
+                    )}
+
                     <div className="overflow-x-auto rounded-xl border border-border">
                       <table className="w-full min-w-[520px] text-sm">
                         <thead className="border-b border-border bg-muted/40 text-left text-[11px] uppercase tracking-wide text-muted-foreground">
@@ -308,6 +418,9 @@ export function HppCompetitors({
         </div>
       )}
 
+      </>
+      )}
+
       <Sheet open={formOpen} onOpenChange={setFormOpen}>
         <SheetContent title="Catat Harga Kompetitor" description="Satu baris = satu harga dari satu kompetitor. Makin banyak pembanding, makin akurat posisinya.">
           {/* Sheet merender children apa adanya — padding & scroll dari sini. */}
@@ -318,7 +431,8 @@ export function HppCompetitors({
                 value={menuSource}
                 onChange={(v) => {
                   setMenuSource(v as "hpp" | "esb");
-                  setForm((f) => ({ ...f, menuId: "", menuName: "" }));
+                  setMenuCat("all");
+                  setForm((f) => ({ ...f, menuId: "", menuName: "", ourPrice: 0 }));
                 }}
                 items={[
                   { value: "hpp", label: `Hasil HPP (${menus.filter((m) => m.source === "hpp").length})` },
@@ -332,6 +446,24 @@ export function HppCompetitors({
               </p>
             </div>
 
+            <Field label="Kategori">
+              <Combobox
+                portal
+                matchTriggerWidth
+                searchable={false}
+                value={menuCat}
+                onChange={(v) => {
+                  setMenuCat(v as "all" | "makanan" | "minuman");
+                  setForm((f) => ({ ...f, menuId: "", menuName: "", ourPrice: 0 }));
+                }}
+                options={[
+                  { value: "all", label: `Semua kategori (${pickable.length})` },
+                  { value: "makanan", label: `Makanan (${pickable.filter((m) => m.category === "makanan").length})` },
+                  { value: "minuman", label: `Minuman (${pickable.filter((m) => m.category === "minuman").length})` },
+                ]}
+              />
+            </Field>
+
             <Field label="Menu kita">
               <Combobox
                 portal
@@ -341,14 +473,23 @@ export function HppCompetitors({
                 value={form.menuId}
                 onChange={(v) => {
                   const m = menus.find((x) => x.id === v);
-                  setForm((f) => ({ ...f, menuId: v, menuName: m ? m.name : f.menuName }));
+                  // Harga jual kita ikut terisi supaya penyurvei langsung punya
+                  // pembanding di layar, tanpa membuka halaman lain.
+                  setForm((f) => ({ ...f, menuId: v, menuName: m ? m.name : f.menuName, ourPrice: m?.price ?? 0 }));
                 }}
                 options={[
                   { value: "", label: "Tulis manual (menu belum ada)" },
-                  ...menus.filter((m) => m.source === menuSource).map((m) => ({ value: m.id, label: m.name, hint: m.brand })),
+                  ...menuChoices.map((m) => ({ value: m.id, label: m.name, hint: m.price > 0 ? `${rp(m.price)} · ${m.brand}` : m.brand })),
                 ]}
               />
             </Field>
+
+            {form.ourPrice > 0 && (
+              <p className="-mt-1 rounded-lg border border-border bg-muted/30 px-3 py-2 text-[11px] text-muted-foreground">
+                Harga jual kita: <b className="tabular-nums text-foreground">{rp(form.ourPrice)}</b> — pakai ini sebagai
+                pembanding saat mencatat harga kompetitor.
+              </p>
+            )}
 
             <Field label="Nama menu">
               <Input
@@ -455,6 +596,34 @@ function Metric({ label, value, sub, tone }: { label: string; value: string; sub
         {value}
       </p>
       {sub && <p className="text-[10px] text-muted-foreground">{sub}</p>}
+    </div>
+  );
+}
+
+
+function AlertCard({
+  tone,
+  icon: Icon,
+  title,
+  body,
+}: {
+  tone: "bad" | "info";
+  icon: typeof ArrowUpRight;
+  title: string;
+  body: React.ReactNode;
+}) {
+  return (
+    <div
+      className={cn(
+        "flex items-start gap-3 rounded-2xl border p-4",
+        tone === "bad" ? "border-red-500/30 bg-red-500/[0.07]" : "border-blue-500/30 bg-blue-500/[0.07]",
+      )}
+    >
+      <Icon className={cn("mt-0.5 size-4 shrink-0", tone === "bad" ? "text-red-600 dark:text-red-400" : "text-blue-600 dark:text-blue-400")} />
+      <div className="min-w-0">
+        <p className={cn("text-sm font-semibold", tone === "bad" ? "text-red-700 dark:text-red-300" : "text-blue-700 dark:text-blue-300")}>{title}</p>
+        <p className="mt-0.5 text-[12px] text-muted-foreground">{body}</p>
+      </div>
     </div>
   );
 }

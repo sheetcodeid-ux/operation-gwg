@@ -3,7 +3,8 @@ import "server-only";
 import { randomUUID } from "node:crypto";
 import { db, dbEnabled } from "./db";
 import { listHpp, type HppRecord } from "./hpp";
-import { hppPct, hppStatus, type Brand } from "@/lib/hpp/calc";
+import { BRAND_HPP_TARGET, HPP_OVER_COST, MIN_MARGIN, hppPct, hppStatus, type Brand } from "@/lib/hpp/calc";
+import { listEsbMenus } from "./esb-menu";
 
 /**
  * Analytics Harga Kompetitor.
@@ -35,6 +36,18 @@ export type CompetitorDraft = Omit<CompetitorPrice, "id" | "createdBy" | "create
 /** Posisi harga kita terhadap pasar. */
 export type PricePosition = "mahal" | "kompetitif" | "murah" | "belum-ada-data";
 
+/** Satu usulan harga beserta akibatnya — supaya pilihannya bisa dibandingkan. */
+export interface PriceOption {
+  key: "pasar" | "sehat" | "premium";
+  label: string;
+  price: number;
+  hppPct: number;
+  margin: number;
+  /** Aman = HPP tidak lewat batas merah dan margin tidak di bawah minimum. */
+  safe: boolean;
+  note: string;
+}
+
 export interface CompetitorInsight {
   menuId: string | null;
   menuName: string;
@@ -55,6 +68,10 @@ export interface CompetitorInsight {
   /** Apakah menurunkan harga ke rata-rata pasar masih aman secara biaya. */
   canMatchMarket: boolean;
   marketStatus: { tone: "good" | "warn" | "bad"; label: string };
+  /** Usulan harga: ikut pasar, aman margin, atau premium. */
+  options: PriceOption[];
+  /** Usulan yang paling layak diambil (aman & paling dekat pasar). */
+  recommended: PriceOption | null;
   competitors: { competitor: string; price: number; city: string | null; observedAt: string }[];
 }
 
@@ -111,10 +128,15 @@ export async function competitorInsights(preloaded?: {
   records?: HppRecord[];
   prices?: CompetitorPrice[];
 }): Promise<CompetitorInsight[]> {
-  const [records, prices] = await Promise.all([
+  const [records, prices, esb] = await Promise.all([
     preloaded?.records ?? listHpp(),
     preloaded?.prices ?? listCompetitorPrices(),
+    listEsbMenus().catch(() => []),
   ]);
+  // Menu yang belum dihitung HPP-nya tetap punya harga jual di ESB. Tanpa ini
+  // "harga kita" kosong dan posisi terhadap pasar tidak bisa dihitung sama
+  // sekali — persis yang terjadi pada menu yang datang dari katalog ESB.
+  const esbPrice = new Map(esb.filter((m) => m.menu).map((m) => [norm(m.menu), m.unitPrice || 0]));
 
   const byMenu = new Map<string, CompetitorPrice[]>();
   for (const p of prices) {
@@ -140,8 +162,13 @@ export async function competitorInsights(preloaded?: {
     const key = norm(p.menuName);
     orphans.set(key, [...(orphans.get(key) ?? []), p]);
   }
-  for (const [, hits] of orphans) {
-    insights.push(buildInsight({ menuId: null, menuName: hits[0].menuName, brand: "—", category: "minuman", ourPrice: 0, hpp: 0 }, hits));
+  for (const [key, hits] of orphans) {
+    insights.push(
+      buildInsight(
+        { menuId: null, menuName: hits[0].menuName, brand: "—", category: "minuman", ourPrice: esbPrice.get(key) ?? 0, hpp: 0 },
+        hits,
+      ),
+    );
   }
 
   // Paling kemahalan lebih dulu — itu yang paling berisiko kalah bersaing.
@@ -179,6 +206,8 @@ function buildInsight(
     hppPctAtMarket,
     // Ikut harga pasar hanya aman kalau HPP-nya tidak berubah jadi merah.
     canMatchMarket: avg > 0 && base.hpp > 0 && marketStatus.tone !== "bad",
+    options: priceOptions(base.hpp, category, base.brand as Brand, avg, max),
+    recommended: pickRecommended(priceOptions(base.hpp, category, base.brand as Brand, avg, max), base.ourPrice),
     marketStatus,
     competitors: hits
       .map((h) => ({ competitor: h.competitor, price: h.price, city: h.city, observedAt: h.observedAt }))
@@ -227,3 +256,60 @@ const fromRow = (r: CompetitorRow): CompetitorPrice => ({
   createdBy: r.created_by,
   createdAt: r.created_at,
 });
+
+
+/**
+ * Tiga usulan harga untuk satu menu, lengkap dengan akibatnya ke HPP.
+ *
+ *  • Ikut pasar   — sejajar rata-rata kompetitor; paling aman secara penjualan.
+ *  • Aman margin  — harga terendah yang masih menjaga HPP di bawah batas brand;
+ *                   inilah lantai harga yang tidak boleh ditembus.
+ *  • Premium      — setara kompetitor termahal; hanya masuk akal kalau kualitas
+ *                   atau porsinya memang di atas rata-rata.
+ *
+ * Semuanya diuji ke HPP, jadi usulan yang membuat menu rugi ditandai tidak aman
+ * alih-alih disodorkan begitu saja.
+ */
+function priceOptions(hpp: number, category: "makanan" | "minuman", brand: Brand, avg: number, max: number): PriceOption[] {
+  if (hpp <= 0 || avg <= 0) return [];
+
+  const targetMax = BRAND_HPP_TARGET[brand]?.max ?? HPP_OVER_COST;
+  const minMargin = MIN_MARGIN[category];
+  // Harga minimum yang memenuhi DUA syarat sekaligus: HPP di bawah target brand
+  // dan margin di atas minimum kategori. Ambil yang paling ketat.
+  const floor = Math.ceil(Math.max(hpp / targetMax, hpp / (1 - minMargin)) / 500) * 500;
+
+  const make = (key: PriceOption["key"], label: string, price: number, note: string): PriceOption => {
+    const pct = hppPct(hpp, price);
+    const margin = price > 0 ? (price - hpp) / price : 0;
+    return {
+      key,
+      label,
+      price: Math.round(price),
+      hppPct: pct,
+      margin,
+      safe: price > 0 && pct <= HPP_OVER_COST && margin >= minMargin,
+      note,
+    };
+  };
+
+  const out = [
+    make("pasar", "Ikut pasar", avg, "Sejajar rata-rata kompetitor"),
+    make("sehat", "Aman margin", floor, `Batas bawah — HPP tetap di bawah ${Math.round(targetMax * 100)}%`),
+  ];
+  // Premium hanya ditawarkan kalau memang ada jarak dari rata-rata.
+  if (max > avg * 1.05) out.push(make("premium", "Premium", max, "Setara kompetitor termahal"));
+  return out;
+}
+
+/** Usulan terbaik: yang aman dan paling dekat dengan harga pasar. */
+function pickRecommended(options: PriceOption[], ourPrice: number): PriceOption | null {
+  const safe = options.filter((o) => o.safe);
+  if (safe.length === 0) return null;
+  const market = options.find((o) => o.key === "pasar");
+  // Kalau ikut pasar sudah aman, itu pilihan paling wajar.
+  if (market?.safe) return market;
+  // Kalau tidak, ambil harga aman terendah — naik seperlunya saja.
+  const cheapest = [...safe].sort((a, b) => a.price - b.price)[0];
+  return cheapest.price === Math.round(ourPrice) ? null : cheapest;
+}

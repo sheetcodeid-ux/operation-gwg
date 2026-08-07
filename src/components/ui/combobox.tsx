@@ -97,10 +97,30 @@ function ComboList({
 }) {
   const [q, setQ] = React.useState("");
   const [active, setActive] = React.useState(0);
+
+  /**
+   * Pencocokan per kata dan berperingkat.
+   *
+   * Versi lama memakai satu substring utuh, sehingga "kopi genzi" tidak
+   * menemukan "ES KOPI SUSU GENZI" — kata yang dipisah spasi tidak pernah
+   * berdampingan. Sekarang SEMUA kata harus cocok (urutan bebas), dan yang
+   * namanya diawali kata kunci muncul lebih dulu supaya daftar panjang tidak
+   * perlu digulir.
+   */
   const filtered = React.useMemo(() => {
-    const s = q.trim().toLowerCase();
-    if (!s) return options;
-    return options.filter((o) => o.label.toLowerCase().includes(s) || o.hint?.toLowerCase().includes(s));
+    const terms = q.trim().toLowerCase().split(/\s+/).filter(Boolean);
+    if (terms.length === 0) return options;
+    const scored: { o: ComboOption; score: number }[] = [];
+    for (const o of options) {
+      const label = o.label.toLowerCase();
+      const hint = o.hint?.toLowerCase() ?? "";
+      // Cocok hanya bila setiap kata kunci ada — di nama ATAU keterangannya.
+      if (!terms.every((t) => label.includes(t) || hint.includes(t))) continue;
+      const joined = terms.join(" ");
+      const score = label.startsWith(joined) ? 0 : label.includes(joined) ? 1 : terms.every((t) => label.includes(t)) ? 2 : 3;
+      scored.push({ o, score });
+    }
+    return scored.sort((a, b) => a.score - b.score || a.o.label.localeCompare(b.o.label, "id")).map((x) => x.o);
   }, [options, q]);
 
   function onKey(e: React.KeyboardEvent) {
@@ -126,6 +146,13 @@ function ComboList({
             value={q}
             onChange={(e) => {
               setQ(e.target.value);
+              setActive(0);
+            }}
+            // Keyboard Android dengan prediksi kata menahan teks sebagai
+            // "composing": teksnya terlihat di kotak tapi onChange belum tentu
+            // sudah membawa nilai final, sehingga daftar tampak tidak tersaring.
+            onCompositionEnd={(e) => {
+              setQ((e.target as HTMLInputElement).value);
               setActive(0);
             }}
             onKeyDown={onKey}
