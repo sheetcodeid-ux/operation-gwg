@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation";
 import type { Metadata } from "next";
-import { getSessionUser } from "@/lib/auth";
+import { requireSessionUser } from "@/lib/auth";
 import { coordinatorReportRows } from "@/lib/data/store";
 import { nowMs } from "@/lib/now";
 import { can } from "@/lib/rbac";
@@ -13,7 +13,7 @@ export const metadata: Metadata = { title: "Coordinator Report" };
 
 export default async function CoordinatorReportPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  const user = (await getSessionUser())!;
+  const user = await requireSessionUser();
   if (!can(user, "view_reports")) redirect("/dashboard");
   const row = coordinatorReportRows(user).find((r) => r.coordinator.id === id);
   if (!row) redirect("/reports");

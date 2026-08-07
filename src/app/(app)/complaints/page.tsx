@@ -1,6 +1,6 @@
 import { CircleCheckBig, Inbox, MessageSquareWarning, Percent } from "lucide-react";
 import type { Metadata } from "next";
-import { getSessionUser } from "@/lib/auth";
+import { requireSessionUser } from "@/lib/auth";
 import { listComplaints, outletName, visibleOutlets } from "@/lib/data/store";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { PageHeader } from "@/components/ui/page-header";
@@ -13,7 +13,7 @@ export const metadata: Metadata = { title: "Complaint Management" };
 
 export default async function ComplaintsPage() {
   const t = await getT();
-  const user = (await getSessionUser())!;
+  const user = await requireSessionUser();
   const complaints = listComplaints(user);
   const outlets = visibleOutlets(user).map((o) => ({ id: o.id, name: o.name }));
   // Complaint workflow: Admin inputs → Supervisor follows up → Coordinator Area

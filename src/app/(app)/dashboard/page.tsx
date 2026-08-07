@@ -1,6 +1,6 @@
 import { LayoutDashboard } from "lucide-react";
 import type { Metadata } from "next";
-import { getSessionUser } from "@/lib/auth";
+import { requireSessionUser } from "@/lib/auth";
 import {
   aggregateOutlets,
   areaName,
@@ -38,7 +38,7 @@ export default async function DashboardPage({
 }: {
   searchParams: Promise<{ range?: string; from?: string; to?: string; scope?: string }>;
 }) {
-  const user = (await getSessionUser())!;
+  const user = await requireSessionUser();
   const sp = await searchParams;
 
   const range = resolveRange({ range: sp.range, from: sp.from, to: sp.to });

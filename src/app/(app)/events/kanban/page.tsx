@@ -1,6 +1,6 @@
 import { CalendarRange } from "lucide-react";
 import type { Metadata } from "next";
-import { getSessionUser } from "@/lib/auth";
+import { requireSessionUser } from "@/lib/auth";
 import { can } from "@/lib/rbac";
 import { Card, CardContent } from "@/components/ui/card";
 import { PageHeader } from "@/components/ui/page-header";
@@ -12,7 +12,7 @@ import { buildEventFormData, buildEventRows } from "@/components/events/event-da
 export const metadata: Metadata = { title: "Event Tracker · Kanban" };
 
 export default async function EventKanbanPage() {
-  const user = (await getSessionUser())!;
+  const user = await requireSessionUser();
   const rows = buildEventRows(user);
   const form = buildEventFormData(user);
   const canCreate = can(user, "create_event");

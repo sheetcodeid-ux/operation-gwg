@@ -1,7 +1,7 @@
 import { Wallet } from "lucide-react";
 import type { Metadata } from "next";
 import { redirect } from "next/navigation";
-import { getSessionUser } from "@/lib/auth";
+import { requireSessionUser } from "@/lib/auth";
 import { canUseOpsFinance } from "@/lib/ops/access";
 import { EXPENSE_COLS, listExpenses, listOpOutlets, type ExpenseRow } from "@/lib/data/ops-finance";
 import { PageHeader } from "@/components/ui/page-header";
@@ -15,7 +15,7 @@ function thisMonth(): string {
 }
 
 export default async function BebanPage({ searchParams }: { searchParams: Promise<{ month?: string }> }) {
-  const user = (await getSessionUser())!;
+  const user = await requireSessionUser();
   if (!canUseOpsFinance(user)) redirect("/dashboard");
 
   const sp = await searchParams;

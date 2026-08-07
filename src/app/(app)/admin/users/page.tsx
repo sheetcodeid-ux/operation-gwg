@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation";
 import type { Metadata } from "next";
-import { getSessionUser } from "@/lib/auth";
+import { requireSessionUser } from "@/lib/auth";
 import { areaName, getOutlets, getUsers } from "@/lib/data/store";
 import { can } from "@/lib/rbac";
 import { getNavExtra } from "@/lib/data/nav";
@@ -14,7 +14,7 @@ import { UserManager, type OrgDept, type OutletLite, type UserRow } from "@/comp
 export const metadata: Metadata = { title: "User Management" };
 
 export default async function UsersPage({ searchParams }: { searchParams: Promise<{ add?: string; name?: string; div?: string }> }) {
-  const user = (await getSessionUser())!;
+  const user = await requireSessionUser();
   if (!can(user, "manage_users")) redirect("/dashboard");
 
   const sp = await searchParams;

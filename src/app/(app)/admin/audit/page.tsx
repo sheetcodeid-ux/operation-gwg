@@ -1,7 +1,7 @@
 import { redirect } from "next/navigation";
 import { CalendarRange, Calculator, ConciergeBell, ListChecks, MessageSquareWarning, ScrollText, SprayCan } from "lucide-react";
 import type { Metadata } from "next";
-import { getSessionUser } from "@/lib/auth";
+import { requireSessionUser } from "@/lib/auth";
 import { getUsers, listComplaints, listEvents, listHospitality, listHygiene, listTasks, outletName } from "@/lib/data/store";
 import { listHpp } from "@/lib/data/hpp";
 import { listIngredients } from "@/lib/data/hpp-ingredients";
@@ -13,7 +13,7 @@ import { AuditFeed, type AuditItem } from "@/components/admin/audit-feed";
 export const metadata: Metadata = { title: "Audit Logs" };
 
 export default async function AuditPage() {
-  const user = (await getSessionUser())!;
+  const user = await requireSessionUser();
   if (!can(user, "view_audit_logs")) redirect("/dashboard");
 
   const hosp = listHospitality(user);

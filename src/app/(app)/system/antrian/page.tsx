@@ -1,7 +1,7 @@
 import { Headset } from "lucide-react";
 import type { Metadata } from "next";
 import { redirect } from "next/navigation";
-import { getSessionUser } from "@/lib/auth";
+import { requireSessionUser } from "@/lib/auth";
 import { getUsers } from "@/lib/data/store";
 import { listSystemRequests } from "@/lib/data/system";
 import { isSystemSupport, SYSTEM_SUPPORT_DEPT, SYSTEM_SUPPORT_JABATAN } from "@/lib/system-shared";
@@ -11,7 +11,7 @@ import { SystemReviewPanel } from "@/components/system/system-review";
 export const metadata: Metadata = { title: "Antrian System — System Support" };
 
 export default async function SystemAntrianPage() {
-  const user = (await getSessionUser())!;
+  const user = await requireSessionUser();
   // Only the System Support team (Operational + jabatan System Support) or Admin.
   if (!isSystemSupport(user)) redirect("/dashboard");
 

@@ -1,6 +1,6 @@
 import { CircleCheck, ClipboardCheck, SprayCan, TriangleAlert } from "lucide-react";
 import type { Metadata } from "next";
-import { getSessionUser } from "@/lib/auth";
+import { requireSessionUser } from "@/lib/auth";
 import { hygienePhotosByAudit } from "@/lib/data/hygiene-photos";
 import { listHygiene, outletCoordinatorName, outletName, visibleOutlets } from "@/lib/data/store";
 import { can } from "@/lib/rbac";
@@ -24,7 +24,7 @@ export const metadata: Metadata = { title: "Hygiene Monitoring" };
 
 export default async function HygienePage() {
   const t = await getT();
-  const user = (await getSessionUser())!;
+  const user = await requireSessionUser();
   const audits = listHygiene(user);
   const outlets = visibleOutlets(user).map((o) => ({ id: o.id, name: o.name }));
   const canCreate = can(user, "create_hygiene");

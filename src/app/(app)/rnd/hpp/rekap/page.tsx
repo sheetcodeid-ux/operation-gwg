@@ -1,7 +1,7 @@
 import { Table2 } from "lucide-react";
 import type { Metadata } from "next";
 import { redirect } from "next/navigation";
-import { getSessionUser } from "@/lib/auth";
+import { requireSessionUser } from "@/lib/auth";
 import { canOpenMenu } from "@/lib/nav";
 import { canVerifyHpp } from "@/lib/hpp/access";
 import { listHpp } from "@/lib/data/hpp";
@@ -11,7 +11,7 @@ import { HppRekap } from "@/components/hpp/hpp-rekap";
 export const metadata: Metadata = { title: "Database HPP" };
 
 export default async function HppRekapPage() {
-  const user = (await getSessionUser())!;
+  const user = await requireSessionUser();
   const canEdit =
     canOpenMenu(user.role, "hpp", user.grants) ||
     user.department === "Product Development & Quality" ||

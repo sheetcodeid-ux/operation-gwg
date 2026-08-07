@@ -2,7 +2,7 @@ import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import type { Metadata } from "next";
 import { ArrowLeft, KeyRound, LayoutGrid, ShieldCheck, User as UserIcon, Briefcase } from "lucide-react";
-import { getSessionUser } from "@/lib/auth";
+import { requireSessionUser } from "@/lib/auth";
 import { areaName, getOutlets, getUser } from "@/lib/data/store";
 import { can } from "@/lib/rbac";
 import { ROLE_LABEL } from "@/lib/constants";
@@ -18,7 +18,7 @@ import type { OutletLite, UserRow } from "@/components/admin/user-manager";
 export const metadata: Metadata = { title: "Detail Pengguna" };
 
 export default async function UserDetailPage({ params }: { params: Promise<{ id: string }> }) {
-  const admin = (await getSessionUser())!;
+  const admin = await requireSessionUser();
   if (!can(admin, "manage_users")) redirect("/dashboard");
 
   const { id } = await params;

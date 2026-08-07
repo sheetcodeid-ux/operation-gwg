@@ -1,7 +1,7 @@
 import { ClipboardCheck } from "lucide-react";
 import type { Metadata } from "next";
 import { redirect } from "next/navigation";
-import { getSessionUser } from "@/lib/auth";
+import { requireSessionUser } from "@/lib/auth";
 import { canReachMenu } from "@/lib/nav";
 import { PageHeader } from "@/components/ui/page-header";
 import { HcRequestReview } from "@/components/hc/request-review";
@@ -9,7 +9,7 @@ import { HcRequestReview } from "@/components/hc/request-review";
 export const metadata: Metadata = { title: "Permintaan Karyawan" };
 
 export default async function HcRecruitReviewPage() {
-  const user = (await getSessionUser())!;
+  const user = await requireSessionUser();
   if (!canReachMenu(user, "hc_reqreview")) redirect("/dashboard");
   return (
     <div className="w-full">

@@ -1,7 +1,7 @@
 import { Palette } from "lucide-react";
 import type { Metadata } from "next";
 import { redirect } from "next/navigation";
-import { getSessionUser } from "@/lib/auth";
+import { requireSessionUser } from "@/lib/auth";
 import { canReachMenu } from "@/lib/nav";
 import { getUsers } from "@/lib/data/store";
 import { PageHeader } from "@/components/ui/page-header";
@@ -10,7 +10,7 @@ import { HcRequestReview } from "@/components/hc/request-review";
 export const metadata: Metadata = { title: "Antrian Design" };
 
 export default async function CreativeDesignQueuePage() {
-  const user = (await getSessionUser())!;
+  const user = await requireSessionUser();
   if (!canReachMenu(user, "creative_design")) redirect("/dashboard");
 
   // Kandidat PIC = anggota aktif tim Creative. Akun tanpa departemen (mis. Super

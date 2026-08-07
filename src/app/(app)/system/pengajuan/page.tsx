@@ -1,7 +1,7 @@
 import { MonitorCog } from "lucide-react";
 import type { Metadata } from "next";
 import { redirect } from "next/navigation";
-import { getSessionUser } from "@/lib/auth";
+import { requireSessionUser } from "@/lib/auth";
 import { canReachMenu } from "@/lib/nav";
 import { visibleOutlets } from "@/lib/data/store";
 import { listSystemRequests } from "@/lib/data/system";
@@ -11,7 +11,7 @@ import { NewSystemRequestButton, SystemRequestList } from "@/components/system/s
 export const metadata: Metadata = { title: "Pengajuan System" };
 
 export default async function SystemPengajuanPage() {
-  const user = (await getSessionUser())!;
+  const user = await requireSessionUser();
   if (!canReachMenu(user, "sys_submit")) redirect("/dashboard");
 
   const outlets = visibleOutlets(user).map((o) => ({ id: o.id, name: o.name }));

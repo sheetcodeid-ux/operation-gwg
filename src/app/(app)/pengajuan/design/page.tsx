@@ -1,7 +1,7 @@
 import { Palette } from "lucide-react";
 import type { Metadata } from "next";
 import { redirect } from "next/navigation";
-import { getSessionUser } from "@/lib/auth";
+import { requireSessionUser } from "@/lib/auth";
 import { canReachMenu } from "@/lib/nav";
 import { listHcRequests } from "@/lib/data/hc-requests";
 import { PageHeader } from "@/components/ui/page-header";
@@ -10,7 +10,7 @@ import { HcRequestList, NewRequestButton } from "@/components/hc/request-submit"
 export const metadata: Metadata = { title: "Pengajuan Design" };
 
 export default async function PengajuanDesignPage() {
-  const user = (await getSessionUser())!;
+  const user = await requireSessionUser();
   if (!canReachMenu(user, "hc_request")) redirect("/dashboard");
 
   const rows = await listHcRequests({ department: user.department ?? "—", kind: "design" });

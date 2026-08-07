@@ -1,7 +1,7 @@
 import { ChartColumnBig } from "lucide-react";
 import type { Metadata } from "next";
 import { redirect } from "next/navigation";
-import { getSessionUser } from "@/lib/auth";
+import { requireSessionUser } from "@/lib/auth";
 import { canReachMenu } from "@/lib/nav";
 import { resolveRange, RANGE_NOW, isoOf } from "@/lib/date-range";
 import { getOperationAnalysis, analysisBranchList } from "@/lib/data/analysis";
@@ -15,7 +15,7 @@ export default async function AnalysisPage({
 }: {
   searchParams: Promise<{ range?: string; from?: string; to?: string; outlet?: string }>;
 }) {
-  const user = (await getSessionUser())!;
+  const user = await requireSessionUser();
   if (!canReachMenu(user, "op_analysis")) redirect("/dashboard");
   const sp = await searchParams;
 

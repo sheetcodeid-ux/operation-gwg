@@ -1,7 +1,7 @@
 import { Scale } from "lucide-react";
 import type { Metadata } from "next";
 import { redirect } from "next/navigation";
-import { getSessionUser } from "@/lib/auth";
+import { requireSessionUser } from "@/lib/auth";
 import { canOpenMenu } from "@/lib/nav";
 import { canVerifyHpp } from "@/lib/hpp/access";
 import { getPriceComparison } from "@/lib/data/price-compare";
@@ -13,7 +13,7 @@ export const metadata: Metadata = { title: "Referensi Harga & HPP" };
 export const maxDuration = 60;
 
 export default async function PriceReferencePage() {
-  const user = (await getSessionUser())!;
+  const user = await requireSessionUser();
   const canEdit =
     canOpenMenu(user.role, "hpp", user.grants) ||
     user.department === "Product Development & Quality" ||

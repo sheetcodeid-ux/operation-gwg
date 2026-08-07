@@ -1,7 +1,7 @@
 import { ShieldAlert } from "lucide-react";
 import type { Metadata } from "next";
 import { redirect } from "next/navigation";
-import { getSessionUser } from "@/lib/auth";
+import { requireSessionUser } from "@/lib/auth";
 import { canOpenMenu } from "@/lib/nav";
 import { getFraudReport } from "@/lib/data/fraud";
 import { PageHeader } from "@/components/ui/page-header";
@@ -14,7 +14,7 @@ export const maxDuration = 60;
 const ymd = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 
 export default async function FraudPage() {
-  const user = (await getSessionUser())!;
+  const user = await requireSessionUser();
   if (!canOpenMenu(user.role, "op_fraud", user.grants)) redirect("/dashboard");
 
   const today = ymd(new Date());

@@ -1,7 +1,7 @@
 import { Award } from "lucide-react";
 import type { Metadata } from "next";
 import { redirect } from "next/navigation";
-import { getSessionUser } from "@/lib/auth";
+import { requireSessionUser } from "@/lib/auth";
 import { canReachMenu } from "@/lib/nav";
 import { getActiveCourse, getCertificate } from "@/lib/data/elearning";
 import { certVerifyQr } from "@/lib/elearning-cert-qr";
@@ -11,7 +11,7 @@ import { Certificate } from "@/components/elearning/certificate";
 export const metadata: Metadata = { title: "Sertifikat" };
 
 export default async function CertificatePage() {
-  const user = (await getSessionUser())!;
+  const user = await requireSessionUser();
   if (!canReachMenu(user, "elearning")) redirect("/dashboard");
 
   const course = await getActiveCourse();

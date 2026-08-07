@@ -1,6 +1,6 @@
 import { notFound, redirect } from "next/navigation";
 import type { Metadata } from "next";
-import { getSessionUser } from "@/lib/auth";
+import { requireSessionUser } from "@/lib/auth";
 import { getOutletDetail, getOutlets } from "@/lib/data/store";
 import { nowMs } from "@/lib/now";
 import { canAccessOutlet } from "@/lib/rbac";
@@ -19,7 +19,7 @@ export async function generateMetadata({ params }: { params: Promise<{ id: strin
 
 export default async function OutletReportPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  const user = (await getSessionUser())!;
+  const user = await requireSessionUser();
   if (!canAccessOutlet(user, id, getOutlets())) redirect("/reports");
   const d = getOutletDetail(id);
   if (!d) notFound();

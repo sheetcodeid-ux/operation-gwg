@@ -1,7 +1,7 @@
 import { Settings2 } from "lucide-react";
 import type { Metadata } from "next";
 import { redirect } from "next/navigation";
-import { getSessionUser } from "@/lib/auth";
+import { requireSessionUser } from "@/lib/auth";
 import { getUsers } from "@/lib/data/store";
 import { getOrgExtra } from "@/lib/data/org";
 import { allDepartments, setOrgExtras } from "@/lib/assessment/org";
@@ -13,7 +13,7 @@ export const metadata: Metadata = { title: "Pengaturan Assessment" };
 
 /** Who may open the settings: Super Admin, HC, or Director. */
 export default async function AssessmentSettingsPage() {
-  const user = (await getSessionUser())!;
+  const user = await requireSessionUser();
   // Admin-only (owner decision).
   if (user.role !== "super_admin") redirect("/assessment");
 

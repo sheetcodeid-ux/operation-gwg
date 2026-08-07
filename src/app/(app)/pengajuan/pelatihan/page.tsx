@@ -1,7 +1,7 @@
 import { GraduationCap } from "lucide-react";
 import type { Metadata } from "next";
 import { redirect } from "next/navigation";
-import { getSessionUser } from "@/lib/auth";
+import { requireSessionUser } from "@/lib/auth";
 import { canReachMenu } from "@/lib/nav";
 import { getUsers } from "@/lib/data/store";
 import { listHcRequests } from "@/lib/data/hc-requests";
@@ -11,7 +11,7 @@ import { HcRequestList, NewRequestButton } from "@/components/hc/request-submit"
 export const metadata: Metadata = { title: "Pengajuan Pelatihan" };
 
 export default async function PengajuanPelatihanPage() {
-  const user = (await getSessionUser())!;
+  const user = await requireSessionUser();
   if (!canReachMenu(user, "hc_request")) redirect("/dashboard");
 
   const department = user.department ?? "—";

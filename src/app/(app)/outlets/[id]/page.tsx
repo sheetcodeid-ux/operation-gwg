@@ -11,7 +11,7 @@ import {
   UserCog,
 } from "lucide-react";
 import type { Metadata } from "next";
-import { getSessionUser } from "@/lib/auth";
+import { requireSessionUser } from "@/lib/auth";
 import { getOutletDetail, getOutlets } from "@/lib/data/store";
 import { canAccessOutlet } from "@/lib/rbac";
 import {
@@ -37,7 +37,7 @@ export async function generateMetadata({ params }: { params: Promise<{ id: strin
 
 export default async function OutletDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  const user = (await getSessionUser())!;
+  const user = await requireSessionUser();
   if (!canAccessOutlet(user, id, getOutlets())) redirect("/outlets");
   const d = getOutletDetail(id);
   if (!d) notFound();

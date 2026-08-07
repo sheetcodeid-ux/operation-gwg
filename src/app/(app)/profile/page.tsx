@@ -1,6 +1,6 @@
 import { Mail, ShieldCheck, UserRound } from "lucide-react";
 import type { Metadata } from "next";
-import { getSessionUser } from "@/lib/auth";
+import { requireSessionUser } from "@/lib/auth";
 import { visibleOutlets } from "@/lib/data/store";
 import { hasGlobalScope } from "@/lib/rbac";
 import { ROLE_LABEL } from "@/lib/constants";
@@ -13,7 +13,7 @@ import { AvatarUpload } from "@/components/profile/avatar-upload";
 export const metadata: Metadata = { title: "Profile" };
 
 export default async function ProfilePage() {
-  const user = (await getSessionUser())!;
+  const user = await requireSessionUser();
   const outlets = visibleOutlets(user);
   // Show the user's actual outlet coverage — "All outlets" only for HQ roles.
   const scope = hasGlobalScope(user.role)

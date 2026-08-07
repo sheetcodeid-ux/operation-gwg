@@ -1,6 +1,7 @@
 import "server-only";
 import { createHmac, timingSafeEqual } from "node:crypto";
 import { cookies } from "next/headers";
+import { redirect } from "next/navigation";
 import { createSupabaseServerClient } from "./supabase/server";
 import { isSupabaseConfigured } from "./supabase/env";
 import { getUser, getUsers } from "./data/store";
@@ -102,4 +103,24 @@ export async function getSessionUser(): Promise<UserProfile | null> {
   }
 
   return null;
+}
+
+/**
+ * Sama seperti `getSessionUser()`, tapi mengarahkan ke halaman login kalau
+ * sesinya sudah tidak sah. Ini yang HARUS dipakai setiap halaman.
+ *
+ * Sebelumnya halaman menulis `(await getSessionUser())!`. Tanda seru itu cuma
+ * meyakinkan TypeScript, tidak mengubah apa pun saat aplikasi berjalan: begitu
+ * sesi kedaluwarsa, nilainya benar-benar null lalu halaman menabrak
+ * `user.role` dan pengguna melihat layar error. Redirect di layout tidak
+ * menolongnya karena layout dan halaman dirender BERSAMAAN — halamannya sudah
+ * telanjur gagal sebelum redirect sempat berlaku.
+ *
+ * `/clear-session` menghapus semua cookie sesi (gwg_uid dan sb-*) lalu
+ * melempar ke /login, jadi sesi basi tidak memicu redirect berputar.
+ */
+export async function requireSessionUser(): Promise<UserProfile> {
+  const user = await getSessionUser();
+  if (!user) redirect("/clear-session");
+  return user;
 }

@@ -1,7 +1,7 @@
 import { MessageSquareWarning, Store } from "lucide-react";
 import { ConciergeBell, SprayCan } from "lucide-react";
 import type { Metadata } from "next";
-import { getSessionUser } from "@/lib/auth";
+import { requireSessionUser } from "@/lib/auth";
 import { areaName, getAreas, getOutlet, outletRanking, userName } from "@/lib/data/store";
 import { PageHeader } from "@/components/ui/page-header";
 import { StatTile } from "@/components/ui/stat";
@@ -11,7 +11,7 @@ import { SyncOutletsButton } from "@/components/outlets/sync-outlets";
 export const metadata: Metadata = { title: "Outlets" };
 
 export default async function OutletsPage() {
-  const user = (await getSessionUser())!;
+  const user = await requireSessionUser();
   const ranking = outletRanking(user);
 
   const rows: OutletRow[] = ranking.map((r) => ({

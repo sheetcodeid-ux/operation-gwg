@@ -1,6 +1,5 @@
 import { cookies } from "next/headers";
-import { redirect } from "next/navigation";
-import { getSessionUser } from "@/lib/auth";
+import { requireSessionUser } from "@/lib/auth";
 import { areaName, listNotifications, visibleOutlets } from "@/lib/data/store";
 import { accessibleMenuKeys, canReachMenu, homeDivision, navAll, setNavExtras } from "@/lib/nav";
 import { isSystemSupport } from "@/lib/system-shared";
@@ -17,9 +16,11 @@ import { ScrollReset } from "@/components/layout/scroll-reset";
 import { CommandPalette } from "@/components/command/command-palette";
 
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
-  const user = await getSessionUser();
-  // Cookie present (proxy let us through) but signature/user invalid — clear it.
-  if (!user) redirect("/clear-session");
+  // Cookie present (proxy let us through) but signature/user invalid — dibersihkan
+  // lalu diarahkan ke login. Halaman di dalamnya memakai penjaga yang sama,
+  // karena layout dan halaman dirender bersamaan: redirect di sini saja tidak
+  // menghentikan halaman yang sudah jalan.
+  const user = await requireSessionUser();
 
   const lang = ((await cookies()).get("gwg_lang")?.value as Lang) || "en";
 

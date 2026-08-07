@@ -1,7 +1,7 @@
 import { Banknote } from "lucide-react";
 import type { Metadata } from "next";
 import { redirect } from "next/navigation";
-import { getSessionUser } from "@/lib/auth";
+import { requireSessionUser } from "@/lib/auth";
 import { canUseOpsFinance } from "@/lib/ops/access";
 import { listOpOutlets } from "@/lib/data/ops-finance";
 import { listPnl } from "@/lib/data/ops-pnl";
@@ -17,7 +17,7 @@ function thisMonth(): string {
 }
 
 export default async function LabaRugiPage({ searchParams }: { searchParams: Promise<{ month?: string }> }) {
-  const user = (await getSessionUser())!;
+  const user = await requireSessionUser();
   if (!canUseOpsFinance(user)) redirect("/dashboard");
 
   const sp = await searchParams;

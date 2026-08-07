@@ -1,7 +1,7 @@
 import { LibraryBig } from "lucide-react";
 import type { Metadata } from "next";
 import { redirect } from "next/navigation";
-import { getSessionUser } from "@/lib/auth";
+import { requireSessionUser } from "@/lib/auth";
 import { canManageElearning } from "@/lib/elearning-shared";
 import { getActiveCourse, getCourseTree, listCertificates, listCourses } from "@/lib/data/elearning";
 import { getElearningDashboard, getEssayReviews, getParticipantRows, listElearningAudit } from "@/lib/data/elearning-admin";
@@ -11,7 +11,7 @@ import { KelolaShell } from "@/components/elearning/dashboard";
 export const metadata: Metadata = { title: "Kelola E-Learning" };
 
 export default async function ElearningManagePage() {
-  const user = (await getSessionUser())!;
+  const user = await requireSessionUser();
   if (!canManageElearning(user)) redirect("/dashboard");
 
   const courses = await listCourses();

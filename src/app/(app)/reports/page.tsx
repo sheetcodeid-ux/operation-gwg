@@ -2,7 +2,7 @@ import { redirect } from "next/navigation";
 import Link from "next/link";
 import { ChevronRight, FileText, MapPinned, Store, UserCog } from "lucide-react";
 import type { Metadata } from "next";
-import { getSessionUser } from "@/lib/auth";
+import { requireSessionUser } from "@/lib/auth";
 import { areaReportRows, coordinatorReportRows, outletReportRows } from "@/lib/data/store";
 import { can } from "@/lib/rbac";
 import { hasMenuGrant } from "@/lib/nav";
@@ -16,7 +16,7 @@ import { ReportsOutletTable, type ReportOutletRow } from "@/components/reports/r
 export const metadata: Metadata = { title: "Reports" };
 
 export default async function ReportsPage() {
-  const user = (await getSessionUser())!;
+  const user = await requireSessionUser();
   // Role permission OR an explicit per-user grant (incl. custom divisions).
   if (!can(user, "view_reports") && !hasMenuGrant(user.grants, "reports")) redirect("/dashboard");
 

@@ -1,7 +1,7 @@
 import { FileUp } from "lucide-react";
 import type { Metadata } from "next";
 import { redirect } from "next/navigation";
-import { getSessionUser } from "@/lib/auth";
+import { requireSessionUser } from "@/lib/auth";
 import { canReachMenu } from "@/lib/nav";
 import { visibleOutlets } from "@/lib/data/store";
 import { listHcSubmissions } from "@/lib/data/hc";
@@ -11,7 +11,7 @@ import { NewSubmissionButton, SubmissionList } from "@/components/hc/hc-submit";
 export const metadata: Metadata = { title: "Pengajuan Dokumen" };
 
 export default async function HcPengajuanPage() {
-  const user = (await getSessionUser())!;
+  const user = await requireSessionUser();
   if (!canReachMenu(user, "hc_submit")) redirect("/dashboard");
 
   const outlets = visibleOutlets(user).map((o) => ({ id: o.id, name: o.name }));

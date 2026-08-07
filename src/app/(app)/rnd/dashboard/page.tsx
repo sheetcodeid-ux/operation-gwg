@@ -1,7 +1,7 @@
 import { ChartSpline } from "lucide-react";
 import type { Metadata } from "next";
 import { redirect } from "next/navigation";
-import { getSessionUser } from "@/lib/auth";
+import { requireSessionUser } from "@/lib/auth";
 import { canUseHpp } from "@/lib/hpp/access";
 import { listHpp } from "@/lib/data/hpp";
 import { listIngredients } from "@/lib/data/hpp-ingredients";
@@ -16,7 +16,7 @@ import type { SalesMenu, SalesRowLite } from "@/components/hpp/hpp-sales-panel";
 export const metadata: Metadata = { title: "Dashboard R&D" };
 
 export default async function RndDashboardPage() {
-  const user = (await getSessionUser())!;
+  const user = await requireSessionUser();
   if (!canUseHpp(user)) redirect("/dashboard");
 
   const [menus, ingredients, salesMonth] = await Promise.all([listHpp(), listIngredients(), latestSalesMonth()]);

@@ -2,7 +2,7 @@ import { Award, Clock, Lock, Settings2, UserX } from "lucide-react";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { getSessionUser } from "@/lib/auth";
+import { requireSessionUser } from "@/lib/auth";
 import { canSeeMenu, hasMenuGrant } from "@/lib/nav";
 import { getMyEvaluators } from "@/lib/actions/assessment";
 import { dbEnabled } from "@/lib/data/db";
@@ -22,7 +22,7 @@ const fmt = (iso: string | null) =>
     : "—";
 
 export default async function AssessmentPage() {
-  const user = (await getSessionUser())!;
+  const user = await requireSessionUser();
   // Viewpoint is derived from the assessment ROSTER settings — the single source
   // of truth. An account that isn't in the roster (and isn't assigned as a
   // peer/atasan) gets no access, fixing the old full-HR-fallback bug.

@@ -1,7 +1,7 @@
 import { GraduationCap } from "lucide-react";
 import type { Metadata } from "next";
 import { redirect } from "next/navigation";
-import { getSessionUser } from "@/lib/auth";
+import { requireSessionUser } from "@/lib/auth";
 import { canReachMenu } from "@/lib/nav";
 import { getActiveCourse, getCourseTree, getProgressMap, getQuizResultsMap } from "@/lib/data/elearning";
 import { canManageElearning } from "@/lib/elearning-shared";
@@ -11,7 +11,7 @@ import { LearnPath } from "@/components/elearning/learn-path";
 export const metadata: Metadata = { title: "E-Learning" };
 
 export default async function ElearningPage() {
-  const user = (await getSessionUser())!;
+  const user = await requireSessionUser();
   if (!canReachMenu(user, "elearning")) redirect("/dashboard");
 
   const canManage = canManageElearning(user);

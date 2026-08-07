@@ -1,6 +1,6 @@
 import { ListChecks } from "lucide-react";
 import type { Metadata } from "next";
-import { getSessionUser } from "@/lib/auth";
+import { requireSessionUser } from "@/lib/auth";
 import { can } from "@/lib/rbac";
 import { PageHeader } from "@/components/ui/page-header";
 import { NewTaskButton } from "@/components/work/new-task-button";
@@ -10,7 +10,7 @@ import { buildTaskSheetData, buildWorkRows } from "@/components/work/work-data";
 export const metadata: Metadata = { title: "Work Tracker" };
 
 export default async function WorkTrackerPage({ searchParams }: { searchParams: Promise<{ dept?: string }> }) {
-  const user = (await getSessionUser())!;
+  const user = await requireSessionUser();
   const sp = await searchParams;
   const rows = buildWorkRows(user);
   const sheet = await buildTaskSheetData(user);

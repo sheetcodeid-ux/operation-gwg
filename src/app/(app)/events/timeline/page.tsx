@@ -1,6 +1,6 @@
 import { CalendarRange } from "lucide-react";
 import type { Metadata } from "next";
-import { getSessionUser } from "@/lib/auth";
+import { requireSessionUser } from "@/lib/auth";
 import { can } from "@/lib/rbac";
 import { PageHeader } from "@/components/ui/page-header";
 import { NewEventButton } from "@/components/events/new-event";
@@ -11,7 +11,7 @@ import { buildEventFormData, buildEventRows } from "@/components/events/event-da
 export const metadata: Metadata = { title: "Event Tracker · Timeline" };
 
 export default async function EventTimelinePage() {
-  const user = (await getSessionUser())!;
+  const user = await requireSessionUser();
   const rows = buildEventRows(user);
   const form = buildEventFormData(user);
   const canCreate = can(user, "create_event");

@@ -1,6 +1,6 @@
 import { ClipboardList, ConciergeBell, Star, Store, TriangleAlert, Users } from "lucide-react";
 import type { Metadata } from "next";
-import { getSessionUser } from "@/lib/auth";
+import { requireSessionUser } from "@/lib/auth";
 import { getUsers, listHospitality, outletCoordinatorName, outletName, userName, visibleOutlets } from "@/lib/data/store";
 import { can } from "@/lib/rbac";
 import { PageHeader } from "@/components/ui/page-header";
@@ -13,7 +13,7 @@ export const metadata: Metadata = { title: "Hospitality Assessment" };
 
 export default async function HospitalityPage() {
   const t = await getT();
-  const user = (await getSessionUser())!;
+  const user = await requireSessionUser();
   const assessments = listHospitality(user);
   const visible = visibleOutlets(user);
   const outlets = visible.map((o) => ({ id: o.id, name: o.name }));
