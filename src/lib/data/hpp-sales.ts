@@ -1,6 +1,7 @@
 import "server-only";
 
 import { db, dbEnabled } from "./db";
+import { selectAll } from "./paged";
 
 /** One menu's monthly performance (name, category, qty sold, amount). Sourced
  *  from the ESB Sales Menu Recap. */
@@ -32,8 +33,13 @@ const mem = new Map<string, SalesRow>(); // key: month|menuName
 
 export async function listSales(month: string): Promise<SalesRow[]> {
   if (!dbEnabled) return [...mem.values()].filter((s) => s.month === month);
-  const { data } = await db().from("hpp_sales").select("*").eq("month", month).order("qty", { ascending: false }).limit(1000);
-  return (data ?? []).map(fromRow);
+  // Diurutkan per menu_name (kunci utama bersama month) supaya paginasi stabil;
+  // urutan qty dipakai di memori, karena mengurutkan pakai kolom tidak unik
+  // membuat baris bergeser antar halaman dan sebagian menu hilang.
+  const rows = await selectAll<Record<string, unknown>>("hpp_sales", (a, b) =>
+    db().from("hpp_sales").select("*").eq("month", month).order("menu_name").range(a, b),
+  );
+  return rows.map(fromRow).sort((x, y) => y.qty - x.qty);
 }
 
 /** Most recent month that has synced sales (YYYY-MM), or null. */

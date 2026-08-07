@@ -1,6 +1,7 @@
 import "server-only";
 
 import { db, dbEnabled } from "./db";
+import { selectAll } from "./paged";
 import { PNL_COLS, type PnlRow } from "@/lib/ops/categories";
 
 /** Laba Rugi per outlet per bulan — diunggah Operation, seperti Beban Operasional. */
@@ -9,8 +10,10 @@ const mem = new Map<string, PnlRow>(); // key: month|code
 
 export async function listPnl(month: string): Promise<PnlRow[]> {
   if (!dbEnabled) return [...mem.entries()].filter(([k]) => k.startsWith(`${month}|`)).map(([, v]) => v);
-  const { data } = await db().from("op_pnl").select("*").eq("month", month).limit(2000);
-  return (data ?? []).map((r: Record<string, unknown>) => {
+  const rows = await selectAll<Record<string, unknown>>("op_pnl", (a, b) =>
+    db().from("op_pnl").select("*").eq("month", month).order("outlet_code").range(a, b),
+  );
+  return rows.map((r) => {
     const row = { outletCode: String(r.outlet_code), outletName: String(r.outlet_name ?? "") } as PnlRow;
     for (const c of PNL_COLS) row[c] = Number(r[c]) || 0;
     return row;

@@ -1,6 +1,7 @@
 import "server-only";
 
 import { db, dbEnabled } from "./db";
+import { selectAll } from "./paged";
 import type { CancelDetailRow } from "@/lib/integrations/esb";
 
 /**
@@ -108,41 +109,39 @@ export async function setFraudReportCache(key: string, report: unknown, final: b
   await db().from("fraud_report_cache").upsert({ key, report, final, computed_at: new Date().toISOString() });
 }
 
+const FRAUD_MAX_ROWS = 500_000;
+
 /** All cached rows for [from, to] (paged past supabase's 1000-row cap). */
 export async function getFraudRows(kind: FraudKindGroup, from: string, to: string): Promise<StoredFraudRow[]> {
-  const out: StoredFraudRow[] = [];
-  const PAGE = 1000;
-  for (let offset = 0; ; offset += PAGE) {
-    const { data, error } = await db()
+  const rows = await selectAll<OrderRow>("fraud_orders", (a, b) =>
+    db()
       .from("fraud_orders")
       .select("day,branch,sales_number,menu,menu_category,order_by,order_time,void_by,void_time,type,notes,qty,subtotal,total")
       .eq("kind", kind)
       .gte("day", from)
       .lte("day", to)
       .order("id", { ascending: true })
-      .range(offset, offset + PAGE - 1);
-    if (error) throw new Error(`DB fraud_orders: ${error.message}`);
-    for (const r of (data ?? []) as OrderRow[]) {
-      out.push({
-        day: r.day,
-        branch: r.branch,
-        salesNumber: r.sales_number,
-        menu: r.menu,
-        menuCategory: r.menu_category,
-        orderBy: r.order_by,
-        orderTime: r.order_time,
-        voidBy: r.void_by,
-        voidTime: r.void_time,
-        type: r.type,
-        notes: r.notes,
-        qty: Number(r.qty) || 0,
-        subtotal: Number(r.subtotal) || 0,
-        total: Number(r.total) || 0,
-      });
-    }
-    if (!data || data.length < PAGE) break;
-  }
-  return out;
+      .range(a, b),
+    // Tabel terbesar di sistem (ratusan ribu baris); rentang lebar butuh pagar
+    // yang lebih longgar daripada bawaan.
+    FRAUD_MAX_ROWS,
+  );
+  return rows.map((r) => ({
+    day: r.day,
+    branch: r.branch,
+    salesNumber: r.sales_number,
+    menu: r.menu,
+    menuCategory: r.menu_category,
+    orderBy: r.order_by,
+    orderTime: r.order_time,
+    voidBy: r.void_by,
+    voidTime: r.void_time,
+    type: r.type,
+    notes: r.notes,
+    qty: Number(r.qty) || 0,
+    subtotal: Number(r.subtotal) || 0,
+    total: Number(r.total) || 0,
+  }));
 }
 
 /** Sync bookkeeping for [from, to], keyed by day. */

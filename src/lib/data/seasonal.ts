@@ -1,6 +1,7 @@
 import "server-only";
 
 import { db, dbEnabled } from "./db";
+import { selectAll } from "./paged";
 import { esbConfigured, esbFetchSales, esbListBranches } from "@/lib/integrations/esb-client";
 
 /**
@@ -68,12 +69,18 @@ export async function getSeasonal(year: number, branch = ""): Promise<SeasonalRe
   if (!dbEnabled) return { configured: true, year, branch, months: {}, pendingDays: [] };
   const from = `${year}-01-01`;
   const to = `${year}-12-31`;
-  const { data, error } = await db().from("seasonal_daily").select("day,gross,net,synced_at").eq("branch", branch).gte("day", from).lte("day", to);
-  if (error) return { configured: true, year, branch, months: {}, pendingDays: [], error: error.message };
+  let rows: Row[];
+  try {
+    rows = await selectAll<Row>("seasonal_daily", (a, b) =>
+      db().from("seasonal_daily").select("day,gross,net,synced_at").eq("branch", branch).gte("day", from).lte("day", to).order("day").range(a, b),
+    );
+  } catch (e) {
+    return { configured: true, year, branch, months: {}, pendingDays: [], error: e instanceof Error ? e.message : String(e) };
+  }
 
   const months: Record<number, Record<number, SeasonalDayValue>> = {};
   const have = new Map<string, string>();
-  for (const r of (data ?? []) as Row[]) {
+  for (const r of rows) {
     const d = new Date(`${r.day}T00:00:00`);
     (months[d.getMonth()] ??= {})[d.getDate()] = { gross: Number(r.gross) || 0, net: Number(r.net) || 0 };
     have.set(r.day, r.synced_at);
@@ -92,8 +99,10 @@ export async function getSeasonal(year: number, branch = ""): Promise<SeasonalRe
  *  into the cache, newest first, stopping near the budget. */
 export async function syncSeasonalDays(from: string, to: string, branch = "", budgetMs = 42_000, force = false): Promise<{ synced: number; remaining: number; error?: string }> {
   if (!dbEnabled || !esbConfigured()) return { synced: 0, remaining: 0 };
-  const { data } = await db().from("seasonal_daily").select("day,synced_at").eq("branch", branch).gte("day", from).lte("day", to);
-  const have = new Map((data ?? []).map((r: { day: string; synced_at: string }) => [r.day, r.synced_at]));
+  const cached = await selectAll<{ day: string; synced_at: string }>("seasonal_daily", (a, b) =>
+    db().from("seasonal_daily").select("day,synced_at").eq("branch", branch).gte("day", from).lte("day", to).order("day").range(a, b),
+  );
+  const have = new Map(cached.map((r) => [r.day, r.synced_at]));
   const today = todayWib();
   // `force` re-pulls every past day (used once to overwrite data synced from an
   // old source); otherwise only missing/stale days are fetched.

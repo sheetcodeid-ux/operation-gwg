@@ -1,6 +1,7 @@
 import "server-only";
 
 import { db, dbEnabled } from "./db";
+import { selectAll } from "./paged";
 import { esbConfigured, esbGenerateMenuRecap, esbReadMenuPages } from "@/lib/integrations/esb-client";
 import { classifyMenuCategory, type MenuRecapRow } from "@/lib/integrations/esb";
 import { getAppConfig, setAppConfig } from "./app-config";
@@ -53,15 +54,10 @@ const fromRow = (r: Row): EsbMenu => ({
 export async function listEsbMenus(): Promise<EsbMenu[]> {
   if (!dbEnabled) return [];
   try {
-    const out: EsbMenu[] = [];
-    const PAGE = 1000;
-    for (let off = 0; ; off += PAGE) {
-      const { data, error } = await db().from("esb_menu").select("*").order("menu", { ascending: true }).range(off, off + PAGE - 1);
-      if (error) throw new Error(error.message);
-      for (const r of (data ?? []) as Row[]) out.push(fromRow(r));
-      if (!data || data.length < PAGE) break;
-    }
-    return out;
+    const rows = await selectAll<Row>("esb_menu", (a, b) =>
+      db().from("esb_menu").select("*").order("menu", { ascending: true }).range(a, b),
+    );
+    return rows.map(fromRow);
   } catch {
     return [];
   }

@@ -1,6 +1,7 @@
 import "server-only";
 
 import { db, dbEnabled } from "./db";
+import { selectAll } from "./paged";
 import { SEED } from "./seed";
 import { loadCredentials, snapshotCredentials } from "./credentials";
 import {
@@ -129,11 +130,15 @@ function replaceInPlace<T>(target: T[], next: T[]) {
 async function avatarMap(): Promise<Map<string, string | null>> {
   const cached = g.__GWG_AVATARS__;
   if (cached && Date.now() - cached.at < AVATAR_TTL_MS) return cached.map;
-  const { data, error } = await db().from("users").select("id,avatar_url").limit(10000);
-  if (error) return cached?.map ?? new Map();
-  const map = new Map<string, string | null>(
-    ((data ?? []) as { id: string; avatar_url: string | null }[]).map((r) => [r.id, r.avatar_url ?? null]),
-  );
+  let rows: { id: string; avatar_url: string | null }[];
+  try {
+    rows = await selectAll<{ id: string; avatar_url: string | null }>("avatars", (from, to) =>
+      db().from("users").select("id,avatar_url").order("id", { ascending: true }).range(from, to),
+    );
+  } catch {
+    return cached?.map ?? new Map();
+  }
+  const map = new Map<string, string | null>(rows.map((r) => [r.id, r.avatar_url ?? null]));
   g.__GWG_AVATARS__ = { at: Date.now(), map };
   return map;
 }
@@ -151,11 +156,19 @@ async function hydrate() {
    * berhasil tetap diperbarui.
    */
   const failed: string[] = [];
-  const get = async (table: string, columns = "*") => {
+
+  /**
+   * Baca satu tabel UTUH, halaman demi halaman (lihat `paged.ts`).
+   *
+   * `key` adalah kolom pengurut dan harus unik di tabelnya — hampir semua tabel
+   * memakai `id`, tapi `credentials` tidak punya kolom itu sama sekali, dan
+   * mengurutkan pakai kolom yang tidak ada membuat SELURUH tabel gagal dimuat.
+   */
+  const get = async (table: string, columns = "*", key = "id") => {
     try {
-      const { data, error } = await supabase.from(table).select(columns).limit(10000);
-      if (error) throw new Error(error.message);
-      return (data ?? []) as unknown as Record<string, unknown>[];
+      return await selectAll<Record<string, unknown>>(`hydrate ${table}`, (from, to) =>
+        supabase.from(table).select(columns).order(key, { ascending: true }).range(from, to),
+      );
     } catch (e) {
       console.error(`[hydrate] ${table} gagal dimuat — mempertahankan data sebelumnya:`, e);
       failed.push(table);
@@ -179,7 +192,7 @@ async function hydrate() {
   if (refDue) {
     const [users, creds, areas, outlets, avatars] = await Promise.all([
       get("users", USER_COLUMNS),
-      get("credentials"),
+      get("credentials", "*", "user_id"),
       get("areas"),
       get("outlets"),
       avatarMap(),

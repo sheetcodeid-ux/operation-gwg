@@ -1,13 +1,12 @@
 import "server-only";
 
 import { db, dbEnabled } from "./db";
+import { selectAll } from "./paged";
 import { outletName } from "./store";
 import { listSales } from "./hpp-sales";
 import { listReviewableEvents } from "./marcomm";
 import { esbConfigured, esbListBranches } from "@/lib/integrations/esb-client";
 import { verdictOf, windowDays, type EventImpact, type ProductBreakdown, type ReviewableEvent } from "@/lib/marcomm-shared";
-
-/* eslint-disable @typescript-eslint/no-explicit-any */
 
 /**
  * Fase B — revenue-impact analysis for approved MarComm events.
@@ -48,8 +47,10 @@ function monthsBefore(first: string, count: number): string[] {
 /** Sum of daily gross omzet for a branch ("" = all outlets) over [from, to]. */
 async function omzetInRange(branch: string, from: string, to: string): Promise<number> {
   if (!dbEnabled || from > to) return 0;
-  const { data } = await db().from("seasonal_daily").select("gross").eq("branch", branch).gte("day", from).lte("day", to);
-  return ((data ?? []) as any[]).reduce((s, r) => s + (Number(r.gross) || 0), 0);
+  const rows = await selectAll<{ gross: number | string }>("seasonal_daily", (a, b) =>
+    db().from("seasonal_daily").select("gross").eq("branch", branch).gte("day", from).lte("day", to).order("day").range(a, b),
+  );
+  return rows.reduce((s, r) => s + (Number(r.gross) || 0), 0);
 }
 
 const norm = (s: string) => s.toLowerCase().replace(/[^a-z0-9]+/g, "");

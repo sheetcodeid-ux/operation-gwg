@@ -1,6 +1,7 @@
 import "server-only";
 
 import { db, dbEnabled } from "./db";
+import { selectAll } from "./paged";
 import { getAreas, getOutlets, listComplaints, userName } from "./store";
 import { listPurchases } from "./ops-finance";
 import { listPnl } from "./ops-pnl";
@@ -44,12 +45,21 @@ async function omzetByOutlet(month: string): Promise<Map<string, number>> {
   if (!dbEnabled) return out;
   const { from, to } = monthBounds(month);
   // Baris rentang penuh sebulan bila ada; kalau tidak, jumlahkan baris hariannya.
-  const { data } = await db()
-    .from("sales_period")
-    .select("branch,net_sales,date_from,date_to")
-    .gte("date_from", from)
-    .lte("date_to", to);
-  const rows = (data ?? []) as { branch: string; net_sales: number | string; date_from: string; date_to: string }[];
+  // Dibaca bertahap: sebulan baris HARIAN untuk ~50 outlet sudah lewat seribu
+  // baris, dan pemotongan diam-diam bikin omzet sebagian outlet hilang dari KPI.
+  const rows = await selectAll<{ branch: string; net_sales: number | string; date_from: string; date_to: string }>(
+    "sales_period",
+    (a, b) =>
+      db()
+        .from("sales_period")
+        .select("branch,net_sales,date_from,date_to")
+        .gte("date_from", from)
+        .lte("date_to", to)
+        .order("branch")
+        .order("date_from")
+        .order("date_to")
+        .range(a, b),
+  );
   const full = rows.filter((r) => r.date_from === from && r.date_to === to);
   const use = full.length > 0 ? full : rows.filter((r) => r.date_from === r.date_to);
   for (const r of use) {
@@ -65,9 +75,17 @@ async function omzetByOutlet(month: string): Promise<Map<string, number>> {
 async function firstSalesMonth(): Promise<{ byOutlet: Map<string, string>; dataStart: string | null }> {
   const byOutlet = new Map<string, string>();
   if (!dbEnabled) return { byOutlet, dataStart: null };
-  const { data } = await db().from("sales_period").select("branch,date_from").order("date_from").limit(20000);
+  const rows = await selectAll<{ branch: string; date_from: string }>("sales_period", (a, b) =>
+    db()
+      .from("sales_period")
+      .select("branch,date_from")
+      .order("branch")
+      .order("date_from")
+      .order("date_to")
+      .range(a, b),
+  );
   let dataStart: string | null = null;
-  for (const r of (data ?? []) as { branch: string; date_from: string }[]) {
+  for (const r of rows) {
     const m = r.date_from.slice(0, 7);
     if (!dataStart || m < dataStart) dataStart = m;
     if (!r.branch) continue;

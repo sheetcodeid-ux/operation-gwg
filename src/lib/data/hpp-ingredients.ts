@@ -2,6 +2,7 @@ import "server-only";
 
 import { randomUUID } from "node:crypto";
 import { db, dbEnabled } from "./db";
+import { selectAll } from "./paged";
 import { recipeUnits, unitPrice } from "@/lib/hpp/units";
 
 export interface HppIngredient {
@@ -42,8 +43,12 @@ export { recipeUnits, unitPrice };
 
 export async function listIngredients(): Promise<HppIngredient[]> {
   if (!dbEnabled) return [...mem.values()].sort((a, b) => a.name.localeCompare(b.name));
-  const { data } = await db().from("hpp_ingredients").select("*").order("name", { ascending: true }).limit(500);
-  return (data ?? []).map(fromRow);
+  // `.limit(500)` dulu memotong daftar tanpa error — dengan 375 bahan dan impor
+  // rutin, batas itu tinggal beberapa unggahan lagi.
+  const rows = await selectAll<IngredientRow>("hpp_ingredients", (a, b) =>
+    db().from("hpp_ingredients").select("*").order("id", { ascending: true }).range(a, b),
+  );
+  return rows.map(fromRow).sort((x, y) => x.name.localeCompare(y.name));
 }
 
 /** Create or update an ingredient; flags `alert` when the unit price jumps >5%. */

@@ -2,6 +2,7 @@ import "server-only";
 
 import { randomUUID } from "node:crypto";
 import { db, dbEnabled } from "./db";
+import { selectAll } from "./paged";
 import { listHpp, type HppRecord } from "./hpp";
 import { BRAND_HPP_TARGET, HPP_OVER_COST, MIN_MARGIN, hppPct, hppStatus, type Brand } from "@/lib/hpp/calc";
 import { listEsbMenus } from "./esb-menu";
@@ -82,16 +83,16 @@ export const PRICE_BAND = 0.1;
 
 export async function listCompetitorPrices(): Promise<CompetitorPrice[]> {
   if (!dbEnabled) return [...mem.values()].sort((a, b) => b.observedAt.localeCompare(a.observedAt));
-  const { data, error } = await db()
-    .from("hpp_competitor_prices")
-    .select("*")
-    .order("observed_at", { ascending: false })
-    .limit(1000);
-  if (error) {
-    console.error("[hpp-competitors] list failed:", error.message);
+  try {
+    // Diurutkan per id (unik) untuk paginasi; urutan tampil disusun di memori.
+    const rows = await selectAll<CompetitorRow>("hpp_competitor_prices", (a, b) =>
+      db().from("hpp_competitor_prices").select("*").order("id", { ascending: true }).range(a, b),
+    );
+    return rows.map(fromRow).sort((x, y) => y.observedAt.localeCompare(x.observedAt));
+  } catch (e) {
+    console.error("[hpp-competitors] list failed:", e);
     return [];
   }
-  return (data ?? []).map(fromRow);
 }
 
 export async function saveCompetitorPrice(input: CompetitorDraft, userId: string | null): Promise<CompetitorPrice> {

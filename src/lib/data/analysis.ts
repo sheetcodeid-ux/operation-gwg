@@ -1,6 +1,7 @@
 import "server-only";
 
 import { db, dbEnabled } from "./db";
+import { selectAll } from "./paged";
 import { esbConfigured } from "@/lib/integrations/esb-client";
 import { listEsbMenus, type EsbMenu } from "./esb-menu";
 import { getSeasonalBranches } from "./seasonal";
@@ -95,8 +96,10 @@ async function readSeasonal(from: string, to: string, branch: string): Promise<M
   const out = new Map<string, { gross: number; net: number }>();
   if (!dbEnabled) return out;
   try {
-    const { data } = await db().from("seasonal_daily").select("day,gross,net").eq("branch", branch).gte("day", from).lte("day", to);
-    for (const r of (data ?? []) as SeasRow[]) out.set(r.day, { gross: Number(r.gross) || 0, net: Number(r.net) || 0 });
+    const rows = await selectAll<SeasRow>("seasonal_daily", (a, b) =>
+      db().from("seasonal_daily").select("day,gross,net").eq("branch", branch).gte("day", from).lte("day", to).order("day").range(a, b),
+    );
+    for (const r of rows) out.set(r.day, { gross: Number(r.gross) || 0, net: Number(r.net) || 0 });
   } catch {
     /* table missing / off → empty */
   }
@@ -108,8 +111,10 @@ async function readSeasonalByBranch(from: string, to: string): Promise<Map<strin
   const out = new Map<string, number>();
   if (!dbEnabled) return out;
   try {
-    const { data } = await db().from("seasonal_daily").select("branch,net").neq("branch", "").gte("day", from).lte("day", to);
-    for (const r of (data ?? []) as { branch: string; net: number | string }[]) out.set(r.branch, (out.get(r.branch) ?? 0) + (Number(r.net) || 0));
+    const rows = await selectAll<{ branch: string; net: number | string }>("seasonal_daily", (a, b) =>
+      db().from("seasonal_daily").select("branch,net").neq("branch", "").gte("day", from).lte("day", to).order("day").order("branch").range(a, b),
+    );
+    for (const r of rows) out.set(r.branch, (out.get(r.branch) ?? 0) + (Number(r.net) || 0));
   } catch {
     /* off → empty */
   }
@@ -120,8 +125,10 @@ async function readSeasonalByBranch(from: string, to: string): Promise<Map<strin
 export async function analysisBranches(): Promise<{ id: string; name: string }[]> {
   if (!dbEnabled) return [];
   try {
-    const { data } = await db().from("seasonal_daily").select("branch").neq("branch", "");
-    const ids = [...new Set(((data ?? []) as { branch: string }[]).map((r) => r.branch))];
+    const rows = await selectAll<{ branch: string }>("seasonal_daily", (a, b) =>
+      db().from("seasonal_daily").select("branch").neq("branch", "").order("day").order("branch").range(a, b),
+    );
+    const ids = [...new Set(rows.map((r) => r.branch))];
     // Names live in esb branches; fall back to the id when unknown.
     return ids.map((id) => ({ id, name: id })).sort((a, b) => a.name.localeCompare(b.name));
   } catch {

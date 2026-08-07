@@ -1,6 +1,7 @@
 import "server-only";
 
 import { db, dbEnabled } from "./db";
+import { selectAll } from "./paged";
 import { areaName, getOutlets } from "./store";
 import { EXPENSE_COLS, expenseTotal, type ExpenseRow, type PurchaseRow } from "@/lib/ops/categories";
 
@@ -21,8 +22,10 @@ const memP = new Map<string, PurchaseRow>();
 /* ---------------- expenses ---------------- */
 export async function listExpenses(month: string): Promise<ExpenseRow[]> {
   if (!dbEnabled) return [...memE.entries()].filter(([k]) => k.startsWith(`${month}|`)).map(([, v]) => v);
-  const { data } = await db().from("op_expenses").select("*").eq("month", month).limit(2000);
-  return (data ?? []).map((r: Record<string, unknown>) => {
+  const rows = await selectAll<Record<string, unknown>>("op_expenses", (a, b) =>
+    db().from("op_expenses").select("*").eq("month", month).order("outlet_code").range(a, b),
+  );
+  return rows.map((r) => {
     const row = { outletCode: String(r.outlet_code), outletName: String(r.outlet_name ?? "") } as ExpenseRow;
     for (const c of EXPENSE_COLS) row[c] = Number(r[c]) || 0;
     return row;
@@ -50,8 +53,10 @@ export async function upsertExpenses(month: string, rows: ExpenseRow[]): Promise
 /* ---------------- purchases ---------------- */
 export async function listPurchases(month: string): Promise<PurchaseRow[]> {
   if (!dbEnabled) return [...memP.entries()].filter(([k]) => k.startsWith(`${month}|`)).map(([, v]) => v);
-  const { data } = await db().from("op_purchases").select("*").eq("month", month).limit(2000);
-  return (data ?? []).map((r: Record<string, unknown>) => ({ outletCode: String(r.outlet_code), outletName: String(r.outlet_name ?? ""), warehouse: Number(r.warehouse) || 0, nonWarehouse: Number(r.non_warehouse) || 0 }));
+  const rows = await selectAll<Record<string, unknown>>("op_purchases", (a, b) =>
+    db().from("op_purchases").select("*").eq("month", month).order("outlet_code").range(a, b),
+  );
+  return rows.map((r) => ({ outletCode: String(r.outlet_code), outletName: String(r.outlet_name ?? ""), warehouse: Number(r.warehouse) || 0, nonWarehouse: Number(r.non_warehouse) || 0 }));
 }
 
 export async function upsertPurchases(month: string, rows: PurchaseRow[]): Promise<number> {
