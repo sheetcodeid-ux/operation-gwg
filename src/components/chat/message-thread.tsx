@@ -1,12 +1,12 @@
 "use client";
 
 import * as React from "react";
-import Link from "next/link";
 import { ArrowLeft, Check, CheckCheck, ExternalLink, FileText, Info, Loader2, Plus, Send, Users, X } from "lucide-react";
 import { toast } from "sonner";
 import { Avatar } from "@/components/ui/avatar";
 import { cn } from "@/lib/utils";
 import { AttachMenu } from "./attach-menu";
+import { RequestDetailSheet } from "./request-detail-sheet";
 import { clockTime, dayLabel, type ChatMessage, type ChatRef, type ChatThread, type PickableRequest } from "@/lib/chat-shared";
 
 /**
@@ -44,6 +44,7 @@ export function MessageThread({
   const [files, setFiles] = React.useState<File[]>([]);
   const [ref, setRef] = React.useState<PickableRequest | null>(null);
   const [menuOpen, setMenuOpen] = React.useState(false);
+  const [openRequest, setOpenRequest] = React.useState<string | null>(null);
   const bottomRef = React.useRef<HTMLDivElement>(null);
   const boxRef = React.useRef<HTMLTextAreaElement>(null);
   const fileRef = React.useRef<HTMLInputElement>(null);
@@ -135,7 +136,7 @@ export function MessageThread({
           </div>
         ) : (
           <>
-            <MessageGroups messages={messages} meId={meId} isGroup={thread.kind === "group"} />
+            <MessageGroups messages={messages} meId={meId} isGroup={thread.kind === "group"} onOpenRequest={setOpenRequest} />
             {pending.map((p) => (
               <PendingBubble key={p.id} body={p.body} request={p.ref} />
             ))}
@@ -143,6 +144,8 @@ export function MessageThread({
         )}
         <div ref={bottomRef} />
       </div>
+
+      <RequestDetailSheet requestId={openRequest} onClose={() => setOpenRequest(null)} />
 
       {/* Kotak tulis */}
       <div className="relative shrink-0 border-t border-border bg-card px-3 py-2.5 sm:px-4">
@@ -243,7 +246,7 @@ export function MessageThread({
               }
             }}
             placeholder="Tulis pesan…"
-            className="max-h-32 min-h-9 flex-1 resize-none rounded-2xl border border-border bg-background px-4 py-2 text-sm leading-5 text-foreground outline-none transition-colors placeholder:text-muted-foreground focus:border-brand-500"
+            className="no-scrollbar max-h-32 min-h-9 flex-1 resize-none overflow-y-auto rounded-2xl border border-border bg-background px-4 py-2 text-sm leading-5 text-foreground outline-none transition-colors placeholder:text-muted-foreground focus:border-brand-500"
           />
 
           <button
@@ -278,7 +281,17 @@ function ThreadSkeleton() {
 }
 
 /** Pesan dikelompokkan per hari, lalu digabung per pengirim berurutan. */
-function MessageGroups({ messages, meId, isGroup }: { messages: ChatMessage[]; meId: string; isGroup: boolean }) {
+function MessageGroups({
+  messages,
+  meId,
+  isGroup,
+  onOpenRequest,
+}: {
+  messages: ChatMessage[];
+  meId: string;
+  isGroup: boolean;
+  onOpenRequest: (id: string) => void;
+}) {
   const out: React.ReactNode[] = [];
   let lastDay = "";
 
@@ -299,13 +312,34 @@ function MessageGroups({ messages, meId, isGroup }: { messages: ChatMessage[]; m
       dayLabel(prev.createdAt) === day &&
       Date.parse(m.createdAt) - Date.parse(prev.createdAt) < 5 * 60_000;
 
-    out.push(<Bubble key={m.id} m={m} mine={m.senderId === meId} grouped={grouped} showName={isGroup} />);
+    out.push(
+      <Bubble
+        key={m.id}
+        m={m}
+        mine={m.senderId === meId}
+        grouped={grouped}
+        showName={isGroup}
+        onOpenRequest={onOpenRequest}
+      />,
+    );
   });
 
   return <div>{out}</div>;
 }
 
-function Bubble({ m, mine, grouped, showName }: { m: ChatMessage; mine: boolean; grouped: boolean; showName: boolean }) {
+function Bubble({
+  m,
+  mine,
+  grouped,
+  showName,
+  onOpenRequest,
+}: {
+  m: ChatMessage;
+  mine: boolean;
+  grouped: boolean;
+  showName: boolean;
+  onOpenRequest: (id: string) => void;
+}) {
   return (
     <div className={cn("flex items-end gap-2", mine ? "justify-end" : "justify-start", grouped ? "mt-0.5" : "mt-3")}>
       {!mine && <span className="w-7 shrink-0">{!grouped && <Avatar name={m.senderName} size={28} />}</span>}
@@ -315,7 +349,7 @@ function Bubble({ m, mine, grouped, showName }: { m: ChatMessage; mine: boolean;
           <span className="px-1 text-[11px] font-medium text-muted-foreground">{m.senderName}</span>
         )}
 
-        {m.ref && <RequestCard r={m.ref} mine={mine} />}
+        {m.ref && <RequestCard r={m.ref} mine={mine} onOpen={onOpenRequest} />}
 
         {m.attachments.length > 0 && (
           <div className={cn("flex w-full flex-col gap-1", mine ? "items-end" : "items-start")}>
@@ -402,8 +436,13 @@ function Attachment({ name, url, mine }: { name: string; url?: string; mine: boo
   );
 }
 
-/** Kartu pengajuan yang diteruskan ke obrolan — bisa langsung dibuka. */
-function RequestCard({ r, mine }: { r: ChatRef; mine: boolean }) {
+/**
+ * Kartu pengajuan di dalam obrolan.
+ *
+ * Menekannya membuka detail DI ATAS percakapan, bukan berpindah halaman —
+ * setelah membaca, yang dibutuhkan biasanya membalas di obrolan yang sama.
+ */
+function RequestCard({ r, mine, onOpen }: { r: ChatRef; mine: boolean; onOpen: (id: string) => void }) {
   const body = (
     <>
       <div className="flex items-center gap-2">
@@ -431,8 +470,8 @@ function RequestCard({ r, mine }: { r: ChatRef; mine: boolean }) {
 
   if (r.missing) return <div className={cls}>{body}</div>;
   return (
-    <Link href={r.href} className={cls}>
+    <button type="button" onClick={() => onOpen(r.id)} className={cls}>
       {body}
-    </Link>
+    </button>
   );
 }

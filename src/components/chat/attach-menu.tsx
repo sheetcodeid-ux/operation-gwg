@@ -1,8 +1,8 @@
 "use client";
 
 import * as React from "react";
-import { FileText, GraduationCap, ImageIcon, Loader2, Palette, Plus, Search, UserPlus, X } from "lucide-react";
-import { Dialog, DialogContent } from "@/components/ui/dialog";
+import { FileText, GraduationCap, ImageIcon, Loader2, Palette, Search, UserPlus } from "lucide-react";
+import { BottomSheet } from "@/components/ui/bottom-sheet";
 import { chatPickableRequestsAction } from "@/lib/actions/chat";
 import { cn } from "@/lib/utils";
 import { shortTime, type PickableRequest } from "@/lib/chat-shared";
@@ -46,64 +46,42 @@ export function AttachMenu({
 
   return (
     <>
-      {/* Petak pilihan naik dari bawah kotak tulis. */}
-      {open && (
-        <>
-          {/* Klik di luar menutup — tanpa ini menu tersangkut terbuka di ponsel. */}
-          <button
-            type="button"
-            aria-label="Tutup menu lampiran"
-            onClick={() => onOpenChange(false)}
-            className="fixed inset-0 z-30 cursor-default"
+      {/* Petak pilihan naik dari bawah layar — bentuk yang sudah dikenal orang
+          dari aplikasi sehari-hari, dan tumpuan ikonnya di jangkauan ibu jari. */}
+      <BottomSheet open={open} onOpenChange={onOpenChange} title="Lampirkan">
+        <div className="grid grid-cols-3 gap-1 px-4 pb-6 pt-1 sm:grid-cols-4">
+          <Tile
+            icon={ImageIcon}
+            label="Foto"
+            tint="bg-emerald-500/15 text-emerald-600 dark:text-emerald-400"
+            onClick={() => {
+              onOpenChange(false);
+              onPickFiles("image/*");
+            }}
           />
-          <div className="absolute bottom-full left-0 z-40 mb-2 w-[min(22rem,calc(100vw-2rem))] rounded-2xl border border-border bg-card p-3 shadow-xl">
-            <div className="mb-2 flex items-center justify-between">
-              <p className="text-xs font-semibold text-foreground">Lampirkan</p>
-              <button
-                type="button"
-                onClick={() => onOpenChange(false)}
-                className="grid size-6 place-items-center rounded-md text-muted-foreground hover:bg-muted"
-                aria-label="Tutup"
-              >
-                <X className="size-3.5" />
-              </button>
-            </div>
-
-            <div className="grid grid-cols-3 gap-1">
-              <Tile
-                icon={ImageIcon}
-                label="Foto"
-                tint="bg-emerald-500/15 text-emerald-600 dark:text-emerald-400"
-                onClick={() => {
-                  onOpenChange(false);
-                  onPickFiles("image/*");
-                }}
-              />
-              <Tile
-                icon={FileText}
-                label="Dokumen"
-                tint="bg-brand-500/15 text-brand-600 dark:text-brand-400"
-                onClick={() => {
-                  onOpenChange(false);
-                  onPickFiles("");
-                }}
-              />
-              {REQUEST_CHOICES.map((c) => (
-                <Tile
-                  key={c.key}
-                  icon={c.icon}
-                  label={c.label}
-                  tint={c.tint}
-                  onClick={() => {
-                    onOpenChange(false);
-                    setPicking(c.kind);
-                  }}
-                />
-              ))}
-            </div>
-          </div>
-        </>
-      )}
+          <Tile
+            icon={FileText}
+            label="Dokumen"
+            tint="bg-brand-500/15 text-brand-600 dark:text-brand-400"
+            onClick={() => {
+              onOpenChange(false);
+              onPickFiles("");
+            }}
+          />
+          {REQUEST_CHOICES.map((c) => (
+            <Tile
+              key={c.key}
+              icon={c.icon}
+              label={c.label}
+              tint={c.tint}
+              onClick={() => {
+                onOpenChange(false);
+                setPicking(c.kind);
+              }}
+            />
+          ))}
+        </div>
+      </BottomSheet>
 
       <RequestPicker
         kind={picking}
@@ -178,9 +156,13 @@ function RequestPicker({
   const title = REQUEST_CHOICES.find((c) => c.kind === kind)?.label ?? "Pengajuan";
 
   return (
-    <Dialog open={kind !== null} onOpenChange={(v) => !v && onClose()}>
-      <DialogContent align="center" title={title} description="Pilih yang ingin diteruskan ke obrolan." className="max-w-md">
-        <div className="flex max-h-[70vh] flex-col p-5">
+    <BottomSheet
+      open={kind !== null}
+      onOpenChange={(v) => !v && onClose()}
+      title={title}
+      description="Pilih yang ingin diteruskan ke obrolan."
+    >
+      <div className="flex max-h-[70dvh] flex-col px-5 pb-5">
           <div className="relative">
             <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
             <input
@@ -222,11 +204,9 @@ function RequestPicker({
                 ))}
               </div>
             )}
-          </div>
         </div>
-      </DialogContent>
-    </Dialog>
+      </div>
+    </BottomSheet>
   );
 }
 
-export { Plus as AttachIcon };

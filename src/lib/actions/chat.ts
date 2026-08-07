@@ -14,14 +14,17 @@ import {
   openDirectThread,
   readThread,
   sendMessage,
+  setArchived,
+  setFavorite,
   threadPeople,
   unreadTotal,
+  REQUEST_HREF,
 } from "@/lib/data/chat";
 import { getHcRequest, listHcRequests } from "@/lib/data/hc-requests";
 import { canSeeRequest, requestScopeFor } from "@/lib/data/request-scope";
 import { presignPut, r2Enabled, R2_PREFIX } from "@/lib/storage/r2";
 import { HC_REQUEST_KIND_LABEL, statusMeta, type HcRequestKind } from "@/lib/hc-request";
-import type { ChatAttachment, ChatMessage, ChatPerson, ChatThread, PickableRequest } from "@/lib/chat-shared";
+import type { ChatAttachment, ChatMessage, ChatPerson, ChatThread, PickableRequest, RequestDetail } from "@/lib/chat-shared";
 
 /**
  * Pesan — obrolan internal, terbuka untuk SEMUA pengguna yang sudah masuk.
@@ -273,4 +276,54 @@ export async function chatPickableRequestsAction(kind: HcRequestKind): Promise<P
     requesterName: r.requesterName,
     createdAt: r.createdAt,
   }));
+}
+
+export async function chatSetFavoriteAction(threadId: string, on: boolean): Promise<{ ok?: true; error?: string }> {
+  const user = await getSessionUser();
+  if (!user || !dbEnabled) return { error: "Tidak punya akses." };
+  const res = await setFavorite(threadId, user.id, on);
+  return res.error ? { error: res.error } : { ok: true };
+}
+
+export async function chatSetArchivedAction(threadId: string, on: boolean): Promise<{ ok?: true; error?: string }> {
+  const user = await getSessionUser();
+  if (!user || !dbEnabled) return { error: "Tidak punya akses." };
+  const res = await setArchived(threadId, user.id, on);
+  return res.error ? { error: res.error } : { ok: true };
+}
+
+/**
+ * Detail satu pengajuan untuk dibuka DARI DALAM obrolan.
+ *
+ * Membuka halaman Pengajuan berarti meninggalkan percakapan; padahal yang
+ * dibutuhkan setelah melihat detailnya justru membalas di obrolan yang sama.
+ */
+export async function chatRequestDetailAction(id: string): Promise<RequestDetail | null> {
+  const user = await getSessionUser();
+  if (!user || !dbEnabled) return null;
+  const r = await getHcRequest(id);
+  if (!r) return null;
+  if (r.requesterId !== user.id && !canSeeRequest(user, r)) return null;
+  return {
+    id: r.id,
+    kindLabel: HC_REQUEST_KIND_LABEL[r.kind],
+    title: r.title,
+    description: r.description,
+    statusLabel: statusMeta(r.kind, r.status).label,
+    requesterName: r.requesterName,
+    department: r.department,
+    assigneeName: r.assigneeName,
+    designType: r.designType,
+    designSize: r.designSize,
+    plannedDate: r.plannedDate,
+    position: r.position,
+    headcount: r.headcount,
+    trainingType: r.trainingType,
+    participants: r.participants,
+    budget: r.budget,
+    createdAt: r.createdAt,
+    revisions: r.revisions,
+    attachments: r.attachments.map((a) => ({ name: a.name, url: a.url })),
+    href: REQUEST_HREF[r.kind] ?? "/pengajuan",
+  };
 }

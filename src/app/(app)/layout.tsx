@@ -9,6 +9,7 @@ import type { Lang } from "@/lib/i18n/dict";
 import { Sidebar } from "@/components/layout/sidebar";
 import { Topbar } from "@/components/layout/topbar";
 import { MainShell } from "@/components/layout/main-shell";
+import { ChromeSlot } from "@/components/layout/chrome-slot";
 import { SidebarProvider } from "@/components/layout/sidebar-context";
 import { NavLockProvider } from "@/components/layout/nav-lock";
 import { ScrollReset } from "@/components/layout/scroll-reset";
@@ -59,7 +60,11 @@ export default async function AppLayout({ children }: { children: React.ReactNod
               gulirannya sendiri di dalam panel. Halaman biasa tetap menggulir
               seperti sebelumnya lewat pembungkus overflow-y-auto di bawah. */}
           <div className="flex h-dvh flex-col overflow-hidden">
-            <Topbar user={user} notifications={notifications} navItems={navItems} allowedKeys={allowedKeys} homeDivision={home} isAdmin={isAdmin} grants={grants} department={department} />
+            {/* Di ponsel, Pesan mengambil alih seluruh layar — topbar disembunyikan
+                supaya tidak ada dua baris kepala bertumpuk. */}
+            <ChromeSlot>
+              <Topbar user={user} notifications={notifications} navItems={navItems} allowedKeys={allowedKeys} homeDivision={home} isAdmin={isAdmin} grants={grants} department={department} />
+            </ChromeSlot>
             <div className="flex min-h-0 flex-1">
               <Sidebar items={navItems} allowedKeys={allowedKeys} homeDivision={home} isAdmin={isAdmin} grants={grants} department={department} />
               {/* overflow-x-clip: no child may widen the page — wide content must

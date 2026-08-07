@@ -78,6 +78,7 @@
   --animate-float: float 6s ease-in-out infinite;
   --animate-sheet-in: sheet-in-right 0.34s cubic-bezier(0.32, 0.72, 0, 1);
   --animate-overlay-in: overlay-fade 0.2s ease-out;
+  --animate-sheet-up: sheet-up 0.3s cubic-bezier(0.32, 0.72, 0, 1);
   --animate-fade-up: fade-up 0.3s cubic-bezier(0.32, 0.72, 0, 1);
   --animate-pop-in: pop-in 0.4s cubic-bezier(0.32, 0.72, 0, 1);
 }
@@ -102,6 +103,11 @@
   from { transform: translateX(100%); }
   to { transform: translateX(0); }
 }
+@keyframes sheet-up {
+  from { transform: translateY(100%); }
+  to { transform: translateY(0); }
+}
+
 @keyframes overlay-fade {
   from { opacity: 0; }
   to { opacity: 1; }

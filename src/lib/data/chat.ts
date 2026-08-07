@@ -48,6 +48,8 @@ interface ParticipantRow {
   user_id: string;
   last_read_at: string;
   hidden_at: string | null;
+  favorite: boolean | null;
+  archived_at: string | null;
 }
 
 interface MessageRow {
@@ -117,7 +119,7 @@ export async function listThreads(meId: string): Promise<ChatThread[]> {
       db().from("chat_threads").select("*").in("id", ids).order("id").range(a, b),
     ),
     selectAll<ParticipantRow>("chat_participants", (a, b) =>
-      db().from("chat_participants").select("thread_id,user_id,last_read_at,hidden_at").in("thread_id", ids).order("thread_id").range(a, b),
+      db().from("chat_participants").select("thread_id,user_id").in("thread_id", ids).order("thread_id").range(a, b),
     ),
   ]);
 
@@ -159,6 +161,8 @@ export async function listThreads(meId: string): Promise<ChatThread[]> {
       lastMessageAt: t.last_message_at,
       lastSenderIsMe: t.last_sender_id === meId,
       unread: unread.get(t.id) ?? 0,
+      favorite: !!me?.favorite,
+      archived: !!me?.archived_at,
     });
   }
 
@@ -501,4 +505,31 @@ export async function threadPeople(threadId: string, meId: string): Promise<Chat
     .map((p) => getUser(p.user_id))
     .filter((u): u is UserProfile => !!u)
     .map(personOf);
+}
+
+/** Tandai favorit — keputusan pribadi, tidak mengubah tampilan lawan bicara. */
+export async function setFavorite(threadId: string, meId: string, on: boolean): Promise<{ error?: string }> {
+  if (!(await isParticipant(threadId, meId))) return { error: "Tidak punya akses ke percakapan ini." };
+  const { error } = await db()
+    .from("chat_participants")
+    .update({ favorite: on })
+    .eq("thread_id", threadId)
+    .eq("user_id", meId);
+  return error ? { error: error.message } : {};
+}
+
+/**
+ * Arsipkan / kembalikan percakapan.
+ *
+ * Berbeda dari menyembunyikan: yang diarsipkan tetap ada dan bisa dibuka lewat
+ * baris "Diarsipkan", hanya tidak ikut memenuhi daftar utama.
+ */
+export async function setArchived(threadId: string, meId: string, on: boolean): Promise<{ error?: string }> {
+  if (!(await isParticipant(threadId, meId))) return { error: "Tidak punya akses ke percakapan ini." };
+  const { error } = await db()
+    .from("chat_participants")
+    .update({ archived_at: on ? new Date().toISOString() : null })
+    .eq("thread_id", threadId)
+    .eq("user_id", meId);
+  return error ? { error: error.message } : {};
 }

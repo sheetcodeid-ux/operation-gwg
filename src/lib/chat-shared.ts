@@ -61,6 +61,8 @@ export interface ChatThread {
   lastMessageAt: string;
   lastSenderIsMe: boolean;
   unread: number;
+  favorite: boolean;
+  archived: boolean;
 }
 
 /** Waktu relatif singkat ala aplikasi pesan ("2h", "kemarin", "3 Agu"). */
@@ -112,4 +114,28 @@ export interface PickableRequest {
   statusLabel: string;
   requesterName: string;
   createdAt: string;
+}
+
+/** Detail pengajuan yang dibuka dari dalam obrolan. */
+export interface RequestDetail {
+  id: string;
+  kindLabel: string;
+  title: string;
+  description: string;
+  statusLabel: string;
+  requesterName: string;
+  department: string;
+  assigneeName: string | null;
+  designType: string | null;
+  designSize: string | null;
+  plannedDate: string | null;
+  position: string | null;
+  headcount: number;
+  trainingType: string | null;
+  participants: number;
+  budget: number;
+  createdAt: string;
+  revisions: { at: string; byName: string; note: string }[];
+  attachments: { name: string; url?: string }[];
+  href: string;
 }

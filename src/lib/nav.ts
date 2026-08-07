@@ -78,7 +78,9 @@ export interface NavItem {
 
 /** Static definition of every menu (order = sidebar order within a group). */
 export const NAV_MENUS: Omit<NavItem, "section" | "group" | "groupIcon">[] = [
-  { key: "pesan", label: "Pesan", href: "/pesan", icon: "MessagesSquare" },
+  // Pintu masuk Pesan ada di topbar (ikon + jumlah belum dibaca), jadi ia
+  // tidak perlu memakan satu baris di setiap divisi sidebar.
+  { key: "pesan", label: "Pesan", href: "/pesan", icon: "MessagesSquare", hidden: true },
   { key: "dashboard", label: "Dashboard", href: "/dashboard", icon: "LayoutDashboard" },
   { key: "analytics", label: "Analytics", href: "/analytics", icon: "TrendingUp" },
   { key: "work", label: "Work Tracker", href: "/work-tracker", icon: "ListChecks" },

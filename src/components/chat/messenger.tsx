@@ -5,13 +5,15 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { MessagesSquare } from "lucide-react";
 import { toast } from "sonner";
 import { useConfirm } from "@/components/ui/confirm";
-import { Sheet, SheetContent } from "@/components/ui/sheet";
+import { BottomSheet } from "@/components/ui/bottom-sheet";
 import {
   chatHideThreadAction,
   chatMarkAllReadAction,
   chatOpenAction,
   chatPollAction,
   chatSendAction,
+  chatSetArchivedAction,
+  chatSetFavoriteAction,
   chatThreadsAction,
 } from "@/lib/actions/chat";
 import { uploadChatFiles } from "./upload";
@@ -19,6 +21,7 @@ import { DetailPanel } from "./detail-panel";
 import { MessageThread } from "./message-thread";
 import { NewChatDialog } from "./new-chat-dialog";
 import { ThreadList } from "./thread-list";
+import { useViewportHeight } from "./use-viewport-height";
 import type { ChatMessage, ChatPerson, ChatThread, PickableRequest } from "@/lib/chat-shared";
 
 /**
@@ -55,6 +58,7 @@ export function Messenger({
   const router = useRouter();
   const params = useSearchParams();
   const { confirm, dialog } = useConfirm();
+  const viewportH = useViewportHeight();
 
   const [threads, setThreads] = React.useState(initialThreads);
   const [activeId, setActiveId] = React.useState<string | null>(params.get("t"));
@@ -117,6 +121,37 @@ export function Messenger({
   React.useEffect(() => {
     cacheRef.current = cache;
   }, [cache]);
+
+  /**
+   * Ambil isi percakapan SEBELUM diklik.
+   *
+   * Dipanggil saat kursor menyentuh atau jari menyentuh sebuah baris. Jeda
+   * antara "menyentuh" dan "menekan" biasanya cukup untuk satu perjalanan ke
+   * server, sehingga saat kliknya benar-benar terjadi isinya sudah siap dan
+   * percakapan terbuka seketika.
+   */
+  const prefetch = React.useCallback((id: string) => {
+    if (cacheRef.current[id] || prefetching.current.has(id)) return;
+    prefetching.current.add(id);
+    void chatPollAction(id)
+      .then((msgs) => {
+        if (msgs) setCache((cur) => (cur[id] ? cur : { ...cur, [id]: msgs }));
+      })
+      .finally(() => prefetching.current.delete(id));
+  }, []);
+  const prefetching = React.useRef<Set<string>>(new Set());
+
+  /**
+   * Percakapan teratas disiapkan begitu halaman dibuka.
+   *
+   * Itu yang hampir selalu dibuka pertama; menyiapkannya di muka membuat klik
+   * pertama pun tidak menunggu.
+   */
+  React.useEffect(() => {
+    for (const t of threads.slice(0, 3)) prefetch(t.id);
+    // Hanya sekali di awal; sisanya disiapkan saat baris disentuh.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // Percakapan yang ditunjuk di URL (mis. setelah meneruskan pengajuan).
   const wanted = params.get("t");
@@ -206,6 +241,27 @@ export function Messenger({
     toast.success("Percakapan dihapus dari daftar Anda");
   }
 
+  /** Favorit & arsip: layar berubah SEKETIKA, server menyusul. Menunggu balasan
+   *  untuk sekadar menyalakan bintang membuat aplikasi terasa berat. */
+  async function toggleFavorite(id: string, on: boolean) {
+    setThreads((cur) => cur.map((t) => (t.id === id ? { ...t, favorite: on } : t)));
+    const res = await chatSetFavoriteAction(id, on);
+    if (res.error) {
+      setThreads((cur) => cur.map((t) => (t.id === id ? { ...t, favorite: !on } : t)));
+      toast.error(res.error);
+    }
+  }
+
+  async function toggleArchive(id: string, on: boolean) {
+    setThreads((cur) => cur.map((t) => (t.id === id ? { ...t, archived: on } : t)));
+    if (on && activeId === id) setActiveId(null);
+    const res = await chatSetArchivedAction(id, on);
+    if (res.error) {
+      setThreads((cur) => cur.map((t) => (t.id === id ? { ...t, archived: !on } : t)));
+      toast.error(res.error);
+    }
+  }
+
   async function markAll() {
     await chatMarkAllReadAction();
     setThreads((cur) => cur.map((t) => ({ ...t, unread: 0 })));
@@ -215,15 +271,24 @@ export function Messenger({
   return (
     <>
       {/* Mengisi area isi sepenuhnya; yang menggulir hanya daftar dan riwayat,
-          sehingga kepala percakapan dan kotak tulis tidak pernah bergeser. */}
-      <div className="flex min-h-0 flex-1 overflow-hidden">
+          sehingga kepala percakapan dan kotak tulis tidak pernah bergeser.
+          Tinggi dikunci ke viewport NYATA supaya papan ketik yang terbuka tidak
+          mendorong kepala percakapan keluar layar. */}
+      <div
+        className="flex min-h-0 flex-1 overflow-hidden"
+        style={viewportH ? { maxHeight: viewportH } : undefined}
+      >
         <ThreadList
           threads={threads}
           activeId={activeId}
           onSelect={(id) => void open(id)}
+          onPrefetch={prefetch}
           onNew={() => setNewOpen(true)}
           onHide={(id) => void hide(id)}
           onMarkAllRead={() => void markAll()}
+          onToggleFavorite={(id, on) => void toggleFavorite(id, on)}
+          onToggleArchive={(id, on) => void toggleArchive(id, on)}
+          onExit={() => router.back()}
           className={cnPane(activeId !== null)}
         />
 
@@ -244,16 +309,19 @@ export function Messenger({
           <EmptyState />
         )}
 
-        {active && <DetailPanel thread={active} people={members} className="hidden w-80 shrink-0 border-l xl:flex" />}
+        {active && <DetailPanel thread={active} people={members} showHeader className="hidden w-80 shrink-0 border-l xl:flex" />}
       </div>
 
-      {/* Layar kecil: profil muncul sebagai panel geser, bukan kolom ketiga. */}
+      {/* Layar kecil: profil naik dari bawah — bentuk yang sudah dikenal orang,
+          dan tumpuan aksinya berada di jangkauan ibu jari. */}
       {active && (
-        <Sheet open={detailOpen} onOpenChange={setDetailOpen}>
-          <SheetContent title={active.kind === "group" ? "Anggota Grup" : "Profil"}>
-            <DetailPanel thread={active} people={members} className="h-full border-0" />
-          </SheetContent>
-        </Sheet>
+        <BottomSheet
+          open={detailOpen}
+          onOpenChange={setDetailOpen}
+          title={active.kind === "group" ? "Anggota Grup" : "Profil"}
+        >
+          <DetailPanel thread={active} people={members} className="border-0" />
+        </BottomSheet>
       )}
 
       <NewChatDialog
