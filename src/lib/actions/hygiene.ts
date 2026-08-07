@@ -8,7 +8,7 @@ import { createHygiene, deleteHygiene } from "@/lib/data/mutations";
 import { persistMessage } from "@/lib/data/persist";
 import { db, dbEnabled } from "@/lib/data/db";
 import { hygieneInputSchema, parseInput } from "@/lib/validation";
-import { HYGIENE_PHOTO_GROUPS } from "@/lib/constants";
+import { HYGIENE_PHOTO_GROUPS, HYGIENE_PHOTO_GROUPS_OPTIONAL } from "@/lib/constants";
 import type { Attachment, HygieneRating, HygieneSection } from "@/lib/types";
 
 export interface HygieneInput {
@@ -24,8 +24,9 @@ export interface HygieneInput {
 
 // A full audit is every photo area × 3 photos each; allow that many per call
 // (with a little headroom) so a size-batched upload of the whole audit is never
-// rejected.
-const MAX_PHOTOS = HYGIENE_PHOTO_GROUPS.length * 3 + 3;
+// rejected. Area etalase yang opsional ikut dihitung — kalau tidak, audit dari
+// outlet yang punya etalase justru ditolak karena kelebihan foto.
+const MAX_PHOTOS = (HYGIENE_PHOTO_GROUPS.length + HYGIENE_PHOTO_GROUPS_OPTIONAL.length) * 3 + 3;
 const MAX_BYTES = 5 * 1024 * 1024; // 5 MB per photo
 
 /** Upload audit photos to Supabase Storage; returns permanent public URLs.

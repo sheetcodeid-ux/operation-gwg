@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { ChevronDown, Loader2, Plus, SprayCan, X } from "lucide-react";
 import { toast } from "sonner";
-import { HYGIENE_PHOTO_GROUPS, HYGIENE_RATING_META, HYGIENE_SECTIONS } from "@/lib/constants";
+import { HYGIENE_PHOTO_GROUPS, HYGIENE_PHOTO_GROUPS_OPTIONAL, HYGIENE_RATING_META, HYGIENE_SECTIONS } from "@/lib/constants";
 import type { Attachment, HygieneRating, HygieneSection } from "@/lib/types";
 import { createHygieneAction, uploadHygienePhotosAction } from "@/lib/actions/hygiene";
 import { presignHygieneUploadsAction } from "@/lib/actions/uploads";
@@ -441,6 +441,27 @@ function HygieneForm({ outlets }: { outlets: { id: string; name: string }[] }) {
               key={g}
               label={td(g)}
               min={MIN_PHOTOS}
+              max={MIN_PHOTOS}
+              stampPrefix={outletName}
+              items={photos[g] ?? []}
+              onChange={(items) => setPhotos((p) => ({ ...p, [g]: items }))}
+            />
+          ))}
+        </div>
+      </Field>
+
+      {/* Etalase hanya ada di sebagian outlet, jadi tidak ikut syarat minimum
+          foto — audit tetap bisa disimpan kalau dikosongkan. */}
+      <Field label="Etalase (opsional)" className="mt-4">
+        <p className="mb-2 text-[11px] text-muted-foreground">
+          Isi hanya bila outlet ini punya etalasenya. Kalau tidak ada, boleh dilewati.
+        </p>
+        <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+          {HYGIENE_PHOTO_GROUPS_OPTIONAL.map((g) => (
+            <CameraCapture
+              key={g}
+              label={g}
+              min={0}
               max={MIN_PHOTOS}
               stampPrefix={outletName}
               items={photos[g] ?? []}

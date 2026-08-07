@@ -245,6 +245,15 @@ export const HYGIENE_SECTIONS: Record<
 
 export const HYGIENE_PHOTO_GROUPS = ["Front Area", "Customer Area", "Kitchen", "Bar", "Toilet", "Plant Area"] as const;
 
+/**
+ * Area foto yang hanya ada di sebagian outlet.
+ *
+ * Tidak semua cabang punya etalase, jadi ini TIDAK ikut syarat minimum foto —
+ * kalau dikosongkan audit tetap bisa disimpan. Outlet yang punya etalase yang
+ * wajib mengisinya.
+ */
+export const HYGIENE_PHOTO_GROUPS_OPTIONAL = ["Etalase Nordu Can", "Etalase Pastry"] as const;
+
 /** Organization-wide KPI targets (used for vs-target indicators). */
 export const KPI_TARGETS = {
   hospitality: 85,
