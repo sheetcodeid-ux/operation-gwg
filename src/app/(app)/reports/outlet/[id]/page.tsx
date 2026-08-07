@@ -2,7 +2,7 @@ import { notFound, redirect } from "next/navigation";
 import type { Metadata } from "next";
 import { getSessionUser } from "@/lib/auth";
 import { getOutletDetail, getOutlets } from "@/lib/data/store";
-import { DEMO_NOW } from "@/lib/now";
+import { nowMs } from "@/lib/now";
 import { canAccessOutlet } from "@/lib/rbac";
 import { COMPLAINT_STATUS_META, TASK_STATUS_META } from "@/lib/constants";
 import { Badge } from "@/components/ui/badge";
@@ -33,7 +33,7 @@ export default async function OutletReportPage({ params }: { params: Promise<{ i
           { label: "Kode", value: d.outlet.code },
           { label: "Wilayah", value: d.areaName },
           { label: "Coordinator", value: d.coordinatorName },
-          { label: "Tanggal", value: formatDate(new Date(DEMO_NOW)) },
+          { label: "Tanggal", value: formatDate(new Date(nowMs())) },
         ]}
       />
 

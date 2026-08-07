@@ -8,7 +8,7 @@ import { createTask, deleteTask, updateTask, updateTaskStatus } from "@/lib/data
 import { addTaskCategory, deleteTaskCategory } from "@/lib/data/task-categories";
 import { persistMessage } from "@/lib/data/persist";
 import { getHcRequestByTask, updateHcRequest } from "@/lib/data/hc-requests";
-import { DEMO_NOW_ISO } from "@/lib/now";
+import { nowIso } from "@/lib/now";
 import { parseInput, taskInputSchema, taskStatusSchema } from "@/lib/validation";
 import type { Priority, TaskStatus } from "@/lib/types";
 
@@ -62,8 +62,8 @@ export async function createTaskAction(input: TaskInput) {
       brands: clean.brands,
       picIds: clean.picIds,
       picId: clean.picIds[0] ?? outlet?.picId ?? user.id,
-      startDate: clean.startDate || DEMO_NOW_ISO,
-      dueDate: clean.dueDate || DEMO_NOW_ISO,
+      startDate: clean.startDate || nowIso(),
+      dueDate: clean.dueDate || nowIso(),
       progress: clean.progress,
     });
   } catch (e) {
@@ -103,8 +103,8 @@ export async function updateTaskAction(id: string, input: TaskInput) {
     brands: clean.brands,
     picIds: clean.picIds,
     picId: clean.picIds[0] ?? outlet?.picId ?? user.id,
-    startDate: clean.startDate || DEMO_NOW_ISO,
-    dueDate: clean.dueDate || DEMO_NOW_ISO,
+    startDate: clean.startDate || nowIso(),
+    dueDate: clean.dueDate || nowIso(),
     progress: clean.progress,
   });
 

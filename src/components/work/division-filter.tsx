@@ -27,7 +27,8 @@ export function membersForDivision(members: DivisionMembers | undefined, divisio
   return [...list].sort((a, b) => a.name.localeCompare(b.name));
 }
 
-const MONTH_NAMES = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
+// Sejalan dengan kalender & tanggal di seluruh web ini yang memakai id-ID.
+const MONTH_NAMES = ["Januari", "Februari", "Maret", "April", "Mei", "Juni", "Juli", "Agustus", "September", "Oktober", "November", "Desember"];
 
 /** "YYYY-MM" key for an ISO date (UTC), matching the calendar's UTC convention. */
 export function monthKey(iso: string) {

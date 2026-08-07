@@ -25,6 +25,7 @@ import {
 } from "@/lib/actions/complaints";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { DatePicker } from "@/components/ui/date-picker";
 import { DataTable } from "@/components/ui/data-table";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { Field, Input, Textarea } from "@/components/ui/input";
@@ -414,7 +415,7 @@ function ResolveForm({ complaint, onClose }: { complaint: ComplaintRow; onClose:
         <Textarea value={action} onChange={(e) => setAction(e.target.value)} placeholder={t("complaint.correctivePh")} />
       </Field>
       <Field label={t("complaint.followUp")}>
-        <Input type="date" value={followUp} onChange={(e) => setFollowUp(e.target.value)} />
+        <DatePicker value={followUp} onChange={setFollowUp} />
       </Field>
       <div className="flex justify-end gap-2">
         <Button variant="ghost" onClick={onClose} disabled={busy}>{t("common.cancel")}</Button>

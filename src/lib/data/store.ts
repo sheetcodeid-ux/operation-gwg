@@ -26,7 +26,7 @@ import { SEED } from "./seed";
 import { db, dbEnabled } from "./db";
 import { notificationFromRow } from "./rows";
 import { canVerifyHpp } from "../hpp/access";
-import { DEMO_NOW } from "../now";
+import { nowMs } from "../now";
 import { buildCompareData, type CompareData } from "../compare-data";
 
 const avg = (xs: number[]) => (xs.length ? xs.reduce((a, b) => a + b, 0) / xs.length : 0);
@@ -202,7 +202,9 @@ export function getDashboardKpis(user: UserProfile): DashboardKpis {
 /* ---------------- period-aware KPIs (real deltas vs previous window) ---------------- */
 export type PeriodKey = "week" | "month" | "quarter";
 const PERIOD_DAYS: Record<PeriodKey, number> = { week: 7, month: 30, quarter: 90 };
-export const NOW = DEMO_NOW;
+/** Ambang atas jendela periode dashboard. Fungsi, bukan konstanta: instance
+ *  server hidup berjam-jam, dan konstanta akan membeku di waktu boot. */
+export const NOW = () => nowMs();
 
 export interface PeriodKpis extends DashboardKpis {
   complaintsReceived: number;
@@ -227,8 +229,8 @@ export function getDashboardKpisWithPeriod(user: UserProfile, period: PeriodKey)
   const ids = new Set(visibleOutlets(user).map((o) => o.id));
   const days = PERIOD_DAYS[period];
   const win = days * 86_400_000;
-  const curStart = NOW - win;
-  const prevStart = NOW - 2 * win;
+  const curStart = NOW() - win;
+  const prevStart = NOW() - 2 * win;
 
   const inWin = (t: number, start: number, end: number) => t >= start && t < end;
 
@@ -242,16 +244,16 @@ export function getDashboardKpisWithPeriod(user: UserProfile, period: PeriodKey)
   const comp = SEED.complaints.filter((c) => ids.has(c.outletId));
   const tasks = SEED.tasks.filter((t) => t.outletId !== null && ids.has(t.outletId));
 
-  const hospCur = avgIn(hosp, curStart, NOW) || base.hospitalityScore;
+  const hospCur = avgIn(hosp, curStart, NOW()) || base.hospitalityScore;
   const hospPrev = avgIn(hosp, prevStart, curStart);
-  const hygCur = avgIn(hyg, curStart, NOW) || base.hygieneScore;
+  const hygCur = avgIn(hyg, curStart, NOW()) || base.hygieneScore;
   const hygPrev = avgIn(hyg, prevStart, curStart);
 
-  const recCur = comp.filter((c) => inWin(+new Date(c.createdAt), curStart, NOW)).length;
+  const recCur = comp.filter((c) => inWin(+new Date(c.createdAt), curStart, NOW())).length;
   const recPrev = comp.filter((c) => inWin(+new Date(c.createdAt), prevStart, curStart)).length;
-  const resCur = comp.filter((c) => c.closedAt && inWin(+new Date(c.closedAt), curStart, NOW)).length;
+  const resCur = comp.filter((c) => c.closedAt && inWin(+new Date(c.closedAt), curStart, NOW())).length;
   const resPrev = comp.filter((c) => c.closedAt && inWin(+new Date(c.closedAt), prevStart, curStart)).length;
-  const tcCur = tasks.filter((t) => t.completionDate && inWin(+new Date(t.completionDate), curStart, NOW)).length;
+  const tcCur = tasks.filter((t) => t.completionDate && inWin(+new Date(t.completionDate), curStart, NOW())).length;
   const tcPrev = tasks.filter((t) => t.completionDate && inWin(+new Date(t.completionDate), prevStart, curStart)).length;
 
   return {
@@ -424,7 +426,7 @@ export type ComplaintCompareData = CompareData;
 export function complaintCompareData(outletIds: string[]): ComplaintCompareData {
   const ids = new Set(outletIds);
   const comp = SEED.complaints.filter((c) => ids.has(c.outletId));
-  return buildCompareData(comp.map((c) => c.createdAt), NOW);
+  return buildCompareData(comp.map((c) => c.createdAt), NOW());
 }
 
 /* ---------------- analytics aggregations ---------------- */
@@ -553,8 +555,8 @@ export interface ReportData {
   perOutlet: { name: string; code: string; hospCur: number; hospPrev: number; hygCur: number; hygPrev: number }[];
 }
 
-/** Current window vs previous equal window across a set of outlets (default 30 days, ending NOW). */
-export function reportPeriodCompare(outletIds: string[], days = 30, endMs = NOW): ReportData {
+/** Current window vs previous equal window across a set of outlets (default 30 days, ending now). */
+export function reportPeriodCompare(outletIds: string[], days = 30, endMs = NOW()): ReportData {
   const ids = new Set(outletIds);
   const win = days * 86_400_000;
   const end = endMs;
@@ -800,18 +802,18 @@ export function qualitySeries(outletIds: string[]): QualitySeries {
   };
 
   const DAY = 86_400_000;
-  const ny = new Date(NOW).getUTCFullYear();
-  const nm = new Date(NOW).getUTCMonth();
+  const ny = new Date(NOW()).getUTCFullYear();
+  const nm = new Date(NOW()).getUTCMonth();
 
   const daily = build(
     Array.from({ length: 14 }, (_, i) => {
-      const end = NOW - (13 - i) * DAY;
+      const end = NOW() - (13 - i) * DAY;
       return { label: new Date(end).toLocaleDateString("en-US", { day: "numeric", month: "short", timeZone: "UTC" }), start: end - DAY, end };
     }),
   );
   const weekly = build(
     Array.from({ length: 8 }, (_, i) => {
-      const end = NOW - (7 - i) * 7 * DAY;
+      const end = NOW() - (7 - i) * 7 * DAY;
       return { label: `W${i + 1}`, start: end - 7 * DAY, end };
     }),
   );
@@ -846,7 +848,7 @@ export function areaWeeklyQuality(outletIds: string[], weeks = 52): { labels: st
   }
   const WK = 7 * 86_400_000;
   const wins = Array.from({ length: weeks }, (_, i) => {
-    const end = NOW - (weeks - 1 - i) * WK;
+    const end = NOW() - (weeks - 1 - i) * WK;
     return { start: end - WK, end };
   });
   const labels = wins.map((w) => new Date(w.end).toLocaleDateString("en-US", { day: "numeric", month: "short", timeZone: "UTC" }));

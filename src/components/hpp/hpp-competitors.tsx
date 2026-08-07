@@ -7,9 +7,11 @@ import { toast } from "sonner";
 import { saveCompetitorPriceAction, deleteCompetitorPriceAction } from "@/lib/actions/hpp-competitors";
 import type { CompetitorInsight, CompetitorPrice, PricePosition } from "@/lib/data/hpp-competitors";
 import { Button } from "@/components/ui/button";
-import { Field, Input, Textarea } from "@/components/ui/input";
+import { Field, Input } from "@/components/ui/input";
 import { StatTile } from "@/components/ui/stat";
 import { Combobox } from "@/components/ui/combobox";
+import { SegmentedTabs } from "@/components/ui/segmented-tabs";
+import { DatePicker } from "@/components/ui/date-picker";
 import { Sheet, SheetContent } from "@/components/ui/sheet";
 import { useConfirm } from "@/components/ui/confirm";
 import { Reveal } from "@/components/hpp/motion";
@@ -31,18 +33,19 @@ const POSITION_META: Record<PricePosition, { label: string; pill: string; icon: 
 type Form = {
   menuId: string;
   menuName: string;
-  competitor: string;
-  price: string;
   city: string;
   source: string;
-  note: string;
   observedAt: string;
 };
 
 const today = () => new Date().toISOString().slice(0, 10);
-const empty = (): Form => ({ menuId: "", menuName: "", competitor: "", price: "", city: "", source: "GoFood", note: "", observedAt: today() });
+const empty = (): Form => ({ menuId: "", menuName: "", city: "", source: "GoFood", observedAt: today() });
 
-export type MenuOption = { id: string; name: string; brand: string };
+export type MenuOption = { id: string; name: string; brand: string; source: "hpp" | "esb" };
+
+/** Satu baris kompetitor di dalam form — sekali input bisa banyak sekaligus. */
+type CompetitorRow = { key: string; competitor: string; price: string; note: string };
+const blankRow = (): CompetitorRow => ({ key: Math.random().toString(36).slice(2, 9), competitor: "", price: "", note: "" });
 
 /**
  * Analytics Harga Kompetitor — menyandingkan harga kita dengan harga pasar,
@@ -63,6 +66,11 @@ export function HppCompetitors({
   const router = useRouter();
   const { confirm, dialog } = useConfirm();
   const [form, setForm] = React.useState<Form>(empty);
+  // Menu kita bisa diambil dari hasil Kalkulator HPP atau dari katalog ESB.
+  const [menuSource, setMenuSource] = React.useState<"hpp" | "esb">("hpp");
+  // Survei harga selalu mengumpulkan beberapa kompetitor sekaligus; memaksa
+  // satu-satu berarti mengisi menu, kota, sumber dan tanggal berulang kali.
+  const [rows2, setRows2] = React.useState<CompetitorRow[]>([blankRow(), blankRow(), blankRow()]);
   const [formOpen, setFormOpen] = React.useState(false);
   const [saving, setSaving] = React.useState(false);
   const [position, setPosition] = React.useState("all");
@@ -80,29 +88,41 @@ export function HppCompetitors({
 
   async function save() {
     if (!form.menuName.trim()) return toast.error("Pilih atau tulis nama menu dulu.");
-    if (!form.competitor.trim()) return toast.error("Isi nama kompetitornya.");
-    if (num(form.price) <= 0) return toast.error("Harga kompetitor harus lebih dari 0.");
+    const filled = rows2.filter((r) => r.competitor.trim() && num(r.price) > 0);
+    if (filled.length === 0) return toast.error("Isi minimal satu kompetitor beserta harganya.");
+    const halfFilled = rows2.find((r) => (r.competitor.trim() ? 0 : 1) !== (num(r.price) > 0 ? 0 : 1));
+    if (halfFilled) return toast.error("Ada baris yang hanya terisi sebagian — lengkapi nama dan harganya.");
+
     setSaving(true);
     try {
-      const res = await saveCompetitorPriceAction({
-        menuId: form.menuId || null,
-        menuName: form.menuName.trim(),
-        competitor: form.competitor.trim(),
-        price: num(form.price),
-        city: form.city.trim() || null,
-        source: form.source || null,
-        note: form.note.trim() || null,
-        observedAt: form.observedAt || today(),
-      });
-      if (res?.error) return toast.error(res.error);
-      toast.success("Harga kompetitor dicatat");
+      // Menu ESB belum tentu punya catatan HPP, jadi hanya id dari kalkulator
+      // yang ditautkan; sisanya dicocokkan lewat nama.
+      const linkedId = form.menuId.startsWith("esb:") ? null : form.menuId || null;
+      for (const r of filled) {
+        const res = await saveCompetitorPriceAction({
+          menuId: linkedId,
+          menuName: form.menuName.trim(),
+          competitor: r.competitor.trim(),
+          price: num(r.price),
+          city: form.city.trim() || null,
+          source: form.source || null,
+          note: r.note.trim() || null,
+          observedAt: form.observedAt || today(),
+        });
+        if (res?.error) return toast.error(res.error);
+      }
+      toast.success(`${filled.length} harga kompetitor dicatat`);
       setForm(empty);
+      setRows2([blankRow(), blankRow(), blankRow()]);
       setFormOpen(false);
       router.refresh();
     } finally {
       setSaving(false);
     }
   }
+
+  const setRow = (key: string, patch: Partial<CompetitorRow>) =>
+    setRows2((rs) => rs.map((r) => (r.key === key ? { ...r, ...patch } : r)));
 
   async function remove(p: CompetitorPrice) {
     if (!(await confirm({ title: `Hapus data ${p.competitor}?`, description: `${p.menuName} · ${rp(p.price)}`, confirmLabel: "Hapus", tone: "danger" }))) return;
@@ -135,6 +155,7 @@ export function HppCompetitors({
           <Button
             onClick={() => {
               setForm(empty);
+              setRows2([blankRow(), blankRow(), blankRow()]);
               setFormOpen(true);
             }}
           >
@@ -291,6 +312,26 @@ export function HppCompetitors({
         <SheetContent title="Catat Harga Kompetitor" description="Satu baris = satu harga dari satu kompetitor. Makin banyak pembanding, makin akurat posisinya.">
           {/* Sheet merender children apa adanya — padding & scroll dari sini. */}
           <div className="flex-1 space-y-4 overflow-y-auto p-5">
+            <div>
+              <p className="mb-1.5 text-xs font-medium text-muted-foreground">Sumber menu</p>
+              <SegmentedTabs
+                value={menuSource}
+                onChange={(v) => {
+                  setMenuSource(v as "hpp" | "esb");
+                  setForm((f) => ({ ...f, menuId: "", menuName: "" }));
+                }}
+                items={[
+                  { value: "hpp", label: `Hasil HPP (${menus.filter((m) => m.source === "hpp").length})` },
+                  { value: "esb", label: `Menu ESB (${menus.filter((m) => m.source === "esb").length})` },
+                ]}
+              />
+              <p className="mt-1.5 text-[11px] text-muted-foreground">
+                {menuSource === "hpp"
+                  ? "Menu yang sudah dihitung di Kalkulator HPP — rekomendasi harganya bisa langsung diuji ke HPP."
+                  : "Seluruh menu yang dijual menurut katalog ESB, termasuk yang HPP-nya belum dihitung."}
+              </p>
+            </div>
+
             <Field label="Menu kita">
               <Combobox
                 portal
@@ -302,7 +343,10 @@ export function HppCompetitors({
                   const m = menus.find((x) => x.id === v);
                   setForm((f) => ({ ...f, menuId: v, menuName: m ? m.name : f.menuName }));
                 }}
-                options={[{ value: "", label: "Tulis manual (menu belum ada)" }, ...menus.map((m) => ({ value: m.id, label: m.name, hint: m.brand }))]}
+                options={[
+                  { value: "", label: "Tulis manual (menu belum ada)" },
+                  ...menus.filter((m) => m.source === menuSource).map((m) => ({ value: m.id, label: m.name, hint: m.brand })),
+                ]}
               />
             </Field>
 
@@ -315,30 +359,71 @@ export function HppCompetitors({
             </Field>
 
             <div className="grid grid-cols-2 gap-3">
-              <Field label="Kompetitor">
-                <Input value={form.competitor} onChange={(e) => setForm({ ...form, competitor: e.target.value })} placeholder="mis. Kopi Kenangan" />
-              </Field>
-              <Field label="Harga">
-                <Input value={form.price} onChange={(e) => setForm({ ...form, price: e.target.value })} placeholder="Rp" inputMode="numeric" />
-              </Field>
-            </div>
-
-            <div className="grid grid-cols-2 gap-3">
               <Field label="Kota">
                 <Input value={form.city} onChange={(e) => setForm({ ...form, city: e.target.value })} placeholder="mis. Sintang" />
               </Field>
               <Field label="Sumber">
-                <Combobox portal matchTriggerWidth value={form.source} onChange={(v) => setForm({ ...form, source: v })} options={SOURCES.map((s) => ({ value: s, label: s }))} />
+                <Combobox portal matchTriggerWidth value={form.source} onChange={(v) => setForm({ ...form, source: v })} options={SOURCES.map((x) => ({ value: x, label: x }))} />
               </Field>
             </div>
 
             <Field label="Tanggal pengamatan">
-              <Input type="date" value={form.observedAt} onChange={(e) => setForm({ ...form, observedAt: e.target.value })} />
+              <DatePicker value={form.observedAt} onChange={(v) => setForm({ ...form, observedAt: v })} />
             </Field>
 
-            <Field label="Catatan (opsional)">
-              <Textarea rows={3} value={form.note} onChange={(e) => setForm({ ...form, note: e.target.value })} placeholder="mis. ukuran cup lebih kecil, promo bundling" />
-            </Field>
+            {/* Beberapa kompetitor sekaligus: menu, kota, sumber dan tanggal di
+                atas berlaku untuk semua baris, jadi tidak perlu diulang. */}
+            <div>
+              <div className="mb-1.5 flex items-center justify-between gap-2">
+                <p className="text-xs font-medium text-muted-foreground">
+                  Kompetitor ({rows2.filter((r) => r.competitor.trim() && num(r.price) > 0).length} terisi)
+                </p>
+                <button
+                  type="button"
+                  onClick={() => setRows2((rs) => [...rs, blankRow()])}
+                  className="inline-flex items-center gap-1 rounded-lg border border-border px-2 py-1 text-[11px] font-medium text-muted-foreground transition-colors hover:text-foreground"
+                >
+                  <Plus className="size-3" /> Tambah baris
+                </button>
+              </div>
+              <div className="space-y-2">
+                {rows2.map((r, i) => (
+                  <div key={r.key} className="rounded-xl border border-border bg-muted/20 p-2.5">
+                    <div className="flex items-start gap-2">
+                      <div className="grid min-w-0 flex-1 grid-cols-2 gap-2">
+                        <Input
+                          value={r.competitor}
+                          onChange={(e) => setRow(r.key, { competitor: e.target.value })}
+                          placeholder={i === 0 ? "mis. Kopi Kenangan" : "Nama kompetitor"}
+                        />
+                        <Input
+                          value={r.price}
+                          onChange={(e) => setRow(r.key, { price: e.target.value })}
+                          placeholder="Rp"
+                          inputMode="numeric"
+                        />
+                      </div>
+                      {rows2.length > 1 && (
+                        <button
+                          type="button"
+                          onClick={() => setRows2((rs) => rs.filter((x) => x.key !== r.key))}
+                          title="Hapus baris"
+                          className="grid size-9 shrink-0 place-items-center rounded-lg text-muted-foreground transition-colors hover:bg-red-500/10 hover:text-red-500"
+                        >
+                          <Trash2 className="size-4" />
+                        </button>
+                      )}
+                    </div>
+                    <Input
+                      value={r.note}
+                      onChange={(e) => setRow(r.key, { note: e.target.value })}
+                      placeholder="Catatan (opsional) — mis. cup lebih kecil"
+                      className="mt-2"
+                    />
+                  </div>
+                ))}
+              </div>
+            </div>
 
             <div className="flex flex-wrap gap-2 pt-2">
               <Button onClick={save} disabled={saving} className="flex-1">

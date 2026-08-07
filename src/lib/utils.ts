@@ -1,6 +1,6 @@
 import { type ClassValue, clsx } from "clsx";
 import { twMerge } from "tailwind-merge";
-import { DEMO_NOW } from "./now";
+import { nowMs } from "./now";
 
 /** Tailwind-aware className merge. */
 export function cn(...inputs: ClassValue[]) {
@@ -45,10 +45,10 @@ export function formatDate(input: string | Date) {
 }
 
 /** Relative time from the demo "now" (e.g. "3 days ago", "in 2 days").
- *  Anchored to DEMO_NOW — NOT the wall clock — so it matches the seeded data. */
+ *  Dihitung dari jam nyata, sehingga "2 hari lagi" benar-benar dua hari lagi. */
 export function fromNow(input: string | Date) {
   const d = typeof input === "string" ? new Date(input) : input;
-  const diff = d.getTime() - DEMO_NOW;
+  const diff = d.getTime() - nowMs();
   const abs = Math.abs(diff);
   const rtf = new Intl.RelativeTimeFormat("en", { numeric: "auto" });
   const units: [Intl.RelativeTimeFormatUnit, number][] = [
@@ -79,10 +79,10 @@ export function initials(name: string) {
     .join("");
 }
 
-/** Whether a due date is overdue relative to the demo "now" (DEMO_NOW), so
+/** Apakah tenggat sudah lewat dibanding waktu sekarang, sehingga
  *  overdue flags stay consistent with the seeded data regardless of the real
  *  wall clock. */
 export function isOverdue(due: string | Date | null | undefined) {
   if (!due) return false;
-  return new Date(due).getTime() < DEMO_NOW;
+  return new Date(due).getTime() < nowMs();
 }

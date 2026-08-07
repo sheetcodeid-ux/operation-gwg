@@ -6,7 +6,7 @@ import { can, canAccessOutlet } from "@/lib/rbac";
 import { getOutlet, getOutlets } from "@/lib/data/store";
 import { createEvent, deleteEvent, updateEvent, updateEventMilestone } from "@/lib/data/mutations";
 import { persistMessage } from "@/lib/data/persist";
-import { DEMO_NOW_ISO } from "@/lib/now";
+import { nowIso } from "@/lib/now";
 import { eventInputSchema, eventMilestoneSchema, parseInput } from "@/lib/validation";
 import type { EventMilestone, EventStatus } from "@/lib/types";
 
@@ -48,8 +48,8 @@ export async function createEventAction(input: EventInput) {
       picId: clean.picId || outlet.picId,
       description: clean.description,
       budget: clean.budget,
-      startDate: clean.startDate || DEMO_NOW_ISO,
-      endDate: clean.endDate || DEMO_NOW_ISO,
+      startDate: clean.startDate || nowIso(),
+      endDate: clean.endDate || nowIso(),
       milestone: clean.milestone,
       status: clean.status,
     });
@@ -77,8 +77,8 @@ export async function updateEventAction(id: string, input: EventInput) {
     picId: clean.picId || outlet.picId,
     description: clean.description,
     budget: clean.budget,
-    startDate: clean.startDate || DEMO_NOW_ISO,
-    endDate: clean.endDate || DEMO_NOW_ISO,
+    startDate: clean.startDate || nowIso(),
+    endDate: clean.endDate || nowIso(),
     milestone: clean.milestone,
     status: clean.status,
   });

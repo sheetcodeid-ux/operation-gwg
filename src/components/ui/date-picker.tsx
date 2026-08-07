@@ -6,13 +6,15 @@ import { CalendarDays, ChevronLeft, ChevronRight } from "lucide-react";
 import { addMonths, endOfMonth, startOfDay, startOfMonth } from "@/lib/date-range";
 import { cn } from "@/lib/utils";
 
-const WEEKDAYS = ["Su", "Mo", "Tu", "We", "Th", "Fr", "Sa"];
+const WEEKDAYS = ["Min", "Sen", "Sel", "Rab", "Kam", "Jum", "Sab"];
 const PANEL_W = 288;
 const PANEL_H = 320;
 
 function parse(value: string): Date {
   const d = new Date(`${value}T00:00:00`);
-  return Number.isNaN(+d) ? new Date(2026, 5, 1) : d;
+  // Nilai kosong/rusak jatuh ke HARI INI, bukan tanggal tetap — kalender yang
+  // membuka bulan yang sudah lewat memaksa pengguna menggeser bulan tiap kali.
+  return Number.isNaN(+d) ? new Date() : d;
 }
 function isoOf(d: Date) {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
@@ -112,7 +114,7 @@ export function DatePicker({ value, onChange, className }: { value: string; onCh
 }
 
 export function Calendar({ selected, onPick }: { selected: Date | null; onPick: (d: Date) => void }) {
-  const [anchor, setAnchor] = React.useState<Date>(startOfMonth(selected ?? new Date(2026, 5, 1)));
+  const [anchor, setAnchor] = React.useState<Date>(startOfMonth(selected ?? new Date()));
   const first = startOfMonth(anchor);
   const total = endOfMonth(anchor).getDate();
   const lead = first.getDay();

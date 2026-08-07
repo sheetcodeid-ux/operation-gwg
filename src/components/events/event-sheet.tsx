@@ -7,7 +7,7 @@ import { toast } from "sonner";
 import { EVENT_MILESTONES, EVENT_STATUS_META } from "@/lib/constants";
 import type { EventMilestone, EventStatus } from "@/lib/types";
 import { createEventAction, updateEventAction } from "@/lib/actions/events";
-import { DEMO_NOW } from "@/lib/now";
+import { nowMs } from "@/lib/now";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetTrigger, useSheetControl } from "@/components/ui/sheet";
@@ -33,7 +33,7 @@ const MILESTONES = EVENT_MILESTONES.map((m) => ({ value: m.value, label: m.label
 const STATUSES = Object.keys(EVENT_STATUS_META) as EventStatus[];
 
 function defaultDateISO(offsetDays = 0) {
-  const d = new Date(DEMO_NOW);
+  const d = new Date(nowMs());
   d.setUTCDate(d.getUTCDate() + offsetDays);
   return d.toISOString().slice(0, 10);
 }
