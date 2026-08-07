@@ -73,9 +73,21 @@ export async function r2Put(key: string, data: ArrayBuffer, contentType: string)
   }
 }
 
-/** Presigned GET URL to view a private object (cheap HMAC, no network call). */
-export async function presignGet(key: string, expiresSec = 21_600): Promise<string> {
-  const signed = await client().sign(`${objectUrl(key)}?X-Amz-Expires=${expiresSec}`, {
+/**
+ * Presigned GET URL to view a private object (cheap HMAC, no network call).
+ *
+ * `downloadName` ditandatangani SEBAGAI BAGIAN dari URL lewat
+ * response-content-disposition. Menempelkan parameter apa pun setelah URL
+ * ditandatangani akan membatalkan tanda tangannya — R2 menghitung ulang dari
+ * seluruh query string, lalu menolak dengan SignatureDoesNotMatch.
+ */
+export async function presignGet(key: string, expiresSec = 21_600, downloadName?: string): Promise<string> {
+  const params = new URLSearchParams({ "X-Amz-Expires": String(expiresSec) });
+  if (downloadName) {
+    const safe = downloadName.replace(/"/g, "").slice(0, 120);
+    params.set("response-content-disposition", `attachment; filename="${safe}"`);
+  }
+  const signed = await client().sign(`${objectUrl(key)}?${params.toString()}`, {
     method: "GET",
     aws: { signQuery: true },
   });
