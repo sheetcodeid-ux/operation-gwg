@@ -34,7 +34,9 @@ import {
 } from "@/lib/actions/hc";
 import {
   forceDownload,
+  HC_CONTRACT_LIKE,
   HC_DOC_LABEL,
+  HC_NEEDS_CHRONOLOGY,
   HC_STATUS_META,
   isImageUrl,
   type HcStatus,
@@ -354,7 +356,10 @@ function DetailPanel({ row, canDelete, onDeleted }: { row: HcSubmission; canDele
         <InfoRow label="Tanggal Pengajuan" value={fmtDateTime(row.createdAt)} />
 
         {row.docType === "bpjs" && <InfoRow label="Nama Ibu Kandung" value={d.motherName} />}
-        {row.docType === "pkwt" && (
+        {/* Ikuti daftar bersama, bukan satu jenis saja: Perpanjang PKWT juga
+            berbasis kontrak, dan SP 1-3 serta PHK juga memakai kronologi.
+            Sebelumnya isian itu diisi pemohon tapi tidak pernah terlihat HC. */}
+        {HC_CONTRACT_LIKE.includes(row.docType) && (
           <>
             <InfoRow label="Posisi / Jabatan" value={d.position} />
             <InfoRow label="Durasi Kontrak" value={d.contractDuration} />
@@ -362,10 +367,13 @@ function DetailPanel({ row, canDelete, onDeleted }: { row: HcSubmission; canDele
             <InfoRow label="Gaji" value={d.salary} />
           </>
         )}
-        {row.docType === "teguran" && (
+        {HC_NEEDS_CHRONOLOGY.includes(row.docType) && (
           <>
             <InfoRow label="Tingkat Teguran" value={d.warningLevel} />
-            <InfoRow label="Kronologi" value={<span className="whitespace-pre-wrap">{d.chronology}</span>} />
+            <InfoRow
+              label={row.docType === "phk" ? "Alasan / Kronologi PHK" : "Kronologi"}
+              value={<span className="whitespace-pre-wrap">{d.chronology}</span>}
+            />
           </>
         )}
 

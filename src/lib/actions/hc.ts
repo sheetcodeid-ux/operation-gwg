@@ -17,7 +17,7 @@ import {
 } from "@/lib/data/hc";
 import { canReachMenu } from "@/lib/nav";
 import { r2Enabled, r2Put, R2_PREFIX } from "@/lib/storage/r2";
-import type { HcDetails, HcDocType } from "@/lib/hc-shared";
+import { HC_DOC_TYPES, HC_NEEDS_CHRONOLOGY, type HcDetails, type HcDocType } from "@/lib/hc-shared";
 import type { UserProfile } from "@/lib/types";
 
 // Access is department-aware (mirrors the sidebar): supervisors submit, Human
@@ -81,12 +81,20 @@ export async function submitHcRequestAction(input: HcSubmitInput) {
   if (!employeeName) return { error: "Nama karyawan wajib diisi." };
   if (!input.outletId) return { error: "Cabang wajib dipilih." };
   if (!canAccessOutlet(user!, input.outletId, getOutlets())) return { error: "Cabang di luar cakupan Anda." };
-  if (!["bpjs", "pkwt", "teguran"].includes(input.docType)) return { error: "Jenis pengajuan tidak valid." };
+  // Divalidasi terhadap daftar jenis dokumen yang sama dengan dropdown-nya.
+  // Sebelumnya hanya tiga jenis yang diterima ("bpjs", "pkwt", "teguran")
+  // padahal dropdown menawarkan dua belas — sembilan sisanya selalu ditolak
+  // dengan "Jenis pengajuan tidak valid" setelah formulirnya diisi penuh.
+  if (!HC_DOC_TYPES.some((t) => t.value === input.docType)) return { error: "Jenis pengajuan tidak valid." };
 
   // Doc-type-specific required fields.
   const d = input.details ?? {};
   if (input.docType === "bpjs" && !d.motherName?.trim()) return { error: "Nama ibu kandung wajib untuk BPJS." };
-  if (input.docType === "teguran" && !d.chronology?.trim()) return { error: "Kronologi pelanggaran wajib untuk Surat Teguran." };
+  // Teguran, SP 1-3 dan PHK sama-sama butuh kronologi — ikuti daftar bersamanya,
+  // bukan hanya "teguran" seperti sebelumnya (klien sudah memakai daftar ini).
+  if (HC_NEEDS_CHRONOLOGY.includes(input.docType) && !d.chronology?.trim()) {
+    return { error: "Kronologi pelanggaran wajib untuk jenis pengajuan ini." };
+  }
 
   const rec = await createHcSubmission({
     employeeName,
