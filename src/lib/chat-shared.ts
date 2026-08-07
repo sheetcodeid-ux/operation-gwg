@@ -8,22 +8,58 @@
 export interface ChatAttachment {
   path: string;
   name: string;
+  /**
+   * Tipe MIME saat diunggah.
+   *
+   * Disimpan ikut lampiran karena nama berkas tidak selalu berekstensi — foto
+   * dari kamera ponsel sering datang tanpa ".jpg" — dan tanpa ini foto akan
+   * tampil sebagai kartu berkas, bukan gambar.
+   */
+  type?: string;
   /** URL bertanda tangan, diisi server saat percakapan dibaca. */
   url?: string;
 }
 
+/** Apakah lampiran ini gambar — dari tipe MIME, atau ekstensi sebagai cadangan. */
+export function isImageAttachment(a: { name: string; type?: string }): boolean {
+  if (a.type) return a.type.startsWith("image/");
+  return /\.(png|jpe?g|gif|webp|avif|heic|heif|bmp)$/i.test(a.name);
+}
+
 /** Rujukan ke catatan lain di aplikasi yang sedang dibahas di obrolan. */
 export interface ChatRef {
-  kind: "pengajuan";
+  kind: "pengajuan" | "hygiene";
   id: string;
   title: string;
-  /** Label jenis pengajuan ("Design", "Pelatihan", …). */
+  /** Label jenis ("Pengajuan Design", "Temuan Hygiene", …). */
   kindLabel: string;
   statusLabel: string;
   requesterName: string;
   href: string;
   /** Rujukan yang catatannya sudah dihapus tetap ditampilkan, tapi mati. */
   missing?: boolean;
+  /** Temuan hygiene: foto bagian yang kotor + apakah masih menggantung. */
+  photoUrl?: string;
+  pending?: boolean;
+}
+
+/** Satu temuan hygiene yang dikirim untuk ditindaklanjuti. */
+export interface HygieneFollowup {
+  id: string;
+  hygieneId: string;
+  outletName: string;
+  area: string;
+  note: string;
+  photoUrl?: string;
+  raisedByName: string;
+  assignedToName: string;
+  assignedTo: string;
+  status: "menunggu" | "selesai";
+  resolution: string;
+  proof: ChatAttachment[];
+  resolvedAt: string | null;
+  createdAt: string;
+  threadId: string | null;
 }
 
 export interface ChatMessage {

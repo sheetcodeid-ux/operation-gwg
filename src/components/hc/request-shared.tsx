@@ -408,18 +408,21 @@ function RequestCard({
             </span>
           </span>
         </button>
-        <div className="flex shrink-0 items-center gap-2">
-          {actions}
-          <button
-            type="button"
-            onClick={onToggle}
-            aria-label={open ? "Tutup rincian" : "Lihat rincian"}
-            className="grid size-8 shrink-0 place-items-center rounded-lg text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-          >
-            <ChevronDown className={cn("size-4 transition-transform duration-200", open && "rotate-180")} />
-          </button>
-        </div>
+        <button
+          type="button"
+          onClick={onToggle}
+          aria-label={open ? "Tutup rincian" : "Lihat rincian"}
+          className="grid size-8 shrink-0 place-items-center rounded-lg text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+        >
+          <ChevronDown className={cn("size-4 transition-transform duration-200", open && "rotate-180")} />
+        </button>
       </div>
+
+      {/* Tombol aksi diletakkan di BARIS SENDIRI, bukan di samping judul.
+          Sebaris, dua tombol memaksa lebar minimum yang melebihi layar ponsel —
+          judulnya menyusut sampai hilang dan seluruh halaman ikut melebar
+          sehingga bisa digeser ke samping. */}
+      {actions && <div className="mt-3 flex flex-wrap items-center gap-2 sm:justify-end">{actions}</div>}
 
       <div id={bodyId} className={cn("grid transition-[grid-template-rows] duration-200", open ? "grid-rows-[1fr]" : "grid-rows-[0fr]")}>
         <div className="overflow-hidden">

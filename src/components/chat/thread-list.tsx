@@ -18,6 +18,7 @@ import { Avatar } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Popover } from "@/components/ui/popover";
 import { cn } from "@/lib/utils";
+import { ReplyStatsButton } from "./reply-stats";
 import { shortTime, type ChatThread } from "@/lib/chat-shared";
 
 /**
@@ -47,6 +48,7 @@ export function ThreadList({
   onToggleFavorite,
   onToggleArchive,
   onExit,
+  onOpenStats,
   className,
 }: {
   threads: ChatThread[];
@@ -62,6 +64,8 @@ export function ThreadList({
   /** Keluar dari Pesan. Di ponsel topbar disembunyikan, jadi ini satu-satunya
    *  jalan kembali ke halaman sebelumnya. */
   onExit: () => void;
+  /** Buka ringkasan kecepatan balas + temuan yang menggantung. */
+  onOpenStats: () => void;
   className?: string;
 }) {
   const [q, setQ] = React.useState("");
@@ -127,6 +131,7 @@ export function ThreadList({
                 <CheckCheck className="size-[18px]" />
               </button>
             )}
+            <ReplyStatsButton onClick={onOpenStats} />
             <Button size="sm" onClick={onNew} className="size-9 shrink-0 p-0" aria-label="Percakapan baru">
               <MessageSquarePlus className="size-[18px]" />
             </Button>

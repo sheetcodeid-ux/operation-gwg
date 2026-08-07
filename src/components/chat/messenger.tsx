@@ -21,6 +21,7 @@ import { DetailPanel } from "./detail-panel";
 import { MessageThread } from "./message-thread";
 import { NewChatDialog } from "./new-chat-dialog";
 import { ThreadList } from "./thread-list";
+import { ReplyStatsSheet } from "./reply-stats";
 import { useViewportHeight } from "./use-viewport-height";
 import type { ChatMessage, ChatPerson, ChatThread, PickableRequest } from "@/lib/chat-shared";
 
@@ -68,6 +69,7 @@ export function Messenger({
   const [newOpen, setNewOpen] = React.useState(false);
   const [detailOpen, setDetailOpen] = React.useState(false);
   const [pending, setPending] = React.useState<Pending[]>([]);
+  const [statsOpen, setStatsOpen] = React.useState(false);
 
   /**
    * Riwayat yang sudah pernah dibuka, disimpan per percakapan.
@@ -189,6 +191,12 @@ export function Messenger({
     };
   }, [activeId]);
 
+  /** Ambil ulang isi satu percakapan — setelah temuan hygiene ditutup, misalnya. */
+  const refresh = React.useCallback(async (id: string) => {
+    const msgs = await chatPollAction(id);
+    if (msgs) setCache((cur) => ({ ...cur, [id]: msgs }));
+  }, []);
+
   async function send(body: string, files: File[], ref: PickableRequest | null): Promise<boolean> {
     const id = activeId;
     if (!id) return false;
@@ -289,6 +297,7 @@ export function Messenger({
           onToggleFavorite={(id, on) => void toggleFavorite(id, on)}
           onToggleArchive={(id, on) => void toggleArchive(id, on)}
           onExit={() => router.back()}
+          onOpenStats={() => setStatsOpen(true)}
           className={cnPane(activeId !== null)}
         />
 
@@ -303,6 +312,7 @@ export function Messenger({
             onSend={send}
             onBack={() => setActiveId(null)}
             onOpenDetail={() => setDetailOpen(true)}
+            onRefresh={() => activeId && void refresh(activeId)}
             className="flex min-w-0 flex-1"
           />
         ) : (
@@ -333,6 +343,7 @@ export function Messenger({
           setThreads(await chatThreadsAction());
         }}
       />
+      <ReplyStatsSheet open={statsOpen} onOpenChange={setStatsOpen} />
       {dialog}
     </>
   );

@@ -20,6 +20,7 @@ import {
   unreadTotal,
   REQUEST_HREF,
 } from "@/lib/data/chat";
+import { replyStats, type ReplyStat } from "@/lib/data/chat-stats";
 import { getHcRequest, listHcRequests } from "@/lib/data/hc-requests";
 import { canSeeRequest, requestScopeFor } from "@/lib/data/request-scope";
 import { presignPut, r2Enabled, R2_PREFIX } from "@/lib/storage/r2";
@@ -326,4 +327,11 @@ export async function chatRequestDetailAction(id: string): Promise<RequestDetail
     attachments: r.attachments.map((a) => ({ name: a.name, url: a.url })),
     href: REQUEST_HREF[r.kind] ?? "/pengajuan",
   };
+}
+
+/** Statistik kecepatan balas di percakapan yang diikuti pengguna. */
+export async function chatReplyStatsAction(): Promise<ReplyStat[]> {
+  const user = await getSessionUser();
+  if (!user || !dbEnabled) return [];
+  return replyStats(user.id);
 }

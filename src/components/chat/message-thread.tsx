@@ -1,13 +1,23 @@
 "use client";
 
 import * as React from "react";
-import { ArrowLeft, Check, CheckCheck, ExternalLink, FileText, Info, Loader2, Plus, Send, Users, X } from "lucide-react";
+import { ArrowLeft, Check, CheckCheck, ExternalLink, FileText, Info, Loader2, Plus, Send, TriangleAlert, Users, X } from "lucide-react";
 import { toast } from "sonner";
 import { Avatar } from "@/components/ui/avatar";
 import { cn } from "@/lib/utils";
 import { AttachMenu } from "./attach-menu";
 import { RequestDetailSheet } from "./request-detail-sheet";
-import { clockTime, dayLabel, type ChatMessage, type ChatRef, type ChatThread, type PickableRequest } from "@/lib/chat-shared";
+import { FollowupSheet } from "./followup-sheet";
+import {
+  clockTime,
+  dayLabel,
+  isImageAttachment,
+  type ChatAttachment,
+  type ChatMessage,
+  type ChatRef,
+  type ChatThread,
+  type PickableRequest,
+} from "@/lib/chat-shared";
 
 /**
  * Kolom tengah: judul percakapan, riwayat pesan, dan kotak tulis.
@@ -26,6 +36,7 @@ export function MessageThread({
   onSend,
   onBack,
   onOpenDetail,
+  onRefresh,
   className,
 }: {
   thread: ChatThread;
@@ -38,6 +49,8 @@ export function MessageThread({
   onSend: (body: string, files: File[], ref: PickableRequest | null) => Promise<boolean>;
   onBack: () => void;
   onOpenDetail: () => void;
+  /** Muat ulang percakapan — dipakai setelah temuan hygiene ditutup. */
+  onRefresh: () => void;
   className?: string;
 }) {
   const [text, setText] = React.useState("");
@@ -45,6 +58,14 @@ export function MessageThread({
   const [ref, setRef] = React.useState<PickableRequest | null>(null);
   const [menuOpen, setMenuOpen] = React.useState(false);
   const [openRequest, setOpenRequest] = React.useState<string | null>(null);
+  const [openFollowup, setOpenFollowup] = React.useState<string | null>(null);
+  const [photo, setPhoto] = React.useState<{ url: string; name: string } | null>(null);
+
+  // Satu bentuk kartu, dua jenis isi — masing-masing punya panelnya sendiri.
+  const openRef = React.useCallback((r: ChatRef) => {
+    if (r.kind === "hygiene") setOpenFollowup(r.id);
+    else setOpenRequest(r.id);
+  }, []);
   const bottomRef = React.useRef<HTMLDivElement>(null);
   const boxRef = React.useRef<HTMLTextAreaElement>(null);
   const fileRef = React.useRef<HTMLInputElement>(null);
@@ -136,7 +157,13 @@ export function MessageThread({
           </div>
         ) : (
           <>
-            <MessageGroups messages={messages} meId={meId} isGroup={thread.kind === "group"} onOpenRequest={setOpenRequest} />
+            <MessageGroups
+              messages={messages}
+              meId={meId}
+              isGroup={thread.kind === "group"}
+              onOpenRef={openRef}
+              onOpenPhoto={(url, name) => setPhoto({ url, name })}
+            />
             {pending.map((p) => (
               <PendingBubble key={p.id} body={p.body} request={p.ref} />
             ))}
@@ -146,6 +173,13 @@ export function MessageThread({
       </div>
 
       <RequestDetailSheet requestId={openRequest} onClose={() => setOpenRequest(null)} />
+      <FollowupSheet
+        followupId={openFollowup}
+        meId={meId}
+        onClose={() => setOpenFollowup(null)}
+        onResolved={onRefresh}
+      />
+      <PhotoLightbox photo={photo} onClose={() => setPhoto(null)} />
 
       {/* Kotak tulis */}
       <div className="relative shrink-0 border-t border-border bg-card px-3 py-2.5 sm:px-4">
@@ -285,12 +319,14 @@ function MessageGroups({
   messages,
   meId,
   isGroup,
-  onOpenRequest,
+  onOpenRef,
+  onOpenPhoto,
 }: {
   messages: ChatMessage[];
   meId: string;
   isGroup: boolean;
-  onOpenRequest: (id: string) => void;
+  onOpenRef: (ref: ChatRef) => void;
+  onOpenPhoto: (url: string, name: string) => void;
 }) {
   const out: React.ReactNode[] = [];
   let lastDay = "";
@@ -319,7 +355,8 @@ function MessageGroups({
         mine={m.senderId === meId}
         grouped={grouped}
         showName={isGroup}
-        onOpenRequest={onOpenRequest}
+        onOpenRef={onOpenRef}
+        onOpenPhoto={onOpenPhoto}
       />,
     );
   });
@@ -332,13 +369,15 @@ function Bubble({
   mine,
   grouped,
   showName,
-  onOpenRequest,
+  onOpenRef,
+  onOpenPhoto,
 }: {
   m: ChatMessage;
   mine: boolean;
   grouped: boolean;
   showName: boolean;
-  onOpenRequest: (id: string) => void;
+  onOpenRef: (ref: ChatRef) => void;
+  onOpenPhoto: (url: string, name: string) => void;
 }) {
   return (
     <div className={cn("flex items-end gap-2", mine ? "justify-end" : "justify-start", grouped ? "mt-0.5" : "mt-3")}>
@@ -349,12 +388,12 @@ function Bubble({
           <span className="px-1 text-[11px] font-medium text-muted-foreground">{m.senderName}</span>
         )}
 
-        {m.ref && <RequestCard r={m.ref} mine={mine} onOpen={onOpenRequest} />}
+        {m.ref && <RequestCard r={m.ref} mine={mine} onOpen={onOpenRef} />}
 
         {m.attachments.length > 0 && (
           <div className={cn("flex w-full flex-col gap-1", mine ? "items-end" : "items-start")}>
             {m.attachments.map((a) => (
-              <Attachment key={a.path} name={a.name} url={a.url} mine={mine} />
+              <Attachment key={a.path} a={a} mine={mine} onOpenPhoto={onOpenPhoto} />
             ))}
           </div>
         )}
@@ -405,73 +444,143 @@ function PendingBubble({ body, request: r }: { body: string; request: PickableRe
   );
 }
 
-/** Lampiran: foto ditampilkan sebagai gambar, sisanya sebagai kartu berkas. */
-function Attachment({ name, url, mine }: { name: string; url?: string; mine: boolean }) {
-  const isImage = /\.(png|jpe?g|gif|webp|avif|heic)$/i.test(name);
-
-  if (isImage && url) {
+/** Lampiran: foto jadi kotak yang bisa diperbesar, sisanya kartu berkas. */
+function Attachment({
+  a,
+  mine,
+  onOpenPhoto,
+}: {
+  a: ChatAttachment;
+  mine: boolean;
+  onOpenPhoto: (url: string, name: string) => void;
+}) {
+  // Foto dibuka DI DALAM aplikasi, bukan tab baru: membuka tab berarti keluar
+  // dari percakapan, dan kembali ke sana butuh dua langkah lagi.
+  if (isImageAttachment(a) && a.url) {
+    const url = a.url;
     return (
-      <a href={url} target="_blank" rel="noopener noreferrer" className="block overflow-hidden rounded-xl ring-1 ring-border">
+      <button
+        type="button"
+        onClick={() => onOpenPhoto(url, a.name)}
+        className="block overflow-hidden rounded-xl ring-1 ring-border transition-opacity hover:opacity-90"
+      >
         {/* Foto obrolan sudah dikompres saat diunggah — lewati optimisasi gambar. */}
         {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img src={url} alt={name} loading="lazy" className="max-h-64 w-auto max-w-full object-cover" />
-      </a>
+        <img
+          src={url}
+          alt={a.name}
+          loading="lazy"
+          className="h-auto max-h-72 w-full max-w-[16rem] object-cover sm:max-w-[18rem]"
+        />
+      </button>
     );
   }
 
   return (
     <a
-      href={url ?? "#"}
+      href={a.url ?? "#"}
       target="_blank"
       rel="noopener noreferrer"
       className={cn(
         "flex max-w-full items-center gap-2 rounded-xl border px-3 py-2 text-xs transition-colors",
-        url ? "hover:bg-muted/60" : "pointer-events-none opacity-60",
+        a.url ? "hover:bg-muted/60" : "pointer-events-none opacity-60",
         mine ? "border-brand-500/30 bg-brand-500/10" : "border-border bg-card",
       )}
     >
       <FileText className="size-4 shrink-0 text-muted-foreground" />
-      <span className="truncate text-foreground">{name}</span>
+      <span className="truncate text-foreground">{a.name}</span>
     </a>
   );
 }
 
 /**
- * Kartu pengajuan di dalam obrolan.
+ * Kartu rujukan di dalam obrolan — pengajuan atau temuan hygiene.
  *
- * Menekannya membuka detail DI ATAS percakapan, bukan berpindah halaman —
- * setelah membaca, yang dibutuhkan biasanya membalas di obrolan yang sama.
+ * Menekannya membuka detail DI ATAS percakapan, bukan berpindah halaman.
+ * Temuan hygiene yang belum ditutup ditandai MERAH: itu tugas yang menggantung,
+ * bukan sekadar lampiran.
  */
-function RequestCard({ r, mine, onOpen }: { r: ChatRef; mine: boolean; onOpen: (id: string) => void }) {
+function RequestCard({ r, mine, onOpen }: { r: ChatRef; mine: boolean; onOpen: (ref: ChatRef) => void }) {
+  const alert = r.kind === "hygiene" && r.pending;
+
   const body = (
     <>
-      <div className="flex items-center gap-2">
-        <span className="rounded-md bg-muted px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+      {r.photoUrl && (
+        <span className="mb-2 block overflow-hidden rounded-lg">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src={r.photoUrl} alt={r.title} loading="lazy" className="h-32 w-full object-cover" />
+        </span>
+      )}
+      <span className="flex items-center gap-2">
+        <span
+          className={cn(
+            "rounded-md px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide",
+            alert ? "bg-red-500/15 text-red-700 dark:text-red-300" : "bg-muted text-muted-foreground",
+          )}
+        >
           {r.kindLabel}
         </span>
         {!r.missing && <ExternalLink className="ml-auto size-3.5 shrink-0 text-muted-foreground" />}
-      </div>
-      <p className="mt-1.5 line-clamp-2 text-sm font-semibold text-foreground">{r.title}</p>
+      </span>
+      <span className="mt-1.5 line-clamp-2 block text-sm font-semibold text-foreground">{r.title}</span>
       {r.missing ? (
-        <p className="mt-0.5 text-[11px] text-muted-foreground">Catatannya sudah tidak ada.</p>
+        <span className="mt-0.5 block text-[11px] text-muted-foreground">Catatannya sudah tidak ada.</span>
       ) : (
-        <p className="mt-0.5 text-[11px] text-muted-foreground">
-          {r.requesterName} · <span className="font-medium text-foreground">{r.statusLabel}</span>
-        </p>
+        <span
+          className={cn(
+            "mt-1 flex items-center gap-1 text-[11px]",
+            alert ? "font-semibold text-red-600 dark:text-red-400" : "text-muted-foreground",
+          )}
+        >
+          {alert && <TriangleAlert className="size-3 shrink-0" />}
+          {alert ? r.statusLabel : `${r.requesterName} · ${r.statusLabel}`}
+        </span>
       )}
     </>
   );
 
   const cls = cn(
     "block w-full max-w-full rounded-xl border p-3 text-left transition-colors",
-    mine ? "border-brand-500/40 bg-brand-500/10" : "border-border bg-card",
+    alert ? "border-red-500/50 bg-red-500/5" : mine ? "border-brand-500/40 bg-brand-500/10" : "border-border bg-card",
     r.missing ? "opacity-70" : "hover:bg-muted/50",
   );
 
   if (r.missing) return <div className={cls}>{body}</div>;
   return (
-    <button type="button" onClick={() => onOpen(r.id)} className={cls}>
+    <button type="button" onClick={() => onOpen(r)} className={cls}>
       {body}
     </button>
+  );
+}
+
+/** Foto diperbesar di dalam aplikasi, bukan tab baru. */
+function PhotoLightbox({ photo, onClose }: { photo: { url: string; name: string } | null; onClose: () => void }) {
+  React.useEffect(() => {
+    if (!photo) return;
+    const onKey = (e: KeyboardEvent) => e.key === "Escape" && onClose();
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [photo, onClose]);
+
+  if (!photo) return null;
+  return (
+    <div
+      className="fixed inset-0 z-[80] flex items-center justify-center bg-black/90 p-4 backdrop-blur-sm"
+      onClick={onClose}
+    >
+      <button
+        type="button"
+        onClick={onClose}
+        aria-label="Tutup"
+        className="absolute right-4 top-4 grid size-10 place-items-center rounded-full bg-white/10 text-white transition-colors hover:bg-white/20"
+      >
+        <X className="size-5" />
+      </button>
+      <div className="flex max-h-full flex-col items-center gap-3" onClick={(e) => e.stopPropagation()}>
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img src={photo.url} alt={photo.name} className="max-h-[82dvh] w-auto max-w-full object-contain" />
+        <p className="max-w-full truncate text-xs text-white/70">{photo.name}</p>
+      </div>
+    </div>
   );
 }

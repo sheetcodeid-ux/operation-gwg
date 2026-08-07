@@ -14,6 +14,7 @@ import { Combobox } from "@/components/ui/combobox";
 import { DataTable } from "@/components/ui/data-table";
 import { Dialog, DialogContent, DialogTrigger } from "@/components/ui/dialog";
 import { MonthFilter } from "@/components/work/division-filter";
+import { FollowupButton } from "./followup-button";
 import { useI18n } from "@/lib/i18n/provider";
 import { cn, formatDate } from "@/lib/utils";
 
@@ -35,7 +36,17 @@ export interface HygieneRow {
 
 /** Documentation gallery: photos grouped by area, collapsible, 3-per-row,
  *  with a clean framed lightbox on click (instead of the raw storage URL). */
-function AuditPhotoGallery({ photos, caption }: { photos: Attachment[]; caption: string }) {
+function AuditPhotoGallery({
+  photos,
+  caption,
+  auditId,
+  outletId,
+}: {
+  photos: Attachment[];
+  caption: string;
+  auditId: string;
+  outletId: string;
+}) {
   const groups = React.useMemo(() => {
     const map = new Map<string, Attachment[]>();
     for (const p of photos) {
@@ -70,17 +81,21 @@ function AuditPhotoGallery({ photos, caption }: { photos: Attachment[]; caption:
             {open && (
               <div className="grid grid-cols-3 gap-2 p-3">
                 {items.map((p) => (
-                  <button
-                    key={p.id}
-                    type="button"
-                    onClick={() => setActive(p)}
-                    className="group relative aspect-square w-full overflow-hidden rounded-lg ring-1 ring-border transition-transform hover:scale-[1.02]"
-                  >
-                    {/* Plain img (not next/image): photos are already compressed at
-                        capture, so we skip Vercel Image Optimization entirely. */}
-                    {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img src={p.url} alt={p.name} loading="lazy" className="absolute inset-0 size-full object-cover" />
-                  </button>
+                  <div key={p.id} className="group relative aspect-square w-full">
+                    <button
+                      type="button"
+                      onClick={() => setActive(p)}
+                      className="absolute inset-0 overflow-hidden rounded-lg ring-1 ring-border transition-transform hover:scale-[1.02]"
+                    >
+                      {/* Plain img (not next/image): photos are already compressed at
+                          capture, so we skip Vercel Image Optimization entirely. */}
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img src={p.url} alt={p.name} loading="lazy" className="absolute inset-0 size-full object-cover" />
+                    </button>
+                    {/* Temuan dikirim per FOTO: "ada yang kotor di outlet X" tanpa
+                        menunjuk bagian mana tidak bisa ditindaklanjuti. */}
+                    <FollowupButton hygieneId={auditId} outletId={outletId} photo={p} area={label} />
+                  </div>
                 ))}
               </div>
             )}
@@ -214,7 +229,12 @@ export function HygieneExplorer({
                 </button>
               </DialogTrigger>
               <DialogContent title="Dokumentasi Audit" description={`${row.original.outlet} · ${formatDate(row.original.date)}`} align="center" className="max-w-2xl">
-                <AuditPhotoGallery photos={photos} caption={`${row.original.outlet} · ${formatDate(row.original.date)}`} />
+                <AuditPhotoGallery
+                  photos={photos}
+                  caption={`${row.original.outlet} · ${formatDate(row.original.date)}`}
+                  auditId={row.original.id}
+                  outletId={row.original.outletId}
+                />
               </DialogContent>
             </Dialog>
           );

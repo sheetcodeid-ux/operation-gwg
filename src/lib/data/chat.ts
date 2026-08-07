@@ -4,6 +4,7 @@ import { randomUUID } from "node:crypto";
 import { db, dbEnabled } from "./db";
 import { selectAll } from "./paged";
 import { getUser, getUsers } from "./store";
+import { getFollowups } from "./hygiene-followup";
 import { isR2Key, presignGet, r2KeyOf } from "@/lib/storage/r2";
 import { ROLE_LABEL } from "@/lib/constants";
 import { HC_REQUEST_KIND_LABEL, statusMeta, type HcRequestKind, type HcRequestStatus } from "@/lib/hc-request";
@@ -87,8 +88,8 @@ export function chatDirectory(meId: string): ChatPerson[] {
 
 const attachmentsOf = (v: unknown): ChatAttachment[] =>
   (Array.isArray(v) ? v : [])
-    .filter((a): a is { path: string; name: string } => !!a && typeof a === "object" && "path" in a && "name" in a)
-    .map((a) => ({ path: String(a.path), name: String(a.name) }));
+    .filter((a): a is { path: string; name: string; type?: string } => !!a && typeof a === "object" && "path" in a)
+    .map((a) => ({ path: String(a.path), name: String(a.name ?? "berkas"), type: a.type ? String(a.type) : undefined }));
 
 /** Apakah `userId` benar-benar peserta percakapan itu. */
 async function isParticipant(threadId: string, userId: string): Promise<boolean> {
@@ -280,6 +281,42 @@ async function refMap(ids: string[]): Promise<Map<string, ChatRef>> {
   return out;
 }
 
+/** Temuan hygiene sebagai kartu obrolan — merah selama belum ditindaklanjuti. */
+async function hygieneRefMap(ids: string[]): Promise<Map<string, ChatRef>> {
+  const out = new Map<string, ChatRef>();
+  const unique = [...new Set(ids)];
+  if (unique.length === 0) return out;
+  const found = await getFollowups(unique);
+  for (const id of unique) {
+    const f = found.get(id);
+    if (!f) {
+      out.set(id, {
+        kind: "hygiene",
+        id,
+        title: "Temuan sudah dihapus",
+        kindLabel: "Temuan Hygiene",
+        statusLabel: "—",
+        requesterName: "—",
+        href: "/hygiene",
+        missing: true,
+      });
+      continue;
+    }
+    out.set(id, {
+      kind: "hygiene",
+      id,
+      title: `${f.area || "Area"} — ${f.outletName}`,
+      kindLabel: "Temuan Hygiene",
+      statusLabel: f.status === "selesai" ? "Sudah ditindaklanjuti" : "Belum ditindaklanjuti",
+      requesterName: f.raisedByName,
+      href: "/hygiene",
+      photoUrl: f.photoUrl,
+      pending: f.status !== "selesai",
+    });
+  }
+  return out;
+}
+
 /** Tanda tangani lampiran supaya bisa dibuka (bucket-nya privat). */
 async function signAttachments(list: ChatMessage[]): Promise<void> {
   const paths = [...new Set(list.flatMap((m) => m.attachments.map((a) => a.path)))];
@@ -324,7 +361,11 @@ export async function readThread(threadId: string, meId: string): Promise<ChatMe
     .limit(MESSAGE_PAGE);
 
   const rows = ((data ?? []) as MessageRow[]).reverse();
-  const refs = await refMap(rows.filter((r) => r.ref_kind === "pengajuan" && r.ref_id).map((r) => r.ref_id!));
+  // Dua jenis rujukan, masing-masing SEKALI baca untuk seluruh percakapan.
+  const [refs, hyg] = await Promise.all([
+    refMap(rows.filter((r) => r.ref_kind === "pengajuan" && r.ref_id).map((r) => r.ref_id!)),
+    hygieneRefMap(rows.filter((r) => r.ref_kind === "hygiene" && r.ref_id).map((r) => r.ref_id!)),
+  ]);
 
   const out: ChatMessage[] = rows.map((r) => ({
     id: r.id,
@@ -333,7 +374,7 @@ export async function readThread(threadId: string, meId: string): Promise<ChatMe
     senderName: getUser(r.sender_id)?.name ?? "Pengguna dihapus",
     body: r.body,
     attachments: attachmentsOf(r.attachments),
-    ref: r.ref_id ? (refs.get(r.ref_id) ?? null) : null,
+    ref: r.ref_id ? ((r.ref_kind === "hygiene" ? hyg.get(r.ref_id) : refs.get(r.ref_id)) ?? null) : null,
     createdAt: r.created_at,
   }));
   await signAttachments(out);
@@ -421,7 +462,7 @@ export interface SendInput {
   senderId: string;
   body: string;
   attachments?: ChatAttachment[];
-  ref?: { kind: "pengajuan"; id: string } | null;
+  ref?: { kind: "pengajuan" | "hygiene"; id: string } | null;
 }
 
 export async function sendMessage(input: SendInput): Promise<{ id?: string; error?: string }> {
@@ -435,7 +476,7 @@ export async function sendMessage(input: SendInput): Promise<{ id?: string; erro
     thread_id: input.threadId,
     sender_id: input.senderId,
     body: input.body,
-    attachments: attachments.map((a) => ({ path: a.path, name: a.name })),
+    attachments: attachments.map((a) => ({ path: a.path, name: a.name, type: a.type ?? null })),
     ref_kind: input.ref?.kind ?? null,
     ref_id: input.ref?.id ?? null,
     created_at: now,
