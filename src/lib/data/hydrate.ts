@@ -72,8 +72,13 @@ const AVATAR_TTL_MS = 5 * 60_000;
  *  instead (users.avatar_url here; hygiene.photos on the Hygiene page). */
 const USER_COLUMNS =
   "id,name,email,role,area_id,outlet_ids,phone,country,department,jabatan,grants,active,created_at";
+// `ratings` sengaja TIDAK ikut: 772 kB untuk 1.089 audit, hanya ditulis saat
+// membuat audit dan tidak pernah dibaca satu pun tampilan. Menariknya tiap
+// hidrasi membuat respons hygiene membengkak sampai koneksinya putus
+// ("TypeError: terminated"), dan begitu hidrasi gagal SELURUH modul menyajikan
+// data lama — audit yang baru diunggah seolah hilang dari tabel.
 const HYGIENE_COLUMNS =
-  "id,outlet_id,area_id,date,shift,inspector_name,supervisor_name,ratings,findings,is_clean,hygiene_score,created_at";
+  "id,outlet_id,area_id,date,shift,inspector_name,supervisor_name,findings,is_clean,hygiene_score,created_at";
 
 export function ensureHydrated(): Promise<void> {
   if (!dbEnabled) return Promise.resolve();
@@ -136,10 +141,26 @@ async function avatarMap(): Promise<Map<string, string | null>> {
 async function hydrate() {
   const supabase = db();
 
+  /**
+   * Satu tabel gagal TIDAK boleh menjatuhkan seluruh hidrasi.
+   *
+   * Sebelumnya `get` melempar, dan karena semua tabel diambil dalam satu
+   * Promise.all, satu respons yang putus membuat users/tasks/complaints ikut
+   * tidak diperbarui — pengguna melihat data lama di mana-mana tanpa tanda
+   * apa pun. Sekarang tabel yang gagal dilewati (isinya dipertahankan), yang
+   * berhasil tetap diperbarui.
+   */
+  const failed: string[] = [];
   const get = async (table: string, columns = "*") => {
-    const { data, error } = await supabase.from(table).select(columns).limit(10000);
-    if (error) throw new Error(`${table}: ${error.message}`);
-    return (data ?? []) as unknown as Record<string, unknown>[];
+    try {
+      const { data, error } = await supabase.from(table).select(columns).limit(10000);
+      if (error) throw new Error(error.message);
+      return (data ?? []) as unknown as Record<string, unknown>[];
+    } catch (e) {
+      console.error(`[hydrate] ${table} gagal dimuat — mempertahankan data sebelumnya:`, e);
+      failed.push(table);
+      return null;
+    }
   };
 
   // Reference data changes only through admin actions, so it rides a slower
@@ -165,44 +186,55 @@ async function hydrate() {
     ]);
 
     // Empty database (first ever boot) → publish the demo seed once.
-    if (users.length === 0) {
+    if (users && users.length === 0) {
       await pushSeed();
       g.__GWG_REF_AT__ = Date.now();
       return;
     }
 
-    replaceInPlace(
-      SEED.users,
-      users.map((r) => {
-        const u = userFromRow(r);
-        u.avatarUrl = avatars.get(u.id) ?? null;
-        return u;
-      }),
-    );
-    replaceInPlace(SEED.areas, areas.map(areaFromRow));
-    replaceInPlace(SEED.outlets, outlets.map(outletFromRow));
-    loadCredentials(
-      (creds as unknown as { user_id: string; username: string; password_hash: string }[]).map((r) => ({
-        userId: r.user_id,
-        username: r.username,
-        passwordHash: r.password_hash,
-      })),
-    );
-    g.__GWG_REF_AT__ = Date.now();
+    if (users) {
+      replaceInPlace(
+        SEED.users,
+        users.map((r) => {
+          const u = userFromRow(r);
+          u.avatarUrl = avatars.get(u.id) ?? null;
+          return u;
+        }),
+      );
+    }
+    if (areas) replaceInPlace(SEED.areas, areas.map(areaFromRow));
+    if (outlets) replaceInPlace(SEED.outlets, outlets.map(outletFromRow));
+    if (creds) {
+      loadCredentials(
+        (creds as unknown as { user_id: string; username: string; password_hash: string }[]).map((r) => ({
+          userId: r.user_id,
+          username: r.username,
+          passwordHash: r.password_hash,
+        })),
+      );
+    }
+    if (users && areas && outlets && creds) g.__GWG_REF_AT__ = Date.now();
   }
 
-  replaceInPlace(SEED.hospitality, hospitality.map(hospitalityFromRow));
-  replaceInPlace(
-    SEED.tasks,
-    tasks.map(taskFromRow).sort((a, b) => +new Date(b.createdAt) - +new Date(a.createdAt)),
-  );
-  replaceInPlace(SEED.events, events.map(eventFromRow));
-  replaceInPlace(SEED.hygiene, hygiene.map(hygieneFromRow));
-  replaceInPlace(SEED.complaints, complaints.map(complaintFromRow));
-  replaceInPlace(
-    SEED.notifications,
-    notifications.map(notificationFromRow).sort((a, b) => +new Date(b.createdAt) - +new Date(a.createdAt)),
-  );
+  if (hospitality) replaceInPlace(SEED.hospitality, hospitality.map(hospitalityFromRow));
+  if (tasks) {
+    replaceInPlace(
+      SEED.tasks,
+      tasks.map(taskFromRow).sort((a, b) => +new Date(b.createdAt) - +new Date(a.createdAt)),
+    );
+  }
+  if (events) replaceInPlace(SEED.events, events.map(eventFromRow));
+  if (hygiene) replaceInPlace(SEED.hygiene, hygiene.map(hygieneFromRow));
+  if (complaints) replaceInPlace(SEED.complaints, complaints.map(complaintFromRow));
+  if (notifications) {
+    replaceInPlace(
+      SEED.notifications,
+      notifications.map(notificationFromRow).sort((a, b) => +new Date(b.createdAt) - +new Date(a.createdAt)),
+    );
+  }
+  // Gagal sebagian ⇒ jangan tandai segar, supaya permintaan berikutnya mencoba
+  // lagi alih-alih menunggu satu TTL penuh dengan data yang belum lengkap.
+  if (failed.length > 0) throw new Error(`tabel gagal dimuat: ${failed.join(", ")}`);
 }
 
 async function pushSeed() {

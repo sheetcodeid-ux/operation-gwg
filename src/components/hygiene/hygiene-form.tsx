@@ -21,6 +21,34 @@ import { useI18n } from "@/lib/i18n/provider";
 import { cn } from "@/lib/utils";
 
 const MIN_PHOTOS = 3;
+
+/**
+ * Unggah satu foto ke R2, dengan percobaan ulang.
+ *
+ * Audit penuh berarti dua puluhan foto berturut-turut dari HP di lapangan.
+ * Satu kedipan sinyal membuat fetch gagal ("Load failed" di Safari), dan versi
+ * sebelumnya langsung membatalkan seluruh unggahan sehingga petugas harus
+ * mengulang dari nol — persis keluhan yang masuk. Jeda antar percobaan
+ * dinaikkan bertahap supaya jaringan sempat pulih.
+ */
+async function putPhotoWithRetry(url: string, file: File, name: string, attempts = 3): Promise<void> {
+  let lastMessage = "";
+  for (let attempt = 1; attempt <= attempts; attempt++) {
+    try {
+      const put = await fetch(url, { method: "PUT", body: file, headers: { "content-type": file.type } });
+      if (put.ok) return;
+      const detail = await put.text().catch(() => "");
+      lastMessage = `${put.status} ${detail.replace(/<[^>]+>/g, " ").slice(0, 100)}`.trim();
+      // 4xx selain 408/429 berarti permintaannya memang ditolak — mengulang
+      // hanya membuang waktu petugas.
+      if (put.status >= 400 && put.status < 500 && put.status !== 408 && put.status !== 429) break;
+    } catch {
+      lastMessage = "koneksi terputus";
+    }
+    if (attempt < attempts) await new Promise((r) => setTimeout(r, attempt * 1200));
+  }
+  throw new Error(`"${name}" gagal setelah ${attempts}× percobaan (${lastMessage}).`);
+}
 /** One draft per device — a supervisor fills one inspection at a time. */
 const DRAFT_KEY = "hygiene-form";
 
@@ -128,6 +156,9 @@ function HygieneForm({ outlets }: { outlets: { id: string; name: string }[] }) {
   const [findingDraft, setFindingDraft] = useState("");
   const [openSection, setOpenSection] = useState<HygieneSection>("front");
   const [photos, setPhotos] = useState<Record<string, CapturedPhoto[]>>({});
+  // Kemajuan unggah foto — audit penuh bisa 20+ foto dan tanpa ini layarnya
+  // tampak menggantung sampai selesai.
+  const [uploadInfo, setUploadInfo] = useState<{ done: number; total: number } | null>(null);
   const outletName = outlets.find((o) => o.id === outletId)?.name;
 
   // ── Draft autosave (weak-signal safety) ──────────────────────────────────
@@ -244,16 +275,19 @@ function HygieneForm({ outlets }: { outlets: { id: string; name: string }[] }) {
           try {
             for (let i = 0; i < entries.length; i++) {
               const { id, url } = presign.items[i];
-              const put = await fetch(url, { method: "PUT", body: entries[i].file, headers: { "content-type": entries[i].file.type } });
-              if (!put.ok) {
-                const detail = await put.text().catch(() => "");
-                throw new Error(`R2 ${put.status} ${detail.replace(/<[^>]+>/g, " ").slice(0, 120)}`);
-              }
+              setUploadInfo({ done: i, total: entries.length });
+              // Audit penuh berarti 20+ foto berturut-turut dari HP di lapangan;
+              // satu kedipan sinyal saja dulu membatalkan SELURUH unggahan dan
+              // memaksa mengulang dari nol. Tiap foto kini dicoba ulang.
+              await putPhotoWithRetry(url, entries[i].file, entries[i].file.name);
               uploaded.push({ id, name: entries[i].label || entries[i].file.name, url: "", kind: "photo", size: entries[i].file.size });
             }
+            setUploadInfo({ done: entries.length, total: entries.length });
           } catch (e) {
             toast.error(`Upload foto gagal: ${e instanceof Error ? e.message : "koneksi bermasalah"}`);
             return;
+          } finally {
+            setUploadInfo(null);
           }
         } else {
           // Fallback: upload through the server to Supabase (size-batched).
@@ -496,6 +530,26 @@ function HygieneForm({ outlets }: { outlets: { id: string; name: string }[] }) {
           </div>
         )}
       </Field>
+
+      {uploadInfo && (
+        <div className="mt-4 rounded-xl border border-border bg-muted/30 p-3">
+          <div className="mb-1.5 flex items-center justify-between gap-2 text-[11px]">
+            <span className="text-foreground/80">
+              Mengunggah foto {Math.min(uploadInfo.done + 1, uploadInfo.total)}/{uploadInfo.total}
+            </span>
+            <span className="font-semibold tabular-nums text-foreground">
+              {Math.round((uploadInfo.done / Math.max(1, uploadInfo.total)) * 100)}%
+            </span>
+          </div>
+          <div className="h-1.5 overflow-hidden rounded-full bg-muted">
+            <div
+              className="h-full rounded-full bg-primary transition-[width] duration-200"
+              style={{ width: `${Math.round((uploadInfo.done / Math.max(1, uploadInfo.total)) * 100)}%` }}
+            />
+          </div>
+          <p className="mt-1.5 text-[10px] text-muted-foreground">Jangan tutup halaman ini sampai selesai.</p>
+        </div>
+      )}
 
       <div className="mt-5 flex justify-end gap-2">
         <Button variant="ghost" onClick={() => setOpen(false)} disabled={pending}>

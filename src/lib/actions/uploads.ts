@@ -33,7 +33,9 @@ export async function presignHygieneUploadsAction(files: { name: string; type: s
     if (!f.type.startsWith("image/")) return { error: `"${f.name}" bukan gambar.` } as const;
     const safe = f.name.replace(/[^a-zA-Z0-9._-]/g, "_").slice(-50);
     const key = `hygiene/${user.id}/${Date.now()}-${randomUUID().slice(0, 8)}-${safe}`;
-    const url = await presignPut(key, f.type, 600);
+    // 10 menit terlalu mepet: audit penuh 20+ foto dari HP di lapangan bisa
+    // melewatinya, dan URL yang kedaluwarsa di tengah jalan menggagalkan sisanya.
+    const url = await presignPut(key, f.type, 3600);
     items.push({ id: `${R2_PREFIX}${key}`, key, url });
   }
   return { mode: "r2", items } as const;

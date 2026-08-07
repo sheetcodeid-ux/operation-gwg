@@ -196,7 +196,7 @@ export const hygieneFromRow = (r: any): HygieneAudit => ({
   shift: r.shift,
   inspectorName: r.inspector_name,
   supervisorName: r.supervisor_name,
-  ratings: r.ratings,
+  ratings: r.ratings ?? {},
   findings: r.findings ?? [],
   photos: r.photos ?? [],
   isClean: r.is_clean,
