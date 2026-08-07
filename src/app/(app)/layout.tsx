@@ -8,8 +8,7 @@ import { I18nProvider } from "@/lib/i18n/provider";
 import type { Lang } from "@/lib/i18n/dict";
 import { Sidebar } from "@/components/layout/sidebar";
 import { Topbar } from "@/components/layout/topbar";
-import { Breadcrumbs } from "@/components/layout/breadcrumbs";
-import { Footer } from "@/components/layout/footer";
+import { MainShell } from "@/components/layout/main-shell";
 import { SidebarProvider } from "@/components/layout/sidebar-context";
 import { NavLockProvider } from "@/components/layout/nav-lock";
 import { ScrollReset } from "@/components/layout/scroll-reset";
@@ -56,21 +55,17 @@ export default async function AppLayout({ children }: { children: React.ReactNod
       <SidebarProvider>
         <NavLockProvider>
           <ScrollReset />
-          <div className="min-h-dvh">
+          {/* h-dvh + overflow-hidden: halaman layar-penuh (Pesan) mengatur
+              gulirannya sendiri di dalam panel. Halaman biasa tetap menggulir
+              seperti sebelumnya lewat pembungkus overflow-y-auto di bawah. */}
+          <div className="flex h-dvh flex-col overflow-hidden">
             <Topbar user={user} notifications={notifications} navItems={navItems} allowedKeys={allowedKeys} homeDivision={home} isAdmin={isAdmin} grants={grants} department={department} />
-            <div className="flex">
+            <div className="flex min-h-0 flex-1">
               <Sidebar items={navItems} allowedKeys={allowedKeys} homeDivision={home} isAdmin={isAdmin} grants={grants} department={department} />
               {/* overflow-x-clip: no child may widen the page — wide content must
                   scroll inside its own overflow-x-auto wrapper (tables, kanban). */}
-              <div className="min-w-0 flex-1 overflow-x-clip">
-                <main className="px-4 py-6 sm:px-6 lg:px-8">
-                  {/* Home points at /dashboard — only show it to users who can
-                      actually open the dashboard (hides the dead home icon for
-                      supervisors and department members like Human Capital). */}
-                  <Breadcrumbs showHome={canReachMenu(user, "dashboard")} />
-                  {children}
-                </main>
-                <Footer />
+              <div data-scroll-root className="flex min-h-0 min-w-0 flex-1 flex-col overflow-x-clip overflow-y-auto">
+                <MainShell showHome={canReachMenu(user, "dashboard")}>{children}</MainShell>
               </div>
             </div>
             <CommandPalette

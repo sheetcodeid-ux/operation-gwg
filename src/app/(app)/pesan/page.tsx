@@ -1,13 +1,19 @@
-import { MessagesSquare } from "lucide-react";
 import type { Metadata } from "next";
 import { Suspense } from "react";
 import { requireSessionUser } from "@/lib/auth";
 import { chatDirectory, chatEnabled, listThreads } from "@/lib/data/chat";
-import { PageHeader } from "@/components/ui/page-header";
 import { Messenger } from "@/components/chat/messenger";
 
 export const metadata: Metadata = { title: "Pesan" };
 
+/**
+ * Pesan mengisi seluruh area isi — tanpa breadcrumb, judul halaman, atau footer.
+ *
+ * Ini aplikasi, bukan dokumen: judul percakapan sudah ada di kepala kolom
+ * tengah, dan kerangka halaman biasa hanya membuat isinya lebih tinggi dari
+ * layar sehingga semuanya ikut bergeser saat digulir. Pelepasan kerangka itu
+ * diatur di `MainShell`.
+ */
 export default async function PesanPage() {
   const user = await requireSessionUser();
 
@@ -18,23 +24,18 @@ export default async function PesanPage() {
     Promise.resolve(chatDirectory(user.id)),
   ]);
 
+  if (!chatEnabled()) {
+    return (
+      <div className="grid flex-1 place-items-center p-6">
+        <p className="text-sm text-muted-foreground">Pesan membutuhkan basis data yang aktif.</p>
+      </div>
+    );
+  }
+
   return (
-    <div className="w-full">
-      <PageHeader
-        icon={MessagesSquare}
-        title="Pesan"
-        description="Terhubung ke seluruh tim. Pengajuan bisa diteruskan ke sini untuk dibahas atau diminta revisinya."
-      />
-      {chatEnabled() ? (
-        // useSearchParams di dalam Messenger butuh batas Suspense saat prerender.
-        <Suspense fallback={<div className="h-[calc(100dvh-13rem)] min-h-[26rem] rounded-xl border border-border" />}>
-          <Messenger meId={user.id} initialThreads={threads} people={people} />
-        </Suspense>
-      ) : (
-        <p className="rounded-xl border border-border bg-card p-6 text-sm text-muted-foreground">
-          Pesan membutuhkan basis data yang aktif.
-        </p>
-      )}
-    </div>
+    // useSearchParams di dalam Messenger butuh batas Suspense saat prerender.
+    <Suspense fallback={<div className="flex-1" />}>
+      <Messenger meId={user.id} initialThreads={threads} people={people} />
+    </Suspense>
   );
 }

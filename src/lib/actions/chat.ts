@@ -17,10 +17,11 @@ import {
   threadPeople,
   unreadTotal,
 } from "@/lib/data/chat";
-import { getHcRequest } from "@/lib/data/hc-requests";
-import { canSeeRequest } from "@/lib/data/request-scope";
+import { getHcRequest, listHcRequests } from "@/lib/data/hc-requests";
+import { canSeeRequest, requestScopeFor } from "@/lib/data/request-scope";
 import { presignPut, r2Enabled, R2_PREFIX } from "@/lib/storage/r2";
-import type { ChatAttachment, ChatMessage, ChatPerson, ChatThread } from "@/lib/chat-shared";
+import { HC_REQUEST_KIND_LABEL, statusMeta, type HcRequestKind } from "@/lib/hc-request";
+import type { ChatAttachment, ChatMessage, ChatPerson, ChatThread, PickableRequest } from "@/lib/chat-shared";
 
 /**
  * Pesan — obrolan internal, terbuka untuk SEMUA pengguna yang sudah masuk.
@@ -52,15 +53,23 @@ export async function chatUnreadTotalAction(): Promise<number> {
   return unreadTotal(user.id);
 }
 
-/** Buka satu percakapan: pesannya + pesertanya. `null` bila bukan peserta. */
+/**
+ * Buka satu percakapan: pesannya + pesertanya. `null` bila bukan peserta.
+ *
+ * Ketiga pekerjaannya berjalan BERSAMAAN. Berurutan, tiap perpindahan
+ * percakapan menumpuk tiga perjalanan ke database — itu jeda yang terasa saat
+ * berpindah cepat antar orang.
+ */
 export async function chatOpenAction(threadId: string): Promise<{ messages: ChatMessage[]; people: ChatPerson[] } | null> {
   const user = await getSessionUser();
   if (!user || !dbEnabled) return null;
-  const messages = await readThread(threadId, user.id);
+  const [messages, people] = await Promise.all([
+    readThread(threadId, user.id),
+    threadPeople(threadId, user.id),
+    markRead(threadId, user.id),
+  ]);
   if (!messages) return null;
-  const people = (await threadPeople(threadId, user.id)) ?? [];
-  await markRead(threadId, user.id);
-  return { messages, people };
+  return { messages, people: people ?? [] };
 }
 
 /**
@@ -243,4 +252,25 @@ export async function chatUploadAction(formData: FormData): Promise<{ path?: str
   const { error } = await db().storage.from("system-attachments").upload(path, file, { contentType: file.type });
   if (error) return { error: `Upload gagal: ${error.message}` };
   return { path, name: file.name };
+}
+
+/**
+ * Pengajuan yang bisa diteruskan pengguna ke obrolan.
+ *
+ * Dipakai pemilih lampiran: tekan ikon "Pengajuan Design", muncul daftar design
+ * yang memang boleh ia lihat. Cakupannya persis sama dengan halaman Pengajuan —
+ * obrolan tidak boleh jadi jalan memutar untuk melihat pengajuan cabang lain.
+ */
+export async function chatPickableRequestsAction(kind: HcRequestKind): Promise<PickableRequest[]> {
+  const user = await getSessionUser();
+  if (!user || !dbEnabled) return [];
+  const rows = await listHcRequests({ ...requestScopeFor(user), kind });
+  return rows.slice(0, 50).map((r) => ({
+    id: r.id,
+    title: r.title,
+    kindLabel: HC_REQUEST_KIND_LABEL[r.kind],
+    statusLabel: statusMeta(r.kind, r.status).label,
+    requesterName: r.requesterName,
+    createdAt: r.createdAt,
+  }));
 }

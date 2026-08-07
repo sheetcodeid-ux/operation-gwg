@@ -103,3 +103,13 @@ export function previewOf(m: { body: string; attachments: unknown[]; ref: unknow
   if (m.attachments.length > 0) return `${m.attachments.length} lampiran`;
   return "";
 }
+
+/** Satu pengajuan yang siap dipilih untuk diteruskan ke obrolan. */
+export interface PickableRequest {
+  id: string;
+  title: string;
+  kindLabel: string;
+  statusLabel: string;
+  requesterName: string;
+  createdAt: string;
+}

@@ -4,10 +4,9 @@ import { randomUUID } from "node:crypto";
 import { db, dbEnabled } from "./db";
 import { selectAll } from "./paged";
 import { getUser, getUsers } from "./store";
-import { getHcRequest } from "./hc-requests";
 import { isR2Key, presignGet, r2KeyOf } from "@/lib/storage/r2";
 import { ROLE_LABEL } from "@/lib/constants";
-import { HC_REQUEST_KIND_LABEL, statusMeta } from "@/lib/hc-request";
+import { HC_REQUEST_KIND_LABEL, statusMeta, type HcRequestKind, type HcRequestStatus } from "@/lib/hc-request";
 import { previewOf, type ChatAttachment, type ChatMessage, type ChatPerson, type ChatRef, type ChatThread } from "@/lib/chat-shared";
 import type { Role, UserProfile } from "@/lib/types";
 
@@ -222,33 +221,59 @@ export async function unreadTotal(meId: string): Promise<number> {
 
 /* ───────────────────────────── isi percakapan ───────────────────────────── */
 
-/** Ubah rujukan pengajuan jadi kartu yang bisa dibaca. */
-async function refOf(kind: string | null, id: string | null): Promise<ChatRef | null> {
-  if (kind !== "pengajuan" || !id) return null;
-  const r = await getHcRequest(id);
-  if (!r) {
-    return {
+export const REQUEST_HREF: Record<string, string> = {
+  design: "/pengajuan/design",
+  pelatihan: "/pengajuan/pelatihan",
+  rekrutmen: "/pengajuan/karyawan",
+};
+
+/**
+ * Ubah SEMUA rujukan pengajuan dalam satu percakapan jadi kartu, sekali baca.
+ *
+ * Versi sebelumnya memanggil `getHcRequest` per pesan. Percakapan dengan sepuluh
+ * pengajuan berarti sepuluh kueri berurutan — itulah jeda yang terasa saat
+ * berpindah percakapan.
+ */
+async function refMap(ids: string[]): Promise<Map<string, ChatRef>> {
+  const out = new Map<string, ChatRef>();
+  const unique = [...new Set(ids)];
+  if (unique.length === 0 || !dbEnabled) return out;
+
+  const { data } = await db()
+    .from("hc_requests")
+    .select("id,kind,title,status,requester_id")
+    .in("id", unique);
+
+  for (const r of (data ?? []) as { id: string; kind: string; title: string; status: string; requester_id: string }[]) {
+    const kind = r.kind as HcRequestKind;
+    out.set(r.id, {
       kind: "pengajuan",
-      id,
-      title: "Pengajuan sudah dihapus",
-      kindLabel: "Pengajuan",
-      statusLabel: "—",
-      requesterName: "—",
-      href: "/pengajuan",
-      missing: true,
-    };
+      id: r.id,
+      title: r.title,
+      kindLabel: HC_REQUEST_KIND_LABEL[kind] ?? "Pengajuan",
+      statusLabel: statusMeta(kind, r.status as HcRequestStatus).label,
+      requesterName: getUser(r.requester_id)?.name ?? "—",
+      href: REQUEST_HREF[r.kind] ?? "/pengajuan",
+    });
   }
-  const href =
-    r.kind === "design" ? "/pengajuan/design" : r.kind === "pelatihan" ? "/pengajuan/pelatihan" : "/pengajuan/karyawan";
-  return {
-    kind: "pengajuan",
-    id: r.id,
-    title: r.title,
-    kindLabel: HC_REQUEST_KIND_LABEL[r.kind],
-    statusLabel: statusMeta(r.kind, r.status).label,
-    requesterName: r.requesterName,
-    href,
-  };
+
+  // Pengajuan yang sudah dihapus tetap ditampilkan, tapi mati — kalau kartunya
+  // hilang begitu saja, percakapannya jadi tidak masuk akal dibaca ulang.
+  for (const id of unique) {
+    if (!out.has(id)) {
+      out.set(id, {
+        kind: "pengajuan",
+        id,
+        title: "Pengajuan sudah dihapus",
+        kindLabel: "Pengajuan",
+        statusLabel: "—",
+        requesterName: "—",
+        href: "/pengajuan",
+        missing: true,
+      });
+    }
+  }
+  return out;
 }
 
 /** Tanda tangani lampiran supaya bisa dibuka (bucket-nya privat). */
@@ -295,19 +320,18 @@ export async function readThread(threadId: string, meId: string): Promise<ChatMe
     .limit(MESSAGE_PAGE);
 
   const rows = ((data ?? []) as MessageRow[]).reverse();
-  const out: ChatMessage[] = [];
-  for (const r of rows) {
-    out.push({
-      id: r.id,
-      threadId: r.thread_id,
-      senderId: r.sender_id,
-      senderName: getUser(r.sender_id)?.name ?? "Pengguna dihapus",
-      body: r.body,
-      attachments: attachmentsOf(r.attachments),
-      ref: await refOf(r.ref_kind, r.ref_id),
-      createdAt: r.created_at,
-    });
-  }
+  const refs = await refMap(rows.filter((r) => r.ref_kind === "pengajuan" && r.ref_id).map((r) => r.ref_id!));
+
+  const out: ChatMessage[] = rows.map((r) => ({
+    id: r.id,
+    threadId: r.thread_id,
+    senderId: r.sender_id,
+    senderName: getUser(r.sender_id)?.name ?? "Pengguna dihapus",
+    body: r.body,
+    attachments: attachmentsOf(r.attachments),
+    ref: r.ref_id ? (refs.get(r.ref_id) ?? null) : null,
+    createdAt: r.created_at,
+  }));
   await signAttachments(out);
   return out;
 }

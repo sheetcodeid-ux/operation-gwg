@@ -2,6 +2,7 @@
 
 import { usePathname } from "next/navigation";
 import * as React from "react";
+import { scrollToTop } from "@/lib/scroll";
 
 /** Forces every route change to open at the top.
  *
@@ -26,7 +27,8 @@ export function ScrollReset() {
       cancelled = true;
     };
     const reset = () => {
-      window.scrollTo(0, 0);
+      // Yang menggulir adalah wadah isi halaman, bukan dokumen — lihat lib/scroll.
+      scrollToTop();
       document.documentElement.scrollTop = 0;
       if (document.body) document.body.scrollTop = 0;
     };

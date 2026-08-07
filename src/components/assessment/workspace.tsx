@@ -1,6 +1,7 @@
 "use client";
 
 import * as React from "react";
+import { scrollToTop } from "@/lib/scroll";
 import { BookOpen, ClipboardList, GaugeCircle, Mic, ScrollText, Settings2, Sparkles } from "lucide-react";
 import { ASSESSMENT_ROLES, canSeeTab, type AssessmentRole, type TabKey } from "@/lib/assessment/access";
 import type { EvaluatorIdentity } from "@/lib/assessment/session";
@@ -92,8 +93,8 @@ function WorkspaceInner({ viewerName, canManage, isParticipant }: { viewerName: 
   // layout so a tall tab (Dashboard) can't keep the old scroll via scroll-anchoring.
   React.useEffect(() => {
     const behavior: ScrollBehavior = a.entrance ? "smooth" : "auto";
-    window.scrollTo({ top: 0, behavior });
-    const id = requestAnimationFrame(() => window.scrollTo({ top: 0, behavior }));
+    scrollToTop(behavior);
+    const id = requestAnimationFrame(() => scrollToTop(behavior));
     return () => cancelAnimationFrame(id);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeTab]);

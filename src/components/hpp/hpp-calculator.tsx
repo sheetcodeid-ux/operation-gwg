@@ -1,6 +1,7 @@
 "use client";
 
 import * as React from "react";
+import { scrollToTop } from "@/lib/scroll";
 import { useRouter } from "next/navigation";
 import {
   AlertTriangle,
@@ -452,7 +453,7 @@ export function HppCalculator({
     setUseClass(!!r.useClass);
     setChosenPrice(r.chosenPrice || 0);
     setTargetProfit(r.targetProfit || 10_000_000);
-    window.scrollTo({ top: 0, behavior: "smooth" });
+    scrollToTop("smooth");
   }
 
   // Deep-link edit from Database HPP (/rnd/hpp?edit=<id>): load it once on mount.

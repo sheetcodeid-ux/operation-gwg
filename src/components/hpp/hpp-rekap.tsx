@@ -382,7 +382,7 @@ export function HppRekap({ records, canEdit, canVerify }: { records: HppRecord[]
 
       {/* Bulk action bar */}
       {selected.size > 0 && (
-        <div className="glass sticky top-20 z-20 flex flex-wrap items-center gap-2 rounded-2xl border border-primary/30 p-3 shadow-lg">
+        <div className="glass sticky top-2 z-20 flex flex-wrap items-center gap-2 rounded-2xl border border-primary/30 p-3 shadow-lg">
           <span className="text-sm font-semibold text-foreground">{selArr.length} dipilih</span>
           <div className="ml-auto flex flex-wrap items-center gap-2">
             {canEdit && selDraft.length > 0 && <Button size="sm" onClick={bulkSubmit} disabled={bulkBusy}><Send className="size-4" /> Ajukan ({selDraft.length})</Button>}

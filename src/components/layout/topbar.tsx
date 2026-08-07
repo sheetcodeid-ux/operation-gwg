@@ -5,6 +5,7 @@ import type { AppNotification, UserProfile } from "@/lib/types";
 import type { MenuKey, NavItem } from "@/lib/nav";
 import { MobileNav } from "./mobile-nav";
 import { TopbarBrand } from "./topbar-brand";
+import { ChatBell } from "@/components/chat/chat-bell";
 import { NotificationCenter } from "./notifications";
 import { UserMenu } from "./user-menu";
 import { ThemeToggle } from "./theme-toggle";
@@ -65,6 +66,7 @@ export function Topbar({
 
         <LanguageToggle />
         <ThemeToggle />
+        <ChatBell />
         <NotificationCenter notifications={notifications} />
         <UserMenu name={user.name} email={user.email} role={user.role} avatarUrl={user.avatarUrl} />
       </div>
