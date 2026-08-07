@@ -15,6 +15,7 @@ import { useConfirm } from "@/components/ui/confirm";
 import { Dialog, DialogContent, DialogTrigger, useDialogControl } from "@/components/ui/dialog";
 import { deleteRequestAction, requestDesignRevisionAction, submitHcRequestAction } from "@/lib/actions/hc-requests";
 import { DESIGN_TYPES, REVIEWER_LABEL, TRAINING_TYPES, fmtRupiah, type HcRequest, type HcRequestKind } from "@/lib/hc-request";
+import { DiscussButton } from "@/components/chat/forward-request";
 import { FilePicker, RequestEmpty, RequestList, uploadAll } from "./request-shared";
 
 const COPY: Record<HcRequestKind, { new: string; title: string; formDesc: string; empty: string }> = {
@@ -82,7 +83,14 @@ export function HcRequestList({
       <RequestList
         rows={rows}
         actions={(r) => (
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
+            {/* Teruskan pengajuan ini ke Pesan — untuk minta revisi, menanyakan
+                progres, atau melibatkan orang lain tanpa menjelaskan ulang. */}
+            <DiscussButton
+              requestId={r.id}
+              requestTitle={r.title}
+              suggestedIds={r.assigneeId ? [r.assigneeId] : []}
+            />
             {/* Design yang sudah dikirim boleh dikembalikan ke tim Creative dengan
                 catatan revisi — dalam pengajuan yang sama, bukan pengajuan baru. */}
             {r.kind === "design" && r.status === "terlaksana" && (

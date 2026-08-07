@@ -2,6 +2,7 @@ import type { Role } from "./types";
 
 /** Every navigable menu in the app. */
 export type MenuKey =
+  | "pesan"
   | "dashboard"
   | "analytics"
   | "work"
@@ -77,6 +78,7 @@ export interface NavItem {
 
 /** Static definition of every menu (order = sidebar order within a group). */
 export const NAV_MENUS: Omit<NavItem, "section" | "group" | "groupIcon">[] = [
+  { key: "pesan", label: "Pesan", href: "/pesan", icon: "MessagesSquare" },
   { key: "dashboard", label: "Dashboard", href: "/dashboard", icon: "LayoutDashboard" },
   { key: "analytics", label: "Analytics", href: "/analytics", icon: "TrendingUp" },
   { key: "work", label: "Work Tracker", href: "/work-tracker", icon: "ListChecks" },
@@ -206,7 +208,7 @@ export const ROLE_MENUS: Record<Role, MenuKey[]> = {
  *  adds later, and roles that were never wired up for them. "Pengajuan" is
  *  company-wide by design: any team must be able to request headcount or a
  *  training programme without an admin granting it first. */
-export const UNIVERSAL_MENUS: MenuKey[] = ["hc_request"];
+export const UNIVERSAL_MENUS: MenuKey[] = ["hc_request", "pesan"];
 
 /** Divisions that are NOT a department doing day-to-day work — they don't get
  *  the company-wide menus (Administrator is app configuration, not a team). */

@@ -17,6 +17,7 @@ import {
 } from "@/lib/actions/hc-requests";
 import { Combobox } from "@/components/ui/combobox";
 import { fmtRupiah, isOpen, nextActions, type HcRequest, type HcRequestKind } from "@/lib/hc-request";
+import { DiscussButton } from "@/components/chat/forward-request";
 import { FilePicker, RequestEmpty, RequestList, uploadAll, type UploadProgress } from "./request-shared";
 
 type Mode = "hc" | "finance";
@@ -80,7 +81,18 @@ export function HcRequestReview({ mode, kind, picOptions = [] }: { mode: Mode; k
             : "Pengajuan yang sudah selesai akan muncul di sini."}
         </RequestEmpty>
       ) : (
-        <RequestList rows={shown} actions={(r) => <Actions r={r} mode={mode} picOptions={picOptions} onDone={load} />} />
+        <RequestList
+          rows={shown}
+          actions={(r) => (
+            <div className="flex flex-wrap items-center gap-2">
+              {/* Peninjau sering perlu bertanya balik ke pemohon sebelum
+                  memutuskan — dari sini langsung ke obrolan yang sudah membawa
+                  pengajuannya. */}
+              <DiscussButton requestId={r.id} requestTitle={r.title} suggestedIds={[r.requesterId]} label="Tanya" />
+              <Actions r={r} mode={mode} picOptions={picOptions} onDone={load} />
+            </div>
+          )}
+        />
       )}
     </div>
   );
