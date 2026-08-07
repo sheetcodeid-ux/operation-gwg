@@ -52,15 +52,24 @@ export async function presignPut(key: string, contentType: string, expiresSec = 
   return signed.url;
 }
 
-/** Server-side upload of bytes to R2 (used for low-volume HC/System files). */
+/**
+ * Server-side upload of bytes to R2 (used for low-volume HC/System files).
+ *
+ * Body dikirim sebagai Uint8Array dengan `content-length` eksplisit. Versi
+ * sebelumnya memakai Blob, yang dialirkan tanpa Content-Length sehingga R2
+ * menolak SETIAP unggahan dengan 411 Length Required — kegagalannya tertelan
+ * fallback ke Supabase, jadi tidak terlihat selain sebagai unggahan yang lambat
+ * lalu gagal pada berkas besar.
+ */
 export async function r2Put(key: string, data: ArrayBuffer, contentType: string): Promise<void> {
+  const body = new Uint8Array(data);
   const res = await client().fetch(objectUrl(key), {
     method: "PUT",
-    headers: { "content-type": contentType },
-    body: new Blob([data], { type: contentType }),
+    headers: { "content-type": contentType, "content-length": String(body.byteLength) },
+    body,
   });
   if (!res.ok && res.status !== 200 && res.status !== 204) {
-    throw new Error(`R2 upload gagal (${res.status})`);
+    throw new Error(`R2 upload gagal (${res.status}) — ${await res.text().catch(() => "")}`.trim());
   }
 }
 

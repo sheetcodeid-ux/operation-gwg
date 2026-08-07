@@ -33,12 +33,20 @@ async function direct(scope: UploadScope, file: File): Promise<UploadedFile | nu
   if (signed.error) throw new Error(signed.error);
   if (!signed.url || !signed.path) return null;
 
-  const res = await fetch(signed.url, {
-    method: "PUT",
-    body: file,
-    headers: { "content-type": file.type || "application/octet-stream" },
-  });
-  if (!res.ok) throw new Error(`Gagal mengunggah "${file.name}" (${res.status}).`);
+  let res: Response;
+  try {
+    res = await fetch(signed.url, {
+      method: "PUT",
+      body: file,
+      headers: { "content-type": file.type || "application/octet-stream" },
+    });
+  } catch {
+    // fetch menolak tanpa status = permintaan diblokir browser, hampir selalu
+    // karena CORS bucket belum mengizinkan PUT dari domain ini. Sebutkan itu
+    // supaya tidak terbaca sebagai gangguan acak.
+    throw new Error(`Gagal mengunggah "${file.name}" — koneksi ke penyimpanan ditolak (cek izin CORS bucket R2).`);
+  }
+  if (!res.ok) throw new Error(`Gagal mengunggah "${file.name}" — penyimpanan menolak (${res.status}).`);
   return { path: signed.path, name: file.name };
 }
 
