@@ -1174,6 +1174,22 @@ const OutletAssignPicker = React.memo(function OutletAssignPicker({
     [list, q],
   );
 
+  /**
+   * Outlet yang SEDANG ditugaskan, lengkap dengan namanya.
+   *
+   * Tanpa daftar ini, satu-satunya cara mengetahui seseorang memegang outlet
+   * apa saja adalah menggulir seluruh daftar dan mencari tanda centangnya —
+   * pada koordinator dengan 13 outlet dari 50-an, itu praktis mustahil.
+   *
+   * Id yang namanya belum ketemu tetap ditampilkan apa adanya, bukan dibuang:
+   * saat daftar POS masih dimuat, membuangnya membuat penugasan yang sudah ada
+   * seolah-olah hilang.
+   */
+  const chosen = React.useMemo(() => {
+    const byId = new Map(list.map((o) => [o.id, o.name] as const));
+    return selected.map((id) => ({ id, name: byId.get(id) ?? id }));
+  }, [list, selected]);
+
   const label = single ? "Outlet Ditugaskan (1 outlet)" : `Wilayah / Outlet Ditugaskan (${selected.length})`;
   const hint = single
     ? "Supervisor hanya memegang 1 outlet. Outlet diambil dari sistem POS; yang sudah dipegang supervisor lain tidak ditampilkan."
@@ -1185,6 +1201,47 @@ const OutletAssignPicker = React.memo(function OutletAssignPicker({
         {hint}
         {loading && <span className="ml-1 inline-flex items-center gap-1 text-muted-foreground/80"><Loader2 className="size-3 animate-spin" /> memuat dari POS…</span>}
       </p>
+
+      {/* Yang sudah ditugaskan, di atas — bisa dibaca sekilas dan dilepas
+          langsung dari sini tanpa mencarinya lagi di daftar bawah. */}
+      {chosen.length > 0 ? (
+        <div className="mb-2 rounded-lg border border-primary/25 bg-primary/[0.06] p-2">
+          <div className="mb-1.5 flex items-center justify-between gap-2">
+            <span className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+              Sedang ditugaskan · {chosen.length}
+            </span>
+            {!single && (
+              <button
+                type="button"
+                onClick={() => setSelected([])}
+                className="text-[10px] font-medium text-muted-foreground underline underline-offset-2 hover:text-foreground"
+              >
+                Kosongkan semua
+              </button>
+            )}
+          </div>
+          <div className="flex max-h-28 flex-wrap gap-1 overflow-y-auto">
+            {chosen.map((o) => (
+              <button
+                key={o.id}
+                type="button"
+                onClick={() => toggle(o.id)}
+                title={`Lepas ${o.name}`}
+                className="group inline-flex max-w-full items-center gap-1 rounded-md bg-primary/15 py-1 pl-2 pr-1.5 text-xs text-foreground ring-1 ring-inset ring-primary/30 transition-colors hover:bg-red-500/15 hover:ring-red-500/40"
+              >
+                <span className="truncate">{o.name}</span>
+                <X className="size-3 shrink-0 text-muted-foreground group-hover:text-red-500" />
+              </button>
+            ))}
+          </div>
+        </div>
+      ) : (
+        <p className="mb-2 rounded-lg border border-amber-500/40 bg-amber-500/5 p-2 text-[11px] leading-relaxed text-amber-700 dark:text-amber-300">
+          Belum ada outlet yang ditugaskan. {single ? "Supervisor" : "Koordinator"} tanpa outlet tidak akan menerima
+          temuan hygiene maupun komplain cabang mana pun.
+        </p>
+      )}
+
       <Input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Cari outlet…" className="mb-2" />
       <div className="max-h-52 space-y-0.5 overflow-y-auto rounded-lg border border-border p-1">
         {filtered.map((o) => (

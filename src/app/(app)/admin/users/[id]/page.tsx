@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import type { Metadata } from "next";
-import { ArrowLeft, KeyRound, LayoutGrid, ShieldCheck, User as UserIcon, Briefcase } from "lucide-react";
+import { ArrowLeft, KeyRound, LayoutGrid, ShieldCheck, Store, User as UserIcon, Briefcase } from "lucide-react";
 import { requireSessionUser } from "@/lib/auth";
 import { areaName, getOutlets, getUser } from "@/lib/data/store";
 import { can } from "@/lib/rbac";
@@ -53,6 +53,13 @@ export default async function UserDetailPage({ params }: { params: Promise<{ id:
   };
 
   const outlets: OutletLite[] = getOutlets().map((o) => ({ id: o.id, name: o.name, code: o.code, areaId: o.areaId, areaName: areaName(o.areaId) }));
+
+  // Outlet yang benar-benar dipegang orang ini. Dicocokkan pada id MAUPUN kode
+  // karena penugasan lama sebagian tersimpan sebagai kode outlet, bukan id.
+  const punya = new Set(u.outletIds ?? []);
+  const assigned = outlets
+    .filter((o) => punya.has(o.id) || punya.has(o.code))
+    .sort((a, b) => a.name.localeCompare(b.name, "id"));
 
   // Menus this user can actually open (own division from role + explicit grants).
   setNavExtras(await getNavExtra());
@@ -116,6 +123,31 @@ export default async function UserDetailPage({ params }: { params: Promise<{ id:
         <StatTile icon={LayoutGrid} label="Menu Akses" value={access.length} sub={`${grants.size} tambahan`} />
         <StatTile icon={KeyRound} label="Cakupan" value={scope} sub="Penugasan" />
       </div>
+
+      {/* Outlet yang benar-benar dipegang — "13 outlets" saja tidak memberi tahu
+          siapa pun outlet MANA, padahal itulah yang menentukan temuan hygiene
+          dan komplain cabang mana yang sampai ke orang ini. */}
+      {assigned.length > 0 && (
+        <section className="mt-4 rounded-2xl border border-border bg-card/40 p-4 sm:p-5">
+          <div className="mb-3 flex items-baseline justify-between gap-3">
+            <h2 className="text-sm font-semibold tracking-tight text-foreground">Outlet yang Ditugaskan</h2>
+            <span className="text-[11px] text-muted-foreground">{assigned.length} outlet</span>
+          </div>
+          <ul className="grid gap-1.5 sm:grid-cols-2 lg:grid-cols-3">
+            {assigned.map((o) => (
+              <li key={o.id} className="flex min-w-0 items-center gap-2 rounded-lg border border-border px-2.5 py-2">
+                <Store className="size-3.5 shrink-0 text-muted-foreground" />
+                <span className="min-w-0 flex-1 truncate text-[13px] text-foreground">{o.name}</span>
+                <span className="shrink-0 text-[10px] text-muted-foreground">{o.areaName}</span>
+              </li>
+            ))}
+          </ul>
+          <p className="mt-2.5 text-[11px] leading-relaxed text-muted-foreground">
+            Daftar ini menentukan temuan hygiene dan komplain cabang mana yang sampai ke orang ini. Ubah lewat tombol{" "}
+            <strong>Edit</strong> di atas.
+          </p>
+        </section>
+      )}
 
       <UserDetailTabs
         u={{
