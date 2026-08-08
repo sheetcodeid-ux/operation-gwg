@@ -1,6 +1,7 @@
 import "server-only";
 
 import { getUsers, visibleOutlets } from "./store";
+import { canReachMenu } from "@/lib/nav";
 import { hasGlobalScope } from "@/lib/rbac";
 import type { ListRequestOpts } from "./hc-requests";
 import type { UserProfile } from "@/lib/types";
@@ -39,13 +40,39 @@ export function requestScopeFor(user: UserProfile): ListRequestOpts {
   return { department: user.department ?? "—" };
 }
 
+/** Tim yang meninjau satu jenis pengajuan — Creative untuk design, HC sisanya. */
+function isReviewer(user: UserProfile, kind: string | undefined): boolean {
+  if (kind === "design") return canReachMenu(user, "creative_design");
+  if (kind === "pelatihan") return canReachMenu(user, "hc_training") || canReachMenu(user, "fin_training");
+  if (kind === "rekrutmen") return canReachMenu(user, "hc_reqreview");
+  return false;
+}
+
 /**
  * Apakah `user` boleh membuka satu pengajuan tertentu.
  *
- * Dipakai jalur yang menerima id dari luar (hapus, detail), supaya menebak id
- * pengajuan orang lain tidak membocorkan apa pun.
+ * Dipakai jalur yang menerima id dari luar (hapus, detail, teruskan ke obrolan),
+ * supaya menebak id pengajuan orang lain tidak membocorkan apa pun.
+ *
+ * `department` pada pengajuan adalah departemen PENGAJU, bukan yang mengerjakan.
+ * Menyaring dengan itu saja pernah membuat PIC Creative ditolak saat hendak
+ * membahas pengajuan design yang SEDANG IA KERJAKAN sendiri: ia melihatnya di
+ * Antrian Design (yang menyaring per jenis), tapi ditolak di Pesan (yang
+ * menyaring per departemen) — dua jalur dengan aturan berbeda untuk satu
+ * pengajuan yang sama.
+ *
+ * Tiga jalur pertama di bawah menutup celah itu tanpa melonggarkan cakupan
+ * siapa pun: pengaju, orang yang ditugaskan, dan tim peninjau jenis tersebut
+ * memang sudah bisa melihat pengajuannya lewat halaman masing-masing.
  */
-export function canSeeRequest(user: UserProfile, req: { requesterId: string; department: string }): boolean {
+export function canSeeRequest(
+  user: UserProfile,
+  req: { requesterId: string; department: string; assigneeId?: string | null; kind?: string },
+): boolean {
+  if (req.requesterId === user.id) return true;
+  if (req.assigneeId && req.assigneeId === user.id) return true;
+  if (isReviewer(user, req.kind)) return true;
+
   const scope = requestScopeFor(user);
   if (scope.requesterIds) return scope.requesterIds.includes(req.requesterId);
   if (scope.department) return req.department === scope.department;

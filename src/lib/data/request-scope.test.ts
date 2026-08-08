@@ -60,6 +60,51 @@ describe("cakupan pengajuan", () => {
   });
 });
 
+/**
+ * PIC yang mengerjakan sebuah pengajuan harus bisa membahasnya.
+ *
+ * `department` pada pengajuan adalah departemen PENGAJU. Untuk pengajuan design
+ * dari supervisor, nilainya "Supervisor" — sehingga penyaringan per departemen
+ * menolak PIC Creative yang justru sedang mengerjakannya. Akibatnya ia bisa
+ * melihat pengajuan itu di Antrian Design tetapi ditolak saat menekan
+ * "Diskusikan Pengajuan" di Pesan.
+ */
+describe("PIC dan tim peninjau", () => {
+  const via = user({ id: "via", role: "member", department: "Creative" });
+  const designDariSupervisor = {
+    requesterId: "spv-basir",
+    department: "Supervisor",
+    kind: "design",
+  };
+
+  it("PIC yang ditugaskan boleh membuka pengajuan yang ia kerjakan", () => {
+    expect(canSeeRequest(via, { ...designDariSupervisor, assigneeId: "via" })).toBe(true);
+  });
+
+  it("tim Creative boleh membuka pengajuan design walau belum ditugaskan", () => {
+    // Mereka memang sudah melihatnya di Antrian Design; menolak di Pesan hanya
+    // membuat dua jalur berbeda aturannya untuk pengajuan yang sama.
+    expect(canSeeRequest(via, designDariSupervisor)).toBe(true);
+  });
+
+  it("orang lain TETAP ditolak — kelonggaran ini tidak melebar", () => {
+    const finance = user({ id: "f1", role: "member", department: "Finance Accounting Tax" });
+    expect(canSeeRequest(finance, designDariSupervisor)).toBe(false);
+
+    const spvLain = user({ id: "spv-ketapang", role: "supervisor" });
+    expect(canSeeRequest(spvLain, designDariSupervisor)).toBe(false);
+  });
+
+  it("PIC pengajuan LAIN tetap ditolak", () => {
+    expect(canSeeRequest(via, { ...designDariSupervisor, assigneeId: "orang-lain", kind: "rekrutmen" })).toBe(false);
+  });
+
+  it("pengaju selalu boleh, tanpa perlu pemeriksaan tambahan di pemanggil", () => {
+    const spv = user({ id: "spv-basir", role: "supervisor" });
+    expect(canSeeRequest(spv, designDariSupervisor)).toBe(true);
+  });
+});
+
 describe("halaman Pengajuan tidak menyaring pakai department mentah", () => {
   const dir = join(process.cwd(), "src/app/(app)/pengajuan");
   const walk = (d: string): string[] =>

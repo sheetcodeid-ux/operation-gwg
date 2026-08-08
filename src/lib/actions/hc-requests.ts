@@ -385,7 +385,7 @@ export async function requestDesignRevisionAction(input: {
   // melihat pengajuan itu (atasan yang menerima hasilnya), atau tim Creative
   // yang menariknya kembali. Dulu ini memakai "satu departemen", yang berarti
   // supervisor cabang lain pun bisa merevisi design bukan miliknya.
-  if (req.requesterId !== user.id && !canSeeRequest(user, req) && !canCreative(user)) {
+  if (!canSeeRequest(user, req)) {
     return { error: "Hanya pemohon atau timnya yang bisa meminta revisi." };
   }
 

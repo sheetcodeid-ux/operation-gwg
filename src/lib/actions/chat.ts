@@ -141,7 +141,7 @@ export async function chatSendAction(input: {
   if (input.refRequestId) {
     const req = await getHcRequest(input.refRequestId);
     if (!req) return { error: "Pengajuan tidak ditemukan." };
-    if (req.requesterId !== user.id && !canSeeRequest(user, req)) {
+    if (!canSeeRequest(user, req)) {
       return { error: "Tidak punya akses ke pengajuan itu." };
     }
   }
@@ -175,7 +175,7 @@ export async function chatForwardRequestAction(input: {
 
   const req = await getHcRequest(input.requestId);
   if (!req) return { error: "Pengajuan tidak ditemukan." };
-  if (req.requesterId !== user.id && !canSeeRequest(user, req)) {
+  if (!canSeeRequest(user, req)) {
     return { error: "Tidak punya akses ke pengajuan itu." };
   }
 
@@ -306,7 +306,7 @@ export async function chatRequestDetailAction(id: string): Promise<RequestDetail
   if (!user || !dbEnabled) return null;
   const r = await getHcRequest(id);
   if (!r) return null;
-  if (r.requesterId !== user.id && !canSeeRequest(user, r)) return null;
+  if (!canSeeRequest(user, r)) return null;
   return {
     id: r.id,
     kindLabel: HC_REQUEST_KIND_LABEL[r.kind],
