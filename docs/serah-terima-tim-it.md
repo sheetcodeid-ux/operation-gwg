@@ -86,6 +86,116 @@ mustahil.
 
 Undangan berlaku 7 hari. Cek statusnya di halaman yang sama.
 
+### 1.2b Cara yang sama, lewat terminal
+
+Kalau lebih suka bash daripada klik. Sekali pasang:
+
+```bash
+brew install gh          # macOS
+gh auth login            # GitHub.com → HTTPS/SSH → Login with a web browser
+```
+
+Simpan nama repo sekali supaya perintah di bawah pendek:
+
+```bash
+REPO=sheetcodeid-ux/operation-gwg
+```
+
+**Undang satu orang** (`push` = peran Write):
+
+```bash
+gh api --method PUT "/repos/$REPO/collaborators/USERNAME_GITHUB" -f permission=push
+```
+
+**Undang beberapa orang sekaligus:**
+
+```bash
+for u in usernameA usernameB usernameC; do
+  gh api --method PUT "/repos/$REPO/collaborators/$u" -f permission=push \
+    && echo "✓ diundang: $u"
+done
+```
+
+Nilai `permission` yang sah: `pull` (Read) · `triage` · `push` (**Write**) ·
+`maintain` · `admin`.
+
+**Cek undangan yang belum diterima:**
+
+```bash
+gh api "/repos/$REPO/invitations" --jq '.[] | "\(.invitee.login) — \(.permissions)"'
+```
+
+**Lihat siapa saja yang sudah punya akses:**
+
+```bash
+gh api "/repos/$REPO/collaborators" --jq '.[] | "\(.login) — \(.role_name)"'
+```
+
+**Cabut akses seseorang:**
+
+```bash
+gh api --method DELETE "/repos/$REPO/collaborators/USERNAME_GITHUB"
+```
+
+**Batalkan undangan yang belum diterima:**
+
+```bash
+gh api "/repos/$REPO/invitations" --jq '.[] | "\(.id) \(.invitee.login)"'   # ambil id-nya
+gh api --method DELETE "/repos/$REPO/invitations/ID_UNDANGAN"
+```
+
+#### Kunci `main` lewat terminal juga
+
+Setara dengan langkah klik di 1.1. Jalankan sekali:
+
+```bash
+gh api --method POST "/repos/$REPO/rulesets" --input - <<'JSON'
+{
+  "name": "lindungi-main",
+  "target": "branch",
+  "enforcement": "active",
+  "conditions": { "ref_name": { "include": ["~DEFAULT_BRANCH"], "exclude": [] } },
+  "rules": [
+    { "type": "deletion" },
+    { "type": "non_fast_forward" },
+    {
+      "type": "pull_request",
+      "parameters": {
+        "required_approving_review_count": 1,
+        "dismiss_stale_reviews_on_push": false,
+        "require_code_owner_review": false,
+        "require_last_push_approval": false,
+        "required_review_thread_resolution": false
+      }
+    },
+    {
+      "type": "required_status_checks",
+      "parameters": {
+        "strict_required_status_checks_policy": false,
+        "required_status_checks": [{ "context": "verify" }]
+      }
+    }
+  ]
+}
+JSON
+```
+
+`non_fast_forward` = blokir force push · `deletion` = branch tidak bisa dihapus ·
+`verify` = nama job di `.github/workflows/ci.yml`.
+
+Periksa hasilnya:
+
+```bash
+gh api "/repos/$REPO/rulesets" --jq '.[] | "\(.id) \(.name) \(.enforcement)"'
+gh api "/repos/$REPO/rulesets/ID" --jq '.rules[].type'
+```
+
+Kalau ternyata terlalu ketat, hapus:
+
+```bash
+gh api --method DELETE "/repos/$REPO/rulesets/ID"
+```
+
 ### 1.3 Yang dikerjakan tim IT di terminal
 
 Kirimkan langkah ini ke mereka.
