@@ -257,6 +257,22 @@ Baris ringkasan di grid memuat total keseluruhan rentang yang diminta, dan
 subtotalnya **sama persis** dengan angka di dashboard ESB. Pakai ini untuk
 memastikan hasil parsing Anda benar.
 
+**#8 — DUA SISTEM TIDAK BOLEH MEMAKAI SATU AKUN ESB YANG SAMA.**
+Ini konsekuensi langsung dari #2, dan baru terasa saat sistem kedua mulai
+jalan. Antrean export ESB (`/site/get-data-report-queue`) terikat pada **akun**,
+bukan pada sesi login. Dua sistem yang login dengan akun yang sama akan
+mengantre di tempat yang sama: sistem A meminta export, sistem B ikut membaca
+antrean itu, lalu **keduanya mengurai berkas milik yang lain**.
+
+Gejalanya persis seperti #2 — tidak ada galat, tidak ada log merah, hanya baris
+milik tanggal atau outlet yang salah masuk ke basis data. Diam-diam, dan baru
+ketahuan saat ada yang mempertanyakan angkanya berminggu-minggu kemudian.
+
+**Setiap sistem wajib punya akun laporan ESB-nya sendiri.** Ini bukan soal
+pembatasan akses — ini supaya kedua sistem tidak saling merusak datanya.
+Sebagai bonus, kalau satu akun terkunci atau kena rate-limit, yang satunya
+tetap jalan.
+
 ---
 
 ## Arsitektur yang kami sarankan
@@ -274,9 +290,31 @@ memang sepi — dan itu justru menyembunyikan fraud, bukan menemukannya.
 
 ---
 
-## Rujukan kode
+## Mulai dari mana
 
-Semuanya ada di repositori Operation GWG:
+Dokumen ini menjelaskan alurnya, tapi **implementasi yang sudah jalan di
+produksi ada di repositori ini** dan itu rujukan yang paling akurat. Urutan baca
+yang kami sarankan:
+
+1. **`src/lib/integrations/esb-client.ts`** — inti seluruh integrasi: login,
+   generate export, baca halaman, antrean serial. Kalau hanya sempat membaca
+   satu berkas, baca ini.
+2. **`src/lib/integrations/esb.ts`** — pengurai grid HTML. Di sinilah penanganan
+   `rowspan` (#4) dan pengenalan kolom lewat label `<th>` berada.
+3. **`supabase/migrations/0022_fraud_sync.sql`** — skema tabel. Bisa dipakai apa
+   adanya di Postgres mana pun.
+4. **`src/lib/data/fraud-store.ts`** — pola tulis ke basis data + penandaan
+   kelengkapan.
+5. **`src/app/api/cron/fraud-sync/`** — cron harian, termasuk pembagian anggaran
+   waktu supaya tidak kena batas 60 detik serverless.
+6. **`src/lib/data/fraud.ts`** — agregasi dan pemisahan void/cancel untuk
+   ditampilkan.
+
+Alurnya sengaja dipisah begini supaya tiap lapisan bisa diuji sendiri. Kalau
+sistem Anda berbeda arsitekturnya, yang wajib ditiru hanya `esb-client.ts` dan
+`esb.ts` — sisanya menyesuaikan.
+
+## Rujukan kode
 
 | Berkas | Isi |
 | --- | --- |
