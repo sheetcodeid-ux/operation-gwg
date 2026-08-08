@@ -55,6 +55,29 @@ export const REVIEWER_LABEL: Record<HcRequestKind, string> = {
   design: "Creative",
 };
 
+/**
+ * Departemen yang menangani tiap jenis pengajuan — penerima notifikasinya.
+ *
+ * Nilainya harus SAMA PERSIS dengan `users.department`, karena itulah yang
+ * dicocokkan saat menentukan notifikasi siapa. Nama yang meleset satu huruf
+ * membuat notifikasinya tersimpan tapi tidak pernah sampai ke siapa pun.
+ */
+export const REVIEWER_DEPARTMENT: Record<HcRequestKind, string> = {
+  rekrutmen: "Human Capital",
+  pelatihan: "Human Capital",
+  design: "Creative",
+};
+
+/** Halaman antrean tim peninjau — tujuan notifikasi untuk mereka. */
+export const REVIEWER_HREF: Record<HcRequestKind, string> = {
+  rekrutmen: "/hc/permintaan",
+  pelatihan: "/hc/pelatihan",
+  design: "/creative/design",
+};
+
+/** Halaman pemohon — tujuan notifikasi tentang pengajuannya sendiri. */
+export const REQUESTER_HREF = "/pengajuan";
+
 export const HC_REQUEST_STATUS_META: Record<HcRequestStatus, { label: string; tone: Tone }> = {
   menunggu_hc: { label: "Menunggu ACC HC", tone: "warning" },
   ditolak_hc: { label: "Ditolak HC", tone: "danger" },

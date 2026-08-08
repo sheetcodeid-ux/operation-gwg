@@ -8,6 +8,8 @@ import { canReachMenu } from "@/lib/nav";
 import { persistMessage } from "@/lib/data/persist";
 import { createHcRequest, deleteHcRequest, getHcRequest, listHcRequests, updateHcRequest } from "@/lib/data/hc-requests";
 import { canSeeRequest, requestScopeFor } from "@/lib/data/request-scope";
+import { notify } from "@/lib/data/notify";
+import { REQUESTER_HREF, REVIEWER_DEPARTMENT, REVIEWER_HREF } from "@/lib/hc-request";
 import { getUsers } from "@/lib/data/store";
 import { createTask, getTask, updateTask, updateTaskStatus } from "@/lib/data/mutations";
 import { presignPut, r2Enabled, r2Put, R2_PREFIX } from "@/lib/storage/r2";
@@ -139,12 +141,33 @@ export async function submitHcRequestAction(input: SubmitRequestInput): Promise<
       attachments: input.attachments ?? [],
     });
     if (res.error) return { error: res.error };
+
+    // Masuk ke notifikasi tim yang menanganinya — Creative untuk design, HC
+    // untuk rekrutmen & pelatihan. Tanpa ini, antrean hanya ketahuan kalau
+    // seseorang kebetulan membuka halamannya.
+    await notify({
+      kind: "request_new",
+      department: REVIEWER_DEPARTMENT[input.kind],
+      title: `${KIND_LABEL[input.kind]} baru`,
+      message: `${input.title.trim()} — dari ${user!.name}`,
+      href: REVIEWER_HREF[input.kind],
+      actorName: user!.name,
+      severity: "info",
+    });
+
     revalidateAll();
     return { ok: true };
   } catch (e) {
     return { error: persistMessage(e) };
   }
 }
+
+/** Label jenis pengajuan untuk judul notifikasi. */
+const KIND_LABEL: Record<HcRequestKind, string> = {
+  rekrutmen: "Permintaan karyawan",
+  pelatihan: "Pengajuan pelatihan",
+  design: "Permintaan design",
+};
 
 function revalidateAll() {
   revalidatePath("/pengajuan");
@@ -194,6 +217,31 @@ export async function hcDecideRequestAction(input: { id: string; approve: boolea
   const status = !input.approve ? "ditolak_hc" : req.kind === "pelatihan" ? "menunggu_finance" : "disetujui_hc";
   const res = await updateHcRequest(input.id, { status, hcNote: input.note ?? "", hcBy: user!.id });
   if (res.error) return { error: res.error };
+
+  // Disetujui dan ditolak dipisah jenisnya — "disetujui" bukan "ditugaskan",
+  // dan keduanya perlu bisa dibedakan saat menyaring notifikasi nanti.
+  await notify(
+    input.approve
+      ? {
+          kind: "request_approved",
+          targetUser: req.requesterId,
+          title: `${KIND_LABEL[req.kind]} disetujui`,
+          message: input.note?.trim() ? `${req.title} — ${input.note.trim()}` : req.title,
+          href: REQUESTER_HREF,
+          actorName: user!.name,
+          severity: "info",
+        }
+      : {
+          kind: "request_rejected",
+          targetUser: req.requesterId,
+          title: `${KIND_LABEL[req.kind]} ditolak`,
+          message: input.note?.trim() ? `${req.title} — ${input.note.trim()}` : req.title,
+          href: REQUESTER_HREF,
+          actorName: user!.name,
+          severity: "warning",
+        },
+  );
+
   revalidateAll();
   return { ok: true };
 }
@@ -260,6 +308,17 @@ export async function completeHcRequestAction(input: {
 
   // Design yang ditutup dari sisi pengajuan ikut menutup tugas Work Tracker-nya.
   if (req.workTaskId) updateTaskStatus(req.workTaskId, "done", 100);
+
+  await notify({
+    kind: "request_done",
+    targetUser: req.requesterId,
+    title: `${KIND_LABEL[req.kind]} selesai`,
+    message: req.title,
+    href: REQUESTER_HREF,
+    actorName: user!.name,
+    severity: "info",
+  });
+
   revalidateAll();
   return { ok: true };
 }
@@ -348,6 +407,17 @@ export async function assignDesignRequestAction(input: {
     status: req.status === "menunggu_hc" ? "disetujui_hc" : req.status,
     hcBy: user!.id,
   });
+
+  await notify({
+    kind: "request_assigned",
+    targetUser: pic.id,
+    title: "Anda ditugaskan mengerjakan design",
+    message: `${req.title}${req.plannedDate ? ` — deadline ${new Date(req.plannedDate).toLocaleDateString("id-ID", { day: "numeric", month: "short" })}` : ""}`,
+    href: REVIEWER_HREF.design,
+    actorName: user!.name,
+    severity: "info",
+  });
+
   revalidateAssignment();
   return { ok: true, taskId: task.id };
 }
@@ -399,6 +469,19 @@ export async function requestDesignRevisionAction(input: {
 
   // Tugas Work Tracker PIC ikut dibuka kembali — kerjaannya memang belum usai.
   if (req.workTaskId) updateTaskStatus(req.workTaskId, "ongoing", 60);
+
+  // Revisi diberitahukan ke PIC-nya bila sudah ada, kalau belum ke seluruh tim
+  // Creative — supaya tidak menggantung menunggu penugasan lebih dulu.
+  await notify({
+    kind: "request_revision",
+    targetUser: req.assigneeId ?? undefined,
+    department: req.assigneeId ? undefined : REVIEWER_DEPARTMENT.design,
+    title: "Permintaan revisi design",
+    message: `${req.title} — ${note}`,
+    href: REVIEWER_HREF.design,
+    actorName: user.name,
+    severity: "warning",
+  });
 
   revalidateAssignment();
   return { ok: true };

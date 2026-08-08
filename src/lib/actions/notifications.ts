@@ -30,3 +30,26 @@ export async function markAllNotificationsReadAction() {
   revalidatePath("/", "layout");
   return { ok: true };
 }
+
+/**
+ * Singkirkan satu notifikasi dari daftar.
+ *
+ * Berbeda dari "sudah dibaca": dibaca berarti sudah dilihat dan tetap ada di
+ * daftar; disingkirkan berarti tidak ingin dilihat lagi.
+ *
+ * Cakupannya diperiksa lewat `listNotifications` — id notifikasi orang lain
+ * tidak akan ketemu di sana, sehingga id tebakan tidak bisa dipakai
+ * menyingkirkan notifikasi orang lain.
+ */
+export async function dismissNotificationAction(id: string) {
+  const user = await getSessionUser();
+  if (!user) return { error: "Not authenticated" };
+  const n = (await listNotifications(user)).find((x) => x.id === id);
+  if (n) {
+    n.dismissed = true;
+    n.read = true;
+    saveNotification(n);
+  }
+  revalidatePath("/", "layout");
+  return { ok: true };
+}

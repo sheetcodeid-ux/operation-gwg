@@ -317,7 +317,19 @@ export type NotificationKind =
   | "hpp_review"
   | "hc_done"
   | "sys_update"
-  | "elearning";
+  | "elearning"
+  // Aktivitas pengajuan — tiap perubahan status punya jenisnya sendiri supaya
+  // ikonnya bisa berbeda dan penyaringan per jenis tetap mungkin nanti.
+  | "request_new"
+  | "request_approved"
+  | "request_assigned"
+  | "request_revision"
+  | "request_done"
+  | "request_rejected"
+  // Aktivitas komplain.
+  | "complaint_new"
+  | "complaint_forwarded"
+  | "complaint_resolved";
 
 export interface AppNotification {
   id: string;
@@ -326,8 +338,28 @@ export interface AppNotification {
   message: string;
   outletId?: string;
   areaId?: string;
-  /** When set, the notification is for this single user (by id), not an audience. */
+  /** Ditujukan ke SATU orang. Kosong berarti penerimanya bukan perorangan. */
   targetUser?: string;
+  /**
+   * Ditujukan ke seluruh anggota satu DEPARTEMEN.
+   *
+   * Inilah yang membuat aktivitas tim tidak tercampur: pengajuan design masuk
+   * ke notifikasi Creative saja, komplain baru ke Operation saja. Tanpa ini,
+   * satu-satunya penerima yang mungkin adalah perorangan atau semua pemilik
+   * outlet — dan aktivitas tim tidak cocok pada keduanya.
+   */
+  department?: string;
+  /**
+   * Halaman tujuan saat diklik.
+   *
+   * Tanpa ini notifikasi hanya bisa dibaca, tidak bisa ditindaklanjuti — orang
+   * harus mencari sendiri pengajuan mana yang dimaksud.
+   */
+  href?: string;
+  /** Nama pelaku, untuk baris "oleh siapa". */
+  actorName?: string;
+  /** Disingkirkan pengguna lewat tombol ×. Beda dari `read` (sekadar dilihat). */
+  dismissed?: boolean;
   severity: "info" | "warning" | "critical";
   read: boolean;
   createdAt: string;

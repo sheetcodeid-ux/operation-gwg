@@ -118,23 +118,46 @@ export function listComplaints(user: UserProfile): Complaint[] {
 export function getComplaint(id: string): Complaint | undefined {
   return SEED.complaints.find((c) => c.id === id);
 }
+/**
+ * Notifikasi yang relevan untuk satu pengguna.
+ *
+ * Tiga jalur penerima, dan ketiganya harus ikut — kalau salah satu terlewat,
+ * seluruh kelas aktivitas menghilang tanpa jejak:
+ *
+ *  • ditujukan langsung kepadanya (`target_user`)
+ *  • ditujukan ke DEPARTEMENNYA (`department`) — inilah yang membuat aktivitas
+ *    tim tidak tercampur: pengajuan design hanya masuk ke Creative, komplain
+ *    hanya ke Operation
+ *  • permintaan verifikasi HPP, yang memang tanpa penerima dan hanya untuk
+ *    Head R&D / Super Admin
+ *
+ * Yang sudah ditutup pengguna (`dismissed`) tidak ikut.
+ */
 export async function listNotifications(user: UserProfile) {
   const ids = visibleOutletIdSet(user);
   const base = SEED.notifications.filter((n) => !n.outletId || ids.has(n.outletId));
   if (!dbEnabled) return base;
-  // DB notifications relevant to this user:
-  //  • targeted directly at them (e.g. their menu was verified/rejected), or
-  //  • HPP review requests (untargeted) — only for the R&D Head / Super Admin.
+
   const canVerify = canVerifyHpp(user);
+  const dept = user.department ?? "";
+  // PostgREST `or` tidak menerima nilai kosong dengan aman, jadi cabang
+  // departemen hanya dipasang bila orangnya memang punya departemen.
+  const cabang = [`target_user.eq.${user.id}`, "kind.eq.hpp_review"];
+  if (dept) cabang.push(`department.eq.${dept}`);
+
   const { data } = await db()
     .from("notifications")
     .select("*")
-    .or(`target_user.eq.${user.id},kind.eq.hpp_review`)
+    .eq("dismissed", false)
+    .or(cabang.join(","))
     .order("created_at", { ascending: false })
-    .limit(40);
-  const extra = (data ?? [])
-    .map(notificationFromRow)
-    .filter((n) => (n.targetUser ? n.targetUser === user.id : n.kind === "hpp_review" && canVerify));
+    .limit(60);
+
+  const extra = (data ?? []).map(notificationFromRow).filter((n) => {
+    if (n.targetUser) return n.targetUser === user.id;
+    if (n.department) return !!dept && n.department === dept;
+    return n.kind === "hpp_review" && canVerify;
+  });
   return [...extra, ...base];
 }
 

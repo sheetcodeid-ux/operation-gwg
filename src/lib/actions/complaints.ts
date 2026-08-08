@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { getSessionUser } from "@/lib/auth";
 import { can, canAccessOutlet } from "@/lib/rbac";
-import { getComplaint, getOutlets, getUsers } from "@/lib/data/store";
+import { getComplaint, getOutlets, getUsers, outletName } from "@/lib/data/store";
 import {
   approveComplaint,
   createComplaint,
@@ -14,6 +14,7 @@ import {
 } from "@/lib/data/mutations";
 import { db, dbEnabled } from "@/lib/data/db";
 import { persistMessage } from "@/lib/data/persist";
+import { notify } from "@/lib/data/notify";
 import { complaintInputSchema, parseInput, resolveComplaintSchema } from "@/lib/validation";
 import {
   canApproveComplaint,
@@ -73,10 +74,31 @@ export async function createComplaintAction(input: ComplaintInput) {
     return { error: persistMessage(e) };
   }
 
+  // Masuk ke notifikasi Operation — di situlah Coordinator Area berada, dan
+  // merekalah yang harus meneruskannya ke supervisor cabang.
+  await notify({
+    kind: "complaint_new",
+    department: OPERATION_DEPARTMENT,
+    title: "Komplain baru masuk",
+    message: `${outletName(record.outletId)} — ${record.content}`,
+    href: "/complaints",
+    actorName: user!.name,
+    outletId: record.outletId,
+    severity: "warning",
+  });
+
   revalidatePath("/complaints");
   revalidatePath("/dashboard");
   return { ok: true, id: record.id };
 }
+
+/**
+ * Departemen yang menangani komplain setelah masuk.
+ *
+ * Coordinator Area berada di departemen ini, dan merekalah yang meneruskan ke
+ * supervisor. Nilainya harus sama persis dengan `users.department`.
+ */
+const OPERATION_DEPARTMENT = "Operational";
 
 export interface ResolveInput {
   id: string;
@@ -186,6 +208,17 @@ export async function forwardComplaintAction(input: {
     assignedBy: user.id,
     assignedByName: user.name,
     note,
+  });
+
+  await notify({
+    kind: "complaint_forwarded",
+    targetUser: spv.id,
+    title: "Komplain diteruskan kepada Anda",
+    message: `${complaint.content} — ${note}`,
+    href: "/complaints",
+    actorName: user.name,
+    outletId: complaint.outletId,
+    severity: "warning",
   });
 
   revalidatePath("/complaints");
