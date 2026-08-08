@@ -46,6 +46,52 @@ On the login screen, pick any **demo persona** — each enforces real RBAC + row
 8. **Notification Center** — overdue tasks/complaints/hygiene, event deadlines, score drops.
 9. **Admin** — user management, organization, audit logs.
 
+## Onboarding developer baru (serah terima ke tim IT)
+
+Urutannya sengaja begini: **kode dulu, kredensial belakangan.** Developer baru bisa
+menjalankan seluruh aplikasi dalam mode demo tanpa satu pun rahasia, jadi tidak ada
+alasan membagikan kredensial produksi di hari pertama.
+
+**1 — Akses repositori.** Repo ini privat. Pemilik menambahkan tiap orang lewat
+GitHub → Settings → Collaborators → *Add people*. Beri peran **Write**; *Admin*
+hanya untuk yang memang perlu mengubah pengaturan repo. Undangannya per akun
+GitHub masing-masing — jangan pakai satu akun bersama, karena riwayat commit jadi
+tidak bisa ditelusuri dan pencabutan akses jadi mustahil per orang.
+
+**2 — Jalankan mode demo.** Cukup ini untuk membaca kode, mengerjakan tampilan,
+dan menjalankan tes:
+
+```bash
+git clone https://github.com/sheetcodeid-ux/operation-gwg.git
+cd operation-gwg && npm install && npm run dev
+```
+
+**3 — Kredensial, hanya kalau memang perlu data sungguhan.** Salin `.env.example`
+ke `.env.local` dan isi yang dibutuhkan saja:
+
+| Yang dikerjakan | Yang perlu diisi |
+| --- | --- |
+| Tampilan, komponen, tes | *(tidak ada — mode demo cukup)* |
+| Baca/tulis data sungguhan | `NEXT_PUBLIC_SUPABASE_*`, `SUPABASE_SERVICE_ROLE_KEY`, `GWG_SUPABASE_URL`, `GWG_SESSION_SECRET` |
+| **Analisis Fraud (void & cancel)** | `ESB_USERNAME`, `ESB_PASSWORD` |
+| Unggah berkas & foto | `R2_*` |
+
+### Aturan kredensial
+
+- **Jangan pernah mengirim nilai rahasia lewat chat, email, atau WhatsApp.** Pakai
+  pengelola kata sandi bersama (1Password/Bitwarden), atau minta orangnya membuat
+  akunnya sendiri. Pesan bisa diteruskan, di-backup, dan tidak bisa ditarik kembali.
+- **ESB: buatkan akun laporan terpisah per orang**, bukan akun master admin dan
+  bukan akun bersama. Aplikasi ini hanya MEMBACA laporan void/cancel; akun master
+  admin memberi kemampuan mengubah data POS yang tidak pernah dibutuhkan.
+- `SUPABASE_SERVICE_ROLE_KEY` melewati seluruh Row Level Security — setara kata
+  sandi root basis data. Untuk pengembangan, lebih baik pakai proyek Supabase
+  terpisah daripada membagikan kunci produksi.
+- Kredensial produksi tinggal di **Vercel → Settings → Environment Variables**,
+  bukan di berkas yang beredar antar orang.
+- Kalau sebuah rahasia terlanjur tersebar: ganti di sumbernya (ESB/Supabase/R2)
+  lalu perbarui di Vercel. Menghapus pesannya tidak membatalkan rahasianya.
+
 ## Scripts
 
 ```bash
