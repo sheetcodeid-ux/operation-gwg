@@ -3,10 +3,11 @@
 import { revalidatePath } from "next/cache";
 import { getSessionUser } from "@/lib/auth";
 import { can, canAccessOutlet } from "@/lib/rbac";
-import { getComplaint, getOutlets } from "@/lib/data/store";
+import { getComplaint, getOutlets, getUsers } from "@/lib/data/store";
 import {
   approveComplaint,
   createComplaint,
+  forwardComplaint,
   resolveComplaint,
   returnComplaintForRevision,
   submitComplaintForApproval,
@@ -14,6 +15,12 @@ import {
 import { db, dbEnabled } from "@/lib/data/db";
 import { persistMessage } from "@/lib/data/persist";
 import { complaintInputSchema, parseInput, resolveComplaintSchema } from "@/lib/validation";
+import {
+  canApproveComplaint,
+  canForwardComplaint,
+  canInputComplaint,
+  canResolveComplaint,
+} from "@/lib/complaints-access";
 import type {
   ComplaintCategory,
   ComplaintSource,
@@ -22,21 +29,17 @@ import type {
 } from "@/lib/types";
 
 /**
- * Complaint workflow roles:
- *  • Admin inputs the complaint         → create
- *  • Supervisor does the follow-up      → submit resolution
- *  • Coordinator Area approves/returns  → close or send back
- * Super Admin may do any step as an override.
+ * Alur komplain:
+ *  • MarComm / Admin memasukkan komplain      → create
+ *  • Coordinator Area meneruskan ke supervisor → forward
+ *  • Supervisor mengerjakan perbaikan          → submit resolution
+ *  • Coordinator Area menilai hasilnya         → approve / return
+ * Super Admin boleh melakukan langkah mana pun sebagai jalan darurat.
+ *
+ * Aturan siapa-boleh-apa ada di `@/lib/complaints-access` — satu berkas yang
+ * dipakai server MAUPUN antarmuka, supaya tombol yang tampil tidak pernah
+ * berbeda dari yang benar-benar diizinkan server.
  */
-function canCreateComplaints(role: string): boolean {
-  return role === "admin_operation" || role === "head_operation" || role === "super_admin";
-}
-function canResolveComplaints(role: string): boolean {
-  return role === "supervisor" || role === "super_admin";
-}
-function canApproveComplaints(role: string): boolean {
-  return role === "area_coordinator" || role === "super_admin";
-}
 
 export interface ComplaintInput {
   source: ComplaintSource;
@@ -50,7 +53,7 @@ export interface ComplaintInput {
 export async function createComplaintAction(input: ComplaintInput) {
   const user = await getSessionUser();
   if (!user) return { error: "Not authenticated" };
-  if (!canCreateComplaints(user.role)) return { error: "You don't have permission to log complaints." };
+  if (!canInputComplaint(user)) return { error: "Tidak berwenang memasukkan komplain." };
   const parsed = parseInput(complaintInputSchema, input);
   if ("error" in parsed) return { error: parsed.error };
   const clean = parsed.data;
@@ -120,6 +123,76 @@ export async function resolveComplaintAction(input: ResolveInput) {
   return { ok: true };
 }
 
+/**
+ * Supervisor yang memegang satu outlet — kandidat penerima komplainnya.
+ *
+ * Dicari lewat `users.outletIds`, BUKAN `outlets.supervisorId`: kolom lama itu
+ * di basis data ini menunjuk akun Admin untuk setiap outlet, jadi memakainya
+ * membuat seluruh komplain terkirim ke Admin alih-alih ke supervisor cabangnya.
+ */
+export async function complaintSupervisorsAction(
+  outletId: string,
+): Promise<{ id: string; name: string }[]> {
+  const user = await getSessionUser();
+  if (!canForwardComplaint(user)) return [];
+  const outlet = getOutlets().find((o) => o.id === outletId);
+  if (!outlet) return [];
+  return getUsers()
+    .filter(
+      (u) =>
+        u.active &&
+        u.role === "supervisor" &&
+        (u.outletIds ?? []).some((id) => id === outlet.id || id === outlet.code),
+    )
+    .map((u) => ({ id: u.id, name: u.name }))
+    .sort((a, b) => a.name.localeCompare(b.name, "id"));
+}
+
+/**
+ * Coordinator Area meneruskan komplain ke supervisor cabang yang bersangkutan.
+ *
+ * Wajib disertai arahan: "diteruskan" tanpa keterangan memaksa supervisornya
+ * menebak bagian mana yang bermasalah, dan itu justru memperlambat perbaikan.
+ */
+export async function forwardComplaintAction(input: {
+  id: string;
+  supervisorId: string;
+  note: string;
+}): Promise<{ ok?: true; error?: string }> {
+  const user = await getSessionUser();
+  if (!user) return { error: "Tidak punya akses." };
+  if (!canForwardComplaint(user)) return { error: "Hanya Coordinator Area yang dapat meneruskan komplain." };
+
+  const complaint = getComplaint(input.id);
+  if (!complaint) return { error: "Komplain tidak ditemukan." };
+  if (!canAccessOutlet(user, complaint.outletId, getOutlets())) {
+    return { error: "Outlet itu di luar cakupan Anda." };
+  }
+  if (complaint.status === "close") return { error: "Komplain ini sudah ditutup." };
+
+  const note = input.note.trim();
+  if (!note) return { error: "Tulis dulu arahan perbaikannya." };
+
+  // Penerima harus benar-benar supervisor outlet itu — kalau tidak, id tebakan
+  // bisa dipakai menugaskan komplain ke orang yang tidak berkepentingan.
+  const kandidat = await complaintSupervisorsAction(complaint.outletId);
+  const spv = kandidat.find((k) => k.id === input.supervisorId);
+  if (!spv) return { error: "Supervisor itu tidak memegang outlet tersebut." };
+
+  forwardComplaint({
+    id: input.id,
+    assignedTo: spv.id,
+    assignedToName: spv.name,
+    assignedBy: user.id,
+    assignedByName: user.name,
+    note,
+  });
+
+  revalidatePath("/complaints");
+  revalidatePath("/dashboard");
+  return { ok: true };
+}
+
 export interface SubmitApprovalInput {
   id: string;
   rootCause: RootCauseCategory;
@@ -131,7 +204,7 @@ export interface SubmitApprovalInput {
 export async function submitComplaintApprovalAction(input: SubmitApprovalInput) {
   const user = await getSessionUser();
   if (!user) return { error: "Not authenticated" };
-  if (!canResolveComplaints(user.role)) return { error: "No permission" };
+  if (!canResolveComplaint(user)) return { error: "No permission" };
   const complaint = getComplaint(input.id);
   if (!complaint) return { error: "Complaint tidak ditemukan." };
   if (!canAccessOutlet(user, complaint.outletId, getOutlets())) return { error: "Outlet is outside your scope." };
@@ -160,7 +233,7 @@ const MAX_PHOTO_BYTES = 5 * 1024 * 1024; // 5 MB
 export async function approveComplaintAction(formData: FormData) {
   const user = await getSessionUser();
   if (!user) return { error: "Not authenticated" };
-  if (!canApproveComplaints(user.role)) return { error: "Hanya Coordinator Area yang dapat menyetujui." };
+  if (!canApproveComplaint(user)) return { error: "Hanya Coordinator Area yang dapat menyetujui." };
   const id = String(formData.get("id") || "");
   const note = String(formData.get("note") || "").trim();
   const complaint = getComplaint(id);
@@ -191,7 +264,7 @@ export async function approveComplaintAction(formData: FormData) {
 export async function returnComplaintAction(input: { id: string; note?: string }) {
   const user = await getSessionUser();
   if (!user) return { error: "Not authenticated" };
-  if (!canApproveComplaints(user.role)) return { error: "Hanya Coordinator Area yang dapat mengembalikan." };
+  if (!canApproveComplaint(user)) return { error: "Hanya Coordinator Area yang dapat mengembalikan." };
   const complaint = getComplaint(input.id);
   if (!complaint) return { error: "Complaint tidak ditemukan." };
   if (!canAccessOutlet(user, complaint.outletId, getOutlets())) return { error: "Outlet is outside your scope." };

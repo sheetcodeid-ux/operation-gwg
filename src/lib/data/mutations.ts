@@ -394,6 +394,39 @@ export function resolveComplaint(input: {
   void saveComplaint(c);
 }
 
+/**
+ * Coordinator Area meneruskan komplain ke supervisor cabang.
+ *
+ * Ini langkah yang menetapkan siapa bertanggung jawab memperbaiki. Statusnya
+ * ikut naik ke `in_progress` supaya komplain yang sudah ada penanggung jawabnya
+ * tidak lagi terhitung sebagai antrean yang belum tersentuh.
+ *
+ * Meneruskan ulang ke orang lain diperbolehkan (mis. salah tunjuk, atau
+ * supervisornya berganti) — catatan terakhirlah yang berlaku.
+ */
+export function forwardComplaint(input: {
+  id: string;
+  assignedTo: string;
+  assignedToName: string;
+  assignedBy: string;
+  assignedByName: string;
+  note: string;
+}) {
+  const c = SEED.complaints.find((x) => x.id === input.id);
+  if (!c) return;
+  c.assignment = {
+    assignedTo: input.assignedTo,
+    assignedToName: input.assignedToName,
+    assignedBy: input.assignedBy,
+    assignedByName: input.assignedByName,
+    assignedAt: nowIso(),
+    note: input.note,
+  };
+  // Komplain yang sudah ditutup tidak dibuka ulang hanya karena diteruskan.
+  if (c.status === "open") c.status = "in_progress";
+  void saveComplaint(c);
+}
+
 /** Admin submits a resolution → routes the complaint to the Coordinator Area
  *  for approval. Status moves to in_progress and stays there until approved. */
 export function submitComplaintForApproval(input: {

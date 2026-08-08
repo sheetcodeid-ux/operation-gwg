@@ -204,20 +204,27 @@ export const hygieneFromRow = (r: any): HygieneAudit => ({
   createdAt: r.created_at,
 });
 
-// The `corrective_action` JSONB column carries BOTH the resolution and the
-// approval record (folded under `__approval`) so the approval workflow needs no
-// schema change. Legacy rows hold a flat CorrectiveAction with no `__approval`.
+// The `corrective_action` JSONB column carries the resolution PLUS two workflow
+// records folded beside it: `__approval` (penilaian Coordinator Area) and
+// `__assignment` (penerusan ke supervisor). Keduanya ikut di sini supaya alur
+// kerjanya tidak menuntut perubahan skema. Baris lama berisi CorrectiveAction
+// polos tanpa kedua kunci itu, dan tetap terbaca.
 const packCorrectiveAction = (c: Complaint) => {
-  if (!c.correctiveAction && !c.approval) return null;
-  return { ...(c.correctiveAction ?? {}), __approval: c.approval ?? null };
+  if (!c.correctiveAction && !c.approval && !c.assignment) return null;
+  return {
+    ...(c.correctiveAction ?? {}),
+    __approval: c.approval ?? null,
+    __assignment: c.assignment ?? null,
+  };
 };
-const unpackCorrectiveAction = (raw: any): Pick<Complaint, "correctiveAction" | "approval"> => {
-  if (!raw || typeof raw !== "object") return { correctiveAction: null, approval: null };
-  const { __approval, ...rest } = raw;
+const unpackCorrectiveAction = (raw: any): Pick<Complaint, "correctiveAction" | "approval" | "assignment"> => {
+  if (!raw || typeof raw !== "object") return { correctiveAction: null, approval: null, assignment: null };
+  const { __approval, __assignment, ...rest } = raw;
   const hasAction = typeof rest?.description === "string" && rest.description.length > 0;
   return {
     correctiveAction: hasAction ? (rest as Complaint["correctiveAction"]) : null,
     approval: (__approval as Complaint["approval"]) ?? null,
+    assignment: (__assignment as Complaint["assignment"]) ?? null,
   };
 };
 

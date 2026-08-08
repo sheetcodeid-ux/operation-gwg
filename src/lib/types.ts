@@ -264,6 +264,25 @@ export interface ComplaintApproval {
   photoUrl?: string | null;
 }
 
+/**
+ * Penerusan komplain dari Coordinator Area ke supervisor cabang.
+ *
+ * Langkah ini yang menetapkan SIAPA bertanggung jawab memperbaiki. Tanpa
+ * penerusan, komplain hanya "terlihat" oleh supervisor yang kebetulan memegang
+ * outletnya — dan tidak ada yang benar-benar merasa ditugaskan.
+ */
+export interface ComplaintAssignment {
+  /** Supervisor yang ditugaskan. */
+  assignedTo: string;
+  assignedToName: string;
+  /** Coordinator Area yang meneruskan. */
+  assignedBy: string;
+  assignedByName: string;
+  assignedAt: string;
+  /** Arahan dari Coordinator Area — apa yang perlu diperbaiki. */
+  note: string;
+}
+
 export interface Complaint {
   id: string;
   source: ComplaintSource;
@@ -279,6 +298,8 @@ export interface Complaint {
   rootCause?: RootCauseCategory | null;
   correctiveAction?: CorrectiveAction | null;
   approval?: ComplaintApproval | null;
+  /** Diisi saat Coordinator Area meneruskannya ke supervisor. */
+  assignment?: ComplaintAssignment | null;
   createdAt: string;
   closedAt?: string | null;
 }

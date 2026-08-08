@@ -261,6 +261,7 @@ export const DIVISION_GROUPS: Partial<Record<Division, NavGroupDef[]>> = {
   Finance: [{ name: "Persetujuan Dana", icon: "Wallet", menus: ["fin_training"] }],
   "Marketing Communication": [
     { name: "Event & Promo", icon: "Megaphone", menus: ["mc_events"] },
+    { name: "Suara Pelanggan", icon: "MessageSquareWarning", menus: ["complaints"] },
     { name: "Kinerja & Penilaian", icon: "Target", menus: ["creative_kpi"] },
   ],
 };
@@ -281,7 +282,9 @@ const DIVISION_MENUS: { division: Division; menus: MenuKey[] }[] = [
   { division: "Executive Assistant", menus: ["work"] },
   { division: "Business Development", menus: ["work"] },
   // Marketing Communication: Work Tracker + the Event/Promo ACC & impact tracker.
-  { division: "Marketing Communication", menus: ["work", "mc_events", "creative_kpi"] },
+  // MarComm adalah pintu masuk keluhan dari kanal publik (Google Review,
+  // Instagram, TikTok), jadi Complaints ikut di divisinya.
+  { division: "Marketing Communication", menus: ["work", "mc_events", "complaints", "creative_kpi"] },
   { division: "Administrator", menus: ["users", "audit"] },
 ];
 

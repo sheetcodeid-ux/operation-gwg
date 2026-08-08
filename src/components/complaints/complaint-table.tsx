@@ -3,7 +3,7 @@
 import * as React from "react";
 import { type ColumnDef } from "@tanstack/react-table";
 import { useRouter } from "next/navigation";
-import { CheckCircle2, ClipboardCheck, Eye, ImagePlus, Loader2, Star, Undo2, X } from "lucide-react";
+import { CheckCircle2, ClipboardCheck, Eye, Forward, ImagePlus, Loader2, Star, Undo2, UserCheck, X } from "lucide-react";
 import { toast } from "sonner";
 import {
   COMPLAINT_CATEGORY_META,
@@ -13,13 +13,17 @@ import {
 } from "@/lib/constants";
 import type {
   ComplaintApproval,
+  ComplaintAssignment,
   ComplaintCategory,
   ComplaintSource,
   ComplaintStatus,
   RootCauseCategory,
 } from "@/lib/types";
+import { COMPLAINT_STAGE, type ComplaintStage } from "@/lib/complaints-access";
 import {
   approveComplaintAction,
+  complaintSupervisorsAction,
+  forwardComplaintAction,
   returnComplaintAction,
   submitComplaintApprovalAction,
 } from "@/lib/actions/complaints";
@@ -46,6 +50,11 @@ export interface ComplaintRow {
   createdAt: string;
   correctiveAction: { description: string; followUpDate?: string | null } | null;
   approval: ComplaintApproval | null;
+  assignment: ComplaintAssignment | null;
+  stage: ComplaintStage;
+  outletId: string;
+  /** Ditugaskan kepada saya — dipakai menandai baris "tugas saya". */
+  mine: boolean;
 }
 
 const STATUSES = Object.keys(COMPLAINT_STATUS_META) as ComplaintStatus[];
@@ -60,15 +69,122 @@ function StatusBadge({ row }: { row: ComplaintRow }) {
     return <Badge tone="warning" dot>{t("complaint.pendingApproval")}</Badge>;
   }
   const m = COMPLAINT_STATUS_META[row.status];
-  return <Badge tone={m?.tone ?? "neutral"} dot>{td(m?.label ?? row.status)}</Badge>;
+  return (
+    <div className="flex flex-col items-start gap-1">
+      <Badge tone={m?.tone ?? "neutral"} dot>{td(m?.label ?? row.status)}</Badge>
+      {/* Kepada siapa diteruskan — tanpa ini, "sedang diproses" tidak
+          memberi tahu siapa pun siapa yang sebenarnya mengerjakan. */}
+      {row.assignment ? (
+        <span className="flex items-center gap-1 text-[10px] text-muted-foreground">
+          <UserCheck className="size-3" />
+          {row.assignment.assignedToName}
+          {row.mine && <span className="font-semibold text-amber-600 dark:text-amber-400">· tugas Anda</span>}
+        </span>
+      ) : (
+        row.stage === "baru" && (
+          <span className="text-[10px] font-medium text-red-600 dark:text-red-400">Belum diteruskan</span>
+        )
+      )}
+    </div>
+  );
 }
 
-/** What this viewer can do with a given complaint, based on its stage. */
-type RowAction = "approve" | "resolve" | "detail";
-function actionFor(row: ComplaintRow, canResolve: boolean, canApprove: boolean): RowAction {
+/** Dialog penerusan — Coordinator Area menunjuk supervisor + memberi arahan. */
+function ForwardDialog({ row, onDone }: { row: ComplaintRow; onDone: () => void }) {
+  const router = useRouter();
+  const [pilihan, setPilihan] = React.useState<{ id: string; name: string }[] | null>(null);
+  const [spv, setSpv] = React.useState("");
+  const [note, setNote] = React.useState("");
+  const [busy, setBusy] = React.useState(false);
+
+  React.useEffect(() => {
+    let alive = true;
+    void complaintSupervisorsAction(row.outletId).then((list) => {
+      if (!alive) return;
+      setPilihan(list);
+      // Outlet dengan satu supervisor: langsung dipilihkan, tidak perlu diklik.
+      if (list.length === 1) setSpv(list[0].id);
+    });
+    return () => {
+      alive = false;
+    };
+  }, [row.outletId]);
+
+  async function kirim() {
+    if (!spv) return toast.error("Pilih dulu supervisornya.");
+    if (!note.trim()) return toast.error("Tulis dulu arahan perbaikannya.");
+    setBusy(true);
+    const res = await forwardComplaintAction({ id: row.id, supervisorId: spv, note });
+    setBusy(false);
+    if (res.error) return toast.error(res.error);
+    toast.success("Diteruskan ke supervisor");
+    onDone();
+    router.refresh();
+  }
+
+  return (
+    <div className="space-y-3">
+      <div className="rounded-xl border border-border bg-muted/40 p-3">
+        <p className="text-sm leading-relaxed text-foreground">{row.content}</p>
+        <p className="mt-1 text-[11px] text-muted-foreground">
+          {row.customerName} · {row.outlet}
+        </p>
+      </div>
+
+      <Field label="Teruskan ke supervisor">
+        {pilihan === null ? (
+          <div className="flex items-center gap-2 py-2 text-xs text-muted-foreground">
+            <Loader2 className="size-4 animate-spin" /> Memuat daftar supervisor…
+          </div>
+        ) : pilihan.length === 0 ? (
+          <p className="rounded-lg border border-amber-500/40 bg-amber-500/5 p-2.5 text-[11px] leading-relaxed text-amber-700 dark:text-amber-300">
+            Outlet ini belum punya supervisor aktif. Tetapkan dulu di User Management — kolom Outlet pada akun
+            supervisornya.
+          </p>
+        ) : (
+          <Combobox
+            portal
+            value={spv}
+            onChange={setSpv}
+            placeholder="Pilih supervisor…"
+            options={pilihan.map((k) => ({ value: k.id, label: k.name }))}
+          />
+        )}
+      </Field>
+
+      <Field label="Arahan perbaikan" hint="Apa yang perlu diperiksa dan diperbaiki di cabang.">
+        <Textarea
+          rows={3}
+          value={note}
+          onChange={(e) => setNote(e.target.value)}
+          placeholder="mis. cek ulang SOP penyajian di jam sibuk, briefing ulang kasir soal keramahan"
+        />
+      </Field>
+
+      <Button onClick={kirim} disabled={busy || !spv || pilihan?.length === 0} className="w-full">
+        {busy ? <Loader2 className="size-4 animate-spin" /> : <Forward className="size-4" />} Teruskan
+      </Button>
+    </div>
+  );
+}
+
+/**
+ * Aksi yang tersedia bagi penonton ini, menurut tahap komplainnya.
+ *
+ * Urutannya penting: meneruskan didahulukan karena itu langkah paling awal —
+ * kalau tidak, Coordinator Area yang juga bisa menilai akan melihat tombol
+ * "Setujui" pada komplain yang bahkan belum ditugaskan ke siapa pun.
+ */
+type RowAction = "forward" | "approve" | "resolve" | "detail";
+function actionFor(row: ComplaintRow, canResolve: boolean, canApprove: boolean, canForward: boolean): RowAction {
+  if (canForward && row.stage === "baru") return "forward";
   const stage = row.approval?.stage;
   if (stage === "pending" && canApprove) return "approve";
-  if (canResolve && stage !== "pending" && stage !== "approved") return "resolve";
+  // Supervisor hanya mengerjakan yang memang ditugaskan kepadanya. Komplain
+  // outletnya tetap terlihat, tapi tombol perbaikannya baru muncul setelah
+  // Coordinator Area meneruskan — supaya tidak ada dua orang mengerjakan hal
+  // yang sama tanpa saling tahu.
+  if (canResolve && row.mine && stage !== "pending" && stage !== "approved") return "resolve";
   return "detail";
 }
 
@@ -76,10 +192,12 @@ export function ComplaintTable({
   rows,
   canResolve = false,
   canApprove = false,
+  canForward = false,
 }: {
   rows: ComplaintRow[];
   canResolve?: boolean;
   canApprove?: boolean;
+  canForward?: boolean;
 }) {
   const { t, td } = useI18n();
   const [status, setStatus] = React.useState("all");
@@ -87,6 +205,7 @@ export function ComplaintTable({
   const [category, setCategory] = React.useState("all");
   const [selected, setSelected] = React.useState<ComplaintRow | null>(null);
   const [viewing, setViewing] = React.useState<ComplaintRow | null>(null);
+  const [forwarding, setForwarding] = React.useState<ComplaintRow | null>(null);
 
   const filtered = React.useMemo(
     () =>
@@ -150,7 +269,14 @@ export function ComplaintTable({
         id: "actions",
         header: "",
         cell: ({ row }) => {
-          const kind = actionFor(row.original, canResolve, canApprove);
+          const kind = actionFor(row.original, canResolve, canApprove, canForward);
+          if (kind === "forward") {
+            return (
+              <Button size="sm" variant="subtle" onClick={() => setForwarding(row.original)}>
+                <Forward className="size-3.5" /> Teruskan
+              </Button>
+            );
+          }
           if (kind === "approve") {
             return (
               <Button size="sm" variant="subtle" onClick={() => setSelected(row.original)}>
@@ -173,7 +299,7 @@ export function ComplaintTable({
         },
       },
     ],
-    [canResolve, canApprove, t, td],
+    [canResolve, canApprove, canForward, t, td],
   );
 
   return (
@@ -224,6 +350,20 @@ export function ComplaintTable({
         />
       )}
       {viewing && <ComplaintDetailDialog key={viewing.id} complaint={viewing} onClose={() => setViewing(null)} />}
+      {forwarding && (
+        <Dialog open onOpenChange={(v) => !v && setForwarding(null)}>
+          <DialogContent
+            title="Teruskan ke Supervisor"
+            description="Tunjuk supervisor cabang yang akan memperbaiki, beserta arahannya."
+            align="center"
+            className="max-w-lg"
+          >
+            <div className="p-5">
+              <ForwardDialog key={forwarding.id} row={forwarding} onDone={() => setForwarding(null)} />
+            </div>
+          </DialogContent>
+        </Dialog>
+      )}
     </>
   );
 }
@@ -232,10 +372,33 @@ export function ComplaintTable({
 function ResolutionSummary({ complaint }: { complaint: ComplaintRow }) {
   const { t, td } = useI18n();
   const a = complaint.approval;
-  const empty = !complaint.rootCause && !complaint.correctiveAction?.description && !a;
-  if (empty) return <p className="text-sm text-muted-foreground">—</p>;
+  const tahap = COMPLAINT_STAGE[complaint.stage];
+  const empty = !complaint.rootCause && !complaint.correctiveAction?.description && !a && !complaint.assignment;
+  if (empty) {
+    return (
+      <p className="text-sm leading-relaxed text-muted-foreground">
+        <span className="font-medium text-red-600 dark:text-red-400">{tahap.label}</span> — {tahap.hint}
+      </p>
+    );
+  }
   return (
     <div className="space-y-3">
+      {/* Penerusan tampil paling atas: ia yang menjelaskan kenapa perbaikannya
+          dikerjakan orang tertentu, dan arahan apa yang ia terima. */}
+      {complaint.assignment && (
+        <div className="rounded-lg border border-border bg-muted/40 p-3">
+          <p className="flex items-center gap-1.5 text-xs font-medium text-foreground">
+            <Forward className="size-3.5" />
+            Diteruskan ke {complaint.assignment.assignedToName}
+          </p>
+          <p className="mt-1 whitespace-pre-line text-sm leading-relaxed text-foreground/90">
+            {complaint.assignment.note}
+          </p>
+          <p className="mt-1 text-[11px] text-muted-foreground">
+            oleh {complaint.assignment.assignedByName} · {formatDate(complaint.assignment.assignedAt)}
+          </p>
+        </div>
+      )}
       {complaint.rootCause && (
         <div>
           <p className="text-xs text-muted-foreground">{t("complaint.rootCause")}</p>
