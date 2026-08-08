@@ -1,3 +1,5 @@
+import { dirname } from "node:path";
+import { fileURLToPath } from "node:url";
 import type { NextConfig } from "next";
 
 /**
@@ -45,6 +47,21 @@ const securityHeaders = [
 const nextConfig: NextConfig = {
   poweredByHeader: false,
   reactStrictMode: true,
+  /**
+   * Akar proyek dipatok, jangan ditebak Turbopack.
+   *
+   * Turbopack menentukan akar dengan MENCARI KE ATAS sebuah `package-lock.json`.
+   * Satu berkas nyasar di folder home — misalnya karena `npm install` pernah
+   * dijalankan di luar folder proyek — membuatnya memilih folder home sebagai
+   * akar, lalu resolusi modul dan penemuan rute jadi kacau: sebagian halaman
+   * hidup, sebagian lain balas 404 tanpa penjelasan apa pun.
+   *
+   * Memakai path berkas ini sendiri, bukan `process.cwd()`, supaya tetap benar
+   * dari direktori kerja mana pun perintahnya dijalankan.
+   */
+  turbopack: {
+    root: dirname(fileURLToPath(import.meta.url)),
+  },
   images: {
     remotePatterns: [{ protocol: "https", hostname: "*.supabase.co" }],
   },
