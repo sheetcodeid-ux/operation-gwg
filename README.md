@@ -48,6 +48,10 @@ On the login screen, pick any **demo persona** — each enforces real RBAC + row
 
 ## Onboarding developer baru (serah terima ke tim IT)
 
+> **Developer baru:** langsung ke **[`docs/panduan-tim-it.md`](docs/panduan-tim-it.md)** —
+> panduan lengkap dari clone sampai Pull Request pertama, ±15 menit.
+> Bagian di bawah ini untuk pemilik sistem yang memberikan aksesnya.
+
 Urutannya sengaja begini: **kode dulu, kredensial belakangan.** Developer baru bisa
 menjalankan seluruh aplikasi dalam mode demo tanpa satu pun rahasia, jadi tidak ada
 alasan membagikan kredensial produksi di hari pertama.
