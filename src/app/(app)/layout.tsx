@@ -1,9 +1,10 @@
 import { cookies } from "next/headers";
 import { requireSessionUser } from "@/lib/auth";
 import { areaName, listNotifications, visibleOutlets } from "@/lib/data/store";
-import { accessibleMenuKeys, canReachMenu, homeDivision, navAll, setNavExtras } from "@/lib/nav";
+import { accessibleMenuKeys, canReachMenu, homeDivision, navAll, navOpenPredicate, setNavExtras } from "@/lib/nav";
 import { isSystemSupport } from "@/lib/system-shared";
 import { getNavExtra } from "@/lib/data/nav";
+import { assessmentMenuOpen } from "@/lib/data/assessment-menu";
 import { I18nProvider } from "@/lib/i18n/provider";
 import type { Lang } from "@/lib/i18n/dict";
 import { Sidebar } from "@/components/layout/sidebar";
@@ -31,7 +32,12 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   // Everyone sees the FULL sidebar (all divisions, like admin); access is
   // enforced per-item — divisions that aren't the user's own render locked.
   const navItems = navAll();
-  const allowedKeys = accessibleMenuKeys(user.role);
+  // Assessment bukan menu tetap: ia hanya terbuka selama periodenya berjalan dan
+  // hanya untuk orang yang benar-benar ikut. Tanpa penyaringan ini setiap akun
+  // `member` selalu memegang menu itu — dan karena menu itu ada di divisi Human
+  // Capital, orang Creative melihat divisi HC ikut terbuka di sidebar-nya.
+  const assessmentOpen = await assessmentMenuOpen(user);
+  const allowedKeys = accessibleMenuKeys(user.role).filter((k) => k !== "assessment" || assessmentOpen);
   const home = homeDivision(user.role);
   const isAdmin = user.role === "super_admin";
   // "Antrian System" is gated by job title, not the grant system — unlock it for
@@ -39,10 +45,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   // its grant so the sidebar/command palette show it for them only.
   const grants = isSystemSupport(user) && !isAdmin ? [...(user.grants ?? []), "Operation:sys_review"] : user.grants ?? [];
   const department = user.department ?? "";
-  const allowed = new Set(allowedKeys);
-  const grantSet = new Set(grants);
-  const canOpen = (n: (typeof navItems)[number]) =>
-    isAdmin || (n.section === home && allowed.has(n.key)) || n.section === department || grantSet.has(`${n.section}:${n.key}`);
+  const canOpen = navOpenPredicate({ homeDivision: home, allowedKeys, department, grants, isAdmin });
   const notifications = await listNotifications(user);
   const outletItems = visibleOutlets(user).map((o) => ({
     id: o.id,

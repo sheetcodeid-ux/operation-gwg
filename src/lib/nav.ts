@@ -500,6 +500,36 @@ export function canReachMenu(
   return !!user.department && divisionHasMenu(user.department, key);
 }
 
+/**
+ * Apakah satu baris sidebar boleh dibuka.
+ *
+ * Aturan yang sama dipakai sidebar, menu ponsel, dan command palette. Dulu
+ * ketiganya menyalin syarat ini masing-masing — tiga tempat yang harus diubah
+ * serempak setiap kali aturannya bergeser, dan satu yang tertinggal berarti
+ * menu tampil terbuka di satu tempat dan terkunci di tempat lain.
+ *
+ * `allowedKeys` sengaja diterima apa adanya, bukan dihitung ulang dari peran:
+ * ada menu yang keterbukaannya bergantung keadaan (Assessment hanya selama
+ * periodenya jalan), dan itu hanya bisa ditentukan di server.
+ */
+export interface NavAccess {
+  homeDivision: string;
+  allowedKeys: Iterable<MenuKey>;
+  department: string;
+  grants: Iterable<string>;
+  isAdmin: boolean;
+}
+
+export function navOpenPredicate(a: NavAccess): (item: { section: string; key: MenuKey }) => boolean {
+  const allowed = new Set(a.allowedKeys);
+  const grants = new Set(a.grants);
+  return (item) =>
+    a.isAdmin ||
+    (item.section === a.homeDivision && allowed.has(item.key)) ||
+    item.section === a.department ||
+    grants.has(`${item.section}:${item.key}`);
+}
+
 /** Where a role should land after login — its first visible menu.
  *  Roles without the executive dashboard (legal, assessor) go to their own
  *  first menu instead of an empty /dashboard. */

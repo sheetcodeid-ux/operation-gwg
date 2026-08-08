@@ -4,7 +4,7 @@ import { useMemo, useState, useTransition } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { ChevronDown, Lock, LogOut } from "lucide-react";
-import { DIVISION_ICON, type Division, type MenuKey, type NavItem } from "@/lib/nav";
+import { DIVISION_ICON, navOpenPredicate, type Division, type MenuKey, type NavItem } from "@/lib/nav";
 import { signOut } from "@/lib/actions/auth";
 import { useI18n } from "@/lib/i18n/provider";
 import { useSidebar } from "./sidebar-context";
@@ -37,8 +37,6 @@ export function Sidebar({
   const { showLocked } = useNavLock();
   const [pending, startTransition] = useTransition();
 
-  const allowed = useMemo(() => new Set(allowedKeys), [allowedKeys]);
-  const grantSet = useMemo(() => new Set(grants), [grants]);
   const sections = useMemo(() => [...new Set(items.map((i) => i.section))], [items]);
   // Only the most specific matching route is active, so a parent (e.g. /rnd/hpp)
   // isn't highlighted alongside its own sub-routes (/rnd/hpp/rekap, /rnd/hpp/bahan).
@@ -51,10 +49,12 @@ export function Sidebar({
     return best;
   }, [items, pathname]);
   const isActive = (href: string) => href === activeHref;
-  // Openable within the user's own division, their assigned department, or via
-  // an explicit per-user grant.
-  const canOpen = (i: NavItem) =>
-    isAdmin || (i.section === homeDivision && allowed.has(i.key)) || i.section === department || grantSet.has(`${i.section}:${i.key}`);
+  // Aturannya dipusatkan di nav.ts — sidebar, menu ponsel, dan command palette
+  // harus memakai syarat yang persis sama.
+  const canOpen = useMemo(
+    () => navOpenPredicate({ homeDivision, allowedKeys, department, grants, isAdmin }),
+    [homeDivision, allowedKeys, department, grants, isAdmin],
+  );
 
   // Single-open accordion: the user's own division starts open; opening another
   // closes the previous one. null = all collapsed.

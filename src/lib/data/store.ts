@@ -13,6 +13,7 @@ import "server-only";
 
 import { hasGlobalScope, scopeOutlets } from "../rbac";
 import type {
+  AppNotification,
   Area,
   Complaint,
   HospitalityAssessment,
@@ -119,31 +120,52 @@ export function getComplaint(id: string): Complaint | undefined {
   return SEED.complaints.find((c) => c.id === id);
 }
 /**
- * Notifikasi yang relevan untuk satu pengguna.
+ * Notifikasi yang benar-benar untuk satu pengguna.
  *
- * Tiga jalur penerima, dan ketiganya harus ikut — kalau salah satu terlewat,
- * seluruh kelas aktivitas menghilang tanpa jejak:
+ * Aturan penerimanya dipusatkan di `forMe` dan dipakai untuk SEMUA sumber —
+ * itu yang paling penting di sini.
  *
- *  • ditujukan langsung kepadanya (`target_user`)
- *  • ditujukan ke DEPARTEMENNYA (`department`) — inilah yang membuat aktivitas
- *    tim tidak tercampur: pengajuan design hanya masuk ke Creative, komplain
- *    hanya ke Operation
- *  • permintaan verifikasi HPP, yang memang tanpa penerima dan hanya untuk
- *    Head R&D / Super Admin
- *
- * Yang sudah ditutup pengguna (`dismissed`) tidak ikut.
+ * Dulu hanya hasil kueri berpenyaring yang diperiksa, sementara
+ * `SEED.notifications` ikut dikembalikan apa adanya. Di produksi `SEED` bukan
+ * data contoh: `hydrate` mengisinya dengan SELURUH tabel notifikasi. Karena
+ * kebanyakan notifikasi tidak punya `outletId`, syarat `!n.outletId` meloloskan
+ * semuanya — sehingga setiap orang melihat notifikasi milik SETIAP orang lain.
+ * Akun Creative melihat penyelesaian dokumen HC dan tiket System Support yang
+ * ditujukan ke orang lain.
  */
 export async function listNotifications(user: UserProfile) {
   const ids = visibleOutletIdSet(user);
-  const base = SEED.notifications.filter((n) => !n.outletId || ids.has(n.outletId));
-  if (!dbEnabled) return base;
-
   const canVerify = canVerifyHpp(user);
   const dept = user.department ?? "";
-  // PostgREST `or` tidak menerima nilai kosong dengan aman, jadi cabang
-  // departemen hanya dipasang bila orangnya memang punya departemen.
-  const cabang = [`target_user.eq.${user.id}`, "kind.eq.hpp_review"];
-  if (dept) cabang.push(`department.eq.${dept}`);
+
+  const forMe = (n: AppNotification): boolean => {
+    if (n.dismissed) return false;
+    // Berpenerima jelas: hanya dia yang boleh melihatnya.
+    if (n.targetUser) return n.targetUser === user.id;
+    if (n.department) return !!dept && n.department === dept;
+    // Permintaan verifikasi HPP memang tanpa penerima — hanya untuk yang berhak.
+    if (n.kind === "hpp_review") return canVerify;
+    // Sisanya notifikasi lama bercakupan outlet (peringatan operasional).
+    return !n.outletId || ids.has(n.outletId);
+  };
+
+  const base = SEED.notifications.filter(forMe);
+  if (!dbEnabled) return base;
+
+  // Cabang kueri dibuat PERSIS seperti `forMe`, bukan lebih longgar.
+  //
+  // Versi longgar ("ambil semua yang `target_user` kosong, saring belakangan")
+  // kelihatan sama hasilnya, tapi tidak: jendela 60 baris terakhir bisa habis
+  // terisi notifikasi departemen lain yang kemudian dibuang `forMe`, dan
+  // orangnya melihat daftar kosong padahal ada notifikasi untuknya.
+  //
+  // Nilainya dikutip ganda karena nama departemen boleh mengandung koma atau
+  // tanda kurung — karakter yang justru memisahkan cabang di PostgREST.
+  const cabang = [`target_user.eq."${user.id}"`];
+  if (dept) cabang.push(`department.eq."${dept.replace(/"/g, "")}"`);
+  if (canVerify) cabang.push("kind.eq.hpp_review");
+  // Siaran lama bercakupan outlet: tanpa penerima perorangan maupun tim.
+  cabang.push("and(target_user.is.null,department.is.null,kind.neq.hpp_review)");
 
   const { data } = await db()
     .from("notifications")
@@ -153,12 +175,12 @@ export async function listNotifications(user: UserProfile) {
     .order("created_at", { ascending: false })
     .limit(60);
 
-  const extra = (data ?? []).map(notificationFromRow).filter((n) => {
-    if (n.targetUser) return n.targetUser === user.id;
-    if (n.department) return !!dept && n.department === dept;
-    return n.kind === "hpp_review" && canVerify;
-  });
-  return [...extra, ...base];
+  const extra = (data ?? []).map(notificationFromRow).filter(forMe);
+
+  // `base` dan `extra` bersumber dari tabel yang sama di produksi, jadi tanpa
+  // penyaringan ganda ini tiap notifikasi tampil dua kali.
+  const seen = new Set(extra.map((n) => n.id));
+  return [...extra, ...base.filter((n) => !seen.has(n.id))];
 }
 
 function byDateDesc<T>(key: keyof T) {

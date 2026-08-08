@@ -5,6 +5,7 @@ import { db, dbEnabled } from "./db";
 import { selectAll } from "./paged";
 import { getUser, getUsers } from "./store";
 import { getFollowups } from "./hygiene-followup";
+import { notifyCollapsed } from "./notify";
 import { isR2Key, presignGet, r2KeyOf } from "@/lib/storage/r2";
 import { ROLE_LABEL } from "@/lib/constants";
 import { HC_REQUEST_KIND_LABEL, statusMeta, type HcRequestKind, type HcRequestStatus } from "@/lib/hc-request";
@@ -502,7 +503,56 @@ export async function sendMessage(input: SendInput): Promise<{ id?: string; erro
     .eq("thread_id", input.threadId)
     .eq("user_id", input.senderId);
 
+  await beritahuPesanMasuk(input, attachments);
+
   return { id };
+}
+
+/**
+ * Kabari peserta lain bahwa ada pesan masuk.
+ *
+ * Ditujukan PERORANGAN, tidak pernah ke departemen: isi percakapan hanya milik
+ * pesertanya. Mengirimkannya ke satu departemen berarti membocorkan cuplikan
+ * pesan ke orang yang tidak ada di percakapan itu.
+ *
+ * Digabungkan per percakapan (`notifyCollapsed`), jadi obrolan bolak-balik tetap
+ * satu baris di lonceng sampai dibaca — bukan satu baris per pesan.
+ */
+async function beritahuPesanMasuk(input: SendInput, attachments: ChatAttachment[]): Promise<void> {
+  try {
+    const { data } = await db()
+      .from("chat_participants")
+      .select("user_id")
+      .eq("thread_id", input.threadId);
+    const penerima = ((data ?? []) as { user_id: string }[])
+      .map((p) => p.user_id)
+      .filter((uid) => uid !== input.senderId);
+    if (penerima.length === 0) return;
+
+    const pengirim = getUser(input.senderId)?.name ?? "Seseorang";
+    const { data: t } = await db()
+      .from("chat_threads")
+      .select("kind, title")
+      .eq("id", input.threadId)
+      .maybeSingle();
+    const thread = t as { kind: string; title: string | null } | null;
+    const judul =
+      thread?.kind === "group" && thread.title
+        ? `Pesan baru di ${thread.title}`
+        : `Pesan baru dari ${pengirim}`;
+
+    const cuplikan = previewOf({ body: input.body, attachments, ref: input.ref ?? null });
+    await notifyCollapsed({
+      kind: "chat_message",
+      title: judul,
+      message: thread?.kind === "group" ? `${pengirim}: ${cuplikan}` : cuplikan,
+      href: `/pesan?t=${input.threadId}`,
+      targetUsers: penerima,
+      actorName: pengirim,
+    });
+  } catch {
+    // Notifikasi adalah efek samping — pesannya sendiri sudah tersimpan.
+  }
 }
 
 export async function markRead(threadId: string, meId: string): Promise<void> {
@@ -512,12 +562,35 @@ export async function markRead(threadId: string, meId: string): Promise<void> {
     .update({ last_read_at: new Date().toISOString() })
     .eq("thread_id", threadId)
     .eq("user_id", meId);
+  await bersihkanNotifPesan(meId, `/pesan?t=${threadId}`);
 }
 
 /** Tandai SELURUH percakapan sudah dibaca. */
 export async function markAllRead(meId: string): Promise<void> {
   if (!dbEnabled) return;
   await db().from("chat_participants").update({ last_read_at: new Date().toISOString() }).eq("user_id", meId);
+  await bersihkanNotifPesan(meId);
+}
+
+/**
+ * Percakapan sudah dibuka → notifikasinya tidak perlu ada lagi.
+ *
+ * Tanpa ini lonceng terus memberitahu "ada pesan baru" untuk percakapan yang
+ * barusan dibaca, dan angkanya jadi bohong.
+ */
+async function bersihkanNotifPesan(meId: string, href?: string): Promise<void> {
+  try {
+    let q = db()
+      .from("notifications")
+      .update({ read: true, dismissed: true })
+      .eq("kind", "chat_message")
+      .eq("target_user", meId)
+      .eq("dismissed", false);
+    if (href) q = q.eq("href", href);
+    await q;
+  } catch {
+    // Efek samping; membaca percakapan tetap berhasil.
+  }
 }
 
 /**

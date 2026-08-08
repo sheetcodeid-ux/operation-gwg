@@ -20,6 +20,10 @@ const HC = readFileSync(join(process.cwd(), "src/lib/actions/hc-requests.ts"), "
 const COMPLAINTS = readFileSync(join(process.cwd(), "src/lib/actions/complaints.ts"), "utf8");
 const STORE = readFileSync(join(process.cwd(), "src/lib/data/store.ts"), "utf8");
 const UI = readFileSync(join(process.cwd(), "src/components/layout/notifications.tsx"), "utf8");
+const CHAT = readFileSync(join(process.cwd(), "src/lib/data/chat.ts"), "utf8");
+const MENU = readFileSync(join(process.cwd(), "src/lib/data/assessment-menu.ts"), "utf8");
+const LAYOUT = readFileSync(join(process.cwd(), "src/app/(app)/layout.tsx"), "utf8");
+const SCHEDULE_ACTION = readFileSync(join(process.cwd(), "src/lib/actions/assessment-schedule.ts"), "utf8");
 
 /** Nama departemen yang benar-benar ada di `users.department` (data produksi). */
 const DEPARTEMEN_NYATA = [
@@ -156,5 +160,74 @@ describe("tampilan pusat notifikasi", () => {
     const j = UI.indexOf("else if (n.outletId)");
     expect(i).toBeGreaterThan(-1);
     expect(j).toBeGreaterThan(i);
+  });
+});
+
+describe("notifikasi pesan masuk", () => {
+  const blok = CHAT.slice(CHAT.indexOf("async function beritahuPesanMasuk"));
+
+  it("hanya perorangan — tidak pernah ke departemen", () => {
+    // Isi percakapan milik pesertanya saja. Mengirimkannya ke satu departemen
+    // berarti membocorkan cuplikan pesan ke orang di luar percakapan itu.
+    expect(blok).toContain("targetUsers: penerima");
+    expect(blok).not.toContain("department:");
+  });
+
+  it("pengirimnya sendiri tidak ikut dikabari", () => {
+    expect(blok).toContain("uid !== input.senderId");
+  });
+
+  it("membawa tautan ke percakapannya, bukan sekadar /pesan", () => {
+    // Tanpa id percakapan, orangnya mendarat di daftar dan harus mencari
+    // sendiri siapa yang mengirim pesan.
+    expect(blok).toContain("href: `/pesan?t=${input.threadId}`");
+  });
+
+  it("digabung per percakapan, bukan satu baris per pesan", () => {
+    // Sepuluh pesan berturut-turut bukan sepuluh kabar; tanpa penggabungan,
+    // satu obrolan singkat mendorong seluruh notifikasi lain keluar daftar.
+    expect(blok).toContain("notifyCollapsed(");
+    expect(NOTIFY).toContain("export async function notifyCollapsed(");
+  });
+
+  it("penggabungan tidak menyentuh yang sudah dibaca atau ditutup", () => {
+    const fn = NOTIFY.slice(NOTIFY.indexOf("export async function notifyCollapsed("));
+    expect(fn).toContain('.eq("read", false)');
+    expect(fn).toContain('.eq("dismissed", false)');
+  });
+
+  it("percakapan yang dibuka membersihkan notifikasinya", () => {
+    // Kalau tidak, lonceng terus bilang "ada pesan baru" untuk percakapan yang
+    // barusan dibaca dan angkanya jadi bohong.
+    expect(CHAT).toContain("bersihkanNotifPesan(meId, `/pesan?t=${threadId}`)");
+    expect(CHAT).toContain("bersihkanNotifPesan(meId)");
+  });
+});
+
+describe("menu assessment", () => {
+  it("bukan menu tetap — disaring di layout, bukan hanya di halamannya", () => {
+    // `ROLE_MENUS.member = ["assessment"]` membuat SETIAP akun member
+    // memegangnya, dan karena menu itu tinggal di divisi Human Capital, orang
+    // Creative melihat divisi HC ikut terbuka di sidebar-nya.
+    expect(LAYOUT).toContain("assessmentMenuOpen(user)");
+    expect(LAYOUT).toContain('k !== "assessment" || assessmentOpen');
+  });
+
+  it("terbuka hanya bila periodenya jalan DAN orangnya ikut", () => {
+    // Periode terbuka bukan alasan membuka menu untuk orang yang tidak dinilai
+    // dan tidak menilai siapa pun.
+    expect(MENU).toContain("canAccessAssessment(akses, schedule)");
+    expect(MENU).toContain("roster.some(");
+    expect(MENU).toContain("assignments.some(");
+  });
+
+  it("penilai inti tetap masuk setelah periodenya tutup", () => {
+    // Merekalah yang menjalankan wawancara dan keputusan akhir.
+    expect(MENU).toContain("if (isPrivilegedEvaluator(akses)) return true;");
+  });
+
+  it("mengubah jadwal langsung terasa di sidebar", () => {
+    expect(SCHEDULE_ACTION).toContain("invalidateAssessmentSchedule()");
+    expect(SCHEDULE_ACTION).toContain('revalidatePath("/", "layout")');
   });
 });

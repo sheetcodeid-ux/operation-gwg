@@ -326,6 +326,9 @@ export type NotificationKind =
   | "request_revision"
   | "request_done"
   | "request_rejected"
+  // Pesan masuk. SELALU perorangan — isi percakapan tidak pernah boleh sampai
+  // ke seluruh departemen.
+  | "chat_message"
   // Aktivitas komplain.
   | "complaint_new"
   | "complaint_forwarded"

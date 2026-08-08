@@ -45,6 +45,7 @@ export async function submitHppAction(id: string) {
     kind: "hpp_review",
     title: "Menu HPP menunggu verifikasi",
     message: `${rec.name} (${rec.brand}) diajukan oleh ${user.name} — perlu diverifikasi tim F&B.`,
+    href: "/rnd/hpp/rekap",
     severity: "info",
     read: false,
     createdAt: new Date().toISOString(),
@@ -79,6 +80,7 @@ export async function bulkSubmitHppAction(ids: string[]) {
       kind: "hpp_review",
       title: "Menu HPP menunggu verifikasi",
       message: `${n} menu diajukan oleh ${user.name} — perlu diverifikasi tim F&B.`,
+      href: "/rnd/hpp/rekap",
       severity: "info",
       read: false,
       createdAt: new Date().toISOString(),
@@ -107,6 +109,7 @@ export async function bulkReviewHppAction(ids: string[], decision: "verified" | 
           decision === "verified"
             ? `${rec.name} (${rec.brand}) telah diverifikasi tim F&B.`
             : `${rec.name} (${rec.brand}) ditolak tim F&B: ${note.trim()}`,
+        href: "/rnd/hpp/rekap",
         targetUser: rec.createdBy,
         severity: decision === "verified" ? "info" : "warning",
         read: false,
@@ -146,6 +149,7 @@ export async function reviewHppAction(id: string, decision: "verified" | "reject
         decision === "verified"
           ? `${rec.name} (${rec.brand}) telah diverifikasi tim F&B.`
           : `${rec.name} (${rec.brand}) ditolak tim F&B: ${note.trim()}`,
+      href: "/rnd/hpp/rekap",
       targetUser: rec.createdBy,
       severity: decision === "verified" ? "info" : "warning",
       read: false,

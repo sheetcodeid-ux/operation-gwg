@@ -5,7 +5,7 @@ import { createPortal } from "react-dom";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { ChevronDown, Lock, Menu, X } from "lucide-react";
-import { DIVISION_ICON, type Division, type MenuKey, type NavItem } from "@/lib/nav";
+import { DIVISION_ICON, navOpenPredicate, type Division, type MenuKey, type NavItem } from "@/lib/nav";
 import { useI18n } from "@/lib/i18n/provider";
 import { useNavLock } from "./nav-lock";
 import { NAV_ICONS } from "./icons";
@@ -32,10 +32,10 @@ export function MobileNav({
   const pathname = usePathname();
   const { t } = useI18n();
   const { showLocked } = useNavLock();
-  const allowed = useMemo(() => new Set(allowedKeys), [allowedKeys]);
-  const grantSet = useMemo(() => new Set(grants), [grants]);
-  const canOpen = (i: NavItem) =>
-    isAdmin || (i.section === homeDivision && allowed.has(i.key)) || i.section === department || grantSet.has(`${i.section}:${i.key}`);
+  const canOpen = useMemo(
+    () => navOpenPredicate({ homeDivision, allowedKeys, department, grants, isAdmin }),
+    [homeDivision, allowedKeys, department, grants, isAdmin],
+  );
   const sections = useMemo(() => [...new Set(items.map((i) => i.section))], [items]);
   // Single-open accordion: home division open by default; opening another closes
   // the previous one. null = all collapsed.

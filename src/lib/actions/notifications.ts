@@ -1,6 +1,5 @@
 "use server";
 
-import { revalidatePath } from "next/cache";
 import { getSessionUser } from "@/lib/auth";
 import { listNotifications } from "@/lib/data/store";
 import { saveNotification } from "@/lib/data/persist";
@@ -14,7 +13,6 @@ export async function markNotificationReadAction(id: string) {
     n.read = true;
     saveNotification(n);
   }
-  revalidatePath("/", "layout");
   return { ok: true };
 }
 
@@ -27,7 +25,6 @@ export async function markAllNotificationsReadAction() {
       saveNotification(n);
     }
   }
-  revalidatePath("/", "layout");
   return { ok: true };
 }
 
@@ -50,6 +47,8 @@ export async function dismissNotificationAction(id: string) {
     n.read = true;
     saveNotification(n);
   }
-  revalidatePath("/", "layout");
+  // SENGAJA tanpa revalidatePath: merevalidasi layout memasang ulang topbar,
+  // sehingga panel notifikasinya tertutup di setiap klik. Antarmuka sudah
+  // menghapus barisnya sendiri; server hanya perlu mencatatnya.
   return { ok: true };
 }

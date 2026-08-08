@@ -54,6 +54,7 @@ function revalidate() {
 async function notifyUser(userId: string, title: string, message: string, severity: "info" | "warning" = "info") {
   await saveNotification({
     id: `ntf_${randomUUID()}`, kind: "elearning", title, message,
+    href: "/elearning",
     targetUser: userId, severity, read: false, createdAt: new Date().toISOString(),
   }).catch(() => {});
 }

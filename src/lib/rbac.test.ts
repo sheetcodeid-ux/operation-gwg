@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { can, hasGlobalScope, scopeOutlets } from "./rbac";
-import { canReachMenu, canSeeMenu, ROLE_MENUS } from "./nav";
+import { accessibleMenuKeys, canReachMenu, canSeeMenu, homeDivision, navOpenPredicate, ROLE_MENUS } from "./nav";
 import { getOutlets, getUsers } from "./data/store";
 import type { UserProfile } from "./types";
 
@@ -128,5 +128,68 @@ describe("scopeOutlets row-level scoping", () => {
     const pos = byRole("pos_operation");
     const scoped = scopeOutlets(pos, outlets);
     expect(scoped.map((o) => o.id)).toEqual(pos.outletIds);
+  });
+});
+
+/**
+ * Divisi mana yang benar-benar terbuka di sidebar seseorang.
+ *
+ * Ini memakai predikat yang SAMA dengan sidebar, menu ponsel, dan command
+ * palette — bukan salinannya. Sebelumnya ketiganya punya salinan sendiri, dan
+ * satu yang tertinggal berarti menu tampil terbuka di satu tempat dan terkunci
+ * di tempat lain.
+ */
+describe("keterbukaan menu di sidebar", () => {
+  // Akun nyata yang dikeluhkan: desainer Creative, peran generik `member`,
+  // hibahnya hanya Work Tracker divisinya sendiri.
+  const seka = {
+    homeDivision: homeDivision("member"), // "Human Capital" — bawaan peran member
+    department: "Creative",
+    grants: ["Creative:work"],
+    isAdmin: false,
+  };
+
+  it("orang Creative tidak membuka menu Human Capital saat assessment tutup", () => {
+    // Inti keluhannya: `ROLE_MENUS.member = ["assessment"]` membuat setiap akun
+    // member memegang menu itu, dan karena menu itu tinggal di divisi Human
+    // Capital, divisi HC ikut terbuka di sidebar seorang desainer.
+    const tutup = navOpenPredicate({
+      ...seka,
+      allowedKeys: accessibleMenuKeys("member").filter((k) => k !== "assessment"),
+    });
+    expect(tutup({ section: "Human Capital", key: "assessment" })).toBe(false);
+    expect(tutup({ section: "Human Capital", key: "hc_review" })).toBe(false);
+    expect(tutup({ section: "Human Capital", key: "hc_reqreview" })).toBe(false);
+    expect(tutup({ section: "Human Capital", key: "hc_kpi" })).toBe(false);
+  });
+
+  it("tapi divisinya sendiri tetap terbuka", () => {
+    const tutup = navOpenPredicate({
+      ...seka,
+      allowedKeys: accessibleMenuKeys("member").filter((k) => k !== "assessment"),
+    });
+    expect(tutup({ section: "Creative", key: "creative_design" })).toBe(true);
+    expect(tutup({ section: "Creative", key: "work" })).toBe(true);
+    // Pengajuan bersifat perusahaan-luas: tiap tim harus bisa mengajukan.
+    expect(tutup({ section: "Creative", key: "hc_request" })).toBe(true);
+  });
+
+  it("saat periodenya jalan, menu assessment memang terbuka", () => {
+    const buka = navOpenPredicate({ ...seka, allowedKeys: accessibleMenuKeys("member") });
+    expect(buka({ section: "Human Capital", key: "assessment" })).toBe(true);
+    // Selebihnya tetap terkunci — periode terbuka bukan kunci seluruh divisi HC.
+    expect(buka({ section: "Human Capital", key: "hc_review" })).toBe(false);
+  });
+
+  it("super admin tetap membuka semuanya", () => {
+    const admin = navOpenPredicate({
+      homeDivision: homeDivision("super_admin"),
+      allowedKeys: [],
+      department: "",
+      grants: [],
+      isAdmin: true,
+    });
+    expect(admin({ section: "Human Capital", key: "hc_review" })).toBe(true);
+    expect(admin({ section: "Administrator", key: "users" })).toBe(true);
   });
 });

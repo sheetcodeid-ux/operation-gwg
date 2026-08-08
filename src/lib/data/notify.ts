@@ -86,3 +86,82 @@ export async function notifyMany(
   const kirim = inputs.filter((n) => !(actorId && n.targetUser === actorId));
   await Promise.all(kirim.map(notify));
 }
+
+/**
+ * Kirim ke banyak orang, tapi paling banyak SATU baris hidup per orang untuk
+ * tujuan yang sama.
+ *
+ * Dipakai untuk kejadian beruntun — terutama pesan masuk. Sepuluh pesan dalam
+ * satu percakapan bukan sepuluh kabar berbeda; itu satu kabar ("ada pesan dari
+ * Ani") yang isinya diperbarui. Tanpa penggabungan ini, satu percakapan singkat
+ * saja sudah cukup untuk mendorong seluruh notifikasi lain keluar dari daftar.
+ *
+ * Baris yang sudah dibaca atau sudah ditutup TIDAK ikut diperbarui: keduanya
+ * berarti orangnya sudah selesai dengan kabar itu, jadi yang baru memang layak
+ * jadi baris baru.
+ */
+export async function notifyCollapsed(
+  input: Omit<NotifyInput, "targetUser" | "department"> & { href: string; targetUsers: string[] },
+): Promise<void> {
+  if (!dbEnabled) return;
+  const penerima = [...new Set(input.targetUsers)].filter(Boolean);
+  if (penerima.length === 0) return;
+
+  const title = input.title.slice(0, 160);
+  const message = input.message.slice(0, 400);
+  const now = new Date().toISOString();
+
+  try {
+    const { data } = await db()
+      .from("notifications")
+      .select("id, target_user")
+      .eq("kind", input.kind)
+      .eq("href", input.href)
+      .eq("read", false)
+      .eq("dismissed", false)
+      .in("target_user", penerima);
+
+    const lama = (data ?? []) as { id: string; target_user: string }[];
+    const sudahAda = new Set(lama.map((r) => r.target_user));
+
+    // Bukan `Promise[]`: pembangun kueri Supabase hanya "thenable", belum janji
+    // penuh — ia baru berjalan saat di-await.
+    const kerja: PromiseLike<unknown>[] = [];
+    if (lama.length > 0) {
+      kerja.push(
+        db()
+          .from("notifications")
+          .update({ title, message, actor_name: input.actorName ?? null, created_at: now })
+          .in("id", lama.map((r) => r.id)),
+      );
+    }
+    const baru = penerima.filter((id) => !sudahAda.has(id));
+    if (baru.length > 0) {
+      kerja.push(
+        db()
+          .from("notifications")
+          .insert(
+            baru.map((uid) => ({
+              id: `ntf_${randomUUID()}`,
+              kind: input.kind,
+              title,
+              message,
+              href: input.href,
+              target_user: uid,
+              department: null,
+              actor_name: input.actorName ?? null,
+              outlet_id: input.outletId ?? null,
+              area_id: input.areaId ?? null,
+              severity: input.severity ?? "info",
+              read: false,
+              dismissed: false,
+              created_at: now,
+            })),
+          ),
+      );
+    }
+    await Promise.all(kerja);
+  } catch {
+    // Sama seperti `notify`: pesannya sudah tersimpan, notifikasinya efek samping.
+  }
+}
