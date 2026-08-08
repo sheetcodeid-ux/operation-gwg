@@ -1,91 +1,155 @@
 # Panduan Serah Terima ke Tim IT
 
-Dokumen ini menjawab satu pertanyaan: **apa yang perlu diberikan ke tim IT, dan
-apa yang harus disiapkan lebih dulu.**
+Runbook langkah-demi-langkah: apa yang diklik, apa yang diketik di terminal, dan
+apa yang dikirim. Mencakup GitHub, ESB (data void & cancel), Vercel, Supabase,
+dan Cloudflare R2.
 
-Mencakup GitHub, ESB (data void & cancel), Vercel, Supabase, dan Cloudflare R2.
+**Identitas sistem** (dipakai di banyak perintah di bawah):
+
+| | |
+| --- | --- |
+| Repositori | `sheetcodeid-ux/operation-gwg` (privat) |
+| Vercel team | `gwg-operation` |
+| Supabase project | `operation-gwg` · ref `igbbqtfyqlibzuaygiwl` · region Seoul |
+| ESB | `https://erp.esb.co.id` |
 
 ---
 
 ## Bagian 0 — Tentukan ini dulu
 
-Jawaban seluruh dokumen ini bercabang di satu pertanyaan. **Tanyakan ke tim IT
+Jawaban seluruh dokumen bercabang di satu pertanyaan. **Tanyakan ke tim IT
 sebelum memberi apa pun:**
 
-> "Kalian mau membangun sistem sendiri yang menarik data dari ESB, atau mau ikut
+> "Kalian mau membangun sistem sendiri yang menarik data dari ESB, atau ikut
 > mengembangkan aplikasi Operation GWG yang sudah ada?"
 
 | | **A. Sistem terpisah** | **B. Ikut kembangkan app ini** |
 | --- | --- | --- |
 | GitHub | ✅ Perlu (sebagai rujukan) | ✅ Perlu |
-| Kredensial ESB | ✅ Perlu (akun sendiri) | ⬜ Tidak — akun yang ada sudah jalan |
+| Kredensial ESB | ✅ Perlu | ⬜ Tidak — yang ada sudah jalan |
 | Vercel | ⬜ **Tidak perlu** | ✅ Perlu |
-| Supabase | ⬜ **Tidak perlu** | ✅ Perlu (proyek terpisah) |
-| Cloudflare R2 | ⬜ **Tidak perlu** | ⬜ Hanya kalau menggarap fitur unggah |
+| Supabase | ⬜ **Tidak perlu** | ✅ Perlu (proyek dev terpisah) |
+| Cloudflare R2 | ⬜ **Tidak perlu** | Hanya bila menggarap fitur unggah |
 
-**Kalau jawabannya A — dan dari pembicaraan sejauh ini kemungkinan besar
-memang A — maka Vercel dan Supabase TIDAK perlu diberikan sama sekali.** Mereka
-akan punya Vercel dan database sendiri. Memberi akses ke milik Anda hanya
-menambah risiko tanpa memberi mereka manfaat apa pun.
+**Kalau jawabannya A, Vercel dan Supabase tidak perlu diberikan sama sekali.**
+Mereka punya sendiri; memberi akses ke milik Anda hanya menambah risiko tanpa
+memberi mereka manfaat.
 
-Sisa dokumen ini menandai tiap bagian dengan **[A]**, **[B]**, atau **[A+B]**.
+Tiap bagian ditandai **[A]**, **[B]**, atau **[A+B]**.
 
 ---
 
 ## Bagian 1 — GitHub **[A+B]**
 
-### 1.1 Kunci branch `main` — lakukan SEBELUM mengundang siapa pun
+### 1.1 Kunci branch `main` — SEBELUM mengundang siapa pun
 
-Kondisi sekarang: **`main` tidak terproteksi**, dan setiap push ke `main`
-**langsung tayang ke produksi** lewat Vercel. Memberi akses Write pada kondisi
-ini berarti satu perintah salah di terminal bisa menimpa seluruh riwayat kerja
-dan langsung sampai ke pengguna.
+Setiap push ke `main` **langsung tayang ke produksi** lewat Vercel. Tanpa
+penguncian, satu `git push --force` salah target bisa menimpa seluruh riwayat
+kerja dan langsung sampai ke pengguna. Ini terjadi pada developer paling senior
+sekalipun.
 
-Ini bukan soal percaya atau tidak. Ini soal `git push --force` yang salah target
-— dan itu terjadi pada developer paling senior sekalipun.
+**Klik:**
+1. Buka repo → tab **Settings**
+2. Menu kiri → **Rules** → **Rulesets** → **New ruleset** → *New branch ruleset*
+3. **Ruleset Name**: `lindungi-main`
+4. **Enforcement status**: **Active**
+5. **Target branches** → *Add target* → *Include default branch*
+6. Centang di bagian **Rules**:
+   - ✅ **Restrict deletions**
+   - ✅ **Block force pushes**
+   - ✅ **Require a pull request before merging**
+     → *Required approvals*: **1**
+   - ✅ **Require status checks to pass**
+     → *Add checks* → cari **`verify`** (nama job di `.github/workflows/ci.yml`)
+7. **Create**
 
-**Caranya:** Settings → Branches → *Add branch ruleset* → target `main`, aktifkan:
+Setelah ini, Anda pun tidak bisa push langsung ke `main` — semua lewat Pull
+Request. Itu memang tujuannya.
 
-- ✅ **Require a pull request before merging**
-- ✅ **Block force pushes**
-- ✅ **Require status checks to pass** → pilih **CI** (workflow-nya sudah ada di
-  `.github/workflows/ci.yml`)
+> **Kalau Anda ingin tetap bisa push langsung**, tambahkan diri Anda di
+> **Bypass list** → *Add bypass* → *Repository admin*. Tapi lebih aman tidak.
 
-Hasilnya: tim IT tetap bisa bekerja penuh, hanya saja perubahan masuk lewat Pull
-Request. Riwayat kerja Anda tidak bisa hilang.
+### 1.2 Undang tim IT
 
-### 1.2 Undang sebagai collaborator
+**Klik:** Settings → **Collaborators and teams** → **Add people** → ketik
+username GitHub atau emailnya → pilih peran:
 
-Settings → Collaborators → **Add people** → username GitHub mereka → peran
-**Write**.
+| Peran | Bisa apa | Untuk siapa |
+| --- | --- | --- |
+| **Read** | clone & baca saja | kalau cuma perlu membaca kode rujukan |
+| **Write** ← *pilih ini* | clone, push branch, buka PR | developer |
+| **Admin** | + ubah setelan repo, hapus repo | jangan, kecuali sangat perlu |
 
-- **Satu undangan per orang.** Jangan akun bersama — dengan akun bersama Anda
-  tidak akan pernah tahu siapa mengubah apa, dan mencabut akses satu orang jadi
-  mustahil.
-- Peran **Admin** hanya untuk yang memang perlu mengubah pengaturan repo.
+**Satu undangan per orang.** Jangan akun bersama — dengan akun bersama Anda
+tidak akan pernah tahu siapa mengubah apa, dan mencabut akses satu orang jadi
+mustahil.
 
-### 1.3 Yang TIDAK perlu dilakukan
+Undangan berlaku 7 hari. Cek statusnya di halaman yang sama.
 
-Repositori dan seluruh riwayat commit-nya sudah dipindai: **tidak ada satu pun
-kredensial yang pernah ter-commit**, dan pola `.env*` diblokir `.gitignore`.
+### 1.3 Yang dikerjakan tim IT di terminal
 
-Memberi akses repo **tidak** memberi mereka kunci apa pun. Tidak ada yang perlu
-dibersihkan.
+Kirimkan langkah ini ke mereka.
 
-### 1.4 Yang mereka dapat otomatis dari akses ini
+**a. Terima undangan** — cek email atau
+`https://github.com/sheetcodeid-ux/operation-gwg/invitations`
+
+**b. Siapkan kunci SSH** (sekali seumur hidup per laptop):
+
+```bash
+ssh-keygen -t ed25519 -C "email-kantor@gwg.co"     # Enter tiga kali
+cat ~/.ssh/id_ed25519.pub                          # salin seluruh isinya
+```
+Tempel ke **GitHub → Settings (akun, bukan repo) → SSH and GPG keys → New SSH key**.
+
+Uji:
+```bash
+ssh -T git@github.com
+# "Hi <username>! You've successfully authenticated..."
+```
+
+**c. Clone & jalankan:**
+
+```bash
+git clone git@github.com:sheetcodeid-ux/operation-gwg.git
+cd operation-gwg
+npm install
+npm run dev            # http://localhost:3000
+```
+
+Aplikasi langsung jalan penuh dalam **mode demo** — data contoh, pilih persona
+di layar login. **Tanpa kredensial apa pun.** Cukup untuk membaca kode,
+menggarap tampilan, dan menjalankan tes.
+
+**d. Alur kerja harian** (karena `main` terkunci):
+
+```bash
+git checkout -b fitur/nama-pekerjaan
+# ...ubah kode...
+npm run lint && npx tsc --noEmit && npx vitest run
+git add -A && git commit -m "penjelasan singkat"
+git push -u origin fitur/nama-pekerjaan
+```
+Lalu buka Pull Request di GitHub.
+
+### 1.4 Yang mereka dapat otomatis dari akses repo
 
 | Berkas | Isi |
 | --- | --- |
-| `docs/esb-fraud-integration.md` | **Cara mengambil void & cancel dari ESB** — alur lengkap + 8 jebakan |
+| `docs/esb-fraud-integration.md` | **Cara ambil void & cancel dari ESB** — alur lengkap + 8 jebakan |
 | `src/lib/integrations/esb-client.ts` | Implementasi login, generate export, antrean serial |
 | `src/lib/integrations/esb.ts` | Pengurai grid HTML ESB |
-| `supabase/migrations/0022_fraud_sync.sql` | Skema tabel `fraud_orders` + `fraud_sync` |
+| `supabase/migrations/0022_fraud_sync.sql` | Skema `fraud_orders` + `fraud_sync` |
 | `src/app/api/cron/fraud-sync/` | Cron harian |
 | `.env.example` | Daftar 15 variabel yang dibaca aplikasi |
-| `README.md` | Bagian *Onboarding developer baru* |
 
-Jadi **dokumen integrasi fraud terkirim otomatis lewat akses GitHub.** Tidak
-perlu mengirim berkas terpisah.
+**Dokumen integrasi fraud terkirim otomatis lewat akses GitHub** — tidak perlu
+mengirim berkas terpisah.
+
+### 1.5 Tidak ada yang perlu dibersihkan
+
+Repositori dan seluruh riwayat commit-nya sudah dipindai: **tidak ada satu pun
+kredensial yang pernah ter-commit**, dan pola `.env*` diblokir `.gitignore`.
+Memberi akses repo tidak memberi mereka kunci apa pun.
 
 ---
 
@@ -95,70 +159,42 @@ perlu mengirim berkas terpisah.
 
 ```
 ESB_BASE_URL   = https://erp.esb.co.id
-ESB_USERNAME   = (akun laporan KHUSUS untuk sistem mereka)
+ESB_USERNAME   = (akun laporan untuk sistem MEREKA)
 ESB_PASSWORD   = (kata sandinya)
 ```
 
-### 2.2 Akun ESB WAJIB terpisah — ini soal data, bukan akses
+Letak nilai yang sekarang: **Vercel → project `operation-gwg` → Settings →
+Environment Variables** → klik ikon mata pada baris `ESB_USERNAME` /
+`ESB_PASSWORD`.
 
-Mintakan ke pihak ESB **satu akun laporan baru** khusus untuk sistem mereka.
-Jangan pakai akun yang sekarang dipakai Operation GWG.
+> Kalau variabelnya dulu dibuat dengan centang **Sensitive**, Vercel membuatnya
+> write-only — nilainya **tidak bisa dibaca kembali oleh siapa pun**, termasuk
+> Anda. Kalau itu terjadi, reset kata sandinya di ESB.
 
-Alasannya teknis, bukan kepercayaan:
+### 2.2 Kalau memakai akun yang sama, atur jadwalnya
 
-> **Antrean export ESB terikat pada AKUN, bukan pada sesi login.** Dua sistem
-> yang login dengan akun sama akan mengantre di tempat yang sama, lalu
-> **masing-masing mengurai berkas milik yang lain**.
->
-> Gejalanya: tidak ada error, tidak ada log merah — hanya baris tanggal atau
-> outlet yang salah masuk ke basis data. Kami pernah kena versi ringannya:
-> **±40% baris milik hari lain**, baru ketahuan setelah angkanya dipertanyakan.
+Idealnya tiap sistem punya akun ESB sendiri. Kalau tetap memakai satu akun
+bersama, **jadwalnya wajib dipisah** — ini soal integritas data, bukan akses:
 
-Bonusnya: kalau satu akun terkunci atau kena rate-limit, sistem yang satunya
-tetap jalan.
+> **Antrean export ESB terikat pada AKUN, bukan sesi login.** Dua sistem yang
+> menarik bersamaan mengantre di tempat yang sama, lalu masing-masing mengurai
+> **berkas milik yang lain** — tanpa error, tanpa log, hanya baris tanggal atau
+> outlet salah yang diam-diam masuk basis data.
 
-Beri tahu juga pihak ESB bahwa akan ada sistem kedua yang menarik laporan,
-supaya tidak dikira serangan.
+Cron Anda: **21:30 UTC = 04:30 WIB** setiap hari (`vercel.json`).
 
-### 2.3 Hak akses akun tersebut
+Minta mereka menjadwalkan di jam yang jelas berbeda, misalnya **09:00 UTC
+(16:00 WIB)**. Jarak setengah hari lebih dari cukup — sinkronisasi harian
+selesai dalam hitungan menit.
+
+### 2.3 Hak akses akunnya
 
 Cukup bisa membuka menu **Report**. **Jangan master admin** — seluruh alur ini
-hanya MEMBACA laporan, tidak pernah menulis apa pun ke POS.
+hanya MEMBACA laporan, tidak pernah menulis ke POS.
 
-### 2.4 Yang perlu mereka baca
+### 2.4 Yang wajib mereka baca lebih dulu
 
-Semua ada di `docs/esb-fraud-integration.md`. Ringkasnya:
-
-**ESB tidak punya API.** Yang ada hanya aplikasi web PHP/Yii2 dengan laporan
-asinkron yang dikirim sebagai potongan HTML. Integrasi bekerja dengan meniru
-persis apa yang dilakukan browser.
-
-Alurnya 4 langkah:
-1. **Login** — `GET /site/login` ambil CSRF → `POST /site/login` dengan
-   **seluruh input tersembunyi** form-nya (ada `challengeToken`)
-2. **Buka halaman laporan** — ambil CSRF baru, `POST_USER_SESSION`, opsi
-   dropdown `typeVoid`
-3. **Minta export** — `POST /report/report-cancel-menu-detail`, tanggal
-   format **`DD-MM-YYYY`**
-4. **Baca per halaman** — `POST /report_service/main/get-data-report`
-
-Pemisahan Void / Cancel dari kolom `Type`:
-
-```js
-const isVoid   = /void/i.test(row.type);
-const isCancel = /cancel/i.test(row.type) && !/void/i.test(row.type);
-```
-
-| Yang diminta | Caranya |
-| --- | --- |
-| Void saja | saring `isVoid` |
-| Cancel saja | saring `isCancel` |
-| Void + Cancel | seluruh baris export default |
-| Delete Order | export terpisah (`typeVoid` = `Removed Before Save`) |
-
-### 2.5 Suruh mereka baca bagian "Jebakan" SEBELUM koding
-
-Waktu mereka akan habis bukan di login atau parsing, tapi di tiga hal ini —
+Waktu mereka akan habis bukan di login atau parsing, tapi di empat hal ini —
 semuanya gagal **tanpa satu pun pesan error**:
 
 | # | Jebakan | Akibat |
@@ -168,51 +204,87 @@ semuanya gagal **tanpa satu pun pesan error**:
 | 4 | Sel hilang karena `rowspan` | ±58% item hilang |
 | 5 | Nilai `typeVoid` asing | SELURUH filter dibuang, tanggal termasuk |
 
-Selengkapnya (8 jebakan) ada di dokumen.
+Selengkapnya (8 jebakan) di `docs/esb-fraud-integration.md`.
 
 ---
 
-## Bagian 3 — Vercel
+## Bagian 3 — Vercel **[B saja]**
 
-### Skenario A: sistem terpisah → **tidak perlu diberikan apa pun**
+Untuk skenario A, lewati bagian ini seluruhnya.
 
-Mereka akan deploy ke Vercel/server mereka sendiri. Akun Vercel Anda tidak ada
-hubungannya dengan pekerjaan mereka.
+### 3.1 Setting: undang ke team
 
-### Skenario B: ikut kembangkan app ini
+**Klik:** vercel.com → pilih team **`gwg-operation`** (pojok kiri atas) →
+**Settings** → **Members** → **Invite** → masukkan email → peran:
 
-**Jangan memberikan nilai environment variable-nya.** Beri akses ke
-project-nya, biar Vercel yang mengurus.
+| Peran | Bisa apa |
+| --- | --- |
+| **Member** ← *pilih ini* | lihat deployment, log, preview |
+| **Developer** | + kelola environment variable |
+| **Owner** | + tagihan, hapus project |
 
-**Caranya:** Vercel → project **operation-gwg** → Settings → **Members** →
-Invite. Peran **Member** (bukan Owner).
+> ⚠️ **Menambah anggota team butuh paket Pro.** Paket Hobby hanya untuk satu
+> orang. Kalau Anda masih di Hobby, Vercel akan menawarkan upgrade berbayar
+> saat mengundang. Kalau tidak mau upgrade: tim IT tidak perlu akses Vercel —
+> mereka cukup jalan di lokal, dan Anda yang menekan deploy.
 
-Dengan itu mereka dapat:
-- Preview deployment otomatis untuk tiap Pull Request
-- Log runtime & build untuk debugging
-- Riwayat deployment dan tombol rollback
+### 3.2 Jangan kirim nilai environment variable
 
-Yang **tidak** otomatis mereka dapat: nilai environment variable produksi.
-Biarkan begitu — untuk pengembangan mereka pakai `.env.local` sendiri.
+Beri akses ke project-nya, biar Vercel yang mengurus. Untuk pengembangan mereka
+pakai `.env.local` sendiri.
 
-**Yang perlu diketahui tentang project ini:**
+### 3.3 Terminal: Vercel CLI
+
+```bash
+npm i -g vercel
+vercel login                     # buka browser, login
+cd operation-gwg
+vercel link                      # pilih team gwg-operation → project operation-gwg
+```
+
+Perintah harian:
+
+```bash
+vercel env pull .env.local       # tarik env var ke lokal (butuh peran Developer)
+vercel dev                       # jalankan seperti di Vercel (bukan `npm run dev`)
+vercel                           # deploy preview (URL sementara)
+vercel --prod                    # deploy produksi ⚠️ langsung ke pengguna
+vercel logs <url-deployment>     # lihat log runtime
+```
+
+> `vercel env pull` menulis **seluruh rahasia produksi** sebagai teks polos ke
+> disk. Berkasnya sudah diblokir `.gitignore`, tapi hapus setelah selesai.
+
+### 3.4 Yang perlu diketahui tentang project ini
 
 | | |
 | --- | --- |
 | Region | `sin1` (Singapura) |
 | Cron | `/api/cron/fraud-sync` tiap hari 21:30 UTC (04:30 WIB) |
-| Auto-deploy | Setiap push ke `main` langsung ke produksi |
+| Auto-deploy | Setiap push/merge ke `main` langsung ke produksi |
 | Batas fungsi | 60 detik — alasan sinkronisasi ESB dipecah per hari |
 
 ---
 
 ## Bagian 4 — Supabase
 
-### Skenario A: sistem terpisah → **tidak perlu diberikan apa pun**
+### 4.1 Skenario A: mereka pakai database sendiri
 
-Mereka bikin database sendiri. Skema tabelnya sudah tersedia di repo
-(`supabase/migrations/0022_fraud_sync.sql`) — tinggal dijalankan di Postgres
-mana pun.
+**Tidak perlu memberi akses apa pun.** Skema tabelnya sudah ada di repo dan
+bisa dijalankan di Postgres mana pun.
+
+Yang mereka lakukan di terminal:
+
+```bash
+npm i -g supabase
+supabase login
+supabase init                                  # kalau proyek baru
+supabase link --project-ref <REF-MILIK-MEREKA>
+supabase db push                               # jalankan semua migrasi
+```
+
+Atau kalau cuma butuh tabel fraud, jalankan satu berkas ini di SQL Editor
+Supabase mereka: `supabase/migrations/0022_fraud_sync.sql`.
 
 > **Kalau ternyata mereka hanya butuh DATANYA, bukan integrasinya:** data ini
 > sudah lengkap di database Anda — **154.892 baris, 32 MB, 1 Januari 2026
@@ -220,33 +292,57 @@ mana pun.
 > daripada menyuruh mereka menarik ulang dari ESB. Bilang saja kalau mau
 > disiapkan.
 
-### Skenario B: ikut kembangkan app ini
+### 4.2 Skenario B: buatkan proyek DEV terpisah
 
-**Buatkan proyek Supabase TERPISAH untuk development.** Jangan bagikan yang
-produksi.
+**Jangan bagikan proyek produksi.** `SUPABASE_SERVICE_ROLE_KEY` melewati
+seluruh Row Level Security — setara kata sandi root database. Siapa pun yang
+memegangnya bisa membaca dan menulis semua tabel: data karyawan, gaji,
+penilaian, seluruhnya. Satu `delete` salah ketik saat development langsung
+mengenai data produksi.
 
-Alasannya: `SUPABASE_SERVICE_ROLE_KEY` **melewati seluruh Row Level Security** —
-setara kata sandi root database. Siapa pun yang memegangnya bisa membaca dan
-menulis semua tabel: data karyawan, gaji, penilaian, seluruhnya. Satu `delete`
-salah ketik saat development langsung mengenai data produksi.
+**Klik + terminal:**
 
-**Caranya:**
-1. Buat proyek Supabase baru (mis. `operation-gwg-dev`)
-2. Jalankan migrasinya: `supabase link --project-ref <ref-baru>` lalu
-   `supabase db push` — seluruh skema terbentuk dari `supabase/migrations/`
-3. Berikan kunci proyek **dev** itu ke mereka
+1. supabase.com → **New project** → nama `operation-gwg-dev`, region **Southeast
+   Asia (Singapore)**, simpan kata sandi database-nya
+2. Salin **Project ref** dari Settings → General
+3. Bangun skemanya:
+   ```bash
+   cd operation-gwg
+   supabase login
+   supabase link --project-ref <REF-DEV-BARU>
+   supabase db push
+   supabase migration list        # pastikan semua 39 migrasi tercatat
+   ```
+4. Ambil kuncinya: **Settings → API Keys** → salin *Project URL*, *anon key*,
+   *service_role key*
+5. Berikan kunci **dev** itu ke tim IT untuk `.env.local` mereka
 
-Kalau memang harus akses ke produksi (misal menelusuri bug data): Supabase →
-Organization → **Team** → Invite, peran **Developer**, dan cabut setelah selesai.
+### 4.3 Kalau memang harus akses ke produksi
 
-**Yang perlu diketahui tentang proyek ini:**
+Misalnya untuk menelusuri bug data. **Klik:** supabase.com → **Organization** →
+**Team** → **Invite member** → peran:
 
-| | |
+| Peran | Bisa apa |
 | --- | --- |
-| Nama | `operation-gwg` |
-| Region | `ap-northeast-2` (Seoul) |
-| Postgres | 17.6 |
-| Tabel fraud | `fraud_orders` (32 MB), `fraud_sync`, `sales_daily`, `sales_period` |
+| **Read-only** ← *pilih ini* | lihat tabel & data, tidak bisa mengubah |
+| **Developer** | + ubah data & skema |
+| **Administrator** | + kelola anggota |
+| **Owner** | + tagihan, hapus proyek |
+
+**Cabut kembali setelah selesai** — Organization → Team → ⋯ → Remove.
+
+### 4.4 Perintah Supabase CLI yang berguna
+
+```bash
+supabase projects list                    # daftar proyek Anda
+supabase migration list                   # migrasi mana yang sudah/belum jalan
+supabase db push                          # jalankan migrasi yang belum
+supabase db diff -f nama_perubahan        # buat migrasi baru dari perubahan skema
+supabase gen types typescript --linked    # tipe TypeScript dari skema
+```
+
+> **Jangan pernah** `supabase db reset` pada proyek produksi — itu MENGHAPUS
+> seluruh data lalu membangun ulang dari migrasi.
 
 ---
 
@@ -255,21 +351,20 @@ Organization → **Team** → Invite, peran **Developer**, dan cabut setelah sel
 Penyimpanan lampiran: berkas pengajuan, foto hygiene, bukti tindak lanjut,
 lampiran obrolan.
 
-Hanya diperlukan kalau mereka menggarap fitur unggah berkas. Kalau iya,
-**buatkan bucket + API token terpisah untuk development**, jangan bagikan yang
-produksi — supaya berkas uji coba tidak bercampur dengan dokumen asli.
+Hanya perlu kalau mereka menggarap fitur unggah. Kalau iya: **buatkan bucket +
+API token terpisah untuk development** (Cloudflare → R2 → *Manage API Tokens*),
+jangan bagikan yang produksi — supaya berkas uji coba tidak bercampur dengan
+dokumen asli.
 
 ---
 
 ## Bagian 6 — Aturan penanganan kredensial
 
-Berlaku untuk semua di atas.
-
 1. **Jangan pernah mengirim nilai rahasia lewat chat, email, atau WhatsApp.**
    Pesan bisa diteruskan, ter-backup ke cloud, dan tidak bisa ditarik kembali.
    Pakai pengelola kata sandi bersama (1Password / Bitwarden).
 2. **Lebih baik mereka membuat akunnya sendiri** daripada Anda membagikan milik
-   Anda. Berlaku untuk ESB, Supabase, Vercel, R2 — semuanya.
+   Anda. Berlaku untuk GitHub, Supabase, Vercel, R2 — semuanya.
 3. **Kredensial produksi tinggal di Vercel → Environment Variables**, bukan di
    berkas yang beredar antar orang.
 4. **Kalau ada rahasia yang terlanjur tersebar:** ganti di sumbernya
@@ -281,23 +376,24 @@ Berlaku untuk semua di atas.
 ## Bagian 7 — Checklist
 
 **Sebelum mengundang siapa pun**
-- [ ] Kunci branch `main` (require PR, block force push, require CI)
-- [ ] Tanyakan ke tim IT: sistem terpisah, atau ikut kembangkan app ini?
-- [ ] Kalau mereka menarik dari ESB → mintakan akun laporan ESB **baru**
+- [ ] Kunci branch `main` (Bagian 1.1)
+- [ ] Tanyakan: sistem terpisah, atau ikut kembangkan app ini? (Bagian 0)
+- [ ] *(bila menarik dari ESB)* siapkan akun ESB + sepakati jadwal tarikan
 
 **Mengundang**
 - [ ] GitHub → Collaborators → Add people, peran **Write**, satu per orang
-- [ ] *(hanya skenario B)* Vercel → Members → Invite, peran **Member**
-- [ ] *(hanya skenario B)* Buat proyek Supabase dev + jalankan migrasi
+- [ ] *(skenario B)* Vercel → Members → Invite, peran **Member**
+- [ ] *(skenario B)* buat proyek Supabase dev + `supabase db push`
 
 **Mengirim kredensial**
 - [ ] Lewat pengelola kata sandi, **bukan chat**
-- [ ] ESB: akun terpisah, hak akses Report saja, bukan master admin
+- [ ] ESB: hak akses Report saja, bukan master admin
 - [ ] Beri tahu pihak ESB akan ada sistem kedua yang menarik laporan
 
 **Menyusul**
-- [ ] Pastikan mereka membaca `docs/esb-fraud-integration.md` bagian **Jebakan**
-      sebelum mulai koding
+- [ ] Pastikan mereka membaca bagian **Jebakan** di
+      `docs/esb-fraud-integration.md` **sebelum** mulai koding
+- [ ] Cek Pull Request pertama mereka masuk dengan benar
 
 ---
 
@@ -310,7 +406,7 @@ Berlaku untuk semua di atas.
 >
 > **Mulai:**
 > ```
-> git clone https://github.com/sheetcodeid-ux/operation-gwg.git
+> git clone git@github.com:sheetcodeid-ux/operation-gwg.git
 > cd operation-gwg && npm install && npm run dev
 > ```
 > Aplikasi langsung jalan penuh dalam mode demo (data contoh, pilih persona di
@@ -323,35 +419,62 @@ Berlaku untuk semua di atas.
 > 2. `src/lib/integrations/esb-client.ts` — implementasi yang sudah jalan di produksi
 > 3. `supabase/migrations/0022_fraud_sync.sql` — skema tabelnya
 >
-> **Akun ESB kalian dikirim terpisah lewat password manager.** Akunnya sengaja
-> berbeda dari yang dipakai sistem kami — antrean export ESB terikat ke akun,
-> jadi kalau dua sistem pakai akun sama, keduanya akan mengurai berkas milik
-> yang lain tanpa error apa pun.
+> **Akun ESB dikirim terpisah lewat password manager.**
+> Sinkronisasi kami jalan tiap hari 04:30 WIB — tolong jadwalkan tarikan kalian
+> di jam lain (misal 16:00 WIB). Antrean export ESB terikat ke akun, jadi kalau
+> bertabrakan kedua sistem bisa saling mengambil berkas yang salah, tanpa error
+> apa pun.
 >
 > **Catatan:** `main` terkunci, perubahan lewat Pull Request.
 
 ---
 
+## Bagian 9 — Masalah yang mungkin mereka temui
+
+**`/login` balas 404, sebagian halaman lain normal**
+Turbopack salah menebak akar proyek karena ada `package-lock.json` nyasar di
+folder induk. Sudah dicegah lewat `turbopack.root` di `next.config.ts`. Kalau
+masih terjadi: `rm -rf .next && npm run dev`.
+
+**`npm run dev` error modul tidak ditemukan**
+Lupa `npm install` setelah `git pull`. `package.json` sering ikut berubah.
+
+**`git pull` menolak: "local changes would be overwritten"**
+```bash
+git stash && git pull origin main && git stash pop
+```
+
+**`npm audit` melaporkan vulnerability**
+Ada di dependensi tidak langsung dan tidak memengaruhi aplikasi.
+**Jangan jalankan `npm audit fix --force`** — perintah itu menaikkan versi mayor
+dan merusak build.
+
+**Aplikasi jalan tapi datanya contoh semua**
+Normal — itu mode demo, terjadi saat `.env.local` belum ada. Memang begitu
+sampai kredensial diberikan.
+
+---
+
 ## Lampiran — 15 environment variable
 
-Daftar lengkap ada di `.env.example`. Ringkasnya siapa butuh apa:
+Daftar lengkap beserta keterangan ada di `.env.example`.
 
-| Variabel | Untuk apa | Skenario A | Skenario B |
+| Variabel | Untuk apa | A | B |
 | --- | --- | --- | --- |
 | `ESB_BASE_URL` | Alamat ESB | ✅ | ⬜ |
-| `ESB_USERNAME` | Akun laporan ESB | ✅ akun sendiri | ⬜ |
-| `ESB_PASSWORD` | Kata sandinya | ✅ akun sendiri | ⬜ |
-| `NEXT_PUBLIC_SUPABASE_URL` | Alamat proyek Supabase | ⬜ | ✅ proyek dev |
-| `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Kunci publik (aman di browser) | ⬜ | ✅ proyek dev |
-| `SUPABASE_SERVICE_ROLE_KEY` | ⚠️ **Melewati seluruh RLS** | ⬜ | ✅ proyek dev |
-| `GWG_SUPABASE_URL` | Alamat untuk lapisan data | ⬜ | ✅ proyek dev |
+| `ESB_USERNAME` | Akun laporan ESB | ✅ | ⬜ |
+| `ESB_PASSWORD` | Kata sandinya | ✅ | ⬜ |
+| `NEXT_PUBLIC_SUPABASE_URL` | Alamat proyek Supabase | ⬜ | ✅ dev |
+| `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Kunci publik (aman di browser) | ⬜ | ✅ dev |
+| `SUPABASE_SERVICE_ROLE_KEY` | ⚠️ **Melewati seluruh RLS** | ⬜ | ✅ dev |
+| `GWG_SUPABASE_URL` | Alamat untuk lapisan data | ⬜ | ✅ dev |
 | `GWG_SUPABASE_KEY` | Cadangan service key | ⬜ | ⬜ |
 | `GWG_SESSION_SECRET` | Penanda tangan cookie sesi | ⬜ | ✅ buat sendiri |
-| `GWG_ADMIN_RPC_SECRET` | Rahasia RPC pembuatan akun | ⬜ | ✅ proyek dev |
-| `R2_ENDPOINT` | Alamat penyimpanan | ⬜ | hanya bila perlu |
-| `R2_BUCKET` | Nama bucket | ⬜ | hanya bila perlu |
-| `R2_ACCESS_KEY_ID` | Kunci akses R2 | ⬜ | hanya bila perlu |
-| `R2_SECRET_ACCESS_KEY` | Rahasia R2 | ⬜ | hanya bila perlu |
+| `GWG_ADMIN_RPC_SECRET` | Rahasia RPC pembuatan akun | ⬜ | ✅ dev |
+| `R2_ENDPOINT` | Alamat penyimpanan | ⬜ | bila perlu |
+| `R2_BUCKET` | Nama bucket | ⬜ | bila perlu |
+| `R2_ACCESS_KEY_ID` | Kunci akses R2 | ⬜ | bila perlu |
+| `R2_SECRET_ACCESS_KEY` | Rahasia R2 | ⬜ | bila perlu |
 | `CRON_SECRET` | Pelindung endpoint cron | ⬜ | diisi Vercel otomatis |
 
 `GWG_SESSION_SECRET` tidak perlu dibagikan — mereka buat sendiri:
