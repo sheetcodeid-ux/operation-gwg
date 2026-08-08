@@ -56,7 +56,7 @@ function Panel({
   className?: string;
 }) {
   return (
-    <div className={cn("flex flex-col rounded-2xl border border-border bg-card/40 p-5", className)}>
+    <div className={cn("flex min-w-0 flex-col rounded-2xl border border-border bg-card/40 p-4 sm:p-5", className)}>
       <div className="mb-3 flex items-start justify-between gap-3">
         <div className="min-w-0">
           <h3 className="text-sm font-semibold tracking-tight text-foreground">{title}</h3>
@@ -97,19 +97,30 @@ export function CreativeKpiBoardView({ canEdit }: { canEdit: boolean }) {
 
   return (
     <div className="space-y-4">
-      {/* Pemilih periode + aksi admin */}
-      <div className="flex flex-wrap items-center gap-2">
-        <Combobox
-          options={CREATIVE_MONTHS.map((m, i) => ({ value: String(i), label: m }))}
-          value={String(month)}
-          onChange={(v) => setMonth(Number(v))}
-          className="w-40"
-        />
-        <Combobox options={years} value={String(year)} onChange={(v) => setYear(Number(v))} className="w-28" />
-        <div className="ml-auto flex items-center gap-2">
-          {canEdit && board && <MetricsSheet period={period} current={board.metrics} onSaved={load} />}
-          {canEdit && board && <SettingsSheet board={board} onSaved={load} />}
+      {/* Pemilih periode + aksi admin.
+          Di HP keduanya berbagi satu baris penuh dan tombolnya turun ke baris
+          sendiri — dijejalkan satu baris, tombolnya terpotong di layar 360px. */}
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+        <div className="flex gap-2">
+          <Combobox
+            options={CREATIVE_MONTHS.map((m, i) => ({ value: String(i), label: m }))}
+            value={String(month)}
+            onChange={(v) => setMonth(Number(v))}
+            className="flex-1 sm:w-40 sm:flex-none"
+          />
+          <Combobox
+            options={years}
+            value={String(year)}
+            onChange={(v) => setYear(Number(v))}
+            className="w-24 shrink-0 sm:w-28"
+          />
         </div>
+        {canEdit && board && (
+          <div className="flex gap-2 sm:ml-auto">
+            <MetricsSheet period={period} current={board.metrics} onSaved={load} />
+            <SettingsSheet board={board} onSaved={load} />
+          </div>
+        )}
       </div>
 
       {loading && !board ? (
@@ -141,7 +152,9 @@ export function CreativeKpiBoardView({ canEdit }: { canEdit: boolean }) {
           <div className="grid gap-4 lg:grid-cols-[280px_1fr]">
             <Panel title="Nilai Bulan Ini" subtitle={creativePeriodLabel(period)}>
               <div className="flex flex-1 flex-col items-center justify-center gap-3 py-2">
-                <ScoreRing value={board.score} size={140} stroke={14} label={pct(board.score)} />
+                {/* ScoreRing sudah menuliskan angkanya sendiri — labelnya diisi
+                    satuan, bukan angka yang sama, supaya tidak terbaca "0 0%". */}
+                <ScoreRing value={board.score} size={140} stroke={14} label="dari 100" />
                 <Badge className={cn("text-xs font-bold", TONE_CLASS[cat.tone])}>{cat.label}</Badge>
                 <p className="px-2 text-center text-[11px] leading-relaxed text-muted-foreground">{cat.action}</p>
               </div>
@@ -151,72 +164,77 @@ export function CreativeKpiBoardView({ canEdit }: { canEdit: boolean }) {
               title="Rincian Indikator"
               subtitle="Capaian = realisasi ÷ target, dibatasi 100%. Nilai = capaian × bobot."
             >
-              <div className="-mx-1 overflow-x-auto">
-                <table className="w-full min-w-[620px] text-sm">
-                  <thead>
-                    <tr className="border-b border-border text-[10px] uppercase tracking-wide text-muted-foreground">
-                      <th className="px-2 py-2 text-left font-semibold">Indikator</th>
-                      <th className="px-2 py-2 text-right font-semibold">Bobot</th>
-                      <th className="px-2 py-2 text-right font-semibold">Target</th>
-                      <th className="px-2 py-2 text-right font-semibold">Aktual</th>
-                      <th className="px-2 py-2 text-right font-semibold">Capaian</th>
-                      <th className="px-2 py-2 text-right font-semibold">Nilai</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {board.rows.map((r) => (
-                      <tr
-                        key={r.indicator.key}
-                        className={cn("border-b border-border/60 last:border-0", !r.scored && "opacity-45")}
-                        title={r.indicator.measure}
-                      >
-                        <td className="px-2 py-2">
-                          <span className="font-medium text-foreground">{r.indicator.name}</span>
-                          <span className="ml-1.5 text-[10px] text-muted-foreground">
-                            {r.indicator.source === "instagram" ? "Instagram" : "Pengajuan Design"}
-                          </span>
-                          {!r.scored && (
-                            <span className="ml-1.5 rounded bg-muted px-1 py-0.5 text-[9px] font-semibold uppercase text-muted-foreground">
-                              belum dinilai
-                            </span>
-                          )}
-                        </td>
-                        <td className="px-2 py-2 text-right tabular-nums text-muted-foreground">{r.weight}%</td>
-                        <td className="px-2 py-2 text-right tabular-nums text-muted-foreground">
-                          {r.scored ? showVal(r.indicator.unit, r.target) : "—"}
-                        </td>
-                        <td className="px-2 py-2 text-right font-medium tabular-nums text-foreground">
-                          {showVal(r.indicator.unit, r.realisasi)}
-                        </td>
-                        <td
-                          className={cn(
-                            "px-2 py-2 text-right font-semibold tabular-nums",
-                            r.scored && TONE_CLASS[creativeKpiCategory(r.capaian).tone],
-                          )}
-                        >
-                          {r.scored ? pct(r.capaian) : "—"}
-                        </td>
-                        <td className="px-2 py-2 text-right tabular-nums text-foreground">
-                          {r.scored ? (Math.round(r.aktual * 100) / 100).toLocaleString("id-ID") : "—"}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                  <tfoot>
-                    <tr className="border-t border-border text-sm font-semibold">
-                      <td className="px-2 py-2 text-foreground">Total</td>
+              {/* HP: satu kartu per indikator. Tabel enam kolom di layar 360px
+                  hanya menyisakan nama + bobot; Target/Aktual/Capaian — justru
+                  angka yang dicari — hilang di balik gulir mendatar. */}
+              <ul className="space-y-2 md:hidden">
+                {board.rows.map((r) => (
+                  <IndicatorCard key={r.indicator.key} r={r} />
+                ))}
+              </ul>
+
+              {/* Layar lebar: tabel penuh, tanpa gulir. */}
+              <table className="hidden w-full text-sm md:table">
+                <thead>
+                  <tr className="border-b border-border text-[10px] uppercase tracking-wide text-muted-foreground">
+                    <th className="px-2 py-2 text-left font-semibold">Indikator</th>
+                    <th className="px-2 py-2 text-right font-semibold">Bobot</th>
+                    <th className="px-2 py-2 text-right font-semibold">Target</th>
+                    <th className="px-2 py-2 text-right font-semibold">Aktual</th>
+                    <th className="px-2 py-2 text-right font-semibold">Capaian</th>
+                    <th className="px-2 py-2 text-right font-semibold">Nilai</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {board.rows.map((r) => (
+                    <tr
+                      key={r.indicator.key}
+                      className={cn("border-b border-border/60 last:border-0", !r.scored && "opacity-50")}
+                      title={r.indicator.measure}
+                    >
+                      <td className="px-2 py-2">
+                        <p className="font-medium text-foreground">{r.indicator.name}</p>
+                        <p className="text-[10px] text-muted-foreground">
+                          {sourceLabel(r.indicator.source)}
+                          {!r.scored && " · belum dinilai"}
+                        </p>
+                      </td>
+                      <td className="px-2 py-2 text-right tabular-nums text-muted-foreground">{r.weight}%</td>
                       <td className="px-2 py-2 text-right tabular-nums text-muted-foreground">
-                        {board.rows.filter((r) => r.scored).reduce((s, r) => s + r.weight, 0)}%
+                        {r.scored ? showVal(r.indicator.unit, r.target) : "—"}
                       </td>
-                      <td colSpan={3} className="px-2 py-2 text-right text-[11px] font-normal text-muted-foreground">
-                        dinormalkan ke bobot yang dinilai
+                      <td className="px-2 py-2 text-right font-medium tabular-nums text-foreground">
+                        {showVal(r.indicator.unit, r.realisasi)}
                       </td>
-                      <td className={cn("px-2 py-2 text-right tabular-nums", TONE_CLASS[cat.tone])}>
-                        {pct(board.score)}
+                      <td
+                        className={cn(
+                          "px-2 py-2 text-right font-semibold tabular-nums",
+                          r.scored && TONE_CLASS[creativeKpiCategory(r.capaian).tone],
+                        )}
+                      >
+                        {r.scored ? pct(r.capaian) : "—"}
+                      </td>
+                      <td className="px-2 py-2 text-right tabular-nums text-foreground">
+                        {r.scored ? nilai(r.aktual) : "—"}
                       </td>
                     </tr>
-                  </tfoot>
-                </table>
+                  ))}
+                </tbody>
+              </table>
+
+              {/* Penutup dipisah dari tabel supaya bacaannya sama di HP maupun
+                  desktop — di HP tidak ada <tfoot> yang bisa disandarkan. */}
+              <div className="mt-3 flex items-center justify-between gap-3 border-t border-border pt-3">
+                <div className="min-w-0">
+                  <p className="text-xs font-semibold text-foreground">Total Skor</p>
+                  <p className="text-[10px] leading-relaxed text-muted-foreground">
+                    Dari {board.rows.filter((r) => r.scored).reduce((s, r) => s + r.weight, 0)}% bobot yang dinilai,
+                    dinormalkan ke 100.
+                  </p>
+                </div>
+                <span className={cn("shrink-0 text-lg font-bold tabular-nums", TONE_CLASS[cat.tone])}>
+                  {pct(board.score)}
+                </span>
               </div>
             </Panel>
           </div>
@@ -231,8 +249,15 @@ export function CreativeKpiBoardView({ canEdit }: { canEdit: boolean }) {
                 Belum ada pengajuan design Instagram yang selesai pada bulan ini.
               </p>
             ) : (
-              <div className="-mx-1 overflow-x-auto">
-                <table className="w-full min-w-[560px] text-sm">
+              <>
+                {/* HP: kartu per orang. */}
+                <ul className="space-y-2 md:hidden">
+                  {board.members.map((m) => (
+                    <MemberCard key={m.userId} m={m} />
+                  ))}
+                </ul>
+
+                <table className="hidden w-full text-sm md:table">
                   <thead>
                     <tr className="border-b border-border text-[10px] uppercase tracking-wide text-muted-foreground">
                       <th className="px-2 py-2 text-left font-semibold">Nama</th>
@@ -266,7 +291,7 @@ export function CreativeKpiBoardView({ canEdit }: { canEdit: boolean }) {
                     ))}
                   </tbody>
                 </table>
-              </div>
+              </>
             )}
           </Panel>
         </>
@@ -278,6 +303,123 @@ export function CreativeKpiBoardView({ canEdit }: { canEdit: boolean }) {
 function previousOf(period: string): string {
   const [y, m] = period.split("-").map(Number);
   return m === 1 ? `${y - 1}-12` : `${y}-${String(m - 1).padStart(2, "0")}`;
+}
+
+const sourceLabel = (s: string) => (s === "instagram" ? "Instagram" : "Pengajuan Design");
+const nilai = (n: number) => (Math.round(n * 100) / 100).toLocaleString("id-ID");
+
+/**
+ * Satu indikator sebagai kartu — tampilan HP.
+ *
+ * Angka yang dicari orang (target, aktual, capaian) berdiri sendiri dalam tiga
+ * kolom, bukan disembunyikan di balik gulir mendatar seperti pada tabel.
+ */
+function IndicatorCard({ r }: { r: CreativeKpiBoard["rows"][number] }) {
+  const tone = TONE_CLASS[creativeKpiCategory(r.capaian).tone];
+  return (
+    <li className={cn("rounded-xl border border-border p-3", !r.scored && "opacity-60")}>
+      <div className="flex items-start justify-between gap-2">
+        <div className="min-w-0">
+          <p className="text-[13px] font-medium leading-snug text-foreground">{r.indicator.name}</p>
+          <p className="mt-0.5 text-[10px] text-muted-foreground">{sourceLabel(r.indicator.source)}</p>
+        </div>
+        <span className="shrink-0 rounded-md bg-muted px-1.5 py-0.5 text-[10px] font-semibold tabular-nums text-muted-foreground">
+          {r.weight}%
+        </span>
+      </div>
+
+      {r.scored ? (
+        <>
+          <dl className="mt-2.5 grid grid-cols-3 gap-2 text-center">
+            <CardStat label="Target" value={showVal(r.indicator.unit, r.target)} />
+            <CardStat label="Aktual" value={showVal(r.indicator.unit, r.realisasi)} strong />
+            <CardStat label="Capaian" value={pct(r.capaian)} className={tone} />
+          </dl>
+          <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-muted">
+            <div
+              className={cn(
+                "h-full rounded-full",
+                r.capaian >= 95
+                  ? "bg-emerald-500"
+                  : r.capaian >= 80
+                    ? "bg-blue-500"
+                    : r.capaian >= 65
+                      ? "bg-amber-500"
+                      : "bg-red-500",
+              )}
+              style={{ width: `${Math.max(Math.min(r.capaian, 100), 2)}%` }}
+            />
+          </div>
+          <p className="mt-1.5 text-right text-[10px] text-muted-foreground">
+            Nilai <span className="font-semibold text-foreground">{nilai(r.aktual)}</span> dari {r.weight}
+          </p>
+        </>
+      ) : (
+        <p className="mt-2 rounded-lg bg-muted/50 px-2 py-1.5 text-[10px] leading-relaxed text-muted-foreground">
+          Belum dinilai — belum ada target untuk bulan ini.
+        </p>
+      )}
+    </li>
+  );
+}
+
+function CardStat({
+  label,
+  value,
+  strong,
+  className,
+}: {
+  label: string;
+  value: string;
+  strong?: boolean;
+  className?: string;
+}) {
+  return (
+    <div>
+      <dt className="text-[9px] uppercase tracking-wide text-muted-foreground">{label}</dt>
+      <dd
+        className={cn(
+          "mt-0.5 truncate text-sm tabular-nums",
+          strong ? "font-semibold text-foreground" : "text-foreground/80",
+          className,
+        )}
+      >
+        {value}
+      </dd>
+    </div>
+  );
+}
+
+/** Sumbangan satu orang sebagai kartu — tampilan HP. */
+function MemberCard({ m }: { m: CreativeKpiBoard["members"][number] }) {
+  const judged = m.onTime + m.late;
+  return (
+    <li className="rounded-xl border border-border p-3">
+      <div className="flex items-center justify-between gap-2">
+        <p className="min-w-0 truncate text-[13px] font-medium text-foreground">{m.name}</p>
+        <span className="shrink-0 rounded-md bg-muted px-1.5 py-0.5 text-[10px] font-semibold tabular-nums text-muted-foreground">
+          {m.total} konten
+        </span>
+      </div>
+      <dl className="mt-2.5 grid grid-cols-3 gap-2 text-center">
+        <CardStat label="Post" value={String(m.post)} strong />
+        <CardStat label="Reels" value={String(m.reels)} strong />
+        <CardStat label="Story" value={String(m.story)} strong />
+      </dl>
+      <div className="mt-2.5 flex items-center justify-between gap-2 border-t border-border/60 pt-2">
+        <span className="text-[10px] text-muted-foreground">
+          Tepat waktu
+          {judged > 0 && ` (${m.onTime}/${judged})`}
+          {m.noDeadline > 0 && ` · ${m.noDeadline} tanpa deadline`}
+        </span>
+        <span
+          className={cn("shrink-0 text-sm font-semibold tabular-nums", TONE_CLASS[creativeKpiCategory(m.onTimePct).tone])}
+        >
+          {judged > 0 ? pct(m.onTimePct) : "—"}
+        </span>
+      </div>
+    </li>
+  );
 }
 
 function Notice({ tone, children }: { tone: "amber" | "red"; children: React.ReactNode }) {
