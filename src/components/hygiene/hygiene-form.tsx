@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState, useTransition } from "react";
+import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { ChevronDown, Loader2, Plus, SprayCan, X } from "lucide-react";
 import { toast } from "sonner";
@@ -23,32 +23,70 @@ import { cn } from "@/lib/utils";
 const MIN_PHOTOS = 3;
 
 /**
- * Unggah satu foto ke R2, dengan percobaan ulang.
+ * Satu percobaan PUT, dengan kemajuan byte dan batas waktu.
  *
- * Audit penuh berarti dua puluhan foto berturut-turut dari HP di lapangan.
- * Satu kedipan sinyal membuat fetch gagal ("Load failed" di Safari), dan versi
- * sebelumnya langsung membatalkan seluruh unggahan sehingga petugas harus
- * mengulang dari nol — persis keluhan yang masuk. Jeda antar percobaan
- * dinaikkan bertahap supaya jaringan sempat pulih.
+ * Memakai XMLHttpRequest, bukan fetch, karena dua hal yang keduanya terlihat
+ * di laporan lapangan:
+ *
+ *  • fetch tidak melaporkan kemajuan pengiriman, jadi bilahnya menampilkan 0%
+ *    selama unggahan berjalan. Rekaman layar 41 detik penuh angka 0% tidak
+ *    bisa dibedakan dari aplikasi yang menggantung.
+ *  • fetch tidak punya batas waktu. Sinyal yang mati di tengah kirim membuat
+ *    permintaannya menggantung SELAMANYA — bukan gagal, hanya diam.
  */
-async function putPhotoWithRetry(url: string, file: File, name: string, attempts = 3): Promise<void> {
+function putOnce(url: string, file: File, onBytes: (loaded: number) => void, timeoutMs: number): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    xhr.open("PUT", url, true);
+    xhr.timeout = timeoutMs;
+    xhr.setRequestHeader("content-type", file.type || "application/octet-stream");
+    xhr.upload.onprogress = (e) => {
+      if (e.lengthComputable) onBytes(e.loaded);
+    };
+    xhr.onload = () => {
+      if (xhr.status >= 200 && xhr.status < 300) return resolve();
+      const detail = (xhr.responseText || "").replace(/<[^>]+>/g, " ").slice(0, 100).trim();
+      const err = new Error(`${xhr.status} ${detail}`.trim());
+      // Ditandai supaya pemanggil tahu mengulang tidak ada gunanya.
+      (err as Error & { status?: number }).status = xhr.status;
+      reject(err);
+    };
+    xhr.ontimeout = () => reject(new Error("jaringan terlalu lambat (waktu habis)"));
+    xhr.onerror = () =>
+      reject(new Error("koneksi ke penyimpanan ditolak — periksa izin CORS bucket R2"));
+    xhr.send(file);
+  });
+}
+
+async function putPhotoWithRetry(
+  url: string,
+  file: File,
+  name: string,
+  onBytes: (loaded: number) => void,
+  attempts = 3,
+): Promise<void> {
   let lastMessage = "";
   for (let attempt = 1; attempt <= attempts; attempt++) {
     try {
-      const put = await fetch(url, { method: "PUT", body: file, headers: { "content-type": file.type } });
-      if (put.ok) return;
-      const detail = await put.text().catch(() => "");
-      lastMessage = `${put.status} ${detail.replace(/<[^>]+>/g, " ").slice(0, 100)}`.trim();
+      // Batas waktu naik tiap percobaan: sinyal lapangan yang lambat masih
+      // punya kesempatan, tapi yang benar-benar mati tetap menyerah.
+      await putOnce(url, file, onBytes, 30_000 * attempt);
+      return;
+    } catch (e) {
+      const err = e as Error & { status?: number };
+      lastMessage = err.message || "koneksi terputus";
       // 4xx selain 408/429 berarti permintaannya memang ditolak — mengulang
       // hanya membuang waktu petugas.
-      if (put.status >= 400 && put.status < 500 && put.status !== 408 && put.status !== 429) break;
-    } catch {
-      lastMessage = "koneksi terputus";
+      const s = err.status;
+      if (s != null && s >= 400 && s < 500 && s !== 408 && s !== 429) break;
     }
+    // Setiap percobaan mulai dari nol byte lagi.
+    onBytes(0);
     if (attempt < attempts) await new Promise((r) => setTimeout(r, attempt * 1200));
   }
   throw new Error(`"${name}" gagal setelah ${attempts}× percobaan (${lastMessage}).`);
 }
+
 /** One draft per device — a supervisor fills one inspection at a time. */
 const DRAFT_KEY = "hygiene-form";
 
@@ -158,7 +196,15 @@ function HygieneForm({ outlets }: { outlets: { id: string; name: string }[] }) {
   const [photos, setPhotos] = useState<Record<string, CapturedPhoto[]>>({});
   // Kemajuan unggah foto — audit penuh bisa 20+ foto dan tanpa ini layarnya
   // tampak menggantung sampai selesai.
-  const [uploadInfo, setUploadInfo] = useState<{ done: number; total: number } | null>(null);
+  const [uploadInfo, setUploadInfo] = useState<{ done: number; total: number; ratio: number } | null>(null);
+  /**
+   * Foto yang SUDAH berhasil naik ke R2, dikunci pada objek File-nya.
+   *
+   * Supervisor yang gagal di foto ke-23 dulu harus mengulang semuanya. Ref ini
+   * bertahan antar percobaan simpan, jadi menekan Simpan lagi hanya
+   * melanjutkan sisanya.
+   */
+  const doneRef = useRef<Map<File, Attachment>>(new Map());
   const outletName = outlets.find((o) => o.id === outletId)?.name;
 
   // ── Draft autosave (weak-signal safety) ──────────────────────────────────
@@ -272,19 +318,39 @@ function HygieneForm({ outlets }: { outlets: { id: string; name: string }[] }) {
           return;
         }
         if (presign.mode === "r2") {
+          const totalBytes = entries.reduce((sum, e) => sum + e.file.size, 0) || 1;
+          let doneBytes = 0;
           try {
             for (let i = 0; i < entries.length; i++) {
+              // Foto yang SUDAH naik di percobaan sebelumnya tidak diulang.
+              // Tanpa ini, gagal di foto ke-23 berarti mengunggah ulang 22 foto
+              // dari awal — persis keluhan "harus ngulang dari nol".
+              if (doneRef.current.has(entries[i].file)) {
+                doneBytes += entries[i].file.size;
+                uploaded.push(doneRef.current.get(entries[i].file)!);
+                setUploadInfo({ done: i + 1, total: entries.length, ratio: doneBytes / totalBytes });
+                continue;
+              }
               const { id, url } = presign.items[i];
-              setUploadInfo({ done: i, total: entries.length });
+              setUploadInfo({ done: i, total: entries.length, ratio: doneBytes / totalBytes });
               // Audit penuh berarti 20+ foto berturut-turut dari HP di lapangan;
               // satu kedipan sinyal saja dulu membatalkan SELURUH unggahan dan
-              // memaksa mengulang dari nol. Tiap foto kini dicoba ulang.
-              await putPhotoWithRetry(url, entries[i].file, entries[i].file.name);
-              uploaded.push({ id, name: entries[i].label || entries[i].file.name, url: "", kind: "photo", size: entries[i].file.size });
+              // memaksa mengulang dari nol. Tiap foto kini dicoba ulang, dan
+              // kemajuannya dihitung per BYTE supaya bilahnya benar-benar jalan.
+              await putPhotoWithRetry(url, entries[i].file, entries[i].file.name, (loaded) =>
+                setUploadInfo({ done: i, total: entries.length, ratio: Math.min(1, (doneBytes + loaded) / totalBytes) }),
+              );
+              const att: Attachment = { id, name: entries[i].label || entries[i].file.name, url: "", kind: "photo", size: entries[i].file.size };
+              doneRef.current.set(entries[i].file, att);
+              uploaded.push(att);
+              doneBytes += entries[i].file.size;
             }
-            setUploadInfo({ done: entries.length, total: entries.length });
+            setUploadInfo({ done: entries.length, total: entries.length, ratio: 1 });
           } catch (e) {
-            toast.error(`Upload foto gagal: ${e instanceof Error ? e.message : "koneksi bermasalah"}`);
+            toast.error(
+              `${e instanceof Error ? e.message : "Koneksi bermasalah"} — ${uploaded.length}/${entries.length} foto sudah tersimpan. Tekan Simpan lagi untuk melanjutkan dari sisanya.`,
+              { duration: 8000 },
+            );
             return;
           } finally {
             setUploadInfo(null);
@@ -340,6 +406,11 @@ function HygieneForm({ outlets }: { outlets: { id: string; name: string }[] }) {
               setFindings([]);
               setPhotos({});
               setInspectorName("");
+              setDate(todayLocal());
+              // Tanpa ini, "Mulai baru" menyisakan catatan foto lama yang sudah
+              // diunggah, dan audit yang benar-benar baru bisa memungut
+              // lampiran audit sebelumnya.
+              doneRef.current.clear();
               setRestored(null);
             }}
             className="shrink-0 rounded-md bg-amber-600 px-2 py-1 font-semibold text-white hover:bg-amber-700"
@@ -538,13 +609,13 @@ function HygieneForm({ outlets }: { outlets: { id: string; name: string }[] }) {
               Mengunggah foto {Math.min(uploadInfo.done + 1, uploadInfo.total)}/{uploadInfo.total}
             </span>
             <span className="font-semibold tabular-nums text-foreground">
-              {Math.round((uploadInfo.done / Math.max(1, uploadInfo.total)) * 100)}%
+              {Math.round(uploadInfo.ratio * 100)}%
             </span>
           </div>
           <div className="h-1.5 overflow-hidden rounded-full bg-muted">
             <div
               className="h-full rounded-full bg-primary transition-[width] duration-200"
-              style={{ width: `${Math.round((uploadInfo.done / Math.max(1, uploadInfo.total)) * 100)}%` }}
+              style={{ width: `${Math.round(uploadInfo.ratio * 100)}%` }}
             />
           </div>
           <p className="mt-1.5 text-[10px] text-muted-foreground">Jangan tutup halaman ini sampai selesai.</p>

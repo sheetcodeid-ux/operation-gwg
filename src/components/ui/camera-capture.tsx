@@ -13,6 +13,39 @@ const stampText = () =>
   new Date().toLocaleString("id-ID", { day: "2-digit", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" });
 
 /**
+ * Baca foto jadi bitmap dengan cara yang paling hemat memori yang tersedia.
+ *
+ * `createImageBitmap` membaca langsung dari berkasnya. Jalur lama lewat
+ * `readAsDataURL` mengubah foto 4 MB jadi teks base64 ~5,4 MB, LALU membuat
+ * elemen gambar dari teks itu — tiga salinan foto yang sama di memori
+ * sekaligus. Di HP kelas menengah yang dipakai supervisor, itu cukup untuk
+ * membuat pengubahan ukurannya gagal.
+ */
+async function toBitmap(file: File): Promise<{ src: CanvasImageSource; width: number; height: number; close: () => void }> {
+  if (typeof createImageBitmap === "function") {
+    try {
+      const bmp = await createImageBitmap(file, { imageOrientation: "from-image" });
+      return { src: bmp, width: bmp.width, height: bmp.height, close: () => bmp.close() };
+    } catch {
+      // Peramban lama / format tak dikenal — turun ke jalur di bawah.
+    }
+  }
+  const url = URL.createObjectURL(file);
+  try {
+    const img: HTMLImageElement = await new Promise((res, rej) => {
+      const im = new Image();
+      im.onload = () => res(im);
+      im.onerror = () => rej(new Error("format foto tidak terbaca"));
+      im.src = url;
+    });
+    return { src: img, width: img.width, height: img.height, close: () => URL.revokeObjectURL(url) };
+  } catch (e) {
+    URL.revokeObjectURL(url);
+    throw e;
+  }
+}
+
+/**
  * Gambar ulang foto ke kanvas dan BAKAR waktunya ke bilah bawah.
  *
  * Dibakar ke dalam gambar, bukan ditulis di sebelahnya, supaya waktunya ikut
@@ -20,47 +53,42 @@ const stampText = () =>
  * waktunya bukan bukti apa-apa.
  */
 async function stampPhoto(file: File, prefix?: string): Promise<CapturedPhoto> {
-  const dataUrl: string = await new Promise((res, rej) => {
-    const r = new FileReader();
-    r.onload = () => res(String(r.result));
-    r.onerror = rej;
-    r.readAsDataURL(file);
-  });
-  const img: HTMLImageElement = await new Promise((res, rej) => {
-    const im = new Image();
-    im.onload = () => res(im);
-    im.onerror = rej;
-    im.src = dataUrl;
-  });
-  // Foto dokumentasi cukup terbaca, tidak perlu kualitas cetak. Dibatasi
-  // 1024px supaya tiap berkas ~80–120 KB — penting saat 50 outlet mengunggah
-  // ribuan foto tiap hari (hemat penyimpanan dan kuota).
-  const maxW = 1024;
-  const scale = Math.min(1, maxW / (img.width || maxW));
-  const w = Math.max(1, Math.round(img.width * scale));
-  const h = Math.max(1, Math.round(img.height * scale));
-  const canvas = document.createElement("canvas");
-  canvas.width = w;
-  canvas.height = h;
-  const ctx = canvas.getContext("2d");
-  if (!ctx) return { file, url: URL.createObjectURL(file) };
-  ctx.drawImage(img, 0, 0, w, h);
+  const img = await toBitmap(file);
+  try {
+    // Foto dokumentasi cukup terbaca, tidak perlu kualitas cetak. Dibatasi
+    // 1024px supaya tiap berkas ~80–120 KB — penting saat 50 outlet mengunggah
+    // ribuan foto tiap hari (hemat penyimpanan dan kuota).
+    const maxW = 1024;
+    const scale = Math.min(1, maxW / (img.width || maxW));
+    const w = Math.max(1, Math.round(img.width * scale));
+    const h = Math.max(1, Math.round(img.height * scale));
+    const canvas = document.createElement("canvas");
+    canvas.width = w;
+    canvas.height = h;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) throw new Error("kanvas tidak tersedia");
+    ctx.drawImage(img.src, 0, 0, w, h);
 
-  const caption = [prefix, stampText()].filter(Boolean).join(" · ");
-  const fs = Math.max(13, Math.round(w * 0.026));
-  const pad = Math.round(w * 0.02);
-  const barH = Math.round(fs * 1.9);
-  ctx.fillStyle = "rgba(0,0,0,0.55)";
-  ctx.fillRect(0, h - barH, w, barH);
-  ctx.fillStyle = "#ffffff";
-  ctx.font = `600 ${fs}px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif`;
-  ctx.textBaseline = "middle";
-  ctx.fillText(caption, pad, h - barH / 2);
+    const caption = [prefix, stampText()].filter(Boolean).join(" · ");
+    const fs = Math.max(13, Math.round(w * 0.026));
+    const pad = Math.round(w * 0.02);
+    const barH = Math.round(fs * 1.9);
+    ctx.fillStyle = "rgba(0,0,0,0.55)";
+    ctx.fillRect(0, h - barH, w, barH);
+    ctx.fillStyle = "#ffffff";
+    ctx.font = `600 ${fs}px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif`;
+    ctx.textBaseline = "middle";
+    ctx.fillText(caption, pad, h - barH / 2);
 
-  const blob: Blob | null = await new Promise((res) => canvas.toBlob(res, "image/jpeg", 0.62));
-  if (!blob) return { file, url: URL.createObjectURL(file) };
-  const stamped = new File([blob], `foto-${Date.now()}.jpg`, { type: "image/jpeg" });
-  return { file: stamped, url: URL.createObjectURL(stamped) };
+    const blob: Blob | null = await new Promise((res) => canvas.toBlob(res, "image/jpeg", 0.62));
+    if (!blob) throw new Error("gagal memampatkan foto");
+    const stamped = new File([blob], `foto-${Date.now()}.jpg`, { type: "image/jpeg" });
+    return { file: stamped, url: URL.createObjectURL(stamped) };
+  } finally {
+    // Bitmap memegang memori foto mentah — kalau tidak dilepas, dua puluhan
+    // foto dalam satu audit menumpuk sampai perambannya kehabisan memori.
+    img.close();
+  }
 }
 
 /** Take photos straight from the phone camera (rear), timestamp burned in.
@@ -82,6 +110,7 @@ export function CameraCapture({
   stampPrefix?: string;
 }) {
   const [busy, setBusy] = React.useState(false);
+  const [error, setError] = React.useState<string | null>(null);
   const full = max != null && items.length >= max;
 
   async function onFiles(e: React.ChangeEvent<HTMLInputElement>) {
@@ -96,11 +125,29 @@ export function CameraCapture({
     if (!files.length) return;
     setBusy(true);
     try {
-      const stamped = await Promise.all(files.map((f) => stampPhoto(f, stampPrefix)));
-      onChange([...items, ...stamped]);
-    } catch {
-      // Fall back to the raw files if canvas fails.
-      onChange([...items, ...files.map((f) => ({ file: f, url: URL.createObjectURL(f) }))]);
+      // BERURUTAN, bukan Promise.all.
+      //
+      // Dua alasan, keduanya pernah menggagalkan audit di lapangan. Pertama,
+      // memproses beberapa foto sekaligus berarti beberapa foto mentah dibuka
+      // bersamaan di memori HP. Kedua, `Promise.all` menolak seluruh kumpulan
+      // begitu SATU foto gagal — dan jalur cadangannya dulu memakai berkas
+      // MENTAH untuk semuanya. Akibatnya 24 foto @ ~100 KB berubah jadi 24
+      // foto @ ~4 MB, dan unggahannya berhenti di 0% lalu gagal.
+      const hasil: CapturedPhoto[] = [];
+      let gagal = 0;
+      for (const f of files) {
+        try {
+          hasil.push(await stampPhoto(f, stampPrefix));
+        } catch {
+          gagal++;
+        }
+      }
+      if (hasil.length > 0) onChange([...items, ...hasil]);
+      if (gagal > 0) {
+        setError(`${gagal} foto tidak terbaca dan dilewati — ambil ulang foto itu.`);
+      } else {
+        setError(null);
+      }
     } finally {
       setBusy(false);
     }
@@ -125,6 +172,9 @@ export function CameraCapture({
         <span className="text-[11px] font-medium">{full ? `Maksimal ${max} foto` : "Ambil Foto"}</span>
         <input type="file" accept="image/*" capture="environment" multiple className="hidden" onChange={onFiles} disabled={busy || full} />
       </label>
+      {error && (
+        <p className="mt-1.5 text-[10px] font-medium text-amber-600 dark:text-amber-400">{error}</p>
+      )}
       {items.length > 0 && (
         <div className="mt-2 grid grid-cols-3 gap-1">
           {items.map((it, i) => (
