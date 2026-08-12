@@ -4,7 +4,7 @@ import { useMemo, useState, useTransition } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { ChevronDown, Lock, LogOut } from "lucide-react";
-import { DIVISION_ICON, navOpenPredicate, type Division, type MenuKey, type NavItem } from "@/lib/nav";
+import { DIVISION_ICON, navOpenPredicate, navSectionOpen, type Division, type MenuKey, type NavItem } from "@/lib/nav";
 import { signOut } from "@/lib/actions/auth";
 import { useI18n } from "@/lib/i18n/provider";
 import { useSidebar } from "./sidebar-context";
@@ -108,13 +108,19 @@ export function Sidebar({
         ) : (
           sections.map((section) => {
             const secItems = items.filter((i) => i.section === section);
-            const secLocked = secItems.every((i) => !canOpen(i));
+            const secLocked = !navSectionOpen(secItems, canOpen);
             const open = openSection === section;
             const DivIcon = NAV_ICONS[secItems[0]?.sectionIcon ?? DIVISION_ICON[section as Division]];
 
+            // Divisi yang terkunci mengunci seluruh isinya, termasuk menu
+            // perusahaan-luas. Membiarkan "Pengajuan" tetap terang di dalam
+            // divisi orang lain hanya membingungkan — menu itu sudah ada di
+            // divisi orangnya sendiri.
+            const itemOpen = (i: NavItem) => !secLocked && canOpen(i);
+
             const renderItem = (item: NavItem) => {
               const Icon = NAV_ICONS[item.icon];
-              const locked = !canOpen(item);
+              const locked = !itemOpen(item);
               const active = !locked && isActive(item.href);
 
               if (locked) {
@@ -195,9 +201,13 @@ export function Sidebar({
                         if (block.kind === "item") return renderItem(block.item);
 
                         const groupId = `${section}/${block.name}`;
-                        const hasActive = block.items.some((i) => canOpen(i) && isActive(i.href));
+                        const hasActive = block.items.some((i) => itemOpen(i) && isActive(i.href));
                         const groupOpen = openGroup === undefined ? hasActive : openGroup === groupId;
                         const GroupIcon = block.icon ? NAV_ICONS[block.icon] : undefined;
+                        // Judul sub-grup ikut meredup bila seluruh isinya
+                        // terkunci — kalau tidak, "Talent Acquisition" tampil
+                        // seterang menu yang benar-benar bisa dibuka.
+                        const groupLocked = block.items.every((i) => !itemOpen(i));
                         return (
                           <div key={groupId} className="pt-0.5">
                             <button
@@ -207,10 +217,14 @@ export function Sidebar({
                               // gap-2.5 + px-2.5 + size-4 icon = the exact same
                               // label offset as the menu links below it, so the
                               // group title and its children line up vertically.
-                              className="flex w-full items-center gap-2.5 rounded-lg px-2.5 py-1.5 text-left text-[13px] font-medium text-foreground/85 transition-colors hover:bg-muted/50"
+                              className={cn(
+                                "flex w-full items-center gap-2.5 rounded-lg px-2.5 py-1.5 text-left text-[13px] font-medium transition-colors hover:bg-muted/50",
+                                groupLocked ? "text-muted-foreground/55" : "text-foreground/85",
+                              )}
                             >
-                              {GroupIcon && <GroupIcon className="size-4 shrink-0 text-muted-foreground" />}
+                              {GroupIcon && <GroupIcon className={cn("size-4 shrink-0", groupLocked ? "text-muted-foreground/55" : "text-muted-foreground")} />}
                               <span className="min-w-0 flex-1 truncate">{block.name}</span>
+                              {groupLocked && <Lock className="size-3 shrink-0 text-muted-foreground/55" />}
                               <ChevronDown className={cn("size-3.5 shrink-0 text-muted-foreground transition-transform duration-200", groupOpen && "rotate-180")} />
                             </button>
                             <div className={cn("grid transition-[grid-template-rows] duration-200", groupOpen ? "grid-rows-[1fr]" : "grid-rows-[0fr]")}>

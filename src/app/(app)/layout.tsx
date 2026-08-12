@@ -1,7 +1,7 @@
 import { cookies } from "next/headers";
 import { requireSessionUser } from "@/lib/auth";
 import { areaName, listNotifications, visibleOutlets } from "@/lib/data/store";
-import { accessibleMenuKeys, canReachMenu, homeDivision, navAll, navOpenPredicate, setNavExtras } from "@/lib/nav";
+import { accessibleMenuKeys, canReachMenu, homeDivision, navAll, navOpenPredicate, navSectionOpen, setNavExtras } from "@/lib/nav";
 import { isSystemSupport } from "@/lib/system-shared";
 import { getNavExtra } from "@/lib/data/nav";
 import { assessmentMenuOpen } from "@/lib/data/assessment-menu";
@@ -45,7 +45,16 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   // its grant so the sidebar/command palette show it for them only.
   const grants = isSystemSupport(user) && !isAdmin ? [...(user.grants ?? []), "Operation:sys_review"] : user.grants ?? [];
   const department = user.department ?? "";
-  const canOpen = navOpenPredicate({ homeDivision: home, allowedKeys, department, grants, isAdmin });
+  const canOpenItem = navOpenPredicate({ homeDivision: home, allowedKeys, department, grants, isAdmin });
+  // Divisi yang terkunci mengunci isinya — sama seperti sidebar. Tanpa ini
+  // command palette menawarkan "Pengajuan" dari divisi orang lain, padahal
+  // sidebar menampilkannya terkunci di sana.
+  const openSections = new Set(
+    [...new Set(navItems.map((n) => n.section))].filter((s) =>
+      navSectionOpen(navItems.filter((n) => n.section === s), canOpenItem),
+    ),
+  );
+  const canOpen = (n: (typeof navItems)[number]) => openSections.has(n.section) && canOpenItem(n);
   const notifications = await listNotifications(user);
   const outletItems = visibleOutlets(user).map((o) => ({
     id: o.id,

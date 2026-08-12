@@ -5,7 +5,7 @@ import { createPortal } from "react-dom";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { ChevronDown, Lock, Menu, X } from "lucide-react";
-import { DIVISION_ICON, navOpenPredicate, type Division, type MenuKey, type NavItem } from "@/lib/nav";
+import { DIVISION_ICON, navOpenPredicate, navSectionOpen, type Division, type MenuKey, type NavItem } from "@/lib/nav";
 import { useI18n } from "@/lib/i18n/provider";
 import { useNavLock } from "./nav-lock";
 import { NAV_ICONS } from "./icons";
@@ -78,13 +78,17 @@ export function MobileNav({
             {sections.map((section) => {
               const secItems = items.filter((i) => i.section === section);
               if (!secItems.length) return null;
-              const secLocked = secItems.every((i) => !canOpen(i));
+              const secLocked = !navSectionOpen(secItems, canOpen);
               const isOpen = openSection === section;
               const DivIcon = NAV_ICONS[secItems[0]?.sectionIcon ?? DIVISION_ICON[section as Division]];
 
+              // Divisi terkunci mengunci seluruh isinya, termasuk menu
+              // perusahaan-luas — menu itu sudah ada di divisi orangnya sendiri.
+              const itemOpen = (i: NavItem) => !secLocked && canOpen(i);
+
               const renderItem = (item: NavItem) => {
                 const Icon = NAV_ICONS[item.icon];
-                const locked = !canOpen(item);
+                const locked = !itemOpen(item);
                 const active = !locked && isActive(item.href);
                 const translated = t(`nav.${item.label}`);
                 // Fall back to the original label when no translation exists.
@@ -149,19 +153,27 @@ export function MobileNav({
                           if (block.kind === "item") return renderItem(block.item);
 
                           const groupId = `${section}/${block.name}`;
-                          const hasActive = block.items.some((i) => canOpen(i) && isActive(i.href));
+                          const hasActive = block.items.some((i) => itemOpen(i) && isActive(i.href));
                           const groupOpen = openGroup === undefined ? hasActive : openGroup === groupId;
                           const GroupIcon = block.icon ? NAV_ICONS[block.icon] : undefined;
+                          // Judul sub-grup ikut meredup bila seluruh isinya
+                          // terkunci — kalau tidak, "Talent Acquisition" tampil
+                          // seterang menu yang benar-benar bisa dibuka.
+                          const groupLocked = block.items.every((i) => !itemOpen(i));
                           return (
                             <div key={groupId} className="pt-0.5">
                               <button
                                 type="button"
                                 onClick={() => setOpenGroup(groupOpen ? null : groupId)}
                                 aria-expanded={groupOpen}
-                                className="flex w-full items-center gap-2.5 rounded-lg px-2.5 py-1.5 text-left text-[13px] font-medium text-foreground/85 hover:bg-muted/50"
+                                className={cn(
+                                  "flex w-full items-center gap-2.5 rounded-lg px-2.5 py-1.5 text-left text-[13px] font-medium hover:bg-muted/50",
+                                  groupLocked ? "text-muted-foreground/55" : "text-foreground/85",
+                                )}
                               >
-                                {GroupIcon && <GroupIcon className="size-4 shrink-0 text-muted-foreground" />}
+                                {GroupIcon && <GroupIcon className={cn("size-4 shrink-0", groupLocked ? "text-muted-foreground/55" : "text-muted-foreground")} />}
                                 <span className="min-w-0 flex-1 truncate">{block.name}</span>
+                                {groupLocked && <Lock className="size-3 shrink-0 text-muted-foreground/55" />}
                                 <ChevronDown className={cn("size-3.5 shrink-0 text-muted-foreground transition-transform duration-200", groupOpen && "rotate-180")} />
                               </button>
                               <div className={cn("grid transition-[grid-template-rows] duration-200", groupOpen ? "grid-rows-[1fr]" : "grid-rows-[0fr]")}>

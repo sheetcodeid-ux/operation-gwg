@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { can, hasGlobalScope, scopeOutlets } from "./rbac";
-import { accessibleMenuKeys, canReachMenu, canSeeMenu, homeDivision, navOpenPredicate, ROLE_MENUS } from "./nav";
+import { accessibleMenuKeys, canReachMenu, canSeeMenu, homeDivision, navAll, navOpenPredicate, navSectionOpen, ROLE_MENUS } from "./nav";
 import { getOutlets, getUsers } from "./data/store";
 import type { UserProfile } from "./types";
 
@@ -191,5 +191,47 @@ describe("keterbukaan menu di sidebar", () => {
     });
     expect(admin({ section: "Human Capital", key: "hc_review" })).toBe(true);
     expect(admin({ section: "Administrator", key: "users" })).toBe(true);
+  });
+});
+
+describe("kunci divisi di sidebar", () => {
+  const canOpen = navOpenPredicate({
+    homeDivision: homeDivision("member"), // "Human Capital"
+    allowedKeys: accessibleMenuKeys("member").filter((k) => k !== "assessment"),
+    department: "Creative",
+    grants: ["Creative:work"],
+    isAdmin: false,
+  });
+  const itemsOf = (section: string) => navAll().filter((i) => i.section === section);
+
+  it("Pengajuan tidak membuka kunci divisi orang lain", () => {
+    // Menu perusahaan-luas muncul di SETIAP divisi, jadi syarat lama
+    // "ada satu menu yang bisa dibuka" tidak pernah gagal — divisi Human
+    // Capital tampil terbuka di sidebar seorang desainer Creative.
+    const hc = itemsOf("Human Capital");
+    expect(hc.some((i) => i.key === "hc_request")).toBe(true); // memang ada di sana
+    expect(hc.some((i) => canOpen(i))).toBe(true); // syarat lama: lolos
+    expect(navSectionOpen(hc, canOpen)).toBe(false); // syarat baru: terkunci
+  });
+
+  it("divisi lain juga terkunci untuk akun Creative", () => {
+    for (const s of ["Operation", "Finance", "Marketing Communication", "Administrator"]) {
+      expect(navSectionOpen(itemsOf(s), canOpen), `${s} seharusnya terkunci`).toBe(false);
+    }
+  });
+
+  it("divisinya sendiri tetap terbuka", () => {
+    expect(navSectionOpen(itemsOf("Creative"), canOpen)).toBe(true);
+  });
+
+  it("orang HC tetap membuka divisinya sendiri", () => {
+    const hcUser = navOpenPredicate({
+      homeDivision: homeDivision("member"),
+      allowedKeys: accessibleMenuKeys("member").filter((k) => k !== "assessment"),
+      department: "Human Capital",
+      grants: [],
+      isAdmin: false,
+    });
+    expect(navSectionOpen(itemsOf("Human Capital"), hcUser)).toBe(true);
   });
 });

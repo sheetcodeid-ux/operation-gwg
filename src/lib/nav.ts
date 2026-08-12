@@ -530,6 +530,25 @@ export function navOpenPredicate(a: NavAccess): (item: { section: string; key: M
     grants.has(`${item.section}:${item.key}`);
 }
 
+/**
+ * Apakah sebuah DIVISI benar-benar milik seseorang.
+ *
+ * Bukan sekadar "ada satu menu yang bisa dibuka di dalamnya". Menu
+ * perusahaan-luas (`UNIVERSAL_MENUS` — Pengajuan, Pesan) sengaja muncul di
+ * SETIAP divisi, jadi syarat itu tidak pernah gagal: divisi Human Capital ikut
+ * tampil terbuka di sidebar seorang desainer Creative hanya karena "Pengajuan"
+ * ada di dalamnya.
+ *
+ * Sebuah divisi terbuka hanya bila ada menu KHAS divisi itu yang boleh dibuka.
+ * Menu perusahaan-luas tetap bisa dijangkau lewat divisi orangnya sendiri.
+ */
+export function navSectionOpen(
+  sectionItems: { section: string; key: MenuKey }[],
+  canOpen: (item: { section: string; key: MenuKey }) => boolean,
+): boolean {
+  return sectionItems.some((i) => !UNIVERSAL_MENUS.includes(i.key) && canOpen(i));
+}
+
 /** Where a role should land after login — its first visible menu.
  *  Roles without the executive dashboard (legal, assessor) go to their own
  *  first menu instead of an empty /dashboard. */
