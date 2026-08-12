@@ -61,8 +61,13 @@ describe("pengiriman foto hygiene", () => {
     expect(FORM).toContain("doneRef.current.set(entries[i].file, att)");
   });
 
-  it("kegagalan memberi tahu berapa foto yang selamat", () => {
-    expect(FORM).toContain("${uploaded.length}/${entries.length} foto sudah tersimpan");
+  it("kegagalan total tetap menyisakan jalan lanjut, bukan buntu", () => {
+    // Pesan "X/Y foto sudah tersimpan" tidak lagi dipakai karena auditnya
+    // sekarang TIDAK gagal saat R2 menolak — ia pindah ke jalur server. Yang
+    // tersisa dijaga di sini: kalau kedua jalur gagal, foto yang sudah naik
+    // tetap diingat dan petugas diberi tahu cara melanjutkan.
+    expect(FORM).toContain("Tekan Simpan lagi untuk mencoba ulang");
+    expect(FORM).toContain("doneRef.current.set(entries[i].file, att)");
   });
 
   it('"Mulai baru" ikut membuang catatan unggahan lama', () => {
@@ -72,5 +77,41 @@ describe("pengiriman foto hygiene", () => {
   it("penolakan tetap tidak diulang percuma", () => {
     // 4xx selain 408/429 memang ditolak — mengulang membuang waktu petugas.
     expect(FORM).toContain("s !== 408 && s !== 429");
+  });
+});
+
+/**
+ * R2 menolak PUT dari peramban (izin CORS bucket belum dibuka). Presign-nya
+ * berhasil, jadi kode lama menganggap jalur R2 tersedia, PUT-nya ditolak, dan
+ * SELURUH audit hangus -- padahal ada jalur server yang bekerja.
+ */
+describe("R2 ditolak: audit tetap bisa disimpan", () => {
+  it("kegagalan R2 pindah ke jalur server, bukan menggagalkan audit", () => {
+    expect(FORM).toContain("r2Gagal = true");
+    expect(FORM).toContain('if (presign.mode !== "r2" || r2Gagal)');
+    expect(FORM).toContain("unggahLewatServer(sisa)");
+  });
+
+  it("foto yang sudah naik ke R2 tidak diulang lewat server", () => {
+    expect(FORM).toContain("entries.filter((e) => !doneRef.current.has(e.file))");
+  });
+
+  it("foto pertama dicoba SEKALI saja supaya gagalnya cepat", () => {
+    // Tiga percobaan dengan batas waktu menaik berarti petugas menunggu sampai
+    // satu setengah menit sebelum tahu izinnya yang bermasalah.
+    expect(FORM).toContain("const percobaan = uploaded.length === 0 ? 1 : 3;");
+  });
+
+  it("petugas diberi tahu jalurnya berpindah, bukan diam-diam", () => {
+    expect(FORM).toContain("foto dikirim lewat server");
+  });
+
+  it("jalur server tetap dipecah agar muat di batas badan permintaan", () => {
+    expect(FORM).toContain("batchBySize(list, MAX_BATCH_BYTES)");
+  });
+
+  it("penyimpanan yang benar-benar mati tetap dibedakan dari kegagalan lain", () => {
+    expect(FORM).toContain('"storage-mati"');
+    expect(FORM).toContain("audit disimpan tanpa foto");
   });
 });

@@ -309,22 +309,50 @@ function HygieneForm({ outlets }: { outlets: { id: string; name: string }[] }) {
       // size-bounded batches instead of one giant request.
       let uploaded: Attachment[] = [];
       const entries = Object.entries(photos).flatMap(([label, items]) => items.map((it) => ({ label, file: it.file })));
+
+      /**
+       * Unggah lewat server (Supabase Storage), dipecah agar tiap permintaan
+       * tetap di bawah batas badan server action.
+       *
+       * Ini BUKAN jalur darurat yang jelek: foto audit sudah dimampatkan ke
+       * ~100 KB, jadi 24 foto pun hanya sekitar 2,5 MB — satu atau dua
+       * permintaan saja.
+       */
+      const unggahLewatServer = async (list: typeof entries): Promise<Attachment[] | "storage-mati"> => {
+        const out: Attachment[] = [];
+        const batches = batchBySize(list, MAX_BATCH_BYTES);
+        for (let i = 0; i < batches.length; i++) {
+          setUploadInfo({ done: i, total: batches.length, ratio: i / batches.length });
+          const fd = new FormData();
+          for (const e of batches[i]) {
+            fd.append("file", e.file);
+            fd.append("label", e.label);
+          }
+          const up = await uploadHygienePhotosAction(fd);
+          if (up.error) {
+            if (up.error.includes("Storage belum aktif")) return "storage-mati";
+            throw new Error(up.error);
+          }
+          out.push(...(up.photos ?? []));
+        }
+        return out;
+      };
+
       if (entries.length > 0) {
-        // Preferred path: upload straight to Cloudflare R2 via presigned URLs so
-        // the photos never pass through Vercel (keeps it well under free limits).
         const presign = await presignHygieneUploadsAction(entries.map((e) => ({ name: e.file.name, type: e.file.type })));
         if ("error" in presign) {
           toast.error(presign.error);
           return;
         }
+
+        // Jalur utama: langsung ke R2 supaya fotonya tidak melewati server.
+        let r2Gagal = false;
         if (presign.mode === "r2") {
           const totalBytes = entries.reduce((sum, e) => sum + e.file.size, 0) || 1;
           let doneBytes = 0;
           try {
             for (let i = 0; i < entries.length; i++) {
               // Foto yang SUDAH naik di percobaan sebelumnya tidak diulang.
-              // Tanpa ini, gagal di foto ke-23 berarti mengunggah ulang 22 foto
-              // dari awal — persis keluhan "harus ngulang dari nol".
               if (doneRef.current.has(entries[i].file)) {
                 doneBytes += entries[i].file.size;
                 uploaded.push(doneRef.current.get(entries[i].file)!);
@@ -333,12 +361,21 @@ function HygieneForm({ outlets }: { outlets: { id: string; name: string }[] }) {
               }
               const { id, url } = presign.items[i];
               setUploadInfo({ done: i, total: entries.length, ratio: doneBytes / totalBytes });
-              // Audit penuh berarti 20+ foto berturut-turut dari HP di lapangan;
-              // satu kedipan sinyal saja dulu membatalkan SELURUH unggahan dan
-              // memaksa mengulang dari nol. Tiap foto kini dicoba ulang, dan
-              // kemajuannya dihitung per BYTE supaya bilahnya benar-benar jalan.
-              await putPhotoWithRetry(url, entries[i].file, entries[i].file.name, (loaded) =>
-                setUploadInfo({ done: i, total: entries.length, ratio: Math.min(1, (doneBytes + loaded) / totalBytes) }),
+              // Foto PERTAMA dicoba sekali saja.
+              //
+              // Kalau R2 memang menolak (izin CORS bucket belum dibuka), tiga
+              // percobaan dengan batas waktu menaik berarti petugas menunggu
+              // sampai satu setengah menit sebelum tahu gagal. Kegagalan di
+              // foto pertama hampir pasti soal izin, bukan sinyal — jadi lebih
+              // baik cepat menyerah dan pindah jalur.
+              const percobaan = uploaded.length === 0 ? 1 : 3;
+              await putPhotoWithRetry(
+                url,
+                entries[i].file,
+                entries[i].file.name,
+                (loaded) =>
+                  setUploadInfo({ done: i, total: entries.length, ratio: Math.min(1, (doneBytes + loaded) / totalBytes) }),
+                percobaan,
               );
               const att: Attachment = { id, name: entries[i].label || entries[i].file.name, url: "", kind: "photo", size: entries[i].file.size };
               doneRef.current.set(entries[i].file, att);
@@ -346,37 +383,38 @@ function HygieneForm({ outlets }: { outlets: { id: string; name: string }[] }) {
               doneBytes += entries[i].file.size;
             }
             setUploadInfo({ done: entries.length, total: entries.length, ratio: 1 });
+          } catch {
+            // R2 menolak. JANGAN gagalkan auditnya — fotonya kecil, jalur
+            // server masih sangat mungkin. Inilah yang dulu tidak ada:
+            // presign berhasil, PUT-nya ditolak CORS, dan seluruh audit hangus
+            // padahal ada jalur lain yang bekerja.
+            r2Gagal = true;
+          }
+        }
+
+        if (presign.mode !== "r2" || r2Gagal) {
+          // Yang sudah berhasil naik ke R2 tidak diulang lewat server.
+          const sisa = entries.filter((e) => !doneRef.current.has(e.file));
+          try {
+            const hasil = await unggahLewatServer(sisa);
+            if (hasil === "storage-mati") {
+              toast.info("Penyimpanan foto belum aktif — audit disimpan tanpa foto.");
+              uploaded = [];
+            } else {
+              uploaded = [...uploaded, ...hasil];
+              if (r2Gagal) toast.info("Penyimpanan langsung sedang bermasalah — foto dikirim lewat server.");
+            }
           } catch (e) {
             toast.error(
-              `${e instanceof Error ? e.message : "Koneksi bermasalah"} — ${uploaded.length}/${entries.length} foto sudah tersimpan. Tekan Simpan lagi untuk melanjutkan dari sisanya.`,
+              `Gagal mengunggah foto: ${e instanceof Error ? e.message : "koneksi bermasalah"}. Tekan Simpan lagi untuk mencoba ulang.`,
               { duration: 8000 },
             );
             return;
           } finally {
             setUploadInfo(null);
           }
-        } else {
-          // Fallback: upload through the server to Supabase (size-batched).
-          const batches = batchBySize(entries, MAX_BATCH_BYTES);
-          for (const batch of batches) {
-            const fd = new FormData();
-            for (const e of batch) {
-              fd.append("file", e.file);
-              fd.append("label", e.label);
-            }
-            const up = await uploadHygienePhotosAction(fd);
-            if (up.error) {
-              if (up.error.includes("Storage belum aktif")) {
-                toast.info("Storage belum aktif — audit disimpan tanpa foto.");
-                uploaded = [];
-                break;
-              }
-              toast.error(up.error);
-              return;
-            }
-            uploaded = uploaded.concat(up.photos ?? []);
-          }
         }
+        setUploadInfo(null);
       }
 
       const res = await createHygieneAction({ outletId, shift, inspectorName, ratings: fullRatings, findings, isClean, photos: uploaded, date: new Date(`${date}T12:00:00`).toISOString() });
