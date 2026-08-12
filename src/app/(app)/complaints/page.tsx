@@ -8,11 +8,13 @@ import { StatTile } from "@/components/ui/stat";
 import { NewComplaintButton } from "@/components/complaints/new-complaint";
 import { ComplaintTable, type ComplaintRow } from "@/components/complaints/complaint-table";
 import { getT } from "@/lib/i18n/server";
+import { COMPLAINT_CATEGORY_META } from "@/lib/constants";
 import {
   canApproveComplaint,
   canForwardComplaint,
   canInputComplaint,
   canResolveComplaint,
+  complaintCategoryScope,
   complaintStage,
 } from "@/lib/complaints-access";
 
@@ -30,6 +32,10 @@ export default async function ComplaintsPage() {
   const canResolve = canResolveComplaint(user);
   const canApprove = canApproveComplaint(user);
   const canForward = canForwardComplaint(user);
+  // Departemen yang hanya berkepentingan pada sebagian kategori (PDQ = mutu
+  // makanan). Daftarnya sudah disaring di lapisan data; di sini hanya perlu
+  // dijelaskan, supaya daftar yang pendek tidak terbaca sebagai data hilang.
+  const kategoriTerbatas = complaintCategoryScope(user);
 
   const closed = complaints.filter((c) => c.status === "close").length;
   const open = complaints.length - closed;
@@ -71,6 +77,16 @@ export default async function ComplaintsPage() {
         description={t("complaint.description")}
         actions={canCreate && outlets.length > 0 ? <NewComplaintButton outlets={outlets} /> : undefined}
       />
+
+      {kategoriTerbatas && (
+        <p className="mb-4 rounded-xl border border-border bg-muted/30 px-3.5 py-2.5 text-xs text-muted-foreground">
+          Menampilkan komplain kategori{" "}
+          <span className="font-medium text-foreground">
+            {kategoriTerbatas.map((c) => COMPLAINT_CATEGORY_META[c].label).join(", ")}
+          </span>{" "}
+          saja — sesuai lingkup {user.department}. Pemasukan komplain baru ada di Marketing Communication.
+        </p>
+      )}
 
       {/* Yang menuntut tindakan orang ini, sebelum angka apa pun — komplain yang
           menggantung karena tidak ada yang merasa ditugaskan adalah kegagalan

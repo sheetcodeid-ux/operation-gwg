@@ -27,6 +27,7 @@ import { SEED } from "./seed";
 import { db, dbEnabled } from "./db";
 import { notificationFromRow } from "./rows";
 import { canVerifyHpp } from "../hpp/access";
+import { complaintCategoryScope } from "../complaints-access";
 import { nowMs } from "../now";
 import { buildCompareData, type CompareData } from "../compare-data";
 
@@ -114,7 +115,14 @@ export function listHygiene(user: UserProfile): HygieneAudit[] {
 }
 export function listComplaints(user: UserProfile): Complaint[] {
   const ids = visibleOutletIdSet(user);
-  return SEED.complaints.filter((c) => ids.has(c.outletId)).sort(byDateDesc("createdAt"));
+  // Sebagian departemen hanya berkepentingan pada sebagian kategori (PDQ =
+  // mutu makanan saja). Disaring di sini, di satu-satunya pintu baca komplain,
+  // supaya tidak ada halaman yang kelupaan menerapkannya.
+  const kategori = complaintCategoryScope(user);
+  return SEED.complaints
+    .filter((c) => ids.has(c.outletId))
+    .filter((c) => kategori === null || kategori.includes(c.category))
+    .sort(byDateDesc("createdAt"));
 }
 export function getComplaint(id: string): Complaint | undefined {
   return SEED.complaints.find((c) => c.id === id);

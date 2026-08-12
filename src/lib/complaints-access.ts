@@ -1,4 +1,4 @@
-import type { UserProfile } from "./types";
+import type { ComplaintCategory, UserProfile } from "./types";
 
 /**
  * Siapa boleh apa pada satu komplain.
@@ -54,6 +54,49 @@ export function canResolveComplaint(user: Pick<UserProfile, "role"> | null): boo
  */
 export function canApproveComplaint(user: Pick<UserProfile, "role"> | null): boolean {
   return !!user && (user.role === "area_coordinator" || user.role === "super_admin");
+}
+
+/* ──────────────────────── cakupan kategori ──────────────────────── */
+
+/**
+ * Departemen yang hanya berkepentingan pada SEBAGIAN kategori komplain.
+ *
+ * Product Development & Quality bertanggung jawab atas mutu produk, jadi yang
+ * relevan bagi mereka hanya keluhan rasa/mutu makanan. Keluhan soal keramahan
+ * staf, kebersihan, atau sistem pembayaran bukan urusan mereka — dan komplain
+ * memuat nama serta keluhan pelanggan, jadi membukanya lebih lebar dari
+ * kebutuhan bukan sekadar berisik, tapi juga membagikan data yang tidak perlu.
+ *
+ * Memasukkan komplain TETAP milik Marketing Communication. PDQ hanya membaca:
+ * tidak ada satu pun izin di berkas ini yang memberi peran PDQ hak meneruskan,
+ * mengerjakan, atau menilai.
+ */
+const CATEGORY_SCOPE: Record<string, ComplaintCategory[]> = {
+  "Product Development & Quality": ["food_quality"],
+};
+
+/**
+ * Kategori komplain yang boleh dilihat seseorang.
+ *
+ * `null` berarti tanpa batas — itulah keadaan normal untuk Operation,
+ * Coordinator Area, supervisor, dan admin.
+ */
+export function complaintCategoryScope(
+  user: Pick<UserProfile, "role" | "department"> | null,
+): ComplaintCategory[] | null {
+  if (!user) return null;
+  // Admin tidak pernah dibatasi — ia mengurus seluruh aplikasi.
+  if (user.role === "super_admin") return null;
+  return CATEGORY_SCOPE[user.department ?? ""] ?? null;
+}
+
+/** Apakah satu komplain masuk cakupan kategori orang ini. */
+export function canSeeComplaintCategory(
+  user: Pick<UserProfile, "role" | "department"> | null,
+  category: ComplaintCategory,
+): boolean {
+  const scope = complaintCategoryScope(user);
+  return scope === null || scope.includes(category);
 }
 
 /* ─────────────────────────── tahapan ─────────────────────────── */

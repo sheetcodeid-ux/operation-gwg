@@ -46,6 +46,14 @@ export function SeasonalChart({
   const [range, setRange] = React.useState<{ start: number; end: number }>({ start: 0, end: 11 });
   const [syncLeft, setSyncLeft] = React.useState(0);
   const seqRef = React.useRef(0);
+  const [loading, setLoading] = React.useState(false);
+  /**
+   * Hasil per (tahun, cabang) yang sudah pernah diambil.
+   *
+   * Isinya hanya ringkasan penjualan harian yang sudah dihitung server, jadi
+   * menyimpannya di memori halaman aman dan hilang saat halaman ditutup.
+   */
+  const cacheRef = React.useRef<Map<string, SeasonalReport>>(new Map());
   const captureRef = React.useRef<HTMLDivElement>(null);
 
   // Months that actually have any data (only these are togglable / drawn).
@@ -113,7 +121,13 @@ export function SeasonalChart({
       setSyncLeft(s.remaining);
       const r = await seasonalReportAction(y, br);
       if (seqRef.current !== seq) return;
-      if ("configured" in r) setReport(r);
+      if ("configured" in r) {
+        // Cache ikut diperbarui. Tanpa ini, kembali ke cabang yang barusan
+        // disinkronkan justru menampilkan versi lamanya yang masih kosong —
+        // cache basi lebih membingungkan daripada tidak ada cache sama sekali.
+        cacheRef.current.set(`${y}|${br}`, r);
+        setReport(r);
+      }
       if (s.remaining === 0 || s.error || s.synced === 0) break;
     }
     if (seqRef.current === seq) setSyncLeft(0);
@@ -123,14 +137,37 @@ export function SeasonalChart({
   const load = React.useCallback(async (y: number, br: string) => {
     const seq = ++seqRef.current;
     setSyncLeft(0);
+
+    // Pilihan yang PERNAH dibuka tampil seketika, tanpa menunggu server.
+    //
+    // Tiap ganti cabang dulu selalu satu perjalanan ke server, termasuk saat
+    // kembali ke cabang yang barusan dilihat — padahal jawabannya sudah ada di
+    // memori. Membanding-bandingkan cabang berarti bolak-balik, dan justru di
+    // situ jedanya paling terasa.
+    const key = `${y}|${br}`;
+    const cached = cacheRef.current.get(key);
+    if (cached) {
+      setReport(cached);
+      setLoading(false);
+      // Data yang masih menunggu penarikan POS tetap dilanjutkan di latar.
+      if (cached.pendingDays?.length) void drain(y, br, seq, cached.pendingDays.length);
+      return;
+    }
+
+    // Data lama SENGAJA dibiarkan tampil selama menunggu — mengosongkan grafik
+    // membuat perpindahan terasa jauh lebih lama daripada sebenarnya.
+    setLoading(true);
     const r = await seasonalReportAction(y, br);
     if (seqRef.current !== seq) return;
+    setLoading(false);
     if (!("configured" in r)) { toast.error((r as { error: string }).error); return; }
+    cacheRef.current.set(key, r);
     setReport(r);
     if (r.pendingDays?.length) void drain(y, br, seq, r.pendingDays.length);
   }, [drain]);
 
   React.useEffect(() => {
+    cacheRef.current.set(`${initialYear}|`, initial);
     if (initial.pendingDays?.length) void drain(initialYear, "", ++seqRef.current, initial.pendingDays.length);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -248,6 +285,11 @@ export function SeasonalChart({
             className="w-28 shrink-0"
           />
 
+          {loading && (
+            <span className="inline-flex items-center gap-1.5 text-[11px] font-medium text-muted-foreground">
+              <Loader2 className="size-3 animate-spin" /> Memuat…
+            </span>
+          )}
           {syncLeft > 0 && (
             <span className="inline-flex shrink-0 items-center gap-1.5 rounded-full border border-amber-500/30 bg-amber-500/10 px-2.5 py-1 text-xs font-medium text-amber-600 dark:text-amber-400">
               <Loader2 className="size-3 animate-spin" /> Sinkron · sisa {syncLeft} hari

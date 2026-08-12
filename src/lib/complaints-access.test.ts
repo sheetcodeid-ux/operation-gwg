@@ -7,6 +7,8 @@ import {
   canForwardComplaint,
   canInputComplaint,
   canResolveComplaint,
+  canSeeComplaintCategory,
+  complaintCategoryScope,
   complaintStage,
 } from "./complaints-access";
 import type { UserProfile } from "./types";
@@ -28,6 +30,7 @@ const marcomm = u({ id: "mc", role: "member", department: "Marketing Communicati
 const ca = u({ id: "ca", role: "area_coordinator", department: "Operational" });
 const spv = u({ id: "spv", role: "supervisor", department: "Supervisor" });
 const admin = u({ id: "adm", role: "admin_operation", department: "Operational" });
+const pdq = u({ id: "pdq", role: "member", department: "Product Development & Quality" });
 const kreatif = u({ id: "cr", role: "member", department: "Creative" });
 
 describe("siapa boleh memasukkan komplain", () => {
@@ -168,5 +171,45 @@ describe("penegakan di server, bukan di tombol", () => {
     for (const fn of [...actions.matchAll(/export async function (\w+)/g)].map((m) => m[1])) {
       expect(bodyOf(fn), `${fn} tidak mengambil sesi`).toContain("await getSessionUser()");
     }
+  });
+});
+
+/**
+ * PDQ hanya berkepentingan pada mutu produk.
+ *
+ * Komplain memuat nama dan keluhan pelanggan, jadi membukanya lebih lebar dari
+ * kebutuhan bukan sekadar berisik — itu membagikan data yang tidak perlu.
+ * Memasukkan komplain TETAP milik Marketing Communication.
+ */
+describe("cakupan kategori komplain per departemen", () => {
+  const STORE = readFileSync(join(process.cwd(), "src/lib/data/store.ts"), "utf8");
+
+  it("PDQ hanya melihat kategori mutu makanan", () => {
+    expect(complaintCategoryScope(pdq)).toEqual(["food_quality"]);
+    expect(canSeeComplaintCategory(pdq, "food_quality")).toBe(true);
+    for (const k of ["service", "cleanliness", "price", "payment_system", "ambiance", "order_error"] as const) {
+      expect(canSeeComplaintCategory(pdq, k), `PDQ tidak boleh melihat ${k}`).toBe(false);
+    }
+  });
+
+  it("departemen lain tetap tanpa batas kategori", () => {
+    for (const who of [marcomm, ca, spv, admin]) {
+      expect(complaintCategoryScope(who)).toBeNull();
+      expect(canSeeComplaintCategory(who, "service")).toBe(true);
+    }
+  });
+
+  it("penyaringnya dipasang di satu-satunya pintu baca komplain", () => {
+    // Kalau hanya halaman yang menyaring, rute atau laporan lain akan
+    // membocorkan kategori yang bukan urusannya.
+    expect(STORE).toContain("complaintCategoryScope(user)");
+    expect(STORE).toContain("kategori === null || kategori.includes(c.category)");
+  });
+
+  it("PDQ hanya MEMBACA — tidak memasukkan, meneruskan, mengerjakan, atau menilai", () => {
+    expect(canInputComplaint(pdq)).toBe(false);
+    expect(canForwardComplaint(pdq)).toBe(false);
+    expect(canResolveComplaint(pdq)).toBe(false);
+    expect(canApproveComplaint(pdq)).toBe(false);
   });
 });

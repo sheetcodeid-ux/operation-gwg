@@ -272,7 +272,10 @@ const DIVISION_MENUS: { division: Division; menus: MenuKey[] }[] = [
   // (System Support) via an injected grant — it is NOT a general Operation menu.
   { division: "Operation", menus: [...OPERATION_FULL, "sys_review", "elearning", "elearning_admin"] },
   { division: "Supervisor", menus: ["events", "hospitality", "hygiene", "complaints", "hc_submit", "sys_submit"] },
-  { division: "Product Development & Quality", menus: ["hpp_dash", "work", "hpp", "hpp_db", "hpp_bahan", "hpp_price", "hpp_comp"] },
+  // Complaints ikut di sini, tapi PDQ hanya melihat kategori Food Quality —
+  // penyaringnya di `complaintCategoryScope`, dan memasukkan komplain tetap
+  // milik Marketing Communication.
+  { division: "Product Development & Quality", menus: ["hpp_dash", "work", "hpp", "hpp_db", "hpp_bahan", "hpp_price", "hpp_comp", "complaints"] },
   { division: "Human Capital", menus: ["work", "hc_review", "hc_kpi", "hc_reqreview", "hc_training", "assessment"] },
   // New department-aligned divisions — Work Tracker only for now.
   { division: "Finance", menus: ["work", "fin_training"] },
