@@ -13,6 +13,7 @@ import { MainShell } from "@/components/layout/main-shell";
 import { ChromeSlot } from "@/components/layout/chrome-slot";
 import { SidebarProvider } from "@/components/layout/sidebar-context";
 import { NavLockProvider } from "@/components/layout/nav-lock";
+import { ChatDockProvider } from "@/components/chat/chat-dock";
 import { ScrollReset } from "@/components/layout/scroll-reset";
 import { CommandPalette } from "@/components/command/command-palette";
 
@@ -67,6 +68,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
     <I18nProvider initialLang={lang}>
       <SidebarProvider>
         <NavLockProvider>
+          <ChatDockProvider>
           <ScrollReset />
           {/* h-dvh + overflow-hidden: halaman layar-penuh (Pesan) mengatur
               gulirannya sendiri di dalam panel. Halaman biasa tetap menggulir
@@ -95,6 +97,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
               outlets={outletItems}
             />
           </div>
+          </ChatDockProvider>
         </NavLockProvider>
       </SidebarProvider>
     </I18nProvider>
