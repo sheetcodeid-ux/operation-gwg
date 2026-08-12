@@ -63,6 +63,8 @@ export default async function HygienePage({ searchParams }: { searchParams: Prom
       findings: a.findings.length,
       findingList: a.findings,
       photos: await resolvePhotos(photosById.get(a.id) ?? a.photos),
+      ratings: a.ratings,
+      supervisor: a.supervisorName,
     })),
   );
 

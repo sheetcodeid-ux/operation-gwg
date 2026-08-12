@@ -3,10 +3,11 @@
 import * as React from "react";
 import { useRouter } from "next/navigation";
 import { type ColumnDef } from "@tanstack/react-table";
-import { Camera, ChevronDown, Trash2, X } from "lucide-react";
+import { Camera, ChevronDown, Printer, Trash2, X } from "lucide-react";
 import { toast } from "sonner";
 import { deleteHygieneAction } from "@/lib/actions/hygiene";
-import type { Attachment } from "@/lib/types";
+import type { Attachment, HygieneRating, HygieneSection } from "@/lib/types";
+import { printHygieneReport } from "./hygiene-report";
 import { scoreColor } from "@/components/ui/tone";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -33,6 +34,9 @@ export interface HygieneRow {
   /** Isi temuannya — dibuka dari kolom Temuan. */
   findingList: string[];
   photos: Attachment[];
+  /** Nilai per bagian & butir — dipakai lembar cetak, bukan tabelnya. */
+  ratings: Record<HygieneSection, Record<string, HygieneRating>>;
+  supervisor: string;
 }
 
 
@@ -309,12 +313,24 @@ export function HygieneExplorer({
           );
         },
       },
-      ...(canDelete
-        ? [{
-            id: "actions",
-            header: "",
-            enableSorting: false,
-            cell: ({ row }: { row: { original: HygieneRow } }) => (
+      // Cetak PDF terbuka untuk SEMUA yang bisa membuka halaman ini — Coordinator
+      // Area memintanya untuk laporan, dan mencetak tidak mengubah apa pun.
+      // Menghapus tetap hanya untuk yang berhak.
+      {
+        id: "actions",
+        header: "",
+        enableSorting: false,
+        cell: ({ row }: { row: { original: HygieneRow } }) => (
+          <div className="flex items-center justify-end gap-1">
+            <button
+              type="button"
+              onClick={() => printHygieneReport(row.original)}
+              className="grid size-7 place-items-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+              title="Unduh / cetak PDF hasil audit"
+            >
+              <Printer className="size-3.5" />
+            </button>
+            {canDelete && (
               <button
                 type="button"
                 onClick={() => onDelete(row.original.id, row.original.outlet)}
@@ -324,9 +340,10 @@ export function HygieneExplorer({
               >
                 <Trash2 className="size-3.5" />
               </button>
-            ),
-          } as ColumnDef<HygieneRow>]
-        : []),
+            )}
+          </div>
+        ),
+      } as ColumnDef<HygieneRow>,
     ],
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [canDelete, deleting, t],
