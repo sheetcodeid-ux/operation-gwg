@@ -14,7 +14,7 @@ import { SegmentedTabs } from "@/components/ui/segmented-tabs";
 import { useConfirm } from "@/components/ui/confirm";
 import { Dialog, DialogContent, DialogTrigger, useDialogControl } from "@/components/ui/dialog";
 import { deleteRequestAction, requestDesignRevisionAction, submitHcRequestAction } from "@/lib/actions/hc-requests";
-import { DESIGN_TYPES, REVIEWER_LABEL, TRAINING_TYPES, fmtRupiah, type HcRequest, type HcRequestKind } from "@/lib/hc-request";
+import { DESIGN_TYPES, REVIEWER_LABEL, TRAINING_TYPES, UPLOAD_HINT, fmtRupiah, type HcRequest, type HcRequestKind } from "@/lib/hc-request";
 import { DiscussButton } from "@/components/chat/forward-request";
 import { FilePicker, RequestEmpty, RequestList, uploadAll } from "./request-shared";
 
@@ -497,7 +497,7 @@ function RequestForm({ kind, members }: { kind: HcRequestKind; members: DeptMemb
               ? "Lampiran (proposal / materi / foto)"
               : "Lampiran (formulir permintaan pegawai)"
         }
-        hint="PDF / JPG / PNG, maks 10 MB per berkas."
+        hint={UPLOAD_HINT}
       >
         <FilePicker files={files} onChange={setFiles} disabled={busy} />
       </Field>

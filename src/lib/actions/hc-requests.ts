@@ -9,7 +9,7 @@ import { persistMessage } from "@/lib/data/persist";
 import { createHcRequest, deleteHcRequest, getHcRequest, listHcRequests, updateHcRequest } from "@/lib/data/hc-requests";
 import { canSeeRequest, requestScopeFor } from "@/lib/data/request-scope";
 import { notify } from "@/lib/data/notify";
-import { REQUESTER_HREF, REVIEWER_DEPARTMENT, REVIEWER_HREF } from "@/lib/hc-request";
+import { REQUESTER_HREF, REVIEWER_DEPARTMENT, REVIEWER_HREF, UPLOAD_MAX_BYTES, UPLOAD_MAX_MB } from "@/lib/hc-request";
 import { getUsers } from "@/lib/data/store";
 import { createTask, getTask, updateTask, updateTaskStatus } from "@/lib/data/mutations";
 import { presignPut, r2Enabled, r2Put, R2_PREFIX } from "@/lib/storage/r2";
@@ -27,7 +27,6 @@ const canFinance = (u: UserProfile | null) => !!u && canReachMenu(u, "fin_traini
 /** Peninjau yang berhak untuk satu jenis pengajuan. */
 const canReview = (u: UserProfile | null, kind: HcRequestKind) => (kind === "design" ? canCreative(u) : canHc(u));
 
-const MAX_BYTES = 10 * 1024 * 1024;
 
 /** Unggah lampiran pengajuan (foto kegiatan, formulir, proposal…). */
 export async function uploadHcRequestFileAction(formData: FormData): Promise<{ path?: string; name?: string; error?: string }> {
@@ -36,7 +35,7 @@ export async function uploadHcRequestFileAction(formData: FormData): Promise<{ p
   if (!dbEnabled) return { error: "Storage belum aktif." };
   const file = formData.get("file");
   if (!(file instanceof File)) return { error: "Tidak ada berkas." };
-  if (file.size > MAX_BYTES) return { error: `Berkas "${file.name}" melebihi 10 MB.` };
+  if (file.size > UPLOAD_MAX_BYTES) return { error: `Berkas "${file.name}" melebihi ${UPLOAD_MAX_MB} MB.` };
   if (file.type !== "application/pdf" && !file.type.startsWith("image/")) {
     return { error: `"${file.name}" harus PDF atau gambar (JPG/PNG).` };
   }
@@ -73,7 +72,7 @@ export async function presignHcUploadAction(input: {
   const user = await getSessionUser();
   if (!canSubmit(user) && !canHc(user) && !canCreative(user)) return { error: "Tidak punya akses." };
   if (!r2Enabled()) return { error: "R2 belum aktif." };
-  if (input.size > MAX_BYTES) return { error: `Berkas "${input.name}" melebihi 10 MB.` };
+  if (input.size > UPLOAD_MAX_BYTES) return { error: `Berkas "${input.name}" melebihi ${UPLOAD_MAX_MB} MB.` };
   if (input.contentType !== "application/pdf" && !input.contentType.startsWith("image/")) {
     return { error: `"${input.name}" harus PDF atau gambar (JPG/PNG).` };
   }

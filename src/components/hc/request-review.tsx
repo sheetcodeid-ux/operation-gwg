@@ -16,7 +16,7 @@ import {
   hcDecideRequestAction,
 } from "@/lib/actions/hc-requests";
 import { Combobox } from "@/components/ui/combobox";
-import { fmtRupiah, isOpen, nextActions, type HcRequest, type HcRequestKind } from "@/lib/hc-request";
+import { UPLOAD_HINT, fmtRupiah, isOpen, nextActions, type HcRequest, type HcRequestKind } from "@/lib/hc-request";
 import { DiscussButton } from "@/components/chat/forward-request";
 import { FilePicker, RequestEmpty, RequestList, uploadAll, type UploadProgress } from "./request-shared";
 
@@ -298,7 +298,7 @@ function CompleteDialog({ r, onClose, onDone }: { r: HcRequest; onClose: () => v
           )}
           <Field
             label={isRecruit ? "Bukti (offering letter / SK)" : isDesign ? "Hasil design (JPG / PNG / PDF)" : "Bukti (laporan, daftar hadir, foto kegiatan)"}
-            hint="PDF / JPG / PNG, maks 10 MB per berkas."
+            hint={UPLOAD_HINT}
           >
             <FilePicker files={files} onChange={setFiles} disabled={busy} label={isDesign ? "Unggah hasil design" : "Unggah bukti"} />
           </Field>

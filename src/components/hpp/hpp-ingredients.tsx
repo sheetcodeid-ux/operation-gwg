@@ -14,6 +14,7 @@ import {
   bulkClearAlertsAction,
 } from "@/lib/actions/hpp-ingredients";
 import { type HppIngredient } from "@/lib/data/hpp-ingredients";
+import { GOLONGAN_LABEL, INGREDIENT_GOLONGAN, parseGolongan, type IngredientGolongan } from "@/lib/hpp/golongan";
 import { unitPrice } from "@/lib/hpp/units";
 import { Button } from "@/components/ui/button";
 import { Field, Input, Label, Textarea } from "@/components/ui/input";
@@ -24,6 +25,7 @@ import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { Sheet, SheetContent } from "@/components/ui/sheet";
 import { useConfirm } from "@/components/ui/confirm";
 import { Reveal } from "@/components/hpp/motion";
+import { cn } from "@/lib/utils";
 
 const rp = (n: number) => "Rp " + Math.round(n || 0).toLocaleString("id-ID");
 const num = (v: string) => Number(String(v).replace(/[^\d.-]/g, "")) || 0;
@@ -43,8 +45,9 @@ type Form = {
   contentQty: string;
   contentUnit: string;
   region: string;
+  golongan: IngredientGolongan;
 };
-const empty: Form = { name: "", buyPrice: "", buyQty: "1", buyUnit: "kg", contentQty: "1", contentUnit: "", region: "" };
+const empty: Form = { name: "", buyPrice: "", buyQty: "1", buyUnit: "kg", contentQty: "1", contentUnit: "", region: "", golongan: "general" };
 
 type ImportRow = {
   id?: string;
@@ -55,6 +58,7 @@ type ImportRow = {
   contentQty: number;
   contentUnit: string;
   region: string | null;
+  golongan: IngredientGolongan;
 };
 
 export function HppIngredients({
@@ -70,6 +74,7 @@ export function HppIngredients({
   const { confirm, dialog } = useConfirm();
 
   const [region, setRegion] = React.useState("all");
+  const [golongan, setGolongan] = React.useState("all");
   const [status, setStatus] = React.useState("all");
   const [form, setForm] = React.useState<Form>(empty);
   const [formOpen, setFormOpen] = React.useState(false);
@@ -112,11 +117,12 @@ export function HppIngredients({
     () =>
       ingredients.filter((i) => {
         if (region !== "all" && (i.region ?? "") !== region) return false;
+        if (golongan !== "all" && i.golongan !== golongan) return false;
         if (status === "alert" && !i.alert) return false;
         if (status === "stable" && i.alert) return false;
         return true;
       }),
-    [ingredients, region, status],
+    [ingredients, region, golongan, status],
   );
 
   // ---- selection ----
@@ -177,6 +183,7 @@ export function HppIngredients({
       contentQty: String(i.contentQty || 1),
       contentUnit: i.contentUnit || i.buyUnit,
       region: i.region ?? "",
+      golongan: i.golongan,
     });
     setFormOpen(true);
   }
@@ -194,6 +201,7 @@ export function HppIngredients({
         contentQty: num(form.contentQty) || 1,
         contentUnit: form.contentUnit.trim() || form.buyUnit,
         region: form.region.trim() || null,
+        golongan: form.golongan,
       });
       if (res?.error) return toast.error(res.error);
       if (res.priceJump) toast.warning("Harga naik >5% — menu terkait ditandai perlu update HPP.");
@@ -242,7 +250,7 @@ export function HppIngredients({
       .map((l) => l.trim())
       .filter(Boolean)
       .map((line) => {
-        const [name, price, qty, unit, isi, isiUnit, reg] = line.split(/[\t,;]/).map((s) => s.trim());
+        const [name, price, qty, unit, isi, isiUnit, reg, gol] = line.split(/[\t,;]/).map((s) => s.trim());
         const buyUnit = unit || "kg";
         return {
           name: name ?? "",
@@ -252,6 +260,7 @@ export function HppIngredients({
           contentQty: num(isi ?? "1") || 1,
           contentUnit: isiUnit || buyUnit,
           region: reg || null,
+          golongan: parseGolongan(gol),
         };
       })
       .filter((r) => r.name);
@@ -287,6 +296,7 @@ export function HppIngredients({
             contentQty: 24,
             contentUnit: "pcs",
             region: "Umum",
+            golongan: "minuman",
           },
         ] as HppIngredient[]);
     const data = src.map((i) => ({
@@ -297,6 +307,7 @@ export function HppIngredients({
       Satuan: i.buyUnit,
       Isi: i.contentQty || 1,
       "Satuan Pakai": i.contentUnit || i.buyUnit,
+      Golongan: GOLONGAN_LABEL[i.golongan],
       Wilayah: i.region ?? "",
     }));
     const ws = XLSX.utils.json_to_sheet(data);
@@ -335,6 +346,7 @@ export function HppIngredients({
             contentQty: num(pick(r, "Isi", "Isi per Dus", "Content")) || 1,
             contentUnit: contentUnit || buyUnit,
             region: pick(r, "Wilayah", "Region").trim() || null,
+            golongan: parseGolongan(pick(r, "Golongan", "Kategori")),
           };
         })
         .filter((r) => r.name);
@@ -386,6 +398,27 @@ export function HppIngredients({
               </div>
               {i.alert && i.prevPrice != null && <p className="text-[10px] text-muted-foreground">dari {rp(i.prevPrice)}</p>}
             </div>
+          );
+        },
+      },
+      {
+        accessorKey: "golongan",
+        header: "Golongan",
+        cell: ({ getValue }) => {
+          const g = getValue<IngredientGolongan>();
+          return (
+            <span
+              className={cn(
+                "whitespace-nowrap rounded-full px-2 py-0.5 text-[11px] font-medium",
+                g === "makanan"
+                  ? "bg-amber-500/12 text-amber-600 dark:text-amber-400"
+                  : g === "minuman"
+                    ? "bg-cyan-500/12 text-cyan-600 dark:text-cyan-400"
+                    : "bg-muted text-muted-foreground",
+              )}
+            >
+              {GOLONGAN_LABEL[g]}
+            </span>
           );
         },
       },
@@ -539,6 +572,24 @@ export function HppIngredients({
         searchPlaceholder="Cari bahan…"
         toolbar={
           <>
+            {/* Pemisah dapur / bar. Diletakkan paling depan karena inilah
+                saringan pertama yang dipakai: orang bar tidak pernah mencari
+                bahan dapur, dan sebaliknya. */}
+            <div className="w-40 shrink-0">
+              <Combobox
+                portal
+                matchTriggerWidth
+                value={golongan}
+                onChange={setGolongan}
+                options={[
+                  { value: "all", label: "Semua Golongan" },
+                  ...INGREDIENT_GOLONGAN.map((g) => ({
+                    value: g,
+                    label: `${GOLONGAN_LABEL[g]} (${ingredients.filter((i) => i.golongan === g).length})`,
+                  })),
+                ]}
+              />
+            </div>
             <div className="w-44 shrink-0">
               <Combobox
                 portal
@@ -628,6 +679,14 @@ export function HppIngredients({
                 </p>
               )}
             </div>
+
+            <Field label="Golongan" hint="General untuk bahan yang dipakai dapur maupun bar (gula, es batu, kemasan).">
+              <Combobox
+                value={form.golongan}
+                onChange={(v) => setForm({ ...form, golongan: v as IngredientGolongan })}
+                options={INGREDIENT_GOLONGAN.map((g) => ({ value: g, label: GOLONGAN_LABEL[g] }))}
+              />
+            </Field>
 
             <Field label="Wilayah (harga tertinggi)">
               <Input value={form.region} onChange={(e) => setForm({ ...form, region: e.target.value })} placeholder="mis. Kalimantan" />

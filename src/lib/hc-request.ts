@@ -17,6 +17,30 @@ import type { Tone } from "@/lib/constants";
 
 export type HcRequestKind = "rekrutmen" | "pelatihan" | "design";
 
+/* ───────────────────────────── batas unggah ─────────────────────────────
+ * Satu sumber untuk pemohon MAUPUN tim yang mengerjakan. Sebelumnya angkanya
+ * ditulis ulang di lima tempat — server, penyandang tanda tangan unggahan,
+ * pemilih berkas, dan dua teks petunjuk — sehingga menaikkan batas di satu
+ * tempat menyisakan penolakan di tempat lain.                              */
+
+/** Ukuran maksimal SATU berkas lampiran pengajuan. */
+export const UPLOAD_MAX_MB = 100;
+export const UPLOAD_MAX_BYTES = UPLOAD_MAX_MB * 1024 * 1024;
+/** Banyaknya berkas yang boleh dilampirkan sekali kirim. */
+export const UPLOAD_MAX_FILES = 20;
+/** Teks petunjuk di bawah pemilih berkas — dipakai semua formulir. */
+export const UPLOAD_HINT = `PDF / JPG / PNG, maks ${UPLOAD_MAX_MB} MB per berkas, hingga ${UPLOAD_MAX_FILES} berkas.`;
+
+/**
+ * Ambang aman untuk melewati server action.
+ *
+ * Badan permintaan menuju fungsi serverless dibatasi beberapa MB dan ditolak
+ * di lapisan platform — sebelum kode kita sempat jalan — sehingga yang
+ * terlihat pengguna hanyalah "an unexpected response was received from the
+ * server". Berkas di atas ambang ini WAJIB naik langsung ke R2.
+ */
+export const DIRECT_UPLOAD_MIN = 3 * 1024 * 1024;
+
 /** Satu putaran revisi yang diminta pemohon atas hasil design. */
 export interface HcRequestRevision {
   at: string;

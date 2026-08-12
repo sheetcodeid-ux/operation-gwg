@@ -4,6 +4,7 @@ import * as React from "react";
 import { scrollToTop } from "@/lib/scroll";
 import { useRouter } from "next/navigation";
 import {
+  ChevronDown,
   AlertTriangle,
   BarChart3,
   BookmarkPlus,
@@ -176,6 +177,9 @@ export function HppCalculator({
   const [esbTargetRec, setEsbTargetRec] = React.useState<number | null>(null);
   const [image, setImage] = React.useState<string | null>(null);
   const [category, setCategory] = React.useState<"makanan" | "minuman">("minuman");
+  // Riwayat mulai tertutup: yang dipakai sehari-hari kalkulatornya, bukan
+  // daftar perhitungan lama yang panjangnya terus bertambah.
+  const [historyOpen, setHistoryOpen] = React.useState(false);
   const [brand, setBrand] = React.useState<Brand>("Nordu");
   const [mode, setMode] = React.useState<"per_pcs" | "per_resep">("per_pcs");
   const [yieldPcs, setYieldPcs] = React.useState(1); // pcs per resep (per_resep only)
@@ -1142,12 +1146,30 @@ export function HppCalculator({
           </Button>
         </div>
 
-        {/* History */}
+        {/* History — bisa ditutup: daftarnya tumbuh terus dan mendorong tombol
+            aksi jauh ke bawah, padahal yang dipakai sehari-hari kalkulatornya. */}
         {initialHistory.length > 0 && (
           <div className="glass rounded-2xl border border-border p-5">
-            <p className="mb-3 flex items-center gap-2 text-sm font-semibold text-foreground">
-              <History className="size-4 text-muted-foreground" /> Riwayat Perhitungan
-            </p>
+            <button
+              type="button"
+              onClick={() => setHistoryOpen((v) => !v)}
+              aria-expanded={historyOpen}
+              className="flex w-full items-center gap-2 text-sm font-semibold text-foreground"
+            >
+              <History className="size-4 text-muted-foreground" />
+              <span className="flex-1 text-left">Riwayat Perhitungan</span>
+              <span className="rounded-full bg-muted px-2 py-0.5 text-[11px] font-medium text-muted-foreground">
+                {initialHistory.length}
+              </span>
+              <ChevronDown className={cn("size-4 text-muted-foreground transition-transform duration-200", historyOpen && "rotate-180")} />
+            </button>
+            <div
+              className={cn(
+                "grid transition-[grid-template-rows] duration-200",
+                historyOpen ? "mt-3 grid-rows-[1fr]" : "grid-rows-[0fr]",
+              )}
+            >
+              <div className="overflow-hidden">
             <div className="space-y-1.5">
               {initialHistory.map((r) => (
                 <div key={r.id} className="group flex items-center gap-2 rounded-xl border border-border bg-muted/20 px-3 py-2">
@@ -1187,6 +1209,8 @@ export function HppCalculator({
                   )}
                 </div>
               ))}
+            </div>
+              </div>
             </div>
           </div>
         )}

@@ -4,6 +4,9 @@ import { randomUUID } from "node:crypto";
 import { db, dbEnabled } from "./db";
 import { selectAll } from "./paged";
 import { recipeUnits, unitPrice } from "@/lib/hpp/units";
+import { asGolongan, type IngredientGolongan } from "@/lib/hpp/golongan";
+
+export { GOLONGAN_LABEL, INGREDIENT_GOLONGAN, asGolongan, type IngredientGolongan } from "@/lib/hpp/golongan";
 
 export interface HppIngredient {
   id: string;
@@ -20,6 +23,8 @@ export interface HppIngredient {
   /** Satuan yang benar-benar dipakai di resep. */
   contentUnit: string;
   region: string | null;
+  /** Pemisah bahan dapur / bar. `general` = dipakai keduanya. */
+  golongan: IngredientGolongan;
   prevPrice: number | null;
   alert: boolean; // last change raised the unit price >5%
   updatedBy: string | null;
@@ -35,6 +40,7 @@ export type IngredientDraft = {
   contentQty?: number;
   contentUnit?: string | null;
   region: string | null;
+  golongan?: IngredientGolongan;
 };
 
 const mem = new Map<string, HppIngredient>();
@@ -68,6 +74,9 @@ export async function upsertIngredient(input: IngredientDraft, userId: string | 
     contentQty,
     contentUnit: (input.contentUnit || "").trim() || input.buyUnit,
     region: input.region,
+    // Golongan yang tidak dikirim TIDAK boleh jatuh ke bawaan: mengubah harga
+    // lewat impor akan mengembalikan semua bahan ke "general".
+    golongan: input.golongan ?? existing?.golongan ?? "general",
     prevPrice: existing ? existing.buyPrice : null,
     alert: priceJump || (existing?.alert ?? false),
     updatedBy: userId,
@@ -113,6 +122,7 @@ const toRow = (r: HppIngredient) => ({
   content_qty: r.contentQty || 1,
   content_unit: r.contentUnit || r.buyUnit,
   region: r.region,
+  golongan: r.golongan,
   prev_price: r.prevPrice,
   alert: r.alert,
   updated_by: r.updatedBy,
@@ -128,6 +138,7 @@ interface IngredientRow {
   content_qty?: number | string | null;
   content_unit?: string | null;
   region: string | null;
+  golongan?: string | null;
   prev_price: number | string | null;
   alert: boolean | null;
   updated_by: string | null;
@@ -143,6 +154,7 @@ const fromRow = (r: IngredientRow): HppIngredient => ({
   contentQty: Number(r.content_qty) || 1,
   contentUnit: r.content_unit || r.buy_unit,
   region: r.region,
+  golongan: asGolongan(r.golongan),
   prevPrice: r.prev_price == null ? null : Number(r.prev_price),
   alert: r.alert ?? false,
   updatedBy: r.updated_by,

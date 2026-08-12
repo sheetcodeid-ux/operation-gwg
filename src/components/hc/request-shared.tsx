@@ -8,6 +8,10 @@ import { Badge } from "@/components/ui/badge";
 import { DetailRows, DetailTitle, type DetailRow } from "@/components/ui/detail-rows";
 import { presignHcUploadAction, uploadHcRequestFileAction } from "@/lib/actions/hc-requests";
 import {
+  DIRECT_UPLOAD_MIN,
+  UPLOAD_MAX_BYTES,
+  UPLOAD_MAX_FILES,
+  UPLOAD_MAX_MB,
   fmtRupiah,
   requestSteps,
   statusMeta,
@@ -58,13 +62,17 @@ export function FilePicker({ files, onChange, disabled, label = "Unggah berkas /
         toast.error(`"${f.name}" harus PDF atau gambar.`);
         continue;
       }
-      if (f.size > 10 * 1024 * 1024) {
-        toast.error(`"${f.name}" melebihi 10 MB.`);
+      if (f.size > UPLOAD_MAX_BYTES) {
+        toast.error(`"${f.name}" melebihi ${UPLOAD_MAX_MB} MB.`);
         continue;
       }
       ok.push(f);
     }
-    onChange([...files, ...ok].slice(0, 10));
+    const gabung = [...files, ...ok];
+    if (gabung.length > UPLOAD_MAX_FILES) {
+      toast.error(`Maksimal ${UPLOAD_MAX_FILES} berkas — sisanya tidak ikut.`);
+    }
+    onChange(gabung.slice(0, UPLOAD_MAX_FILES));
   }
   return (
     <div className="space-y-2">
@@ -87,16 +95,6 @@ export function FilePicker({ files, onChange, disabled, label = "Unggah berkas /
     </div>
   );
 }
-
-/**
- * Ambang aman untuk melewati server action.
- *
- * Badan permintaan menuju fungsi serverless dibatasi beberapa MB dan ditolak
- * di lapisan platform — sebelum kode kita jalan — sehingga error-nya muncul
- * sebagai "an unexpected response was received from the server", bukan pesan
- * kita sendiri. Berkas di atas ambang ini naik langsung ke R2.
- */
-const DIRECT_UPLOAD_MIN = 3 * 1024 * 1024;
 
 /** Kemajuan unggahan yang dilaporkan ke pemanggil. */
 export interface UploadProgress {
@@ -180,6 +178,13 @@ export async function uploadAll(
         report(0);
         continue;
       }
+      // Sampai sini berarti R2 belum aktif. Jalur server action TIDAK bisa
+      // menampung berkas sebesar ini — platform menolaknya sebelum kode kita
+      // jalan, dan pesannya tidak terbaca pengguna. Lebih baik berhenti dengan
+      // alasan yang jelas daripada gagal tanpa penjelasan.
+      throw new Error(
+        `"${file.name}" (${(file.size / 1024 / 1024).toFixed(1)} MB) terlalu besar untuk diunggah selagi penyimpanan R2 belum aktif. Hubungi admin, atau unggah berkas di bawah ${(DIRECT_UPLOAD_MIN / 1024 / 1024).toFixed(0)} MB.`,
+      );
     }
     const fd = new FormData();
     fd.append("file", file);
