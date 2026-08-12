@@ -22,6 +22,8 @@ import {
 } from "@/lib/data/chat";
 import { replyStats, type ReplyStat } from "@/lib/data/chat-stats";
 import { getHcRequest, listHcRequests } from "@/lib/data/hc-requests";
+import { getSystemRequestRow } from "@/lib/data/system";
+import { isSystemSupport } from "@/lib/system-shared";
 import { canSeeRequest, requestScopeFor } from "@/lib/data/request-scope";
 import { presignPut, r2Enabled, R2_PREFIX } from "@/lib/storage/r2";
 import { HC_REQUEST_KIND_LABEL, statusMeta, type HcRequestKind } from "@/lib/hc-request";
@@ -197,6 +199,51 @@ export async function chatForwardRequestAction(input: {
     return { threadId };
   } catch (e) {
     return { error: e instanceof Error ? e.message : "Gagal meneruskan pengajuan." };
+  }
+}
+
+/**
+ * Teruskan sebuah REQUEST SYSTEM ke seseorang untuk ditanyakan.
+ *
+ * Terpisah dari `chatForwardRequestAction` karena request system adalah
+ * catatan yang berbeda dengan pengajuan HC — memakai jalur yang sama berarti
+ * kartunya akan dicari di tabel yang salah dan selalu tampil "sudah dihapus".
+ *
+ * Yang boleh meneruskan: tim System Support (yang menangani antreannya) atau
+ * pemohonnya sendiri. Tanpa batas ini, id tebakan bisa dipakai menarik judul
+ * request milik cabang lain ke dalam obrolan.
+ */
+export async function chatForwardSystemAction(input: {
+  requestId: string;
+  toUserIds: string[];
+  note: string;
+}): Promise<{ threadId?: string; error?: string }> {
+  const user = await getSessionUser();
+  if (!user || !dbEnabled) return { error: "Tidak punya akses." };
+  if (input.toUserIds.length === 0) return { error: "Pilih dulu tujuannya." };
+
+  const req = await getSystemRequestRow(input.requestId);
+  if (!req) return { error: "Request tidak ditemukan." };
+  if (!isSystemSupport(user) && req.requester_id !== user.id && user.role !== "super_admin") {
+    return { error: "Tidak punya akses ke request itu." };
+  }
+
+  try {
+    const threadId =
+      input.toUserIds.length === 1
+        ? await openDirectThread(user.id, input.toUserIds[0])
+        : await createGroupThread(user.id, `Bahas: ${req.title}`.slice(0, 80), input.toUserIds);
+    const res = await sendMessage({
+      threadId,
+      senderId: user.id,
+      body: input.note.trim(),
+      ref: { kind: "system", id: req.id },
+    });
+    if (res.error) return { error: res.error };
+    revalidatePath("/pesan");
+    return { threadId };
+  } catch (e) {
+    return { error: e instanceof Error ? e.message : "Gagal meneruskan request." };
   }
 }
 

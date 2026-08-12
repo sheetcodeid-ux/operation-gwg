@@ -1,6 +1,7 @@
 "use client";
 
 import * as React from "react";
+import { useRouter } from "next/navigation";
 import { ArrowLeft, Check, CheckCheck, ExternalLink, FileText, Info, Loader2, Plus, Send, TriangleAlert, Users, X } from "lucide-react";
 import { toast } from "sonner";
 import { Avatar } from "@/components/ui/avatar";
@@ -57,15 +58,26 @@ export function MessageThread({
   const [files, setFiles] = React.useState<File[]>([]);
   const [ref, setRef] = React.useState<PickableRequest | null>(null);
   const [menuOpen, setMenuOpen] = React.useState(false);
+  const router = useRouter();
   const [openRequest, setOpenRequest] = React.useState<string | null>(null);
   const [openFollowup, setOpenFollowup] = React.useState<string | null>(null);
   const [photo, setPhoto] = React.useState<{ url: string; name: string } | null>(null);
 
-  // Satu bentuk kartu, dua jenis isi — masing-masing punya panelnya sendiri.
-  const openRef = React.useCallback((r: ChatRef) => {
-    if (r.kind === "hygiene") setOpenFollowup(r.id);
-    else setOpenRequest(r.id);
-  }, []);
+  // Satu bentuk kartu, tiga jenis isi.
+  //
+  // Pengajuan HC dan temuan hygiene punya panelnya sendiri di dalam obrolan.
+  // Request System belum punya, jadi kartunya membuka halaman antreannya —
+  // BUKAN panel pengajuan. Sebelumnya semua yang bukan hygiene diarahkan ke
+  // panel pengajuan, yang berarti request system akan dicari di tabel yang
+  // salah dan panelnya tampil kosong.
+  const openRef = React.useCallback(
+    (r: ChatRef) => {
+      if (r.kind === "hygiene") setOpenFollowup(r.id);
+      else if (r.kind === "system") router.push(r.href);
+      else setOpenRequest(r.id);
+    },
+    [router],
+  );
   const bottomRef = React.useRef<HTMLDivElement>(null);
   const boxRef = React.useRef<HTMLTextAreaElement>(null);
   const fileRef = React.useRef<HTMLInputElement>(null);

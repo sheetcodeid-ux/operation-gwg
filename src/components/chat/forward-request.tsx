@@ -8,7 +8,7 @@ import { Avatar } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { Field, Textarea } from "@/components/ui/input";
-import { chatDirectoryAction, chatForwardRequestAction } from "@/lib/actions/chat";
+import { chatDirectoryAction, chatForwardRequestAction, chatForwardSystemAction } from "@/lib/actions/chat";
 import { cn } from "@/lib/utils";
 import type { ChatPerson } from "@/lib/chat-shared";
 
@@ -26,11 +26,21 @@ export function DiscussButton({
   /** Saran tujuan — mis. PIC Creative yang mengerjakan design ini. */
   suggestedIds = [],
   label = "Diskusikan",
+  /**
+   * Catatan mana yang dilampirkan.
+   *
+   * Pengajuan HC dan Request System hidup di tabel berbeda. Memakai jalur yang
+   * sama untuk keduanya berarti kartunya dicari di tabel yang salah dan selalu
+   * tampil "sudah dihapus" — jadi jenisnya harus disebut, bukan ditebak dari
+   * bentuk id-nya.
+   */
+  source = "pengajuan",
 }: {
   requestId: string;
   requestTitle: string;
   suggestedIds?: string[];
   label?: string;
+  source?: "pengajuan" | "system";
 }) {
   const router = useRouter();
   const [open, setOpen] = React.useState(false);
@@ -79,11 +89,14 @@ export function DiscussButton({
   async function submit() {
     if (picked.length === 0) return toast.error("Pilih dulu tujuannya.");
     setBusy(true);
-    const res = await chatForwardRequestAction({ requestId, toUserIds: picked, note });
+    const res =
+      source === "system"
+        ? await chatForwardSystemAction({ requestId, toUserIds: picked, note })
+        : await chatForwardRequestAction({ requestId, toUserIds: picked, note });
     setBusy(false);
     if (res.error) return toast.error(res.error);
     setOpen(false);
-    toast.success("Pengajuan diteruskan ke Pesan");
+    toast.success(source === "system" ? "Request diteruskan ke Pesan" : "Pengajuan diteruskan ke Pesan");
     // Langsung dibawa ke percakapannya — meneruskan hampir selalu diikuti
     // menulis sesuatu di sana.
     if (res.threadId) router.push(`/pesan?t=${res.threadId}`);

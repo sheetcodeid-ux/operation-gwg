@@ -9,6 +9,7 @@ import { notifyCollapsed } from "./notify";
 import { isR2Key, presignGet, r2KeyOf } from "@/lib/storage/r2";
 import { ROLE_LABEL } from "@/lib/constants";
 import { HC_REQUEST_KIND_LABEL, statusMeta, type HcRequestKind, type HcRequestStatus } from "@/lib/hc-request";
+import { SYS_TYPE_LABEL, SYS_STATUS_META, type SysRequestType, type SysStatus } from "@/lib/system-shared";
 import { FOLLOWUP_STATUS, previewOf, type ChatAttachment, type ChatMessage, type ChatPerson, type ChatRef, type ChatThread } from "@/lib/chat-shared";
 import type { Role, UserProfile } from "@/lib/types";
 
@@ -282,6 +283,54 @@ async function refMap(ids: string[]): Promise<Map<string, ChatRef>> {
   return out;
 }
 
+/**
+ * Request System sebagai kartu obrolan.
+ *
+ * Dibaca sekali untuk seluruh percakapan, sama seperti rujukan pengajuan —
+ * satu kueri per pesan adalah jeda yang langsung terasa saat berpindah
+ * percakapan.
+ */
+async function systemRefMap(ids: string[]): Promise<Map<string, ChatRef>> {
+  const out = new Map<string, ChatRef>();
+  const unique = [...new Set(ids)];
+  if (unique.length === 0 || !dbEnabled) return out;
+
+  const { data } = await db()
+    .from("system_requests")
+    .select("id,title,status,requester_id,request_type")
+    .in("id", unique);
+
+  for (const r of (data ?? []) as { id: string; title: string; status: SysStatus; requester_id: string; request_type: string }[]) {
+    out.set(r.id, {
+      kind: "system",
+      id: r.id,
+      title: r.title,
+      kindLabel: SYS_TYPE_LABEL[r.request_type as SysRequestType] ?? "Request System",
+      statusLabel: SYS_STATUS_META[r.status]?.label ?? "—",
+      requesterName: getUser(r.requester_id)?.name ?? "—",
+      href: "/system/pengajuan",
+    });
+  }
+
+  // Yang sudah dihapus tetap tampil, tapi mati — kartunya hilang begitu saja
+  // membuat percakapannya tidak masuk akal dibaca ulang.
+  for (const id of unique) {
+    if (!out.has(id)) {
+      out.set(id, {
+        kind: "system",
+        id,
+        title: "Request system sudah dihapus",
+        kindLabel: "Request System",
+        statusLabel: "—",
+        requesterName: "—",
+        href: "/system/pengajuan",
+        missing: true,
+      });
+    }
+  }
+  return out;
+}
+
 /** Temuan hygiene sebagai kartu obrolan — merah selama belum ditindaklanjuti. */
 async function hygieneRefMap(ids: string[]): Promise<Map<string, ChatRef>> {
   const out = new Map<string, ChatRef>();
@@ -363,10 +412,11 @@ export async function readThread(threadId: string, meId: string): Promise<ChatMe
     .limit(MESSAGE_PAGE);
 
   const rows = ((data ?? []) as MessageRow[]).reverse();
-  // Dua jenis rujukan, masing-masing SEKALI baca untuk seluruh percakapan.
-  const [refs, hyg] = await Promise.all([
+  // Tiga jenis rujukan, masing-masing SEKALI baca untuk seluruh percakapan.
+  const [refs, hyg, sys] = await Promise.all([
     refMap(rows.filter((r) => r.ref_kind === "pengajuan" && r.ref_id).map((r) => r.ref_id!)),
     hygieneRefMap(rows.filter((r) => r.ref_kind === "hygiene" && r.ref_id).map((r) => r.ref_id!)),
+    systemRefMap(rows.filter((r) => r.ref_kind === "system" && r.ref_id).map((r) => r.ref_id!)),
   ]);
 
   const out: ChatMessage[] = rows.map((r) => ({
@@ -376,7 +426,9 @@ export async function readThread(threadId: string, meId: string): Promise<ChatMe
     senderName: getUser(r.sender_id)?.name ?? "Pengguna dihapus",
     body: r.body,
     attachments: attachmentsOf(r.attachments),
-    ref: r.ref_id ? ((r.ref_kind === "hygiene" ? hyg.get(r.ref_id) : refs.get(r.ref_id)) ?? null) : null,
+    ref: r.ref_id
+      ? ((r.ref_kind === "hygiene" ? hyg : r.ref_kind === "system" ? sys : refs).get(r.ref_id) ?? null)
+      : null,
     createdAt: r.created_at,
   }));
   await signAttachments(out);
@@ -464,7 +516,7 @@ export interface SendInput {
   senderId: string;
   body: string;
   attachments?: ChatAttachment[];
-  ref?: { kind: "pengajuan" | "hygiene"; id: string } | null;
+  ref?: { kind: "pengajuan" | "hygiene" | "system"; id: string } | null;
 }
 
 export async function sendMessage(input: SendInput): Promise<{ id?: string; error?: string }> {

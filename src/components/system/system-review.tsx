@@ -24,6 +24,7 @@ import { Badge } from "@/components/ui/badge";
 import { Field, Textarea } from "@/components/ui/input";
 import { Combobox } from "@/components/ui/combobox";
 import { StageFilterChips } from "@/components/ui/stage-filter";
+import { DiscussButton } from "@/components/chat/forward-request";
 import { cn } from "@/lib/utils";
 import {
   completeSystemRequestAction,
@@ -285,6 +286,19 @@ function DetailPanel({
             }
           />
         )}
+      </div>
+
+      {/* Bertanya balik ke pemohon sebelum memutuskan — sama seperti antrian
+          Design & Permintaan HC. Request-nya ikut terlampir sebagai kartu,
+          jadi tidak perlu menjelaskan ulang yang mana. */}
+      <div className="mt-4">
+        <DiscussButton
+          source="system"
+          requestId={row.id}
+          requestTitle={row.title}
+          suggestedIds={[row.requesterId]}
+          label="Tanya"
+        />
       </div>
 
       {/* System Support actions */}
