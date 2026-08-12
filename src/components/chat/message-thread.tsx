@@ -63,17 +63,17 @@ export function MessageThread({
   const [openFollowup, setOpenFollowup] = React.useState<string | null>(null);
   const [photo, setPhoto] = React.useState<{ url: string; name: string } | null>(null);
 
-  // Satu bentuk kartu, tiga jenis isi.
+  // Satu bentuk kartu, empat jenis isi.
   //
   // Pengajuan HC dan temuan hygiene punya panelnya sendiri di dalam obrolan.
-  // Request System belum punya, jadi kartunya membuka halaman antreannya —
-  // BUKAN panel pengajuan. Sebelumnya semua yang bukan hygiene diarahkan ke
-  // panel pengajuan, yang berarti request system akan dicari di tabel yang
-  // salah dan panelnya tampil kosong.
+  // Request System dan Dokumen HC belum punya, jadi kartunya membuka halaman
+  // antreannya — BUKAN panel pengajuan. Sebelumnya semua yang bukan hygiene
+  // diarahkan ke panel pengajuan, yang berarti jenis baru akan dicari di tabel
+  // yang salah dan panelnya tampil kosong.
   const openRef = React.useCallback(
     (r: ChatRef) => {
       if (r.kind === "hygiene") setOpenFollowup(r.id);
-      else if (r.kind === "system") router.push(r.href);
+      else if (r.kind === "system" || r.kind === "dokumen") router.push(r.href);
       else setOpenRequest(r.id);
     },
     [router],

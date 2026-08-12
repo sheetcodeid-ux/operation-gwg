@@ -10,6 +10,7 @@ import { isR2Key, presignGet, r2KeyOf } from "@/lib/storage/r2";
 import { ROLE_LABEL } from "@/lib/constants";
 import { HC_REQUEST_KIND_LABEL, statusMeta, type HcRequestKind, type HcRequestStatus } from "@/lib/hc-request";
 import { SYS_TYPE_LABEL, SYS_STATUS_META, type SysRequestType, type SysStatus } from "@/lib/system-shared";
+import { HC_DOC_LABEL, HC_STATUS_META, type HcDocType, type HcStatus } from "@/lib/hc-shared";
 import { FOLLOWUP_STATUS, previewOf, type ChatAttachment, type ChatMessage, type ChatPerson, type ChatRef, type ChatThread } from "@/lib/chat-shared";
 import type { Role, UserProfile } from "@/lib/types";
 
@@ -331,6 +332,69 @@ async function systemRefMap(ids: string[]): Promise<Map<string, ChatRef>> {
   return out;
 }
 
+/**
+ * Dokumen HC (PKWT, SP, dsb) sebagai kartu obrolan.
+ *
+ * Judulnya memakai nama karyawan + jenis dokumennya, karena itulah yang
+ * dipakai orang menyebut berkasnya — "PKWT Andi", bukan nomor barisnya.
+ */
+async function docRefMap(ids: string[]): Promise<Map<string, ChatRef>> {
+  const out = new Map<string, ChatRef>();
+  const unique = [...new Set(ids)];
+  if (unique.length === 0 || !dbEnabled) return out;
+
+  const { data } = await db()
+    .from("hc_submissions")
+    .select("id,employee_name,doc_type,status,supervisor_id")
+    .in("id", unique);
+
+  for (const r of (data ?? []) as { id: string; employee_name: string; doc_type: HcDocType; status: HcStatus; supervisor_id: string }[]) {
+    out.set(r.id, {
+      kind: "dokumen",
+      id: r.id,
+      title: `${HC_DOC_LABEL[r.doc_type] ?? "Dokumen"} — ${r.employee_name}`,
+      kindLabel: "Dokumen HC",
+      statusLabel: HC_STATUS_META[r.status]?.label ?? "—",
+      requesterName: getUser(r.supervisor_id)?.name ?? "—",
+      href: "/hc/antrian",
+    });
+  }
+
+  for (const id of unique) {
+    if (!out.has(id)) {
+      out.set(id, {
+        kind: "dokumen",
+        id,
+        title: "Dokumen HC sudah dihapus",
+        kindLabel: "Dokumen HC",
+        statusLabel: "—",
+        requesterName: "—",
+        href: "/hc/antrian",
+        missing: true,
+      });
+    }
+  }
+  return out;
+}
+
+/**
+ * Pilih peta rujukan sesuai jenisnya.
+ *
+ * Ditulis sebagai pemetaan eksplisit, bukan rantai `?:` dengan cabang terakhir
+ * sebagai "sisanya". Bentuk "sisanya" itulah yang membuat rujukan system dulu
+ * dibaca dari tabel pengajuan begitu jenis ketiga ditambahkan — jenis baru
+ * berikutnya akan mengulangi kesalahan yang sama.
+ */
+function REF_MAPS(
+  kind: string | null,
+  m: { hyg: Map<string, ChatRef>; sys: Map<string, ChatRef>; doc: Map<string, ChatRef>; refs: Map<string, ChatRef> },
+): Map<string, ChatRef> {
+  if (kind === "hygiene") return m.hyg;
+  if (kind === "system") return m.sys;
+  if (kind === "dokumen") return m.doc;
+  return m.refs;
+}
+
 /** Temuan hygiene sebagai kartu obrolan — merah selama belum ditindaklanjuti. */
 async function hygieneRefMap(ids: string[]): Promise<Map<string, ChatRef>> {
   const out = new Map<string, ChatRef>();
@@ -412,11 +476,12 @@ export async function readThread(threadId: string, meId: string): Promise<ChatMe
     .limit(MESSAGE_PAGE);
 
   const rows = ((data ?? []) as MessageRow[]).reverse();
-  // Tiga jenis rujukan, masing-masing SEKALI baca untuk seluruh percakapan.
-  const [refs, hyg, sys] = await Promise.all([
+  // Empat jenis rujukan, masing-masing SEKALI baca untuk seluruh percakapan.
+  const [refs, hyg, sys, doc] = await Promise.all([
     refMap(rows.filter((r) => r.ref_kind === "pengajuan" && r.ref_id).map((r) => r.ref_id!)),
     hygieneRefMap(rows.filter((r) => r.ref_kind === "hygiene" && r.ref_id).map((r) => r.ref_id!)),
     systemRefMap(rows.filter((r) => r.ref_kind === "system" && r.ref_id).map((r) => r.ref_id!)),
+    docRefMap(rows.filter((r) => r.ref_kind === "dokumen" && r.ref_id).map((r) => r.ref_id!)),
   ]);
 
   const out: ChatMessage[] = rows.map((r) => ({
@@ -427,7 +492,7 @@ export async function readThread(threadId: string, meId: string): Promise<ChatMe
     body: r.body,
     attachments: attachmentsOf(r.attachments),
     ref: r.ref_id
-      ? ((r.ref_kind === "hygiene" ? hyg : r.ref_kind === "system" ? sys : refs).get(r.ref_id) ?? null)
+      ? (REF_MAPS(r.ref_kind, { hyg, sys, doc, refs }).get(r.ref_id) ?? null)
       : null,
     createdAt: r.created_at,
   }));
@@ -516,7 +581,7 @@ export interface SendInput {
   senderId: string;
   body: string;
   attachments?: ChatAttachment[];
-  ref?: { kind: "pengajuan" | "hygiene" | "system"; id: string } | null;
+  ref?: { kind: "pengajuan" | "hygiene" | "system" | "dokumen"; id: string } | null;
 }
 
 export async function sendMessage(input: SendInput): Promise<{ id?: string; error?: string }> {

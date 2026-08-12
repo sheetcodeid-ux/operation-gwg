@@ -22,6 +22,7 @@ import {
 import { toast } from "sonner";
 import { uploadOne } from "@/lib/upload-client";
 import { Button } from "@/components/ui/button";
+import { DiscussButton } from "@/components/chat/forward-request";
 import { Badge } from "@/components/ui/badge";
 import { Field, Textarea } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
@@ -385,6 +386,19 @@ function DetailPanel({ row, canDelete, onDeleted }: { row: HcSubmission; canDele
             <span className="text-sm text-muted-foreground">Tidak dilampirkan</span>
           )}
         </div>
+      </div>
+
+      {/* Bertanya balik ke supervisor pengaju sebelum memproses — sama seperti
+          antrian Design, Permintaan HC, dan System. Dokumennya ikut terlampir
+          sebagai kartu, jadi tidak perlu menyebut ulang berkas yang mana. */}
+      <div className="mt-4">
+        <DiscussButton
+          source="dokumen"
+          requestId={row.id}
+          requestTitle={row.employeeName}
+          suggestedIds={[row.supervisorId]}
+          label="Tanya"
+        />
       </div>
 
       {/* HC actions */}

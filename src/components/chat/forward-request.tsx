@@ -8,7 +8,7 @@ import { Avatar } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { Field, Textarea } from "@/components/ui/input";
-import { chatDirectoryAction, chatForwardRequestAction, chatForwardSystemAction } from "@/lib/actions/chat";
+import { chatDirectoryAction, chatForwardDocAction, chatForwardRequestAction, chatForwardSystemAction } from "@/lib/actions/chat";
 import { cn } from "@/lib/utils";
 import type { ChatPerson } from "@/lib/chat-shared";
 
@@ -40,7 +40,7 @@ export function DiscussButton({
   requestTitle: string;
   suggestedIds?: string[];
   label?: string;
-  source?: "pengajuan" | "system";
+  source?: "pengajuan" | "system" | "dokumen";
 }) {
   const router = useRouter();
   const [open, setOpen] = React.useState(false);
@@ -89,14 +89,19 @@ export function DiscussButton({
   async function submit() {
     if (picked.length === 0) return toast.error("Pilih dulu tujuannya.");
     setBusy(true);
-    const res =
+    const kirim =
       source === "system"
-        ? await chatForwardSystemAction({ requestId, toUserIds: picked, note })
-        : await chatForwardRequestAction({ requestId, toUserIds: picked, note });
+        ? chatForwardSystemAction
+        : source === "dokumen"
+          ? chatForwardDocAction
+          : chatForwardRequestAction;
+    const res = await kirim({ requestId, toUserIds: picked, note });
     setBusy(false);
     if (res.error) return toast.error(res.error);
     setOpen(false);
-    toast.success(source === "system" ? "Request diteruskan ke Pesan" : "Pengajuan diteruskan ke Pesan");
+    toast.success(
+      source === "system" ? "Request diteruskan ke Pesan" : source === "dokumen" ? "Dokumen diteruskan ke Pesan" : "Pengajuan diteruskan ke Pesan",
+    );
     // Langsung dibawa ke percakapannya — meneruskan hampir selalu diikuti
     // menulis sesuatu di sana.
     if (res.threadId) router.push(`/pesan?t=${res.threadId}`);

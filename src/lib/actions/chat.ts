@@ -23,6 +23,8 @@ import {
 import { replyStats, type ReplyStat } from "@/lib/data/chat-stats";
 import { getHcRequest, listHcRequests } from "@/lib/data/hc-requests";
 import { getSystemRequestRow } from "@/lib/data/system";
+import { getHcSubmissionRow } from "@/lib/data/hc";
+import { canReachMenu } from "@/lib/nav";
 import { isSystemSupport } from "@/lib/system-shared";
 import { canSeeRequest, requestScopeFor } from "@/lib/data/request-scope";
 import { presignPut, r2Enabled, R2_PREFIX } from "@/lib/storage/r2";
@@ -244,6 +246,49 @@ export async function chatForwardSystemAction(input: {
     return { threadId };
   } catch (e) {
     return { error: e instanceof Error ? e.message : "Gagal meneruskan request." };
+  }
+}
+
+/**
+ * Teruskan sebuah DOKUMEN HC (PKWT, SP, dsb) ke seseorang untuk ditanyakan.
+ *
+ * Yang boleh: tim HC yang menangani antreannya, supervisor yang mengajukannya,
+ * atau admin. Dokumen HC memuat data pribadi karyawan, jadi batas ini lebih
+ * penting daripada pada jenis rujukan lain.
+ */
+export async function chatForwardDocAction(input: {
+  requestId: string;
+  toUserIds: string[];
+  note: string;
+}): Promise<{ threadId?: string; error?: string }> {
+  const user = await getSessionUser();
+  if (!user || !dbEnabled) return { error: "Tidak punya akses." };
+  if (input.toUserIds.length === 0) return { error: "Pilih dulu tujuannya." };
+
+  const doc = await getHcSubmissionRow(input.requestId);
+  if (!doc) return { error: "Dokumen tidak ditemukan." };
+  const bolehHc = canReachMenu(user, "hc_review");
+  if (!bolehHc && doc.supervisor_id !== user.id && user.role !== "super_admin") {
+    return { error: "Tidak punya akses ke dokumen itu." };
+  }
+
+  try {
+    const judul = `Bahas: ${doc.employee_name}`.slice(0, 80);
+    const threadId =
+      input.toUserIds.length === 1
+        ? await openDirectThread(user.id, input.toUserIds[0])
+        : await createGroupThread(user.id, judul, input.toUserIds);
+    const res = await sendMessage({
+      threadId,
+      senderId: user.id,
+      body: input.note.trim(),
+      ref: { kind: "dokumen", id: doc.id },
+    });
+    if (res.error) return { error: res.error };
+    revalidatePath("/pesan");
+    return { threadId };
+  } catch (e) {
+    return { error: e instanceof Error ? e.message : "Gagal meneruskan dokumen." };
   }
 }
 

@@ -28,7 +28,7 @@ export function isImageAttachment(a: { name: string; type?: string }): boolean {
 
 /** Rujukan ke catatan lain di aplikasi yang sedang dibahas di obrolan. */
 export interface ChatRef {
-  kind: "pengajuan" | "hygiene" | "system";
+  kind: "pengajuan" | "hygiene" | "system" | "dokumen";
   id: string;
   title: string;
   /** Label jenis ("Pengajuan Design", "Temuan Hygiene", …). */
@@ -175,7 +175,9 @@ export function previewOf(m: {
   if (m.body.trim()) return m.body.trim();
   if (m.ref) {
     if (m.ref.kind === "hygiene") return "Temuan hygiene";
-    return m.ref.kind === "system" ? "Meneruskan sebuah request system" : "Meneruskan sebuah pengajuan";
+    if (m.ref.kind === "system") return "Meneruskan sebuah request system";
+    if (m.ref.kind === "dokumen") return "Meneruskan sebuah dokumen HC";
+    return "Meneruskan sebuah pengajuan";
   }
   if (m.attachments.length > 0) return `${m.attachments.length} lampiran`;
   return "";
