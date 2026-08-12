@@ -23,6 +23,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Field, Textarea } from "@/components/ui/input";
 import { Combobox } from "@/components/ui/combobox";
+import { StageFilterChips } from "@/components/ui/stage-filter";
 import { cn } from "@/lib/utils";
 import {
   completeSystemRequestAction,
@@ -84,23 +85,13 @@ export function SystemReviewPanel({
             <Inbox className="size-4 text-muted-foreground" /> Antrean System
             <span className="ml-auto text-xs font-normal text-muted-foreground">{rows.length} total</span>
           </div>
-          <div className="flex flex-wrap gap-1.5">
-            {STATUS_FILTERS.map((f) => {
-              const n = f.value === "all" ? rows.length : counts[f.value];
-              return (
-                <button
-                  key={f.value}
-                  onClick={() => setFilter(f.value)}
-                  className={cn(
-                    "rounded-full px-2.5 py-1 text-xs font-medium transition-colors",
-                    filter === f.value ? "bg-brand-500 text-white" : "bg-muted text-muted-foreground hover:bg-muted/70",
-                  )}
-                >
-                  {f.label} <span className="tabular-nums opacity-70">{n}</span>
-                </button>
-              );
-            })}
-          </div>
+          {/* Chip yang sama persis dengan antrian Design & Dokumen HC. */}
+          <StageFilterChips
+            options={STATUS_FILTERS}
+            value={filter}
+            onChange={setFilter}
+            count={(v) => (v === "all" ? rows.length : counts[v])}
+          />
         </div>
         <div className="max-h-[70vh] space-y-1.5 overflow-y-auto p-2">
           {filtered.length === 0 && (

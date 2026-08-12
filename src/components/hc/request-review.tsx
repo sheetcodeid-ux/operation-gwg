@@ -16,12 +16,21 @@ import {
   hcDecideRequestAction,
 } from "@/lib/actions/hc-requests";
 import { Combobox } from "@/components/ui/combobox";
-import { UPLOAD_HINT, fmtRupiah, isOpen, nextActions, type HcRequest, type HcRequestKind } from "@/lib/hc-request";
+import {
+  UPLOAD_HINT,
+  fmtRupiah,
+  nextActions,
+  requestStage,
+  stageFilters,
+  type HcRequest,
+  type HcRequestKind,
+  type RequestStage,
+} from "@/lib/hc-request";
+import { StageFilterChips } from "@/components/ui/stage-filter";
 import { DiscussButton } from "@/components/chat/forward-request";
 import { FilePicker, RequestEmpty, RequestList, uploadAll, type UploadProgress } from "./request-shared";
 
 type Mode = "hc" | "finance";
-type Tab = "open" | "done";
 
 /** Kandidat PIC pengerjaan design (anggota tim Creative). */
 export interface PicOption {
@@ -33,7 +42,7 @@ export interface PicOption {
 /** Antrian pengajuan — dipakai HC (per jenis) dan Finance (dana pelatihan). */
 export function HcRequestReview({ mode, kind, picOptions = [] }: { mode: Mode; kind?: HcRequestKind; picOptions?: PicOption[] }) {
   const [rows, setRows] = React.useState<HcRequest[] | null>(null);
-  const [tab, setTab] = React.useState<Tab>("open");
+  const [stage, setStage] = React.useState<RequestStage | "all">("all");
 
   const load = React.useCallback(async () => {
     setRows(mode === "hc" ? await allHcRequestsAction(kind) : await financeTrainingRequestsAction());
@@ -42,31 +51,29 @@ export function HcRequestReview({ mode, kind, picOptions = [] }: { mode: Mode; k
     void load();
   }, [load]);
 
-  const open = (rows ?? []).filter((r) => isOpen(r.status));
-  const done = (rows ?? []).filter((r) => !isOpen(r.status));
-  const shown = tab === "open" ? open : done;
+  // Antrian Finance hanya mengurus dana pelatihan; sisanya mengikuti jenis
+  // yang sedang dibuka. Tanpa jenis (HC melihat semuanya sekaligus), pakai
+  // saringan pelatihan yang tidak memuat tahap khusus design.
+  const filterKind: HcRequestKind = mode === "finance" ? "pelatihan" : (kind ?? "pelatihan");
+  const opsi = React.useMemo(() => stageFilters(filterKind), [filterKind]);
+
+  const semua = rows ?? [];
+  const tahapDari = React.useCallback(
+    (r: HcRequest) => requestStage({ kind: r.kind, status: r.status, revisions: r.revisions }),
+    [],
+  );
+  const shown = React.useMemo(
+    () => (stage === "all" ? semua : semua.filter((r) => tahapDari(r) === stage)),
+    [semua, stage, tahapDari],
+  );
+  const hitung = React.useCallback(
+    (v: RequestStage | "all") => (v === "all" ? semua.length : semua.filter((r) => tahapDari(r) === v).length),
+    [semua, tahapDari],
+  );
 
   return (
     <div>
-      <div className="mb-4 inline-grid grid-cols-2 gap-1 rounded-xl border border-border bg-muted/50 p-1">
-        {([
-          { id: "open" as Tab, label: `Antrian (${open.length})` },
-          { id: "done" as Tab, label: `Selesai (${done.length})` },
-        ]).map((t) => (
-          <button
-            key={t.id}
-            type="button"
-            onClick={() => setTab(t.id)}
-            aria-pressed={tab === t.id}
-            className={cn(
-              "inline-flex items-center justify-center gap-1.5 rounded-lg px-3 py-1.5 text-sm font-medium transition-colors",
-              tab === t.id ? "bg-background text-foreground shadow-md ring-1 ring-border" : "text-muted-foreground hover:bg-muted/60 hover:text-foreground",
-            )}
-          >
-            {t.label}
-          </button>
-        ))}
-      </div>
+      <StageFilterChips className="mb-4" options={opsi} value={stage} onChange={setStage} count={hitung} />
 
       {rows === null ? (
         <div className="flex items-center gap-2 py-10 text-sm text-muted-foreground">
@@ -74,11 +81,11 @@ export function HcRequestReview({ mode, kind, picOptions = [] }: { mode: Mode; k
         </div>
       ) : shown.length === 0 ? (
         <RequestEmpty>
-          {tab === "open"
+          {stage === "all"
             ? mode === "hc"
-              ? "Tidak ada antrian — semua pengajuan departemen sudah diproses."
-              : "Tidak ada pengajuan pelatihan yang menunggu persetujuan dana."
-            : "Pengajuan yang sudah selesai akan muncul di sini."}
+              ? "Belum ada pengajuan yang masuk."
+              : "Belum ada pengajuan pelatihan yang butuh persetujuan dana."
+            : `Tidak ada pengajuan pada tahap "${opsi.find((o) => o.value === stage)?.label ?? stage}".`}
         </RequestEmpty>
       ) : (
         <RequestList

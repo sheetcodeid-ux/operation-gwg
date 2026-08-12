@@ -206,6 +206,59 @@ export interface HcRequest {
   completedAt: string | null;
 }
 
+/* ─────────────────────── tahapan & saringan antrian ───────────────────────
+ * Setiap antrian (Design, Dokumen HC, Sistem) dulu menyusun daftar statusnya
+ * sendiri, sehingga "Selesai" di satu halaman tidak berarti sama dengan
+ * "Selesai" di halaman lain. Tahapannya kini DITURUNKAN dari data — bukan
+ * kolom tersendiri — jadi tidak mungkin ada tahap yang bertentangan dengan
+ * isi pengajuannya.                                                        */
+
+export type RequestStage = "menunggu" | "dikerjakan" | "revisi" | "selesai" | "ditolak";
+
+export interface StageInput {
+  kind: HcRequestKind;
+  status: HcRequestStatus;
+  /** Riwayat revisi — hanya terisi pada pengajuan design. */
+  revisions?: { at: string }[];
+}
+
+/**
+ * Posisi sebuah pengajuan dalam alurnya.
+ *
+ * Khusus design, "sedang dikerjakan" dan "sedang direvisi" memakai status yang
+ * SAMA (`disetujui_hc`): meminta revisi mengembalikan design yang sudah
+ * terkirim ke status itu lagi. Yang membedakan hanyalah ada tidaknya riwayat
+ * revisi — dan itu memang pembeda yang benar, karena design yang pernah
+ * direvisi bukan pekerjaan baru.
+ */
+export function requestStage(r: StageInput): RequestStage {
+  if (r.status === "ditolak_hc" || r.status === "ditolak_finance") return "ditolak";
+  if (r.status === "terlaksana") return "selesai";
+  if (r.status === "menunggu_hc") return "menunggu";
+  if (r.kind === "design" && r.status === "disetujui_hc" && (r.revisions?.length ?? 0) > 0) return "revisi";
+  return "dikerjakan";
+}
+
+/**
+ * Pilihan saringan untuk satu jenis pengajuan.
+ *
+ * Design punya tahap "Revisi" yang nyata dan sering; jenis lain tidak
+ * mengenalnya, jadi menampilkannya di sana hanya jadi tombol yang selalu nol.
+ * "Ditolak" selalu ikut supaya pengajuan yang ditolak tidak lenyap dari
+ * pandangan — satu-satunya tempatnya dulu hanyalah "Semua".
+ */
+export function stageFilters(kind: HcRequestKind): { value: RequestStage | "all"; label: string }[] {
+  const dikerjakan = kind === "design" ? "Sedang Dikerjakan" : "Diproses";
+  return [
+    { value: "all", label: "Semua" },
+    { value: "menunggu", label: "Menunggu" },
+    { value: "dikerjakan", label: dikerjakan },
+    ...(kind === "design" ? ([{ value: "revisi", label: "Revisi" }] as const) : []),
+    { value: "selesai", label: "Selesai" },
+    { value: "ditolak", label: "Ditolak" },
+  ];
+}
+
 /** Langkah berikutnya yang wajar untuk sebuah pengajuan (dipakai tombol aksi). */
 export function nextActions(r: HcRequest): { hc: boolean; finance: boolean; complete: boolean } {
   if (r.kind === "pelatihan") {
