@@ -41,18 +41,32 @@ export async function uploadHcRequestFileAction(formData: FormData): Promise<{ p
   }
   const safe = file.name.replace(/[^a-zA-Z0-9._-]/g, "_").slice(-60);
   const name = `request/${user!.id}/${Date.now()}-${randomUUID().slice(0, 8)}-${safe}`;
-  if (r2Enabled()) {
-    try {
-      const key = `hc/${name}`;
-      await r2Put(key, await file.arrayBuffer(), file.type || "application/octet-stream");
-      return { path: `${R2_PREFIX}${key}`, name: file.name };
-    } catch (e) {
-      console.error("[hc-request] R2 upload gagal, fallback Supabase:", e);
+
+  // SELURUH badan aksi ini terbungkus.
+  //
+  // Server action yang melempar galat tak tertangkap muncul di layar pengguna
+  // sebagai "An error occurred in the Server Components render. The specific
+  // message is omitted in production builds" — kalimat yang tidak memberi tahu
+  // apa pun, tidak kepada pemakainya maupun kepada yang memperbaikinya.
+  // Apa pun yang gagal di sini, orangnya harus tetap menerima alasan yang bisa
+  // dibaca dan bisa dilaporkan.
+  try {
+    if (r2Enabled()) {
+      try {
+        const key = `hc/${name}`;
+        await r2Put(key, await file.arrayBuffer(), file.type || "application/octet-stream");
+        return { path: `${R2_PREFIX}${key}`, name: file.name };
+      } catch (e) {
+        console.error("[hc-request] R2 upload gagal, fallback Supabase:", e);
+      }
     }
+    const { error } = await db().storage.from("system-attachments").upload(`hc/${name}`, file, { contentType: file.type });
+    if (error) return { error: `Upload gagal: ${error.message}` };
+    return { path: `hc/${name}`, name: file.name };
+  } catch (e) {
+    console.error("[hc-request] unggah gagal total:", e);
+    return { error: `Gagal mengunggah "${file.name}": ${e instanceof Error ? e.message : "penyimpanan tidak merespons"}.` };
   }
-  const { error } = await db().storage.from("system-attachments").upload(`hc/${name}`, file, { contentType: file.type });
-  if (error) return { error: `Upload gagal: ${error.message}` };
-  return { path: `hc/${name}`, name: file.name };
 }
 
 /**

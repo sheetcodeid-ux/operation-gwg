@@ -170,15 +170,30 @@ export async function uploadAll(
       });
     report(0);
 
+    // R2 dicoba lebih dulu untuk SEMUA ukuran, bukan hanya berkas besar.
+    //
+    // Jalur lewat server action membawa berkasnya melalui fungsi serverless:
+    // badan permintaannya dibatasi platform, dan kegagalan apa pun di sana
+    // muncul sebagai pesan buram yang tidak bisa ditindaklanjuti siapa pun.
+    // Naik langsung ke R2 melewati seluruh masalah itu — foto 1,9 MB dari HP
+    // tidak punya alasan untuk singgah di server.
+    let direct: HcRequestAttachment | null = null;
+    try {
+      direct = await uploadDirect(file, report);
+    } catch (e) {
+      // R2 menolak (izin, jaringan). Berkas kecil masih bisa lewat server;
+      // yang besar memang tidak ada jalan lain.
+      if (file.size > DIRECT_UPLOAD_MIN) throw e;
+      console.error("[pengajuan] unggah langsung gagal, mencoba lewat server:", e);
+    }
+    if (direct) {
+      out.push(direct);
+      doneBytes += file.size;
+      report(0);
+      continue;
+    }
     if (file.size > DIRECT_UPLOAD_MIN) {
-      const direct = await uploadDirect(file, report);
-      if (direct) {
-        out.push(direct);
-        doneBytes += file.size;
-        report(0);
-        continue;
-      }
-      // Sampai sini berarti R2 belum aktif. Jalur server action TIDAK bisa
+      // Sampai sini berarti R2 tidak tersedia. Jalur server action TIDAK bisa
       // menampung berkas sebesar ini — platform menolaknya sebelum kode kita
       // jalan, dan pesannya tidak terbaca pengguna. Lebih baik berhenti dengan
       // alasan yang jelas daripada gagal tanpa penjelasan.
