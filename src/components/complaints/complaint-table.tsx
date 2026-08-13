@@ -218,6 +218,86 @@ export function ComplaintTable({
     [rows, status, source, category],
   );
 
+  /**
+   * Tombol aksi baris — dipakai dua kali: di kolom tabel (layar lebar) dan di
+   * kartu (HP). Satu sumber supaya keduanya tidak pernah menawarkan aksi yang
+   * berbeda untuk komplain yang sama.
+   */
+  const tombolAksi = React.useCallback(
+    (row: ComplaintRow, className?: string) => {
+      const kind = actionFor(row, canResolve, canApprove, canForward);
+      if (kind === "forward") {
+        return (
+          <Button size="sm" variant="subtle" className={className} onClick={() => setForwarding(row)}>
+            <Forward className="size-3.5" /> Teruskan
+          </Button>
+        );
+      }
+      if (kind === "approve") {
+        return (
+          <Button size="sm" variant="subtle" className={className} onClick={() => setSelected(row)}>
+            <CheckCircle2 className="size-3.5" /> {t("complaint.approve")}
+          </Button>
+        );
+      }
+      if (kind === "resolve") {
+        return (
+          <Button size="sm" variant="subtle" className={className} onClick={() => setSelected(row)}>
+            <ClipboardCheck className="size-3.5" /> {t("complaint.followUpAction")}
+          </Button>
+        );
+      }
+      return (
+        <Button size="sm" variant="subtle" className={className} onClick={() => setViewing(row)}>
+          <Eye className="size-3.5" /> {t("complaint.view")}
+        </Button>
+      );
+    },
+    [canResolve, canApprove, canForward, t],
+  );
+
+  /**
+   * Kartu untuk HP.
+   *
+   * Tabelnya berlebar minimum 44rem; di layar 360px kolom status dan tombol
+   * aksinya sama sekali tidak terlihat tanpa menggulir mendatar — itulah yang
+   * dilaporkan sebagai "tabelnya tidak muncul". Kartu memuat isi komplain,
+   * pelapor, outlet, tanggal, sumber, kategori, status, dan tombol aksi yang
+   * sama persis dengan versi tabelnya.
+   */
+  const kartu = React.useCallback(
+    (row: ComplaintRow) => {
+      const src = COMPLAINT_SOURCE_META[row.source];
+      return (
+        <div className="rounded-xl border border-border bg-card p-3">
+          <div className="flex items-start justify-between gap-2">
+            <p className="line-clamp-3 flex-1 text-sm font-medium leading-relaxed text-foreground">{row.content}</p>
+            {row.rating != null && (
+              <span className="inline-flex shrink-0 items-center gap-0.5 text-xs text-amber-500">
+                <Star className="size-3 fill-current" />
+                {row.rating}
+              </span>
+            )}
+          </div>
+          <p className="mt-1 text-[11px] text-muted-foreground">
+            {row.customerName} · {row.outlet} · {formatDate(row.createdAt)}
+          </p>
+          <div className="mt-2 flex flex-wrap items-center gap-1.5">
+            <Badge tone={src?.tone ?? "neutral"}>{td(src?.label ?? row.source)}</Badge>
+            <span className="text-[11px] text-muted-foreground">
+              {td(COMPLAINT_CATEGORY_META[row.category]?.label ?? row.category)}
+            </span>
+          </div>
+          <div className="mt-2.5 flex items-end justify-between gap-2 border-t border-border/60 pt-2.5">
+            <StatusBadge row={row} />
+            {tombolAksi(row)}
+          </div>
+        </div>
+      );
+    },
+    [td, tombolAksi],
+  );
+
   const columns = React.useMemo<ColumnDef<ComplaintRow>[]>(
     () => [
       {
@@ -268,38 +348,10 @@ export function ComplaintTable({
       {
         id: "actions",
         header: "",
-        cell: ({ row }) => {
-          const kind = actionFor(row.original, canResolve, canApprove, canForward);
-          if (kind === "forward") {
-            return (
-              <Button size="sm" variant="subtle" onClick={() => setForwarding(row.original)}>
-                <Forward className="size-3.5" /> Teruskan
-              </Button>
-            );
-          }
-          if (kind === "approve") {
-            return (
-              <Button size="sm" variant="subtle" onClick={() => setSelected(row.original)}>
-                <CheckCircle2 className="size-3.5" /> {t("complaint.approve")}
-              </Button>
-            );
-          }
-          if (kind === "resolve") {
-            return (
-              <Button size="sm" variant="subtle" onClick={() => setSelected(row.original)}>
-                <ClipboardCheck className="size-3.5" /> {t("complaint.followUpAction")}
-              </Button>
-            );
-          }
-          return (
-            <Button size="sm" variant="subtle" onClick={() => setViewing(row.original)}>
-              <Eye className="size-3.5" /> {t("complaint.view")}
-            </Button>
-          );
-        },
+        cell: ({ row }) => tombolAksi(row.original),
       },
     ],
-    [canResolve, canApprove, canForward, t, td],
+    [t, td, tombolAksi],
   );
 
   return (
@@ -308,6 +360,7 @@ export function ComplaintTable({
         tableId="complaints"
         columns={columns}
         data={filtered}
+        mobileCard={kartu}
         showSearch={false}
         showExport={false}
         searchPlaceholder="Search complaints…"
