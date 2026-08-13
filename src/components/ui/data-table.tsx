@@ -33,19 +33,6 @@ interface DataTableProps<TData, TValue> {
   showSearch?: boolean;
   /** Show the CSV export (download) button (default true). */
   showExport?: boolean;
-  /**
-   * Tampilan kartu untuk layar sempit (<768px).
-   *
-   * Tabelnya punya lebar minimum 44rem, jadi di HP ia menggulir mendatar. Untuk
-   * tabel berkolom banyak, kolom paling kanan — status dan tombol aksinya —
-   * seluruhnya berada di luar layar, dan bagi pengguna itu terbaca sebagai
-   * "tabelnya tidak ada". Bila renderer ini diisi, layar sempit memakai daftar
-   * kartu sementara layar lebar tetap memakai tabel.
-   *
-   * Barisnya diambil dari model tabel yang sama, jadi pencarian, filter,
-   * urutan, dan halaman berlaku persis sama di kedua tampilan.
-   */
-  mobileCard?: (row: TData) => React.ReactNode;
 }
 
 export function DataTable<TData, TValue>({
@@ -59,7 +46,6 @@ export function DataTable<TData, TValue>({
   maxHeight = "62vh",
   showSearch = true,
   showExport = true,
-  mobileCard,
 }: DataTableProps<TData, TValue>) {
   const [sorting, setSorting] = React.useState<SortingState>([]);
   const [globalFilter, setGlobalFilter] = React.useState("");
@@ -232,25 +218,7 @@ export function DataTable<TData, TValue>({
         </div>
       </div>
 
-      {/* HP: satu kartu per baris — lihat catatan pada prop `mobileCard`. */}
-      {mobileCard && (
-        <div className="space-y-2 md:hidden">
-          {table.getRowModel().rows.length === 0 ? (
-            <p className="rounded-xl border border-border px-3 py-10 text-center text-sm text-muted-foreground">
-              Tidak ada data.
-            </p>
-          ) : (
-            table.getRowModel().rows.map((row) => (
-              <React.Fragment key={row.id}>{mobileCard(row.original)}</React.Fragment>
-            ))
-          )}
-        </div>
-      )}
-
-      <div
-        className={cn("overflow-auto rounded-xl border border-border", mobileCard && "hidden md:block")}
-        style={stickyHeader ? { maxHeight } : undefined}
-      >
+      <div className="overflow-auto rounded-xl border border-border" style={stickyHeader ? { maxHeight } : undefined}>
         {/* min-w: on phones the table overflows and swipes horizontally instead
             of crushing every column to fit. */}
         <table className="w-full min-w-[44rem] text-sm">
