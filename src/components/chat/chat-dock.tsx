@@ -3,10 +3,10 @@
 import * as React from "react";
 import { createPortal } from "react-dom";
 import { useRouter } from "next/navigation";
-import { Maximize2, Minus, Send, X } from "lucide-react";
+import { Loader2, Maximize2, Minus, Palette, Send, X } from "lucide-react";
 import { toast } from "sonner";
-import { chatOpenAction, chatPollAction, chatSendAction } from "@/lib/actions/chat";
-import type { ChatMessage, ChatThread } from "@/lib/chat-shared";
+import { chatOpenAction, chatPickableRequestsAction, chatPollAction, chatSendAction } from "@/lib/actions/chat";
+import type { ChatMessage, ChatThread, PickableRequest } from "@/lib/chat-shared";
 import { Avatar } from "@/components/ui/avatar";
 import { fromNow } from "@/lib/utils";
 import { cn } from "@/lib/utils";
@@ -164,6 +164,17 @@ function ChatWindow({
   const [meId, setMeId] = React.useState<string | null>(null);
   const [body, setBody] = React.useState("");
   const [sending, setSending] = React.useState(false);
+  /**
+   * Pengajuan design yang ikut dilampirkan.
+   *
+   * Ini yang membuat jendela kecil setara dengan halaman Pesan untuk pekerjaan
+   * sehari-hari: menanyakan revisi tanpa melampirkan pengajuannya berarti tim
+   * Creative menerima pesan yang tidak jelas menunjuk brief yang mana — persis
+   * keluhan yang masuk.
+   */
+  const [ref, setRef] = React.useState<PickableRequest | null>(null);
+  const [pickerOpen, setPickerOpen] = React.useState(false);
+  const [pick, setPick] = React.useState<PickableRequest[] | null>(null);
   const bottomRef = React.useRef<HTMLDivElement>(null);
 
   const load = React.useCallback(async () => {
@@ -204,18 +215,30 @@ function ChatWindow({
 
   async function kirim() {
     const teks = body.trim();
-    if (!teks || sending) return;
+    // Melampirkan pengajuan saja sudah cukup — catatannya boleh kosong.
+    if ((!teks && !ref) || sending) return;
     setSending(true);
     // Kosongkan lebih dulu supaya balasan berikutnya bisa langsung diketik;
     // dikembalikan kalau gagal, jadi tidak ada tulisan yang hilang.
+    const lampiran = ref;
     setBody("");
-    const res = await chatSendAction({ threadId: thread.id, body: teks });
+    setRef(null);
+    const res = await chatSendAction({ threadId: thread.id, body: teks, refRequestId: lampiran?.id ?? null });
     setSending(false);
     if (res.error) {
       setBody(teks);
+      setRef(lampiran);
       return toast.error(res.error);
     }
     void load();
+  }
+
+  async function bukaPemilih() {
+    const buka = !pickerOpen;
+    setPickerOpen(buka);
+    // Daftarnya diambil saat pertama dibuka saja — jendela obrolan bisa ada
+    // tiga sekaligus, dan tidak satu pun perlu memuatnya sebelum dipakai.
+    if (buka && pick === null) setPick(await chatPickableRequestsAction("design"));
   }
 
   return (
@@ -314,7 +337,70 @@ function ChatWindow({
             <div ref={bottomRef} />
           </div>
 
+          {/* Daftar pengajuan design yang boleh ia lihat — cakupannya persis
+              sama dengan halaman Pengajuan, jadi obrolan tidak jadi jalan
+              memutar untuk melihat pengajuan cabang lain. */}
+          {pickerOpen && (
+            <div className="max-h-44 shrink-0 overflow-y-auto border-t border-border bg-muted/20">
+              {pick === null ? (
+                <p className="flex items-center justify-center gap-1.5 py-6 text-[11.5px] text-muted-foreground">
+                  <Loader2 className="size-3 animate-spin" /> Memuat pengajuan…
+                </p>
+              ) : pick.length === 0 ? (
+                <p className="py-6 text-center text-[11.5px] text-muted-foreground">Belum ada pengajuan design.</p>
+              ) : (
+                pick.map((r) => (
+                  <button
+                    key={r.id}
+                    type="button"
+                    onClick={() => {
+                      setRef(r);
+                      setPickerOpen(false);
+                    }}
+                    className="block w-full border-b border-border/50 px-2.5 py-1.5 text-left last:border-0 hover:bg-muted/60"
+                  >
+                    <p className="truncate text-[12px] font-medium text-foreground">{r.title}</p>
+                    <p className="truncate text-[10px] text-muted-foreground">
+                      {r.requesterName} · {r.statusLabel}
+                    </p>
+                  </button>
+                ))
+              )}
+            </div>
+          )}
+
+          {ref && (
+            <div className="flex shrink-0 items-center gap-2 border-t border-brand-500/30 bg-brand-500/5 px-2.5 py-1.5">
+              <Palette className="size-3.5 shrink-0 text-brand-600 dark:text-brand-400" />
+              <span className="min-w-0 flex-1">
+                <span className="block truncate text-[11.5px] font-medium text-foreground">{ref.title}</span>
+                <span className="block truncate text-[10px] text-muted-foreground">{ref.statusLabel}</span>
+              </span>
+              <button
+                type="button"
+                onClick={() => setRef(null)}
+                aria-label="Batalkan lampiran pengajuan"
+                className="grid size-5 shrink-0 place-items-center rounded text-muted-foreground hover:bg-muted hover:text-foreground"
+              >
+                <X className="size-3" />
+              </button>
+            </div>
+          )}
+
           <div className="flex shrink-0 items-end gap-1.5 border-t border-border p-2">
+            <button
+              type="button"
+              onClick={() => void bukaPemilih()}
+              aria-label="Lampirkan pengajuan design"
+              title="Lampirkan pengajuan design"
+              aria-expanded={pickerOpen}
+              className={cn(
+                "grid size-8 shrink-0 place-items-center rounded-lg transition-colors",
+                pickerOpen ? "bg-brand-500/15 text-brand-600 dark:text-brand-400" : "text-muted-foreground hover:bg-muted hover:text-foreground",
+              )}
+            >
+              <Palette className="size-3.5" />
+            </button>
             <textarea
               value={body}
               onChange={(e) => setBody(e.target.value)}
@@ -333,7 +419,7 @@ function ChatWindow({
             <button
               type="button"
               onClick={() => void kirim()}
-              disabled={!body.trim() || sending}
+              disabled={(!body.trim() && !ref) || sending}
               aria-label="Kirim"
               className="grid size-8 shrink-0 place-items-center rounded-lg bg-brand-500 text-white transition-opacity hover:bg-brand-600 disabled:opacity-40"
             >

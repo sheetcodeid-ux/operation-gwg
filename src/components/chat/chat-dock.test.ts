@@ -56,6 +56,28 @@ describe("jendela obrolan mengambang", () => {
     expect(DOCK).toContain('e.key === "Enter" && !e.shiftKey');
   });
 
+  it("bisa melampirkan pengajuan design, seperti di halaman Pesan", () => {
+    // Menanyakan revisi tanpa melampirkan pengajuannya berarti tim Creative
+    // menerima pesan yang tidak jelas menunjuk brief yang mana.
+    expect(DOCK).toContain('chatPickableRequestsAction("design")');
+    expect(DOCK).toContain("refRequestId: lampiran?.id ?? null");
+  });
+
+  it("melampirkan pengajuan saja sudah cukup — catatan boleh kosong", () => {
+    expect(DOCK).toContain("if ((!teks && !ref) || sending) return;");
+    expect(DOCK).toContain("disabled={(!body.trim() && !ref) || sending}");
+  });
+
+  it("lampiran dikembalikan bila pengirimannya gagal", () => {
+    expect(DOCK).toContain("setRef(lampiran);");
+  });
+
+  it("daftar pengajuan diambil saat pemilihnya dibuka, bukan saat jendela dibuka", () => {
+    // Bisa ada tiga jendela sekaligus; tidak satu pun perlu memuatnya sebelum
+    // benar-benar dipakai.
+    expect(DOCK).toContain("if (buka && pick === null)");
+  });
+
   it("selalu ada jalan ke detail lengkap", () => {
     expect(DOCK).toContain("Buka detail di halaman Pesan");
   });
