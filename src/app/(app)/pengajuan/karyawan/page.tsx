@@ -24,7 +24,7 @@ export default async function PermintaanKaryawanPage() {
         description="Ajukan penambahan atau pengganti pegawai ke tim Human Capital. Status persetujuan terlihat di setiap kartu."
         actions={<NewRequestButton kind="rekrutmen" />}
       />
-      <HcRequestList rows={rows} kind="rekrutmen" canDelete={user.role === "super_admin"} />
+      <HcRequestList rows={rows} kind="rekrutmen" canDelete={user.role === "super_admin"} meId={user.id} />
     </div>
   );
 }

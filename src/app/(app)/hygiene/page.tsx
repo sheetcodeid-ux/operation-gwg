@@ -2,14 +2,15 @@ import { CircleCheck, ClipboardCheck, SprayCan, TriangleAlert } from "lucide-rea
 import type { Metadata } from "next";
 import { requireSessionUser } from "@/lib/auth";
 import { hygienePhotosByAudit } from "@/lib/data/hygiene-photos";
-import { listHygiene, outletCoordinatorName, outletName, visibleOutlets } from "@/lib/data/store";
+import { outletCoordinatorName, outletName, visibleOutlets } from "@/lib/data/store";
+import { hygieneMonths, readHygiene } from "@/lib/data/hygiene-read";
 import { can } from "@/lib/rbac";
 import { PageHeader } from "@/components/ui/page-header";
 import { StatTile } from "@/components/ui/stat";
 import { NewAuditButton } from "@/components/hygiene/hygiene-form";
 import { HygieneExplorer, type HygieneRow } from "@/components/hygiene/hygiene-explorer";
 import { getT } from "@/lib/i18n/server";
-import { monthKey, monthKeyLabel, monthOptions } from "@/lib/month";
+import { monthKeyLabel } from "@/lib/month";
 import { isR2Key, presignGet, r2Enabled, r2KeyOf } from "@/lib/storage/r2";
 import type { Attachment } from "@/lib/types";
 
@@ -26,7 +27,6 @@ export const metadata: Metadata = { title: "Hygiene Monitoring" };
 export default async function HygienePage({ searchParams }: { searchParams: Promise<{ bulan?: string }> }) {
   const t = await getT();
   const user = await requireSessionUser();
-  const all = listHygiene(user);
   const outlets = visibleOutlets(user).map((o) => ({ id: o.id, name: o.name }));
   const canCreate = can(user, "create_hygiene");
 
@@ -37,12 +37,17 @@ export default async function HygienePage({ searchParams }: { searchParams: Prom
    * foto dan menandatangani URL untuk ribuan audit setiap kali halaman dibuka —
    * beban yang terus bertambah tiap hari. Filternya tetap terlihat dan ada opsi
    * "Semua Bulan", jadi tidak ada data yang disembunyikan diam-diam.
+   *
+   * Dibaca LANGSUNG dari database, bukan dari salinan di memori: audit yang
+   * baru disimpan harus langsung terlihat, dan salinan memori tiap instance
+   * belum tentu memuatnya (lihat `hygiene-read.ts`).
    */
-  const months = monthOptions(all.map((a) => a.date));
   const sp = await searchParams;
-  const valid = sp.bulan === "all" || months.some((m) => m.value === sp.bulan);
-  const month = valid && sp.bulan ? sp.bulan : (months[0]?.value ?? "all");
-  const audits = month === "all" ? all : all.filter((a) => monthKey(a.date) === month);
+  const bulanTersedia = await hygieneMonths(user);
+  const months = bulanTersedia.map((k) => ({ value: k, label: monthKeyLabel(k) }));
+  const valid = sp.bulan === "all" || bulanTersedia.includes(sp.bulan ?? "");
+  const month = valid && sp.bulan ? sp.bulan : (bulanTersedia[0] ?? "all");
+  const audits = await readHygiene(user, month === "all" ? null : month);
 
   // Photos are the heaviest column in `hygiene` and are only rendered here, so
   // they are left out of the shared in-memory cache and fetched per page.

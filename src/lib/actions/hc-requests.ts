@@ -496,7 +496,24 @@ export async function requestDesignRevisionAction(input: {
  */
 export async function deleteRequestAction(id: string): Promise<{ ok?: true; error?: string }> {
   const user = await getSessionUser();
-  if (!user || user.role !== "super_admin") return { error: "Hanya Super Admin yang bisa menghapus pengajuan." };
+  if (!user) return { error: "Tidak punya akses." };
+
+  if (user.role !== "super_admin") {
+    // Pemohon boleh MEMBATALKAN pengajuannya sendiri selama belum disentuh tim
+    // penerima. Sebelumnya hanya Super Admin yang bisa, sehingga satu berkas
+    // yang lupa dilampirkan berarti pengajuan salah menggantung selamanya di
+    // antrean — dan pemohonnya mengirim pengajuan kedua yang isinya sama.
+    //
+    // Batasnya di status, bukan di waktu: begitu tim penerima menyetujui atau
+    // menolaknya, keputusan itu bagian dari catatan dan tidak boleh dihapus
+    // sepihak oleh pemohon.
+    const req = await getHcRequest(id);
+    if (!req) return { error: "Pengajuan tidak ditemukan." };
+    if (req.requesterId !== user.id) return { error: "Hanya pemohonnya yang bisa membatalkan pengajuan ini." };
+    if (req.status !== "menunggu_hc") {
+      return { error: "Pengajuan sudah diproses tim penerima — minta mereka yang membatalkannya." };
+    }
+  }
 
   const res = await deleteHcRequest(id);
   if (res.error) return { error: res.error };

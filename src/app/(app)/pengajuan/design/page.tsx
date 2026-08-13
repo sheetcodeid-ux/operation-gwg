@@ -24,7 +24,7 @@ export default async function PengajuanDesignPage() {
         description="Ajukan kebutuhan materi desain ke tim Creative. Lengkapi brief agar tidak bolak-balik revisi."
         actions={<NewRequestButton kind="design" />}
       />
-      <HcRequestList rows={rows} kind="design" canDelete={user.role === "super_admin"} />
+      <HcRequestList rows={rows} kind="design" canDelete={user.role === "super_admin"} meId={user.id} />
     </div>
   );
 }

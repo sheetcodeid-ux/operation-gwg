@@ -51,11 +51,14 @@ export function HcRequestList({
   rows,
   kind,
   canDelete = false,
+  meId,
 }: {
   rows: HcRequest[];
   kind: HcRequestKind;
   /** Super Admin boleh membersihkan pengajuan uji coba / salah kirim. */
   canDelete?: boolean;
+  /** Pemohon boleh membatalkan pengajuannya sendiri selagi masih menunggu. */
+  meId: string;
 }) {
   const router = useRouter();
   const { confirm, dialog } = useConfirm();
@@ -96,7 +99,11 @@ export function HcRequestList({
             {r.kind === "design" && r.status === "terlaksana" && (
               <ReviseButton r={r} onDone={() => router.refresh()} />
             )}
-            {canDelete && (
+            {/* Pemohon boleh membatalkan pengajuannya sendiri selama belum
+                disentuh tim penerima — lampiran yang lupa ikut adalah alasan
+                paling sering, dan tanpa ini ia mengirim pengajuan kedua yang
+                isinya sama. */}
+            {(canDelete || (r.requesterId === meId && r.status === "menunggu_hc")) && (
               <Button
                 variant="outline"
                 size="sm"
@@ -105,7 +112,7 @@ export function HcRequestList({
                 className="gap-1.5 text-destructive hover:bg-destructive/10 hover:text-destructive"
               >
                 {deleting === r.id ? <Loader2 className="size-3.5 animate-spin" /> : <Trash2 className="size-3.5" />}
-                Hapus
+                {canDelete ? "Hapus" : "Batalkan"}
               </Button>
             )}
           </div>

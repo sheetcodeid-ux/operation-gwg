@@ -35,7 +35,7 @@ export default async function PengajuanPelatihanPage() {
         description="Ajukan program pelatihan ke Human Capital. Setelah disetujui, Finance memutuskan dananya."
         actions={<NewRequestButton kind="pelatihan" members={members} />}
       />
-      <HcRequestList rows={rows} kind="pelatihan" canDelete={user.role === "super_admin"} />
+      <HcRequestList rows={rows} kind="pelatihan" canDelete={user.role === "super_admin"} meId={user.id} />
     </div>
   );
 }
