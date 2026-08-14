@@ -54,7 +54,7 @@ describe("menu access matrix", () => {
   });
 
   it("gives HRD (legal) Work Tracker + HC Document Queue + Assessment Golongan", () => {
-    expect(ROLE_MENUS.legal).toEqual(["work", "hc_review", "hc_kpi", "hc_reqreview", "hc_training", "assessment"]);
+    expect(ROLE_MENUS.legal).toEqual(["work", "hc_review", "hc_reqreview", "hc_training", "assessment"]);
     expect(canSeeMenu("legal", "hc_review")).toBe(true);
     expect(canSeeMenu("legal", "assessment")).toBe(true);
     expect(canSeeMenu("legal", "dashboard")).toBe(false);
@@ -160,7 +160,7 @@ describe("keterbukaan menu di sidebar", () => {
     expect(tutup({ section: "Human Capital", key: "assessment" })).toBe(false);
     expect(tutup({ section: "Human Capital", key: "hc_review" })).toBe(false);
     expect(tutup({ section: "Human Capital", key: "hc_reqreview" })).toBe(false);
-    expect(tutup({ section: "Human Capital", key: "hc_kpi" })).toBe(false);
+    expect(tutup({ section: "Human Capital", key: "hc_training" })).toBe(false);
   });
 
   it("tapi divisinya sendiri tetap terbuka", () => {

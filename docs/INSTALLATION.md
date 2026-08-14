@@ -28,7 +28,7 @@ waktu: **15 menit**.
 
 Platform operasional internal GWG Group (Nordu Coffee, Cattu, Busari, Lesung
 Pipi) untuk memantau 50+ outlet: hospitality, hygiene, work tracker, event,
-komplain, HPP, e-learning, assessment, KPI, dan analisis fraud POS.
+komplain, HPP, e-learning, assessment, dan analisis fraud POS.
 
 | Komponen | Teknologi |
 | --- | --- |

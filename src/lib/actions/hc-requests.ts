@@ -191,7 +191,6 @@ function revalidateAll() {
   revalidatePath("/finance/pelatihan");
   revalidatePath("/pengajuan/design");
   revalidatePath("/creative/design");
-  revalidatePath("/hc/kpi");
 }
 
 /** Pengajuan milik saya / departemen saya. */
@@ -285,7 +284,7 @@ export async function financeDecideRequestAction(input: {
 }
 
 /**
- * HC menutup pengajuan sebagai TERLAKSANA — inilah yang dihitung KPI.
+ * HC menutup pengajuan sebagai TERLAKSANA.
  *  • rekrutmen → isi berapa pegawai yang benar-benar direkrut
  *  • pelatihan → tandai program sudah dijalankan (lampirkan foto/daftar hadir)
  */
@@ -504,9 +503,8 @@ export async function requestDesignRevisionAction(input: {
  * Hapus pengajuan — KHUSUS Super Admin.
  *
  * Sengaja tidak diberikan ke pemohon atau peninjau: pengajuan adalah jejak
- * keputusan (siapa mengajukan, siapa menyetujui, kapan selesai) yang ikut
- * menyusun KPI HC. Menghapusnya menghilangkan jejak itu, jadi hanya pemilik
- * sistem yang boleh melakukannya.
+ * keputusan: siapa mengajukan, siapa menyetujui, kapan selesai. Menghapusnya
+ * menghilangkan jejak itu, jadi hanya pemilik sistem yang boleh melakukannya.
  */
 export async function deleteRequestAction(id: string): Promise<{ ok?: true; error?: string }> {
   const user = await getSessionUser();
@@ -543,7 +541,6 @@ export async function deleteRequestAction(id: string): Promise<{ ok?: true; erro
   revalidatePath("/hc/pelatihan");
   revalidatePath("/finance/pelatihan");
   revalidatePath("/creative/design");
-  revalidatePath("/hc/kpi");
   revalidatePath("/work-tracker");
   return { ok: true };
 }

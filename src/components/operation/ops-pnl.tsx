@@ -6,7 +6,7 @@ import { ChevronLeft, ChevronRight, Download, FileUp, Loader2, Save, Search, Tri
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { PNL_COLS, PNL_LABELS, pnlComputed, type PnlCol, type PnlRow } from "@/lib/ops/categories";
-import { savePnlAction } from "@/lib/actions/ops-kpi";
+import { savePnlAction } from "@/lib/actions/ops-pnl";
 import { cn } from "@/lib/utils";
 
 const rp = (n: number) => "Rp" + Math.round(n || 0).toLocaleString("id-ID");
@@ -125,7 +125,7 @@ export function OpsPnl({ month, rows: initial }: { month: string; rows: PnlRow[]
       {off > 0 && (
         <p className="flex items-start gap-2 rounded-xl border border-amber-500/30 bg-amber-500/10 p-3 text-[12px] text-amber-700 dark:text-amber-300">
           <TriangleAlert className="mt-0.5 size-4 shrink-0" />
-          <span>{off} outlet punya Laba Bersih yang tidak sama dengan Pendapatan − HPP − Beban. Angka yang dipakai KPI adalah kolom Laba Bersih.</span>
+          <span>{off} outlet punya Laba Bersih yang tidak sama dengan Pendapatan − HPP − Beban. Yang tersimpan adalah kolom Laba Bersih.</span>
         </p>
       )}
 
@@ -175,7 +175,7 @@ export function OpsPnl({ month, rows: initial }: { month: string; rows: PnlRow[]
       <p className={cn("text-[12px]", dirty ? "text-amber-600 dark:text-amber-400" : "text-muted-foreground")}>
         {dirty
           ? "Ada perubahan belum disimpan — klik Simpan."
-          : "Kolom Laba Bersih dipakai sebagai Actual Net Profit pada KPI Coordinator Area."}
+          : "Semua perubahan sudah tersimpan."}
       </p>
     </div>
   );

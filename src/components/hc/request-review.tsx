@@ -276,7 +276,7 @@ function CompleteDialog({ r, onClose, onDone }: { r: HcRequest; onClose: () => v
         attachments,
       });
       if (res.error) return toast.error(res.error);
-      toast.success(isDesign ? "Design ditandai selesai" : "Ditandai terlaksana — masuk ke KPI Human Capital");
+      toast.success(isDesign ? "Design ditandai selesai" : "Ditandai terlaksana");
       onClose();
       onDone();
     } catch (e) {
@@ -293,10 +293,10 @@ function CompleteDialog({ r, onClose, onDone }: { r: HcRequest; onClose: () => v
         <div className="max-h-[70vh] space-y-3 overflow-y-auto p-5">
           <p className="rounded-lg bg-brand-500/10 px-3 py-2 text-xs text-muted-foreground">
             {isRecruit
-              ? "Jumlah yang direkrut dihitung otomatis sebagai realisasi KPI Jumlah Rekrutmen bulan ini."
+              ? "Isi jumlah pegawai yang benar-benar direkrut dari permintaan ini."
               : isDesign
                 ? "Lampirkan hasil designnya agar pemohon bisa langsung mengunduh dari halaman pengajuannya."
-                : "Program yang terlaksana dihitung otomatis sebagai realisasi KPI Development / Pelatihan bulan ini."}
+                : "Tandai bahwa program pelatihannya sudah benar-benar dijalankan."}
           </p>
           {isRecruit && (
             <Field label={`Jumlah Direkrut (dari ${r.headcount} diminta)`}>

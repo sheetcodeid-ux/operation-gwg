@@ -39,7 +39,7 @@ export default async function LabaRugiPage({ searchParams }: { searchParams: Pro
       <PageHeader
         icon={Banknote}
         title="Laba Rugi"
-        description="Input laba rugi per outlet per bulan · Laba Bersih mengisi Actual Net Profit di KPI Coordinator Area"
+        description="Input laba rugi per outlet per bulan"
       />
       <OpsPnl month={month} rows={rows} />
     </div>

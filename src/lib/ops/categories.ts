@@ -15,8 +15,7 @@ export const EXPENSE_LABELS: Record<ExpenseCol, string> = {
 
 export type ExpenseRow = { outletCode: string; outletName: string } & Record<ExpenseCol, number>;
 
-/** Laba Rugi per outlet per bulan (Operation → Laba Rugi). `laba_bersih` inilah
- *  yang dipakai sebagai Actual Net Profit pada KPI Coordinator Area. */
+/** Laba Rugi per outlet per bulan (Operation → Laba Rugi). */
 export const PNL_COLS = ["pendapatan", "hpp", "beban", "laba_bersih"] as const;
 export type PnlCol = (typeof PNL_COLS)[number];
 export const PNL_LABELS: Record<PnlCol, string> = {

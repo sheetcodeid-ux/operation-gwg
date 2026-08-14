@@ -22,7 +22,7 @@ const COPY: Record<HcRequestKind, { new: string; title: string; formDesc: string
   rekrutmen: {
     new: "Permintaan Baru",
     title: "Permintaan Karyawan",
-    formDesc: "Diproses Human Capital. Jumlah yang benar-benar direkrut dihitung otomatis ke KPI Jumlah Rekrutmen.",
+    formDesc: "Diproses Human Capital. Jumlah yang benar-benar direkrut dicatat saat permintaannya ditandai terlaksana.",
     empty: "Belum ada permintaan. Klik “Permintaan Baru” untuk mengirim permintaan pegawai ke Human Capital.",
   },
   pelatihan: {

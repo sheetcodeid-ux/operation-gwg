@@ -4,10 +4,9 @@ import type { Tone } from "@/lib/constants";
  * Pengajuan antar-departemen.
  *
  * Tiga jenis, tiga alur persetujuan:
- *  • rekrutmen — permintaan pegawai. HC ACC → direkrut. Menyuplai KPI
- *    "Jumlah Rekrutmen" (target = jumlah yang diminta, realisasi = yang direkrut).
+ *  • rekrutmen — permintaan pegawai. HC ACC → direkrut.
  *  • pelatihan — permintaan program pelatihan. HC ACC → Finance ACC dana →
- *    dilaksanakan. Menyuplai KPI "Development / Pelatihan".
+ *    dilaksanakan.
  *  • design — permintaan materi desain ke tim Creative. Creative ACC →
  *    dikerjakan → selesai. Tidak melewati Finance.
  *

@@ -19,20 +19,17 @@ export type MenuKey =
   | "op_seasonal"
   | "op_analysis"
   | "op_pnl"
-  | "op_kpi"
   | "sys_review"
   | "hc_submit"
   | "hc_review"
   | "sys_submit"
   | "elearning"
   | "elearning_admin"
-  | "hc_kpi"
   | "hc_request"
   | "hc_reqreview"
   | "hc_training"
   | "fin_training"
   | "creative_design"
-  | "creative_kpi"
   | "mc_events"
   | "assessment"
   | "hpp_dash"
@@ -97,7 +94,6 @@ export const NAV_MENUS: Omit<NavItem, "section" | "group" | "groupIcon">[] = [
   { key: "op_seasonal", label: "Musiman", href: "/operation/musiman", icon: "Waves" },
   { key: "op_analysis", label: "Data Analysis", href: "/operation/analysis", icon: "ChartColumnBig" },
   { key: "op_pnl", label: "Laba Rugi", href: "/operation/laba-rugi", icon: "Banknote" },
-  { key: "op_kpi", label: "KPI Coordinator Area", href: "/operation/kpi", icon: "Gauge" },
   { key: "sys_review", label: "Antrian System", href: "/system/antrian", icon: "Headset" },
   // Kedua "pengajuan" ini kini menjadi kategori DI DALAM halaman Pengajuan —
   // tetap punya rute sendiri, tapi tidak lagi muncul terpisah di sidebar.
@@ -106,13 +102,11 @@ export const NAV_MENUS: Omit<NavItem, "section" | "group" | "groupIcon">[] = [
   { key: "sys_submit", label: "Pengajuan System", href: "/system/pengajuan", icon: "MonitorCog", hidden: true },
   { key: "elearning", label: "E-Learning", href: "/elearning", icon: "GraduationCap" },
   { key: "elearning_admin", label: "Kelola E-Learning", href: "/elearning/kelola", icon: "LibraryBig" },
-  { key: "hc_kpi", label: "KPI Human Capital", href: "/hc/kpi", icon: "Gauge" },
   { key: "hc_request", label: "Pengajuan", href: "/pengajuan", icon: "Send" },
   { key: "hc_reqreview", label: "Permintaan Karyawan", href: "/hc/permintaan", icon: "ClipboardCheck" },
   { key: "hc_training", label: "Pelatihan", href: "/hc/pelatihan", icon: "GraduationCap" },
   { key: "fin_training", label: "ACC Dana Pelatihan", href: "/finance/pelatihan", icon: "Wallet" },
   { key: "creative_design", label: "Antrian Design", href: "/creative/design", icon: "Palette" },
-  { key: "creative_kpi", label: "KPI Social Media", href: "/creative/kpi", icon: "Gauge" },
   { key: "mc_events", label: "Event Tracker", href: "/marcomm/events", icon: "Megaphone" },
   { key: "reports", label: "Reports", href: "/reports", icon: "FileText" },
   { key: "assessment", label: "Assessment Golongan", href: "/assessment", icon: "Award" },
@@ -184,7 +178,6 @@ const OPERATION_FULL: MenuKey[] = [
   "op_seasonal",
   "op_analysis",
   "op_pnl",
-  "op_kpi",
   "reports",
 ];
 
@@ -203,7 +196,7 @@ export const ROLE_MENUS: Record<Role, MenuKey[]> = {
   bar_rnd: ["hpp_dash", "work", "hpp", "hpp_db", "hpp_bahan", "hpp_price", "hpp_comp", "assessment"],
   kitchen_rnd: ["hpp_dash", "work", "hpp", "hpp_db", "hpp_bahan", "hpp_price", "hpp_comp", "assessment"],
   coordinator_rnd: ["hpp_dash", "work", "hpp", "hpp_db", "hpp_bahan", "hpp_price", "hpp_comp", "assessment"],
-  legal: ["work", "hc_review", "hc_kpi", "hc_reqreview", "hc_training", "assessment"], // HRD — assessment, HC document queue + KPI departemen
+  legal: ["work", "hc_review", "hc_reqreview", "hc_training", "assessment"], // HRD — assessment + antrian dokumen HC
   assessor: ["assessment"], // division Head / evaluator — assessment only
   member: ["assessment"], // HO staff — assessment; other access via `department`
 };
@@ -239,7 +232,7 @@ export const DIVISION_GROUPS: Partial<Record<Division, NavGroupDef[]>> = {
   Operation: [
     { name: "Monitoring Outlet", icon: "Store", menus: ["outlets", "hospitality", "hygiene", "complaints"] },
     { name: "Keuangan Operasional", icon: "Wallet", menus: ["op_beban", "op_pembelian", "op_pnl", "op_settings"] },
-    { name: "Analisis & Laporan", icon: "ChartColumnBig", menus: ["analytics", "op_analysis", "op_fraud", "op_seasonal", "op_kpi", "reports"] },
+    { name: "Analisis & Laporan", icon: "ChartColumnBig", menus: ["analytics", "op_analysis", "op_fraud", "op_seasonal", "reports"] },
     { name: "Pembelajaran", icon: "GraduationCap", menus: ["elearning", "elearning_admin"] },
     { name: "System Support", icon: "Headset", menus: ["sys_review"] },
   ],
@@ -252,17 +245,15 @@ export const DIVISION_GROUPS: Partial<Record<Division, NavGroupDef[]>> = {
   "Human Capital": [
     { name: "Talent Acquisition", icon: "UserRound", menus: ["hc_reqreview", "hc_training"] },
     { name: "Administrasi Personalia", icon: "FolderInput", menus: ["hc_review"] },
-    { name: "Kinerja & Penilaian", icon: "Target", menus: ["hc_kpi", "assessment"] },
+    { name: "Kinerja & Penilaian", icon: "Target", menus: ["assessment"] },
   ],
   Creative: [
     { name: "Permintaan Masuk", icon: "Palette", menus: ["creative_design"] },
-    { name: "Kinerja & Penilaian", icon: "Target", menus: ["creative_kpi"] },
   ],
   Finance: [{ name: "Persetujuan Dana", icon: "Wallet", menus: ["fin_training"] }],
   "Marketing Communication": [
     { name: "Event & Promo", icon: "Megaphone", menus: ["mc_events"] },
     { name: "Suara Pelanggan", icon: "MessageSquareWarning", menus: ["complaints"] },
-    { name: "Kinerja & Penilaian", icon: "Target", menus: ["creative_kpi"] },
   ],
 };
 
@@ -276,10 +267,10 @@ const DIVISION_MENUS: { division: Division; menus: MenuKey[] }[] = [
   // penyaringnya di `complaintCategoryScope`, dan memasukkan komplain tetap
   // milik Marketing Communication.
   { division: "Product Development & Quality", menus: ["hpp_dash", "work", "hpp", "hpp_db", "hpp_bahan", "hpp_price", "hpp_comp", "complaints"] },
-  { division: "Human Capital", menus: ["work", "hc_review", "hc_kpi", "hc_reqreview", "hc_training", "assessment"] },
+  { division: "Human Capital", menus: ["work", "hc_review", "hc_reqreview", "hc_training", "assessment"] },
   // New department-aligned divisions — Work Tracker only for now.
   { division: "Finance", menus: ["work", "fin_training"] },
-  { division: "Creative", menus: ["work", "creative_design", "creative_kpi"] },
+  { division: "Creative", menus: ["work", "creative_design"] },
   { division: "Project Manager", menus: ["work"] },
   { division: "Auditor", menus: ["work"] },
   { division: "Executive Assistant", menus: ["work"] },
@@ -287,7 +278,7 @@ const DIVISION_MENUS: { division: Division; menus: MenuKey[] }[] = [
   // Marketing Communication: Work Tracker + the Event/Promo ACC & impact tracker.
   // MarComm adalah pintu masuk keluhan dari kanal publik (Google Review,
   // Instagram, TikTok), jadi Complaints ikut di divisinya.
-  { division: "Marketing Communication", menus: ["work", "mc_events", "complaints", "creative_kpi"] },
+  { division: "Marketing Communication", menus: ["work", "mc_events", "complaints"] },
   { division: "Administrator", menus: ["users", "audit"] },
 ];
 
