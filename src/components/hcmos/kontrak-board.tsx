@@ -13,6 +13,8 @@ import {
   Plus,
   Trash2,
   Users,
+  BellRing,
+  Search,
 } from "lucide-react";
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
@@ -42,10 +44,12 @@ import {
 } from "@/lib/hcmos/kontrak";
 import {
   hapusKontrakAction,
+  kirimPengingatAction,
   simpanKontrakAction,
   simpanUpdateBulananAction,
 } from "@/lib/actions/hcmos";
 import type { KontrakRow, OutletKontrak } from "@/lib/data/hcmos";
+import { formatDate } from "@/lib/utils";
 
 /**
  * Kontrak Tracker — pengganti aplikasi HTML terpisah.
@@ -459,6 +463,19 @@ function TabelKaryawan({
 
 /* ─────────────────────────── panel update bulanan ─────────────────────────── */
 
+/**
+ * Dashboard Input — pemantauan kepatuhan Update Bulanan.
+ *
+ * Bentuknya mengikuti berkas HTML dari Human Capital: satu tabel status seluruh
+ * outlet, saringan Semua / Sudah / Belum, pencarian, catatan terbaru supervisor,
+ * dan tombol pengingat per baris.
+ *
+ * Satu kolom yang paling berguna dan paling mudah terlewat: "Dilaporkan SPV"
+ * disandingkan dengan "Tercatat Sistem". Kalau supervisor melaporkan 14 orang
+ * sementara Kontrak Tracker hanya memuat 9, selisih itulah petunjuk bahwa lima
+ * karyawan belum pernah dimasukkan datanya — dan tanpa dua kolom bersebelahan,
+ * tidak ada yang akan menyadarinya.
+ */
 function PanelLapor({
   rows,
   periode,
@@ -470,15 +487,50 @@ function PanelLapor({
   bolehTulis: (id: string) => boolean;
   onLapor: (o: OutletKontrak) => void;
 }) {
+  const router = useRouter();
+  const [saring, setSaring] = React.useState<"semua" | "sudah" | "belum">("semua");
+  const [cari, setCari] = React.useState("");
+  const [busy, setBusy] = React.useState(false);
+
   const sudah = rows.filter((o) => o.sudahLapor);
   const belum = rows.filter((o) => !o.sudahLapor);
   const persen = rows.length ? Math.round((sudah.length / rows.length) * 100) : 0;
+
+  const terlihat = React.useMemo(() => {
+    const q = cari.trim().toLowerCase();
+    return rows
+      .filter((o) => (saring === "semua" ? true : saring === "sudah" ? o.sudahLapor : !o.sudahLapor))
+      .filter((o) => !q || `${o.name} ${o.code} ${o.supervisorName}`.toLowerCase().includes(q));
+  }, [rows, saring, cari]);
+
+  const catatan = sudah
+    .filter((o) => o.updateTerakhir?.catatan)
+    .sort((a, b) => (b.updateTerakhir?.updatedAt ?? "").localeCompare(a.updateTerakhir?.updatedAt ?? ""))
+    .slice(0, 8);
+
+  async function ingatkan(outletId?: string) {
+    setBusy(true);
+    const res = await kirimPengingatAction({ periode, outletId });
+    setBusy(false);
+    if (res.error) return toast.error(res.error);
+    const tambahan = res.tanpaSupervisor ? ` · ${res.tanpaSupervisor} outlet belum punya supervisor terdaftar` : "";
+    toast.success(`Pengingat terkirim ke ${res.terkirim} supervisor${tambahan}`);
+    router.refresh();
+  }
 
   return (
     <div className="space-y-3">
       <Card>
         <CardHeader>
-          <CardTitle>Kepatuhan {periodeLabel(periode)}</CardTitle>
+          <CardTitle className="flex flex-wrap items-center justify-between gap-2">
+            <span>Kepatuhan {periodeLabel(periode)}</span>
+            {belum.length > 0 && (
+              <Button size="sm" variant="subtle" onClick={() => ingatkan()} disabled={busy}>
+                {busy ? <Loader2 className="size-3.5 animate-spin" /> : <BellRing className="size-3.5" />}
+                Ingatkan {belum.length} Outlet
+              </Button>
+            )}
+          </CardTitle>
         </CardHeader>
         <CardContent>
           <div className="flex items-end justify-between gap-3">
@@ -491,52 +543,139 @@ function PanelLapor({
         </CardContent>
       </Card>
 
-      {belum.length > 0 && (
-        <Card>
-          <CardHeader>
-            <CardTitle>Belum Melapor · {belum.length} outlet</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-2">
-            {belum.map((o) => (
-              <div key={o.id} className="flex items-center justify-between gap-3 rounded-xl border border-border p-3">
-                <div className="min-w-0">
-                  <p className="truncate text-sm font-medium text-foreground">{o.name}</p>
-                  <p className="truncate text-[11px] text-muted-foreground">Supervisor: {o.supervisorName}</p>
-                </div>
-                {bolehTulis(o.id) && (
-                  <Button size="sm" variant="subtle" onClick={() => onLapor(o)}>
-                    <ClipboardList className="size-3.5" /> Isi Laporan
-                  </Button>
+      <Card>
+        <CardHeader className="pb-3">
+          <CardTitle>Status Input per Outlet</CardTitle>
+          <div className="mt-2 flex flex-wrap items-center gap-2">
+            <SegmentedTabs
+              className="w-full max-w-xs"
+              size="sm"
+              value={saring}
+              onChange={(v) => setSaring(v as "semua" | "sudah" | "belum")}
+              items={[
+                { value: "semua", label: `Semua (${rows.length})` },
+                { value: "sudah", label: `Sudah (${sudah.length})` },
+                { value: "belum", label: `Belum (${belum.length})` },
+              ]}
+            />
+            <div className="relative min-w-[14rem] flex-1">
+              <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+              <Input
+                value={cari}
+                onChange={(e) => setCari(e.target.value)}
+                placeholder="Cari nama outlet, kode, atau supervisor…"
+                className="pl-9"
+              />
+            </div>
+          </div>
+        </CardHeader>
+        <CardContent className="p-0">
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[56rem] text-sm">
+              <thead>
+                <tr className="border-b border-border bg-muted text-left text-xs text-muted-foreground">
+                  <th className="px-3 py-2.5 font-medium">Kode</th>
+                  <th className="px-3 py-2.5 font-medium">Outlet</th>
+                  <th className="px-3 py-2.5 font-medium">Supervisor</th>
+                  <th className="px-3 py-2.5 font-medium">Status</th>
+                  <th className="px-3 py-2.5 font-medium">Update Terakhir</th>
+                  <th className="px-3 py-2.5 font-medium">Dilaporkan SPV</th>
+                  <th className="px-3 py-2.5 font-medium">Tercatat Sistem</th>
+                  <th className="px-3 py-2.5 font-medium">Diisi Oleh</th>
+                  <th className="px-3 py-2.5" />
+                </tr>
+              </thead>
+              <tbody>
+                {terlihat.length === 0 ? (
+                  <tr>
+                    <td colSpan={9} className="px-3 py-10 text-center text-muted-foreground">
+                      Tidak ada outlet yang cocok.
+                    </td>
+                  </tr>
+                ) : (
+                  terlihat.map((o) => {
+                    const u = o.updateTerakhir;
+                    const beda = u && u.jumlahKaryawan !== o.aktif;
+                    return (
+                      <tr key={o.id} className="border-b border-border/60 last:border-0">
+                        <td className="px-3 py-2 font-medium text-foreground">{o.code}</td>
+                        <td className="px-3 py-2 text-foreground">{o.name}</td>
+                        <td className="px-3 py-2 text-muted-foreground">{o.supervisorName}</td>
+                        <td className="px-3 py-2">
+                          {o.sudahLapor ? (
+                            <Badge tone="success" dot>
+                              Sudah
+                            </Badge>
+                          ) : (
+                            <Badge tone="warning" dot>
+                              Belum
+                            </Badge>
+                          )}
+                        </td>
+                        <td className="px-3 py-2 text-muted-foreground">
+                          {u ? `${periodeLabel(u.periode)} · ${formatDate(u.updatedAt)}` : "—"}
+                        </td>
+                        <td className="px-3 py-2 tabular-nums text-foreground">{u ? u.jumlahKaryawan : "—"}</td>
+                        <td className="px-3 py-2">
+                          <span className="tabular-nums text-foreground">{o.aktif}</span>
+                          {/* Selisih dua angka ini yang menunjukkan data karyawan
+                              belum lengkap — lihat catatan di atas. */}
+                          {beda && (
+                            <span className="ml-1.5 text-[11px] text-amber-600 dark:text-amber-400">
+                              selisih {Math.abs((u?.jumlahKaryawan ?? 0) - o.aktif)}
+                            </span>
+                          )}
+                        </td>
+                        <td className="px-3 py-2 text-muted-foreground">{u?.olehNama ?? "—"}</td>
+                        <td className="px-3 py-2">
+                          <div className="flex justify-end gap-1.5">
+                            {!o.sudahLapor &&
+                              (o.supervisorId ? (
+                                <Button size="sm" variant="ghost" onClick={() => ingatkan(o.id)} disabled={busy}>
+                                  <BellRing className="size-3.5" /> Ingatkan
+                                </Button>
+                              ) : (
+                                <span className="text-[11px] text-muted-foreground">Supervisor belum terdaftar</span>
+                              ))}
+                            {bolehTulis(o.id) && (
+                              <Button size="sm" variant="subtle" onClick={() => onLapor(o)}>
+                                <ClipboardList className="size-3.5" /> Isi
+                              </Button>
+                            )}
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })
                 )}
-              </div>
-            ))}
-          </CardContent>
-        </Card>
-      )}
+              </tbody>
+            </table>
+          </div>
+        </CardContent>
+      </Card>
 
-      {sudah.length > 0 && (
-        <Card>
-          <CardHeader>
-            <CardTitle>Sudah Melapor · {sudah.length} outlet</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-2">
-            {sudah.map((o) => (
+      <Card>
+        <CardHeader>
+          <CardTitle>Catatan Terbaru dari Supervisor</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-2">
+          {catatan.length === 0 ? (
+            <p className="py-6 text-center text-sm text-muted-foreground">Belum ada catatan dari supervisor.</p>
+          ) : (
+            catatan.map((o) => (
               <div key={o.id} className="rounded-xl border border-border p-3">
-                <div className="flex items-center justify-between gap-3">
-                  <p className="truncate text-sm font-medium text-foreground">{o.name}</p>
-                  <Badge tone="success">{o.updateTerakhir?.jumlahKaryawan ?? 0} karyawan</Badge>
-                </div>
-                {o.updateTerakhir?.catatan && (
-                  <p className="mt-1.5 whitespace-pre-line text-[12px] leading-relaxed text-foreground/90">
-                    {o.updateTerakhir.catatan}
-                  </p>
-                )}
-                <p className="mt-1 text-[11px] text-muted-foreground">oleh {o.updateTerakhir?.olehNama ?? "—"}</p>
+                <p className="text-[11px] text-muted-foreground">
+                  {o.name} ({o.code}) · {o.updateTerakhir?.olehNama ?? "—"} ·{" "}
+                  {o.updateTerakhir ? formatDate(o.updateTerakhir.updatedAt) : "—"}
+                </p>
+                <p className="mt-1 whitespace-pre-line text-sm leading-relaxed text-foreground/90">
+                  {o.updateTerakhir?.catatan}
+                </p>
               </div>
-            ))}
-          </CardContent>
-        </Card>
-      )}
+            ))
+          )}
+        </CardContent>
+      </Card>
     </div>
   );
 }

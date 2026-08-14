@@ -5,6 +5,7 @@ import { type ColumnDef } from "@tanstack/react-table";
 import {
   AlertCircle,
   Award,
+  Building2,
   Banknote,
   CalendarCheck,
   ChartColumnBig,
@@ -13,6 +14,7 @@ import {
   LogOut,
   Rocket,
   ShieldCheck,
+  Store,
   UsersRound,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
@@ -20,13 +22,15 @@ import { Combobox } from "@/components/ui/combobox";
 import { SegmentedTabs } from "@/components/ui/segmented-tabs";
 import { StatTile } from "@/components/ui/stat";
 import { RekamanBoard, type BarisRekaman, type Bidang } from "./rekaman";
-import { SCOPE_LABEL } from "@/lib/hcmos/pillars";
+import { SCOPE_LABEL, type HcScope } from "@/lib/hcmos/pillars";
 import {
   JENIS_CUTI,
   KATEGORI_KASUS,
   KATEGORI_KELUAR,
+  DURASI_POST_TEST_MENIT,
   KESIAPAN,
   LEVEL_LABEL,
+  MATERI_FAST_TRACK,
   NILAI_LULUS,
   PROGRAM_FAST,
   STATUS_BPJS,
@@ -58,6 +62,34 @@ const opsiOutlet = (outlets: PilihanOutlet[]) => [
   { value: "", label: "—" },
   ...outlets.map((o) => ({ value: o.id, label: o.name })),
 ];
+
+/**
+ * Tombol scope Manajemen (GWG) / Outlet di dalam halaman — Juknis Bab 2.2.
+ *
+ * Bentuknya sama di setiap modul supaya letaknya bisa ditebak: satu baris tepat
+ * di atas tab isi, tidak pernah di dalam tabel atau di dalam formulir.
+ */
+function ScopeTabs({
+  value,
+  onChange,
+}: {
+  value: HcScope | "semua";
+  onChange: (v: HcScope | "semua") => void;
+}) {
+  return (
+    <SegmentedTabs
+      className="max-w-md"
+      size="sm"
+      value={value}
+      onChange={(v) => onChange(v as HcScope | "semua")}
+      items={[
+        { value: "semua", label: "Semua" },
+        { value: "manajemen", label: SCOPE_LABEL.manajemen, icon: Building2 },
+        { value: "outlet", label: SCOPE_LABEL.outlet, icon: Store },
+      ]}
+    />
+  );
+}
 
 const kolomNama: ColumnDef<BarisRekaman>[] = [
   {
@@ -95,7 +127,16 @@ export function KompensasiBoard({
   tabAwal?: string;
 }) {
   const [tab, setTab] = React.useState(tabAwal);
+  const [scope, setScope] = React.useState<HcScope | "semua">("semua");
   const rute = "/hc-mos/kompensasi";
+
+  // Scope tab memindahkan tampilan di dalam halaman, bukan pindah menu —
+  // Juknis Bab 2.2. "Semua" dipertahankan sebagai pilihan karena sebagian
+  // pertanyaan memang lintas scope ("berapa total gaji bulan ini").
+  const perScope = React.useCallback(
+    (rows: BarisRekaman[]) => (scope === "semua" ? rows : rows.filter((r) => t(r, "scope") === scope)),
+    [scope],
+  );
 
   const totalThp = payroll.reduce(
     (a, p) =>
@@ -123,6 +164,8 @@ export function KompensasiBoard({
         <StatTile icon={ChartColumnBig} label="Golongan" value={golongan.length} sub="struktur kompensasi" />
       </div>
 
+      <ScopeTabs value={scope} onChange={setScope} />
+
       <SegmentedTabs
         className="max-w-2xl"
         value={tab}
@@ -140,7 +183,7 @@ export function KompensasiBoard({
           tabel="hc_leaves"
           rute={rute}
           tableId="hcmos-cuti"
-          rows={cuti}
+          rows={perScope(cuti)}
           bolehUbah={bolehUbah}
           labelTambah="Pengajuan"
           searchPlaceholder="Cari nama…"
@@ -214,7 +257,7 @@ export function KompensasiBoard({
           tabel="hc_payroll"
           rute={rute}
           tableId="hcmos-payroll"
-          rows={payroll}
+          rows={perScope(payroll)}
           bolehUbah={bolehUbah}
           labelTambah="Baris Gaji"
           searchPlaceholder="Cari nama, periode…"
@@ -276,7 +319,7 @@ export function KompensasiBoard({
           tabel="hc_benefits"
           rute={rute}
           tableId="hcmos-bpjs"
-          rows={benefit}
+          rows={perScope(benefit)}
           bolehUbah={bolehUbah}
           labelTambah="Karyawan"
           searchPlaceholder="Cari nama…"
@@ -337,7 +380,7 @@ export function KompensasiBoard({
           tabel="hc_salary_grades"
           rute={rute}
           tableId="hcmos-golongan"
-          rows={golongan}
+          rows={perScope(golongan)}
           bolehUbah={bolehUbah}
           labelTambah="Golongan"
           searchPlaceholder="Cari golongan, jabatan…"
@@ -566,8 +609,14 @@ export function RelasiBoard({
   tabAwal?: string;
 }) {
   const [tab, setTab] = React.useState(tabAwal);
+  const [scope, setScope] = React.useState<HcScope | "semua">("semua");
   const rute = "/hc-mos/relasi";
   const terbuka = kasus.filter((k) => t(k, "status") !== "selesai").length;
+
+  const perScope = React.useCallback(
+    (rows: BarisRekaman[]) => (scope === "semua" ? rows : rows.filter((r) => t(r, "scope") === scope)),
+    [scope],
+  );
 
   const kolomPerkara = (kategoriHeader: string): ColumnDef<BarisRekaman>[] => [
     ...kolomNama,
@@ -631,6 +680,8 @@ export function RelasiBoard({
         <StatTile icon={LogOut} label="Proses Keluar" value={keluar.length} sub="offboarding" />
       </div>
 
+      <ScopeTabs value={scope} onChange={setScope} />
+
       <SegmentedTabs
         className="max-w-md"
         value={tab}
@@ -646,7 +697,7 @@ export function RelasiBoard({
           tabel="hc_cases"
           rute={rute}
           tableId="hcmos-kasus"
-          rows={kasus}
+          rows={perScope(kasus)}
           bolehUbah={bolehUbah}
           labelTambah="Kasus"
           searchPlaceholder="Cari nama, kategori…"
@@ -661,7 +712,7 @@ export function RelasiBoard({
           tabel="hc_cases"
           rute={rute}
           tableId="hcmos-offboarding"
-          rows={keluar}
+          rows={perScope(keluar)}
           bolehUbah={bolehUbah}
           labelTambah="Proses Keluar"
           searchPlaceholder="Cari nama…"
@@ -814,7 +865,17 @@ export function FastTrackBoard({
             opsi: Object.entries(PROGRAM_FAST).map(([v, l]) => ({ value: v, label: l })),
           },
           { key: "batch", label: "Batch", tipe: "teks" },
-          { key: "materi", label: "Materi", tipe: "teks", span: 2 },
+          {
+            key: "materi",
+            label: "Materi",
+            tipe: "pilihan",
+            span: 2,
+            hint: `Tiap materi dijalani tiga tahap: Pre Test → Role Play → Post Test (${DURASI_POST_TEST_MENIT} menit).`,
+            opsi: MATERI_FAST_TRACK.map((m) => ({
+              value: m.judul,
+              label: `${m.no}. ${m.judul} — ${m.bentuk} · ${m.menit} menit`,
+            })),
+          },
           { key: "pre_test", label: "Pre Test", tipe: "angka" },
           { key: "role_play", label: "Role Play", tipe: "angka" },
           { key: "post_test", label: "Post Test", tipe: "angka", hint: `Lulus minimal ${NILAI_LULUS}.` },

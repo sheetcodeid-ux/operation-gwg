@@ -26,7 +26,8 @@ export const SCOPE_LABEL: Record<HcScope, string> = {
 };
 
 /** Peran dalam matriks RACI. */
-export type RaciRole = "R" | "A" | "C" | "I";
+export const RACI_ROLES = ["R", "A", "C", "I"] as const;
+export type RaciRole = (typeof RACI_ROLES)[number];
 
 export const RACI_LABEL: Record<RaciRole, string> = {
   R: "Responsible — mengerjakan",
@@ -35,9 +36,16 @@ export const RACI_LABEL: Record<RaciRole, string> = {
   I: "Informed — diberi tahu",
 };
 
-/** Pemegang peran yang muncul di matriks. */
-export const RACI_ACTORS = ["Head HC", "PIC Pilar", "Kepala Divisi", "Supervisor Outlet", "Karyawan"] as const;
-export type RaciActor = (typeof RACI_ACTORS)[number];
+/**
+ * Isi satu baris matriks: SIAPA yang memegang tiap peran.
+ *
+ * Namanya ditulis apa adanya seperti matriks yang dikirim Human Capital —
+ * "Riva", "Uswatun", "Outlet Manager", "Karyawan Bersangkutan". Sempat saya
+ * ganti jadi peran generik ("PIC Pilar"), dan itu keliru: yang berguna bagi
+ * pembacanya justru namanya, karena itulah yang menentukan ia harus menghubungi
+ * siapa. Tanda "—" berarti memang tidak ada pemegangnya.
+ */
+export type RaciEntry = Record<RaciRole, string>;
 
 export interface HcSubmenu {
   slug: string;
@@ -55,8 +63,8 @@ export interface HcSubmenu {
   href?: string;
   /** Nama modul itu di sistem, bila namanya berbeda dari istilah HC-MOS. */
   hrefLabel?: string;
-  /** Peran tiap aktor untuk aktivitas ini (matriks RACI Bab 8). */
-  raci: Partial<Record<RaciActor, RaciRole>>;
+  /** Pemegang tiap peran untuk aktivitas ini (matriks RACI Bab 8). */
+  raci: RaciEntry;
 }
 
 export interface HcPillar {
@@ -72,14 +80,14 @@ export interface HcPillar {
 }
 
 /** SOP muncul di setiap pilar dengan bentuk yang sama — jangan disalin sembilan kali. */
-const sop = (pilar: string, slugPilar: string): HcSubmenu => ({
+const sop = (pilar: string, slugPilar: string, raci: RaciEntry): HcSubmenu => ({
   slug: "sop",
   label: "SOP",
   fungsi: `Prosedur standar operasional pilar ${pilar}.`,
   icon: "ScrollText",
   href: `/hc-mos/dokumen?jenis=sop&pilar=${slugPilar}`,
   hrefLabel: "SOP pilar ini",
-  raci: { "Head HC": "A", "PIC Pilar": "R", "Kepala Divisi": "C", "Karyawan": "I" },
+  raci,
 });
 
 export const HC_PILLARS: HcPillar[] = [
@@ -97,7 +105,7 @@ export const HC_PILLARS: HcPillar[] = [
         fungsi: "Peta struktur organisasi GWG Group — kantor pusat & seluruh outlet.",
         icon: "Building2",
         href: "/hc-mos/struktur",
-        raci: { "Head HC": "A", "PIC Pilar": "R", "Kepala Divisi": "C", "Karyawan": "I" },
+        raci: { R: "Riva", A: "Adrian", C: "Uswatun, Head of Operation", I: "Seluruh Karyawan" },
       },
       {
         slug: "database-karyawan",
@@ -105,7 +113,7 @@ export const HC_PILLARS: HcPillar[] = [
         fungsi: "Data karyawan Manajemen (Office & Warehouse) dan rekap seluruh outlet.",
         icon: "Database",
         href: "/hc-mos/karyawan",
-        raci: { "Head HC": "A", "PIC Pilar": "R", "Kepala Divisi": "I", "Supervisor Outlet": "C" },
+        raci: { R: "Uswatun", A: "Adrian", C: "Riva", I: "Outlet Manager, Kepala Divisi" },
       },
       {
         slug: "document-queue",
@@ -114,7 +122,7 @@ export const HC_PILLARS: HcPillar[] = [
         icon: "FileText",
         href: "/hc/antrian",
         hrefLabel: "Antrian Dokumen",
-        raci: { "Head HC": "A", "PIC Pilar": "R", "Supervisor Outlet": "C", "Karyawan": "I" },
+        raci: { R: "Uswatun", A: "Adrian", C: "Riva", I: "Karyawan Terkait" },
       },
       {
         slug: "culture-value",
@@ -123,9 +131,9 @@ export const HC_PILLARS: HcPillar[] = [
         icon: "HeartHandshake",
         href: "/hc-mos/dokumen?jenis=culture",
         hrefLabel: "Culture & Value",
-        raci: { "Head HC": "A", "PIC Pilar": "R", "Kepala Divisi": "C", "Karyawan": "I" },
+        raci: { R: "Riva", A: "Adrian", C: "Kepala Divisi", I: "Seluruh Karyawan" },
       },
-      sop("Organization Development", "organization-development"),
+      sop("Organization Development", "organization-development", { R: "Riva", A: "Adrian", C: "Uswatun", I: "Seluruh Karyawan" }),
     ],
   },
   {
@@ -143,7 +151,7 @@ export const HC_PILLARS: HcPillar[] = [
         icon: "ClipboardList",
         href: "/hc/permintaan",
         hrefLabel: "Permintaan Karyawan",
-        raci: { "Head HC": "A", "PIC Pilar": "R", "Kepala Divisi": "C", "Supervisor Outlet": "C" },
+        raci: { R: "Dini", A: "Adrian", C: "Head of Operation, Outlet Manager, Riva", I: "Kepala Divisi Terkait" },
       },
       {
         slug: "database-kandidat",
@@ -152,7 +160,7 @@ export const HC_PILLARS: HcPillar[] = [
         icon: "Users",
         href: "/hc-mos/rekrutmen",
         hrefLabel: "Database Kandidat",
-        raci: { "Head HC": "A", "PIC Pilar": "R", "Kepala Divisi": "I" },
+        raci: { R: "Dini", A: "Adrian", C: "—", I: "Outlet Manager" },
       },
       {
         slug: "jadwal-interview",
@@ -161,7 +169,7 @@ export const HC_PILLARS: HcPillar[] = [
         icon: "Calendar",
         href: "/hc-mos/rekrutmen?tab=interview",
         hrefLabel: "Jadwal Interview",
-        raci: { "Head HC": "I", "PIC Pilar": "R", "Kepala Divisi": "C" },
+        raci: { R: "Dini", A: "Adrian", C: "Hiring Manager/User", I: "Kandidat" },
       },
       {
         slug: "onboarding",
@@ -170,9 +178,9 @@ export const HC_PILLARS: HcPillar[] = [
         icon: "LogIn",
         href: "/hc-mos/rekrutmen?tab=onboarding",
         hrefLabel: "Onboarding",
-        raci: { "Head HC": "A", "PIC Pilar": "R", "Supervisor Outlet": "R", "Karyawan": "I" },
+        raci: { R: "Dini", A: "Adrian", C: "Riva", I: "Outlet Manager" },
       },
-      sop("Recruitment & Selection", "recruitment-selection"),
+      sop("Recruitment & Selection", "recruitment-selection", { R: "Dini", A: "Adrian", C: "Uswatun", I: "Outlet Manager" }),
     ],
   },
   {
@@ -190,7 +198,7 @@ export const HC_PILLARS: HcPillar[] = [
         icon: "CalendarDays",
         href: "/hc/pelatihan",
         hrefLabel: "Pelatihan",
-        raci: { "Head HC": "A", "PIC Pilar": "R", "Kepala Divisi": "I" },
+        raci: { R: "Riva", A: "Adrian", C: "Outlet Manager", I: "Karyawan/Crew" },
       },
       {
         slug: "competency-matrix",
@@ -199,7 +207,7 @@ export const HC_PILLARS: HcPillar[] = [
         icon: "Grid3x3",
         href: "/hc-mos/kinerja?tab=kompetensi",
         hrefLabel: "Competency Matrix",
-        raci: { "Head HC": "A", "PIC Pilar": "R", "Kepala Divisi": "C" },
+        raci: { R: "Riva", A: "Adrian", C: "Dini", I: "Kepala Divisi" },
       },
       {
         slug: "modul-pelatihan",
@@ -208,7 +216,7 @@ export const HC_PILLARS: HcPillar[] = [
         icon: "BookOpen",
         href: "/elearning",
         hrefLabel: "E-Learning",
-        raci: { "Head HC": "A", "PIC Pilar": "R", "Karyawan": "I" },
+        raci: { R: "Riva", A: "Adrian", C: "Kepala Divisi Terkait", I: "Karyawan/Crew" },
       },
       {
         slug: "fast-start-fast-track",
@@ -218,7 +226,7 @@ export const HC_PILLARS: HcPillar[] = [
         href: "/hc-mos/fast-track",
         hrefLabel: "Fast Start & Fast Track",
         scopeOnly: "outlet",
-        raci: { "Head HC": "A", "PIC Pilar": "R", "Supervisor Outlet": "R", "Karyawan": "I" },
+        raci: { R: "Dini", A: "Riva", C: "Outlet Manager", I: "Crew Baru" },
       },
       {
         slug: "pre-post-test",
@@ -228,7 +236,7 @@ export const HC_PILLARS: HcPillar[] = [
         scopeOnly: "outlet",
         href: "/hc-mos/fast-track",
         hrefLabel: "Pre Test & Post Test",
-        raci: { "Head HC": "I", "PIC Pilar": "R", "Supervisor Outlet": "R", "Karyawan": "I" },
+        raci: { R: "Dini", A: "Riva", C: "Supervisor/Outlet Manager", I: "Crew Baru" },
       },
       {
         slug: "self-learning",
@@ -237,9 +245,9 @@ export const HC_PILLARS: HcPillar[] = [
         icon: "MonitorPlay",
         href: "/elearning",
         hrefLabel: "E-Learning",
-        raci: { "Head HC": "I", "PIC Pilar": "R", "Karyawan": "R" },
+        raci: { R: "Riva", A: "Adrian", C: "Dini", I: "Seluruh Karyawan/Crew" },
       },
-      sop("Learning & Development", "learning-development"),
+      sop("Learning & Development", "learning-development", { R: "Riva", A: "Adrian", C: "Uswatun", I: "Outlet Manager" }),
     ],
   },
   {
@@ -257,7 +265,7 @@ export const HC_PILLARS: HcPillar[] = [
         icon: "Star",
         href: "/hc-mos/kinerja",
         hrefLabel: "Penilaian Kinerja",
-        raci: { "Head HC": "A", "PIC Pilar": "R", "Kepala Divisi": "R", "Karyawan": "I" },
+        raci: { R: "Riva", A: "Adrian", C: "Atasan Langsung", I: "Karyawan Bersangkutan" },
       },
       {
         slug: "kenaikan-golongan",
@@ -266,7 +274,7 @@ export const HC_PILLARS: HcPillar[] = [
         icon: "TrendingUp",
         href: "/assessment",
         hrefLabel: "Assessment Golongan",
-        raci: { "Head HC": "A", "PIC Pilar": "R", "Kepala Divisi": "R", "Karyawan": "I" },
+        raci: { R: "Riva", A: "Adrian", C: "Atasan Langsung, Rekan Sejawat", I: "Uswatun" },
       },
       {
         slug: "appraisal-review",
@@ -275,9 +283,9 @@ export const HC_PILLARS: HcPillar[] = [
         icon: "ClipboardCheck",
         href: "/hc-mos/kinerja?tab=review",
         hrefLabel: "Appraisal Review",
-        raci: { "Head HC": "A", "PIC Pilar": "C", "Kepala Divisi": "R", "Karyawan": "C" },
+        raci: { R: "Riva", A: "Adrian", C: "Kepala Divisi", I: "Karyawan Bersangkutan" },
       },
-      sop("Performance Management", "performance-management"),
+      sop("Performance Management", "performance-management", { R: "Riva", A: "Adrian", C: "Dini", I: "Seluruh Karyawan" }),
     ],
   },
   {
@@ -295,7 +303,7 @@ export const HC_PILLARS: HcPillar[] = [
         icon: "GitBranch",
         href: "/hc-mos/talent",
         hrefLabel: "Career Path",
-        raci: { "Head HC": "A", "PIC Pilar": "R", "Kepala Divisi": "C", "Karyawan": "I" },
+        raci: { R: "Riva", A: "Adrian", C: "Kepala Divisi", I: "Karyawan Bersangkutan" },
       },
       {
         slug: "succession-plan",
@@ -304,9 +312,9 @@ export const HC_PILLARS: HcPillar[] = [
         icon: "UsersRound",
         href: "/hc-mos/talent?tab=suksesi",
         hrefLabel: "Succession Plan",
-        raci: { "Head HC": "A", "PIC Pilar": "R", "Kepala Divisi": "C" },
+        raci: { R: "Riva", A: "Adrian", C: "Head of Operation, Dini", I: "Kepala Divisi" },
       },
-      sop("Talent & Career Management", "talent-career"),
+      sop("Talent & Career Management", "talent-career", { R: "Riva", A: "Adrian", C: "Dini", I: "Kepala Divisi" }),
     ],
   },
   {
@@ -324,7 +332,7 @@ export const HC_PILLARS: HcPillar[] = [
         icon: "CalendarCheck",
         href: "/hc-mos/kompensasi",
         hrefLabel: "Attendance & Cuti",
-        raci: { "Head HC": "A", "PIC Pilar": "R", "Supervisor Outlet": "R", "Karyawan": "I" },
+        raci: { R: "Uswatun", A: "Adrian", C: "Outlet Manager, Atasan Langsung", I: "Karyawan/Crew" },
       },
       {
         slug: "payroll",
@@ -333,7 +341,7 @@ export const HC_PILLARS: HcPillar[] = [
         icon: "Banknote",
         href: "/hc-mos/kompensasi?tab=payroll",
         hrefLabel: "Payroll",
-        raci: { "Head HC": "A", "PIC Pilar": "R", "Kepala Divisi": "I" },
+        raci: { R: "Uswatun", A: "Adrian", C: "Finance & Accounting", I: "Karyawan/Crew" },
       },
       {
         slug: "bpjs-benefit",
@@ -342,7 +350,7 @@ export const HC_PILLARS: HcPillar[] = [
         icon: "ShieldCheck",
         href: "/hc-mos/kompensasi?tab=bpjs",
         hrefLabel: "BPJS & Benefit",
-        raci: { "Head HC": "A", "PIC Pilar": "R", "Karyawan": "I" },
+        raci: { R: "Uswatun", A: "Adrian", C: "Finance & Accounting", I: "Karyawan Bersangkutan" },
       },
       {
         slug: "struktur-kompensasi",
@@ -351,9 +359,9 @@ export const HC_PILLARS: HcPillar[] = [
         icon: "ChartColumnBig",
         href: "/hc-mos/kompensasi?tab=golongan",
         hrefLabel: "Struktur Kompensasi",
-        raci: { "Head HC": "A", "PIC Pilar": "R", "Kepala Divisi": "C" },
+        raci: { R: "Uswatun", A: "Adrian", C: "Finance & Accounting", I: "Kepala Divisi" },
       },
-      sop("Compensation & Benefit", "compensation-benefit"),
+      sop("Compensation & Benefit", "compensation-benefit", { R: "Uswatun", A: "Adrian", C: "Finance & Accounting", I: "Seluruh Karyawan" }),
     ],
   },
   {
@@ -371,7 +379,7 @@ export const HC_PILLARS: HcPillar[] = [
         icon: "AlertCircle",
         href: "/hc-mos/relasi",
         hrefLabel: "Case Management",
-        raci: { "Head HC": "R", "PIC Pilar": "C", "Kepala Divisi": "C", "Supervisor Outlet": "I" },
+        raci: { R: "Adrian", A: "Adrian", C: "Riva, Dini (sesuai kasus)", I: "Kepala Divisi, Outlet Manager" },
       },
       {
         slug: "offboarding",
@@ -380,7 +388,7 @@ export const HC_PILLARS: HcPillar[] = [
         icon: "LogOut",
         href: "/hc-mos/relasi?tab=keluar",
         hrefLabel: "Offboarding",
-        raci: { "Head HC": "A", "PIC Pilar": "R", "Supervisor Outlet": "C", "Karyawan": "I" },
+        raci: { R: "Uswatun", A: "Adrian", C: "Kepala Divisi/Outlet Manager Terkait", I: "Finance (Payroll Final)" },
       },
       {
         slug: "kontrak-tracker",
@@ -388,9 +396,9 @@ export const HC_PILLARS: HcPillar[] = [
         fungsi: "Kontrak kerja seluruh outlet: masa berlaku, prioritas perpanjangan, dan Update Bulanan Supervisor.",
         icon: "FileSignature",
         href: "/hc-mos/kontrak",
-        raci: { "Head HC": "A", "PIC Pilar": "C", "Supervisor Outlet": "R", "Karyawan": "I" },
+        raci: { R: "Uswatun", A: "Adrian", C: "—", I: "Karyawan Bersangkutan" },
       },
-      sop("Employee & Industrial Relations", "employee-relations"),
+      sop("Employee & Industrial Relations", "employee-relations", { R: "Adrian", A: "Adrian", C: "Uswatun", I: "Seluruh Karyawan" }),
     ],
   },
   {
@@ -408,7 +416,7 @@ export const HC_PILLARS: HcPillar[] = [
         icon: "ShieldCheck",
         href: "/hc-mos/dokumen?jenis=compliance",
         hrefLabel: "Dokumen & Kepatuhan",
-        raci: { "Head HC": "R", "PIC Pilar": "C", "Kepala Divisi": "I" },
+        raci: { R: "Adrian", A: "Adrian", C: "Riva", I: "Kepala Divisi" },
       },
       {
         slug: "kebijakan",
@@ -417,9 +425,9 @@ export const HC_PILLARS: HcPillar[] = [
         icon: "Book",
         href: "/hc-mos/dokumen?jenis=kebijakan",
         hrefLabel: "Kebijakan",
-        raci: { "Head HC": "A", "PIC Pilar": "R", "Karyawan": "I" },
+        raci: { R: "Adrian", A: "Adrian", C: "Riva, Uswatun", I: "Seluruh Karyawan" },
       },
-      sop("Legal & Compliance", "legal-compliance"),
+      sop("Legal & Compliance", "legal-compliance", { R: "Adrian", A: "Adrian", C: "—", I: "Seluruh Karyawan" }),
     ],
   },
   {
@@ -435,9 +443,9 @@ export const HC_PILLARS: HcPillar[] = [
         label: "Dashboard Monitoring",
         fungsi: "Metrik HR terpantau: headcount, rekrutmen, turnover, kontrak, dokumen, dan pelatihan.",
         icon: "LayoutDashboard",
-        href: "/hc-mos",
-        hrefLabel: "Dashboard HC-MOS",
-        raci: { "Head HC": "A", "PIC Pilar": "R", "Kepala Divisi": "I" },
+        href: "/hc-mos/monitoring",
+        hrefLabel: "Dashboard Monitoring",
+        raci: { R: "Adrian", A: "Adrian", C: "Dini, Riva, Uswatun", I: "Head of Operation" },
       },
       {
         slug: "report-kpi",
@@ -446,9 +454,9 @@ export const HC_PILLARS: HcPillar[] = [
         icon: "PieChart",
         href: "/hc-mos/kpi",
         hrefLabel: "Report & KPI",
-        raci: { "Head HC": "A", "PIC Pilar": "R", "Kepala Divisi": "I" },
+        raci: { R: "Adrian", A: "Adrian", C: "Dini, Riva, Uswatun", I: "Owner/Manajemen" },
       },
-      sop("HR Analytics & CI", "hr-analytics"),
+      sop("HR Analytics & CI", "hr-analytics", { R: "Adrian", A: "Adrian", C: "Dini, Riva, Uswatun", I: "—" }),
     ],
   },
 ];

@@ -4,7 +4,7 @@ import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { requireSessionUser } from "@/lib/auth";
 import { canReachMenu } from "@/lib/nav";
-import { HC_PILLARS, pillarBySlug, RACI_LABEL } from "@/lib/hcmos/pillars";
+import { HC_PILLARS, pillarBySlug, RACI_LABEL, RACI_ROLES } from "@/lib/hcmos/pillars";
 import { NAV_ICONS } from "@/components/layout/icons";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -71,13 +71,13 @@ export default async function PilarPage({ params }: { params: Promise<{ pilar: s
               </CardHeader>
               <CardContent className="pt-0">
                 <div className="flex flex-wrap items-center gap-1.5 border-t border-border/60 pt-3">
-                  {Object.entries(s.raci).map(([aktor, peran]) => (
+                  {RACI_ROLES.filter((r) => s.raci[r] && s.raci[r] !== "—").map((r) => (
                     <span
-                      key={aktor}
-                      title={RACI_LABEL[peran]}
-                      className="inline-flex items-center gap-1 rounded-md border border-border bg-muted/40 px-2 py-1 text-[11px] text-muted-foreground"
+                      key={r}
+                      title={RACI_LABEL[r]}
+                      className="inline-flex items-center gap-1.5 rounded-md border border-border bg-muted/40 px-2 py-1 text-[11px] text-muted-foreground"
                     >
-                      <span className="font-semibold text-foreground">{peran}</span> {aktor}
+                      <span className="font-semibold text-foreground">{r}</span> {s.raci[r]}
                     </span>
                   ))}
                 </div>

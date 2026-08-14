@@ -4,7 +4,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { requireSessionUser } from "@/lib/auth";
 import { canReachMenu } from "@/lib/nav";
-import { allSubmenus, RACI_ACTORS, RACI_LABEL, type RaciRole } from "@/lib/hcmos/pillars";
+import { allSubmenus, RACI_LABEL, RACI_ROLES, type RaciRole } from "@/lib/hcmos/pillars";
 import { Card, CardContent } from "@/components/ui/card";
 import { PageHeader } from "@/components/ui/page-header";
 
@@ -55,14 +55,14 @@ export default async function RaciPage() {
           {/* Matriksnya memang lebar — digulir mendatar di dalam wadahnya
               sendiri, bukan membuat seluruh halaman ikut bergeser. */}
           <div className="overflow-x-auto rounded-2xl">
-            <table className="w-full min-w-[48rem] text-sm">
+            <table className="w-full min-w-[64rem] text-sm">
               <thead>
                 <tr className="border-b border-border bg-muted text-left text-xs text-muted-foreground">
                   <th className="px-3 py-2.5 font-medium">Pilar</th>
                   <th className="px-3 py-2.5 font-medium">Aktivitas / Menu</th>
-                  {RACI_ACTORS.map((a) => (
-                    <th key={a} className="px-3 py-2.5 text-center font-medium">
-                      {a}
+                  {RACI_ROLES.map((r) => (
+                    <th key={r} className="px-3 py-2.5 font-medium">
+                      {r}
                     </th>
                   ))}
                 </tr>
@@ -81,19 +81,22 @@ export default async function RaciPage() {
                         {awalKelompok ? <span className="font-medium text-foreground">{pillar.label}</span> : null}
                       </td>
                       <td className="px-3 py-2 text-foreground">{sub.label}</td>
-                      {RACI_ACTORS.map((a) => {
-                        const peran = sub.raci[a];
+                      {RACI_ROLES.map((r) => {
+                        const siapa = sub.raci[r];
                         return (
-                          <td key={a} className="px-3 py-2 text-center">
-                            {peran ? (
-                              <span
-                                title={RACI_LABEL[peran]}
-                                className={`inline-grid size-6 place-items-center rounded-md text-[11px] font-bold ${TONE[peran]}`}
-                              >
-                                {peran}
+                          <td key={r} className="px-3 py-2">
+                            {siapa && siapa !== "—" ? (
+                              <span className="inline-flex items-center gap-1.5">
+                                <span
+                                  title={RACI_LABEL[r]}
+                                  className={`inline-grid size-5 shrink-0 place-items-center rounded text-[10px] font-bold ${TONE[r]}`}
+                                >
+                                  {r}
+                                </span>
+                                <span className="text-[12px] text-foreground">{siapa}</span>
                               </span>
                             ) : (
-                              <span className="text-muted-foreground/40">·</span>
+                              <span className="text-muted-foreground/40">—</span>
                             )}
                           </td>
                         );

@@ -5,8 +5,11 @@ import { getSessionUser } from "@/lib/auth";
 import { canReachMenu } from "@/lib/nav";
 import { getOutlets } from "@/lib/data/store";
 import { canAccessOutlet } from "@/lib/rbac";
+import { periodeLabel } from "@/lib/hcmos/kontrak";
+import { notify } from "@/lib/data/notify";
 import {
   hapusKontrak,
+  rekapOutlet,
   outletDariKontrak,
   riwayatUpdateBulanan,
   simpanKontrak,
@@ -122,5 +125,62 @@ export async function riwayatUpdateAction(outletId: string): Promise<UpdateBulan
     return await riwayatUpdateBulanan(outletId);
   } catch (e) {
     return { error: e instanceof Error ? e.message : "Gagal memuat riwayat." };
+  }
+}
+
+/**
+ * Ingatkan supervisor yang belum mengirim Update Bulanan.
+ *
+ * Berkas HTML aslinya memakai tautan `mailto:` — yang berarti membuka aplikasi
+ * email di HP orang yang menekan tombolnya, lalu berharap ia benar-benar
+ * mengirimnya. Di sini pengingatnya dikirim sebagai notifikasi di dalam sistem,
+ * langsung ke akun supervisornya: ia sudah membuka aplikasi ini tiap hari untuk
+ * hygiene dan komplain, dan notifikasinya membawa tautan yang begitu diklik
+ * mendarat tepat di Kontrak Tracker. Tidak ada layanan email baru yang perlu
+ * dibayar, dan tidak ada pengingat yang berhenti di kotak keluar seseorang.
+ *
+ * Outlet yang supervisornya belum terdaftar dilewati dan dilaporkan apa adanya
+ * — mengaku "terkirim" untuk penerima yang tidak ada adalah kebohongan kecil
+ * yang membuat kepatuhan terlihat sedang diurus padahal tidak.
+ */
+export async function kirimPengingatAction(input: {
+  periode: string;
+  /** Kosongkan untuk mengingatkan SEMUA outlet yang belum melapor. */
+  outletId?: string;
+}): Promise<{ ok?: true; terkirim?: number; tanpaSupervisor?: number; error?: string }> {
+  const user = await getSessionUser();
+  if (!bolehBuka(user)) return { error: "Tidak punya akses." };
+
+  try {
+    const rekap = await rekapOutlet(user!, input.periode);
+    const sasaran = rekap.filter(
+      (o) => !o.sudahLapor && (!input.outletId || o.id === input.outletId),
+    );
+    if (sasaran.length === 0) return { error: "Tidak ada outlet yang perlu diingatkan." };
+
+    const punyaSpv = sasaran.filter((o) => o.supervisorId);
+    await Promise.all(
+      punyaSpv.map((o) =>
+        notify({
+          kind: "hc_update_due",
+          title: `Update Bulanan ${periodeLabel(input.periode)} belum masuk`,
+          message: `${o.name} belum mengirim laporan bulanan. Isi jumlah karyawan aktif dan catatannya lewat Kontrak Tracker.`,
+          href: "/hc-mos/kontrak",
+          targetUser: o.supervisorId,
+          actorName: user!.name,
+          outletId: o.id,
+          severity: "warning",
+        }),
+      ),
+    );
+
+    segarkan();
+    return {
+      ok: true,
+      terkirim: punyaSpv.length,
+      tanpaSupervisor: sasaran.length - punyaSpv.length,
+    };
+  } catch (e) {
+    return { error: e instanceof Error ? e.message : "Gagal mengirim pengingat." };
   }
 }

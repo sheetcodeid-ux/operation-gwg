@@ -193,6 +193,7 @@ export interface OutletKontrak {
   code: string;
   areaName: string;
   brand: Brand | null;
+  supervisorId: string;
   supervisorName: string;
   /** Karyawan aktif (belum keluar). */
   aktif: number;
@@ -230,6 +231,7 @@ export async function rekapOutlet(user: UserProfile, periode = periodeKey()): Pr
         code: o.code,
         areaName: o.areaName,
         brand: o.brand,
+        supervisorId: o.supervisorId,
         supervisorName: o.supervisorName,
         aktif: aktif.length,
         segera: aktif.filter((k) => k.status === "segera_berakhir").length,

@@ -17,6 +17,7 @@ import { Progress } from "@/components/ui/progress";
 import { SegmentedTabs } from "@/components/ui/segmented-tabs";
 import { StatTile } from "@/components/ui/stat";
 import { HC_PILLARS, SCOPE_LABEL, submenusForScope, type HcScope } from "@/lib/hcmos/pillars";
+import { GrafikBatang, GrafikDonat, GrafikGaris } from "./grafik";
 import { periodeLabel } from "@/lib/hcmos/kontrak";
 import type { HcmosRingkas } from "@/lib/data/hcmos";
 
@@ -60,34 +61,24 @@ function RingkasManajemen({ r }: { r: HcmosRingkas }) {
         <StatTile icon={Users} label="Total Terdaftar" value={total} sub="seluruh akun" />
       </div>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>Sebaran per Departemen</CardTitle>
-        </CardHeader>
-        <CardContent>
-          {r.perDepartemen.length === 0 ? (
-            <p className="py-8 text-center text-sm text-muted-foreground">
-              Belum ada departemen terisi di User Management.
-            </p>
-          ) : (
-            <ul className="space-y-2.5">
-              {r.perDepartemen.map((d) => (
-                <li key={d.nama}>
-                  <div className="mb-1 flex items-baseline justify-between gap-3">
-                    <span className="truncate text-sm text-foreground">{d.nama}</span>
-                    <span className="shrink-0 text-sm font-semibold tabular-nums text-foreground">{d.jumlah}</span>
-                  </div>
-                  <Progress value={r.manajemenAktif ? (d.jumlah / r.manajemenAktif) * 100 : 0} />
-                </li>
-              ))}
-            </ul>
-          )}
-          <p className="mt-3 text-[11px] text-muted-foreground">
-            Sumber: User Management. Menambah atau menonaktifkan karyawan dilakukan di sana, dan angkanya ikut berubah
-            di sini — tidak ada daftar karyawan kedua yang perlu disamakan.
-          </p>
-        </CardContent>
-      </Card>
+      <div className="grid gap-3 lg:grid-cols-2">
+        <GrafikDonat
+          judul="Komposisi per Departemen"
+          subjudul="Sumber: User Management"
+          data={r.perDepartemen.slice(0, 8).map((d) => ({ nama: d.nama, nilai: d.jumlah }))}
+          pesanKosong="Belum ada departemen terisi di User Management."
+        />
+        <GrafikBatang
+          judul="Jumlah Karyawan per Departemen"
+          data={r.perDepartemen.slice(0, 10).map((d) => ({ nama: d.nama, nilai: d.jumlah }))}
+          pesanKosong="Belum ada departemen terisi di User Management."
+        />
+      </div>
+
+      <p className="text-[11px] text-muted-foreground">
+        Sumber: User Management. Menambah atau menonaktifkan karyawan dilakukan di sana, dan angkanya ikut berubah di
+        sini — tidak ada daftar karyawan kedua yang perlu disamakan.
+      </p>
     </>
   );
 }
@@ -135,33 +126,20 @@ function RingkasOutlet({ r }: { r: HcmosRingkas }) {
           </CardContent>
         </Card>
 
-        <Card>
-          <CardHeader>
-            <CardTitle>Turnover</CardTitle>
-          </CardHeader>
-          <CardContent>
-            {r.turnoverPerKategori.length === 0 ? (
-              <p className="py-8 text-center text-sm text-muted-foreground">
-                Belum ada karyawan keluar yang tercatat.
-              </p>
-            ) : (
-              <ul className="space-y-2.5">
-                {r.turnoverPerKategori.map((k) => {
-                  const total = r.turnoverPerKategori.reduce((a, x) => a + x.jumlah, 0);
-                  return (
-                    <li key={k.kategori}>
-                      <div className="mb-1 flex items-baseline justify-between gap-3">
-                        <span className="truncate text-sm text-foreground">{k.kategori}</span>
-                        <span className="shrink-0 text-sm font-semibold tabular-nums text-foreground">{k.jumlah}</span>
-                      </div>
-                      <Progress value={total ? (k.jumlah / total) * 100 : 0} />
-                    </li>
-                  );
-                })}
-              </ul>
-            )}
-          </CardContent>
-        </Card>
+      </div>
+
+      <div className="grid gap-3 lg:grid-cols-2">
+        <GrafikGaris
+          judul="Tren Karyawan Keluar per Bulan"
+          subjudul="Sumber: tanggal keluar di Kontrak Tracker"
+          data={[...r.turnoverPerBulan].reverse().map((x) => ({ nama: x.bulan, nilai: x.jumlah }))}
+          pesanKosong="Belum ada karyawan keluar yang tercatat."
+        />
+        <GrafikDonat
+          judul="Komposisi Turnover"
+          data={r.turnoverPerKategori.map((x) => ({ nama: x.kategori, nilai: x.jumlah }))}
+          pesanKosong="Belum ada karyawan keluar yang tercatat."
+        />
       </div>
     </>
   );

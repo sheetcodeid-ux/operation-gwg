@@ -10,6 +10,46 @@
 /** Ambang kelulusan Pre/Post Test sesuai Juknis Bab 4.3. */
 export const NILAI_LULUS = 65;
 
+/** Tiap materi dijalani tiga tahap; Post Test-nya berdurasi 20 menit. */
+export const TAHAP_MATERI = ["Pre Test", "Role Play", "Post Test"] as const;
+export const DURASI_POST_TEST_MENIT = 20;
+
+/**
+ * Sepuluh materi Fast Start & Fast Track, urut sesuai kurikulum yang dikirim
+ * Human Capital.
+ *
+ * Ditulis sebagai daftar tetap, bukan isian bebas: kalau materinya diketik
+ * sendiri tiap kali, "Hygiene & Safety" akan tercatat juga sebagai "Hygiene
+ * and Safety" dan "hygiene", dan rekap kelulusan per materi langsung pecah
+ * jadi tiga baris yang sebenarnya satu.
+ */
+export const MATERI_FAST_TRACK = [
+  { no: 1, judul: "Company Profile", bentuk: "Video + Bacaan", menit: 25 },
+  { no: 2, judul: "Self Leadership", bentuk: "Video + Studi Kasus", menit: 30 },
+  { no: 3, judul: "Hygiene & Safety", bentuk: "Video + Praktik", menit: 25 },
+  { no: 4, judul: "People & Policy", bentuk: "Bacaan + Kuis", menit: 20 },
+  { no: 5, judul: "Finance", bentuk: "Video + Kuis", menit: 22 },
+  { no: 6, judul: "Marketing & Communication", bentuk: "Video + Praktik", menit: 28 },
+  { no: 7, judul: "Hospitality", bentuk: "Video + Studi Kasus", menit: 30 },
+  { no: 8, judul: "Legal & Ethics", bentuk: "Bacaan + Kuis", menit: 20 },
+  { no: 9, judul: "Creative & Design", bentuk: "Video + Praktik", menit: 25 },
+  { no: 10, judul: "Service Flow", bentuk: "Video + Praktik", menit: 25 },
+] as const;
+
+/** Kurikulum onboarding staf manajemen — sepuluh materi, bentuk yang sama. */
+export const MATERI_MANAJEMEN = [
+  { no: 1, judul: "Company Profile & Visi Misi", bentuk: "Video + Bacaan", menit: 25 },
+  { no: 2, judul: "Core Values & Budaya Kerja", bentuk: "Video + Kuis", menit: 20 },
+  { no: 3, judul: "Struktur Organisasi & Jobdesk", bentuk: "Video + Studi Kasus", menit: 25 },
+  { no: 4, judul: "Kebijakan SDM & Kode Etik", bentuk: "Bacaan + Kuis", menit: 20 },
+  { no: 5, judul: "Finance & Anggaran Dasar", bentuk: "Video + Kuis", menit: 25 },
+  { no: 6, judul: "Komunikasi & Pelaporan Manajerial", bentuk: "Video + Praktik", menit: 22 },
+  { no: 7, judul: "Kepemimpinan & Manajemen Tim", bentuk: "Video + Studi Kasus", menit: 30 },
+  { no: 8, judul: "Legal & Compliance untuk Manajemen", bentuk: "Bacaan + Kuis", menit: 25 },
+  { no: 9, judul: "Digital Tools & Data untuk Manajemen", bentuk: "Video + Praktik", menit: 25 },
+  { no: 10, judul: "Performance Management & KPI", bentuk: "Video + Studi Kasus", menit: 25 },
+] as const;
+
 export const PROGRAM_FAST = { fast_start: "Fast Start", fast_track: "Fast Track" } as const;
 export type ProgramFast = keyof typeof PROGRAM_FAST;
 

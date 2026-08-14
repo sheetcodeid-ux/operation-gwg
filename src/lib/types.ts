@@ -329,6 +329,8 @@ export type NotificationKind =
   // Pesan masuk. SELALU perorangan — isi percakapan tidak pernah boleh sampai
   // ke seluruh departemen.
   | "chat_message"
+  // Pengingat Update Bulanan outlet (HC-MOS Kontrak Tracker).
+  | "hc_update_due"
   // Aktivitas komplain.
   | "complaint_new"
   | "complaint_forwarded"
