@@ -72,11 +72,13 @@ export interface HcPillar {
 }
 
 /** SOP muncul di setiap pilar dengan bentuk yang sama — jangan disalin sembilan kali. */
-const sop = (pilar: string): HcSubmenu => ({
+const sop = (pilar: string, slugPilar: string): HcSubmenu => ({
   slug: "sop",
   label: "SOP",
   fungsi: `Prosedur standar operasional pilar ${pilar}.`,
   icon: "ScrollText",
+  href: `/hc-mos/dokumen?jenis=sop&pilar=${slugPilar}`,
+  hrefLabel: "SOP pilar ini",
   raci: { "Head HC": "A", "PIC Pilar": "R", "Kepala Divisi": "C", "Karyawan": "I" },
 });
 
@@ -94,6 +96,7 @@ export const HC_PILLARS: HcPillar[] = [
         label: "Struktur Organisasi",
         fungsi: "Peta struktur organisasi GWG Group — kantor pusat & seluruh outlet.",
         icon: "Building2",
+        href: "/hc-mos/struktur",
         raci: { "Head HC": "A", "PIC Pilar": "R", "Kepala Divisi": "C", "Karyawan": "I" },
       },
       {
@@ -118,9 +121,11 @@ export const HC_PILLARS: HcPillar[] = [
         label: "Culture & Value",
         fungsi: "Nilai-nilai inti (core values) GWG Group.",
         icon: "HeartHandshake",
+        href: "/hc-mos/dokumen?jenis=culture",
+        hrefLabel: "Culture & Value",
         raci: { "Head HC": "A", "PIC Pilar": "R", "Kepala Divisi": "C", "Karyawan": "I" },
       },
-      sop("Organization Development"),
+      sop("Organization Development", "organization-development"),
     ],
   },
   {
@@ -145,6 +150,8 @@ export const HC_PILLARS: HcPillar[] = [
         label: "Database Kandidat",
         fungsi: "Basis data pelamar untuk posisi manajemen maupun outlet.",
         icon: "Users",
+        href: "/hc-mos/rekrutmen",
+        hrefLabel: "Database Kandidat",
         raci: { "Head HC": "A", "PIC Pilar": "R", "Kepala Divisi": "I" },
       },
       {
@@ -152,6 +159,8 @@ export const HC_PILLARS: HcPillar[] = [
         label: "Jadwal Interview",
         fungsi: "Kalender jadwal wawancara kandidat.",
         icon: "Calendar",
+        href: "/hc-mos/rekrutmen?tab=interview",
+        hrefLabel: "Jadwal Interview",
         raci: { "Head HC": "I", "PIC Pilar": "R", "Kepala Divisi": "C" },
       },
       {
@@ -159,9 +168,11 @@ export const HC_PILLARS: HcPillar[] = [
         label: "Onboarding",
         fungsi: "Program orientasi karyawan baru — materi berbeda per scope.",
         icon: "LogIn",
+        href: "/hc-mos/rekrutmen?tab=onboarding",
+        hrefLabel: "Onboarding",
         raci: { "Head HC": "A", "PIC Pilar": "R", "Supervisor Outlet": "R", "Karyawan": "I" },
       },
-      sop("Recruitment & Selection"),
+      sop("Recruitment & Selection", "recruitment-selection"),
     ],
   },
   {
@@ -222,7 +233,7 @@ export const HC_PILLARS: HcPillar[] = [
         hrefLabel: "E-Learning",
         raci: { "Head HC": "I", "PIC Pilar": "R", "Karyawan": "R" },
       },
-      sop("Learning & Development"),
+      sop("Learning & Development", "learning-development"),
     ],
   },
   {
@@ -256,7 +267,7 @@ export const HC_PILLARS: HcPillar[] = [
         icon: "ClipboardCheck",
         raci: { "Head HC": "A", "PIC Pilar": "C", "Kepala Divisi": "R", "Karyawan": "C" },
       },
-      sop("Performance Management"),
+      sop("Performance Management", "performance-management"),
     ],
   },
   {
@@ -281,7 +292,7 @@ export const HC_PILLARS: HcPillar[] = [
         icon: "UsersRound",
         raci: { "Head HC": "A", "PIC Pilar": "R", "Kepala Divisi": "C" },
       },
-      sop("Talent & Career Management"),
+      sop("Talent & Career Management", "talent-career"),
     ],
   },
   {
@@ -320,7 +331,7 @@ export const HC_PILLARS: HcPillar[] = [
         icon: "ChartColumnBig",
         raci: { "Head HC": "A", "PIC Pilar": "R", "Kepala Divisi": "C" },
       },
-      sop("Compensation & Benefit"),
+      sop("Compensation & Benefit", "compensation-benefit"),
     ],
   },
   {
@@ -353,7 +364,7 @@ export const HC_PILLARS: HcPillar[] = [
         href: "/hc-mos/kontrak",
         raci: { "Head HC": "A", "PIC Pilar": "C", "Supervisor Outlet": "R", "Karyawan": "I" },
       },
-      sop("Employee & Industrial Relations"),
+      sop("Employee & Industrial Relations", "employee-relations"),
     ],
   },
   {
@@ -369,6 +380,8 @@ export const HC_PILLARS: HcPillar[] = [
         label: "Document & Compliance",
         fungsi: "Dokumen legalitas dan kepatuhan, termasuk PKS Kemitraan (sewa lokasi, kemitraan supplier/brand).",
         icon: "ShieldCheck",
+        href: "/hc-mos/dokumen?jenis=compliance",
+        hrefLabel: "Dokumen & Kepatuhan",
         raci: { "Head HC": "R", "PIC Pilar": "C", "Kepala Divisi": "I" },
       },
       {
@@ -376,9 +389,11 @@ export const HC_PILLARS: HcPillar[] = [
         label: "Kebijakan (Policy)",
         fungsi: "Kumpulan kebijakan internal perusahaan.",
         icon: "Book",
+        href: "/hc-mos/dokumen?jenis=kebijakan",
+        hrefLabel: "Kebijakan",
         raci: { "Head HC": "A", "PIC Pilar": "R", "Karyawan": "I" },
       },
-      sop("Legal & Compliance"),
+      sop("Legal & Compliance", "legal-compliance"),
     ],
   },
   {
@@ -405,7 +420,7 @@ export const HC_PILLARS: HcPillar[] = [
         icon: "PieChart",
         raci: { "Head HC": "A", "PIC Pilar": "R", "Kepala Divisi": "I" },
       },
-      sop("HR Analytics & CI"),
+      sop("HR Analytics & CI", "hr-analytics"),
     ],
   },
 ];
