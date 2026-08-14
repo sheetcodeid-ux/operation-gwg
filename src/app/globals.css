@@ -263,11 +263,23 @@
 }
 
 @layer components {
-  /* Translucent panel — for cards over the ambient backdrop */
+  /*
+   * Panel dasar — dipakai setiap Card dan hampir semua kotak di aplikasi ini.
+   *
+   * Dulu panel ini tembus pandang dengan `backdrop-filter` (efek kaca). Di
+   * sebagian ponsel Android, lapisan backdrop-filter gagal dikomposisi: SELURUH
+   * isi panel tampil sebagai kotak gelap buram — judul, saringan, dan tabelnya
+   * tidak terbaca sama sekali — sementara elemen di luar panel (spanduk, kartu
+   * angka) tetap normal. Persis itu yang dilaporkan supervisor: "ada card tapi
+   * di bawahnya tidak ada tabel".
+   *
+   * Perangkat itu tetap MELAPORKAN dukungan backdrop-filter, jadi `@supports`
+   * tidak menolong: satu-satunya perbaikan yang pasti adalah tidak memakainya.
+   * Efek kaca tidak sepadan dengan halaman yang tidak bisa dibaca sama sekali
+   * di sebagian ponsel, jadi panelnya memakai latar padat.
+   */
   .glass {
-    background: color-mix(in oklch, var(--card) 82%, transparent);
-    backdrop-filter: blur(14px) saturate(140%);
-    -webkit-backdrop-filter: blur(14px) saturate(140%);
+    background: var(--card);
     border: 1px solid var(--border);
     box-shadow: 0 1px 0 0 color-mix(in oklch, var(--foreground) 4%, transparent) inset,
       0 10px 30px -16px rgba(0, 0, 0, 0.5);

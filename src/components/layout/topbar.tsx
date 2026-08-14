@@ -30,8 +30,11 @@ export function Topbar({
   grants: string[];
   department?: string;
 }) {
+  // Latar padat: topbar menempel di atas isi yang bergulir, dan di sebagian
+  // ponsel Android lapisan backdrop-filter gagal dikomposisi sehingga
+  // elemennya tampil sebagai balok gelap.
   return (
-    <header className="no-print sticky top-0 z-50 flex h-16 items-center border-b border-border bg-background/80 backdrop-blur-xl">
+    <header className="no-print sticky top-0 z-50 flex h-16 items-center border-b border-border bg-background">
       {/* Left: desktop brand column (aligns with sidebar) */}
       <TopbarBrand />
 

@@ -222,9 +222,13 @@ export function DataTable<TData, TValue>({
         {/* min-w: on phones the table overflows and swipes horizontally instead
             of crushing every column to fit. */}
         <table className="w-full min-w-[44rem] text-sm">
+          {/* Latar kepala tabel padat, bukan tembus pandang berblur: baris ini
+              menempel di atas isi yang bergulir, dan di sebagian ponsel Android
+              lapisan backdrop-filter membuat seluruh tabel tampil sebagai kotak
+              gelap yang tidak terbaca. */}
           <thead className={cn(stickyHeader && "sticky top-0 z-10")}>
             {table.getHeaderGroups().map((hg) => (
-              <tr key={hg.id} className="whitespace-nowrap border-b border-border bg-muted/70 backdrop-blur supports-[backdrop-filter]:bg-muted/60">
+              <tr key={hg.id} className="whitespace-nowrap border-b border-border bg-muted">
                 {hg.headers.map((header) => {
                   const canSort = header.column.getCanSort();
                   return (
