@@ -99,7 +99,15 @@ export function MonitoringBoard({ tabs }: { tabs: TabMonitoring[] }) {
           ) : g.bentuk === "garis" ? (
             <GrafikGaris key={g.judul} judul={g.judul} subjudul={g.subjudul} data={g.data} />
           ) : (
-            <GrafikBatang key={g.judul} judul={g.judul} subjudul={g.subjudul} data={g.data} />
+            <GrafikBatang
+              key={g.judul}
+              judul={g.judul}
+              subjudul={g.subjudul}
+              data={g.data}
+              // Sumbu yang isinya periode disingkat jadi nama bulan, bukan
+              // huruf awal — "2026-08" tidak berarti apa pun sebagai "20".
+              periode={/periode|bulan/i.test(g.judul)}
+            />
           ),
         )}
       </div>

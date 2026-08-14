@@ -1,106 +1,102 @@
 "use client";
 
 import * as React from "react";
-import {
-  Bar,
-  BarChart,
-  CartesianGrid,
-  Cell,
-  Line,
-  LineChart,
-  Pie,
-  PieChart,
-  ResponsiveContainer,
-  Tooltip,
-  XAxis,
-  YAxis,
-} from "recharts";
+import { Area, Bar, CartesianGrid, ComposedChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { singkat, singkatPeriode } from "@/lib/hcmos/singkat";
 
 /**
- * Grafik HC-MOS.
+ * Grafik HC-MOS — mengikuti gaya grafik Work Tracker.
  *
- * Tiga bentuk saja, dengan aturan pemakaian yang sama seperti berkas HTML dari
- * Human Capital: donat untuk komposisi, batang untuk perbandingan antar
- * kategori, garis untuk tren waktu. Membatasi bentuknya membuat pembaca tidak
- * perlu menerjemahkan ulang cara membaca tiap panel.
+ * Dua bentuk saja, sama seperti di sana:
  *
- * Semua grafik memakai `ResponsiveContainer` — di HP lebarnya menyesuaikan
- * kartu, bukan memaksa halaman menggulir mendatar.
+ *  • Donat: cincin SVG dengan ANGKA PERSEN saja di tengah, keterangan di
+ *    sampingnya berisi nama tanpa angka, dan total di kaki kartunya. Angka di
+ *    tengah mengikuti bagian yang sedang disentuh.
+ *  • Batang: batang abu-abu bergradasi, bukan warna-warni. Warna dipakai untuk
+ *    MEMBEDAKAN, dan pada grafik yang semua batangnya mengukur hal yang sama,
+ *    tidak ada yang perlu dibedakan — warna berbeda di tiap batang justru
+ *    menyiratkan makna yang tidak ada.
+ *
+ * Label sumbu disingkat tiga huruf ("Supervisor" → SPV) karena nama departemen
+ * di GWG panjang dan saling menimpa bila ditulis utuh. Nama utuhnya tetap
+ * muncul di tooltip.
  */
 
-/** Palet dipakai berurutan supaya kategori yang sama berwarna sama antar panel. */
-const PALET = ["#3b82f6", "#10b981", "#f59e0b", "#ef4444", "#8b5cf6", "#06b6d4", "#ec4899", "#84cc16"];
+const BIRU = "#3b82f6";
+const R = 66;
+const STROKE = 22;
+const CIRC = 2 * Math.PI * R;
 
-const SUMBU = { fontSize: 11, fill: "rgb(148 163 184)" };
-const KISI = "rgba(148,163,184,0.16)";
-
-function Bingkai({
-  judul,
-  subjudul,
-  children,
-  tinggi = 240,
-}: {
-  judul: string;
-  subjudul?: string;
-  children: React.ReactElement;
-  tinggi?: number;
-}) {
-  return (
-    <Card>
-      <CardHeader className="pb-2">
-        <CardTitle>{judul}</CardTitle>
-        {subjudul && <p className="text-[11px] text-muted-foreground">{subjudul}</p>}
-      </CardHeader>
-      <CardContent>
-        <div style={{ height: tinggi }}>
-          <ResponsiveContainer width="100%" height="100%">
-            {children}
-          </ResponsiveContainer>
-        </div>
-      </CardContent>
-    </Card>
-  );
-}
-
-/** Kotak keterangan saat kursor menyentuh grafik. */
-interface TipProps {
-  active?: boolean;
-  payload?: readonly { name?: unknown; value?: unknown; payload?: { nama?: string } }[];
-  label?: unknown;
-}
-function Tip({ active, payload, label, satuan }: TipProps & { satuan?: string }) {
-  if (!active || !payload?.length) return null;
-  return (
-    <div className="rounded-lg border border-border bg-popover px-2.5 py-1.5 text-[12px] shadow-lg">
-      <p className="font-medium text-foreground">{String(label ?? payload[0]?.payload?.nama ?? "")}</p>
-      {payload.map((p, i) => (
-        <p key={i} className="text-muted-foreground">
-          {String(p.name ?? "")}: <span className="font-semibold text-foreground">{String(p.value ?? "")}</span>
-          {satuan ?? ""}
-        </p>
-      ))}
-    </div>
-  );
-}
+/** Palet slice donat — sama dengan Work Tracker supaya dua modul terasa satu. */
+const WARNA = ["#3b82f6", "#f59e0b", "#06b6d4", "#8b5cf6", "#10b981", "#f43f5e", "#64748b", "#eab308"];
 
 export interface TitikData {
   nama: string;
   nilai: number;
 }
 
-/** Kosong ditangani di sini, bukan di tiap pemanggil. */
-function Kosong({ judul, subjudul, pesan }: { judul: string; subjudul?: string; pesan: string }) {
+function Bingkai({
+  judul,
+  subjudul,
+  children,
+}: {
+  judul: string;
+  subjudul?: string;
+  children: React.ReactNode;
+}) {
   return (
-    <Card>
+    <Card className="flex flex-col">
       <CardHeader className="pb-2">
         <CardTitle>{judul}</CardTitle>
         {subjudul && <p className="text-[11px] text-muted-foreground">{subjudul}</p>}
       </CardHeader>
-      <CardContent>
-        <p className="py-12 text-center text-sm text-muted-foreground">{pesan}</p>
-      </CardContent>
+      <CardContent className="flex flex-1 flex-col">{children}</CardContent>
     </Card>
+  );
+}
+
+function Kosong({ judul, subjudul, pesan }: { judul: string; subjudul?: string; pesan: string }) {
+  return (
+    <Bingkai judul={judul} subjudul={subjudul}>
+      <div className="grid flex-1 place-items-center rounded-xl border border-dashed border-border bg-muted/20 py-12 text-center text-xs text-muted-foreground">
+        {pesan}
+      </div>
+    </Bingkai>
+  );
+}
+
+/* ─────────────────────────────── batang ─────────────────────────────── */
+
+interface BarisBatang {
+  nama: string;
+  penuh: string;
+  nilai: number;
+}
+
+function TipBatang({
+  active,
+  payload,
+  satuan,
+}: {
+  active?: boolean;
+  payload?: readonly { payload?: BarisBatang }[];
+  satuan?: string;
+}) {
+  const d = payload?.[0]?.payload;
+  if (!active || !d) return null;
+  return (
+    <div className="rounded-xl border border-border bg-popover px-3 py-2 text-xs shadow-lg">
+      {/* Nama utuh, bukan singkatannya — singkatan hanya untuk sumbu. */}
+      <p className="mb-1 font-medium text-foreground">{d.penuh}</p>
+      <p className="flex items-center gap-2 text-muted-foreground">
+        <span className="size-2 rounded-full bg-slate-400" /> Jumlah
+        <span className="ml-auto font-semibold text-foreground">
+          {d.nilai}
+          {satuan ?? ""}
+        </span>
+      </p>
+    </div>
   );
 }
 
@@ -109,31 +105,63 @@ export function GrafikBatang({
   subjudul,
   data,
   satuan,
+  /** Sumbu berisi periode (2026-08 / Agustus 2026) — disingkat jadi nama bulan. */
+  periode = false,
   pesanKosong = "Belum ada datanya.",
 }: {
   judul: string;
   subjudul?: string;
   data: TitikData[];
   satuan?: string;
+  periode?: boolean;
   pesanKosong?: string;
 }) {
-  if (data.length === 0) return <Kosong judul={judul} subjudul={subjudul} pesan={pesanKosong} />;
+  const baris = React.useMemo<BarisBatang[]>(
+    () => data.map((d) => ({ nama: periode ? singkatPeriode(d.nama) : singkat(d.nama), penuh: d.nama, nilai: d.nilai })),
+    [data, periode],
+  );
+  if (baris.length === 0) return <Kosong judul={judul} subjudul={subjudul} pesan={pesanKosong} />;
+
   return (
     <Bingkai judul={judul} subjudul={subjudul}>
-      <BarChart data={data} margin={{ top: 6, right: 8, left: -18, bottom: 0 }}>
-        <CartesianGrid strokeDasharray="3 3" stroke={KISI} vertical={false} />
-        <XAxis dataKey="nama" tick={SUMBU} tickLine={false} axisLine={false} interval={0} angle={-12} textAnchor="end" height={48} />
-        <YAxis tick={SUMBU} tickLine={false} axisLine={false} allowDecimals={false} />
-        <Tooltip cursor={{ fill: "rgba(148,163,184,0.08)" }} content={(p) => <Tip {...(p as unknown as TipProps)} satuan={satuan} />} />
-        <Bar dataKey="nilai" name="Jumlah" radius={[6, 6, 0, 0]} maxBarSize={48}>
-          {data.map((_, i) => (
-            <Cell key={i} fill={PALET[i % PALET.length]} />
-          ))}
-        </Bar>
-      </BarChart>
+      <div className="min-h-[15rem] flex-1" style={{ outline: "none" }}>
+        <ResponsiveContainer width="100%" height="100%">
+          <ComposedChart data={baris} margin={{ top: 8, right: 8, left: 0, bottom: 0 }} accessibilityLayer={false}>
+            <defs>
+              <linearGradient id="hcGrey" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0%" stopColor="#94a3b8" stopOpacity={0.9} />
+                <stop offset="100%" stopColor="#94a3b8" stopOpacity={0.35} />
+              </linearGradient>
+            </defs>
+            <CartesianGrid strokeDasharray="3 3" stroke="rgba(148,163,184,0.16)" vertical={false} />
+            <XAxis
+              dataKey="nama"
+              tick={{ fill: "var(--foreground)", fontSize: 10, fontWeight: 600 }}
+              tickLine={false}
+              axisLine={false}
+              interval={0}
+              height={22}
+            />
+            <YAxis
+              allowDecimals={false}
+              tick={{ fill: "var(--foreground)", fontSize: 11, fontWeight: 600 }}
+              tickLine={false}
+              axisLine={false}
+              width={34}
+            />
+            <Tooltip
+              cursor={{ fill: "rgba(148,163,184,0.08)" }}
+              content={(p) => <TipBatang {...(p as unknown as { active?: boolean; payload?: readonly { payload?: BarisBatang }[] })} satuan={satuan} />}
+            />
+            <Bar dataKey="nilai" name="Jumlah" fill="url(#hcGrey)" radius={[3, 3, 0, 0]} maxBarSize={34} />
+          </ComposedChart>
+        </ResponsiveContainer>
+      </div>
     </Bingkai>
   );
 }
+
+/* ──────────────────────────────── tren ──────────────────────────────── */
 
 export function GrafikGaris({
   judul,
@@ -148,69 +176,168 @@ export function GrafikGaris({
   satuan?: string;
   pesanKosong?: string;
 }) {
-  if (data.length === 0) return <Kosong judul={judul} subjudul={subjudul} pesan={pesanKosong} />;
+  const baris = React.useMemo<BarisBatang[]>(
+    () => data.map((d) => ({ nama: singkatPeriode(d.nama), penuh: d.nama, nilai: d.nilai })),
+    [data],
+  );
+  if (baris.length === 0) return <Kosong judul={judul} subjudul={subjudul} pesan={pesanKosong} />;
+
   return (
     <Bingkai judul={judul} subjudul={subjudul}>
-      <LineChart data={data} margin={{ top: 6, right: 8, left: -18, bottom: 0 }}>
-        <CartesianGrid strokeDasharray="3 3" stroke={KISI} vertical={false} />
-        <XAxis dataKey="nama" tick={SUMBU} tickLine={false} axisLine={false} />
-        <YAxis tick={SUMBU} tickLine={false} axisLine={false} allowDecimals={false} />
-        <Tooltip content={(p) => <Tip {...(p as unknown as TipProps)} satuan={satuan} />} />
-        <Line type="monotone" dataKey="nilai" name="Jumlah" stroke={PALET[0]} strokeWidth={2} dot={{ r: 3 }} />
-      </LineChart>
+      <div className="min-h-[15rem] flex-1" style={{ outline: "none" }}>
+        <ResponsiveContainer width="100%" height="100%">
+          <ComposedChart data={baris} margin={{ top: 8, right: 8, left: 0, bottom: 0 }} accessibilityLayer={false}>
+            <defs>
+              <linearGradient id="hcBlue" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0%" stopColor={BIRU} stopOpacity={0.35} />
+                <stop offset="100%" stopColor={BIRU} stopOpacity={0} />
+              </linearGradient>
+            </defs>
+            <CartesianGrid strokeDasharray="3 3" stroke="rgba(148,163,184,0.16)" vertical={false} />
+            <XAxis
+              dataKey="nama"
+              tick={{ fill: "var(--foreground)", fontSize: 10, fontWeight: 600 }}
+              tickLine={false}
+              axisLine={false}
+              interval={0}
+              height={22}
+            />
+            <YAxis
+              allowDecimals={false}
+              tick={{ fill: "var(--foreground)", fontSize: 11, fontWeight: 600 }}
+              tickLine={false}
+              axisLine={false}
+              width={34}
+            />
+            <Tooltip
+              content={(p) => <TipBatang {...(p as unknown as { active?: boolean; payload?: readonly { payload?: BarisBatang }[] })} satuan={satuan} />}
+            />
+            <Area
+              type="monotone"
+              dataKey="nilai"
+              name="Jumlah"
+              stroke={BIRU}
+              strokeWidth={2.5}
+              fill="url(#hcBlue)"
+              dot={{ r: 3, fill: BIRU }}
+              activeDot={{ r: 5 }}
+              className="chart-glow-blue"
+            />
+          </ComposedChart>
+        </ResponsiveContainer>
+      </div>
     </Bingkai>
   );
 }
+
+/* ─────────────────────────────── donat ─────────────────────────────── */
 
 export function GrafikDonat({
   judul,
   subjudul,
   data,
+  labelTotal = "Total",
   pesanKosong = "Belum ada datanya.",
 }: {
   judul: string;
   subjudul?: string;
   data: TitikData[];
+  labelTotal?: string;
   pesanKosong?: string;
 }) {
-  const total = data.reduce((a, d) => a + d.nilai, 0);
-  if (data.length === 0 || total === 0) return <Kosong judul={judul} subjudul={subjudul} pesan={pesanKosong} />;
+  const [aktifKey, setAktifKey] = React.useState<string | null>(null);
+
+  const slices = React.useMemo(
+    () => data.filter((d) => d.nilai > 0).map((d, i) => ({ ...d, warna: WARNA[i % WARNA.length] })),
+    [data],
+  );
+  const total = slices.reduce((a, s) => a + s.nilai, 0);
+
+  // Bagian aktif = yang sedang disentuh; bawaannya yang terbesar. Angka di
+  // tengah mengikuti bagian ini — itulah gunanya bisa disentuh.
+  const aktif = slices.find((s) => s.nama === aktifKey) ?? slices[0];
+  const persen = total && aktif ? Math.round((aktif.nilai / total) * 100) : 0;
+
+  // Panjang busur tiap bagian + putaran awalnya, dihitung dari jumlah bagian
+  // sebelumnya. Ditulis dengan reduce, bukan penampung yang diubah-ubah:
+  // penampung di dalam useMemo membuat hasilnya bergantung pada urutan render.
+  const busur = React.useMemo(
+    () =>
+      slices.reduce<{ nama: string; warna: string; len: number; rot: number }[]>((acc, s) => {
+        const sebelumnya = acc.reduce((a, b) => a + b.len, 0);
+        const len = total ? (s.nilai / total) * CIRC : 0;
+        acc.push({ nama: s.nama, warna: s.warna, len, rot: -90 + (sebelumnya / CIRC) * 360 });
+        return acc;
+      }, []),
+    [slices, total],
+  );
+
+  if (slices.length === 0 || total === 0) return <Kosong judul={judul} subjudul={subjudul} pesan={pesanKosong} />;
+
   return (
-    <Card>
-      <CardHeader className="pb-2">
-        <CardTitle>{judul}</CardTitle>
-        {subjudul && <p className="text-[11px] text-muted-foreground">{subjudul}</p>}
-      </CardHeader>
-      <CardContent>
-        <div className="flex flex-wrap items-center gap-4">
-          <div className="h-[190px] min-w-[190px] flex-1">
-            <ResponsiveContainer width="100%" height="100%">
-              <PieChart>
-                <Pie data={data} dataKey="nilai" nameKey="nama" innerRadius={52} outerRadius={80} paddingAngle={2}>
-                  {data.map((_, i) => (
-                    <Cell key={i} fill={PALET[i % PALET.length]} />
-                  ))}
-                </Pie>
-                <Tooltip content={(p) => <Tip {...(p as unknown as TipProps)} />} />
-              </PieChart>
-            </ResponsiveContainer>
-          </div>
-          {/* Keterangan ditulis sendiri, bukan legend bawaan: nama outlet dan
-              kategori di sini panjang-panjang, dan legend bawaan memotongnya
-              tanpa memberi tahu bahwa terpotong. */}
-          <ul className="min-w-[10rem] flex-1 space-y-1.5">
-            {data.map((d, i) => (
-              <li key={d.nama} className="flex items-center gap-2 text-[12px]">
-                <span className="size-2.5 shrink-0 rounded-sm" style={{ background: PALET[i % PALET.length] }} />
-                <span className="min-w-0 flex-1 truncate text-foreground">{d.nama}</span>
-                <span className="shrink-0 tabular-nums text-muted-foreground">
-                  {d.nilai} · {Math.round((d.nilai / total) * 100)}%
-                </span>
-              </li>
+    <Bingkai judul={judul} subjudul={subjudul}>
+      <div className="flex flex-1 items-center gap-4 py-2">
+        <div className="relative h-44 w-44 shrink-0">
+          <svg viewBox="0 0 176 176" className="h-full w-full">
+            {busur.map((b) => (
+              <circle
+                key={b.nama}
+                cx={88}
+                cy={88}
+                r={R}
+                fill="none"
+                stroke={b.warna}
+                strokeWidth={STROKE}
+                strokeLinecap="round"
+                strokeDasharray={`${b.len} ${CIRC - b.len}`}
+                transform={`rotate(${b.rot} 88 88)`}
+                className="cursor-pointer transition-opacity"
+                style={{ opacity: aktif && b.nama === aktif.nama ? 1 : 0.9 }}
+                onMouseEnter={() => setAktifKey(b.nama)}
+                onMouseLeave={() => setAktifKey(null)}
+                onClick={() => setAktifKey(b.nama)}
+              />
             ))}
-          </ul>
+          </svg>
+          {/* Hanya angka persennya. Tanpa keterangan di bawahnya — itu yang
+              diminta, dan memang cincinnya sudah dijelaskan oleh daftar di
+              sampingnya. */}
+          <div className="pointer-events-none absolute inset-0 grid place-items-center text-center">
+            <p className="text-[2rem] font-extrabold leading-none tracking-tight" style={{ color: aktif?.warna }}>
+              {persen}%
+            </p>
+          </div>
         </div>
-      </CardContent>
-    </Card>
+
+        <ul className="min-w-0 flex-1 space-y-2">
+          {slices.map((s) => (
+            <li
+              key={s.nama}
+              onMouseEnter={() => setAktifKey(s.nama)}
+              onMouseLeave={() => setAktifKey(null)}
+              onClick={() => setAktifKey(s.nama)}
+              className="flex cursor-pointer items-start gap-2 text-xs"
+            >
+              <span className="mt-1 size-2.5 shrink-0 rounded-full" style={{ background: s.warna }} />
+              <span className={aktif && s.nama === aktif.nama ? "font-medium text-foreground" : "text-foreground/85"}>
+                {s.nama}
+              </span>
+            </li>
+          ))}
+        </ul>
+      </div>
+
+      <div className="flex items-center justify-between border-t border-border/60 pt-4">
+        <span className="text-xs text-muted-foreground">{labelTotal}</span>
+        <div className="flex items-center gap-2">
+          <div className="flex -space-x-1.5">
+            {slices.slice(0, 5).map((s) => (
+              <span key={s.nama} className="size-4 rounded-full ring-2 ring-card" style={{ background: s.warna }} />
+            ))}
+          </div>
+          <span className="text-sm font-semibold tabular-nums text-foreground">{total}</span>
+        </div>
+      </div>
+    </Bingkai>
   );
 }
