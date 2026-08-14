@@ -8,6 +8,7 @@ import {
   ChartSpline,
   ClipboardCheck,
   ConciergeBell,
+  FileSignature,
   FileText,
   FileUp,
   FlaskConical,
@@ -50,6 +51,7 @@ import {
 
 /** Maps nav icon names (strings in nav.ts) to Lucide components. */
 export const NAV_ICONS: Record<string, LucideIcon> = {
+  FileSignature,
   LayoutDashboard,
   ChartSpline,
   ChartColumnBig,

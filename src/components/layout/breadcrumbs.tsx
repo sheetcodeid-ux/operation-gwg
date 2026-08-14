@@ -22,12 +22,26 @@ const LABELS: Record<string, string> = {
   departments: "Departemen & Divisi",
   audit: "Audit Logs",
   ca: "Coordinator",
+  "hc-mos": "HC-MOS",
+  raci: "Matriks RACI",
+  kontrak: "Kontrak Tracker",
+  karyawan: "Database Karyawan",
   area: "Region",
   outlet: "Outlet",
 };
 
 function label(seg: string) {
   if (LABELS[seg]) return LABELS[seg];
+  // Ruas berbentuk kata-berpenghubung ("organization-development") berasal dari
+  // slug halaman, bukan id — dirapikan jadi kata biasa alih-alih dicetak apa
+  // adanya. Diperiksa sebelum aturan panjang di bawahnya, yang akan
+  // meloloskannya mentah-mentah.
+  if (/^[a-z]+(-[a-z]+)+$/.test(seg)) {
+    return seg
+      .split("-")
+      .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
+      .join(" ");
+  }
   // ids like out_001 / usr_004 / area_001 → keep short
   if (/_\d+$/.test(seg) || seg.length > 14) return seg.replace(/_/g, " ");
   return seg.charAt(0).toUpperCase() + seg.slice(1);

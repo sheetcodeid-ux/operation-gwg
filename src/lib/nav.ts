@@ -25,6 +25,8 @@ export type MenuKey =
   | "sys_submit"
   | "elearning"
   | "elearning_admin"
+  | "hcmos"
+  | "hc_kontrak"
   | "hc_request"
   | "hc_reqreview"
   | "hc_training"
@@ -102,6 +104,8 @@ export const NAV_MENUS: Omit<NavItem, "section" | "group" | "groupIcon">[] = [
   { key: "sys_submit", label: "Pengajuan System", href: "/system/pengajuan", icon: "MonitorCog", hidden: true },
   { key: "elearning", label: "E-Learning", href: "/elearning", icon: "GraduationCap" },
   { key: "elearning_admin", label: "Kelola E-Learning", href: "/elearning/kelola", icon: "LibraryBig" },
+  { key: "hcmos", label: "HC-MOS", href: "/hc-mos", icon: "Network" },
+  { key: "hc_kontrak", label: "Kontrak Tracker", href: "/hc-mos/kontrak", icon: "FileSignature" },
   { key: "hc_request", label: "Pengajuan", href: "/pengajuan", icon: "Send" },
   { key: "hc_reqreview", label: "Permintaan Karyawan", href: "/hc/permintaan", icon: "ClipboardCheck" },
   { key: "hc_training", label: "Pelatihan", href: "/hc/pelatihan", icon: "GraduationCap" },
@@ -191,12 +195,12 @@ export const ROLE_MENUS: Record<Role, MenuKey[]> = {
   data_operation: ["work", "op_analysis", "assessment"],
   pos_operation: ["work", "op_analysis", "assessment"],
   admin_operation: ["work", "complaints", "op_analysis", "assessment"],
-  supervisor: ["events", "hospitality", "hygiene", "complaints", "hc_submit", "sys_submit"], // field SPV — event/promo proposals + visits + HC docs + system requests
+  supervisor: ["events", "hospitality", "hygiene", "complaints", "hc_kontrak", "hc_submit", "sys_submit"], // field SPV — event/promo proposals + visits + HC docs + system requests
   head_bar_rnd: ["hpp_dash", "work", "hpp", "hpp_db", "hpp_bahan", "hpp_price", "hpp_comp", "assessment"],
   bar_rnd: ["hpp_dash", "work", "hpp", "hpp_db", "hpp_bahan", "hpp_price", "hpp_comp", "assessment"],
   kitchen_rnd: ["hpp_dash", "work", "hpp", "hpp_db", "hpp_bahan", "hpp_price", "hpp_comp", "assessment"],
   coordinator_rnd: ["hpp_dash", "work", "hpp", "hpp_db", "hpp_bahan", "hpp_price", "hpp_comp", "assessment"],
-  legal: ["work", "hc_review", "hc_reqreview", "hc_training", "assessment"], // HRD — assessment + antrian dokumen HC
+  legal: ["work", "hcmos", "hc_kontrak", "hc_review", "hc_reqreview", "hc_training", "assessment"], // HRD — assessment + antrian dokumen HC
   assessor: ["assessment"], // division Head / evaluator — assessment only
   member: ["assessment"], // HO staff — assessment; other access via `department`
 };
@@ -238,6 +242,7 @@ export const DIVISION_GROUPS: Partial<Record<Division, NavGroupDef[]>> = {
   ],
   Supervisor: [
     { name: "Operasional Outlet", icon: "Store", menus: ["hospitality", "hygiene", "complaints"] },
+    { name: "Kepegawaian", icon: "UserRound", menus: ["hc_kontrak"] },
   ],
   "Product Development & Quality": [
     { name: "Kalkulasi HPP", icon: "Calculator", menus: ["hpp", "hpp_db", "hpp_bahan", "hpp_price", "hpp_comp"] },
@@ -246,6 +251,7 @@ export const DIVISION_GROUPS: Partial<Record<Division, NavGroupDef[]>> = {
     { name: "Talent Acquisition", icon: "UserRound", menus: ["hc_reqreview", "hc_training"] },
     { name: "Administrasi Personalia", icon: "FolderInput", menus: ["hc_review"] },
     { name: "Kinerja & Penilaian", icon: "Target", menus: ["assessment"] },
+    { name: "HC-MOS", icon: "Network", menus: ["hcmos", "hc_kontrak"] },
   ],
   Creative: [
     { name: "Permintaan Masuk", icon: "Palette", menus: ["creative_design"] },
@@ -262,12 +268,12 @@ const DIVISION_MENUS: { division: Division; menus: MenuKey[] }[] = [
   // sys_review sits under Operation for placement, but access is jabatan-gated
   // (System Support) via an injected grant — it is NOT a general Operation menu.
   { division: "Operation", menus: [...OPERATION_FULL, "sys_review", "elearning", "elearning_admin"] },
-  { division: "Supervisor", menus: ["events", "hospitality", "hygiene", "complaints", "hc_submit", "sys_submit"] },
+  { division: "Supervisor", menus: ["events", "hospitality", "hygiene", "complaints", "hc_kontrak", "hc_submit", "sys_submit"] },
   // Complaints ikut di sini, tapi PDQ hanya melihat kategori Food Quality —
   // penyaringnya di `complaintCategoryScope`, dan memasukkan komplain tetap
   // milik Marketing Communication.
   { division: "Product Development & Quality", menus: ["hpp_dash", "work", "hpp", "hpp_db", "hpp_bahan", "hpp_price", "hpp_comp", "complaints"] },
-  { division: "Human Capital", menus: ["work", "hc_review", "hc_reqreview", "hc_training", "assessment"] },
+  { division: "Human Capital", menus: ["work", "hcmos", "hc_kontrak", "hc_review", "hc_reqreview", "hc_training", "assessment"] },
   // New department-aligned divisions — Work Tracker only for now.
   { division: "Finance", menus: ["work", "fin_training"] },
   { division: "Creative", menus: ["work", "creative_design"] },

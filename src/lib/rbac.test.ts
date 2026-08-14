@@ -54,14 +54,14 @@ describe("menu access matrix", () => {
   });
 
   it("gives HRD (legal) Work Tracker + HC Document Queue + Assessment Golongan", () => {
-    expect(ROLE_MENUS.legal).toEqual(["work", "hc_review", "hc_reqreview", "hc_training", "assessment"]);
+    expect(ROLE_MENUS.legal).toEqual(["work", "hcmos", "hc_kontrak", "hc_review", "hc_reqreview", "hc_training", "assessment"]);
     expect(canSeeMenu("legal", "hc_review")).toBe(true);
     expect(canSeeMenu("legal", "assessment")).toBe(true);
     expect(canSeeMenu("legal", "dashboard")).toBe(false);
   });
 
   it("gives supervisor Hospitality + Hygiene + Complaints + HC Document Requests (field SPV, no dashboard/assessment)", () => {
-    expect(ROLE_MENUS.supervisor).toEqual(["events", "hospitality", "hygiene", "complaints", "hc_submit", "sys_submit"]);
+    expect(ROLE_MENUS.supervisor).toEqual(["events", "hospitality", "hygiene", "complaints", "hc_kontrak", "hc_submit", "sys_submit"]);
     expect(canSeeMenu("supervisor", "hc_submit")).toBe(true);
     expect(canSeeMenu("supervisor", "hygiene")).toBe(true);
     expect(canSeeMenu("supervisor", "hospitality")).toBe(true);
