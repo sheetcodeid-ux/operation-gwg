@@ -12,7 +12,16 @@ import { NextResponse, type NextRequest } from "next/server";
 // The PWA manifest and service worker MUST be publicly fetchable (unauthenticated),
 // otherwise the browser can't read the manifest / register the SW and the app
 // stops being installable.
-const PUBLIC_PATHS = ["/login", "/api/cron/", "/manifest.webmanifest", "/sw.js"];
+// /api/galat-klien menerima laporan galat dari peramban. Justru galat di
+// halaman login — saat pengguna belum punya sesi — yang paling perlu tercatat;
+// kalau rute ini ikut dialihkan ke /login, laporannya tidak pernah sampai.
+const PUBLIC_PATHS = [
+  "/login",
+  "/api/cron/",
+  "/api/galat-klien",
+  "/manifest.webmanifest",
+  "/sw.js",
+];
 
 function hasSession(req: NextRequest): boolean {
   if (req.cookies.get("gwg_uid")) return true;

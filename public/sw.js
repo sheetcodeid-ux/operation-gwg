@@ -7,7 +7,7 @@
 //    so cache-first them; the HTML shell is always network-first so a new deploy
 //    is picked up (and references the current chunks).
 
-const CACHE = "gwg-shell-v3";
+const CACHE = "gwg-shell-v4";
 const OFFLINE_URL = "/offline.html";
 
 self.addEventListener("install", (event) => {
@@ -33,8 +33,17 @@ self.addEventListener("message", (event) => {
   if (event.data === "skip-waiting") self.skipWaiting();
 });
 
+// Hanya berkas yang namanya MEMUAT sidik isinya yang aman disimpan selamanya,
+// ditambah gambar dan huruf yang jarang berubah.
+//
+// Sebelumnya aturan ini mencakup SEMUA berkas berakhiran .js dan .css, termasuk
+// yang namanya tetap sama antar penerapan versi. Berkas seperti itu tersimpan
+// selamanya di perangkat: halamannya sudah versi baru, tapi berkas kodenya
+// masih versi lama — dan menyegarkan halaman tidak menolong, karena yang
+// dilayani tetap salinan lama dari perangkat itu sendiri.
 function isImmutableAsset(url) {
-  return url.pathname.startsWith("/_next/static/") || /\.(?:js|css|woff2?|png|jpg|jpeg|svg|webp|ico)$/.test(url.pathname);
+  if (url.pathname.startsWith("/_next/static/")) return true;
+  return /\.(?:woff2?|png|jpg|jpeg|svg|webp|ico)$/.test(url.pathname);
 }
 
 self.addEventListener("fetch", (event) => {

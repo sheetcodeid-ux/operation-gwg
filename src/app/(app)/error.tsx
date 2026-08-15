@@ -4,6 +4,7 @@ import { useEffect } from "react";
 import { AlertTriangle, RotateCcw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { isChunkLoadError, recoverFromChunkError } from "@/lib/chunk-recovery";
+import { laporkanGalat } from "@/components/client-error-reporter";
 
 /**
  * Segment-level error boundary for the authenticated app. Catches render/data
@@ -19,6 +20,9 @@ import { isChunkLoadError, recoverFromChunkError } from "@/lib/chunk-recovery";
 export default function AppError({ error, reset }: { error: Error & { digest?: string }; reset: () => void }) {
   useEffect(() => {
     console.error("[app-error]", error);
+    // Dicatat ke jejak server supaya kegagalan di perangkat seseorang bisa
+    // ditelusuri tanpa menunggu ia sempat memotret layarnya.
+    laporkanGalat("app-error", error);
     recoverFromChunkError(error);
   }, [error]);
 
@@ -38,6 +42,14 @@ export default function AppError({ error, reset }: { error: Error & { digest?: s
           : "Halaman ini gagal dimuat. Coba muat ulang — jika masih bermasalah, hubungi administrator."}
       </p>
       {error.digest && <p className="mt-2 text-xs text-muted-foreground/70">Ref: {error.digest}</p>}
+      {/* Pesan aslinya ikut ditampilkan (kecuali saat sekadar memuat versi baru)
+          supaya foto layar dari perangkat siapa pun langsung bisa dibaca
+          penyebabnya, tanpa harus menunggu jejak servernya. */}
+      {!chunk && error.message && (
+        <p className="mt-3 w-full break-words rounded-lg border border-border bg-muted/40 px-3 py-2 text-left font-mono text-[11px] leading-relaxed text-muted-foreground">
+          {String(error.message).slice(0, 300)}
+        </p>
+      )}
       <Button onClick={() => (chunk ? window.location.reload() : reset())} className="mt-5">
         <RotateCcw className="size-4" /> {chunk ? "Muat ulang sekarang" : "Coba lagi"}
       </Button>

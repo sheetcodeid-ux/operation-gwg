@@ -16,9 +16,58 @@ function isChunkError(error: unknown): boolean {
   return /ChunkLoadError|Loading (chunk|CSS chunk)|dynamically imported module|module script failed/i.test(String(err.message ?? error));
 }
 
+/**
+ * Buang service worker beserta seluruh isi cache-nya, lalu muat ulang.
+ *
+ * Ini pintu keluar untuk kegagalan yang TIDAK sembuh dengan menyegarkan
+ * halaman — persis yang dialami di lapangan: sudah di-refresh, sudah keluar
+ * masuk, tetap layar galat. Penyebab tersering kelas ini adalah sisa berkas
+ * versi lama yang masih dilayani dari cache perangkat itu sendiri, dan tidak
+ * ada satu pun tombol di peramban yang bisa ditekan pengguna biasa untuk
+ * membersihkannya.
+ */
+async function bersihkanLaluMuatUlang() {
+  try {
+    if (typeof navigator !== "undefined" && "serviceWorker" in navigator) {
+      const daftar = await navigator.serviceWorker.getRegistrations();
+      await Promise.all(daftar.map((r) => r.unregister()));
+    }
+    if (typeof caches !== "undefined") {
+      const kunci = await caches.keys();
+      await Promise.all(kunci.map((k) => caches.delete(k)));
+    }
+  } catch {
+    /* tetap lanjut memuat ulang walau pembersihannya gagal */
+  }
+  // `true` sudah tidak berpengaruh di peramban modern; menambahkan penanda
+  // waktu memastikan permintaannya benar-benar baru.
+  window.location.replace(window.location.pathname + "?segar=" + Date.now());
+}
+
 export default function GlobalError({ error, reset }: { error: Error & { digest?: string }; reset: () => void }) {
   useEffect(() => {
     console.error("[global-error]", error);
+
+    // Kirim galatnya ke jejak server. Ditulis langsung di sini, bukan lewat
+    // modul bersama, karena batas galat ini sengaja tidak bergantung pada
+    // modul mana pun — modul itulah yang mungkin gagal dimuat.
+    try {
+      void fetch("/api/galat-klien", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        keepalive: true,
+        body: JSON.stringify({
+          kind: "global-error",
+          digest: error?.digest,
+          message: error?.message ?? String(error),
+          stack: error?.stack,
+          path: window.location.pathname + window.location.search,
+        }),
+      });
+    } catch {
+      /* diabaikan */
+    }
+
     // Stale page shell after a deploy → hard-reload once (guarded against loops).
     if (typeof window !== "undefined" && isChunkError(error)) {
       try {
@@ -53,26 +102,77 @@ export default function GlobalError({ error, reset }: { error: Error & { digest?
           <p style={{ marginTop: 8, fontSize: "0.875rem", color: "#9ca3af" }}>
             Aplikasi mengalami masalah tak terduga. Silakan muat ulang halaman.
           </p>
-          {error.digest && (
-            <p style={{ marginTop: 8, fontSize: "0.75rem", color: "#6b7280" }}>Ref: {error.digest}</p>
-          )}
-          <button
-            onClick={reset}
-            style={{
-              marginTop: 20,
-              height: 40,
-              padding: "0 16px",
-              borderRadius: 8,
-              border: "none",
-              background: "#6366f1",
-              color: "white",
-              fontSize: "0.875rem",
-              fontWeight: 500,
-              cursor: "pointer",
-            }}
-          >
-            Coba lagi
-          </button>
+          <p style={{ marginTop: 8, fontSize: "0.75rem", color: "#6b7280" }}>
+            {/* Kode rujukan hanya ada pada galat sisi server. Tulisan "tanpa
+                kode" bukan hiasan: itulah yang membedakan galat server dari
+                galat peramban, dan menentukan ke mana penelusurannya diarahkan. */}
+            Ref: {error.digest || "tanpa kode (galat peramban)"}
+          </p>
+
+          {/* Pesan galatnya ditampilkan apa adanya, bukan disembunyikan.
+              Layar ini hanya muncul di perangkat orang lain, sering di kota
+              lain, dan satu-satunya laporan yang sampai ke sini adalah foto
+              layar. Kalau fotonya cuma berisi "Terjadi kesalahan sistem",
+              penelusurannya berubah jadi tebak-tebakan berhari-hari — sudah
+              terbukti. Dengan pesan aslinya ikut terfoto, satu kiriman WhatsApp
+              sudah cukup untuk tahu penyebabnya. */}
+          {error.message ? (
+            <p
+              style={{
+                marginTop: 12,
+                fontSize: "0.7rem",
+                lineHeight: 1.5,
+                color: "#9ca3af",
+                background: "#111827",
+                border: "1px solid #1f2937",
+                borderRadius: 8,
+                padding: "8px 10px",
+                textAlign: "left",
+                wordBreak: "break-word",
+                fontFamily: "ui-monospace, monospace",
+              }}
+            >
+              {String(error.message).slice(0, 300)}
+            </p>
+          ) : null}
+          <div style={{ marginTop: 20, display: "flex", gap: 8, justifyContent: "center", flexWrap: "wrap" }}>
+            <button
+              onClick={reset}
+              style={{
+                height: 40,
+                padding: "0 16px",
+                borderRadius: 8,
+                border: "none",
+                background: "#6366f1",
+                color: "white",
+                fontSize: "0.875rem",
+                fontWeight: 500,
+                cursor: "pointer",
+              }}
+            >
+              Coba lagi
+            </button>
+            <button
+              onClick={() => void bersihkanLaluMuatUlang()}
+              style={{
+                height: 40,
+                padding: "0 16px",
+                borderRadius: 8,
+                border: "1px solid #374151",
+                background: "transparent",
+                color: "#e5e7eb",
+                fontSize: "0.875rem",
+                fontWeight: 500,
+                cursor: "pointer",
+              }}
+            >
+              Bersihkan &amp; Muat Ulang
+            </button>
+          </div>
+          <p style={{ marginTop: 12, fontSize: "0.75rem", color: "#6b7280", lineHeight: 1.6 }}>
+            Kalau menekan &ldquo;Coba lagi&rdquo; tidak menolong, tekan &ldquo;Bersihkan &amp; Muat Ulang&rdquo;.
+            Tombol itu membuang berkas versi lama yang masih tersimpan di perangkat ini.
+          </p>
         </div>
       </body>
     </html>

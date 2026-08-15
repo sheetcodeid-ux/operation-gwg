@@ -44,7 +44,14 @@ describe("penjaga sesi di halaman", () => {
         const src = readFileSync(f, "utf8");
         if (!src.includes("getSessionUser(")) return false;
         // Boleh dipakai langsung HANYA kalau hasil null-nya benar-benar ditangani.
-        return !/if\s*\(!\s*\w+\)/.test(src) && !src.includes("requireSessionUser");
+        if (/if\s*\(!\s*\w+\)/.test(src) || src.includes("requireSessionUser")) return false;
+        // Rantai opsional juga menangani null. Rute yang memang boleh diakses
+        // tanpa sesi — misalnya penampung laporan galat, yang justru dipanggil
+        // dari halaman login — cukup menulis `user?.id`, dan memaksanya memakai
+        // `if (!user)` malah membuatnya menolak laporan yang ingin dikumpulkan.
+        // Yang diperiksa: variabelnya tidak pernah dibaca dengan titik biasa.
+        const nama = /(?:const|let)\s+(\w+)\s*=\s*await\s+getSessionUser\(/.exec(src)?.[1];
+        return !nama || new RegExp(`\\b${nama}\\s*\\.`).test(src);
       })
       .map(rel);
     expect(offenders).toEqual([]);
