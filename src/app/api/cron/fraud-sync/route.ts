@@ -3,6 +3,7 @@ import { syncFraudRange, syncSalesDaily, syncSalesPeriod } from "@/lib/data/frau
 import { esbSetDeadline } from "@/lib/integrations/esb-client";
 import { syncSeasonalDays } from "@/lib/data/seasonal";
 import { getAppConfig } from "@/lib/data/app-config";
+import { rateLimit } from "@/lib/rate-limit";
 
 /**
  * Server-side fraud sync — runs UNATTENDED so the data is always ready before
@@ -63,17 +64,57 @@ async function backfillHistory(
   return { synced, windows, error };
 }
 
+/**
+ * Berapa kali pemanggil yang HANYA berbekal User-Agent boleh lewat per jam.
+ *
+ * Cron harian Vercel butuh satu panggilan sehari, jadi dua per jam sudah sangat
+ * longgar untuknya — tapi cukup rapat untuk mencegah rute ini dipakai berulang
+ * kali oleh orang luar.
+ */
+const UA_LIMIT = 2;
+const UA_WINDOW_MS = 60 * 60 * 1000;
+
+/**
+ * Siapa yang boleh menjalankan sinkronisasi ini.
+ *
+ * Urutannya disengaja: token dulu, User-Agent belakangan.
+ *
+ * User-Agent adalah tulisan bebas yang ditentukan sepenuhnya oleh pemanggil —
+ * siapa pun di internet bisa mengirim `User-Agent: vercel-cron` dan dulunya
+ * langsung diterima. Yang bisa ia lakukan bukan membaca data, melainkan
+ * memaksa server memanggil ESB dan menulis ke basis data berulang kali:
+ * kuota vendor dan jatah waktu fungsi Vercel yang jadi korbannya.
+ *
+ * Jalur User-Agent tidak dihapus, karena cron harian Vercel akan berhenti
+ * bekerja kalau `CRON_SECRET` belum disetel — dan mematikan cadangan tanpa
+ * pemberitahuan lebih berbahaya daripada lubangnya sendiri. Yang dilakukan:
+ *  • begitu `CRON_SECRET` disetel di Vercel, jalur User-Agent MATI total;
+ *  • selama belum disetel, jalur itu dibatasi {@link UA_LIMIT} kali per jam.
+ */
 async function authorized(req: Request): Promise<boolean> {
   const url = new URL(req.url);
   const token = url.searchParams.get("token") ?? req.headers.get("authorization")?.replace(/^Bearer\s+/i, "");
   const secret = process.env.CRON_SECRET;
   if (secret && token === secret) return true;
-  if ((req.headers.get("user-agent") ?? "").startsWith("vercel-cron")) return true;
   if (token) {
     const dbToken = await getAppConfig("fraud_sync_token");
     if (dbToken && token === dbToken) return true;
   }
-  return false;
+
+  const uaCocok = (req.headers.get("user-agent") ?? "").startsWith("vercel-cron");
+  if (!uaCocok) return false;
+  if (secret) {
+    // Sudah ada cara yang benar untuk membuktikan diri, jadi tebakan lewat
+    // User-Agent tidak lagi diperlukan — dan karenanya tidak lagi diterima.
+    console.warn("[cron] permintaan ber-User-Agent vercel-cron ditolak: CRON_SECRET sudah disetel");
+    return false;
+  }
+  const rl = rateLimit("cron:fraud-sync:ua", UA_LIMIT, UA_WINDOW_MS);
+  if (!rl.ok) {
+    console.warn("[cron] jalur User-Agent melewati batas; setel CRON_SECRET di Vercel agar rute ini benar-benar terkunci");
+    return false;
+  }
+  return true;
 }
 
 export async function GET(req: Request) {

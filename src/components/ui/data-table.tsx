@@ -16,6 +16,7 @@ import { ArrowUpDown, Download, Search, SlidersHorizontal } from "lucide-react";
 import { Input } from "./input";
 import { Popover } from "./popover";
 import { downloadCsv, toCsv } from "@/lib/csv";
+import { todayIso } from "@/lib/now";
 import { cn } from "@/lib/utils";
 
 interface DataTableProps<TData, TValue> {
@@ -101,7 +102,7 @@ export function DataTable<TData, TValue>({
         return v as string | number | boolean;
       }),
     );
-    const stamp = new Date().toISOString().slice(0, 10);
+    const stamp = todayIso();
     downloadCsv(`${tableId ?? "export"}-${stamp}`, toCsv(headers, rows));
   }
 

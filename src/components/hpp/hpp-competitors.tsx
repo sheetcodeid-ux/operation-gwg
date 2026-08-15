@@ -6,6 +6,7 @@ import { ArrowDownRight, ArrowUpRight, ChevronDown, Minus, Plus, Scale, Store, T
 import { toast } from "sonner";
 import { saveCompetitorPriceAction, deleteCompetitorPriceAction } from "@/lib/actions/hpp-competitors";
 import type { CompetitorInsight, CompetitorPrice, PricePosition } from "@/lib/data/hpp-competitors";
+import { todayIso } from "@/lib/now";
 import { Button } from "@/components/ui/button";
 import { Field, Input } from "@/components/ui/input";
 import { StatTile } from "@/components/ui/stat";
@@ -41,7 +42,7 @@ type Form = {
   observedAt: string;
 };
 
-const today = () => new Date().toISOString().slice(0, 10);
+const today = todayIso;
 const empty = (): Form => ({ menuId: "", menuName: "", ourPrice: 0, city: "", source: "GoFood", observedAt: today() });
 
 export type MenuOption = {

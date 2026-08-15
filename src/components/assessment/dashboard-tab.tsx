@@ -22,6 +22,7 @@ import { departmentOptions, employeesForPosition, formatGolongan, positionsForDe
 import { ASSESSMENTS, LATEST_ASSESSMENTS, computeResult, historyFor, sessionToEnriched, type EnrichedRecord, type RecoKind, type ResultBundle } from "@/lib/assessment/result";
 import { deleteSession, listAllSessions } from "@/lib/actions/assessment";
 import { HASIL_META, HASIL_OPTIONS, type AssessmentRecord, type HasilStatus } from "@/lib/assessment/records";
+import { todayIso } from "@/lib/now";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { DataTable } from "@/components/ui/data-table";
@@ -102,7 +103,7 @@ export function DashboardTab() {
         // Carry the server session id so the running record and its polled DB twin
         // de-duplicate to a single row (no more "Bella" appearing twice).
         id: a.session?.id ?? "live",
-        tanggal: new Date().toISOString().slice(0, 10),
+        tanggal: todayIso(),
         batch: a.candidate.batch || "—",
         nik: a.candidate.nik || "—",
         name: a.resolved.nama,
@@ -231,7 +232,7 @@ export function DashboardTab() {
       golongan: golNow || "—",
       golonganTujuan: golNext || "—",
       batch: a.candidate.batch || "—",
-      tanggal: new Date().toISOString().slice(0, 10),
+      tanggal: todayIso(),
       source: "live",
     };
   }

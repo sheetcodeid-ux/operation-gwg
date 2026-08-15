@@ -8,6 +8,7 @@ import { PRIORITY_META, TASK_STATUS_META, WORK_CATEGORIES, WORK_BRANDS } from "@
 import type { Priority, TaskStatus } from "@/lib/types";
 import { addTaskCategoryAction, createTaskAction, deleteTaskCategoryAction, updateTaskAction } from "@/lib/actions/work";
 import { cn } from "@/lib/utils";
+import { isoTanggalLokal } from "@/lib/now";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetTrigger, useSheetControl } from "@/components/ui/sheet";
 import { Field, Input, Textarea } from "@/components/ui/input";
@@ -50,15 +51,12 @@ const STATUSES = Object.keys(TASK_STATUS_META) as TaskStatus[];
 function defaultDateISO(offsetDays = 0) {
   const d = new Date();
   d.setDate(d.getDate() + offsetDays);
-  const y = d.getFullYear();
-  const m = String(d.getMonth() + 1).padStart(2, "0");
-  const day = String(d.getDate()).padStart(2, "0");
-  return `${y}-${m}-${day}`;
+  return isoTanggalLokal(d);
 }
 
 function toDateInput(iso: string) {
   const d = new Date(iso);
-  return Number.isNaN(+d) ? defaultDateISO() : d.toISOString().slice(0, 10);
+  return Number.isNaN(+d) ? defaultDateISO() : isoTanggalLokal(d);
 }
 
 /** Slide-in (Sheet) task form — create or edit, by division, with optional branch. Shared by Dashboard + Work Tracker. */

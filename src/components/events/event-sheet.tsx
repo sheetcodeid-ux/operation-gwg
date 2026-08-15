@@ -7,7 +7,7 @@ import { toast } from "sonner";
 import { EVENT_MILESTONES, EVENT_STATUS_META } from "@/lib/constants";
 import type { EventMilestone, EventStatus } from "@/lib/types";
 import { createEventAction, updateEventAction } from "@/lib/actions/events";
-import { nowMs } from "@/lib/now";
+import { isoTanggalLokal, nowMs } from "@/lib/now";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetTrigger, useSheetControl } from "@/components/ui/sheet";
@@ -34,12 +34,12 @@ const STATUSES = Object.keys(EVENT_STATUS_META) as EventStatus[];
 
 function defaultDateISO(offsetDays = 0) {
   const d = new Date(nowMs());
-  d.setUTCDate(d.getUTCDate() + offsetDays);
-  return d.toISOString().slice(0, 10);
+  d.setDate(d.getDate() + offsetDays);
+  return isoTanggalLokal(d);
 }
 function toDateInput(iso: string) {
   const d = new Date(iso);
-  return Number.isNaN(+d) ? defaultDateISO() : d.toISOString().slice(0, 10);
+  return Number.isNaN(+d) ? defaultDateISO() : isoTanggalLokal(d);
 }
 
 /** Slide-in (Sheet) event form — create or edit. PIC = Coordinator Area. */

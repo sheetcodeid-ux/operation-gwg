@@ -19,6 +19,20 @@ const COOKIE_OPTS = {
   sameSite: "lax" as const,
   path: "/",
   maxAge: 60 * 60 * 24 * 7,
+  /**
+   * Cookie sesi TIDAK BOLEH ikut terkirim lewat sambungan biasa (http).
+   *
+   * Tanpa penanda ini, satu permintaan http saja — tautan lama, ketikan alamat
+   * tanpa "https", satu gambar dari halaman lain — sudah cukup membuat peramban
+   * mengirimkan cookie ini dalam keadaan terbuka. Siapa pun yang berada di
+   * jaringan yang sama (WiFi kafe, hotspot outlet) bisa menyalinnya, dan cookie
+   * ini setara dengan kata sandi: memegangnya berarti masuk sebagai orang itu
+   * selama seminggu penuh.
+   *
+   * Dimatikan saat pengembangan karena http://localhost memang bukan https, dan
+   * memaksakannya di sana membuat login lokal tidak bisa dipakai sama sekali.
+   */
+  secure: process.env.NODE_ENV === "production",
 };
 
 /** Demo sign-in: persist the chosen persona id in a session cookie. */
