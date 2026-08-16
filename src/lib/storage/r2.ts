@@ -103,6 +103,47 @@ export async function r2Delete(key: string): Promise<void> {
   }
 }
 
+/** Satu halaman hasil penelusuran isi bucket. */
+export interface R2Halaman {
+  keys: { key: string; size: number }[];
+  /** Diteruskan ke panggilan berikutnya; kosong berarti sudah habis. */
+  lanjutan: string;
+}
+
+/**
+ * Telusuri isi bucket di bawah sebuah awalan (ListObjectsV2).
+ *
+ * Dipakai pembersih foto untuk menemukan berkas YATIM — yang terunggah tapi
+ * formulirnya tidak jadi tersimpan, sehingga tidak dirujuk baris mana pun.
+ * Tanpa penelusuran, berkas seperti itu tidak akan pernah bisa ditemukan lagi:
+ * kuncinya cuma ada di penyimpanan, tidak di basis data.
+ *
+ * Hasilnya dibaca per halaman (maks 1000 per panggilan, batas S3) supaya
+ * bucket besar tidak perlu dimuat sekaligus ke memori.
+ */
+export async function r2List(prefix: string, lanjutan = "", maxKeys = 1000): Promise<R2Halaman> {
+  const qs = new URLSearchParams({ "list-type": "2", prefix, "max-keys": String(maxKeys) });
+  if (lanjutan) qs.set("continuation-token", lanjutan);
+  const res = await client().fetch(`${endpoint}/${bucket}?${qs.toString()}`, { method: "GET" });
+  if (!res.ok) throw new Error(`R2 list gagal (${res.status})`);
+  const xml = await res.text();
+
+  // XML-nya dangkal dan bentuknya tetap, jadi dibaca dengan pencocokan pola —
+  // menambah pustaka pengurai XML untuk tiga tag tidak sepadan harganya.
+  const keys: { key: string; size: number }[] = [];
+  for (const m of xml.matchAll(/<Contents>([\s\S]*?)<\/Contents>/g)) {
+    const isi = m[1];
+    const key = /<Key>([\s\S]*?)<\/Key>/.exec(isi)?.[1];
+    if (!key) continue;
+    keys.push({ key: decodeXml(key), size: Number(/<Size>(\d+)<\/Size>/.exec(isi)?.[1] ?? 0) });
+  }
+  const habis = /<IsTruncated>false<\/IsTruncated>/i.test(xml);
+  return { keys, lanjutan: habis ? "" : (/<NextContinuationToken>([\s\S]*?)<\/NextContinuationToken>/.exec(xml)?.[1] ?? "") };
+}
+
+const decodeXml = (s: string) =>
+  s.replace(/&amp;/g, "&").replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&quot;/g, '"').replace(/&#39;/g, "'");
+
 /** An Attachment id for an R2 object is prefixed so reads know to presign it. */
 export const R2_PREFIX = "r2:";
 export const isR2Key = (id: string | undefined): boolean => !!id?.startsWith(R2_PREFIX);
