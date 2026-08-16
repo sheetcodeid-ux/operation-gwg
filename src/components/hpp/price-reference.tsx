@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Combobox } from "@/components/ui/combobox";
 import { syncEsbMenuAction } from "@/lib/actions/hpp";
 import type { PriceCompareRow, PriceStatus } from "@/lib/data/price-compare";
+import { pesanRingkas } from "@/lib/pesan-galat";
 
 const STATUS: Record<PriceStatus, { label: string; cls: string }> = {
   above: { label: "Harga ESB > HPP", cls: "bg-emerald-500/12 text-emerald-600 dark:text-emerald-400" },
@@ -87,7 +88,7 @@ export function PriceReference({ initial, esbSyncedAt, canSync }: { initial: Pri
   const sync = () =>
     startSync(async () => {
       const res = await syncEsbMenuAction();
-      if ("error" in res && res.error) { toast.error(res.error); return; }
+      if ("error" in res && res.error) { toast.error(pesanRingkas(res.error)); return; }
       const r = res as { menus?: number; complete?: boolean };
       toast.success(`Katalog ESB tersinkron — ${r.menus ?? 0} menu${r.complete === false ? " (sebagian, lanjut otomatis)" : ""}`);
     });

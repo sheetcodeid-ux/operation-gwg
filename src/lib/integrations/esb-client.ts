@@ -1,6 +1,6 @@
 import "server-only";
 
-import { extractReportData, parseCancelDetailReport, parseIdrNumber, type CancelDetailReport, type CancelDetailRow } from "./esb";
+import { bacaJsonEsb, extractReportData, parseCancelDetailReport, parseIdrNumber, type CancelDetailReport, type CancelDetailRow } from "./esb";
 
 /**
  * Authenticated ESB (erp.esb.co.id) client — runs SERVER-SIDE only, logging in
@@ -208,8 +208,23 @@ async function ensureSession(): Promise<Session> {
   return session;
 }
 
+/**
+ * Apakah badan balasan ini sebenarnya halaman LOGIN ESB?
+ *
+ * Sesi ESB yang habis tidak selalu dibalas 401/403/302. Karena permintaan kita
+ * membawa `X-Requested-With: XMLHttpRequest`, ESB kadang membalas 200 berisi
+ * halaman login utuh — dan `res.ok` bernilai benar, sehingga kode meneruskannya
+ * seolah data. Penandanya dipilih yang tidak mungkin muncul di laporan: alamat
+ * form login dan kolom kata sandi.
+ */
+const BERBAU_LOGIN = /\/site\/login|name="LoginForm|type="password"/i;
+
 /** Authenticated form POST; body is built from the session so CSRF/POST_USER_
- *  SESSION always match the session actually used (incl. after a re-login). */
+ *  SESSION always match the session actually used (incl. after a re-login).
+ *
+ *  Badannya dibaca di sini lalu dibungkus ulang jadi Response baru. Itu perlu
+ *  supaya isinya bisa diperiksa tanpa menghabiskannya — pemanggil tetap bisa
+ *  memakai `.json()` maupun `.text()` seperti biasa. */
 async function postForm(path: string, build: (s: Session) => Record<string, string>): Promise<Response> {
   const call = (s: Session) =>
     esbFetch(`${BASE}${path}`, {
@@ -225,12 +240,28 @@ async function postForm(path: string, build: (s: Session) => Record<string, stri
       body: new URLSearchParams(build(s)),
       cache: "no-store",
     });
-  let res = await call(await ensureSession());
-  if (res.status === 401 || res.status === 403 || res.status === 302) {
+
+  const bungkus = async (r: Response) =>
+    new Response(await r.text().catch(() => ""), { status: r.status, headers: r.headers });
+
+  let res = await bungkus(await call(await ensureSession()));
+  const kedaluwarsa = async (r: Response) => {
+    if (r.status === 401 || r.status === 403 || r.status === 302) return true;
+    // 200 tapi isinya halaman login — inilah bentuk kedaluwarsa yang dulu lolos
+    // dan berakhir sebagai galat penguraian JSON di layar pengguna.
+    return r.ok && BERBAU_LOGIN.test(await r.clone().text().catch(() => ""));
+  };
+  if (await kedaluwarsa(res)) {
     session = null; // expired → re-login once
-    res = await call(await ensureSession());
+    res = await bungkus(await call(await ensureSession()));
   }
   return res;
+}
+
+/** Baca badan balasan sebagai JSON lewat {@link bacaJsonEsb} — lihat catatan di
+ *  sana soal kenapa `res.json()` polos tidak boleh dipakai di sini. */
+async function bacaJson<T>(res: Response, konteks: string): Promise<T> {
+  return bacaJsonEsb<T>(await res.text().catch(() => ""), konteks);
 }
 
 /** YYYY-MM-DD → DD-MM-YYYY (the format the ESB report form expects). */
@@ -268,7 +299,7 @@ async function generateExport(dateFromYmd: string, dateToYmd: string, typeVoid: 
     POST_USER_SESSION: s.postUserSession,
   }));
   if (!res.ok) throw new Error(`ESB report-cancel-menu-detail failed (${res.status})`);
-  const json = (await res.json()) as { status?: number; data?: string };
+  const json = await bacaJson<{ status?: number; data?: string }>(res, "report-cancel-menu-detail");
   if (!json?.data) throw new Error("ESB: export URL missing in report response");
   return json.data;
 }
@@ -576,7 +607,7 @@ export function esbGenerateMenuRecap(dateFromYmd: string, dateToYmd: string): Pr
       POST_USER_SESSION: s.postUserSession,
     }));
     if (!res.ok) throw new Error(`ESB report-sales-menu-recap failed (${res.status})`);
-    const json = (await res.json()) as { status?: number; data?: string };
+    const json = await bacaJson<{ status?: number; data?: string }>(res, "report-sales-menu-recap");
     if (!json?.data) throw new Error("ESB: menu-recap export URL missing");
     const url = json.data;
     await pokeQueue();

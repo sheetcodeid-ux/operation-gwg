@@ -8,6 +8,7 @@ import { Combobox } from "@/components/ui/combobox";
 import { seasonalReportAction, seasonalSyncAction } from "@/lib/actions/seasonal";
 import type { SeasonalReport } from "@/lib/data/seasonal";
 import { cn, formatIDR, formatIDRShort } from "@/lib/utils";
+import { pesanRingkas } from "@/lib/pesan-galat";
 
 const MONTHS = ["Januari", "Februari", "Maret", "April", "Mei", "Juni", "Juli", "Agustus", "September", "Oktober", "November", "Desember"];
 const MONTH_SHORT = ["Jan", "Feb", "Mar", "Apr", "Mei", "Jun", "Jul", "Agu", "Sep", "Okt", "Nov", "Des"];
@@ -117,7 +118,7 @@ export function SeasonalChart({
     for (let i = 0; i < 60 && seqRef.current === seq; i++) {
       const s = await seasonalSyncAction(y, br);
       if (seqRef.current !== seq) return;
-      if (!("synced" in s)) { toast.error(s.error); break; }
+      if (!("synced" in s)) { toast.error(pesanRingkas(s.error)); break; }
       setSyncLeft(s.remaining);
       const r = await seasonalReportAction(y, br);
       if (seqRef.current !== seq) return;
@@ -160,7 +161,7 @@ export function SeasonalChart({
     const r = await seasonalReportAction(y, br);
     if (seqRef.current !== seq) return;
     setLoading(false);
-    if (!("configured" in r)) { toast.error((r as { error: string }).error); return; }
+    if (!("configured" in r)) { toast.error(pesanRingkas((r as { error: string }).error)); return; }
     cacheRef.current.set(key, r);
     setReport(r);
     if (r.pendingDays?.length) void drain(y, br, seq, r.pendingDays.length);

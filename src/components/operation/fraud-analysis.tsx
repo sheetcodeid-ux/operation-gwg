@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Combobox } from "@/components/ui/combobox";
 import { SegmentedTabs } from "@/components/ui/segmented-tabs";
+import { pesanRingkas } from "@/lib/pesan-galat";
 import { cn, formatIDR, formatIDRShort } from "@/lib/utils";
 import { fraudReportAction, fraudSyncAction, outletFraudDailyAction, salesSyncAction } from "@/lib/actions/fraud";
 import type { FraudDailyPoint, FraudKind, FraudOrder, FraudOutletRow, FraudPeriod, FraudReport } from "@/lib/data/fraud";
@@ -128,11 +129,11 @@ export function FraudAnalysis({ initial, initialDate }: { initial: FraudReport; 
       for (let i = 0; i < 40 && seqRef.current === seq; i++) {
         const s = await fraudSyncAction(p, d, k);
         if (seqRef.current !== seq) return;
-        if (!("synced" in s)) { toast.error(s.error); break; }
+        if (!("synced" in s)) { toast.error(pesanRingkas(s.error)); break; }
         setSyncLeft(s.remaining);
         await refresh(p, d, k, seq); // matrix fills in progressively
         if (s.remaining === 0) break;
-        if (s.error) { toast.error(`Sinkron ESB terhenti: ${s.error}`); break; }
+        if (s.error) { toast.error(`Sinkron ESB terhenti: ${pesanRingkas(s.error)}`); break; }
         if (s.synced === 0) break; // no forward progress — stop looping
       }
       if (seqRef.current === seq) {
@@ -152,7 +153,7 @@ export function FraudAnalysis({ initial, initialDate }: { initial: FraudReport; 
       // A FraudReport can itself carry an `error` field, so discriminate on a
       // required report field (configured) rather than the presence of `error`.
       if (!("configured" in res)) {
-        toast.error((res as { error: string }).error);
+        toast.error(pesanRingkas((res as { error: string }).error));
         return;
       }
       setReport(res);

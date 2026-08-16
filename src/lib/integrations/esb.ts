@@ -94,6 +94,37 @@ function unescapeJsonString(s: string): string {
  * Handles all three (recursively unwrapping up to 3 layers). Returns "" when
  * there's no data field (e.g. the {code:404,"try again later"} response).
  */
+/**
+ * Baca balasan ESB sebagai JSON, dengan pesan yang bisa dimengerti orang.
+ *
+ * `res.json()` polos melempar "Unexpected token '<', \"<body styl\"... is not
+ * valid JSON". Pesan itu benar secara teknis dan tidak berguna sama sekali:
+ * pernah tampil apa adanya sebagai notifikasi di layar Coordinator Area yang
+ * membuka Fraud Analysis — tidak menjelaskan apa yang terjadi, tidak
+ * menyarankan apa pun. Yang lebih buruk, ia MEMBUANG badan aslinya, padahal
+ * itulah satu-satunya bukti kenapa ESB membalas begitu.
+ *
+ * Di sini badannya disimpan: kalimat pertama untuk pengguna, cuplikan mentah di
+ * belakang kurung siku untuk penelusuran. `pesanRingkas()` yang memotong
+ * ekornya saat ditampilkan, jadi jejak galat tetap menerima semuanya.
+ *
+ * Tinggal di modul ini, bukan di esb-client, karena ini murni soal membaca teks
+ * — tanpa jaringan dan tanpa kredensial, sehingga bisa diuji langsung.
+ */
+export function bacaJsonEsb<T>(teks: string, konteks: string): T {
+  try {
+    return JSON.parse(teks) as T;
+  } catch {
+    const bersih = teks.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim().slice(0, 200);
+    const halaman = /^\s*<|<body|<html|<!doctype/i.test(teks);
+    throw new Error(
+      halaman
+        ? `ESB membalas halaman web, bukan data — biasanya karena ESB sedang bermasalah atau dalam pemeliharaan. Coba lagi beberapa menit lagi. [${konteks}] isi: ${bersih || "(kosong)"}`
+        : `ESB membalas format yang tidak dikenali. [${konteks}] isi: ${bersih || "(kosong)"}`,
+    );
+  }
+}
+
 export function extractReportData(text: string, depth = 0): string {
   if (depth > 3) return "";
   try {
