@@ -70,6 +70,12 @@ export function Sidebar({
     const translated = t(`nav.${item.label}`);
     // t() returns the raw "nav.<label>" key when there is no translation.
     return translated.startsWith("nav.") ? item.label : translated;
+  }
+
+  /** Nama bidang (sub-grup), diterjemahkan dengan aturan yang sama. */
+  function labelGrup(name: string) {
+    const translated = t(`group.${name}`);
+    return translated.startsWith("group.") ? name : translated;
   };
 
   return (
@@ -223,7 +229,11 @@ export function Sidebar({
                               )}
                             >
                               {GroupIcon && <GroupIcon className={cn("size-4 shrink-0", groupLocked ? "text-muted-foreground/55" : "text-muted-foreground")} />}
-                              <span className="min-w-0 flex-1 truncate">{block.name}</span>
+                              {/* Nama bidang ikut bahasa yang dipilih. Dulu
+                                  ditulis mentah, sehingga menu di bawahnya
+                                  berbahasa Inggris tapi judul bidangnya tetap
+                                  Indonesia — satu sidebar dua bahasa. */}
+                              <span className="min-w-0 flex-1 truncate">{labelGrup(block.name)}</span>
                               {groupLocked && <Lock className="size-3 shrink-0 text-muted-foreground/55" />}
                               <ChevronDown className={cn("size-3.5 shrink-0 text-muted-foreground transition-transform duration-200", groupOpen && "rotate-180")} />
                             </button>

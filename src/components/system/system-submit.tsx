@@ -257,19 +257,31 @@ function SystemRequestForm({
         </div>
       </div>
 
-      <Field label="Nomor WhatsApp Aktif" hint="Untuk konfirmasi tindak lanjut. Contoh: 082154860207">
-        <Input
-          value={waNumber}
-          onChange={(e) => setWaNumber(e.target.value.replace(/[^\d]/g, ""))}
-          inputMode="numeric"
-          placeholder="082154860207"
-        />
-      </Field>
+      {/* Nomor WhatsApp hanya untuk meja POS: teknisi perlu menghubungi cabang
+          untuk memandu perbaikan di tempat. Kendala aplikasi ditangani di dalam
+          aplikasi ini juga, jadi menanyakannya cuma menambah isian kosong. */}
+      {desk === "system" && (
+        <Field label="Nomor WhatsApp Aktif" hint="Untuk konfirmasi tindak lanjut. Contoh: 082154860207">
+          <Input
+            value={waNumber}
+            onChange={(e) => setWaNumber(e.target.value.replace(/[^\d]/g, ""))}
+            inputMode="numeric"
+            placeholder="082154860207"
+          />
+        </Field>
+      )}
 
       <div className="border-t border-border pt-3">
         <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Detail Permintaan</p>
 
-        <Field label="Kategori Kendala" hint="Pilih yang paling mendekati — tim IT memakai ini untuk menentukan siapa yang menangani.">
+        <Field
+          label="Kategori Kendala"
+          hint={
+            desk === "helpdesk"
+              ? "Pilih yang paling mendekati — ini menentukan urutan penanganan, bukan siapa yang menangani."
+              : "Pilih yang paling mendekati — tim System Support memakai ini untuk menentukan siapa yang menangani."
+          }
+        >
           <KategoriPicker options={kategori} value={requestType} onChange={setRequestType} />
         </Field>
 
@@ -277,7 +289,11 @@ function SystemRequestForm({
           <Input
             value={title}
             onChange={(e) => setTitle(e.target.value)}
-            placeholder="Ringkas dalam satu kalimat — mis. 'Aplikasi kasir gagal login sejak pagi'"
+            placeholder={
+              desk === "helpdesk"
+                ? "Ringkas dalam satu kalimat — mis. 'Halaman Hygiene gagal dibuka sejak pagi'"
+                : "Ringkas dalam satu kalimat — mis. 'Printer struk kasir tidak keluar sejak pagi'"
+            }
           />
         </Field>
 
@@ -285,19 +301,29 @@ function SystemRequestForm({
           <Textarea
             value={description}
             onChange={(e) => setDescription(e.target.value)}
-            placeholder="Jelaskan selengkap mungkin: apa yang terjadi, sejak kapan, langkah yang sudah dicoba, atau detail fitur yang diharapkan."
+            placeholder={
+              desk === "helpdesk"
+                ? "Menu apa yang dibuka, apa yang terjadi, sejak kapan, dan apa yang sudah dicoba. Kalau ada pesan error, tuliskan apa adanya."
+                : "Jelaskan selengkap mungkin: apa yang terjadi, sejak kapan, dan langkah yang sudah dicoba."
+            }
             rows={4}
           />
         </Field>
 
-        <Field label="Dampak bila Tertunda" className="mt-3" hint="Bantu tim menilai prioritas penanganan.">
-          <Textarea
-            value={impact}
-            onChange={(e) => setImpact(e.target.value)}
-            placeholder="Contoh: Transaksi kasir terhenti sehingga menimbulkan antrean panjang dan potensi kehilangan penjualan."
-            rows={2}
-          />
-        </Field>
+        {/* "Dampak bila Tertunda" dilepas dari meja IT. Tingkat Urgensi di
+            bawah sudah menyampaikan hal yang sama dalam satu ketukan, dan dua
+            isian yang menanyakan seberapa mendesak hanya membuat formulir
+            panjang lalu dilewati begitu saja. */}
+        {desk === "system" && (
+          <Field label="Dampak bila Tertunda" className="mt-3" hint="Bantu tim menilai prioritas penanganan.">
+            <Textarea
+              value={impact}
+              onChange={(e) => setImpact(e.target.value)}
+              placeholder="Contoh: Transaksi kasir terhenti sehingga menimbulkan antrean panjang dan potensi kehilangan penjualan."
+              rows={2}
+            />
+          </Field>
+        )}
       </div>
 
       <div className="grid gap-3 sm:grid-cols-2">
@@ -327,10 +353,20 @@ function SystemRequestForm({
         </Field>
       </div>
 
-      <Field label="Lampiran Pendukung (opsional)" hint="Unggah foto/berkas (maks 10 MB) atau tempel tautan Google Drive.">
+      <Field
+        label="Lampiran Pendukung (opsional)"
+        hint={
+          desk === "helpdesk"
+            ? "Foto layar paling menolong — pesan error yang terbaca menghemat satu putaran tanya-jawab."
+            : "Unggah foto/berkas (maks 10 MB) atau tempel tautan Google Drive."
+        }
+      >
         <div className="space-y-2">
           <FilePick file={file} onPick={setFile} />
-          {!file && (
+          {/* Tempel tautan hanya untuk meja POS. Kendala aplikasi dilaporkan
+              dengan foto layar dari perangkat yang sedang dipakai; menaruh
+              kotak tautan di sana cuma menambah isian yang tidak pernah diisi. */}
+          {desk === "system" && !file && (
             <div className="relative">
               <Link2 className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
               <Input
@@ -349,7 +385,7 @@ function SystemRequestForm({
           Batal
         </Button>
         <Button onClick={submit} disabled={pending}>
-          {pending && <Loader2 className="animate-spin" />} Kirim Permintaan
+          {pending && <Loader2 className="animate-spin" />} {desk === "helpdesk" ? "Kirim Laporan" : "Kirim Permintaan"}
         </Button>
       </div>
     </div>

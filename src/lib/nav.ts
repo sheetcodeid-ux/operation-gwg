@@ -98,14 +98,14 @@ export const NAV_MENUS: Omit<NavItem, "section" | "group" | "groupIcon">[] = [
   { key: "op_seasonal", label: "Musiman", href: "/operation/musiman", icon: "Waves" },
   { key: "op_analysis", label: "Data Analysis", href: "/operation/analysis", icon: "ChartColumnBig" },
   { key: "op_pnl", label: "Laba Rugi", href: "/operation/laba-rugi", icon: "Banknote" },
-  { key: "sys_review", label: "Antrian System", href: "/system/antrian", icon: "Headset" },
-  { key: "it_review", label: "Antrian IT Help Desk", href: "/it-helpdesk/antrian", icon: "LifeBuoy" },
+  { key: "sys_review", label: "Antrian POS", href: "/system/antrian", icon: "Headset" },
+  { key: "it_review", label: "Antrian IT", href: "/it-helpdesk/antrian", icon: "CodeXml" },
   // Kedua "pengajuan" ini kini menjadi kategori DI DALAM halaman Pengajuan —
   // tetap punya rute sendiri, tapi tidak lagi muncul terpisah di sidebar.
   { key: "hc_submit", label: "Pengajuan Dokumen", href: "/hc/pengajuan", icon: "FileUp", hidden: true },
   { key: "hc_review", label: "Antrian Dokumen", href: "/hc/antrian", icon: "FolderInput" },
-  { key: "sys_submit", label: "Pengajuan System", href: "/system/pengajuan", icon: "MonitorCog", hidden: true },
-  { key: "it_submit", label: "IT Help Desk", href: "/it-helpdesk/pengajuan", icon: "LifeBuoy", hidden: true },
+  { key: "sys_submit", label: "Pengajuan POS", href: "/system/pengajuan", icon: "MonitorCog", hidden: true },
+  { key: "it_submit", label: "IT Help Desk", href: "/it-helpdesk/pengajuan", icon: "CodeXml", hidden: true },
   { key: "elearning", label: "E-Learning", href: "/elearning", icon: "GraduationCap" },
   { key: "elearning_admin", label: "Kelola E-Learning", href: "/elearning/kelola", icon: "LibraryBig" },
   { key: "hcmos", label: "HC-MOS", href: "/hc-mos", icon: "Network" },
@@ -252,7 +252,7 @@ export const DIVISION_GROUPS: Partial<Record<Division, NavGroupDef[]>> = {
     { name: "Keuangan Operasional", icon: "Wallet", menus: ["op_beban", "op_pembelian", "op_pnl", "op_settings"] },
     { name: "Analisis & Laporan", icon: "ChartColumnBig", menus: ["analytics", "op_analysis", "op_fraud", "op_seasonal", "reports"] },
     { name: "Pembelajaran", icon: "GraduationCap", menus: ["elearning", "elearning_admin"] },
-    { name: "System Support", icon: "Headset", menus: ["sys_review"] },
+    { name: "System Support", icon: "Headset", menus: ["sys_review", "it_review"] },
   ],
   Supervisor: [
     { name: "Operasional Outlet", icon: "Store", menus: ["hospitality", "hygiene", "complaints"] },

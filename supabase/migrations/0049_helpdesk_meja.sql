@@ -34,13 +34,14 @@ alter table public.system_requests
     'jaringan','bug','hardware','printer','salah_data','akses','fitur','training','lainnya'
   ]));
 
--- Tiket lama yang jelas-jelas soal aplikasi dipindahkan ke meja Help Desk.
--- Sisanya dibiarkan di 'system': menebak-nebak kategori yang ambigu lebih buruk
--- daripada membiarkannya, karena tiket yang salah meja tidak akan dilihat
--- orang yang seharusnya mengerjakannya.
-update public.system_requests
-set desk = 'helpdesk'
-where request_type in ('bug', 'fitur', 'akses');
+-- SELURUH tiket lama tetap di meja System, tanpa kecuali.
+--
+-- Sempat dipindahkan berdasarkan kategori, dan itu keliru: "Permintaan Fitur"
+-- pada tiket-tiket lama berarti penambahan menu di ESB/POS — pekerjaan tim
+-- System Support, bukan aplikasi web. Kategorinya sama, artinya berbeda.
+--
+-- Pelajarannya: kategori tidak bisa dipakai menebak meja. Meja IT Help Desk
+-- dimulai dari kosong, dan diisi hanya oleh tiket yang memang dikirim ke sana.
 
 -- Tiap antrean dibuka per meja, terurut waktu.
 create index if not exists system_requests_desk_created_idx
