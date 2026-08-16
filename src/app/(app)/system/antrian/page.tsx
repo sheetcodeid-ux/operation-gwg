@@ -6,7 +6,7 @@ import { getUsers } from "@/lib/data/store";
 import { listSystemRequests } from "@/lib/data/system";
 import { isSystemSupport, SYSTEM_SUPPORT_DEPT, SYSTEM_SUPPORT_JABATAN } from "@/lib/system-shared";
 import { PageHeader } from "@/components/ui/page-header";
-import { SystemReviewPanel } from "@/components/system/system-review";
+import { HelpdeskPanel } from "@/components/system/helpdesk-panel";
 
 export const metadata: Metadata = { title: "Antrian System — System Support" };
 
@@ -26,10 +26,10 @@ export default async function SystemAntrianPage() {
     <div className="w-full">
       <PageHeader
         icon={Headset}
-        title="Antrian System"
-        description="Tinjau permintaan System/IT dari cabang, tentukan penanggung jawab, lalu teruskan ke Work Tracker untuk dikerjakan."
+        title="Antrian IT Help Desk"
+        description="Semua tiket IT dari seluruh departemen, terpusat di sini. Tinjau, tentukan penanggung jawab, lalu teruskan ke Work Tracker untuk dikerjakan."
       />
-      <SystemReviewPanel rows={rows} handlers={handlers} canDelete={user.role === "super_admin"} />
+      <HelpdeskPanel rows={rows} handlers={handlers} canDelete={user.role === "super_admin"} />
     </div>
   );
 }

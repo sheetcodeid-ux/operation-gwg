@@ -208,8 +208,15 @@ export const ROLE_MENUS: Record<Role, MenuKey[]> = {
 /** Menus every department gets automatically — including divisions an admin
  *  adds later, and roles that were never wired up for them. "Pengajuan" is
  *  company-wide by design: any team must be able to request headcount or a
- *  training programme without an admin granting it first. */
-export const UNIVERSAL_MENUS: MenuKey[] = ["hc_request", "pesan"];
+ *  training programme without an admin granting it first.
+ *
+ *  `sys_submit` (IT Help Desk) ada di sini karena alasan yang sama, dan lebih
+ *  keras lagi: komputer mati atau printer macet bisa menimpa SIAPA PUN. Dulu
+ *  menu ini hanya milik supervisor, sehingga Finance, Creative, dan Human
+ *  Capital melaporkan kendalanya lewat WhatsApp — di luar sistem, tanpa nomor
+ *  tiket, dan tidak terhitung di mana-mana. Yang tidak tercatat tidak bisa
+ *  diperbaiki. */
+export const UNIVERSAL_MENUS: MenuKey[] = ["hc_request", "sys_submit", "pesan"];
 
 /** Divisions that are NOT a department doing day-to-day work — they don't get
  *  the company-wide menus (Administrator is app configuration, not a team). */

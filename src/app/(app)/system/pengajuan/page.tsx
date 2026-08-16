@@ -21,9 +21,15 @@ export default async function SystemPengajuanPage() {
     <div className="w-full">
       <PageHeader
         icon={MonitorCog}
-        title="Pengajuan System / IT Support"
-        description="Ajukan permintaan fitur, perbaikan bug, akses user, atau kendala perangkat ke tim System Support. Pantau statusnya di sini."
-        actions={<NewSystemRequestButton requesterName={user.name} outlets={outlets} />}
+        title="IT Help Desk"
+        description="Laporkan kendala IT — jaringan, perangkat, printer, akun, atau aplikasi error. Setiap laporan dapat nomor tiket dan bisa Anda pantau sampai selesai."
+        actions={
+          <NewSystemRequestButton
+            requesterName={user.name}
+            requesterPosition={(user.jabatan ?? "").trim() || user.department || "—"}
+            outlets={outlets}
+          />
+        }
       />
       <SystemRequestList rows={rows} />
     </div>

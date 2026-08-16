@@ -40,6 +40,10 @@ interface Row {
   processed_at: string | null;
   completed_at: string | null;
   created_at: string;
+  ticket_no: string | null;
+  first_response_at: string | null;
+  satisfaction: number | null;
+  satisfaction_note: string | null;
 }
 
 const SIGN_TTL = 60 * 60;
@@ -74,6 +78,7 @@ function toRequest(r: Row, signed: Map<string, string>): SystemRequest {
   const fileUrl = r.attachment_path ? signed.get(r.attachment_path) ?? null : null;
   return {
     id: r.id,
+    ticketNo: r.ticket_no,
     requesterId: r.requester_id,
     requesterName: r.requester_name,
     position: r.position,
@@ -98,6 +103,9 @@ function toRequest(r: Row, signed: Map<string, string>): SystemRequest {
     processedByName: r.processed_by ? userName(r.processed_by) : null,
     completedAt: r.completed_at,
     createdAt: r.created_at,
+    firstResponseAt: r.first_response_at,
+    satisfaction: r.satisfaction,
+    satisfactionNote: r.satisfaction_note,
   };
 }
 
@@ -138,12 +146,38 @@ export interface SysCreateInput {
   attachmentName: string | null;
 }
 
+/**
+ * Nomor tiket berikutnya untuk bulan berjalan: IT-YYYYMM-NNNN.
+ *
+ * Nomornya dibaca dari tiket TERAKHIR bulan itu, bukan dari jumlah baris —
+ * menghitung baris membuat nomor terpakai ulang begitu ada satu tiket dihapus.
+ *
+ * Kalau dua tiket dibuat pada detik yang sama, keduanya bisa memperebutkan
+ * nomor yang sama. Indeks unik di basis data yang memutuskan, dan pemanggilnya
+ * mencoba lagi. Nomor kembar jauh lebih merepotkan daripada satu percobaan
+ * ulang: dua orang menyebut "tiket IT-202608-0007" untuk dua masalah berbeda.
+ */
+async function nomorTiketBerikutnya(): Promise<string> {
+  const wib = new Date(Date.now() + 7 * 3_600_000);
+  const periode = `${wib.getUTCFullYear()}${String(wib.getUTCMonth() + 1).padStart(2, "0")}`;
+  const { data } = await db()
+    .from("system_requests")
+    .select("ticket_no")
+    .like("ticket_no", `IT-${periode}-%`)
+    .order("ticket_no", { ascending: false })
+    .limit(1);
+  const terakhir = (data as { ticket_no: string }[] | null)?.[0]?.ticket_no ?? "";
+  const urut = Number(terakhir.slice(-4)) || 0;
+  return `IT-${periode}-${String(urut + 1).padStart(4, "0")}`;
+}
+
 export async function createSystemRequest(input: SysCreateInput): Promise<{ id: string } | null> {
   if (!dbEnabled) return null;
   markLocalWrite();
   const id = `sys_${randomUUID()}`;
   const { error } = await db().from("system_requests").insert({
     id,
+    ticket_no: await nomorTiketBerikutnya(),
     requester_id: input.requesterId,
     requester_name: input.requesterName,
     position: input.position,
@@ -168,7 +202,7 @@ export async function createSystemRequest(input: SysCreateInput): Promise<{ id: 
 /** Waiting → Processing: record the assigned handler, note, and the created task. */
 export async function processSystemRequest(
   id: string,
-  input: { handlerId: string; note: string; workTaskId: string; processedBy: string },
+  input: { handlerId: string; note: string; workTaskId: string; processedBy: string; firstResponseAt: string | null },
 ): Promise<{ error?: string }> {
   if (!dbEnabled) return { error: "Database belum aktif." };
   markLocalWrite();
@@ -181,6 +215,11 @@ export async function processSystemRequest(
       work_task_id: input.workTaskId,
       processed_by: input.processedBy,
       processed_at: new Date().toISOString(),
+      // Hanya sentuhan PERTAMA yang dicatat. Kalau ditimpa tiap kali tiket
+      // disentuh lagi, angkanya berubah jadi "waktu sentuhan terakhir" dan
+      // tiket yang terlantar tiga hari lalu dibuka sebentar akan terlihat
+      // seolah direspons seketika.
+      first_response_at: input.firstResponseAt ?? new Date().toISOString(),
     })
     .eq("id", id)
     .eq("status", "waiting");
@@ -197,6 +236,34 @@ export async function completeSystemRequest(id: string, resultPaths: string[] = 
     .eq("id", id)
     .neq("status", "done");
   return error ? { error: error.message } : {};
+}
+
+/**
+ * Penilaian pelapor atas tiket yang sudah ditutup.
+ *
+ * Dibatasi ke tiket miliknya sendiri DAN yang statusnya sudah selesai. Dua
+ * syarat itu ditegakkan di kueri, bukan hanya di layar: tanpa `eq` pada
+ * pelapor, siapa pun yang tahu id tiket bisa menilai tiket orang lain, dan
+ * angka kepuasan tim IT jadi bisa dikarang dari luar.
+ */
+export async function simpanKepuasan(
+  id: string,
+  requesterId: string,
+  nilai: number,
+  catatan: string,
+): Promise<{ error?: string }> {
+  if (!dbEnabled) return { error: "Database belum aktif." };
+  markLocalWrite();
+  const { data, error } = await db()
+    .from("system_requests")
+    .update({ satisfaction: nilai, satisfaction_note: catatan || null, satisfaction_at: new Date().toISOString() })
+    .eq("id", id)
+    .eq("requester_id", requesterId)
+    .eq("status", "done")
+    .select("id");
+  if (error) return { error: error.message };
+  if (!data || data.length === 0) return { error: "Tiket tidak ditemukan, bukan milik Anda, atau belum selesai." };
+  return {};
 }
 
 /** Delete a request (and all uploaded files) — Super Admin cleanup. */

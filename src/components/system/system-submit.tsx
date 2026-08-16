@@ -2,7 +2,11 @@
 
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { ChevronDown, CircleUser, ExternalLink, Link2, Loader2, MonitorCog, Paperclip, Plus, Store, Upload, X } from "lucide-react";
+import {
+  Bug, ChevronDown, CircleHelp, CircleUser, ExternalLink, GraduationCap, KeyRound, Link2, Loader2,
+  MonitorCog, MonitorSmartphone, Paperclip, Plus, Printer, Sparkles, Store, Upload, Wifi, X,
+  type LucideIcon,
+} from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -11,16 +15,19 @@ import { Field, Input, Textarea } from "@/components/ui/input";
 import { Combobox } from "@/components/ui/combobox";
 import { DatePicker } from "@/components/ui/date-picker";
 import { cn } from "@/lib/utils";
-import { submitSystemRequestAction, uploadSystemAttachmentAction } from "@/lib/actions/system";
+import { beriKepuasanAction, submitSystemRequestAction, uploadSystemAttachmentAction } from "@/lib/actions/system";
 import { uploadOne } from "@/lib/upload-client";
 import { ProofGrid } from "@/components/system/system-review";
 import { DetailRows, DetailTitle } from "@/components/ui/detail-rows";
 import { StatusFilter } from "@/components/ui/status-filter";
 import {
   SYS_REQUEST_TYPES,
+  SYS_SATISFACTION,
+  SYS_SATISFACTION_META,
   SYS_STATUS_META,
   SYS_TYPE_LABEL,
   SYS_URGENCY_META,
+  selisihSingkat,
   type SysRequestType,
   type SysStatus,
   type SysUrgency,
@@ -34,17 +41,86 @@ function fmtDate(iso: string) {
 
 const URGENCIES: SysUrgency[] = ["urgent", "normal", "low"];
 
+/**
+ * Ikon per kategori. Dipetakan di sini, bukan di `system-shared.ts`, supaya
+ * berkas tipe itu tetap bebas React dan bisa diimpor dari sisi server.
+ */
+const IKON_KATEGORI: Record<string, LucideIcon> = {
+  Wifi,
+  Bug,
+  MonitorSmartphone,
+  Printer,
+  KeyRound,
+  Sparkles,
+  GraduationCap,
+  CircleHelp,
+};
+
+/**
+ * Kartu kategori — sekali tekan, bukan dropdown.
+ *
+ * Yang memakai ini sering sedang panik: kasir mati, antrean mengular. Dropdown
+ * menyembunyikan semua pilihan di balik satu ketukan lagi, dan contoh nyatanya
+ * ("WiFi putus, internet lambat") tidak muat di dalamnya — padahal contoh itu
+ * yang membuat orang memilih kategori yang benar tanpa harus berpikir.
+ */
+function KategoriPicker({
+  value,
+  onChange,
+}: {
+  value: SysRequestType;
+  onChange: (v: SysRequestType) => void;
+}) {
+  return (
+    <div className="grid gap-2 sm:grid-cols-2">
+      {SYS_REQUEST_TYPES.map((t) => {
+        const Icon = IKON_KATEGORI[t.icon] ?? CircleHelp;
+        const active = value === t.value;
+        return (
+          <button
+            key={t.value}
+            type="button"
+            onClick={() => onChange(t.value)}
+            aria-pressed={active}
+            className={cn(
+              "flex items-start gap-2.5 rounded-xl border p-2.5 text-left transition-colors",
+              active
+                ? "border-brand-500/50 bg-brand-500/5"
+                : "border-border hover:border-brand-500/30 hover:bg-muted/40",
+            )}
+          >
+            <span
+              className={cn(
+                "grid size-8 shrink-0 place-items-center rounded-lg ring-1",
+                active ? "bg-brand-500/10 text-brand-600 ring-brand-500/30" : "bg-muted text-muted-foreground ring-border",
+              )}
+            >
+              <Icon className="size-4" />
+            </span>
+            <span className="min-w-0">
+              <span className="block text-xs font-semibold text-foreground">{t.label}</span>
+              <span className="mt-0.5 block text-[11px] leading-snug text-muted-foreground">{t.hint}</span>
+            </span>
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
 export function NewSystemRequestButton({
   requesterName,
+  requesterPosition,
   outlets,
 }: {
   requesterName: string;
+  requesterPosition: string;
   outlets: { id: string; name: string }[];
 }) {
   return (
     <Dialog>
       <DialogTrigger>
-        <Button size="sm" disabled={outlets.length === 0}>
+        <Button size="sm">
           <Plus /> Ajukan Permintaan
         </Button>
       </DialogTrigger>
@@ -54,20 +130,28 @@ export function NewSystemRequestButton({
         align="center"
         className="max-w-lg"
       >
-        <SystemRequestForm requesterName={requesterName} outlets={outlets} />
+        <SystemRequestForm requesterName={requesterName} requesterPosition={requesterPosition} outlets={outlets} />
       </DialogContent>
     </Dialog>
   );
 }
 
-function SystemRequestForm({ requesterName, outlets }: { requesterName: string; outlets: { id: string; name: string }[] }) {
+function SystemRequestForm({
+  requesterName,
+  requesterPosition,
+  outlets,
+}: {
+  requesterName: string;
+  requesterPosition: string;
+  outlets: { id: string; name: string }[];
+}) {
   const router = useRouter();
   const { setOpen } = useDialogControl();
   const [pending, startTransition] = useTransition();
 
   const [outletId, setOutletId] = useState(outlets[0]?.id ?? "");
   const [waNumber, setWaNumber] = useState("");
-  const [requestType, setRequestType] = useState<SysRequestType>("fitur");
+  const [requestType, setRequestType] = useState<SysRequestType>("jaringan");
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [impact, setImpact] = useState("");
@@ -76,12 +160,11 @@ function SystemRequestForm({ requesterName, outlets }: { requesterName: string; 
   const [attachmentLink, setAttachmentLink] = useState("");
   const [file, setFile] = useState<File | null>(null);
 
-  const outletName = outlets.find((o) => o.id === outletId)?.name ?? "—";
+  const outletName = outlets.find((o) => o.id === outletId)?.name ?? "Kantor Pusat";
 
   function submit() {
     if (!title.trim()) return toast.error("Judul permintaan wajib diisi.");
     if (!description.trim()) return toast.error("Uraian permintaan wajib diisi.");
-    if (!outletId) return toast.error("Cabang wajib dipilih.");
 
     startTransition(async () => {
       let attachmentPath: string | null = null;
@@ -126,13 +209,13 @@ function SystemRequestForm({ requesterName, outlets }: { requesterName: string; 
         <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Informasi Pemohon</p>
         <div className="grid gap-2.5 rounded-xl border border-border bg-muted/20 p-3 sm:grid-cols-3">
           <AutoField icon={<CircleUser className="size-3.5" />} label="Nama" value={requesterName} />
-          <AutoField icon={<CircleUser className="size-3.5" />} label="Jabatan" value="Supervisor" />
+          <AutoField icon={<CircleUser className="size-3.5" />} label="Jabatan" value={requesterPosition} />
           {outlets.length > 1 ? (
             <Field label="Cabang">
               <Combobox
                 value={outletId}
                 onChange={setOutletId}
-                options={outlets.map((o) => ({ value: o.id, label: o.name }))}
+                options={[{ value: "", label: "Kantor Pusat / Non-cabang" }, ...outlets.map((o) => ({ value: o.id, label: o.name }))]}
                 placeholder="Pilih cabang"
                 searchPlaceholder="Cari cabang…"
               />
@@ -155,12 +238,8 @@ function SystemRequestForm({ requesterName, outlets }: { requesterName: string; 
       <div className="border-t border-border pt-3">
         <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Detail Permintaan</p>
 
-        <Field label="Jenis Permintaan">
-          <Combobox
-            value={requestType}
-            onChange={(v) => setRequestType(v as SysRequestType)}
-            options={SYS_REQUEST_TYPES.map((t) => ({ value: t.value, label: t.label }))}
-          />
+        <Field label="Kategori Kendala" hint="Pilih yang paling mendekati — tim IT memakai ini untuk menentukan siapa yang menangani.">
+          <KategoriPicker value={requestType} onChange={setRequestType} />
         </Field>
 
         <Field label="Judul Permintaan" className="mt-3">
@@ -278,6 +357,85 @@ function AutoField({ icon, label, value }: { icon: React.ReactNode; label: strin
 
 /** Daftar permintaan sistem milik pemohon — kartu yang bisa dibuka + penyaring
  *  status, seragam dengan halaman Pengajuan lainnya. */
+/**
+ * Penilaian pelapor atas tiket yang sudah ditutup.
+ *
+ * Tiket ditutup oleh yang menangani, bukan oleh yang mengalami masalahnya.
+ * Tanpa kotak ini, "selesai" hanya berarti "sudah dianggap selesai oleh tim
+ * IT" — dan tidak ada satu pun jalan bagi pelapor untuk bilang bahwa
+ * printernya masih bermasalah selain menelepon ulang, di luar sistem.
+ *
+ * Sekali dinilai, penilaiannya dikunci. Nilai yang bisa diubah kapan saja
+ * berhenti mengukur pengalaman dan mulai mengukur siapa yang terakhir menekan.
+ */
+function KotakKepuasan({ req }: { req: SystemRequest }) {
+  const router = useRouter();
+  const [pending, startTransition] = useTransition();
+  const [nilai, setNilai] = useState<number | null>(null);
+  const [catatan, setCatatan] = useState("");
+
+  if (req.satisfaction !== null) {
+    const m = SYS_SATISFACTION_META[req.satisfaction];
+    return (
+      <div className="rounded-xl border border-border bg-muted/30 p-3">
+        <DetailTitle>Penilaian Anda</DetailTitle>
+        <div className="mt-1 flex items-center gap-2">
+          <Badge tone={m.tone}>{m.label}</Badge>
+          {req.satisfactionNote && <span className="text-xs text-muted-foreground">“{req.satisfactionNote}”</span>}
+        </div>
+      </div>
+    );
+  }
+
+  function kirim() {
+    if (nilai === null) return toast.error("Pilih tingkat kepuasan terlebih dahulu.");
+    startTransition(async () => {
+      const res = await beriKepuasanAction({ id: req.id, nilai, catatan });
+      if (res?.error) {
+        toast.error(res.error);
+        return;
+      }
+      toast.success("Terima kasih, penilaian Anda tersimpan.");
+      router.refresh();
+    });
+  }
+
+  return (
+    <div className="rounded-xl border border-brand-500/30 bg-brand-500/5 p-3">
+      <DetailTitle>Sudah beres di tempat Anda?</DetailTitle>
+      <p className="mb-2 text-[11px] text-muted-foreground">
+        Penilaian Anda yang menentukan apakah tiket ini benar-benar selesai.
+      </p>
+      <div className="flex flex-wrap gap-1.5">
+        {SYS_SATISFACTION.map((s) => (
+          <button
+            key={s.value}
+            type="button"
+            onClick={() => setNilai(s.value)}
+            aria-pressed={nilai === s.value}
+            className={cn(
+              "rounded-lg border px-2.5 py-1.5 text-xs font-medium transition-colors",
+              nilai === s.value ? cn(TONE_PILL[s.tone], "border-transparent") : "border-input text-muted-foreground hover:bg-muted/50",
+            )}
+          >
+            {s.label}
+          </button>
+        ))}
+      </div>
+      <Textarea
+        value={catatan}
+        onChange={(e) => setCatatan(e.target.value)}
+        placeholder="Catatan tambahan (opsional) — mis. masih sering putus di jam sibuk."
+        rows={2}
+        className="mt-2"
+      />
+      <Button size="sm" className="mt-2" onClick={kirim} disabled={pending}>
+        {pending ? <Loader2 className="animate-spin" /> : null} Kirim Penilaian
+      </Button>
+    </div>
+  );
+}
+
 export function SystemRequestList({ rows }: { rows: SystemRequest[] }) {
   const [status, setStatus] = useState("");
   const [openId, setOpenId] = useState<string | null>(null);
@@ -333,7 +491,9 @@ export function SystemRequestList({ rows }: { rows: SystemRequest[] }) {
                     <span className="min-w-0 flex-1">
                       <span className="block truncate text-sm font-medium text-foreground">{r.title}</span>
                       <span className="block truncate text-xs text-muted-foreground">
-                        {SYS_TYPE_LABEL[r.requestType]} · {r.outletName}
+                        {r.ticketNo ? <span className="font-mono text-foreground/70">{r.ticketNo}</span> : null}
+                        {r.ticketNo ? " · " : ""}
+                        {SYS_TYPE_LABEL[r.requestType]} · {r.outletName || "Kantor Pusat"}
                       </span>
                       <span className="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-1">
                         <Badge tone={st.tone}>{st.label}</Badge>
@@ -359,6 +519,7 @@ export function SystemRequestList({ rows }: { rows: SystemRequest[] }) {
                     <div className="mt-3 space-y-3 border-t border-border pt-3">
                       <DetailRows
                         rows={[
+                          { label: "Nomor tiket", value: r.ticketNo, skipEmpty: true },
                           { label: "Jenis permintaan", value: SYS_TYPE_LABEL[r.requestType] },
                           { label: "Cabang", value: r.outletName },
                           { label: "Pemohon", value: `${r.requesterName}${r.position ? ` — ${r.position}` : ""}` },
@@ -368,6 +529,8 @@ export function SystemRequestList({ rows }: { rows: SystemRequest[] }) {
                           { label: "Diajukan", value: fmtDate(r.createdAt) },
                           { label: "Ditangani", value: r.handlerName, skipEmpty: true },
                           { label: "Selesai", value: r.completedAt ? fmtDate(r.completedAt) : "", skipEmpty: true },
+                          { label: "Direspons dalam", value: selisihSingkat(r.createdAt, r.firstResponseAt) ?? "", skipEmpty: true },
+                          { label: "Tuntas dalam", value: selisihSingkat(r.createdAt, r.completedAt) ?? "", skipEmpty: true },
                         ]}
                       />
 
@@ -419,6 +582,8 @@ export function SystemRequestList({ rows }: { rows: SystemRequest[] }) {
                           <ProofGrid urls={r.resultUrls} />
                         </div>
                       )}
+
+                      {r.status === "done" && <KotakKepuasan req={r} />}
                     </div>
                   </div>
                 </div>

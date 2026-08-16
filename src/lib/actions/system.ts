@@ -15,9 +15,10 @@ import {
   deleteSystemRequest,
   getSystemRequestRow,
   processSystemRequest,
+  simpanKepuasan,
 } from "@/lib/data/system";
 import { r2Enabled, r2Put, R2_PREFIX } from "@/lib/storage/r2";
-import { isSystemSupport, SYS_TYPE_LABEL, type SysRequestType, type SysUrgency } from "@/lib/system-shared";
+import { isSystemSupport, SYS_REQUEST_TYPES, SYS_TYPE_LABEL, type SysRequestType, type SysUrgency } from "@/lib/system-shared";
 import type { Priority, UserProfile } from "@/lib/types";
 
 const canSubmit = (u: UserProfile | null) => !!u && canReachMenu(u, "sys_submit");
@@ -26,7 +27,10 @@ const canSubmit = (u: UserProfile | null) => !!u && canReachMenu(u, "sys_submit"
 const canReview = (u: UserProfile | null) => isSystemSupport(u);
 
 const MAX_BYTES = 10 * 1024 * 1024; // 10 MB per supporting file
-const REQ_TYPES: SysRequestType[] = ["fitur", "bug", "akses", "hardware", "training", "lainnya"];
+// Diturunkan dari daftar kategorinya, bukan disalin ulang. Salinan kedua pasti
+// tertinggal saat kategori ditambah — dan gejalanya membingungkan: kartunya ada
+// di layar, tapi kiriman ditolak "Jenis request tidak valid".
+const REQ_TYPES: SysRequestType[] = SYS_REQUEST_TYPES.map((t) => t.value);
 const URGENCIES: SysUrgency[] = ["urgent", "normal", "low"];
 const URGENCY_PRIORITY: Record<SysUrgency, Priority> = { urgent: "high", normal: "medium", low: "low" };
 
@@ -96,8 +100,13 @@ export async function submitSystemRequestAction(input: SysSubmitInput) {
 
   const title = input.title?.trim();
   if (!title) return { error: "Judul request wajib diisi." };
-  if (!input.outletId) return { error: "Cabang wajib dipilih." };
-  if (!canAccessOutlet(user!, input.outletId, getOutlets())) return { error: "Cabang di luar cakupan Anda." };
+  // Cabang OPSIONAL. Help desk ini dipakai seluruh departemen, dan staf kantor
+  // pusat (Finance, Creative, HC) memang tidak bertugas di cabang mana pun —
+  // mewajibkannya berarti memaksa mereka memilih cabang yang tidak ada
+  // hubungannya dengan kendalanya, dan datanya jadi menyesatkan.
+  if (input.outletId && !canAccessOutlet(user!, input.outletId, getOutlets())) {
+    return { error: "Cabang di luar cakupan Anda." };
+  }
   if (!REQ_TYPES.includes(input.requestType)) return { error: "Jenis request tidak valid." };
   if (!URGENCIES.includes(input.urgency)) return { error: "Urgensi tidak valid." };
   if (!input.description?.trim()) return { error: "Deskripsi request wajib diisi." };
@@ -105,7 +114,10 @@ export async function submitSystemRequestAction(input: SysSubmitInput) {
   const rec = await createSystemRequest({
     requesterId: user!.id,
     requesterName: user!.name,
-    position: "Supervisor",
+    // Diambil dari profilnya. Dulu dipatok "Supervisor" karena hanya supervisor
+    // yang bisa mengajukan; sekarang seluruh departemen bisa, dan jabatan yang
+    // salah membuat tim IT menghubungi orang dengan anggapan yang keliru.
+    position: (user!.jabatan ?? "").trim() || user!.department || "—",
     outletId: input.outletId,
     waNumber: input.waNumber?.trim() || null,
     requestType: input.requestType,
@@ -143,7 +155,7 @@ export async function processSystemRequestAction(input: { id: string; handlerId:
     `Jenis: ${SYS_TYPE_LABEL[req.request_type]}`,
     req.description ? `\nDeskripsi:\n${req.description}` : "",
     req.impact ? `\n\nDampak jika tidak ditangani:\n${req.impact}` : "",
-    `\n\nPengaju: ${req.requester_name} (Supervisor)${req.wa_number ? ` · WA ${req.wa_number}` : ""}`,
+    `\n\nPengaju: ${req.requester_name}${req.position ? ` (${req.position})` : ""}${req.wa_number ? ` · WA ${req.wa_number}` : ""}`,
     req.attachment_link ? `\nLampiran: ${req.attachment_link}` : "",
   ].join("");
 
@@ -172,6 +184,7 @@ export async function processSystemRequestAction(input: { id: string; handlerId:
     note: input.note?.trim() ?? "",
     workTaskId: task.id,
     processedBy: user!.id,
+    firstResponseAt: req.first_response_at,
   });
   if (res.error) return { error: res.error };
 
@@ -229,5 +242,28 @@ export async function deleteSystemRequestAction(id: string) {
   if (res.error) return { error: res.error };
   revalidatePath("/system/antrian");
   revalidatePath("/system/pengajuan");
+  return { ok: true };
+}
+
+/**
+ * Pelapor menilai tiketnya sendiri setelah ditutup.
+ *
+ * Selama ini tiket ditutup sepihak oleh yang menangani, dan tidak ada satu pun
+ * tanda apakah masalahnya benar-benar beres di tempat pelapor. Nilai ini yang
+ * membedakan "ditutup" dari "selesai".
+ *
+ * Pemeriksaan kepemilikan dan status ada di lapisan data, ditegakkan lewat
+ * kueri — bukan di sini — supaya tidak bisa dilewati lewat jalur lain.
+ */
+export async function beriKepuasanAction(input: { id: string; nilai: number; catatan?: string }) {
+  const user = await getSessionUser();
+  if (!user) return { error: "Tidak punya akses." };
+  if (!Number.isInteger(input.nilai) || input.nilai < 1 || input.nilai > 5) {
+    return { error: "Nilai kepuasan harus antara 1 sampai 5." };
+  }
+  const res = await simpanKepuasan(input.id, user.id, input.nilai, (input.catatan ?? "").trim().slice(0, 500));
+  if (res.error) return { error: res.error };
+  revalidatePath("/system/pengajuan");
+  revalidatePath("/system/antrian");
   return { ok: true };
 }
