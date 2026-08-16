@@ -15,7 +15,7 @@ export default async function SystemAntrianPage() {
   // Only the System Support team (Operational + jabatan System Support) or Admin.
   if (!isSystemSupport(user)) redirect("/dashboard");
 
-  const rows = await listSystemRequests();
+  const rows = await listSystemRequests("system");
   // Handlers = the System Support team (department Operational, jabatan System Support).
   const handlers = getUsers()
     .filter((u) => u.department === SYSTEM_SUPPORT_DEPT && (u.jabatan ?? "").trim().toLowerCase() === SYSTEM_SUPPORT_JABATAN.toLowerCase())
@@ -26,8 +26,8 @@ export default async function SystemAntrianPage() {
     <div className="w-full">
       <PageHeader
         icon={Headset}
-        title="Antrian IT Help Desk"
-        description="Semua tiket IT dari seluruh departemen, terpusat di sini. Tinjau, tentukan penanggung jawab, lalu teruskan ke Work Tracker untuk dikerjakan."
+        title="Antrian System"
+        description="Tiket perangkat & POS dari cabang. Tinjau, tentukan penanggung jawab, lalu teruskan ke Work Tracker untuk dikerjakan."
       />
       <HelpdeskPanel rows={rows} handlers={handlers} canDelete={user.role === "super_admin"} />
     </div>

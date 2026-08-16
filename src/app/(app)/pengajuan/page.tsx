@@ -1,4 +1,4 @@
-import { FileUp, GraduationCap, MonitorCog, Palette, Send, UserPlus } from "lucide-react";
+import { FileUp, GraduationCap, MonitorCog, Palette, Send, UserPlus, LifeBuoy } from "lucide-react";
 import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 import { requireSessionUser } from "@/lib/auth";
@@ -67,7 +67,18 @@ export default async function PengajuanPage() {
       href: "/system/pengajuan",
       icon: MonitorCog,
       title: "Pengajuan System",
-      description: "Kendala perangkat, akses aplikasi, dan permintaan bantuan tim System Support.",
+      description: "Perangkat & POS di cabang — mesin kasir, printer struk, jaringan outlet. Ditangani tim System Support.",
+    });
+  }
+  // Meja yang BERBEDA dari Pengajuan System, dan bedanya sengaja ditulis di
+  // keterangannya: yang menangani orang lain. Tanpa itu, dua kartu bertuliskan
+  // "kendala IT" bersebelahan hanya membuat orang menebak harus pilih yang mana.
+  if (canReachMenu(user, "it_submit")) {
+    categories.push({
+      href: "/it-helpdesk/pengajuan",
+      icon: LifeBuoy,
+      title: "IT Help Desk",
+      description: "Kendala pada aplikasi ini — error, data keliru, hak akses, atau permintaan fitur.",
     });
   }
 

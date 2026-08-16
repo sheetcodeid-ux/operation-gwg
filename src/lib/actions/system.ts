@@ -18,19 +18,44 @@ import {
   simpanKepuasan,
 } from "@/lib/data/system";
 import { r2Enabled, r2Put, R2_PREFIX } from "@/lib/storage/r2";
-import { isSystemSupport, SYS_REQUEST_TYPES, SYS_TYPE_LABEL, type SysRequestType, type SysUrgency } from "@/lib/system-shared";
+import {
+  isHelpdeskOwner,
+  isSystemSupport,
+  SYS_TYPE_LABEL,
+  typesForDesk,
+  type SysDesk,
+  type SysRequestType,
+  type SysUrgency,
+} from "@/lib/system-shared";
 import type { Priority, UserProfile } from "@/lib/types";
 
 const canSubmit = (u: UserProfile | null) => !!u && canReachMenu(u, "sys_submit");
 // Only the System Support team (Operational + jabatan "System Support") — plus
 // Super Admin — may triage, forward and close system tickets.
-const canReview = (u: UserProfile | null) => isSystemSupport(u);
+const canReview = (u: UserProfile | null) => isSystemSupport(u) || isHelpdeskOwner(u);
 
 const MAX_BYTES = 10 * 1024 * 1024; // 10 MB per supporting file
-// Diturunkan dari daftar kategorinya, bukan disalin ulang. Salinan kedua pasti
-// tertinggal saat kategori ditambah — dan gejalanya membingungkan: kartunya ada
-// di layar, tapi kiriman ditolak "Jenis request tidak valid".
-const REQ_TYPES: SysRequestType[] = SYS_REQUEST_TYPES.map((t) => t.value);
+/**
+ * Kategori yang sah untuk sebuah meja — diturunkan dari daftar kategorinya,
+ * bukan disalin ulang. Salinan kedua pasti tertinggal saat kategori ditambah,
+ * dan gejalanya membingungkan: kartunya ada di layar tapi kiriman ditolak.
+ *
+ * Diperiksa PER MEJA, bukan gabungan: tanpa itu, tiket "printer macet" bisa
+ * dikirim ke antrean Help Desk lewat panggilan langsung, lalu mendarat di meja
+ * orang yang tidak memperbaiki printer.
+ */
+const kategoriSah = (desk: SysDesk, t: SysRequestType) => typesForDesk(desk).some((o) => o.value === t);
+
+/** Segarkan halaman-halaman milik satu meja saja. */
+function revalidateDesk(desk: SysDesk) {
+  const dasar = desk === "helpdesk" ? "/it-helpdesk" : "/system";
+  revalidatePath(`${dasar}/pengajuan`);
+  revalidatePath(`${dasar}/antrian`);
+}
+
+/** Siapa yang berwenang atas antrean sebuah meja. */
+const bolehTangani = (u: UserProfile | null, desk: SysDesk) =>
+  desk === "helpdesk" ? isHelpdeskOwner(u) : isSystemSupport(u);
 const URGENCIES: SysUrgency[] = ["urgent", "normal", "low"];
 const URGENCY_PRIORITY: Record<SysUrgency, Priority> = { urgent: "high", normal: "medium", low: "low" };
 
@@ -80,6 +105,7 @@ export async function uploadSystemResultAction(formData: FormData) {
 /* ------------------------------------------------------------------ */
 
 export interface SysSubmitInput {
+  desk: SysDesk;
   outletId: string;
   waNumber: string;
   requestType: SysRequestType;
@@ -107,7 +133,8 @@ export async function submitSystemRequestAction(input: SysSubmitInput) {
   if (input.outletId && !canAccessOutlet(user!, input.outletId, getOutlets())) {
     return { error: "Cabang di luar cakupan Anda." };
   }
-  if (!REQ_TYPES.includes(input.requestType)) return { error: "Jenis request tidak valid." };
+  const desk: SysDesk = input.desk === "helpdesk" ? "helpdesk" : "system";
+  if (!kategoriSah(desk, input.requestType)) return { error: "Jenis request tidak valid untuk layanan ini." };
   if (!URGENCIES.includes(input.urgency)) return { error: "Urgensi tidak valid." };
   if (!input.description?.trim()) return { error: "Deskripsi request wajib diisi." };
 
@@ -118,6 +145,7 @@ export async function submitSystemRequestAction(input: SysSubmitInput) {
     // yang bisa mengajukan; sekarang seluruh departemen bisa, dan jabatan yang
     // salah membuat tim IT menghubungi orang dengan anggapan yang keliru.
     position: (user!.jabatan ?? "").trim() || user!.department || "—",
+    desk,
     outletId: input.outletId,
     waNumber: input.waNumber?.trim() || null,
     requestType: input.requestType,
@@ -132,8 +160,7 @@ export async function submitSystemRequestAction(input: SysSubmitInput) {
   });
   if (!rec) return { error: "Gagal menyimpan request. Coba lagi." };
 
-  revalidatePath("/system/pengajuan");
-  revalidatePath("/system/antrian");
+  revalidateDesk(desk);
   return { ok: true, id: rec.id };
 }
 
@@ -148,6 +175,10 @@ export async function processSystemRequestAction(input: { id: string; handlerId:
 
   const req = await getSystemRequestRow(input.id);
   if (!req) return { error: "Request tidak ditemukan." };
+  // Wewenangnya ditentukan MEJA tiket ini, bukan sekadar "termasuk salah satu
+  // tim IT". Tanpa pemeriksaan ini, tim System Support bisa menutup tiket
+  // aplikasi web dan sebaliknya — dan pemiliknya tidak akan pernah melihatnya.
+  if (!bolehTangani(user, req.desk)) return { error: "Tiket ini bukan milik antrean Anda." };
   if (req.status !== "waiting") return { error: "Request sudah diproses." };
 
   // Forward into the Work Tracker as a System Operation task for the handler.
@@ -211,6 +242,9 @@ export async function processSystemRequestAction(input: { id: string; handlerId:
 export async function completeSystemRequestAction(input: { id: string; resultPaths?: string[] }) {
   const user = await getSessionUser();
   if (!canReview(user)) return { error: "Tidak punya akses." };
+  const asal = await getSystemRequestRow(input.id);
+  if (!asal) return { error: "Request tidak ditemukan." };
+  if (!bolehTangani(user, asal.desk)) return { error: "Tiket ini bukan milik antrean Anda." };
   const req = await getSystemRequestRow(input.id);
   if (!req) return { error: "Request tidak ditemukan." };
   const resultPaths = (input.resultPaths ?? []).filter((p) => typeof p === "string" && p);

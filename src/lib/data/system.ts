@@ -5,7 +5,7 @@ import { db, dbEnabled } from "./db";
 import { markLocalWrite } from "./hydrate";
 import { outletName, userName } from "./store";
 import { isR2Key, presignGet, r2Delete, r2KeyOf } from "@/lib/storage/r2";
-import type { SysRequestType, SysUrgency, SystemRequest } from "@/lib/system-shared";
+import type { SysDesk, SysRequestType, SysUrgency, SystemRequest } from "@/lib/system-shared";
 
 /**
  * System-Support request workflow — DB-direct (no SEED hydration).
@@ -41,6 +41,7 @@ interface Row {
   completed_at: string | null;
   created_at: string;
   ticket_no: string | null;
+  desk: SysDesk;
   first_response_at: string | null;
   satisfaction: number | null;
   satisfaction_note: string | null;
@@ -79,6 +80,7 @@ function toRequest(r: Row, signed: Map<string, string>): SystemRequest {
   return {
     id: r.id,
     ticketNo: r.ticket_no,
+    desk: r.desk ?? "system",
     requesterId: r.requester_id,
     requesterName: r.requester_name,
     position: r.position,
@@ -109,10 +111,24 @@ function toRequest(r: Row, signed: Map<string, string>): SystemRequest {
   };
 }
 
-/** List requests, newest first. Pass `requesterId` to scope to one supervisor. */
-export async function listSystemRequests(requesterId?: string): Promise<SystemRequest[]> {
+/**
+ * Daftar tiket, terbaru dulu.
+ *
+ * `desk` WAJIB disebut pemanggilnya. Nilai bawaan diam-diam pernah jadi sumber
+ * kebocoran di modul lain: satu pemanggil lupa menyaring, lalu antrean satu
+ * meja menampilkan tiket meja lain tanpa ada yang menyadarinya.
+ */
+export async function listSystemRequests(
+  desk: SysDesk,
+  requesterId?: string,
+): Promise<SystemRequest[]> {
   if (!dbEnabled) return [];
-  let q = db().from("system_requests").select("*").order("created_at", { ascending: false }).limit(300);
+  let q = db()
+    .from("system_requests")
+    .select("*")
+    .eq("desk", desk)
+    .order("created_at", { ascending: false })
+    .limit(300);
   if (requesterId) q = q.eq("requester_id", requesterId);
   const { data, error } = await q;
   if (error || !data) return [];
@@ -135,6 +151,7 @@ export interface SysCreateInput {
   position: string;
   outletId: string;
   waNumber: string | null;
+  desk: SysDesk;
   requestType: SysRequestType;
   title: string;
   description: string | null;
@@ -178,6 +195,7 @@ export async function createSystemRequest(input: SysCreateInput): Promise<{ id: 
   const { error } = await db().from("system_requests").insert({
     id,
     ticket_no: await nomorTiketBerikutnya(),
+    desk: input.desk,
     requester_id: input.requesterId,
     requester_name: input.requesterName,
     position: input.position,

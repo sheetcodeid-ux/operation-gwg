@@ -4,7 +4,7 @@ import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import {
   Bug, ChevronDown, CircleHelp, CircleUser, ExternalLink, GraduationCap, KeyRound, Link2, Loader2,
-  MonitorCog, MonitorSmartphone, Paperclip, Plus, Printer, Sparkles, Store, Upload, Wifi, X,
+  DatabaseZap, MonitorCog, MonitorSmartphone, Paperclip, Plus, Printer, Sparkles, Store, Upload, Wifi, X,
   type LucideIcon,
 } from "lucide-react";
 import { toast } from "sonner";
@@ -21,15 +21,17 @@ import { ProofGrid } from "@/components/system/system-review";
 import { DetailRows, DetailTitle } from "@/components/ui/detail-rows";
 import { StatusFilter } from "@/components/ui/status-filter";
 import {
-  SYS_REQUEST_TYPES,
   SYS_SATISFACTION,
   SYS_SATISFACTION_META,
   SYS_STATUS_META,
   SYS_TYPE_LABEL,
   SYS_URGENCY_META,
   selisihSingkat,
+  typesForDesk,
+  type SysDesk,
   type SysRequestType,
   type SysStatus,
+  type SysTypeOption,
   type SysUrgency,
   type SystemRequest,
 } from "@/lib/system-shared";
@@ -48,6 +50,7 @@ const URGENCIES: SysUrgency[] = ["urgent", "normal", "low"];
 const IKON_KATEGORI: Record<string, LucideIcon> = {
   Wifi,
   Bug,
+  DatabaseZap,
   MonitorSmartphone,
   Printer,
   KeyRound,
@@ -65,15 +68,17 @@ const IKON_KATEGORI: Record<string, LucideIcon> = {
  * yang membuat orang memilih kategori yang benar tanpa harus berpikir.
  */
 function KategoriPicker({
+  options,
   value,
   onChange,
 }: {
+  options: SysTypeOption[];
   value: SysRequestType;
   onChange: (v: SysRequestType) => void;
 }) {
   return (
     <div className="grid gap-2 sm:grid-cols-2">
-      {SYS_REQUEST_TYPES.map((t) => {
+      {options.map((t) => {
         const Icon = IKON_KATEGORI[t.icon] ?? CircleHelp;
         const active = value === t.value;
         return (
@@ -108,50 +113,71 @@ function KategoriPicker({
   );
 }
 
+const TEKS_MEJA: Record<SysDesk, { tombol: string; judul: string; keterangan: string }> = {
+  system: {
+    tombol: "Ajukan Permintaan",
+    judul: "Formulir Pengajuan Dukungan Sistem",
+    keterangan:
+      "Kendala perangkat di cabang — mesin kasir, printer struk, jaringan outlet. Ditangani tim System Support.",
+  },
+  helpdesk: {
+    tombol: "Lapor Kendala IT",
+    judul: "Formulir IT Help Desk",
+    keterangan:
+      "Kendala pada aplikasi ini — error, data keliru, hak akses, atau permintaan fitur. Langsung masuk ke antrean IT Help Desk.",
+  },
+};
+
 export function NewSystemRequestButton({
+  desk = "system",
   requesterName,
   requesterPosition,
   outlets,
 }: {
+  desk?: SysDesk;
   requesterName: string;
   requesterPosition: string;
   outlets: { id: string; name: string }[];
 }) {
+  const teks = TEKS_MEJA[desk];
   return (
     <Dialog>
       <DialogTrigger>
         <Button size="sm">
-          <Plus /> Ajukan Permintaan
+          <Plus /> {teks.tombol}
         </Button>
       </DialogTrigger>
-      <DialogContent
-        title="Formulir Pengajuan Dukungan Sistem"
-        description="Sampaikan kebutuhan atau kendala sistem Anda selengkap mungkin agar tim System Support dapat menindaklanjuti dengan cepat dan tepat."
-        align="center"
-        className="max-w-lg"
-      >
-        <SystemRequestForm requesterName={requesterName} requesterPosition={requesterPosition} outlets={outlets} />
+      <DialogContent title={teks.judul} description={teks.keterangan} align="center" className="max-w-lg">
+        <SystemRequestForm
+          desk={desk}
+          requesterName={requesterName}
+          requesterPosition={requesterPosition}
+          outlets={outlets}
+        />
       </DialogContent>
     </Dialog>
   );
 }
 
 function SystemRequestForm({
+  desk,
   requesterName,
   requesterPosition,
   outlets,
 }: {
+  desk: SysDesk;
   requesterName: string;
   requesterPosition: string;
   outlets: { id: string; name: string }[];
 }) {
+  const kategori = typesForDesk(desk);
   const router = useRouter();
   const { setOpen } = useDialogControl();
   const [pending, startTransition] = useTransition();
 
   const [outletId, setOutletId] = useState(outlets[0]?.id ?? "");
   const [waNumber, setWaNumber] = useState("");
-  const [requestType, setRequestType] = useState<SysRequestType>("jaringan");
+  const [requestType, setRequestType] = useState<SysRequestType>(kategori[0].value);
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [impact, setImpact] = useState("");
@@ -180,6 +206,7 @@ function SystemRequestForm({
         }
       }
       const res = await submitSystemRequestAction({
+        desk,
         outletId,
         waNumber,
         requestType,
@@ -196,7 +223,11 @@ function SystemRequestForm({
         toast.error(res.error);
         return;
       }
-      toast.success("Permintaan berhasil dikirim ke tim System Support.");
+      toast.success(
+        desk === "helpdesk"
+          ? "Laporan terkirim ke IT Help Desk. Nomor tiketnya bisa Anda pantau di daftar bawah."
+          : "Permintaan berhasil dikirim ke tim System Support.",
+      );
       setOpen(false);
       router.refresh();
     });
@@ -239,7 +270,7 @@ function SystemRequestForm({
         <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Detail Permintaan</p>
 
         <Field label="Kategori Kendala" hint="Pilih yang paling mendekati — tim IT memakai ini untuk menentukan siapa yang menangani.">
-          <KategoriPicker value={requestType} onChange={setRequestType} />
+          <KategoriPicker options={kategori} value={requestType} onChange={setRequestType} />
         </Field>
 
         <Field label="Judul Permintaan" className="mt-3">

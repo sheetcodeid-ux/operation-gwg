@@ -1,10 +1,14 @@
 import { describe, expect, it } from "vitest";
 import {
+  HELPDESK_TYPES,
+  isHelpdeskOwner,
+  SYSTEM_TYPES,
   SYS_REQUEST_TYPES,
   SYS_SATISFACTION,
   SYS_TYPE_LABEL,
   selisihMs,
   selisihSingkat,
+  typesForDesk,
 } from "./system-shared";
 
 describe("kategori IT Help Desk", () => {
@@ -86,5 +90,79 @@ describe("tingkat kepuasan", () => {
 
   it("tersusun dari yang terbaik ke terburuk", () => {
     expect(SYS_SATISFACTION.map((s) => s.value)).toEqual([5, 4, 3, 2, 1]);
+  });
+});
+
+describe("pemisahan dua meja", () => {
+  it("meja System hanya berisi perangkat cabang, tanpa urusan aplikasi", () => {
+    const nilai = SYSTEM_TYPES.map((t) => t.value);
+    expect(nilai).toContain("jaringan");
+    expect(nilai).toContain("printer");
+    expect(nilai).toContain("hardware");
+    // Ini urusan aplikasi web dan ditangani orang lain. Kalau muncul di sini,
+    // permintaan fitur akan mendarat di antrean tim perbaikan POS.
+    expect(nilai).not.toContain("fitur");
+    expect(nilai).not.toContain("bug");
+    expect(nilai).not.toContain("salah_data");
+  });
+
+  it("meja Help Desk hanya berisi urusan aplikasi, tanpa perangkat cabang", () => {
+    const nilai = HELPDESK_TYPES.map((t) => t.value);
+    expect(nilai).toContain("bug");
+    expect(nilai).toContain("fitur");
+    expect(nilai).toContain("salah_data");
+    // Printer dan mesin kasir bukan pekerjaan meja ini.
+    expect(nilai).not.toContain("printer");
+    expect(nilai).not.toContain("hardware");
+    expect(nilai).not.toContain("jaringan");
+  });
+
+  it("typesForDesk mengembalikan daftar yang benar", () => {
+    expect(typesForDesk("system")).toBe(SYSTEM_TYPES);
+    expect(typesForDesk("helpdesk")).toBe(HELPDESK_TYPES);
+  });
+
+  it("setiap meja punya kategori dan tidak ada yang kosong", () => {
+    // Meja tanpa kategori = formulir yang tidak bisa dikirim sama sekali.
+    expect(SYSTEM_TYPES.length).toBeGreaterThan(0);
+    expect(HELPDESK_TYPES.length).toBeGreaterThan(0);
+  });
+
+  it("gabungannya memberi label untuk kategori dari kedua meja", () => {
+    // Baris lama bisa memakai kategori meja mana pun; tabel harus tetap bisa
+    // menamainya, bukan menampilkan kode mentah.
+    for (const t of [...SYSTEM_TYPES, ...HELPDESK_TYPES]) {
+      expect(SYS_TYPE_LABEL[t.value]).toBe(t.label);
+    }
+  });
+
+  it("gabungannya tidak memuat kategori kembar", () => {
+    const nilai = SYS_REQUEST_TYPES.map((t) => t.value);
+    expect(nilai.length).toBe(new Set(nilai).size);
+  });
+});
+
+describe("isHelpdeskOwner", () => {
+  const buat = (jabatan: string | null, role = "member") => ({ role, department: "Operational", jabatan });
+
+  it("menerima pemegang jabatan IT Help Desk", () => {
+    expect(isHelpdeskOwner(buat("IT Help Desk"))).toBe(true);
+    expect(isHelpdeskOwner(buat("  it help desk  "))).toBe(true); // spasi & huruf besar
+  });
+
+  it("MENOLAK tim System Support", () => {
+    // Inti pemisahannya: mereka mengurus perangkat di cabang, bukan aplikasi
+    // ini. Memberi mereka antrean web berarti tiket web mendarat di meja orang
+    // yang tidak mengerjakannya, lalu diam di situ.
+    expect(isHelpdeskOwner(buat("System Support"))).toBe(false);
+  });
+
+  it("menolak yang tidak berjabatan apa pun", () => {
+    expect(isHelpdeskOwner(buat(null))).toBe(false);
+    expect(isHelpdeskOwner(null)).toBe(false);
+  });
+
+  it("super admin selalu bisa", () => {
+    expect(isHelpdeskOwner(buat(null, "super_admin"))).toBe(true);
   });
 });

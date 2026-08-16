@@ -2,7 +2,7 @@ import { cookies } from "next/headers";
 import { requireSessionUser } from "@/lib/auth";
 import { areaName, listNotifications, visibleOutlets } from "@/lib/data/store";
 import { accessibleMenuKeys, canReachMenu, homeDivision, navAll, navOpenPredicate, navSectionOpen, setNavExtras } from "@/lib/nav";
-import { isSystemSupport } from "@/lib/system-shared";
+import { isHelpdeskOwner, isSystemSupport } from "@/lib/system-shared";
 import { getNavExtra } from "@/lib/data/nav";
 import { assessmentMenuOpen } from "@/lib/data/assessment-menu";
 import { I18nProvider } from "@/lib/i18n/provider";
@@ -44,7 +44,14 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   // "Antrian System" is gated by job title, not the grant system — unlock it for
   // the System Support team (Operational + jabatan System Support) by injecting
   // its grant so the sidebar/command palette show it for them only.
-  const grants = isSystemSupport(user) && !isAdmin ? [...(user.grants ?? []), "Operation:sys_review"] : user.grants ?? [];
+  // "Antrian System" dan "Antrian IT Help Desk" digerbangi JABATAN, bukan sistem
+  // grant — keduanya dibuka di sini dengan menyuntikkan grantnya, supaya sidebar
+  // dan command palette menampilkannya hanya untuk yang berhak.
+  const grants = [...(user.grants ?? [])];
+  if (!isAdmin) {
+    if (isSystemSupport(user)) grants.push("Operation:sys_review");
+    if (isHelpdeskOwner(user)) grants.push("Operation:it_review");
+  }
   const department = user.department ?? "";
   const canOpenItem = navOpenPredicate({ homeDivision: home, allowedKeys, department, grants, isAdmin });
   // Divisi yang terkunci mengunci isinya — sama seperti sidebar. Tanpa ini

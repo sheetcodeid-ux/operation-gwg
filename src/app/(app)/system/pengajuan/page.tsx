@@ -15,14 +15,14 @@ export default async function SystemPengajuanPage() {
   if (!canReachMenu(user, "sys_submit")) redirect("/dashboard");
 
   const outlets = visibleOutlets(user).map((o) => ({ id: o.id, name: o.name }));
-  const rows = await listSystemRequests(user.role === "super_admin" ? undefined : user.id);
+  const rows = await listSystemRequests("system", user.role === "super_admin" ? undefined : user.id);
 
   return (
     <div className="w-full">
       <PageHeader
         icon={MonitorCog}
-        title="IT Help Desk"
-        description="Laporkan kendala IT — jaringan, perangkat, printer, akun, atau aplikasi error. Setiap laporan dapat nomor tiket dan bisa Anda pantau sampai selesai."
+        title="Pengajuan System"
+        description="Laporkan kendala perangkat di cabang — jaringan, mesin kasir, printer struk. Ditangani tim System Support. Setiap laporan dapat nomor tiket."
         actions={
           <NewSystemRequestButton
             requesterName={user.name}

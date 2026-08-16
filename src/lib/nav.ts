@@ -20,9 +20,11 @@ export type MenuKey =
   | "op_analysis"
   | "op_pnl"
   | "sys_review"
+  | "it_review"
   | "hc_submit"
   | "hc_review"
   | "sys_submit"
+  | "it_submit"
   | "elearning"
   | "elearning_admin"
   | "hcmos"
@@ -97,11 +99,13 @@ export const NAV_MENUS: Omit<NavItem, "section" | "group" | "groupIcon">[] = [
   { key: "op_analysis", label: "Data Analysis", href: "/operation/analysis", icon: "ChartColumnBig" },
   { key: "op_pnl", label: "Laba Rugi", href: "/operation/laba-rugi", icon: "Banknote" },
   { key: "sys_review", label: "Antrian System", href: "/system/antrian", icon: "Headset" },
+  { key: "it_review", label: "Antrian IT Help Desk", href: "/it-helpdesk/antrian", icon: "LifeBuoy" },
   // Kedua "pengajuan" ini kini menjadi kategori DI DALAM halaman Pengajuan —
   // tetap punya rute sendiri, tapi tidak lagi muncul terpisah di sidebar.
   { key: "hc_submit", label: "Pengajuan Dokumen", href: "/hc/pengajuan", icon: "FileUp", hidden: true },
   { key: "hc_review", label: "Antrian Dokumen", href: "/hc/antrian", icon: "FolderInput" },
   { key: "sys_submit", label: "Pengajuan System", href: "/system/pengajuan", icon: "MonitorCog", hidden: true },
+  { key: "it_submit", label: "IT Help Desk", href: "/it-helpdesk/pengajuan", icon: "LifeBuoy", hidden: true },
   { key: "elearning", label: "E-Learning", href: "/elearning", icon: "GraduationCap" },
   { key: "elearning_admin", label: "Kelola E-Learning", href: "/elearning/kelola", icon: "LibraryBig" },
   { key: "hcmos", label: "HC-MOS", href: "/hc-mos", icon: "Network" },
@@ -210,13 +214,16 @@ export const ROLE_MENUS: Record<Role, MenuKey[]> = {
  *  company-wide by design: any team must be able to request headcount or a
  *  training programme without an admin granting it first.
  *
- *  `sys_submit` (IT Help Desk) ada di sini karena alasan yang sama, dan lebih
- *  keras lagi: komputer mati atau printer macet bisa menimpa SIAPA PUN. Dulu
- *  menu ini hanya milik supervisor, sehingga Finance, Creative, dan Human
- *  Capital melaporkan kendalanya lewat WhatsApp — di luar sistem, tanpa nomor
- *  tiket, dan tidak terhitung di mana-mana. Yang tidak tercatat tidak bisa
- *  diperbaiki. */
-export const UNIVERSAL_MENUS: MenuKey[] = ["hc_request", "sys_submit", "pesan"];
+ *  `it_submit` (IT Help Desk) ada di sini karena alasan yang sama, dan lebih
+ *  keras lagi: aplikasi yang error bisa menimpa SIAPA PUN di kantor. Selama ini
+ *  Finance, Creative, dan Human Capital melaporkannya lewat WhatsApp — di luar
+ *  sistem, tanpa nomor tiket, tidak terhitung di mana-mana. Yang tidak tercatat
+ *  tidak bisa diperbaiki.
+ *
+ *  Sengaja BUKAN `sys_submit`: itu meja System Support untuk perangkat & POS di
+ *  cabang, ditangani orang yang berbeda. Menggabungkan keduanya membuat keluhan
+ *  printer kasir dan permintaan fitur web menumpuk di satu antrean yang sama. */
+export const UNIVERSAL_MENUS: MenuKey[] = ["hc_request", "it_submit", "pesan"];
 
 /** Divisions that are NOT a department doing day-to-day work — they don't get
  *  the company-wide menus (Administrator is app configuration, not a team). */
@@ -274,7 +281,7 @@ export const DIVISION_GROUPS: Partial<Record<Division, NavGroupDef[]>> = {
 const DIVISION_MENUS: { division: Division; menus: MenuKey[] }[] = [
   // sys_review sits under Operation for placement, but access is jabatan-gated
   // (System Support) via an injected grant — it is NOT a general Operation menu.
-  { division: "Operation", menus: [...OPERATION_FULL, "sys_review", "elearning", "elearning_admin"] },
+  { division: "Operation", menus: [...OPERATION_FULL, "sys_review", "it_review", "elearning", "elearning_admin"] },
   { division: "Supervisor", menus: ["events", "hospitality", "hygiene", "complaints", "hc_kontrak", "hc_submit", "sys_submit"] },
   // Complaints ikut di sini, tapi PDQ hanya melihat kategori Food Quality —
   // penyaringnya di `complaintCategoryScope`, dan memasukkan komplain tetap

@@ -20,11 +20,48 @@ export function isSystemSupport(
 export const SYSTEM_SUPPORT_DEPT = "Operational";
 export const SYSTEM_SUPPORT_JABATAN = "System Support";
 
+/**
+ * DUA meja yang berbeda, memakai alur dan tabel yang sama.
+ *
+ *  • `system`   — perangkat & POS di cabang: mesin kasir, printer struk,
+ *                 jaringan outlet. Ditangani tim System Support.
+ *  • `helpdesk` — aplikasi web ini sendiri: error, permintaan fitur, hak akses
+ *                 menu, data yang perlu dikoreksi. Ditangani pemilik Help Desk.
+ *
+ * Pemisahannya bukan soal rapi-rapian. Keduanya ditangani ORANG YANG BERBEDA,
+ * dan digabung berarti keluhan printer kasir menumpuk di antrean yang sama
+ * dengan permintaan fitur web — dua-duanya jadi lebih lambat ditemukan.
+ *
+ * Yang TIDAK dipisah: tabel, alur status, penomoran tiket, dan komponennya.
+ * Membangun dua sistem tiket berdampingan justru mengembalikan persoalan yang
+ * mau diselesaikan — data IT tercecer di dua tempat.
+ */
+export type SysDesk = "system" | "helpdesk";
+
+/** Jabatan yang memegang antrean IT Help Desk (aplikasi web). */
+export const HELPDESK_JABATAN = "IT Help Desk";
+
+/**
+ * Siapa yang boleh menangani tiket Help Desk.
+ *
+ * Sengaja TIDAK memakai jabatan "System Support": mereka mengurus perangkat di
+ * cabang, bukan aplikasi ini. Memberi mereka antrean web berarti tiket web
+ * mendarat di meja orang yang tidak mengerjakannya, lalu diam di situ.
+ */
+export function isHelpdeskOwner(
+  user: { role: string; department?: string | null; jabatan?: string | null } | null,
+): boolean {
+  if (!user) return false;
+  if (user.role === "super_admin") return true;
+  return (user.jabatan ?? "").trim().toLowerCase() === HELPDESK_JABATAN.toLowerCase();
+}
+
 export type SysRequestType =
   | "jaringan"
   | "bug"
   | "hardware"
   | "printer"
+  | "salah_data"
   | "akses"
   | "fitur"
   | "training"
@@ -33,33 +70,56 @@ export type SysUrgency = "urgent" | "normal" | "low";
 export type SysStatus = "waiting" | "processing" | "done";
 
 /**
- * Kategori keluhan, diurutkan dari yang paling sering dipakai di lapangan.
+ * Satu pilihan kategori.
  *
- * Urutannya bukan selera: kartu pertama yang paling sering ditekan, dan
- * daftar yang dimulai dari "Penambahan Fitur" memaksa orang yang wifi-nya mati
- * membaca sampai bawah dulu. `jaringan` dan `printer` ditambahkan justru karena
- * dua itu keluhan harian yang dulu tidak punya tempat dan selalu jatuh ke
- * "lainnya" — dan kategori yang isinya selalu "lainnya" tidak bisa dipakai
- * menghitung apa pun.
+ * Daftarnya diurutkan dari yang paling sering dipakai, dan itu bukan selera:
+ * kartu pertama yang paling sering ditekan, jadi daftar yang dimulai dari
+ * "Permintaan Fitur" memaksa orang yang aplikasinya error membaca sampai bawah
+ * dulu.
  *
  * `hint` adalah contoh nyata, bukan penjelasan ulang labelnya. Orang memilih
  * kategori dengan mencocokkan keadaannya, bukan dengan membaca definisi.
  */
-export const SYS_REQUEST_TYPES: {
+export interface SysTypeOption {
   value: SysRequestType;
   label: string;
   /** Nama ikon lucide — dipetakan di komponen, supaya berkas ini tetap bebas React. */
   icon: string;
   hint: string;
-}[] = [
-  { value: "jaringan", label: "Jaringan / Internet", icon: "Wifi", hint: "WiFi putus, internet lambat, CCTV tidak terhubung" },
-  { value: "bug", label: "Aplikasi Error", icon: "Bug", hint: "Sistem tidak bisa dibuka, tombol error, data tidak muncul" },
-  { value: "hardware", label: "Perangkat / Hardware", icon: "MonitorSmartphone", hint: "Komputer mati, tablet rusak, mesin kasir bermasalah" },
+}
+
+/** Meja System Support — perangkat & POS di cabang. */
+export const SYSTEM_TYPES: SysTypeOption[] = [
+  { value: "jaringan", label: "Jaringan / Internet", icon: "Wifi", hint: "WiFi outlet putus, internet lambat, CCTV tidak terhubung" },
   { value: "printer", label: "Printer / Struk", icon: "Printer", hint: "Struk tidak keluar, printer dapur macet, tinta habis" },
-  { value: "akses", label: "Akun / Akses", icon: "KeyRound", hint: "Lupa kata sandi, akun terkunci, minta hak akses menu" },
-  { value: "fitur", label: "Permintaan Fitur", icon: "Sparkles", hint: "Minta menu baru atau perubahan pada sistem" },
-  { value: "training", label: "Pelatihan", icon: "GraduationCap", hint: "Minta diajari memakai sistem atau perangkat" },
-  { value: "lainnya", label: "Lainnya", icon: "CircleHelp", hint: "Kendala IT yang tidak masuk kategori di atas" },
+  { value: "hardware", label: "Perangkat / Mesin Kasir", icon: "MonitorSmartphone", hint: "Mesin kasir mati, tablet rusak, layar tidak menyala" },
+  { value: "lainnya", label: "Lainnya", icon: "CircleHelp", hint: "Kendala perangkat lain di cabang" },
+];
+
+/**
+ * Meja IT Help Desk — aplikasi web ini sendiri.
+ *
+ * Isinya sengaja tidak memuat printer atau mesin kasir: itu perangkat di
+ * cabang, dan yang menanganinya orang lain. Kategori yang salah meja membuat
+ * tiket mendarat di antrean yang tidak akan mengerjakannya.
+ */
+export const HELPDESK_TYPES: SysTypeOption[] = [
+  { value: "bug", label: "Aplikasi Error", icon: "Bug", hint: "Halaman gagal dibuka, tombol tidak jalan, muncul pesan error" },
+  { value: "salah_data", label: "Data Salah / Tidak Muncul", icon: "DatabaseZap", hint: "Angka rekap keliru, data sudah diisi tapi tidak tampil" },
+  { value: "akses", label: "Akun / Hak Akses", icon: "KeyRound", hint: "Lupa kata sandi, akun terkunci, menu yang seharusnya ada tidak muncul" },
+  { value: "fitur", label: "Permintaan Fitur", icon: "Sparkles", hint: "Minta menu baru, kolom tambahan, atau perubahan tampilan" },
+  { value: "training", label: "Cara Pakai", icon: "GraduationCap", hint: "Minta diajari memakai sebuah menu di aplikasi" },
+  { value: "lainnya", label: "Lainnya", icon: "CircleHelp", hint: "Kendala aplikasi yang tidak masuk kategori di atas" },
+];
+
+/** Kategori yang berlaku untuk sebuah meja. */
+export const typesForDesk = (desk: SysDesk): SysTypeOption[] =>
+  desk === "helpdesk" ? HELPDESK_TYPES : SYSTEM_TYPES;
+
+/** Gabungan keduanya — dipakai untuk memvalidasi dan memberi label baris lama. */
+export const SYS_REQUEST_TYPES: SysTypeOption[] = [
+  ...SYSTEM_TYPES,
+  ...HELPDESK_TYPES.filter((h) => !SYSTEM_TYPES.some((s) => s.value === h.value)),
 ];
 
 export const SYS_TYPE_LABEL: Record<SysRequestType, string> = Object.fromEntries(
@@ -120,6 +180,8 @@ export function selisihMs(dari: string | null, sampai: string | null): number | 
 
 export interface SystemRequest {
   id: string;
+  /** Meja mana yang menangani tiket ini. */
+  desk: SysDesk;
   /** Nomor tiket, mis. IT-202608-0007. Null hanya untuk baris lama. */
   ticketNo: string | null;
   requesterId: string;
