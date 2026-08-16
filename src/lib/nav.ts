@@ -58,6 +58,8 @@ export type Division =
   | "Auditor"
   | "Executive Assistant"
   | "Business Development"
+  | "Supply Chain"
+  | "Production"
   | "Marketing Communication";
 
 export interface NavItem {
@@ -147,6 +149,8 @@ export const DIVISION_ICON: Record<Division, string> = {
   Auditor: "SearchCheck", // distinct from Supervisor's shield
   "Executive Assistant": "NotebookPen",
   "Business Development": "Handshake",
+  "Supply Chain": "Truck",
+  Production: "ChefHat",
   "Marketing Communication": "Megaphone",
 };
 
@@ -295,6 +299,11 @@ const DIVISION_MENUS: { division: Division; menus: MenuKey[] }[] = [
   { division: "Auditor", menus: ["work"] },
   { division: "Executive Assistant", menus: ["work"] },
   { division: "Business Development", menus: ["work"] },
+  // Dua departemen ini punya pegawai aktif tapi belum pernah punya divisi, jadi
+  // sidebar mereka kosong sama sekali. Diberi dasar yang sama dengan divisi
+  // selaras-departemen lainnya; menu khususnya menyusul saat modulnya ada.
+  { division: "Supply Chain", menus: ["work"] },
+  { division: "Production", menus: ["work"] },
   // Marketing Communication: Work Tracker + the Event/Promo ACC & impact tracker.
   // MarComm adalah pintu masuk keluhan dari kanal publik (Google Review,
   // Instagram, TikTok), jadi Complaints ikut di divisinya.
@@ -495,6 +504,53 @@ export function canOpenMenu(role: Role, key: MenuKey, grants?: string[]): boolea
   return role === "super_admin" || canSeeMenu(role, key) || hasMenuGrant(grants, key);
 }
 
+/**
+ * Nama departemen di data pegawai TIDAK selalu sama persis dengan nama divisi
+ * di sidebar, dan selisihnya diam-diam mematikan seluruh akses per-departemen.
+ *
+ * Contoh nyatanya: 12 orang tercatat berdepartemen "Operational", sementara
+ * divisinya bernama "Operation". Perbandingannya `===`, jadi hasilnya selalu
+ * salah — dan akibatnya tidak terlihat sebagai galat, melainkan sebagai
+ * "menunya terkunci terus". Satu-satunya jalan keluar selama ini adalah
+ * memberi izin satu per satu ke tiap orang, yang lalu terlihat wajar padahal
+ * hanya menambal gejalanya.
+ *
+ * Nama yang tidak dikenal dikembalikan apa adanya — divisi buatan admin lewat
+ * User Management memang bernama persis seperti departemennya.
+ */
+const ALIAS_DEPARTEMEN: Record<string, Division> = {
+  operational: "Operation",
+  operasional: "Operation",
+  "finance accounting tax": "Finance",
+  "finance & accounting": "Finance",
+  "human capital management": "Human Capital",
+  hrd: "Human Capital",
+  pdq: "Product Development & Quality",
+  "marcomm": "Marketing Communication",
+};
+
+/**
+ * Menu yang DITEMPATKAN di sebuah divisi hanya demi letaknya di sidebar, tapi
+ * aksesnya ditentukan JABATAN — bukan keanggotaan departemen.
+ *
+ * Keduanya adalah kotak masuk pekerjaan milik orang tertentu, bukan halaman
+ * informasi. Antrian POS dikerjakan tim System Support; Antrian IT dikerjakan
+ * pemegang Help Desk seorang diri. Membukanya untuk seluruh departemen
+ * Operation berarti tiket bisa ditutup oleh orang yang tidak mengerjakannya,
+ * dan pemiliknya tidak akan pernah tahu.
+ *
+ * Tanpa daftar ini, aturan "satu departemen boleh semua menunya" akan menelan
+ * keduanya — dan sidebar menampilkannya terbuka padahal halamannya menolak,
+ * sehingga yang menekan terlempar balik ke dashboard tanpa penjelasan.
+ */
+export const MENU_DIGERBANGI_JABATAN: MenuKey[] = ["sys_review", "it_review"];
+
+export function divisiDari(department: string | null | undefined): string {
+  const nama = (department ?? "").trim();
+  if (!nama) return "";
+  return ALIAS_DEPARTEMEN[nama.toLowerCase()] ?? nama;
+}
+
 /** Does the division named `division` (built-in or admin-defined) include `key`? */
 export function divisionHasMenu(division: string, key: MenuKey): boolean {
   if (UNIVERSAL_MENUS.includes(key) && !NO_UNIVERSAL.includes(division)) return true;
@@ -511,7 +567,9 @@ export function canReachMenu(
   key: MenuKey,
 ): boolean {
   if (canOpenMenu(user.role, key, user.grants ?? undefined)) return true;
-  return !!user.department && divisionHasMenu(user.department, key);
+  if (MENU_DIGERBANGI_JABATAN.includes(key)) return false;
+  const divisi = divisiDari(user.department);
+  return !!divisi && divisionHasMenu(divisi, key);
 }
 
 /**
@@ -540,7 +598,9 @@ export function navOpenPredicate(a: NavAccess): (item: { section: string; key: M
   return (item) =>
     a.isAdmin ||
     (item.section === a.homeDivision && allowed.has(item.key)) ||
-    item.section === a.department ||
+    // Keanggotaan departemen membuka seluruh menu divisinya — kecuali kotak
+    // masuk yang digerbangi jabatan, yang tetap hanya lewat grant.
+    (item.section === a.department && !MENU_DIGERBANGI_JABATAN.includes(item.key)) ||
     grants.has(`${item.section}:${item.key}`);
 }
 

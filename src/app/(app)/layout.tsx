@@ -1,7 +1,7 @@
 import { cookies } from "next/headers";
 import { requireSessionUser } from "@/lib/auth";
 import { areaName, listNotifications, visibleOutlets } from "@/lib/data/store";
-import { accessibleMenuKeys, canReachMenu, homeDivision, navAll, navOpenPredicate, navSectionOpen, setNavExtras } from "@/lib/nav";
+import { accessibleMenuKeys, canReachMenu, divisiDari, homeDivision, navAll, navOpenPredicate, navSectionOpen, setNavExtras } from "@/lib/nav";
 import { isHelpdeskOwner, isSystemSupport } from "@/lib/system-shared";
 import { getNavExtra } from "@/lib/data/nav";
 import { assessmentMenuOpen } from "@/lib/data/assessment-menu";
@@ -52,7 +52,10 @@ export default async function AppLayout({ children }: { children: React.ReactNod
     if (isSystemSupport(user)) grants.push("Operation:sys_review");
     if (isHelpdeskOwner(user)) grants.push("Operation:it_review");
   }
-  const department = user.department ?? "";
+  // Diselaraskan dulu ke nama divisi. Departemen "Operational" tidak akan
+  // pernah cocok dengan divisi "Operation" kalau dibandingkan mentah-mentah,
+  // dan seluruh menu departemennya ikut terkunci tanpa pesan apa pun.
+  const department = divisiDari(user.department);
   const canOpenItem = navOpenPredicate({ homeDivision: home, allowedKeys, department, grants, isAdmin });
   // Divisi yang terkunci mengunci isinya — sama seperti sidebar. Tanpa ini
   // command palette menawarkan "Pengajuan" dari divisi orang lain, padahal
