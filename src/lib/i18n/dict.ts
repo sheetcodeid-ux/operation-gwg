@@ -63,6 +63,10 @@ export const DICT: Record<Lang, Record<string, string>> = {
     "nav.Data Analysis": "Data Analysis",
     "nav.Laba Rugi": "Profit & Loss",
 
+    "nav.Kalkulator HPP Produksi": "Production Cost Calculator",
+    "nav.Database Produksi": "Production Database",
+    "group.Biaya Produksi": "Production Cost",
+
     "nav.Antrian POS": "POS Queue",
     "nav.Antrian IT": "IT Queue",
     "nav.Pengajuan System POS": "System POS Request",
@@ -284,6 +288,10 @@ export const DICT: Record<Lang, Record<string, string>> = {
     "nav.Analytics Harga Kompetitor": "Analytics Harga Kompetitor",
     "nav.Data Analysis": "Analisis Data",
     "nav.Laba Rugi": "Laba Rugi",
+
+    "nav.Kalkulator HPP Produksi": "Kalkulator HPP Produksi",
+    "nav.Database Produksi": "Database Produksi",
+    "group.Biaya Produksi": "Biaya Produksi",
 
     "nav.Antrian POS": "Antrian POS",
     "nav.Antrian IT": "Antrian IT",

@@ -42,6 +42,8 @@ export type MenuKey =
   | "hpp_bahan"
   | "hpp_price"
   | "hpp_comp"
+  | "sc_hpp"
+  | "sc_rekap"
   | "users"
   | "audit";
 
@@ -126,6 +128,8 @@ export const NAV_MENUS: Omit<NavItem, "section" | "group" | "groupIcon">[] = [
   { key: "hpp_bahan", label: "Master Bahan Baku", href: "/rnd/hpp/bahan", icon: "Package" },
   { key: "hpp_price", label: "Referensi Harga & HPP", href: "/rnd/hpp/price", icon: "Scale" },
   { key: "hpp_comp", label: "Analytics Harga Kompetitor", href: "/rnd/hpp/kompetitor", icon: "Store" },
+  { key: "sc_hpp", label: "Kalkulator HPP Produksi", href: "/supply-chain/hpp", icon: "Calculator" },
+  { key: "sc_rekap", label: "Database Produksi", href: "/supply-chain/rekap", icon: "Table2" },
   { key: "users", label: "User Management", href: "/admin/users", icon: "Users" },
   { key: "audit", label: "Audit Logs", href: "/admin/audit", icon: "ScrollText" },
 ];
@@ -269,6 +273,9 @@ export const DIVISION_GROUPS: Partial<Record<Division, NavGroupDef[]>> = {
   "Product Development & Quality": [
     { name: "Kalkulasi HPP", icon: "Calculator", menus: ["hpp", "hpp_db", "hpp_bahan", "hpp_price", "hpp_comp"] },
   ],
+  "Supply Chain": [
+    { name: "Biaya Produksi", icon: "Calculator", menus: ["sc_hpp", "sc_rekap"] },
+  ],
   "Human Capital": [
     { name: "Talent Acquisition", icon: "UserRound", menus: ["hc_reqreview", "hc_training"] },
     { name: "Administrasi Personalia", icon: "FolderInput", menus: ["hc_review"] },
@@ -306,7 +313,7 @@ const DIVISION_MENUS: { division: Division; menus: MenuKey[] }[] = [
   // Dua departemen ini punya pegawai aktif tapi belum pernah punya divisi, jadi
   // sidebar mereka kosong sama sekali. Diberi dasar yang sama dengan divisi
   // selaras-departemen lainnya; menu khususnya menyusul saat modulnya ada.
-  { division: "Supply Chain", menus: ["work"] },
+  { division: "Supply Chain", menus: ["work", "sc_hpp", "sc_rekap"] },
   { division: "Production", menus: ["work"] },
   // Marketing Communication: Work Tracker + the Event/Promo ACC & impact tracker.
   // MarComm adalah pintu masuk keluhan dari kanal publik (Google Review,
