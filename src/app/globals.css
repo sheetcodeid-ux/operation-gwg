@@ -446,6 +446,31 @@
   a { text-decoration: none !important; color: inherit !important; }
 }
 
+/**
+ * Kolom grid boleh MENYUSUT — dan ini penyebab sesungguhnya "tembus layar".
+ *
+ * Grid tanpa `grid-template-columns` (mis. `grid gap-4 lg:grid-cols-[...]`,
+ * yang di ponsel tidak punya kolom apa pun) menaruh isinya di satu kolom
+ * tersirat. Ukuran kolom itu diambil dari `grid-auto-columns`, yang bawaannya
+ * `auto` — artinya SELEBAR isi terpanjang, bukan selebar wadahnya.
+ *
+ * Akibatnya terukur: wadahnya 358px, kolomnya 710px. Kartu antrean yang
+ * judulnya panjang memaksa kolomnya melebar dua kali lipat layar, lalu seluruh
+ * isinya terpotong di tepi kanan. Halaman memang sudah tidak bisa digeser
+ * setelah `overflow-x` dikunci — tapi terpotong tetap rusak, hanya rusaknya
+ * berpindah bentuk.
+ *
+ * Ada 112 grid berpola sama di aplikasi ini. Menambal satu per satu berarti 112
+ * peluang salah ketik, dan yang ke-113 akan lahir lagi besok. Satu aturan di
+ * sini menutup semuanya sekaligus, termasuk yang belum ditulis.
+ *
+ * Aman karena tidak ada satu pun grid yang memakai `grid-auto-flow: column` —
+ * di layout seperti itu aturan ini akan mengubah perilakunya.
+ */
+.grid {
+  grid-auto-columns: minmax(0, 1fr);
+}
+
 /* Pembungkus yang tidak boleh melebar, dengan cadangan untuk Safari lama.
    Dipakai menggantikan `overflow-x-clip` bawaan Tailwind, yang hanya
    menghasilkan `clip` tanpa cadangan apa pun. */

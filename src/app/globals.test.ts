@@ -57,3 +57,14 @@ describe("cadangan CSS untuk Safari lama", () => {
     expect(isi).toMatch(/@supports\s*\(min-height:\s*100dvh\)/);
   });
 });
+
+describe("kolom grid boleh menyusut", () => {
+  it("grid punya grid-auto-columns minmax(0, 1fr)", () => {
+    // Ini penyebab sesungguhnya "tembus layar", dan gejalanya HANYA muncul saat
+    // ada data — itulah kenapa pengukuran pertama lolos: antrian lokal kosong.
+    // Grid tanpa grid-template-columns menaruh isinya di satu kolom tersirat
+    // yang bawaannya selebar ISI TERPANJANG, bukan selebar wadahnya. Terukur
+    // 710px di dalam wadah 358px, lalu seluruh isinya terpotong di tepi kanan.
+    expect(isi).toMatch(/\.grid\s*\{[^}]*grid-auto-columns:\s*minmax\(0,\s*1fr\)/);
+  });
+});

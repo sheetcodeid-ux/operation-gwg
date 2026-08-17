@@ -71,7 +71,7 @@ export function HcReviewPanel({ rows, canDelete = false }: { rows: HcSubmission[
   }, [rows]);
 
   return (
-    <div className="grid gap-4 lg:grid-cols-[minmax(0,380px)_minmax(0,1fr)]">
+    <div className="grid grid-cols-[minmax(0,1fr)] gap-4 lg:grid-cols-[minmax(0,380px)_minmax(0,1fr)]">
       {/* Left — Antrean Masuk */}
       <div className="flex flex-col rounded-2xl border border-border bg-card">
         <div className="border-b border-border p-3">
