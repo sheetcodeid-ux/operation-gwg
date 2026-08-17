@@ -106,8 +106,8 @@ export const NAV_MENUS: Omit<NavItem, "section" | "group" | "groupIcon">[] = [
   // tetap punya rute sendiri, tapi tidak lagi muncul terpisah di sidebar.
   { key: "hc_submit", label: "Pengajuan Dokumen", href: "/hc/pengajuan", icon: "FileUp", hidden: true },
   { key: "hc_review", label: "Antrian Dokumen", href: "/hc/antrian", icon: "FolderInput" },
-  { key: "sys_submit", label: "Pengajuan POS", href: "/system/pengajuan", icon: "MonitorCog", hidden: true },
-  { key: "it_submit", label: "IT Help Desk", href: "/it-helpdesk/pengajuan", icon: "CodeXml", hidden: true },
+  { key: "sys_submit", label: "Pengajuan System POS", href: "/system/pengajuan", icon: "MonitorCog", hidden: true },
+  { key: "it_submit", label: "Pengajuan IT Help Desk", href: "/it-helpdesk/pengajuan", icon: "CodeXml", hidden: true },
   { key: "elearning", label: "E-Learning", href: "/elearning", icon: "GraduationCap" },
   { key: "elearning_admin", label: "Kelola E-Learning", href: "/elearning/kelola", icon: "LibraryBig" },
   { key: "hcmos", label: "HC-MOS", href: "/hc-mos", icon: "Network" },
@@ -224,10 +224,14 @@ export const ROLE_MENUS: Record<Role, MenuKey[]> = {
  *  sistem, tanpa nomor tiket, tidak terhitung di mana-mana. Yang tidak tercatat
  *  tidak bisa diperbaiki.
  *
- *  Sengaja BUKAN `sys_submit`: itu meja System Support untuk perangkat & POS di
- *  cabang, ditangani orang yang berbeda. Menggabungkan keduanya membuat keluhan
- *  printer kasir dan permintaan fitur web menumpuk di satu antrean yang sama. */
-export const UNIVERSAL_MENUS: MenuKey[] = ["hc_request", "it_submit", "pesan"];
+ *  `sys_submit` (Pengajuan System POS) ikut di sini karena alasan yang sama.
+ *  Sempat hanya milik supervisor, dan akibatnya nyata: Marketing Communication
+ *  yang mau menambah menu di ESB tidak melihat kategorinya sama sekali, lalu
+ *  memilih IT Help Desk — meja yang salah, ditangani orang yang berbeda.
+ *
+ *  Keduanya TETAP dua meja terpisah. Yang dibuka di sini hanya PINTU MASUKNYA;
+ *  antreannya tetap milik penanganya masing-masing. */
+export const UNIVERSAL_MENUS: MenuKey[] = ["hc_request", "sys_submit", "it_submit", "pesan"];
 
 /** Divisions that are NOT a department doing day-to-day work — they don't get
  *  the company-wide menus (Administrator is app configuration, not a team). */

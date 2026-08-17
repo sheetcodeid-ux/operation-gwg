@@ -65,8 +65,8 @@ export const DICT: Record<Lang, Record<string, string>> = {
 
     "nav.Antrian POS": "POS Queue",
     "nav.Antrian IT": "IT Queue",
-    "nav.Pengajuan POS": "POS Request",
-    "nav.IT Help Desk": "IT Help Desk",
+    "nav.Pengajuan System POS": "System POS Request",
+    "nav.Pengajuan IT Help Desk": "IT Help Desk Request",
     "nav.Pengajuan Dokumen": "Document Requests",
     "nav.Antrian Dokumen": "Document Queue",
     "nav.Referensi Harga & HPP": "Price & COGS Reference",
@@ -287,8 +287,8 @@ export const DICT: Record<Lang, Record<string, string>> = {
 
     "nav.Antrian POS": "Antrian POS",
     "nav.Antrian IT": "Antrian IT",
-    "nav.Pengajuan POS": "Pengajuan POS",
-    "nav.IT Help Desk": "IT Help Desk",
+    "nav.Pengajuan System POS": "Pengajuan System POS",
+    "nav.Pengajuan IT Help Desk": "Pengajuan IT Help Desk",
     "nav.Pengajuan Dokumen": "Pengajuan Dokumen",
     "nav.Antrian Dokumen": "Antrian Dokumen",
     "nav.Referensi Harga & HPP": "Referensi Harga & HPP",

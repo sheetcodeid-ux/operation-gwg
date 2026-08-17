@@ -222,13 +222,47 @@
     text-rendering: optimizeLegibility;
   }
 
+  /* Tidak ada satu pun perangkat yang boleh menggeser halaman ke samping. Isi
+     yang memang lebar (tabel, kanban) menggulir di dalam pembungkusnya sendiri.
+
+     DUA baris, dan keduanya WAJIB ada:
+
+       overflow-x: hidden;  cadangan untuk Safari di bawah versi 16
+       overflow-x: clip;    menimpa di peramban modern
+
+     `clip` baru dikenal Safari 16. Di iPhone yang lebih lama barisnya dibuang
+     mentah-mentah, dan tanpa cadangan `hidden` halamannya kembali bisa digeser
+     — persis yang terjadi: normal di Android, tembus di iPhone. `clip` tetap
+     dipakai bila didukung karena ia TIDAK membuat wadah gulir baru, sehingga
+     elemen lengket di dalamnya tidak ikut rusak.
+
+     Dipasang di html DAN body: di iOS yang menggulir sering elemen html, jadi
+     mengunci body saja tidak menahan apa pun. */
+  html,
+  body {
+    overflow-x: hidden;
+    max-width: 100%;
+  }
+  /* Dibungkus @supports, BUKAN ditulis sebagai baris kedua berturut-turut.
+     Dua deklarasi properti yang sama akan digabung pengecil CSS menjadi satu —
+     yang tersisa hanya `clip`, dan cadangannya lenyap tepat di peramban yang
+     membutuhkannya. Sudah terbukti saat memeriksa hasil build. */
+  @supports (overflow-x: clip) {
+    html,
+    body {
+      overflow-x: clip;
+    }
+  }
+
   body {
     @apply bg-background text-foreground;
     font-family: var(--font-sans);
-    min-height: 100dvh;
-    /* Never allow page-level horizontal scroll on any device — wide content
-       (tables, kanban) scrolls inside its own overflow-x-auto wrapper. */
-    overflow-x: clip;
+    min-height: 100vh;
+  }
+  @supports (min-height: 100dvh) {
+    body {
+      min-height: 100dvh;
+    }
   }
 
   /* Ambient command-center backdrop — dark only */
@@ -410,4 +444,28 @@
   }
   .print-break { break-before: page; }
   a { text-decoration: none !important; color: inherit !important; }
+}
+
+/* Pembungkus yang tidak boleh melebar, dengan cadangan untuk Safari lama.
+   Dipakai menggantikan `overflow-x-clip` bawaan Tailwind, yang hanya
+   menghasilkan `clip` tanpa cadangan apa pun. */
+@utility clip-x {
+  overflow-x: hidden;
+}
+@supports (overflow-x: clip) {
+  .clip-x {
+    overflow-x: clip;
+  }
+}
+
+/* Tinggi satu layar penuh, dengan cadangan untuk peramban tanpa satuan dvh.
+   Tanpa cadangan, tingginya jatuh ke `auto` dan seluruh kerangka aplikasi
+   kehilangan patokan tingginya. */
+@utility h-layar {
+  height: 100vh;
+}
+@supports (height: 100dvh) {
+  .h-layar {
+    height: 100dvh;
+  }
 }

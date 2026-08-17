@@ -83,7 +83,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
           {/* h-dvh + overflow-hidden: halaman layar-penuh (Pesan) mengatur
               gulirannya sendiri di dalam panel. Halaman biasa tetap menggulir
               seperti sebelumnya lewat pembungkus overflow-y-auto di bawah. */}
-          <div className="flex h-dvh flex-col overflow-hidden">
+          <div className="flex h-layar flex-col overflow-hidden">
             {/* Di ponsel, Pesan mengambil alih seluruh layar — topbar disembunyikan
                 supaya tidak ada dua baris kepala bertumpuk. */}
             <ChromeSlot>
@@ -93,7 +93,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
               <Sidebar items={navItems} allowedKeys={allowedKeys} homeDivision={home} isAdmin={isAdmin} grants={grants} department={department} />
               {/* overflow-x-clip: no child may widen the page — wide content must
                   scroll inside its own overflow-x-auto wrapper (tables, kanban). */}
-              <div data-scroll-root className="flex min-h-0 min-w-0 flex-1 flex-col overflow-x-clip overflow-y-auto">
+              <div data-scroll-root className="flex min-h-0 min-w-0 flex-1 flex-col clip-x overflow-y-auto">
                 <MainShell showHome={canReachMenu(user, "dashboard")}>{children}</MainShell>
               </div>
             </div>

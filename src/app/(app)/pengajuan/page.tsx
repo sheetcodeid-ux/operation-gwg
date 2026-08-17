@@ -1,4 +1,4 @@
-import { FileUp, GraduationCap, MonitorCog, Palette, Send, UserPlus, LifeBuoy } from "lucide-react";
+import { FileUp, GraduationCap, MonitorCog, Palette, Send, UserPlus, CodeXml } from "lucide-react";
 import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 import { requireSessionUser } from "@/lib/auth";
@@ -66,7 +66,7 @@ export default async function PengajuanPage() {
     categories.push({
       href: "/system/pengajuan",
       icon: MonitorCog,
-      title: "Pengajuan System",
+      title: "Pengajuan System POS",
       description: "Perangkat & POS di cabang — mesin kasir, printer struk, jaringan outlet. Ditangani tim System Support.",
     });
   }
@@ -76,8 +76,8 @@ export default async function PengajuanPage() {
   if (canReachMenu(user, "it_submit")) {
     categories.push({
       href: "/it-helpdesk/pengajuan",
-      icon: LifeBuoy,
-      title: "IT Help Desk",
+      icon: CodeXml,
+      title: "Pengajuan IT Help Desk",
       description: "Kendala pada aplikasi ini — error, data keliru, hak akses, atau permintaan fitur.",
     });
   }
