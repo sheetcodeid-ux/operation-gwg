@@ -3,12 +3,10 @@ import "server-only";
 import { randomUUID } from "node:crypto";
 import { db, dbEnabled } from "./db";
 import { userName } from "./store";
-import { isR2Key, presignGet, r2KeyOf } from "@/lib/storage/r2";
 import type { HcRequest, HcRequestAttachment, HcRequestKind, HcRequestStatus } from "@/lib/hc-request";
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
-const SIGN_TTL = 60 * 60;
 const mem = new Map<string, any>();
 
 const rawAttachments = (v: any): HcRequestAttachment[] =>
@@ -53,30 +51,28 @@ const fromRow = (r: any): HcRequest => ({
   completedAt: r.completed_at ?? null,
 });
 
-async function signAll(list: HcRequest[]): Promise<void> {
-  const paths = [...new Set(list.flatMap((r) => r.attachments.map((a) => a.path).filter((p): p is string => !!p)))];
-  if (paths.length === 0) return;
-  const map = new Map<string, string>();
-  const sb: string[] = [];
-  for (const p of paths) {
-    if (isR2Key(p)) {
-      try {
-        const url = await presignGet(r2KeyOf(p), SIGN_TTL);
-        if (url) map.set(p, url);
-      } catch {
-        /* lewati */
-      }
-    } else sb.push(p);
-  }
-  if (dbEnabled && sb.length > 0) {
-    try {
-      const { data } = await db().storage.from("system-attachments").createSignedUrls(sb, SIGN_TTL);
-      for (const d of data ?? []) if (d.path && d.signedUrl) map.set(d.path, d.signedUrl);
-    } catch {
-      /* signing tidak tersedia */
+/**
+ * Tautan lampiran yang TIDAK BISA KEDALUWARSA.
+ *
+ * Yang ditanam ke halaman adalah alamat aplikasi, bukan tanda tangan
+ * penyimpanan. Tanda tangan punya masa berlaku; halaman tidak — aplikasi ini
+ * dipasang sebagai PWA dan tabnya bisa menganggur berhari-hari, sehingga
+ * presigned URL yang ikut terkirim bersama daftar sudah mati jauh sebelum
+ * berkasnya diklik. Yang muncul saat itu bukan gambarnya, melainkan jawaban
+ * mentah penyimpanan: "ExpiredRequest — Request has expired".
+ *
+ * Rute `/api/berkas/pengajuan/[id]` menandatangani pada detik berkasnya
+ * diklik, setelah memeriksa ulang hak akses sesi yang sedang berjalan. Selain
+ * tidak pernah basi, ini juga menghapus seluruh kerja penandatanganan dari
+ * pemuatan daftar: sebelumnya setiap kali antrian dibuka, SEMUA lampiran dari
+ * ratusan pengajuan ikut ditandatangani padahal hampir tidak ada yang dibuka.
+ */
+function tautkanLampiran(list: HcRequest[]): void {
+  for (const r of list) {
+    for (const a of r.attachments) {
+      if (a.path) a.url = `/api/berkas/pengajuan/${encodeURIComponent(r.id)}?p=${encodeURIComponent(a.path)}`;
     }
   }
-  for (const r of list) for (const a of r.attachments) if (a.path) a.url = map.get(a.path);
 }
 
 export interface ListRequestOpts {
@@ -120,7 +116,7 @@ export async function listHcRequests(opts: ListRequestOpts = {}): Promise<HcRequ
     const { data } = await q;
     rows = ((data ?? []) as any[]).map(fromRow);
   }
-  await signAll(rows);
+  tautkanLampiran(rows);
   return rows;
 }
 

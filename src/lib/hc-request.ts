@@ -271,6 +271,58 @@ export function nextActions(r: HcRequest): { hc: boolean; finance: boolean; comp
   return { hc: r.status === "menunggu_hc", finance: false, complete: r.status === "disetujui_hc" };
 }
 
+/* ─────────────────── siapa melihat pekerjaan siapa (design) ───────────────────
+ *
+ * Antrian Design dipakai beberapa designer sekaligus. Sebelumnya semuanya
+ * melihat SELURUH antrian, sehingga Seka membuka "Sedang Dikerjakan" dan yang
+ * muncul adalah pekerjaan Via — tidak ada cara membedakan mana kerjaannya
+ * sendiri selain mengingat satu per satu.
+ *
+ * Pemisahnya PENUGASAN, bukan tahapnya:
+ *
+ *   belum ditugaskan → kolam bersama, terlihat semua orang. Inilah yang
+ *                      biasanya mengisi "Menunggu": permintaan yang baru masuk
+ *                      dan belum jelas siapa yang mengambil.
+ *   sudah ditugaskan → milik PIC-nya saja, di tahap mana pun ia berada —
+ *                      dikerjakan, revisi, selesai, maupun ditolak.
+ *
+ * Memakai tahap sebagai pemisah ("Menunggu bersama, sisanya pribadi") terdengar
+ * mirip tapi salah: pengajuan yang sudah ditugaskan lalu dikembalikan ke
+ * Menunggu akan muncul lagi di layar semua orang, dan pengajuan yang belum
+ * ditugaskan tapi sudah disetujui akan hilang dari semua orang — termasuk dari
+ * yang seharusnya mengambilnya.
+ */
+
+/**
+ * Jabatan yang mengelola antrian, bukan mengerjakannya.
+ *
+ * Mereka menugaskan PIC, jadi mereka harus melihat seluruh antrian — termasuk
+ * pekerjaan yang sudah dipegang orang lain, karena itulah dasar membagi beban.
+ */
+const JABATAN_PENGELOLA = ["head", "manager", "supervisor", "kepala", "koordinator", "coordinator", "lead"];
+
+/** Apakah pengguna ini mengelola antrian design (melihat semua + menugaskan)? */
+export function kelolaAntrianDesign(
+  user: { role?: string | null; jabatan?: string | null } | null | undefined,
+): boolean {
+  if (!user) return false;
+  if (user.role === "super_admin") return true;
+  // Dicocokkan per KATA supaya "Graphic Designer" tidak ikut hanya karena
+  // mengandung potongan huruf yang sama dengan salah satu jabatan pengelola.
+  const kata = (user.jabatan ?? "").toLowerCase().split(/[^a-z]+/).filter(Boolean);
+  return kata.some((k) => JABATAN_PENGELOLA.includes(k));
+}
+
+/**
+ * Antrian yang pantas dilihat seorang designer: kolam bersama + miliknya.
+ *
+ * Sengaja menerima bentuk seminimal mungkin supaya bisa dipakai di server
+ * (sebelum dikirim ke peramban) maupun di layar, dengan aturan yang sama persis.
+ */
+export function antrianUntukPic<T extends { assigneeId?: string | null }>(rows: T[], userId: string): T[] {
+  return rows.filter((r) => !r.assigneeId || r.assigneeId === userId);
+}
+
 export const isOpen = (s: HcRequestStatus) => s !== "terlaksana" && s !== "ditolak_hc" && s !== "ditolak_finance";
 
 export const fmtRupiah = (n: number) => `Rp ${Math.round(n).toLocaleString("id-ID")}`;

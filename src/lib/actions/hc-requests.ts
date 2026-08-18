@@ -9,7 +9,15 @@ import { persistMessage } from "@/lib/data/persist";
 import { createHcRequest, deleteHcRequest, getHcRequest, listHcRequests, updateHcRequest } from "@/lib/data/hc-requests";
 import { canSeeRequest, requestScopeFor } from "@/lib/data/request-scope";
 import { notify } from "@/lib/data/notify";
-import { REQUESTER_HREF, REVIEWER_DEPARTMENT, REVIEWER_HREF, UPLOAD_MAX_BYTES, UPLOAD_MAX_MB } from "@/lib/hc-request";
+import {
+  antrianUntukPic,
+  kelolaAntrianDesign,
+  REQUESTER_HREF,
+  REVIEWER_DEPARTMENT,
+  REVIEWER_HREF,
+  UPLOAD_MAX_BYTES,
+  UPLOAD_MAX_MB,
+} from "@/lib/hc-request";
 import { getUsers } from "@/lib/data/store";
 import { createTask, getTask, updateTask, updateTaskStatus } from "@/lib/data/mutations";
 import { presignPut, r2Enabled, r2Put, R2_PREFIX } from "@/lib/storage/r2";
@@ -26,6 +34,23 @@ const canCreative = (u: UserProfile | null) => !!u && canReachMenu(u, "creative_
 const canFinance = (u: UserProfile | null) => !!u && canReachMenu(u, "fin_training");
 /** Peninjau yang berhak untuk satu jenis pengajuan. */
 const canReview = (u: UserProfile | null, kind: HcRequestKind) => (kind === "design" ? canCreative(u) : canHc(u));
+
+/**
+ * Boleh menyentuh SATU pengajuan design tertentu.
+ *
+ * `canReview` menjawab "boleh membuka antriannya?", pertanyaan ini menjawab
+ * "boleh menyentuh yang ini?". Keduanya perlu: designer memang berhak membuka
+ * antrian, tapi pekerjaan yang sudah dipegang rekannya bukan miliknya —
+ * menandainya selesai atau menolaknya berarti menutup pekerjaan orang lain.
+ *
+ * Yang belum ditugaskan tetap terbuka untuk siapa pun di tim: itulah cara
+ * seseorang mengambil pekerjaan baru.
+ */
+function bolehSentuhDesign(u: UserProfile | null, req: { assigneeId?: string | null }): boolean {
+  if (!canCreative(u)) return false;
+  if (kelolaAntrianDesign(u)) return true;
+  return !req.assigneeId || req.assigneeId === u!.id;
+}
 
 
 /** Unggah lampiran pengajuan (foto kegiatan, formulir, proposal…). */
@@ -207,7 +232,14 @@ export async function myHcRequestsAction(): Promise<HcRequest[]> {
 export async function allHcRequestsAction(kind?: HcRequestKind): Promise<HcRequest[]> {
   const user = await getSessionUser();
   if (kind === "design" ? !canCreative(user) : !canHc(user)) return [];
-  return listHcRequests(kind ? { kind } : {});
+  const rows = await listHcRequests(kind ? { kind } : {});
+
+  // Antrian Design dipakai beberapa designer sekaligus. Penyaringannya
+  // dilakukan DI SINI, bukan di layar: yang tidak boleh dilihat sebaiknya tidak
+  // pernah sampai ke peramban, dan saringan di layar bisa dilewati siapa pun
+  // yang memanggil aksi ini langsung.
+  if (kind === "design" && !kelolaAntrianDesign(user)) return antrianUntukPic(rows, user!.id);
+  return rows;
 }
 
 /** Pelatihan yang menunggu / sudah diputus Finance. */
@@ -225,6 +257,9 @@ export async function hcDecideRequestAction(input: { id: string; approve: boolea
   const req = await getHcRequest(input.id);
   if (!req) return { error: "Pengajuan tidak ditemukan." };
   if (!canReview(user, req.kind)) return { error: "Tidak punya akses." };
+  if (req.kind === "design" && !bolehSentuhDesign(user, req)) {
+    return { error: `Pengajuan ini dikerjakan ${req.assigneeName ?? "rekan lain"}.` };
+  }
   if (req.status !== "menunggu_hc") return { error: "Pengajuan ini sudah diproses." };
   const status = !input.approve ? "ditolak_hc" : req.kind === "pelatihan" ? "menunggu_finance" : "disetujui_hc";
   const res = await updateHcRequest(input.id, { status, hcNote: input.note ?? "", hcBy: user!.id });
@@ -298,6 +333,9 @@ export async function completeHcRequestAction(input: {
   const req = await getHcRequest(input.id);
   if (!req) return { error: "Pengajuan tidak ditemukan." };
   if (!canReview(user, req.kind)) return { error: "Tidak punya akses." };
+  if (req.kind === "design" && !bolehSentuhDesign(user, req)) {
+    return { error: `Pengajuan ini dikerjakan ${req.assigneeName ?? "rekan lain"}.` };
+  }
   const ready = req.kind === "pelatihan" ? req.status === "disetujui_finance" : req.status === "disetujui_hc";
   if (!ready) return { error: "Pengajuan belum siap ditandai terlaksana." };
 
@@ -354,6 +392,14 @@ export async function assignDesignRequestAction(input: {
   if (!req) return { error: "Pengajuan tidak ditemukan." };
   if (req.kind !== "design") return { error: "Penugasan PIC hanya untuk pengajuan design." };
   if (!canCreative(user)) return { error: "Tidak punya akses." };
+  // Mengambil pekerjaan yang menganggur: boleh siapa saja di tim. Memindahkan
+  // pekerjaan yang sudah dipegang rekan: hanya yang mengelola antrian.
+  if (!bolehSentuhDesign(user, req)) {
+    return { error: `Pengajuan ini sudah dipegang ${req.assigneeName ?? "rekan lain"}.` };
+  }
+  if (!kelolaAntrianDesign(user) && input.assigneeId !== user!.id) {
+    return { error: "Hanya pengelola antrian yang bisa menugaskan pekerjaan ke orang lain." };
+  }
   if (req.status === "terlaksana" || req.status === "ditolak_hc") return { error: "Pengajuan ini sudah selesai." };
   if (!input.assigneeId) return { error: "Pilih PIC yang mengerjakan." };
 

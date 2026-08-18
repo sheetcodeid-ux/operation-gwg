@@ -3,7 +3,6 @@
 import * as React from "react";
 import { CheckCircle2, ClipboardCheck, Loader2, UserRound, Wallet, XCircle } from "lucide-react";
 import { toast } from "sonner";
-import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { Field, Input, Textarea } from "@/components/ui/input";
@@ -39,10 +38,30 @@ export interface PicOption {
   jabatan?: string | null;
 }
 
-/** Antrian pengajuan — dipakai HC (per jenis) dan Finance (dana pelatihan). */
-export function HcRequestReview({ mode, kind, picOptions = [] }: { mode: Mode; kind?: HcRequestKind; picOptions?: PicOption[] }) {
+/**
+ * Antrian pengajuan — dipakai HC (per jenis) dan Finance (dana pelatihan).
+ *
+ * `kelola` membedakan dua peran yang membuka layar yang sama: yang MENGERJAKAN
+ * (designer) hanya menerima kolam bersama + pekerjaannya sendiri — server sudah
+ * memotongnya sebelum sampai ke sini — sementara yang MENGELOLA menerima
+ * seluruh antrian dan butuh saringan per PIC untuk membaginya.
+ */
+export function HcRequestReview({
+  mode,
+  kind,
+  picOptions = [],
+  kelola = false,
+  meId,
+}: {
+  mode: Mode;
+  kind?: HcRequestKind;
+  picOptions?: PicOption[];
+  kelola?: boolean;
+  meId?: string;
+}) {
   const [rows, setRows] = React.useState<HcRequest[] | null>(null);
   const [stage, setStage] = React.useState<RequestStage | "all">("all");
+  const [pic, setPic] = React.useState("all");
 
   const load = React.useCallback(async () => {
     setRows(mode === "hc" ? await allHcRequestsAction(kind) : await financeTrainingRequestsAction());
@@ -57,7 +76,25 @@ export function HcRequestReview({ mode, kind, picOptions = [] }: { mode: Mode; k
   const filterKind: HcRequestKind = mode === "finance" ? "pelatihan" : (kind ?? "pelatihan");
   const opsi = React.useMemo(() => stageFilters(filterKind), [filterKind]);
 
-  const semua = rows ?? [];
+  const saringPic = kind === "design" && kelola;
+  const opsiPic = React.useMemo(
+    () => [
+      { value: "all", label: "Semua PIC" },
+      { value: "belum", label: "Belum ditugaskan" },
+      ...picOptions.map((p) => ({ value: p.id, label: p.name })),
+    ],
+    [picOptions],
+  );
+
+  // Saringan PIC diterapkan LEBIH DULU, supaya angka di tiap tahap ikut
+  // menyesuaikan. Kalau tidak, "Sedang Dikerjakan (7)" akan tetap tertulis 7
+  // padahal yang tampil setelah memilih satu nama hanya dua.
+  const semua = React.useMemo(() => {
+    const list = rows ?? [];
+    if (!saringPic || pic === "all") return list;
+    return pic === "belum" ? list.filter((r) => !r.assigneeId) : list.filter((r) => r.assigneeId === pic);
+  }, [rows, saringPic, pic]);
+
   const tahapDari = React.useCallback(
     (r: HcRequest) => requestStage({ kind: r.kind, status: r.status, revisions: r.revisions }),
     [],
@@ -73,6 +110,19 @@ export function HcRequestReview({ mode, kind, picOptions = [] }: { mode: Mode; k
 
   return (
     <div>
+      {saringPic && (
+        <div className="mb-3 flex flex-wrap items-center gap-2">
+          <span className="text-xs text-muted-foreground">Tampilkan pekerjaan</span>
+          <Combobox value={pic} onChange={setPic} options={opsiPic} className="w-full sm:w-56" />
+        </div>
+      )}
+      {kind === "design" && !kelola && (
+        <p className="mb-3 rounded-xl border border-border bg-muted/30 px-3 py-2 text-[11px] leading-relaxed text-muted-foreground">
+          Yang tampil di sini hanya <b className="text-foreground">pekerjaan Anda</b> ditambah permintaan yang{" "}
+          <b className="text-foreground">belum ditugaskan</b> ke siapa pun. Begitu Anda mengambil salah satunya, ia hilang
+          dari daftar rekan yang lain.
+        </p>
+      )}
       <StageFilterChips className="mb-4" options={opsi} value={stage} onChange={setStage} count={hitung} />
 
       {rows === null ? (
@@ -96,7 +146,7 @@ export function HcRequestReview({ mode, kind, picOptions = [] }: { mode: Mode; k
                   memutuskan — dari sini langsung ke obrolan yang sudah membawa
                   pengajuannya. */}
               <DiscussButton requestId={r.id} requestTitle={r.title} suggestedIds={[r.requesterId]} label="Tanya" />
-              <Actions r={r} mode={mode} picOptions={picOptions} onDone={load} />
+              <Actions r={r} mode={mode} picOptions={picOptions} kelola={kelola} meId={meId} onDone={load} />
             </div>
           )}
         />
@@ -105,7 +155,21 @@ export function HcRequestReview({ mode, kind, picOptions = [] }: { mode: Mode; k
   );
 }
 
-function Actions({ r, mode, picOptions, onDone }: { r: HcRequest; mode: Mode; picOptions: PicOption[]; onDone: () => void }) {
+function Actions({
+  r,
+  mode,
+  picOptions,
+  kelola,
+  meId,
+  onDone,
+}: {
+  r: HcRequest;
+  mode: Mode;
+  picOptions: PicOption[];
+  kelola: boolean;
+  meId?: string;
+  onDone: () => void;
+}) {
   const step = nextActions(r);
   const [dialog, setDialog] = React.useState<null | "hc" | "finance" | "complete" | "assign">(null);
   const isDesign = r.kind === "design";
@@ -122,7 +186,7 @@ function Actions({ r, mode, picOptions, onDone }: { r: HcRequest; mode: Mode; pi
                 karena penugasan itulah yang membuat tugasnya di Work Tracker. */}
             {isDesign ? (
               <Button size="sm" onClick={() => setDialog("assign")}>
-                <UserRound className="size-4" /> Tugaskan PIC
+                <UserRound className="size-4" /> {kelola ? "Tugaskan PIC" : "Ambil Pekerjaan"}
               </Button>
             ) : (
               <Button size="sm" onClick={() => setDialog("hc")}>
@@ -131,9 +195,13 @@ function Actions({ r, mode, picOptions, onDone }: { r: HcRequest; mode: Mode; pi
             )}
           </>
         )}
-        {isDesign && !step.hc && r.status !== "terlaksana" && (
+        {/* Memindahkan pekerjaan yang sudah dipegang seseorang adalah keputusan
+            pembagian beban, bukan keputusan pengerjaan — jadi tombolnya hanya
+            ada pada yang mengelola antrian. Yang mengerjakan tetap bisa
+            MENGAMBIL pekerjaan yang belum bertuan. */}
+        {isDesign && !step.hc && r.status !== "terlaksana" && (kelola || !r.assigneeId) && (
           <Button size="sm" variant="outline" onClick={() => setDialog("assign")}>
-            <UserRound className="size-4" /> {r.assigneeName ? "Ganti PIC" : "Tugaskan PIC"}
+            <UserRound className="size-4" /> {r.assigneeName ? "Ganti PIC" : kelola ? "Tugaskan PIC" : "Ambil Pekerjaan"}
           </Button>
         )}
         {step.complete && (
@@ -142,7 +210,9 @@ function Actions({ r, mode, picOptions, onDone }: { r: HcRequest; mode: Mode; pi
           </Button>
         )}
         {dialog === "hc" && <HcDecideDialog r={r} onClose={() => setDialog(null)} onDone={onDone} />}
-        {dialog === "assign" && <AssignDialog r={r} picOptions={picOptions} onClose={() => setDialog(null)} onDone={onDone} />}
+        {dialog === "assign" && (
+          <AssignDialog r={r} picOptions={picOptions} kelola={kelola} meId={meId} onClose={() => setDialog(null)} onDone={onDone} />
+        )}
         {dialog === "complete" && <CompleteDialog r={r} onClose={() => setDialog(null)} onDone={onDone} />}
       </>
     );
@@ -354,25 +424,36 @@ function CompleteDialog({ r, onClose, onDone }: { r: HcRequest; onClose: () => v
 function AssignDialog({
   r,
   picOptions,
+  kelola,
+  meId,
   onClose,
   onDone,
 }: {
   r: HcRequest;
   picOptions: PicOption[];
+  kelola: boolean;
+  meId?: string;
   onClose: () => void;
   onDone: () => void;
 }) {
-  const [pic, setPic] = React.useState(r.assigneeId ?? "");
+  // Yang mengerjakan hanya bisa menugaskan SATU orang: dirinya sendiri.
+  // Menampilkan daftar nama rekan padahal server akan menolaknya hanya
+  // memancing kekecewaan — jadi pilihannya memang tidak ditawarkan.
+  const [pic, setPic] = React.useState(kelola ? (r.assigneeId ?? "") : (meId ?? ""));
   const [busy, setBusy] = React.useState(false);
 
   async function save() {
-    if (!pic) return toast.error("Pilih PIC yang mengerjakan.");
+    if (!pic) return toast.error(kelola ? "Pilih PIC yang mengerjakan." : "Akun Anda belum dikenali, muat ulang halaman.");
     setBusy(true);
     const res = await assignDesignRequestAction({ id: r.id, assigneeId: pic });
     setBusy(false);
     if (res?.error) return toast.error(res.error);
     const name = picOptions.find((p) => p.id === pic)?.name ?? "PIC";
-    toast.success(`Dikerjakan oleh ${name} — tugasnya masuk Work Tracker Creative`);
+    toast.success(
+      kelola
+        ? `Dikerjakan oleh ${name} — tugasnya masuk Work Tracker Creative`
+        : "Pekerjaan ini sekarang milik Anda — tugasnya masuk Work Tracker Creative",
+    );
     onClose();
     onDone();
   }
@@ -381,12 +462,17 @@ function AssignDialog({
     <Dialog open onOpenChange={(v) => !v && onClose()}>
       <DialogContent
         align="center"
-        title={r.assigneeName ? "Ganti PIC Pengerjaan" : "Tugaskan PIC Pengerjaan"}
+        title={kelola ? (r.assigneeName ? "Ganti PIC Pengerjaan" : "Tugaskan PIC Pengerjaan") : "Ambil Pekerjaan Ini"}
         description={r.title}
         className="max-w-md"
       >
         <div className="space-y-4 p-5">
-          {picOptions.length === 0 ? (
+          {!kelola ? (
+            <p className="rounded-lg border border-border bg-muted/30 p-3 text-xs leading-relaxed text-muted-foreground">
+              Pekerjaan ini akan tercatat atas nama Anda dan hilang dari daftar rekan yang lain. Tugasnya juga langsung
+              muncul di <b className="text-foreground">Work Tracker Creative</b>.
+            </p>
+          ) : picOptions.length === 0 ? (
             <p className="rounded-lg border border-dashed border-border p-3 text-xs text-muted-foreground">
               Belum ada anggota tim Creative di User Management.
             </p>
@@ -405,17 +491,20 @@ function AssignDialog({
             </Field>
           )}
 
-          <p className="rounded-lg border border-border bg-muted/30 p-3 text-[11px] text-muted-foreground">
-            Setelah ditugaskan, tugas otomatis muncul di <b className="text-foreground">Work Tracker Creative</b> atas nama
-            PIC. Menandai tugas itu selesai akan menutup permintaan design ini, begitu pula sebaliknya.
-          </p>
+          {kelola && (
+            <p className="rounded-lg border border-border bg-muted/30 p-3 text-[11px] text-muted-foreground">
+              Setelah ditugaskan, tugas otomatis muncul di <b className="text-foreground">Work Tracker Creative</b> atas
+              nama PIC. Menandai tugas itu selesai akan menutup permintaan design ini, begitu pula sebaliknya.
+            </p>
+          )}
 
           <div className="flex justify-end gap-2">
             <Button variant="outline" onClick={onClose} disabled={busy}>
               Batal
             </Button>
-            <Button onClick={save} disabled={busy || picOptions.length === 0}>
-              {busy ? <Loader2 className="size-4 animate-spin" /> : <UserRound className="size-4" />} Simpan
+            <Button onClick={save} disabled={busy || (kelola && picOptions.length === 0) || (!kelola && !meId)}>
+              {busy ? <Loader2 className="size-4 animate-spin" /> : <UserRound className="size-4" />}{" "}
+              {kelola ? "Simpan" : "Ambil"}
             </Button>
           </div>
         </div>

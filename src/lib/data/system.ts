@@ -4,7 +4,7 @@ import { randomUUID } from "node:crypto";
 import { db, dbEnabled } from "./db";
 import { markLocalWrite } from "./hydrate";
 import { outletName, userName } from "./store";
-import { isR2Key, presignGet, r2Delete, r2KeyOf } from "@/lib/storage/r2";
+import { isR2Key, r2Delete, r2KeyOf } from "@/lib/storage/r2";
 import type { SysDesk, SysRequestType, SysUrgency, SystemRequest } from "@/lib/system-shared";
 
 /**
@@ -47,36 +47,24 @@ interface Row {
   satisfaction_note: string | null;
 }
 
-const SIGN_TTL = 60 * 60;
+/**
+ * Tautan berkas tiket yang TIDAK BISA KEDALUWARSA.
+ *
+ * Yang ditanam ke halaman adalah alamat aplikasi, bukan tanda tangan
+ * penyimpanan. Tanda tangan punya masa berlaku; halaman tidak — aplikasi ini
+ * dipasang sebagai PWA dan tabnya bisa menganggur berhari-hari, sehingga
+ * presigned URL yang ikut terkirim bersama daftar sudah mati jauh sebelum
+ * berkasnya diklik. Yang muncul saat itu bukan fotonya, melainkan jawaban
+ * mentah penyimpanan: "ExpiredRequest — Request has expired".
+ *
+ * Rute `/api/berkas/tiket/[id]` menandatangani pada detik berkasnya diklik,
+ * setelah memeriksa ulang hak akses sesi yang sedang berjalan.
+ */
+const tautanBerkas = (idTiket: string, jalur: string) =>
+  `/api/berkas/tiket/${encodeURIComponent(idTiket)}?p=${encodeURIComponent(jalur)}`;
 
-/** Batch-sign uploaded-attachment paths in one API call → path→URL map. */
-async function signBatch(paths: string[]): Promise<Map<string, string>> {
-  const map = new Map<string, string>();
-  const unique = [...new Set(paths.filter(Boolean))];
-  if (unique.length === 0) return map;
-  for (const p of unique) {
-    if (!isR2Key(p)) continue;
-    try {
-      const url = await presignGet(r2KeyOf(p), SIGN_TTL);
-      if (url) map.set(p, url);
-    } catch {
-      /* leave this file's link empty rather than throwing the page */
-    }
-  }
-  const sb = unique.filter((p) => !isR2Key(p));
-  if (dbEnabled && sb.length > 0) {
-    try {
-      const { data } = await db().storage.from("system-attachments").createSignedUrls(sb, SIGN_TTL);
-      for (const d of data ?? []) if (d.path && d.signedUrl) map.set(d.path, d.signedUrl);
-    } catch {
-      /* signing unavailable — rows still render, just without a download link */
-    }
-  }
-  return map;
-}
-
-function toRequest(r: Row, signed: Map<string, string>): SystemRequest {
-  const fileUrl = r.attachment_path ? signed.get(r.attachment_path) ?? null : null;
+function toRequest(r: Row): SystemRequest {
+  const fileUrl = r.attachment_path ? tautanBerkas(r.id, r.attachment_path) : null;
   return {
     id: r.id,
     ticketNo: r.ticket_no,
@@ -100,7 +88,7 @@ function toRequest(r: Row, signed: Map<string, string>): SystemRequest {
     handlerId: r.handler_id,
     handlerName: r.handler_id ? userName(r.handler_id) : null,
     note: r.note,
-    resultUrls: (r.result_paths ?? []).map((p) => signed.get(p)).filter((u): u is string => !!u),
+    resultUrls: (r.result_paths ?? []).filter(Boolean).map((p) => tautanBerkas(r.id, p)),
     workTaskId: r.work_task_id,
     processedByName: r.processed_by ? userName(r.processed_by) : null,
     completedAt: r.completed_at,
@@ -132,10 +120,7 @@ export async function listSystemRequests(
   if (requesterId) q = q.eq("requester_id", requesterId);
   const { data, error } = await q;
   if (error || !data) return [];
-  const rows = data as Row[];
-  const paths = rows.flatMap((r) => [r.attachment_path, ...(r.result_paths ?? [])]).filter((p): p is string => !!p);
-  const signed = await signBatch(paths);
-  return rows.map((r) => toRequest(r, signed));
+  return (data as Row[]).map(toRequest);
 }
 
 export async function getSystemRequestRow(id: string): Promise<Row | null> {
