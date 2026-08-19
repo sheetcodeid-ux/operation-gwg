@@ -3,7 +3,7 @@
 import * as React from "react";
 import { Area, Bar, CartesianGrid, ComposedChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { singkat, singkatPeriode } from "@/lib/hcmos/singkat";
+import { labelSumbu, singkat, singkatPeriode } from "@/lib/hcmos/singkat";
 
 /**
  * Grafik HC-MOS — mengikuti gaya grafik Work Tracker.
@@ -116,10 +116,13 @@ export function GrafikBatang({
   periode?: boolean;
   pesanKosong?: string;
 }) {
-  const baris = React.useMemo<BarisBatang[]>(
-    () => data.map((d) => ({ nama: periode ? singkatPeriode(d.nama) : singkat(d.nama), penuh: d.nama, nilai: d.nilai })),
-    [data, periode],
-  );
+  const baris = React.useMemo<BarisBatang[]>(() => {
+    const label = labelSumbu(
+      data.map((d) => d.nama),
+      periode ? singkatPeriode : singkat,
+    );
+    return data.map((d, i) => ({ nama: label[i], penuh: d.nama, nilai: d.nilai }));
+  }, [data, periode]);
   if (baris.length === 0) return <Kosong judul={judul} subjudul={subjudul} pesan={pesanKosong} />;
 
   return (
@@ -176,17 +179,20 @@ export function GrafikGaris({
   satuan?: string;
   pesanKosong?: string;
 }) {
-  const baris = React.useMemo<BarisBatang[]>(
-    () => data.map((d) => ({ nama: singkatPeriode(d.nama), penuh: d.nama, nilai: d.nilai })),
-    [data],
-  );
+  const baris = React.useMemo<BarisBatang[]>(() => {
+    const label = labelSumbu(
+      data.map((d) => d.nama),
+      singkatPeriode,
+    );
+    return data.map((d, i) => ({ nama: label[i], penuh: d.nama, nilai: d.nilai }));
+  }, [data]);
   if (baris.length === 0) return <Kosong judul={judul} subjudul={subjudul} pesan={pesanKosong} />;
 
   return (
     <Bingkai judul={judul} subjudul={subjudul}>
       <div className="min-h-[15rem] flex-1" style={{ outline: "none" }}>
         <ResponsiveContainer width="100%" height="100%">
-          <ComposedChart data={baris} margin={{ top: 8, right: 8, left: 0, bottom: 0 }} accessibilityLayer={false}>
+          <ComposedChart data={baris} margin={{ top: 8, right: 28, left: 0, bottom: 0 }} accessibilityLayer={false}>
             <defs>
               <linearGradient id="hcBlue" x1="0" y1="0" x2="0" y2="1">
                 <stop offset="0%" stopColor={BIRU} stopOpacity={0.35} />

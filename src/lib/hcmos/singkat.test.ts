@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { singkat, singkatPeriode } from "./singkat";
+import { labelSumbu, singkat, singkatPeriode } from "./singkat";
 
 describe("singkatan label sumbu", () => {
   it("memakai singkatan yang sudah dipakai orang, bukan potongan huruf", () => {
@@ -66,5 +66,26 @@ describe("singkatan periode", () => {
 
   it("yang bukan periode jatuh ke aturan singkatan biasa", () => {
     expect(singkatPeriode("Supervisor")).toBe("SPV");
+  });
+});
+
+describe("labelSumbu", () => {
+  it("menyingkat selama singkatannya masih saling berbeda", () => {
+    expect(labelSumbu(["Finance Accounting Tax", "Supervisor"])).toEqual(["FAT", "SPV"]);
+  });
+
+  it("memakai nama utuh begitu singkatannya bertabrakan", () => {
+    // "Batch 01/2026" dan "Batch 02/2026" sama-sama jadi "B02" — tiga titik
+    // pada grafik tren jadi tidak bisa dibedakan sama sekali.
+    const nama = ["Batch 01/2026", "Batch 02/2026", "Batch 03/2026"];
+    expect(labelSumbu(nama)).toEqual(nama);
+  });
+
+  it("nama yang memang kembar tidak memaksa label panjang", () => {
+    expect(labelSumbu(["Supervisor", "Supervisor"])).toEqual(["SPV", "SPV"]);
+  });
+
+  it("bisa dipakai dengan penyingkat periode", () => {
+    expect(labelSumbu(["2026-01", "2026-02"], singkatPeriode)).toEqual(["JAN", "FEB"]);
   });
 });

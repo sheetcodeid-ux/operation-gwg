@@ -8,6 +8,7 @@ import { getOutlets } from "@/lib/data/store";
 import { scopeOutlets } from "@/lib/rbac";
 import { listTabel } from "@/lib/data/hcmos-lanjutan";
 import { PageHeader } from "@/components/ui/page-header";
+import { Badge } from "@/components/ui/badge";
 import { FastTrackBoard } from "@/components/hcmos/modul-boards";
 import { bolehUbahHc } from "@/lib/hcmos/akses";
 
@@ -28,9 +29,23 @@ export default async function FastTrackPage() {
       <PageHeader
         icon={Rocket}
         title="Fast Start & Fast Track"
-        description="Program wajib crew outlet beserta Pre Test, Role Play, dan Post Test — kelulusan minimal 65."
+        description="Pelaksanaan program wajib crew outlet per batch — Pre Test, Role Play, dan Post Test, dengan kelulusan minimal 65."
       />
+      <div className="mb-4 flex flex-wrap gap-2">
+        <Badge tone="neutral">Learning &amp; Development</Badge>
+        <Badge tone="neutral">PIC: Riva</Badge>
+        <Badge tone="neutral">Scope: Outlet</Badge>
+      </div>
+
       <FastTrackBoard rows={rows} outlets={outlets} bolehUbah={bolehUbahHc(user)} />
+
+      <p className="mt-4 text-[11px] leading-relaxed text-muted-foreground">
+        Kurikulum beserta status tiap modulnya ada di{" "}
+        <Link href="/hc-mos/modul" className="text-primary hover:underline">
+          Modul Pelatihan (LMS)
+        </Link>
+        ; halaman ini yang mencatat siapa menjalaninya.
+      </p>
     </div>
   );
 }

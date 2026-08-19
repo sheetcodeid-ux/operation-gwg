@@ -211,10 +211,10 @@ export const HC_PILLARS: HcPillar[] = [
       {
         slug: "modul-pelatihan",
         label: "Modul Pelatihan (LMS)",
-        fungsi: "Modul pelatihan terstruktur dan terjadwal.",
+        fungsi: "Kurikulum pelatihan Manajemen & Outlet beserta pelaksanaannya — modul mana yang berjalan, siapa pesertanya.",
         icon: "BookOpen",
-        href: "/elearning",
-        hrefLabel: "E-Learning",
+        href: "/hc-mos/modul",
+        hrefLabel: "Modul Pelatihan",
         raci: { R: "Riva", A: "Adrian", C: "Kepala Divisi Terkait", I: "Karyawan/Crew" },
       },
       {

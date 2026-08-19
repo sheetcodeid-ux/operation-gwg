@@ -100,3 +100,20 @@ export function singkatPeriode(nama: string): string {
   if (idx >= 0) return BULAN_SINGKAT[idx];
   return singkat(bersih);
 }
+
+/**
+ * Label sumbu X untuk sekumpulan titik — disingkat HANYA bila singkatannya
+ * masih membedakan satu titik dari yang lain.
+ *
+ * Ini bukan kehati-hatian berlebihan. "Batch 01/2026", "Batch 02/2026", dan
+ * "Batch 03/2026" semuanya menjadi "B02" lewat aturan huruf awal, sehingga
+ * grafik tren menampilkan tiga label identik dan pembacanya kehilangan
+ * satu-satunya penanda titik mana yang mana. Lebih baik label panjang yang
+ * benar daripada singkatan rapi yang tidak menunjuk apa pun.
+ */
+export function labelSumbu(nama: string[], ringkas: (s: string) => string = singkat): string[] {
+  const pendek = nama.map(ringkas);
+  const bedaAsli = new Set(nama.map((n) => n.trim())).size;
+  if (new Set(pendek).size === bedaAsli) return pendek;
+  return nama.map((n) => n.trim() || "—");
+}

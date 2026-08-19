@@ -30,6 +30,16 @@ import {
   STANDAR_OUTLET,
 } from "@/lib/hcmos/kompetensi";
 import { SCOPE_LABEL, type HcScope } from "@/lib/hcmos/pillars";
+import { brandOutlet } from "@/lib/hcmos/kontrak";
+import { GrafikBatang, GrafikGaris } from "./grafik";
+import {
+  STATUS_MODUL_META,
+  fastTrackPerBrand,
+  jumlahPeserta,
+  ringkasBatch,
+  trenKelulusan,
+  type RekamanPelatihan,
+} from "@/lib/hcmos/pelatihan";
 import {
   JENIS_CUTI,
   KATEGORI_KASUS,
@@ -749,27 +759,161 @@ export function FastTrackBoard({
     [rows, program],
   );
 
-  const berNilai = rows.filter((r) => n(r, "post_test") !== null);
-  const jumlahLulus = berNilai.filter((r) => lulus(n(r, "post_test"))).length;
   const rerataPre = rataRata(rows.map((r) => n(r, "pre_test")));
   const rerataPost = rataRata(rows.map((r) => n(r, "post_test")));
+
+  // Bentuk mentah tabel diubah sekali jadi bentuk yang dipakai perhitungan,
+  // supaya seluruh rekap di bawah membaca sumber yang sama persis dengan
+  // Modul Pelatihan — bukan menghitung ulang dengan aturan sendiri.
+  const rekaman = React.useMemo<RekamanPelatihan[]>(
+    () =>
+      rows.map((r) => ({
+        nama: t(r, "nama"),
+        materi: t(r, "materi"),
+        program: t(r, "program"),
+        batch: t(r, "batch"),
+        outletName: r.outletName ?? null,
+        tanggal: t(r, "tanggal") || null,
+        postTest: n(r, "post_test"),
+      })),
+    [rows],
+  );
+
+  const batch = React.useMemo(() => ringkasBatch(rekaman), [rekaman]);
+  const tren = React.useMemo(() => trenKelulusan(batch), [batch]);
+  const perBrand = React.useMemo(
+    () => fastTrackPerBrand(rekaman, (nama) => brandOutlet(nama) ?? ""),
+    [rekaman],
+  );
+
+  const batchBerjalan = batch.filter((b) => b.status === "berjalan").length;
+  const fastStart = rekaman.filter((r) => r.program === "fast_start" && r.postTest !== null);
+  const lulusFastStart = fastStart.filter((r) => lulus(r.postTest) === true).length;
+  const persenFastStart = fastStart.length === 0 ? null : Math.round((lulusFastStart / fastStart.length) * 100);
+  const jalurFastTrack = perBrand.reduce((a, b) => a + b.nilai, 0);
 
   return (
     <div className="space-y-4">
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-        <StatTile icon={Rocket} label="Peserta" value={rows.length} sub="seluruh batch" />
+        <StatTile
+          icon={Rocket}
+          label="Batch Berjalan"
+          value={batchBerjalan}
+          sub={`dari ${batch.length} batch tercatat`}
+        />
+        <StatTile
+          icon={UsersRound}
+          label="Crew Terdaftar"
+          value={jumlahPeserta(rekaman)}
+          sub="orang berbeda, bukan jumlah baris"
+        />
         <StatTile
           icon={ClipboardCheck}
-          label="Lulus"
-          value={jumlahLulus}
-          sub={`dari ${berNilai.length} yang sudah dinilai`}
+          label="Kelulusan Fast Start"
+          value={persenFastStart === null ? "—" : `${persenFastStart}%`}
+          sub={
+            fastStart.length === 0
+              ? "belum ada Post Test yang dinilai"
+              : `${lulusFastStart} lulus dari ${fastStart.length} dinilai`
+          }
         />
-        <StatTile icon={ChartColumnBig} label="Rerata Pre Test" value={rerataPre ?? "—"} sub="sebelum pelatihan" />
         <StatTile
-          icon={ChartColumnBig}
-          label="Rerata Post Test"
-          value={rerataPost ?? "—"}
-          sub={rerataPre !== null && rerataPost !== null ? `naik ${Math.round((rerataPost - rerataPre) * 10) / 10}` : "sesudah pelatihan"}
+          icon={Store}
+          label="Jalur Fast Track"
+          value={jalurFastTrack}
+          sub={perBrand.length === 0 ? "belum ada peserta Fast Track" : `tersebar di ${perBrand.length} brand`}
+        />
+      </div>
+
+      {/* ── Jadwal batch ─────────────────────────────────────────────────
+          Rekap per batch dulu, daftar pesertanya belakangan. Yang ditanyakan
+          orang saat membuka halaman ini hampir selalu "batch mana yang masih
+          jalan dan sudah sampai mana", bukan nilai satu orang tertentu. */}
+      <Card>
+        <CardHeader className="pb-2">
+          <CardTitle>Jadwal Batch</CardTitle>
+          <p className="text-[11px] text-muted-foreground">
+            Periode diambil dari tanggal catatan pesertanya — tidak diketik terpisah
+          </p>
+        </CardHeader>
+        <CardContent>
+          {batch.length === 0 ? (
+            <p className="py-6 text-center text-sm text-muted-foreground">
+              Belum ada batch tercatat. Tambahkan peserta di tabel bawah untuk memulainya.
+            </p>
+          ) : (
+            <div className="-mx-4 overflow-x-auto px-4">
+              <table className="w-full min-w-[640px] border-collapse text-sm">
+                <thead>
+                  <tr className="border-b border-border text-left">
+                    <ThKecil>Batch</ThKecil>
+                    <ThKecil>Program</ThKecil>
+                    <ThKecil>Peserta</ThKecil>
+                    <ThKecil>Periode</ThKecil>
+                    <ThKecil>Kelulusan</ThKecil>
+                    <ThKecil>Status</ThKecil>
+                  </tr>
+                </thead>
+                <tbody>
+                  {batch.map((b) => (
+                    <tr key={b.batch} className="border-b border-border/60 last:border-0">
+                      <TdKecil className="font-medium text-foreground">{b.batch}</TdKecil>
+                      <TdKecil>
+                        <div className="flex flex-wrap gap-1">
+                          {b.program.length === 0 ? (
+                            <span className="text-muted-foreground">—</span>
+                          ) : (
+                            b.program.map((pr) => (
+                              <Badge key={pr} tone={pr === "fast_track" ? "brand" : "neutral"}>
+                                {PROGRAM_FAST[pr as keyof typeof PROGRAM_FAST] ?? pr}
+                              </Badge>
+                            ))
+                          )}
+                        </div>
+                      </TdKecil>
+                      <TdKecil className="tabular-nums">{b.peserta}</TdKecil>
+                      <TdKecil className="whitespace-nowrap">
+                        {b.mulai ? `${formatDate(b.mulai)} — ${formatDate(b.selesai ?? b.mulai)}` : "—"}
+                      </TdKecil>
+                      <TdKecil className="tabular-nums">
+                        {b.persenLulus === null ? (
+                          <span className="text-muted-foreground">belum dinilai</span>
+                        ) : (
+                          `${b.persenLulus}% (${b.lulus}/${b.dinilai})`
+                        )}
+                      </TdKecil>
+                      <TdKecil>
+                        <Badge tone={STATUS_MODUL_META[b.status].tone} dot>
+                          {STATUS_MODUL_META[b.status].label}
+                        </Badge>
+                      </TdKecil>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      <div className="grid gap-3 lg:grid-cols-2">
+        <GrafikGaris
+          judul="Tren Kelulusan per Batch"
+          subjudul={
+            rerataPre !== null && rerataPost !== null
+              ? `Rerata Pre Test ${rerataPre} → Post Test ${rerataPost}`
+              : "Persen peserta yang lulus Post Test di tiap batch"
+          }
+          data={tren}
+          satuan="%"
+          pesanKosong="Belum ada batch yang Post Test-nya sudah dinilai."
+        />
+        <GrafikBatang
+          judul="Jalur Fast Track per Brand"
+          subjudul="Crew yang mengikuti modul lanjutan, dihitung per orang"
+          data={perBrand}
+          satuan="orang"
+          pesanKosong="Belum ada peserta Fast Track yang tercatat."
         />
       </div>
 
@@ -1049,4 +1193,15 @@ function StandarKompetensiCard() {
       </CardContent>
     </Card>
   );
+}
+
+/* Sel tabel ringkas — dipakai rekap batch yang tidak butuh DataTable penuh. */
+function ThKecil({ children }: { children: React.ReactNode }) {
+  return (
+    <th className="px-3 py-2 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">{children}</th>
+  );
+}
+
+function TdKecil({ children, className = "" }: { children: React.ReactNode; className?: string }) {
+  return <td className={`px-3 py-2.5 align-top text-muted-foreground ${className}`}>{children}</td>;
 }
