@@ -104,9 +104,20 @@ describe("revisi hasil Meeting Fitur HRD", () => {
     expect(semuaSub.find((x) => x.slug === "self-learning")!.scopeOnly).toBeUndefined();
   });
 
-  it("Appraisal Review diganti Request Intervensi", () => {
-    expect(adaSlug("appraisal-review")).toBe(false);
+  it("Appraisal Review dan Request Intervensi berdampingan, bukan saling menggantikan", () => {
+    // Sempat yang satu menggantikan yang lain. Keduanya ternyata menjawab hal
+    // berbeda: sesi terjadwal untuk sekelompok orang di akhir periode, versus
+    // permintaan sesaat untuk satu orang di tengah periode.
+    expect(adaSlug("appraisal-review")).toBe(true);
     expect(adaSlug("request-intervensi")).toBe(true);
+  });
+
+  it("keduanya menuju halaman yang berbeda", () => {
+    // Kalau alamatnya sama, dua baris menu itu hanya menambah kebingungan.
+    const alamat = ["appraisal-review", "request-intervensi"].map(
+      (slug) => semuaSub.find((x) => x.slug === slug)!.href,
+    );
+    expect(new Set(alamat).size).toBe(2);
   });
 
   it("Antrian Dokumen berada di dalam HC-MOS, bukan menu HC yang berdiri sendiri", () => {

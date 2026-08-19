@@ -68,8 +68,8 @@ export const ALUR_SOP: AlurSop[] = [
     langkah: [
       { judul: "Penetapan Periode Penilaian", isi: "Ditetapkan Riva & disetujui Adrian" },
       { judul: "Pengisian Penilaian", isi: "Atasan langsung menilai anggota timnya" },
-      { judul: "Request Intervensi", isi: "Diajukan satu lapis di atas bila ada kinerja yang turun" },
-      { judul: "Finalisasi & Tindak Lanjut", isi: "Kenaikan golongan atau rencana pengembangan" },
+      { judul: "Appraisal Review", isi: "Diskusi hasil penilaian dengan karyawan sebelum difinalisasi" },
+      { judul: "Finalisasi & Tindak Lanjut", isi: "Kenaikan golongan, rencana pengembangan, atau Request Intervensi bila kinerjanya turun" },
     ],
   },
   {

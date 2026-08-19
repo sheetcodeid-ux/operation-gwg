@@ -33,6 +33,7 @@ export const TABEL_HCMOS = {
   // `peran_pemohon` disimpan terpisah dari `pemohon` karena yang menentukan
   // bobot sebuah permintaan adalah dari lapis mana ia datang, dan orang bisa
   // berpindah jabatan sementara catatannya tidak ikut berubah.
+  hc_appraisal_sessions: ["tanggal", "peserta", "reviewer", "scope", "status", "catatan"],
   hc_interventions: [
     "nama", "jabatan", "divisi", "scope", "outlet_id",
     "pemohon", "peran_pemohon", "tanggal", "gejala", "urgensi",
@@ -54,6 +55,7 @@ export const URUTAN_HCMOS: Record<TabelHcmos, { kolom: string; naik: boolean }> 
   hc_benefits: { kolom: "nama", naik: true },
   hc_salary_grades: { kolom: "golongan", naik: true },
   hc_cases: { kolom: "tanggal", naik: false },
+  hc_appraisal_sessions: { kolom: "tanggal", naik: false },
   hc_interventions: { kolom: "tanggal", naik: false },
 };
 

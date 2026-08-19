@@ -176,7 +176,11 @@ export function KinerjaBoard({
 
   return (
     <div className="space-y-4">
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+      {/* Ringkasan penilaian sudah ditampilkan halamannya sendiri di atas, dan
+          jauh lebih berguna di sana karena punya penyebutnya. Menampilkannya
+          dua kali membuat pembacanya membandingkan dua angka yang sebenarnya
+          mengukur hal yang sama. */}
+      <div className={`grid gap-3 sm:grid-cols-2 lg:grid-cols-4 ${tab === "penilaian" ? "hidden" : ""}`}>
         <StatTile icon={Star} label="Penilaian" value={penilaian.length} sub="seluruh periode" />
         <StatTile
           icon={LifeBuoy}

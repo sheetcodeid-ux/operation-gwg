@@ -287,10 +287,25 @@ export const HC_PILLARS: HcPillar[] = [
         raci: { R: "Riva", A: "Adrian", C: "Atasan Langsung, Rekan Sejawat", I: "Uswatun" },
       },
       {
-        // Menggantikan "Appraisal Review", yang dihapus di Meeting Fitur HRD.
+        slug: "appraisal-review",
+        label: "Appraisal Review",
+        fungsi:
+          "Sesi peninjauan hasil appraisal bersama atasan langsung, dijadwalkan di akhir periode sebelum penilaiannya difinalisasi.",
+        icon: "ClipboardList",
+        href: "/hc-mos/appraisal",
+        hrefLabel: "Appraisal Review",
+        raci: { R: "Riva", A: "Adrian", C: "Atasan Langsung", I: "Karyawan Bersangkutan" },
+      },
+      {
+        // Berdampingan dengan Appraisal Review, bukan menggantikannya —
+        // keduanya menjawab hal yang berbeda:
         //
-        // Yang dibutuhkan bukan sesi peninjauan terjadwal, melainkan jalur
-        // MEMINTA INTERVENSI saat kinerja seseorang turun — dan permintaannya
+        //   Appraisal Review   : sesi TERJADWAL, untuk sekelompok orang, di
+        //                        akhir periode penilaian.
+        //   Request Intervensi : permintaan SESAAT, untuk satu orang, kapan pun
+        //                        kinerjanya terlihat turun.
+        //
+        // Yang dibutuhkan di sini jalur MEMINTA INTERVENSI — dan permintaannya
         // datang dari atas orang itu: kalau yang bermasalah anggota tim, head
         // divisinya yang meminta; kalau yang bermasalah head-nya sendiri,
         // permintaannya datang dari Owner. Tanpa jalur ini, penurunan kinerja

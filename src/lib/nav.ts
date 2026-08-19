@@ -41,6 +41,7 @@ export type MenuKey =
   | "hc_selflearning"
   | "hc_kinerja"
   | "hc_intervensi"
+  | "hc_appraisal"
   | "hc_career"
   | "hc_kompensasi"
   | "hc_relasi"
@@ -150,6 +151,7 @@ export const NAV_MENUS: Omit<NavItem, "section" | "group" | "groupIcon">[] = [
   { key: "hc_selflearning", label: "Self-Learning (LMS)", href: "/elearning", icon: "MonitorPlay" },
   { key: "hc_kinerja", label: "Penilaian Kinerja", href: "/hc-mos/kinerja", icon: "Star" },
   { key: "hc_intervensi", label: "Request Intervensi", href: "/hc-mos/kinerja?tab=intervensi", icon: "LifeBuoy" },
+  { key: "hc_appraisal", label: "Appraisal Review", href: "/hc-mos/appraisal", icon: "ClipboardList" },
   { key: "hc_career", label: "Career Path", href: "/hc-mos/talent", icon: "GitBranch" },
   { key: "hc_kompensasi", label: "Attendance & Cuti", href: "/hc-mos/kompensasi", icon: "CalendarCheck" },
   { key: "hc_relasi", label: "Case Management", href: "/hc-mos/relasi", icon: "AlertCircle" },
@@ -256,7 +258,7 @@ export const ROLE_MENUS: Record<Role, MenuKey[]> = {
   bar_rnd: ["hpp_dash", "work", "hpp", "hpp_db", "hpp_bahan", "hpp_price", "hpp_comp", "assessment"],
   kitchen_rnd: ["hpp_dash", "work", "hpp", "hpp_db", "hpp_bahan", "hpp_price", "hpp_comp", "assessment"],
   coordinator_rnd: ["hpp_dash", "work", "hpp", "hpp_db", "hpp_bahan", "hpp_price", "hpp_comp", "assessment"],
-  legal: ["work", "hcmos", "hcmos_raci", "hc_struktur", "hc_karyawan", "hc_culture", "hc_sop", "hc_rekrutmen", "hc_kompetensi", "hc_modul", "hc_faststart", "hc_pretest", "hc_selflearning", "hc_kinerja", "hc_intervensi", "hc_career", "hc_kompensasi", "hc_relasi", "hc_compliance", "hc_kebijakan", "hc_monitoring", "hc_kpi", "hc_kontrak", "hc_review", "hc_reqreview", "hc_training", "assessment", "elearning"], // HRD — seluruh kerangka HC-MOS
+  legal: ["work", "hcmos", "hcmos_raci", "hc_struktur", "hc_karyawan", "hc_culture", "hc_sop", "hc_rekrutmen", "hc_kompetensi", "hc_modul", "hc_faststart", "hc_pretest", "hc_selflearning", "hc_kinerja", "hc_appraisal", "hc_intervensi", "hc_career", "hc_kompensasi", "hc_relasi", "hc_compliance", "hc_kebijakan", "hc_monitoring", "hc_kpi", "hc_kontrak", "hc_review", "hc_reqreview", "hc_training", "assessment", "elearning"], // HRD — seluruh kerangka HC-MOS
   assessor: ["assessment"], // division Head / evaluator — assessment only
   member: ["assessment"], // HO staff — assessment; other access via `department`
 };
@@ -423,7 +425,7 @@ export const DIVISION_GROUPS: Partial<Record<Division, NavGroupDef[]>> = {
       name: "Performance Management",
       icon: "Target",
       urutan: 4,
-      menus: ["hc_kinerja", "assessment", "hc_intervensi", sopPilar("performance-management")],
+      menus: ["hc_kinerja", "assessment", "hc_appraisal", "hc_intervensi", sopPilar("performance-management")],
     },
     {
       name: "Talent & Career Management",
@@ -496,7 +498,7 @@ export const DIVISION_MENUS: { division: Division; menus: MenuKey[] }[] = [
   // penyaringnya di `complaintCategoryScope`, dan memasukkan komplain tetap
   // milik Marketing Communication.
   { division: "Product Development & Quality", menus: ["hpp_dash", "work", "hpp", "hpp_db", "hpp_bahan", "hpp_price", "hpp_comp", "complaints"] },
-  { division: "Human Capital", menus: ["work", "hcmos", "hcmos_raci", "hc_struktur", "hc_karyawan", "hc_culture", "hc_sop", "hc_rekrutmen", "hc_kompetensi", "hc_modul", "hc_faststart", "hc_pretest", "hc_selflearning", "hc_kinerja", "hc_intervensi", "hc_career", "hc_kompensasi", "hc_relasi", "hc_compliance", "hc_kebijakan", "hc_monitoring", "hc_kpi", "hc_kontrak", "hc_review", "hc_reqreview", "hc_training", "assessment", "elearning"] },
+  { division: "Human Capital", menus: ["work", "hcmos", "hcmos_raci", "hc_struktur", "hc_karyawan", "hc_culture", "hc_sop", "hc_rekrutmen", "hc_kompetensi", "hc_modul", "hc_faststart", "hc_pretest", "hc_selflearning", "hc_kinerja", "hc_appraisal", "hc_intervensi", "hc_career", "hc_kompensasi", "hc_relasi", "hc_compliance", "hc_kebijakan", "hc_monitoring", "hc_kpi", "hc_kontrak", "hc_review", "hc_reqreview", "hc_training", "assessment", "elearning"] },
   // New department-aligned divisions — Work Tracker only for now.
   { division: "Finance", menus: ["work", "fin_training"] },
   { division: "Creative", menus: ["work", "creative_design"] },
