@@ -1,6 +1,16 @@
 import { describe, expect, it } from "vitest";
 import { can, hasGlobalScope, scopeOutlets } from "./rbac";
-import { accessibleMenuKeys, canReachMenu, canSeeMenu, homeDivision, navAll, navOpenPredicate, navSectionOpen, ROLE_MENUS } from "./nav";
+import {
+  accessibleMenuKeys,
+  canReachMenu,
+  canSeeMenu,
+  DIVISION_MENUS,
+  homeDivision,
+  navAll,
+  navOpenPredicate,
+  navSectionOpen,
+  ROLE_MENUS,
+} from "./nav";
 import { getOutlets, getUsers } from "./data/store";
 import type { UserProfile } from "./types";
 
@@ -53,11 +63,21 @@ describe("menu access matrix", () => {
     }
   });
 
-  it("gives HRD (legal) Work Tracker + HC Document Queue + Assessment Golongan", () => {
-    expect(ROLE_MENUS.legal).toEqual(["work", "hcmos", "hc_kontrak", "hc_review", "hc_reqreview", "hc_training", "assessment"]);
-    expect(canSeeMenu("legal", "hc_review")).toBe(true);
-    expect(canSeeMenu("legal", "assessment")).toBe(true);
+  it("memberi HRD (legal) seluruh kerangka HC-MOS, tanpa dasbor eksekutif", () => {
+    // Daftarnya tidak lagi dieja satu per satu: kerangka HC-MOS punya 9 pilar
+    // dan sub-menunya bertambah seiring modulnya jadi, sehingga menuliskannya
+    // ulang di sini hanya membuat uji ini gagal setiap kali menu baru dipasang
+    // — tanpa pernah menangkap satu pun kesalahan yang nyata.
+    //
+    // Yang benar-benar perlu dijaga: HRD memegang SETIAP menu divisinya, dan
+    // tidak memegang yang bukan miliknya.
+    const divisi = DIVISION_MENUS.find((d) => d.division === "Human Capital")!;
+    expect([...ROLE_MENUS.legal].sort()).toEqual([...divisi.menus].sort());
+    for (const key of ["hc_review", "assessment", "hcmos_raci", "hc_kpi"] as const) {
+      expect(canSeeMenu("legal", key), key).toBe(true);
+    }
     expect(canSeeMenu("legal", "dashboard")).toBe(false);
+    expect(canSeeMenu("legal", "hpp")).toBe(false);
   });
 
   it("gives supervisor Hospitality + Hygiene + Complaints + HC Document Requests (field SPV, no dashboard/assessment)", () => {

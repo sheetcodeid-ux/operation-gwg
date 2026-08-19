@@ -2,7 +2,7 @@
 
 import { useMemo, useState, useTransition } from "react";
 import Link from "next/link";
-import { usePathname, useRouter } from "next/navigation";
+import { useRouter } from "next/navigation";
 import { ChevronDown, Lock, LogOut } from "lucide-react";
 import { DIVISION_ICON, navOpenPredicate, navSectionOpen, type Division, type MenuKey, type NavItem } from "@/lib/nav";
 import { signOut } from "@/lib/actions/auth";
@@ -11,6 +11,7 @@ import { useSidebar } from "./sidebar-context";
 import { useNavLock } from "./nav-lock";
 import { NAV_ICONS } from "./icons";
 import { navBlocks } from "./nav-blocks";
+import { useActiveHref } from "./aktif";
 import { cn } from "@/lib/utils";
 
 /** Aniq-UI style sidebar: every division is shown as a collapsible group; the
@@ -30,7 +31,6 @@ export function Sidebar({
   grants?: string[];
   department?: string;
 }) {
-  const pathname = usePathname();
   const router = useRouter();
   const { t } = useI18n();
   const { collapsed } = useSidebar();
@@ -40,15 +40,7 @@ export function Sidebar({
   const sections = useMemo(() => [...new Set(items.map((i) => i.section))], [items]);
   // Only the most specific matching route is active, so a parent (e.g. /rnd/hpp)
   // isn't highlighted alongside its own sub-routes (/rnd/hpp/rekap, /rnd/hpp/bahan).
-  const activeHref = useMemo(() => {
-    let best = "";
-    for (const it of items) {
-      const h = it.href;
-      if ((pathname === h || pathname.startsWith(h + "/")) && h.length > best.length) best = h;
-    }
-    return best;
-  }, [items, pathname]);
-  const isActive = (href: string) => href === activeHref;
+  const isActive = useActiveHref(items);
   // Aturannya dipusatkan di nav.ts — sidebar, menu ponsel, dan command palette
   // harus memakai syarat yang persis sama.
   const canOpen = useMemo(

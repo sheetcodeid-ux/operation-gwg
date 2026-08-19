@@ -57,6 +57,16 @@ export interface HcSubmenu {
   /** Sub-menu ini hanya relevan untuk satu scope. Kosong = dua-duanya. */
   scopeOnly?: HcScope;
   /**
+   * Ditampilkan di sidebar bawah "Menu Administrasi", bukan di dalam pilarnya.
+   *
+   * Aktivitasnya tetap MILIK pilar ini — itulah yang menentukan siapa
+   * penanggung jawabnya di matriks RACI. Yang berbeda hanya tempat orang
+   * mencarinya: Kontrak Tracker dipakai hampir tiap hari oleh orang yang tidak
+   * sedang memikirkan pilar mana pun, jadi ia diletakkan di menu administrasi
+   * bersama Pengajuan dan Work Tracker.
+   */
+  diAdministrasi?: boolean;
+  /**
    * Rute modul yang SUDAH berjalan di sistem ini. Bila diisi, sub-menunya
    * menunjuk ke sana alih-alih dibuat ulang.
    */
@@ -147,38 +157,27 @@ export const HC_PILLARS: HcPillar[] = [
       {
         slug: "manpower-request",
         label: "Manpower Request",
-        fungsi: "Permintaan tambahan tenaga kerja dari divisi maupun outlet.",
+        fungsi: "Permintaan tambahan tenaga kerja, dipisah dua scope: Manajemen (divisi) dan Outlet.",
         icon: "ClipboardList",
         href: "/hc/permintaan",
         hrefLabel: "Permintaan Karyawan",
         raci: { R: "Dini", A: "Adrian", C: "Head of Operation, Outlet Manager, Riva", I: "Kepala Divisi Terkait" },
       },
       {
-        slug: "database-kandidat",
-        label: "Database Kandidat",
-        fungsi: "Basis data pelamar untuk posisi manajemen maupun outlet.",
+        // Kandidat, jadwal wawancara, dan onboarding dulu jadi TIGA baris menu
+        // yang membuka SATU halaman yang sama dengan tab berbeda. Hasil Meeting
+        // Fitur HRD: jadikan satu pintu. Ketiganya memang satu berkas yang
+        // bergerak — orang yang sama, dari melamar sampai hari pertama kerja —
+        // dan memecahnya jadi tiga menu membuat satu kandidat terlihat seperti
+        // tiga urusan terpisah.
+        slug: "rekrutmen-seleksi",
+        label: "Rekrutmen & Seleksi",
+        fungsi:
+          "Satu berkas per kandidat: lamaran & dokumen (CV, surat lamaran, KTP, transkrip, ijazah, SKCK), jadwal wawancara, sampai onboarding.",
         icon: "Users",
         href: "/hc-mos/rekrutmen",
-        hrefLabel: "Database Kandidat",
-        raci: { R: "Dini", A: "Adrian", C: "—", I: "Outlet Manager" },
-      },
-      {
-        slug: "jadwal-interview",
-        label: "Jadwal Interview",
-        fungsi: "Kalender jadwal wawancara kandidat.",
-        icon: "Calendar",
-        href: "/hc-mos/rekrutmen?tab=interview",
-        hrefLabel: "Jadwal Interview",
-        raci: { R: "Dini", A: "Adrian", C: "Hiring Manager/User", I: "Kandidat" },
-      },
-      {
-        slug: "onboarding",
-        label: "Onboarding",
-        fungsi: "Program orientasi karyawan baru — materi berbeda per scope.",
-        icon: "LogIn",
-        href: "/hc-mos/rekrutmen?tab=onboarding",
-        hrefLabel: "Onboarding",
-        raci: { R: "Dini", A: "Adrian", C: "Riva", I: "Outlet Manager" },
+        hrefLabel: "Rekrutmen & Seleksi",
+        raci: { R: "Dini", A: "Adrian", C: "Hiring Manager/User, Outlet Manager", I: "Kandidat, Riva" },
       },
       sop("Recruitment & Selection", "recruitment-selection", { R: "Dini", A: "Adrian", C: "Uswatun", I: "Outlet Manager" }),
     ],
@@ -219,33 +218,22 @@ export const HC_PILLARS: HcPillar[] = [
         raci: { R: "Riva", A: "Adrian", C: "Kepala Divisi Terkait", I: "Karyawan/Crew" },
       },
       {
-        slug: "fast-start-fast-track",
-        label: "Fast Start & Fast Track",
-        fungsi: "Program wajib crew outlet — Fast Start (dasar) lalu Fast Track (sesuai posisi/brand).",
-        icon: "Rocket",
-        href: "/hc-mos/fast-track",
-        hrefLabel: "Fast Start & Fast Track",
-        scopeOnly: "outlet",
-        raci: { R: "Dini", A: "Riva", C: "Outlet Manager", I: "Crew Baru" },
-      },
-      {
-        slug: "pre-post-test",
-        label: "Pre Test & Post Test",
-        fungsi: "Penilaian materi Fast Start & Fast Track — Pre Test, Role Play, Post Test; kelulusan minimal 65.",
-        icon: "ClipboardCheck",
-        scopeOnly: "outlet",
-        href: "/hc-mos/fast-track",
-        hrefLabel: "Pre Test & Post Test",
-        raci: { R: "Dini", A: "Riva", C: "Supervisor/Outlet Manager", I: "Crew Baru" },
-      },
-      {
+        // Fast Start & Fast Track dan Pre/Post Test dulu berdiri sendiri di
+        // sebelah Self-Learning. Hasil Meeting Fitur HRD: SATU PINTU.
+        //
+        // Alasannya bukan sekadar merapikan menu. Ketiganya adalah bagian dari
+        // satu perjalanan belajar yang sama — masuk, pre test, studi kasus,
+        // materi utama, post test — dan memisahkannya membuat orang harus tahu
+        // lebih dulu ia sedang berada di program yang mana sebelum bisa
+        // melanjutkan. Yang seharusnya ia tahu cuma: pelajaran saya sampai mana.
         slug: "self-learning",
         label: "Self-Learning (LMS)",
-        fungsi: "Platform belajar mandiri beserta progres tiap karyawan.",
+        fungsi:
+          "Satu pintu belajar mandiri: pre test → studi kasus → materi utama → post test. Fast Start & Fast Track untuk crew outlet berjalan di alur yang sama.",
         icon: "MonitorPlay",
         href: "/elearning",
         hrefLabel: "E-Learning",
-        raci: { R: "Riva", A: "Adrian", C: "Dini", I: "Seluruh Karyawan/Crew" },
+        raci: { R: "Riva", A: "Adrian", C: "Dini, Outlet Manager", I: "Seluruh Karyawan/Crew" },
       },
       sop("Learning & Development", "learning-development", { R: "Riva", A: "Adrian", C: "Uswatun", I: "Outlet Manager" }),
     ],
@@ -277,13 +265,22 @@ export const HC_PILLARS: HcPillar[] = [
         raci: { R: "Riva", A: "Adrian", C: "Atasan Langsung, Rekan Sejawat", I: "Uswatun" },
       },
       {
-        slug: "appraisal-review",
-        label: "Appraisal Review",
-        fungsi: "Sesi peninjauan hasil appraisal bersama atasan.",
-        icon: "ClipboardCheck",
-        href: "/hc-mos/kinerja?tab=review",
-        hrefLabel: "Appraisal Review",
-        raci: { R: "Riva", A: "Adrian", C: "Kepala Divisi", I: "Karyawan Bersangkutan" },
+        // Menggantikan "Appraisal Review", yang dihapus di Meeting Fitur HRD.
+        //
+        // Yang dibutuhkan bukan sesi peninjauan terjadwal, melainkan jalur
+        // MEMINTA INTERVENSI saat kinerja seseorang turun — dan permintaannya
+        // datang dari atas orang itu: kalau yang bermasalah anggota tim, head
+        // divisinya yang meminta; kalau yang bermasalah head-nya sendiri,
+        // permintaannya datang dari Owner. Tanpa jalur ini, penurunan kinerja
+        // hanya jadi bahan obrolan dan tidak pernah tercatat sebagai tindakan.
+        slug: "request-intervensi",
+        label: "Request Intervensi",
+        fungsi:
+          "Permintaan intervensi kinerja dari head divisi (untuk anggota timnya) atau dari Owner (untuk head divisi).",
+        icon: "LifeBuoy",
+        href: "/hc-mos/kinerja?tab=intervensi",
+        hrefLabel: "Request Intervensi",
+        raci: { R: "Riva", A: "Adrian", C: "Head Divisi Pemohon", I: "Karyawan Bersangkutan" },
       },
       sop("Performance Management", "performance-management", { R: "Riva", A: "Adrian", C: "Dini", I: "Seluruh Karyawan" }),
     ],
@@ -393,9 +390,10 @@ export const HC_PILLARS: HcPillar[] = [
       {
         slug: "kontrak-tracker",
         label: "Kontrak Tracker (PKWT/PKWTT)",
-        fungsi: "Kontrak kerja seluruh outlet: masa berlaku, prioritas perpanjangan, dan Update Bulanan Supervisor.",
+        fungsi: "Kontrak kerja karyawan: masa berlaku, prioritas perpanjangan, dan pengingat jatuh tempo.",
         icon: "FileSignature",
         href: "/hc-mos/kontrak",
+        diAdministrasi: true,
         raci: { R: "Uswatun", A: "Adrian", C: "—", I: "Karyawan Bersangkutan" },
       },
       sop("Employee & Industrial Relations", "employee-relations", { R: "Adrian", A: "Adrian", C: "Uswatun", I: "Seluruh Karyawan" }),

@@ -3,13 +3,13 @@
 import { useEffect, useMemo, useState } from "react";
 import { createPortal } from "react-dom";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
 import { ChevronDown, Lock, Menu, X } from "lucide-react";
 import { DIVISION_ICON, navOpenPredicate, navSectionOpen, type Division, type MenuKey, type NavItem } from "@/lib/nav";
 import { useI18n } from "@/lib/i18n/provider";
 import { useNavLock } from "./nav-lock";
 import { NAV_ICONS } from "./icons";
 import { navBlocks } from "./nav-blocks";
+import { useActiveHref } from "./aktif";
 import { BrandLogo } from "./brand-logo";
 import { cn } from "@/lib/utils";
 
@@ -29,7 +29,6 @@ export function MobileNav({
   department?: string;
 }) {
   const [open, setOpen] = useState(false);
-  const pathname = usePathname();
   const { t } = useI18n();
   const { showLocked } = useNavLock();
   const canOpen = useMemo(
@@ -45,15 +44,7 @@ export function MobileNav({
   // `undefined` = untouched, so the group holding the current page shows open.
   const [openGroup, setOpenGroup] = useState<string | null | undefined>(undefined);
   // Most-specific match only — avoids a parent route lighting up with its children.
-  const activeHref = useMemo(() => {
-    let best = "";
-    for (const it of items) {
-      const h = it.href;
-      if ((pathname === h || pathname.startsWith(h + "/")) && h.length > best.length) best = h;
-    }
-    return best;
-  }, [items, pathname]);
-  const isActive = (href: string) => href === activeHref;
+  const isActive = useActiveHref(items);
 
   // The drawer is portalled to <body>: rendered here it would sit inside the
   // topbar's backdrop-blur, whose backdrop-filter traps position:fixed to the

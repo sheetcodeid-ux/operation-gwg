@@ -7,7 +7,7 @@ import { getNavExtra } from "@/lib/data/nav";
 import { getOrgExtra } from "@/lib/data/org";
 import { getUserDepartments } from "@/lib/data/user-departments";
 import { allDepartments, setOrgExtras } from "@/lib/assessment/org";
-import { assignableDivisions, groupsFor, setNavExtras, visibleMenusOf, type NavExtra } from "@/lib/nav";
+import { assignableDivisions, groupsFor, kunciEntri, setNavExtras, visibleMenusOf, type NavExtra } from "@/lib/nav";
 import type { DivisionGroups } from "@/components/admin/group-manager";
 import { UserManager, type OrgDept, type OutletLite, type UserRow } from "@/components/admin/user-manager";
 
@@ -62,7 +62,15 @@ export default async function UsersPage({ searchParams }: { searchParams: Promis
   const sidebarGroups: DivisionGroups[] = assignableDivisions().map((d) => ({
     division: d.name,
     menus: visibleMenusOf(d.name),
-    groups: groupsFor(d.name).map((g) => ({ name: g.name, icon: g.icon, menus: [...g.menus] })),
+    // Penyusun sidebar di User Management hanya mengurus KUNCI menu. Baris
+    // berbentuk panjang (beberapa tautan berbagi satu izin, mis. SOP tiap
+    // pilar) diciutkan ke kuncinya — yang bisa diatur admin memang izinnya,
+    // bukan tautannya satu per satu.
+    groups: groupsFor(d.name).map((g) => ({
+      name: g.name,
+      icon: g.icon,
+      menus: [...new Set(g.menus.map(kunciEntri))],
+    })),
     isDefault: !(navExtra.groups ?? []).some((g) => g.division === d.name),
   }));
 

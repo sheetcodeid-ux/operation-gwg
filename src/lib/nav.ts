@@ -28,6 +28,23 @@ export type MenuKey =
   | "elearning"
   | "elearning_admin"
   | "hcmos"
+  | "hcmos_raci"
+  | "hc_struktur"
+  | "hc_karyawan"
+  | "hc_culture"
+  | "hc_sop"
+  | "hc_rekrutmen"
+  | "hc_kompetensi"
+  | "hc_selflearning"
+  | "hc_kinerja"
+  | "hc_intervensi"
+  | "hc_career"
+  | "hc_kompensasi"
+  | "hc_relasi"
+  | "hc_compliance"
+  | "hc_kebijakan"
+  | "hc_monitoring"
+  | "hc_kpi"
   | "hc_kontrak"
   | "hc_request"
   | "hc_reqreview"
@@ -112,7 +129,26 @@ export const NAV_MENUS: Omit<NavItem, "section" | "group" | "groupIcon">[] = [
   { key: "it_submit", label: "Pengajuan IT Help Desk", href: "/it-helpdesk/pengajuan", icon: "CodeXml", hidden: true },
   { key: "elearning", label: "E-Learning", href: "/elearning", icon: "GraduationCap" },
   { key: "elearning_admin", label: "Kelola E-Learning", href: "/elearning/kelola", icon: "LibraryBig" },
-  { key: "hcmos", label: "HC-MOS", href: "/hc-mos", icon: "Network" },
+  { key: "hcmos", label: "Dashboard HC-MOS", href: "/hc-mos", icon: "LayoutDashboard" },
+  { key: "hcmos_raci", label: "Matriks RACI", href: "/hc-mos/raci", icon: "Table2" },
+  { key: "hc_struktur", label: "Struktur Organisasi", href: "/hc-mos/struktur", icon: "Building2" },
+  { key: "hc_karyawan", label: "Database Karyawan", href: "/hc-mos/karyawan", icon: "Database" },
+  { key: "hc_culture", label: "Culture & Value", href: "/hc-mos/dokumen?jenis=culture", icon: "HeartHandshake" },
+  // Satu izin untuk seluruh SOP; tautannya berbeda per pilar lewat baris
+  // berbentuk panjang di `DIVISION_GROUPS`.
+  { key: "hc_sop", label: "SOP", href: "/hc-mos/dokumen?jenis=sop", icon: "ScrollText", hidden: true },
+  { key: "hc_rekrutmen", label: "Rekrutmen & Seleksi", href: "/hc-mos/rekrutmen", icon: "Users" },
+  { key: "hc_kompetensi", label: "Competency Matrix", href: "/hc-mos/kinerja?tab=kompetensi", icon: "Grid3x3" },
+  { key: "hc_selflearning", label: "Self-Learning (LMS)", href: "/elearning", icon: "MonitorPlay" },
+  { key: "hc_kinerja", label: "Penilaian Kinerja", href: "/hc-mos/kinerja", icon: "Star" },
+  { key: "hc_intervensi", label: "Request Intervensi", href: "/hc-mos/kinerja?tab=intervensi", icon: "LifeBuoy" },
+  { key: "hc_career", label: "Career Path", href: "/hc-mos/talent", icon: "GitBranch" },
+  { key: "hc_kompensasi", label: "Attendance & Cuti", href: "/hc-mos/kompensasi", icon: "CalendarCheck" },
+  { key: "hc_relasi", label: "Case Management", href: "/hc-mos/relasi", icon: "AlertCircle" },
+  { key: "hc_compliance", label: "Document & Compliance", href: "/hc-mos/dokumen?jenis=compliance", icon: "ShieldCheck" },
+  { key: "hc_kebijakan", label: "Kebijakan (Policy)", href: "/hc-mos/dokumen?jenis=kebijakan", icon: "Book" },
+  { key: "hc_monitoring", label: "Dashboard Monitoring", href: "/hc-mos/monitoring", icon: "Gauge" },
+  { key: "hc_kpi", label: "Report & KPI", href: "/hc-mos/kpi", icon: "PieChart" },
   { key: "hc_kontrak", label: "Kontrak Tracker", href: "/hc-mos/kontrak", icon: "FileSignature" },
   { key: "hc_request", label: "Pengajuan", href: "/pengajuan", icon: "Send" },
   { key: "hc_reqreview", label: "Permintaan Karyawan", href: "/hc/permintaan", icon: "ClipboardCheck" },
@@ -212,7 +248,7 @@ export const ROLE_MENUS: Record<Role, MenuKey[]> = {
   bar_rnd: ["hpp_dash", "work", "hpp", "hpp_db", "hpp_bahan", "hpp_price", "hpp_comp", "assessment"],
   kitchen_rnd: ["hpp_dash", "work", "hpp", "hpp_db", "hpp_bahan", "hpp_price", "hpp_comp", "assessment"],
   coordinator_rnd: ["hpp_dash", "work", "hpp", "hpp_db", "hpp_bahan", "hpp_price", "hpp_comp", "assessment"],
-  legal: ["work", "hcmos", "hc_kontrak", "hc_review", "hc_reqreview", "hc_training", "assessment"], // HRD — assessment + antrian dokumen HC
+  legal: ["work", "hcmos", "hcmos_raci", "hc_struktur", "hc_karyawan", "hc_culture", "hc_sop", "hc_rekrutmen", "hc_kompetensi", "hc_selflearning", "hc_kinerja", "hc_intervensi", "hc_career", "hc_kompensasi", "hc_relasi", "hc_compliance", "hc_kebijakan", "hc_monitoring", "hc_kpi", "hc_kontrak", "hc_review", "hc_reqreview", "hc_training", "assessment", "elearning"], // HRD — seluruh kerangka HC-MOS
   assessor: ["assessment"], // division Head / evaluator — assessment only
   member: ["assessment"], // HO staff — assessment; other access via `department`
 };
@@ -251,11 +287,57 @@ const withUniversal = (menus: MenuKey[], division: string): MenuKey[] =>
  * Karyawan + Pelatihan). Menu yang tidak masuk bidang mana pun dianggap umum
  * dan diletakkan di bawah, urut abjad.                                       */
 
+/**
+ * Satu baris di dalam sebuah bidang kerja.
+ *
+ * Biasanya cukup kunci menunya, dan judul/rute/ikonnya diambil dari
+ * `NAV_MENUS`. Bentuk panjangnya dipakai saat BEBERAPA BARIS berbagi satu izin
+ * tetapi menuju tempat yang berbeda — misalnya "SOP", yang muncul di kesembilan
+ * pilar Human Capital dengan tautan berbeda per pilar, atau tab-tab di dalam
+ * satu halaman Kompensasi.
+ *
+ * Membuat kunci izin tersendiri untuk tiap baris seperti itu terlihat lebih
+ * rapi, tapi keliru: yang dibatasi memang satu hal ("boleh membuka SOP"), dan
+ * memecahnya jadi sembilan izin berarti sembilan kotak centang di User
+ * Management yang harus selalu dicentang bersamaan.
+ */
+export type NavGroupEntry = MenuKey | { key: MenuKey; label: string; href: string; icon: string };
+
+/** Kunci menu dari sebuah baris bidang kerja, apa pun bentuknya. */
+export const kunciEntri = (e: NavGroupEntry): MenuKey => (typeof e === "string" ? e : e.key);
+
 export interface NavGroupDef {
   name: string;
   icon: string; // lucide icon name
-  menus: MenuKey[];
+  menus: NavGroupEntry[];
+  /**
+   * Nomor urut bidang kerja. Diisi hanya bila urutannya PUNYA ARTI.
+   *
+   * Bawaannya urut abjad, dan itu tepat untuk kebanyakan divisi: tanpa urutan
+   * yang bermakna, abjad adalah satu-satunya susunan yang bisa ditebak. Tapi
+   * kerangka HC-MOS punya alur yang disepakati — orang direkrut sebelum
+   * dilatih, dilatih sebelum dinilai — dan mengurutkannya secara abjad
+   * ("Compensation" duluan, "Recruitment" belakangan) memutus alur itu.
+   *
+   * Bidang kerja yang punya nomor selalu di atas yang tidak, dan isinya ikut
+   * mengikuti urutan yang ditulis, bukan abjad.
+   */
+  urutan?: number;
 }
+
+/**
+ * Baris "SOP" milik satu pilar.
+ *
+ * Muncul di kesembilan pilar dengan judul yang sama tapi tautan berbeda, dan
+ * semuanya memakai satu izin (`hc_sop`) — yang dibatasi memang "boleh membuka
+ * SOP", bukan sembilan hal yang berbeda.
+ */
+const sopPilar = (slugPilar: string): NavGroupEntry => ({
+  key: "hc_sop",
+  label: "SOP",
+  href: `/hc-mos/dokumen?jenis=sop&pilar=${slugPilar}`,
+  icon: "ScrollText",
+});
 
 /** Pengelompokan bawaan per divisi. Bisa ditimpa admin lewat User Management. */
 export const DIVISION_GROUPS: Partial<Record<Division, NavGroupDef[]>> = {
@@ -276,11 +358,102 @@ export const DIVISION_GROUPS: Partial<Record<Division, NavGroupDef[]>> = {
   "Supply Chain": [
     { name: "Biaya Produksi", icon: "Calculator", menus: ["sc_hpp", "sc_rekap"] },
   ],
+  /**
+   * Human Capital mengikuti kerangka HC-MOS: sembilan pilar, urut sesuai alur
+   * kerjanya (orang direkrut → dilatih → dinilai → dikembangkan), lalu menu
+   * administrasi di bawahnya.
+   *
+   * Susunannya sengaja SAMA PERSIS dengan `HC_PILLARS` di
+   * `src/lib/hcmos/pillars.ts`, yang jadi rujukan halaman pilar, matriks RACI,
+   * dan dasbor. Kalau salah satu berubah tanpa yang lain, sidebar dan isi
+   * halamannya menampilkan kerangka yang berbeda — dan yang membacanya tidak
+   * punya cara tahu mana yang benar. Uji `hcmos/kerangka.test.ts` menjaga
+   * keduanya tetap sama.
+   */
   "Human Capital": [
-    { name: "Talent Acquisition", icon: "UserRound", menus: ["hc_reqreview", "hc_training"] },
-    { name: "Administrasi Personalia", icon: "FolderInput", menus: ["hc_review"] },
-    { name: "Kinerja & Penilaian", icon: "Target", menus: ["assessment"] },
-    { name: "HC-MOS", icon: "Network", menus: ["hcmos", "hc_kontrak"] },
+    { name: "HC-MOS", icon: "Network", urutan: 0, menus: ["hcmos_raci", "hcmos"] },
+    {
+      name: "Organization Development",
+      icon: "Network",
+      urutan: 1,
+      menus: [
+        "hc_struktur",
+        "hc_karyawan",
+        // Antrian dokumen memang milik HC-MOS, bukan menu HC yang berdiri
+        // sendiri — hasil Meeting Fitur HRD.
+        "hc_review",
+        "hc_culture",
+        sopPilar("organization-development"),
+      ],
+    },
+    {
+      name: "Recruitment & Selection",
+      icon: "UserPlus",
+      urutan: 2,
+      menus: ["hc_reqreview", "hc_rekrutmen", sopPilar("recruitment-selection")],
+    },
+    {
+      name: "Learning & Development",
+      icon: "GraduationCap",
+      urutan: 3,
+      menus: ["hc_training", "hc_kompetensi", "elearning", "hc_selflearning", sopPilar("learning-development")],
+    },
+    {
+      name: "Performance Management",
+      icon: "Target",
+      urutan: 4,
+      menus: ["hc_kinerja", "assessment", "hc_intervensi", sopPilar("performance-management")],
+    },
+    {
+      name: "Talent & Career Management",
+      icon: "Award",
+      urutan: 5,
+      menus: [
+        "hc_career",
+        { key: "hc_career", label: "Succession Plan", href: "/hc-mos/talent?tab=suksesi", icon: "UsersRound" },
+        sopPilar("talent-career"),
+      ],
+    },
+    {
+      name: "Compensation & Benefit",
+      icon: "Wallet",
+      urutan: 6,
+      menus: [
+        "hc_kompensasi",
+        { key: "hc_kompensasi", label: "Payroll", href: "/hc-mos/kompensasi?tab=payroll", icon: "Banknote" },
+        { key: "hc_kompensasi", label: "BPJS & Benefit", href: "/hc-mos/kompensasi?tab=bpjs", icon: "ShieldCheck" },
+        { key: "hc_kompensasi", label: "Struktur Kompensasi", href: "/hc-mos/kompensasi?tab=golongan", icon: "ChartColumnBig" },
+        sopPilar("compensation-benefit"),
+      ],
+    },
+    {
+      name: "Employee & Industrial Relations",
+      icon: "MessageSquare",
+      urutan: 7,
+      menus: [
+        "hc_relasi",
+        { key: "hc_relasi", label: "Offboarding / Exit Process", href: "/hc-mos/relasi?tab=keluar", icon: "LogOut" },
+        sopPilar("employee-relations"),
+      ],
+    },
+    {
+      name: "Legal & Compliance",
+      icon: "Scale",
+      urutan: 8,
+      menus: ["hc_compliance", "hc_kebijakan", sopPilar("legal-compliance")],
+    },
+    {
+      name: "HR Analytics & CI",
+      icon: "ChartColumnBig",
+      urutan: 9,
+      menus: ["hc_monitoring", "hc_kpi", sopPilar("hr-analytics")],
+    },
+    {
+      name: "Menu Administrasi",
+      icon: "FolderCog",
+      urutan: 10,
+      menus: ["hc_kontrak", "hc_request", "work"],
+    },
   ],
   Creative: [
     { name: "Permintaan Masuk", icon: "Palette", menus: ["creative_design"] },
@@ -293,7 +466,7 @@ export const DIVISION_GROUPS: Partial<Record<Division, NavGroupDef[]>> = {
 };
 
 /** Menus shown per division in the Super Admin sidebar (all divisions listed). */
-const DIVISION_MENUS: { division: Division; menus: MenuKey[] }[] = [
+export const DIVISION_MENUS: { division: Division; menus: MenuKey[] }[] = [
   // sys_review sits under Operation for placement, but access is jabatan-gated
   // (System Support) via an injected grant — it is NOT a general Operation menu.
   { division: "Operation", menus: [...OPERATION_FULL, "sys_review", "it_review", "elearning", "elearning_admin"] },
@@ -302,7 +475,7 @@ const DIVISION_MENUS: { division: Division; menus: MenuKey[] }[] = [
   // penyaringnya di `complaintCategoryScope`, dan memasukkan komplain tetap
   // milik Marketing Communication.
   { division: "Product Development & Quality", menus: ["hpp_dash", "work", "hpp", "hpp_db", "hpp_bahan", "hpp_price", "hpp_comp", "complaints"] },
-  { division: "Human Capital", menus: ["work", "hcmos", "hc_kontrak", "hc_review", "hc_reqreview", "hc_training", "assessment"] },
+  { division: "Human Capital", menus: ["work", "hcmos", "hcmos_raci", "hc_struktur", "hc_karyawan", "hc_culture", "hc_sop", "hc_rekrutmen", "hc_kompetensi", "hc_selflearning", "hc_kinerja", "hc_intervensi", "hc_career", "hc_kompensasi", "hc_relasi", "hc_compliance", "hc_kebijakan", "hc_monitoring", "hc_kpi", "hc_kontrak", "hc_review", "hc_reqreview", "hc_training", "assessment", "elearning"] },
   // New department-aligned divisions — Work Tracker only for now.
   { division: "Finance", menus: ["work", "fin_training"] },
   { division: "Creative", menus: ["work", "creative_design"] },
@@ -392,23 +565,39 @@ export function groupsFor(division: string): NavGroupDef[] {
  * pernah ikut — rutenya tetap hidup, hanya tidak muncul di sidebar.
  */
 function itemsForDivision(division: string, menus: MenuKey[], sectionIcon: string): NavItem[] {
-  const visible = new Set(withUniversal(menus, division).filter((k) => !MENU_BY_KEY[k]?.hidden));
+  const diizinkan = new Set(withUniversal(menus, division));
+  // `hidden` berarti "jangan tampil sebagai barisnya sendiri", bukan "tidak
+  // boleh dibuka". Bedanya penting untuk kunci yang memang hanya membawa izin:
+  // `hc_sop` tidak punya satu halaman SOP, ia dipakai sembilan baris SOP milik
+  // tiap pilar. Menyaringnya di sini membuat kesembilan baris itu lenyap.
+  const visible = new Set([...diizinkan].filter((k) => !MENU_BY_KEY[k]?.hidden));
   const byName = (a: { label: string }, b: { label: string }) => a.label.localeCompare(b.label, "id");
 
-  // Bidang kerja urut abjad, isinya juga urut abjad.
-  const groups = [...groupsFor(division)].sort((a, b) => a.name.localeCompare(b.name, "id"));
+  // Bidang kerja bernomor lebih dulu dan sesuai nomornya; sisanya urut abjad.
+  const groups = [...groupsFor(division)].sort(
+    (a, b) => (a.urutan ?? Infinity) - (b.urutan ?? Infinity) || a.name.localeCompare(b.name, "id"),
+  );
   const grouped: NavItem[] = [];
   const used = new Set<MenuKey>();
 
   for (const g of groups) {
     const items = g.menus
-      .filter((key) => visible.has(key) && !used.has(key) && MENU_BY_KEY[key])
-      .map((key) => {
-        used.add(key);
-        return { ...MENU_BY_KEY[key]!, section: division, sectionIcon, group: g.name, groupIcon: g.icon };
+      .filter((e) => {
+        const key = kunciEntri(e);
+        // Baris berbentuk panjang membawa judul & rutenya sendiri, jadi ia boleh
+        // muncul berkali-kali dengan kunci yang sama — itu memang gunanya.
+        if (typeof e !== "string") return diizinkan.has(key);
+        return visible.has(key) && !used.has(key) && !!MENU_BY_KEY[key];
       })
-      .sort(byName);
-    grouped.push(...items);
+      .map((e) => {
+        if (typeof e !== "string") {
+          return { ...e, section: division, sectionIcon, group: g.name, groupIcon: g.icon };
+        }
+        used.add(e);
+        return { ...MENU_BY_KEY[e]!, section: division, sectionIcon, group: g.name, groupIcon: g.icon };
+      });
+    // Bidang kerja yang urutannya bermakna mempertahankan urutan tulisnya.
+    grouped.push(...(g.urutan === undefined ? [...items].sort(byName) : items));
   }
 
   // Menu umum: selalu paling bawah, urut abjad.
