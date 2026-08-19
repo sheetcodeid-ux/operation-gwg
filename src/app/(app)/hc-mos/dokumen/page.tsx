@@ -12,6 +12,9 @@ import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { NAV_ICONS } from "@/components/layout/icons";
 import { CORE_VALUES } from "@/lib/hcmos/budaya";
+import { alurPilar } from "@/lib/hcmos/alur-sop";
+import { pillarBySlug } from "@/lib/hcmos/pillars";
+import { AlurLangkah } from "@/components/hcmos/alur";
 
 export const metadata: Metadata = { title: "Pusat Dokumen — HC-MOS" };
 
@@ -31,6 +34,8 @@ export default async function DokumenPage({
     : "sop";
 
   const rows = await listDokumen();
+  const alur = jenis === "sop" ? alurPilar(sp.pilar ?? "") : undefined;
+  const namaPilar = pillarBySlug(sp.pilar ?? "")?.label ?? "";
   const bolehUbah =
     user.role === "super_admin" || user.role === "legal" || user.department === "Human Capital";
 
@@ -45,17 +50,21 @@ export default async function DokumenPage({
 
       <PageHeader
         icon={jenis === "culture" ? HeartHandshake : ScrollText}
-        title={jenis === "culture" ? "Culture & Value" : "Pusat Dokumen"}
+        title={jenis === "culture" ? "Culture & Value" : jenis === "sop" && namaPilar ? `SOP ${namaPilar}` : "Pusat Dokumen"}
         description={
           jenis === "culture"
             ? "Nilai-nilai inti GWG Group yang jadi acuan perilaku seluruh karyawan manajemen dan outlet."
-            : "SOP tiap pilar, kebijakan, culture & value, dokumen kepatuhan, dan PKS kemitraan."
+            : jenis === "sop" && namaPilar
+              ? `Prosedur standar operasional pilar ${namaPilar} beserta dokumen resminya.`
+              : "SOP tiap pilar, kebijakan, culture & value, dokumen kepatuhan, dan PKS kemitraan."
         }
       />
 
       <div className="mb-4 flex flex-wrap gap-2">
-        <Badge tone="neutral">Organization Development</Badge>
-        <Badge tone="neutral">PIC: {jenis === "culture" ? "Riva" : "Uswatun"}</Badge>
+        <Badge tone="neutral">{jenis === "sop" && namaPilar ? namaPilar : "Organization Development"}</Badge>
+        <Badge tone="neutral">
+          PIC: {jenis === "sop" && sp.pilar ? (pillarBySlug(sp.pilar)?.pic ?? "—") : jenis === "culture" ? "Riva" : "Uswatun"}
+        </Badge>
         <Badge tone="neutral">Scope: Manajemen &amp; Outlet</Badge>
       </div>
 
@@ -64,6 +73,14 @@ export default async function DokumenPage({
           dan deck onboarding hanyalah turunannya, dan menaruh daftar berkas di
           atas membuat halaman ini terbaca sebagai lemari arsip. */}
       {jenis === "culture" && <CoreValues />}
+
+      {/* SOP satu pilar dibuka dengan ALUR KERJANYA, dokumennya menyusul.
+          Yang dicari orang saat membuka SOP hampir selalu "langkahnya apa saja
+          dan siapa mengerjakan apa" — berkas PDF-nya baru dibutuhkan ketika ia
+          perlu mengutipnya. */}
+      {jenis === "sop" && alur && (
+        <AlurLangkah judul={`Alur SOP ${namaPilar}`} ringkas={alur.ringkas} langkah={alur.langkah} />
+      )}
 
       <DokumenBoard rows={rows} jenisAwal={jenis} pilarAwal={sp.pilar ?? ""} bolehUbah={bolehUbah} />
     </div>

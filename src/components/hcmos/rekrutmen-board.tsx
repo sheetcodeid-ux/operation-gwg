@@ -17,6 +17,8 @@ import { Field, Input, Textarea } from "@/components/ui/input";
 import { Progress } from "@/components/ui/progress";
 import { SegmentedTabs } from "@/components/ui/segmented-tabs";
 import { StatTile } from "@/components/ui/stat";
+import { AlurLangkah } from "./alur";
+import { TAHAP_ONBOARDING_MANAJEMEN, TAHAP_ONBOARDING_OUTLET } from "@/lib/hcmos/alur-sop";
 import { useConfirm } from "@/components/ui/confirm";
 import { SCOPE_LABEL, type HcScope } from "@/lib/hcmos/pillars";
 import {
@@ -90,7 +92,26 @@ export function RekrutmenBoard({
 
       {tab === "kandidat" && <TabKandidat rows={kandidat} outlets={outlets} bolehUbah={bolehUbah} />}
       {tab === "interview" && <TabInterview rows={wawancara} outlets={outlets} bolehUbah={bolehUbah} />}
-      {tab === "onboarding" && <TabOnboarding rows={onboarding} outlets={outlets} bolehUbah={bolehUbah} />}
+      {tab === "onboarding" && (
+        <>
+          {/* Tahapannya ditaruh di atas daftarnya: yang ditanyakan orang saat
+              membuka Onboarding hampir selalu "karyawan baru ini harus melewati
+              apa saja", bukan "siapa saja yang sedang onboarding". */}
+          <div className="grid grid-cols-[minmax(0,1fr)] gap-3 lg:grid-cols-2">
+            <AlurLangkah
+              judul="Tahapan Onboarding Manajemen"
+              ringkas="Materi wajibnya berjalan lewat Self-Learning jalur Manajemen"
+              langkah={TAHAP_ONBOARDING_MANAJEMEN}
+            />
+            <AlurLangkah
+              judul="Tahapan Onboarding Outlet"
+              ringkas="Fast Start & Fast Track berjalan di Self-Learning jalur Outlet"
+              langkah={TAHAP_ONBOARDING_OUTLET}
+            />
+          </div>
+          <TabOnboarding rows={onboarding} outlets={outlets} bolehUbah={bolehUbah} />
+        </>
+      )}
     </div>
   );
 }
