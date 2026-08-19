@@ -108,6 +108,15 @@ export function GrafikBatang({
   satuan,
   /** Sumbu berisi periode (2026-08 / Agustus 2026) — disingkat jadi nama bulan. */
   periode = false,
+  /**
+   * Label ditulis utuh, tanpa disingkat.
+   *
+   * Dipakai bila isinya kalimat bebas, bukan nama departemen. Singkatan huruf
+   * awal masuk akal untuk "Product Development & Quality" → PDQ karena orang
+   * memang menyebutnya begitu; untuk "Dapat penawaran di luar" → DPL tidak ada
+   * yang mengenalinya, dan sumbunya berubah jadi teka-teki.
+   */
+  labelPenuh = false,
   pesanKosong = "Belum ada datanya.",
 }: {
   judul: string;
@@ -115,15 +124,16 @@ export function GrafikBatang({
   data: TitikData[];
   satuan?: string;
   periode?: boolean;
+  labelPenuh?: boolean;
   pesanKosong?: string;
 }) {
   const baris = React.useMemo<BarisBatang[]>(() => {
     const label = labelSumbu(
       data.map((d) => d.nama),
-      periode ? singkatPeriode : singkat,
+      labelPenuh ? (x) => x.trim() || "—" : periode ? singkatPeriode : singkat,
     );
     return data.map((d, i) => ({ nama: label[i], penuh: d.nama, nilai: d.nilai }));
-  }, [data, periode]);
+  }, [data, periode, labelPenuh]);
   if (baris.length === 0) return <Kosong judul={judul} subjudul={subjudul} pesan={pesanKosong} />;
 
   return (

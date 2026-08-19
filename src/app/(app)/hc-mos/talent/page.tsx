@@ -8,6 +8,9 @@ import { listTabel } from "@/lib/data/hcmos-lanjutan";
 import { PageHeader } from "@/components/ui/page-header";
 import { TalentBoard } from "@/components/hcmos/modul-boards";
 import { bolehUbahHc } from "@/lib/hcmos/akses";
+import { Badge } from "@/components/ui/badge";
+import { JenjangKarier } from "@/components/hcmos/jenjang-karier";
+import { JENJANG_MANAJEMEN, JENJANG_OUTLET } from "@/lib/hcmos/struktur";
 
 export const metadata: Metadata = { title: "Talent & Karier — HC-MOS" };
 
@@ -16,6 +19,7 @@ export default async function TalentPage({ searchParams }: { searchParams: Promi
   if (!canReachMenu(user, "hcmos")) redirect("/dashboard");
 
   const sp = await searchParams;
+  const tab = sp.tab === "suksesi" ? "suksesi" : "karier";
   const [karier, suksesi] = await Promise.all([listTabel("hc_career_paths"), listTabel("hc_succession")]);
 
   return (
@@ -25,14 +29,41 @@ export default async function TalentPage({ searchParams }: { searchParams: Promi
       </Link>
       <PageHeader
         icon={Award}
-        title="Talent & Career Management"
-        description="Jenjang karier tiap jabatan dan rencana suksesi untuk posisi kunci."
+        title={tab === "suksesi" ? "Succession Plan" : "Career Path"}
+        description={
+          tab === "suksesi"
+            ? "Perencanaan suksesi untuk posisi kunci di manajemen dan outlet."
+            : "Jenjang karier yang tersedia untuk karyawan manajemen maupun crew outlet di GWG Group."
+        }
       />
+      <div className="mb-4 flex flex-wrap gap-2">
+        <Badge tone="neutral">Talent &amp; Career Management</Badge>
+        <Badge tone="neutral">PIC: Riva</Badge>
+        <Badge tone="neutral">Scope: Manajemen &amp; Outlet</Badge>
+      </div>
+
+      {/* Tangganya dulu, daftarnya belakangan. Yang ditanyakan orang saat
+          membuka Career Path adalah "dari posisi saya, ke mana saya bisa naik"
+          — pertanyaan tentang urutan, bukan tentang isi tabel. */}
+      {tab === "karier" && (
+        <>
+          <JenjangKarier
+            judul="Jenjang Karier Outlet"
+            ringkas="Berlaku seragam di seluruh brand — jalur posisi operasional"
+            jenjang={JENJANG_OUTLET}
+          />
+          <JenjangKarier
+            judul="Jenjang Karier Manajemen"
+            ringkas="Jalur posisi kantor pusat"
+            jenjang={JENJANG_MANAJEMEN}
+          />
+        </>
+      )}
       <TalentBoard
         karier={karier}
         suksesi={suksesi}
         bolehUbah={bolehUbahHc(user)}
-        tabAwal={sp.tab === "suksesi" ? "suksesi" : "karier"}
+        tabAwal={tab}
       />
     </div>
   );

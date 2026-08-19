@@ -9,6 +9,7 @@ import { scopeOutlets } from "@/lib/rbac";
 import { listTabel } from "@/lib/data/hcmos-lanjutan";
 import { EmptyState, PageHeader } from "@/components/ui/page-header";
 import { RelasiBoard } from "@/components/hcmos/modul-boards";
+import { Badge } from "@/components/ui/badge";
 import { bolehUbahHc } from "@/lib/hcmos/akses";
 
 export const metadata: Metadata = { title: "Hubungan Industrial — HC-MOS" };
@@ -18,6 +19,7 @@ export default async function RelasiPage({ searchParams }: { searchParams: Promi
   if (!canReachMenu(user, "hcmos")) redirect("/dashboard");
 
   const sp = await searchParams;
+  const tab = sp.tab === "keluar" ? "keluar" : "kasus";
 
   // Kasus hubungan industrial menyangkut nama orang beserta perkaranya —
   // dibaca terbatas, bukan konsumsi umum.
@@ -44,15 +46,24 @@ export default async function RelasiPage({ searchParams }: { searchParams: Promi
       </Link>
       <PageHeader
         icon={MessageSquare}
-        title="Employee & Industrial Relations"
-        description="Penanganan kasus hubungan industrial dan proses keluar karyawan."
+        title={tab === "keluar" ? "Offboarding / Exit Process" : "Case Management"}
+        description={
+          tab === "keluar"
+            ? "Proses karyawan keluar (resign atau PHK) — dari notifikasi sampai statusnya non-aktif di Database Karyawan."
+            : "Penanganan kasus hubungan industrial — pilih tampilan sesuai scope: Manajemen (GWG) atau Outlet."
+        }
       />
+      <div className="mb-4 flex flex-wrap gap-2">
+        <Badge tone="neutral">Employee &amp; Industrial Relations</Badge>
+        <Badge tone="neutral">PIC: {tab === "keluar" ? "Adrian & Uswatun" : "Adrian"}</Badge>
+        <Badge tone="neutral">Scope: Manajemen &amp; Outlet</Badge>
+      </div>
       <RelasiBoard
         kasus={semua.filter((r) => r.jenis === "kasus")}
         keluar={semua.filter((r) => r.jenis === "offboarding")}
         outlets={outlets}
         bolehUbah
-        tabAwal={sp.tab === "keluar" ? "keluar" : "kasus"}
+        tabAwal={tab}
       />
     </div>
   );

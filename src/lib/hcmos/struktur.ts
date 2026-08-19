@@ -135,3 +135,32 @@ export const KELOMPOK_KANTOR: Record<string, string> = {
 /** Kelompok sebuah departemen; yang tidak dipetakan masuk "Lainnya". */
 export const kelompokDari = (departemen: string): string =>
   KELOMPOK_KANTOR[departemen.trim()] ?? "Lainnya";
+
+/**
+ * Jenjang jabatan di kantor pusat.
+ *
+ * Ditulis terpisah dari `JENJANG_OUTLET` dan bukan digabung, karena keduanya
+ * memang bukan satu tangga: seorang Supervisor outlet tidak berada di anak
+ * tangga yang sama dengan Supervisor/Lead divisi, dan menaruhnya dalam satu
+ * daftar membuat perpindahan antar keduanya terbaca sebagai kenaikan biasa
+ * padahal itu perpindahan jalur.
+ */
+export const JENJANG_MANAJEMEN: LevelOutlet[] = [
+  { level: 1, jabatan: "Staff", melaporKe: "Officer/Coordinator" },
+  { level: 2, jabatan: "Officer/Coordinator", melaporKe: "Supervisor/Lead" },
+  { level: 3, jabatan: "Supervisor/Lead", melaporKe: "Manager/Head of Division" },
+  { level: 4, jabatan: "Manager/Head of Division", melaporKe: "Direktur" },
+];
+
+/** Apa yang dikerjakan di tiap anak tangga — dipakai halaman Career Path. */
+export const TUGAS_JENJANG: Record<string, string> = {
+  "Crew / Barista / Kasir": "Titik masuk operasional outlet",
+  "Shift Leader": "Memimpin shift & tim kecil",
+  Supervisor: "Mengelola operasional harian outlet",
+  "Outlet Manager": "Bertanggung jawab penuh atas satu outlet",
+  "Head of Operation": "Mengelola beberapa outlet atau brand",
+  Staff: "Titik masuk divisi manajemen",
+  "Officer/Coordinator": "Menangani area kerja spesifik",
+  "Supervisor/Lead": "Mengoordinasi tim kecil",
+  "Manager/Head of Division": "Memimpin divisi",
+};

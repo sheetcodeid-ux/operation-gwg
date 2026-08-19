@@ -28,7 +28,11 @@ export const TABEL_HCMOS = {
   hc_payroll: ["periode", "nama", "scope", "outlet_id", "gaji_pokok", "tunjangan", "lembur", "potongan", "catatan"],
   hc_benefits: ["nama", "scope", "outlet_id", "bpjs_kesehatan", "bpjs_tk", "status", "tgl_daftar", "catatan"],
   hc_salary_grades: ["golongan", "jabatan", "scope", "gaji_min", "gaji_max", "tunjangan"],
-  hc_cases: ["jenis", "nama", "jabatan", "scope", "outlet_id", "kategori", "tanggal", "ringkasan", "tindakan", "status"],
+  hc_cases: [
+    "jenis", "nama", "jabatan", "scope", "outlet_id", "kategori", "tanggal", "ringkasan", "tindakan", "status",
+    // Ditambahkan untuk Case Management & Offboarding — lihat migrasi 0055.
+    "tgl_selesai", "eskalasi", "exit_interview", "serah_aset", "payroll_final",
+  ],
   // Request Intervensi — pengganti Appraisal Review (Meeting Fitur HRD).
   // `peran_pemohon` disimpan terpisah dari `pemohon` karena yang menentukan
   // bobot sebuah permintaan adalah dari lapis mana ia datang, dan orang bisa

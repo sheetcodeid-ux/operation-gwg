@@ -24,7 +24,13 @@ import type { TabelHcmos } from "@/lib/hcmos/tabel";
  * supaya tiap modul tetap bisa menampilkan hal yang memang khas baginya.
  */
 
-export type TipeBidang = "teks" | "angka" | "tanggal" | "pilihan" | "panjang";
+export type TipeBidang = "teks" | "angka" | "tanggal" | "pilihan" | "panjang" | "boolean";
+
+/** Pilihan untuk bidang bertipe boolean — teksnya tetap, nilainya boolean. */
+const OPSI_BOOLEAN = [
+  { value: "ya", label: "Ya" },
+  { value: "tidak", label: "Belum" },
+];
 
 export interface Bidang {
   key: string;
@@ -165,7 +171,15 @@ function DialogRekaman({
   const [f, setF] = React.useState<Record<string, unknown>>(awal);
   const [busy, setBusy] = React.useState(false);
   const set = (k: string, v: unknown) => setF((p) => ({ ...p, [k]: v }));
-  const teks = (k: string) => (f[k] === null || f[k] === undefined ? "" : String(f[k]));
+  const teks = (k: string) => {
+    const v = f[k];
+    if (v === null || v === undefined) return "";
+    // Kolom boolean disimpan sebagai true/false tapi dipilih lewat daftar;
+    // keduanya dijembatani di satu tempat supaya nilai lama yang sudah ada di
+    // basis data tetap terbaca benar saat formulirnya dibuka.
+    if (typeof v === "boolean") return v ? "ya" : "tidak";
+    return String(v);
+  };
 
   async function simpan() {
     const kurang = bidang.find((b) => b.wajib && !teks(b.key).trim());
@@ -176,6 +190,10 @@ function DialogRekaman({
     for (const b of bidang) {
       const v = teks(b.key).trim();
       if (b.tipe === "angka") isi[b.key] = v === "" ? null : Number(v);
+      // Kolomnya boolean di basis data; mengirim "ya" sebagai teks akan
+      // ditolak, dan mengirim null membuat langkah yang belum selesai tercatat
+      // sebagai "tidak diketahui" alih-alih "belum".
+      else if (b.tipe === "boolean") isi[b.key] = v === "ya";
       else isi[b.key] = v === "" ? null : v;
     }
 
@@ -205,14 +223,14 @@ function DialogRekaman({
                 hint={b.hint}
                 className={b.span === 3 ? "sm:col-span-3" : b.span === 2 ? "sm:col-span-2" : undefined}
               >
-                {b.tipe === "pilihan" ? (
+                {b.tipe === "pilihan" || b.tipe === "boolean" ? (
                   <Combobox
                     portal
                     matchTriggerWidth
-                    searchable={(b.opsi?.length ?? 0) > 8}
+                    searchable={b.tipe === "pilihan" && (b.opsi?.length ?? 0) > 8}
                     value={teks(b.key)}
                     onChange={(v) => set(b.key, v)}
-                    options={b.opsi ?? []}
+                    options={b.tipe === "boolean" ? OPSI_BOOLEAN : (b.opsi ?? [])}
                   />
                 ) : b.tipe === "tanggal" ? (
                   <DatePicker value={teks(b.key)} onChange={(v) => set(b.key, v)} />

@@ -4,6 +4,7 @@ import * as React from "react";
 import { type ColumnDef } from "@tanstack/react-table";
 import {
   AlertCircle,
+  AlertTriangle,
   Award,
   Building2,
   Banknote,
@@ -31,6 +32,17 @@ import {
 } from "@/lib/hcmos/kompetensi";
 import { SCOPE_LABEL, type HcScope } from "@/lib/hcmos/pillars";
 import { brandOutlet } from "@/lib/hcmos/kontrak";
+import { AlurLangkah } from "./alur";
+import {
+  ESKALASI,
+  TAHAP_OFFBOARDING,
+  alasanKeluar,
+  lamaHari,
+  ringkasKasus,
+  ringkasKeluar,
+  type Eskalasi,
+  type PerkaraRingkas,
+} from "@/lib/hcmos/relasi";
 import { GrafikBatang, GrafikGaris } from "./grafik";
 import {
   STATUS_MODUL_META,
@@ -63,6 +75,20 @@ import {
 import { formatDate } from "@/lib/utils";
 
 /** Ambil nilai kolom sebagai teks tanpa memaksa tipe di setiap pemakaian. */
+/** Baris mentah `hc_cases` → bentuk yang dipakai perhitungan di lib/relasi. */
+const bacaPerkara = (r: BarisRekaman): PerkaraRingkas => ({
+  nama: t(r, "nama"),
+  scope: t(r, "scope") || "manajemen",
+  kategori: t(r, "kategori"),
+  status: t(r, "status"),
+  eskalasi: t(r, "eskalasi") || "normal",
+  tanggal: t(r, "tanggal") || null,
+  tglSelesai: t(r, "tgl_selesai") || null,
+  exitInterview: r.exit_interview === true,
+  serahAset: r.serah_aset === true,
+  payrollFinal: r.payroll_final === true,
+});
+
 const t = (r: BarisRekaman, k: string) => (r[k] === null || r[k] === undefined ? "" : String(r[k]));
 const n = (r: BarisRekaman, k: string) => (r[k] === null || r[k] === undefined ? null : Number(r[k]));
 
@@ -626,14 +652,23 @@ export function RelasiBoard({
   tabAwal?: string;
 }) {
   const [tab, setTab] = React.useState(tabAwal);
-  const [scope, setScope] = React.useState<HcScope | "semua">("semua");
+  // Scope di sini pilihan tunggal, bukan "semua". Kasus hubungan industrial di
+  // kantor dan di outlet ditangani orang berbeda dengan aturan berbeda;
+  // menjumlahkan keduanya menghasilkan angka yang tidak dipakai siapa pun.
+  const [scope, setScope] = React.useState<HcScope>("manajemen");
   const rute = "/hc-mos/relasi";
-  const terbuka = kasus.filter((k) => t(k, "status") !== "selesai").length;
+  const tahun = new Date().getFullYear();
 
   const perScope = React.useCallback(
-    (rows: BarisRekaman[]) => (scope === "semua" ? rows : rows.filter((r) => t(r, "scope") === scope)),
+    (rows: BarisRekaman[]) => rows.filter((r) => (t(r, "scope") || "manajemen") === scope),
     [scope],
   );
+
+  const kasusScope = React.useMemo(() => perScope(kasus).map(bacaPerkara), [kasus, perScope]);
+  const keluarScope = React.useMemo(() => perScope(keluar).map(bacaPerkara), [keluar, perScope]);
+  const rk = React.useMemo(() => ringkasKasus(kasusScope, tahun), [kasusScope, tahun]);
+  const rl = React.useMemo(() => ringkasKeluar(keluarScope, tahun), [keluarScope, tahun]);
+  const alasan = React.useMemo(() => alasanKeluar(keluarScope), [keluarScope]);
 
   const kolomPerkara = (kategoriHeader: string): ColumnDef<BarisRekaman>[] => [
     ...kolomNama,
@@ -658,10 +693,14 @@ export function RelasiBoard({
       header: "Status",
       cell: ({ row }) => {
         const m = STATUS_PERKARA[t(row.original, "status") as keyof typeof STATUS_PERKARA];
+        const lama = lamaHari(t(row.original, "tanggal") || null, t(row.original, "tgl_selesai") || null);
         return (
-          <Badge tone={m?.tone ?? "neutral"} dot>
-            {m?.label ?? "—"}
-          </Badge>
+          <div className="min-w-0">
+            <Badge tone={m?.tone ?? "neutral"} dot>
+              {m?.label ?? "—"}
+            </Badge>
+            {lama !== null && <p className="mt-0.5 text-[11px] text-muted-foreground">selesai dalam {lama} hari</p>}
+          </div>
         );
       },
     },
@@ -685,19 +724,36 @@ export function RelasiBoard({
       tipe: "pilihan",
       opsi: Object.entries(STATUS_PERKARA).map(([v, m]) => ({ value: v, label: m.label })),
     },
+    { key: "tgl_selesai", label: "Tanggal Selesai", tipe: "tanggal", hint: "Diisi saat perkaranya ditutup — dari sinilah lama penyelesaian dihitung." },
+    ...(jenis === "kasus"
+      ? ([
+          {
+            key: "eskalasi",
+            label: "Tingkat Eskalasi",
+            tipe: "pilihan",
+            opsi: (Object.keys(ESKALASI) as Eskalasi[]).map((v) => ({ value: v, label: ESKALASI[v].label })),
+          },
+        ] as Bidang[])
+      : ([
+          { key: "exit_interview", label: "Exit Interview Selesai", tipe: "boolean" },
+          { key: "serah_aset", label: "Serah Terima Aset Selesai", tipe: "boolean" },
+          { key: "payroll_final", label: "Payroll Final Diproses", tipe: "boolean" },
+        ] as Bidang[])),
     { key: "ringkasan", label: "Ringkasan", tipe: "panjang", span: 3 },
     { key: "tindakan", label: "Tindakan / Kesepakatan", tipe: "panjang", span: 3 },
   ];
 
   return (
     <div className="space-y-4">
-      <div className="grid gap-3 sm:grid-cols-3">
-        <StatTile icon={AlertCircle} label="Kasus Berjalan" value={terbuka} sub="belum selesai" />
-        <StatTile icon={ClipboardCheck} label="Total Kasus" value={kasus.length} sub="seluruh periode" />
-        <StatTile icon={LogOut} label="Proses Keluar" value={keluar.length} sub="offboarding" />
-      </div>
-
-      <ScopeTabs value={scope} onChange={setScope} />
+      <SegmentedTabs
+        className="max-w-md"
+        value={scope}
+        onChange={(v) => setScope(v as HcScope)}
+        items={[
+          { value: "manajemen", label: SCOPE_LABEL.manajemen, icon: Building2 },
+          { value: "outlet", label: SCOPE_LABEL.outlet, icon: Store },
+        ]}
+      />
 
       <SegmentedTabs
         className="max-w-md"
@@ -708,6 +764,58 @@ export function RelasiBoard({
           { value: "keluar", label: "Offboarding", icon: LogOut },
         ]}
       />
+
+      {tab === "kasus" ? (
+        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+          <StatTile icon={AlertCircle} label="Kasus Berjalan" value={rk.berjalan} sub="belum selesai" />
+          <StatTile icon={ClipboardCheck} label={`Selesai (${tahun})`} value={rk.selesaiTahunIni} sub="ditutup tahun ini" />
+          <StatTile
+            icon={AlertTriangle}
+            label="Eskalasi Tinggi"
+            value={rk.eskalasiTinggi}
+            sub={rk.eskalasiTinggi === 0 ? "tidak ada" : "masih berjalan"}
+          />
+          <StatTile
+            icon={CalendarCheck}
+            label="Rata-rata Waktu Penyelesaian"
+            value={rk.rataHari === null ? "—" : `${rk.rataHari} hari`}
+            sub={rk.rataHari === null ? "belum ada kasus yang ditutup" : "dari kasus yang sudah ditutup"}
+          />
+        </div>
+      ) : (
+        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+          <StatTile icon={LogOut} label={`Karyawan Keluar (${tahun})`} value={rl.keluarTahunIni} sub={`${rl.total} sepanjang riwayat`} />
+          <StatTile
+            icon={ClipboardCheck}
+            label="Exit Interview Selesai"
+            value={`${rl.exitInterview}/${rl.keluarTahunIni}`}
+            sub="digali Human Capital"
+          />
+          <StatTile
+            icon={ShieldCheck}
+            label="Serah Terima Aset Selesai"
+            value={`${rl.serahAset}/${rl.keluarTahunIni}`}
+            sub="aset & akses dikembalikan"
+          />
+          <StatTile
+            icon={Banknote}
+            label="Payroll Final Diproses"
+            value={`${rl.payrollFinal}/${rl.keluarTahunIni}`}
+            sub="gaji terakhir & pesangon"
+          />
+        </div>
+      )}
+
+      {tab === "keluar" && (
+        <GrafikBatang
+          judul={`Alasan Keluar (${tahun})`}
+          subjudul={`Sumber: catatan proses keluar — ${SCOPE_LABEL[scope]}`}
+          data={alasan}
+          satuan="orang"
+          labelPenuh
+          pesanKosong="Belum ada karyawan keluar yang tercatat untuk scope ini."
+        />
+      )}
 
       {tab === "kasus" && (
         <RekamanBoard
@@ -736,6 +844,14 @@ export function RelasiBoard({
           bawaan={{ jenis: "offboarding", scope: "manajemen", status: "terbuka" }}
           columns={kolomPerkara("Alasan Keluar")}
           bidang={bidangPerkara("offboarding", KATEGORI_KELUAR)}
+        />
+      )}
+
+      {tab === "keluar" && (
+        <AlurLangkah
+          judul="Alur Offboarding"
+          ringkas="Standar proses karyawan keluar — berlaku untuk Manajemen & Outlet"
+          langkah={TAHAP_OFFBOARDING}
         />
       )}
     </div>
