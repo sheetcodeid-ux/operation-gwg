@@ -21,7 +21,7 @@ import {
 import { getUsers } from "@/lib/data/store";
 import { createTask, getTask, updateTask, updateTaskStatus } from "@/lib/data/mutations";
 import { presignPut, r2Enabled, r2Put, R2_PREFIX } from "@/lib/storage/r2";
-import type { HcRequest, HcRequestAttachment, HcRequestKind } from "@/lib/hc-request";
+import type { HcRequest, HcRequestAttachment, HcRequestKind, HcRequestStatus } from "@/lib/hc-request";
 import type { UserProfile } from "@/lib/types";
 
 /** Setiap departemen boleh mengajukan (menu hc_request). */
@@ -46,10 +46,12 @@ const canReview = (u: UserProfile | null, kind: HcRequestKind) => (kind === "des
  * Yang belum ditugaskan tetap terbuka untuk siapa pun di tim: itulah cara
  * seseorang mengambil pekerjaan baru.
  */
-function bolehSentuhDesign(u: UserProfile | null, req: { assigneeId?: string | null }): boolean {
+function bolehSentuhDesign(u: UserProfile | null, req: { assigneeId?: string | null; status: HcRequestStatus }): boolean {
   if (!canCreative(u)) return false;
   if (kelolaAntrianDesign(u)) return true;
-  return !req.assigneeId || req.assigneeId === u!.id;
+  // Sejalan dengan apa yang terlihat di layar: papan pengumuman (Menunggu)
+  // terbuka untuk siapa saja yang mau mengambilnya, sisanya milik PIC-nya.
+  return req.status === "menunggu_hc" || req.assigneeId === u!.id;
 }
 
 

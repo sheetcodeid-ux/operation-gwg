@@ -118,9 +118,9 @@ export function HcRequestReview({
       )}
       {kind === "design" && !kelola && (
         <p className="mb-3 rounded-xl border border-border bg-muted/30 px-3 py-2 text-[11px] leading-relaxed text-muted-foreground">
-          Yang tampil di sini hanya <b className="text-foreground">pekerjaan Anda</b> ditambah permintaan yang{" "}
-          <b className="text-foreground">belum ditugaskan</b> ke siapa pun. Begitu Anda mengambil salah satunya, ia hilang
-          dari daftar rekan yang lain.
+          <b className="text-foreground">Menunggu</b> berisi permintaan baru seluruh tim Creative — siapa pun boleh
+          mengambilnya. Tab lainnya (Sedang Dikerjakan, Revisi, Selesai, Ditolak) hanya berisi{" "}
+          <b className="text-foreground">pekerjaan Anda sendiri</b>, jadi tidak tercampur dengan pekerjaan rekan.
         </p>
       )}
       <StageFilterChips className="mb-4" options={opsi} value={stage} onChange={setStage} count={hitung} />
@@ -180,7 +180,7 @@ function Actions({
         {step.hc && (
           <>
             <Button size="sm" variant="ghost" className="text-red-600 dark:text-red-400" onClick={() => setDialog("hc")}>
-              <XCircle className="size-4" /> Tinjau
+              <XCircle className="size-4" /> {isDesign ? "Tolak" : "Tinjau"}
             </Button>
             {/* Design tidak cukup di-ACC — harus jelas siapa yang mengerjakan,
                 karena penugasan itulah yang membuat tugasnya di Work Tracker. */}
@@ -195,13 +195,18 @@ function Actions({
             )}
           </>
         )}
-        {/* Memindahkan pekerjaan yang sudah dipegang seseorang adalah keputusan
-            pembagian beban, bukan keputusan pengerjaan — jadi tombolnya hanya
-            ada pada yang mengelola antrian. Yang mengerjakan tetap bisa
-            MENGAMBIL pekerjaan yang belum bertuan. */}
-        {isDesign && !step.hc && r.status !== "terlaksana" && (kelola || !r.assigneeId) && (
+        {/* Penugasan adalah pintu masuk pekerjaan, dan pintunya cuma satu: tahap
+            Menunggu. Mengulanginya di "Sedang Dikerjakan" membuat tombol yang
+            sama muncul dua kali untuk satu keputusan yang sudah diambil.
+
+            Yang tersisa di sini bukan pengulangan itu, melainkan tindakan yang
+            berbeda: MEMINDAHKAN pekerjaan yang sudah berjalan ke orang lain —
+            keputusan pembagian beban, bukan keputusan pengerjaan. Tanpa jalan
+            ini, satu designer yang berhalangan berarti pekerjaannya tidak
+            pernah bisa dilanjutkan siapa pun. */}
+        {isDesign && !step.hc && r.status !== "terlaksana" && kelola && (
           <Button size="sm" variant="outline" onClick={() => setDialog("assign")}>
-            <UserRound className="size-4" /> {r.assigneeName ? "Ganti PIC" : kelola ? "Tugaskan PIC" : "Ambil Pekerjaan"}
+            <UserRound className="size-4" /> {r.assigneeName ? "Ganti PIC" : "Tugaskan PIC"}
           </Button>
         )}
         {step.complete && (
@@ -230,7 +235,18 @@ function Actions({
   );
 }
 
+/**
+ * Meninjau pengajuan.
+ *
+ * Design tidak punya tombol "Setujui" di sini, dan itu disengaja. Menyetujui
+ * design TANPA menunjuk siapa yang mengerjakan menghasilkan baris yang berstatus
+ * "Sedang Dikerjakan" padahal tidak ada yang mengerjakan: ia lolos dari tab
+ * Menunggu, tapi tidak masuk daftar siapa pun, jadi tidak ada yang merasa itu
+ * bagiannya sampai pemohonnya menagih. Persetujuan design terjadi lewat
+ * penugasan — satu langkah, bukan dua yang boleh berjalan sendiri-sendiri.
+ */
 function HcDecideDialog({ r, onClose, onDone }: { r: HcRequest; onClose: () => void; onDone: () => void }) {
+  const isDesign = r.kind === "design";
   const [note, setNote] = React.useState("");
   const [busy, setBusy] = React.useState(false);
 
@@ -254,26 +270,28 @@ function HcDecideDialog({ r, onClose, onDone }: { r: HcRequest; onClose: () => v
 
   return (
     <Dialog open onOpenChange={(v) => !v && onClose()}>
-      <DialogContent title="Tinjau Pengajuan" description={r.title} align="center" className="max-w-md">
+      <DialogContent title={isDesign ? "Tolak Permintaan Design" : "Tinjau Pengajuan"} description={r.title} align="center" className="max-w-md">
         <div className="space-y-3 p-5">
           <p className="rounded-lg bg-muted/50 px-3 py-2 text-xs text-muted-foreground">
             {r.kind === "pelatihan"
               ? "Disetujui → diteruskan ke Finance untuk persetujuan dana."
-              : r.kind === "design"
-                ? "Disetujui → design masuk antrian pengerjaan tim Creative. Setelah jadi, tandai Selesai dan lampirkan hasilnya."
+              : isDesign
+                ? "Untuk menerima permintaan ini, pakai tombol penugasan PIC — design dianggap disetujui begitu ada yang mengerjakannya. Di sini hanya untuk menolak."
                 : "Disetujui → permintaan masuk proses rekrutmen. Setelah pegawai diterima, tandai Terlaksana dan isi jumlah yang direkrut."}
           </p>
-          <Field label="Catatan (opsional)">
+          <Field label={isDesign ? "Alasan penolakan" : "Catatan (opsional)"}>
             <Textarea rows={3} value={note} onChange={(e) => setNote(e.target.value)} placeholder="Alasan / arahan…" />
           </Field>
           <div className="flex justify-end gap-2">
             <Button variant="ghost" onClick={onClose} disabled={busy}>Batal</Button>
             <Button variant="outline" className="text-red-600 dark:text-red-400" onClick={() => decide(false)} disabled={busy}>
-              <XCircle className="size-4" /> Tolak
+              {busy && isDesign ? <Loader2 className="size-4 animate-spin" /> : <XCircle className="size-4" />} Tolak
             </Button>
-            <Button onClick={() => decide(true)} disabled={busy}>
-              {busy ? <Loader2 className="size-4 animate-spin" /> : <CheckCircle2 className="size-4" />} Setujui
-            </Button>
+            {!isDesign && (
+              <Button onClick={() => decide(true)} disabled={busy}>
+                {busy ? <Loader2 className="size-4 animate-spin" /> : <CheckCircle2 className="size-4" />} Setujui
+              </Button>
+            )}
           </div>
         </div>
       </DialogContent>

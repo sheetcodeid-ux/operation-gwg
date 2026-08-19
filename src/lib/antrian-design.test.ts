@@ -47,24 +47,61 @@ describe("kelolaAntrianDesign", () => {
 describe("antrianUntukPic", () => {
   const via = "usr_via";
   const seka = "usr_seka";
+  const baris = (id, status, assigneeId, revisions = []) =>
+    ({ id, kind: "design", status, assigneeId, revisions });
+
   const rows = [
-    { id: "belum-1", assigneeId: null },
-    { id: "belum-2", assigneeId: undefined },
-    { id: "punya-via", assigneeId: via },
-    { id: "punya-seka", assigneeId: seka },
+    baris("baru-1", "menunggu_hc", null),
+    baris("baru-2", "menunggu_hc", undefined),
+    baris("dikerjakan-via", "disetujui_hc", via),
+    baris("dikerjakan-seka", "disetujui_hc", seka),
+    baris("revisi-via", "disetujui_hc", via, [{ at: "2026-08-01" }]),
+    baris("selesai-via", "terlaksana", via),
+    baris("selesai-seka", "terlaksana", seka),
+    baris("ditolak-via", "ditolak_hc", via),
+    // Baris ganjil: sudah lolos Menunggu tapi tidak ditugaskan ke siapa pun.
+    baris("yatim-dikerjakan", "disetujui_hc", null),
+    baris("yatim-selesai", "terlaksana", null),
+    baris("yatim-ditolak", "ditolak_hc", null),
   ];
 
-  it("yang belum ditugaskan terlihat semua orang", () => {
+  const idsUntuk = (uid: string) => antrianUntukPic(rows, uid).map((r) => r.id);
+
+  it("Menunggu dilihat seluruh tim", () => {
     for (const uid of [via, seka]) {
-      const ids = antrianUntukPic(rows, uid).map((r) => r.id);
-      expect(ids).toContain("belum-1");
-      expect(ids).toContain("belum-2");
+      expect(idsUntuk(uid)).toContain("baru-1");
+      expect(idsUntuk(uid)).toContain("baru-2");
     }
   });
 
-  it("pekerjaan rekan tidak ikut terbawa", () => {
-    expect(antrianUntukPic(rows, seka).map((r) => r.id)).toEqual(["belum-1", "belum-2", "punya-seka"]);
-    expect(antrianUntukPic(rows, via).map((r) => r.id)).toEqual(["belum-1", "belum-2", "punya-via"]);
+  it("selain Menunggu hanya berisi pekerjaan sendiri", () => {
+    expect(idsUntuk(seka)).toEqual(["baru-1", "baru-2", "dikerjakan-seka", "selesai-seka"]);
+    expect(idsUntuk(via)).toEqual([
+      "baru-1",
+      "baru-2",
+      "dikerjakan-via",
+      "revisi-via",
+      "selesai-via",
+      "ditolak-via",
+    ]);
+  });
+
+  it("pekerjaan rekan tidak pernah ikut, di tahap mana pun", () => {
+    for (const uid of [via, seka]) {
+      const lain = antrianUntukPic(rows, uid).filter((r) => r.assigneeId && r.assigneeId !== uid);
+      expect(lain).toEqual([]);
+    }
+  });
+
+  it("baris tanpa PIC di luar Menunggu tidak muncul di layar designer", () => {
+    // Kalau ikut muncul, ia nongol di "Sedang Dikerjakan" milik SEMUA orang
+    // padahal tidak ada yang mengerjakannya — persis keluhan yang diperbaiki.
+    for (const uid of [via, seka]) {
+      const ids = idsUntuk(uid);
+      expect(ids).not.toContain("yatim-dikerjakan");
+      expect(ids).not.toContain("yatim-selesai");
+      expect(ids).not.toContain("yatim-ditolak");
+    }
   });
 
   it("tidak mengubah daftar aslinya", () => {
@@ -107,5 +144,33 @@ describe("penyaringan dilakukan di server", () => {
     for (const nama of ["hcDecideRequestAction", "completeHcRequestAction", "assignDesignRequestAction"]) {
       expect(badanFungsi(nama), `${nama} tidak memeriksa kepemilikan design`).toContain("bolehSentuhDesign");
     }
+  });
+});
+
+describe("penugasan hanya punya satu pintu masuk", () => {
+  /**
+   * Tombol penugasan sempat muncul dua kali untuk satu keputusan yang sama:
+   * di tahap Menunggu (tempat pekerjaan diambil) dan lagi di "Sedang
+   * Dikerjakan". Yang kedua bukan langkah baru, hanya pengulangan — dan
+   * pengulangan itulah yang membuat alurnya terbaca seperti ada dua cara
+   * berbeda untuk hal yang sama.
+   */
+  const UI = readFileSync(join(process.cwd(), "src/components/hc/request-review.tsx"), "utf8");
+
+  it("di luar tahap Menunggu, tombolnya hanya untuk pengelola antrian", () => {
+    const blok = /\{isDesign && !step\.hc && [^}]*\}/.exec(UI)?.[0] ?? "";
+    expect(blok, "blok tombol penugasan tidak ditemukan").not.toBe("");
+    expect(blok).toContain("kelola");
+    // "Ambil Pekerjaan" adalah tindakan tahap Menunggu; kalau ia muncul lagi di
+    // sini, tombolnya kembali dobel untuk yang mengerjakan.
+    expect(blok).not.toContain("Ambil Pekerjaan");
+  });
+
+  it("design tidak bisa disetujui tanpa menunjuk PIC", () => {
+    // Menyetujui tanpa PIC menghasilkan baris "Sedang Dikerjakan" yang tidak
+    // ada di daftar siapa pun — lolos dari Menunggu, tapi tak bertuan.
+    const dialog = UI.slice(UI.indexOf("function HcDecideDialog"));
+    const tombolSetujui = /\{!isDesign && \(\s*<Button onClick=\{\(\) => decide\(true\)\}/.test(dialog);
+    expect(tombolSetujui, "tombol Setujui harus disembunyikan untuk design").toBe(true);
   });
 });

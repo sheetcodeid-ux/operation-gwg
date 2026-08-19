@@ -313,14 +313,34 @@ export function kelolaAntrianDesign(
   return kata.some((k) => JABATAN_PENGELOLA.includes(k));
 }
 
+/** Bentuk seminimal mungkin yang cukup untuk menentukan kepemilikan satu baris. */
+export interface BarisAntrian {
+  kind: HcRequestKind;
+  status: HcRequestStatus;
+  assigneeId?: string | null;
+  revisions?: { at: string }[];
+}
+
 /**
- * Antrian yang pantas dilihat seorang designer: kolam bersama + miliknya.
+ * Antrian yang pantas dilihat seorang designer.
  *
- * Sengaja menerima bentuk seminimal mungkin supaya bisa dipakai di server
- * (sebelum dikirim ke peramban) maupun di layar, dengan aturan yang sama persis.
+ * Menunggu adalah PAPAN PENGUMUMAN: permintaan yang baru masuk belum jadi
+ * pekerjaan siapa pun, dan seluruh tim perlu melihatnya untuk tahu apa yang
+ * akan datang. Begitu keluar dari Menunggu, ia sudah jadi pekerjaan seseorang —
+ * dan sejak itu hanya orang itu yang perlu melihatnya.
+ *
+ * Perhatikan bahwa pemisahnya TAHAP, bukan sekadar ada tidaknya PIC. Keduanya
+ * hampir selalu sama, tapi tidak pada satu kasus yang justru paling merepotkan:
+ * pengajuan yang disetujui tanpa ditugaskan ke siapa pun. Memakai "belum ada
+ * PIC" sebagai penanda kolam bersama membuat baris seperti itu nongol di layar
+ * SEMUA orang, di tab "Sedang Dikerjakan" — padahal tidak ada yang mengerjakan,
+ * dan tidak seorang pun bisa memastikan itu bukan bagiannya.
+ *
+ * Baris tanpa PIC di luar Menunggu tetap terlihat oleh yang mengelola antrian,
+ * yang memang tugasnya membagikannya.
  */
-export function antrianUntukPic<T extends { assigneeId?: string | null }>(rows: T[], userId: string): T[] {
-  return rows.filter((r) => !r.assigneeId || r.assigneeId === userId);
+export function antrianUntukPic<T extends BarisAntrian>(rows: T[], userId: string): T[] {
+  return rows.filter((r) => requestStage(r) === "menunggu" || r.assigneeId === userId);
 }
 
 export const isOpen = (s: HcRequestStatus) => s !== "terlaksana" && s !== "ditolak_hc" && s !== "ditolak_finance";

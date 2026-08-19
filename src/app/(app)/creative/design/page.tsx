@@ -36,7 +36,7 @@ export default async function CreativeDesignQueuePage() {
         description={
           kelola
             ? "Permintaan materi desain dari seluruh departemen. Tugaskan PIC-nya, lalu tandai selesai beserta hasilnya."
-            : "Pekerjaan design Anda, ditambah permintaan yang belum diambil siapa pun. Ambil untuk mulai mengerjakan, lalu tandai selesai beserta hasilnya."
+            : "Tab Menunggu berisi permintaan baru seluruh tim; tab lainnya hanya pekerjaan Anda sendiri. Ambil dari Menunggu untuk mulai mengerjakan, lalu tandai selesai beserta hasilnya."
         }
       />
       <HcRequestReview mode="hc" kind="design" picOptions={picOptions} kelola={kelola} meId={user.id} />
