@@ -14,6 +14,8 @@ import {
   type PrioritasRenewal,
   type StatusKontrak,
 } from "@/lib/hcmos/kontrak";
+import { TAHAP_AKTIF, TAHAP_META, type TahapKandidat } from "@/lib/hcmos/rekrutmen";
+import type { HcScope } from "@/lib/hcmos/pillars";
 import type { UserProfile } from "@/lib/types";
 
 /**
@@ -262,11 +264,46 @@ export interface HcmosRingkas {
   /** Turnover 12 bulan terakhir, dikelompokkan per bulan keluar. */
   turnoverPerBulan: { bulan: string; jumlah: number }[];
   turnoverPerKategori: { kategori: string; jumlah: number }[];
+
+  /* ── angka tambahan untuk dasbor ──────────────────────────────────────── */
+
+  /** Penilaian kinerja yang sudah lewat tahap draf, dari total karyawan aktif. */
+  reviewSelesai: number;
+  /** Kesiapan suksesi — jumlah per tingkat kesiapan. */
+  suksesiPerKesiapan: { kesiapan: string; jumlah: number }[];
+  /** Kandidat per tahap, dipisah scope. Dasar grafik pipeline rekrutmen. */
+  pipelinePerTahap: { scope: HcScope; tahap: string; jumlah: number }[];
+  /** Permintaan karyawan yang masih menunggu keputusan HC, per scope. */
+  posisiTerbuka: { scope: HcScope; jumlah: number }[];
+  /** Persetujuan yang menggantung: permintaan karyawan & pelatihan + cuti. */
+  persetujuanMenunggu: {
+    id: string;
+    scope: HcScope;
+    judul: string;
+    orang: string;
+    jenis: string;
+    tanggal: string | null;
+    href: string;
+  }[];
+  /** Karyawan outlet dikelompokkan per brand — dasar grafik komposisi crew. */
+  crewPerBrand: { brand: string; jumlah: number }[];
 }
 
 /** Angka ringkas untuk Dashboard HC-MOS — satu kali baca, dipakai semua kartunya. */
 export async function ringkasHcmos(user: UserProfile, periode = periodeKey()): Promise<HcmosRingkas> {
-  const [rekap, kontrak] = await Promise.all([rekapOutlet(user, periode), listKontrak(user)]);
+  const [rekap, kontrak, kandidat, review, suksesi, permintaan, cuti] = await Promise.all([
+    rekapOutlet(user, periode),
+    listKontrak(user),
+    // Angka-angka di bawah ini SELALU dari modulnya masing-masing. Menghitung
+    // ulang di sini dengan aturan sendiri berarti dasbor bisa menampilkan angka
+    // yang berbeda dari halaman yang jadi sumbernya, dan yang membacanya tidak
+    // punya cara tahu mana yang benar.
+    bacaTabel("hc_candidates", "id,scope,tahap"),
+    bacaTabel("hc_reviews", "id,status"),
+    bacaTabel("hc_succession", "id,kesiapan"),
+    bacaTabel("hc_requests", "id,kind,scope,status,title,position,headcount,requester_id,created_at"),
+    bacaTabel("hc_leaves", "id,nama,scope,jenis,tgl_mulai,status"),
+  ]);
 
   // Manajemen: daftar orang di User Management, bukan salinan tersendiri.
   const users = getUsers();
@@ -307,7 +344,105 @@ export async function ringkasHcmos(user: UserProfile, periode = periodeKey()): P
     turnoverPerKategori: [...perKategori.entries()]
       .map(([kategori, jumlah]) => ({ kategori, jumlah }))
       .sort((a, b) => b.jumlah - a.jumlah),
+
+    reviewSelesai: review.filter((r) => String(r.status ?? "") !== "draf").length,
+
+    suksesiPerKesiapan: hitungPer(suksesi, (r) => String(r.kesiapan ?? "") || "perlu_dikembangkan").map(
+      ([kesiapan, jumlah]) => ({ kesiapan, jumlah }),
+    ),
+
+    // Hanya tahap yang MASIH BERJALAN. "Diterima" dan "Tidak Lolos" bukan
+    // bagian pipeline — memasukkannya membuat corongnya melebar di ujung,
+    // padahal orang-orang itu sudah keluar dari antrean.
+    pipelinePerTahap: TAHAP_AKTIF.flatMap((tahap) =>
+      (["manajemen", "outlet"] as HcScope[]).map((scope) => ({
+        scope,
+        tahap: TAHAP_META[tahap as TahapKandidat].label,
+        jumlah: kandidat.filter((k) => scopeDari(k.scope) === scope && String(k.tahap ?? "") === tahap).length,
+      })),
+    ),
+
+    posisiTerbuka: (["manajemen", "outlet"] as HcScope[]).map((scope) => ({
+      scope,
+      jumlah: permintaan
+        .filter((r) => String(r.kind ?? "") === "rekrutmen" && scopeDari(r.scope) === scope)
+        .filter((r) => String(r.status ?? "") === "menunggu_hc" || String(r.status ?? "") === "disetujui_hc")
+        .reduce((a, r) => a + (Number(r.headcount) || 1), 0),
+    })),
+
+    persetujuanMenunggu: [
+      ...permintaan
+        .filter((r) => String(r.status ?? "") === "menunggu_hc")
+        .map((r) => ({
+          id: String(r.id),
+          scope: scopeDari(r.scope),
+          judul: String(r.title ?? "Pengajuan"),
+          orang: r.requester_id ? userName(String(r.requester_id)) : "—",
+          jenis: String(r.kind ?? "") === "rekrutmen" ? "Permintaan Karyawan" : "Pengajuan Pelatihan",
+          tanggal: (r.created_at as string | null) ?? null,
+          href: String(r.kind ?? "") === "rekrutmen" ? "/hc/permintaan" : "/hc/pelatihan",
+        })),
+      ...cuti
+        .filter((r) => String(r.status ?? "") === "menunggu")
+        .map((r) => ({
+          id: String(r.id),
+          scope: scopeDari(r.scope),
+          judul: String(r.jenis ?? "Cuti"),
+          orang: String(r.nama ?? "—"),
+          jenis: "Cuti & Izin",
+          tanggal: (r.tgl_mulai as string | null) ?? null,
+          href: "/hc-mos/kompensasi",
+        })),
+    ].sort((a, b) => (b.tanggal ?? "").localeCompare(a.tanggal ?? "")),
+
+    crewPerBrand: hitungPer(
+      kontrak.filter((k) => !k.keluar),
+      (k) => k.brand ?? "Tanpa Brand",
+    ).map(([brand, jumlah]) => ({ brand, jumlah })),
   };
+}
+
+/* ── penolong dasbor ─────────────────────────────────────────────────────── */
+
+type BarisBebas = Record<string, unknown>;
+
+/**
+ * Membaca satu tabel HC-MOS apa adanya untuk keperluan hitungan dasbor.
+ *
+ * Dibaca halaman demi halaman lewat `selectAll`, bukan `.limit(n)` besar. API
+ * Supabase memotong satu permintaan di 1.000 baris TANPA memberi tahu, jadi
+ * `.limit(2000)` menghasilkan angka yang terlihat wajar tapi diam-diam kurang —
+ * bentuk kesalahan yang paling sulit disadari, karena tidak ada yang rusak di
+ * layar.
+ *
+ * Gagal baca mengembalikan daftar kosong, bukan melempar. Satu tabel yang belum
+ * pernah diisi tidak boleh membuat SELURUH dasbor gagal dimuat — kartu yang
+ * kosong masih memberi tahu keadaannya, halaman yang error tidak memberi tahu
+ * apa pun.
+ */
+async function bacaTabel(nama: string, kolom: string): Promise<BarisBebas[]> {
+  if (!dbEnabled) return [];
+  try {
+    return await selectAll<BarisBebas>(nama, (from, to) =>
+      // Urutan wajib pada kolom unik: tanpa itu halaman kedua bisa mengulang
+      // atau melewatkan baris yang sudah terbaca di halaman pertama.
+      db().from(nama).select(kolom).order("id").range(from, to),
+    );
+  } catch {
+    return [];
+  }
+}
+
+const scopeDari = (v: unknown): HcScope => (String(v ?? "") === "outlet" ? "outlet" : "manajemen");
+
+/** Menghitung jumlah baris per kunci, terbanyak dulu. */
+function hitungPer<T>(rows: T[], kunci: (r: T) => string): [string, number][] {
+  const peta = new Map<string, number>();
+  for (const r of rows) {
+    const k = kunci(r);
+    peta.set(k, (peta.get(k) ?? 0) + 1);
+  }
+  return [...peta.entries()].sort((a, b) => b[1] - a[1]);
 }
 
 /* ─────────────────────────────── penulisan ─────────────────────────────── */
