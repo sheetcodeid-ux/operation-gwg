@@ -1,7 +1,15 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { antrianUntukPic, kelolaAntrianDesign } from "./hc-request";
+import {
+  antrianUntukPic,
+  kelolaAntrianDesign,
+  LABEL_SCOPE_MANPOWER,
+  PENJELASAN_SCOPE_MANPOWER,
+  SCOPE_MANPOWER,
+  scopeBawaan,
+  scopeManpowerValid,
+} from "./hc-request";
 
 /**
  * Aturan yang diuji di sini berasal dari keluhan nyata: Seka membuka Antrian
@@ -172,5 +180,49 @@ describe("penugasan hanya punya satu pintu masuk", () => {
     const dialog = UI.slice(UI.indexOf("function HcDecideDialog"));
     const tombolSetujui = /\{!isDesign && \(\s*<Button onClick=\{\(\) => decide\(true\)\}/.test(dialog);
     expect(tombolSetujui, "tombol Setujui harus disembunyikan untuk design").toBe(true);
+  });
+});
+
+describe("scope permintaan karyawan", () => {
+  /**
+   * Hasil Meeting Fitur HRD: permintaan karyawan dipisah Manajemen dan Outlet.
+   * Yang mudah tertukar adalah bawaannya — Supervisor memegang satu cabang dan
+   * tidak membawahi divisi mana pun, jadi permintaannya selalu permintaan
+   * outlet. Bawaan yang salah pada formulir yang diisi berulang kali akan
+   * menghasilkan puluhan baris salah scope sebelum ada yang menyadarinya.
+   */
+  it("Supervisor mengajukan atas nama outlet", () => {
+    expect(scopeBawaan("supervisor")).toBe("outlet");
+  });
+
+  it("peran kantor mengajukan atas nama manajemen", () => {
+    for (const r of ["legal", "head_operation", "member", "area_coordinator", null, undefined]) {
+      expect(scopeBawaan(r), String(r)).toBe("manajemen");
+    }
+  });
+
+  it("hanya dua scope yang sah", () => {
+    expect(scopeManpowerValid("manajemen")).toBe(true);
+    expect(scopeManpowerValid("outlet")).toBe(true);
+    expect(scopeManpowerValid("cabang")).toBe(false);
+    expect(scopeManpowerValid("")).toBe(false);
+  });
+
+  it("tiap scope punya label dan penjelasan", () => {
+    for (const v of SCOPE_MANPOWER) {
+      expect(LABEL_SCOPE_MANPOWER[v], v).toBeTruthy();
+      expect(PENJELASAN_SCOPE_MANPOWER[v], v).toBeTruthy();
+    }
+  });
+
+  it("permintaan outlet wajib menyebut cabangnya, dan cabang itu diperiksa", () => {
+    // Tanpa pemeriksaan ini, satu supervisor bisa mengajukan penambahan orang
+    // atas nama cabang lain — dan yang menanggung anggarannya adalah cabang
+    // yang tidak pernah memintanya.
+    const src = readFileSync(join(process.cwd(), "src/lib/actions/hc-requests.ts"), "utf8");
+    const mulai = src.indexOf("export async function submitHcRequestAction");
+    const isi = src.slice(mulai, src.indexOf("\n}", mulai));
+    expect(isi).toContain("Pilih outlet yang mengajukan.");
+    expect(isi).toContain("canAccessOutlet");
   });
 });

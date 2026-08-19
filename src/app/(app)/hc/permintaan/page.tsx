@@ -16,7 +16,7 @@ export default async function HcRecruitReviewPage() {
       <PageHeader
         icon={ClipboardCheck}
         title="Permintaan Karyawan"
-        description="Tinjau permintaan pegawai dari seluruh departemen."
+        description="Tinjau permintaan pegawai — dipisah Manajemen (divisi kantor) dan Outlet (cabang, diajukan Supervisor)."
       />
       <HcRequestReview mode="hc" kind="rekrutmen" />
     </div>

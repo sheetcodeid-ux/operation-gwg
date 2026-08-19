@@ -2,8 +2,9 @@ import "server-only";
 
 import { randomUUID } from "node:crypto";
 import { db, dbEnabled } from "./db";
-import { userName } from "./store";
-import type { HcRequest, HcRequestAttachment, HcRequestKind, HcRequestStatus } from "@/lib/hc-request";
+import { outletName, userName } from "./store";
+import { scopeManpowerValid } from "@/lib/hc-request";
+import type { HcRequest, HcRequestAttachment, HcRequestKind, HcRequestStatus, ScopeManpower } from "@/lib/hc-request";
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
@@ -25,6 +26,9 @@ const fromRow = (r: any): HcRequest => ({
   subjectName: r.subject_name ?? "",
   position: r.position ?? null,
   headcount: Number(r.headcount ?? 0),
+  scope: scopeManpowerValid(r.scope ?? "") ? r.scope : "manajemen",
+  outletId: r.outlet_id ?? null,
+  outletName: r.outlet_id ? outletName(r.outlet_id) : null,
   recruited: Number(r.recruited ?? 0),
   trainingType: r.training_type ?? null,
   participants: Number(r.participants ?? 0),
@@ -129,6 +133,8 @@ export interface CreateRequestInput {
   subjectName?: string;
   position?: string | null;
   headcount?: number;
+  scope?: ScopeManpower;
+  outletId?: string | null;
   trainingType?: string | null;
   participants?: number;
   participantNames?: string[];
@@ -151,6 +157,8 @@ export async function createHcRequest(input: CreateRequestInput): Promise<{ id?:
     subject_name: input.subjectName ?? "",
     position: input.position ?? null,
     headcount: input.headcount ?? 0,
+    scope: input.scope ?? "manajemen",
+    outlet_id: input.outletId ?? null,
     recruited: 0,
     training_type: input.trainingType ?? null,
     participants: input.participants ?? 0,

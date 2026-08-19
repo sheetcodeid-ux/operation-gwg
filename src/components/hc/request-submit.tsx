@@ -14,7 +14,19 @@ import { SegmentedTabs } from "@/components/ui/segmented-tabs";
 import { useConfirm } from "@/components/ui/confirm";
 import { Dialog, DialogContent, DialogTrigger, useDialogControl } from "@/components/ui/dialog";
 import { deleteRequestAction, requestDesignRevisionAction, submitHcRequestAction } from "@/lib/actions/hc-requests";
-import { DESIGN_TYPES, REVIEWER_LABEL, TRAINING_TYPES, UPLOAD_HINT, fmtRupiah, type HcRequest, type HcRequestKind } from "@/lib/hc-request";
+import {
+  DESIGN_TYPES,
+  LABEL_SCOPE_MANPOWER,
+  PENJELASAN_SCOPE_MANPOWER,
+  REVIEWER_LABEL,
+  SCOPE_MANPOWER,
+  TRAINING_TYPES,
+  UPLOAD_HINT,
+  fmtRupiah,
+  type HcRequest,
+  type HcRequestKind,
+  type ScopeManpower,
+} from "@/lib/hc-request";
 import { DiscussButton } from "@/components/chat/forward-request";
 import { FilePicker, RequestEmpty, RequestList, uploadAll } from "./request-shared";
 
@@ -184,7 +196,18 @@ function ReviseButton({ r, onDone }: { r: HcRequest; onDone: () => void }) {
 
 /** Dialog terpusat — bentuk yang sama dengan Pengajuan Dokumen & Pengajuan
  *  System, supaya seluruh formulir pengajuan terasa satu keluarga. */
-export function NewRequestButton({ kind, members = [] }: { kind: HcRequestKind; members?: DeptMember[] }) {
+export function NewRequestButton({
+  kind,
+  members = [],
+  outlets = [],
+  scopeAwal = "manajemen",
+}: {
+  kind: HcRequestKind;
+  members?: DeptMember[];
+  /** Cabang yang boleh dipilih pemohon — hanya untuk permintaan karyawan. */
+  outlets?: PilihanOutlet[];
+  scopeAwal?: ScopeManpower;
+}) {
   const copy = COPY[kind];
   return (
     <Dialog>
@@ -194,7 +217,7 @@ export function NewRequestButton({ kind, members = [] }: { kind: HcRequestKind; 
         </Button>
       </DialogTrigger>
       <DialogContent title={copy.title} description={copy.formDesc} align="center" className="max-w-lg">
-        <RequestForm kind={kind} members={members} />
+        <RequestForm kind={kind} members={members} outlets={outlets} scopeAwal={scopeAwal} />
       </DialogContent>
     </Dialog>
   );
@@ -210,9 +233,24 @@ function FieldError({ children }: { children?: string }) {
   );
 }
 
-type Errors = Partial<Record<"title" | "position" | "headcount" | "trainingType" | "participants" | "designType" | "subjectName", string>>;
+type Errors = Partial<Record<"title" | "position" | "headcount" | "outletId" | "trainingType" | "participants" | "designType" | "subjectName", string>>;
 
-function RequestForm({ kind, members }: { kind: HcRequestKind; members: DeptMember[] }) {
+export interface PilihanOutlet {
+  id: string;
+  name: string;
+}
+
+function RequestForm({
+  kind,
+  members,
+  outlets,
+  scopeAwal,
+}: {
+  kind: HcRequestKind;
+  members: DeptMember[];
+  outlets: PilihanOutlet[];
+  scopeAwal: ScopeManpower;
+}) {
   const router = useRouter();
   const { setOpen } = useDialogControl();
   const isTraining = kind === "pelatihan";
@@ -221,6 +259,10 @@ function RequestForm({ kind, members }: { kind: HcRequestKind; members: DeptMemb
   const [description, setDescription] = React.useState("");
   const [position, setPosition] = React.useState("");
   const [headcount, setHeadcount] = React.useState("1");
+  const [scope, setScope] = React.useState<ScopeManpower>(scopeAwal);
+  // Supervisor biasanya cuma memegang satu cabang — memilihkannya lebih dulu
+  // menghapus satu langkah yang jawabannya sudah pasti.
+  const [outletId, setOutletId] = React.useState(outlets.length === 1 ? outlets[0].id : "");
   const [trainingType, setTrainingType] = React.useState(TRAINING_TYPES[0]);
   const [customType, setCustomType] = React.useState("");
   const [designType, setDesignType] = React.useState(DESIGN_TYPES[0]);
@@ -263,6 +305,7 @@ function RequestForm({ kind, members }: { kind: HcRequestKind; members: DeptMemb
     } else {
       if (!position.trim()) e.position = "Posisi yang diminta wajib diisi.";
       if (Number(headcount) < 1) e.headcount = "Jumlah minimal 1 orang.";
+      if (scope === "outlet" && !outletId) e.outletId = "Pilih outlet yang mengajukan.";
     }
     return e;
   }
@@ -281,6 +324,8 @@ function RequestForm({ kind, members }: { kind: HcRequestKind; members: DeptMemb
         description: description.trim(),
         position: position.trim(),
         headcount: Number(headcount) || 0,
+        scope,
+        outletId: scope === "outlet" ? outletId : null,
         subjectName: subjectName.trim(),
         trainingType: isTraining ? resolvedType : "",
         participants: participantCount,
@@ -454,6 +499,39 @@ function RequestForm({ kind, members }: { kind: HcRequestKind; members: DeptMemb
         </>
       ) : (
         <>
+          <Field
+            label="Permintaan Untuk"
+            hint={PENJELASAN_SCOPE_MANPOWER[scope]}
+          >
+            <SegmentedTabs
+              size="sm"
+              value={scope}
+              onChange={(v) => setScope(v as ScopeManpower)}
+              items={SCOPE_MANPOWER.map((v) => ({ value: v, label: LABEL_SCOPE_MANPOWER[v] }))}
+            />
+          </Field>
+          {scope === "outlet" && (
+            <Field label="Outlet yang Mengajukan">
+              {outlets.length === 0 ? (
+                <p className="rounded-lg border border-dashed border-border p-3 text-xs text-muted-foreground">
+                  Akun Anda belum dipasangkan ke outlet mana pun, jadi permintaan outlet belum bisa diajukan. Hubungi
+                  admin untuk menetapkan cabang Anda.
+                </p>
+              ) : (
+                <Combobox
+                  portal
+                  matchTriggerWidth
+                  searchable
+                  searchPlaceholder="Cari outlet…"
+                  value={outletId}
+                  onChange={setOutletId}
+                  options={outlets.map((o) => ({ value: o.id, label: o.name }))}
+                  placeholder="Pilih outlet"
+                />
+              )}
+              <FieldError>{errors.outletId}</FieldError>
+            </Field>
+          )}
           <div className="grid gap-3 sm:grid-cols-2">
             <Field label="Posisi yang Diminta">
               <Input

@@ -16,6 +16,45 @@ import type { Tone } from "@/lib/constants";
 
 export type HcRequestKind = "rekrutmen" | "pelatihan" | "design";
 
+/* ─────────────────────── scope permintaan karyawan ───────────────────────
+ * Hasil Meeting Fitur HRD: permintaan karyawan dipisah Manajemen dan Outlet.
+ *
+ * Pemisahnya bukan label. Keduanya ditangani orang yang berbeda dan diukur
+ * dengan cara yang berbeda: permintaan divisi biasanya satu orang untuk satu
+ * posisi dan lamanya dihitung dari kebutuhan divisinya, sementara permintaan
+ * cabang datang berulang, jumlahnya banyak, dan waktunya diukur terhadap
+ * jadwal buka cabang. Dicampur, rata-rata waktu rekrutmen berhenti berarti
+ * bagi keduanya.                                                            */
+
+export const SCOPE_MANPOWER = ["manajemen", "outlet"] as const;
+export type ScopeManpower = (typeof SCOPE_MANPOWER)[number];
+
+export const LABEL_SCOPE_MANPOWER: Record<ScopeManpower, string> = {
+  manajemen: "Manajemen (Divisi)",
+  outlet: "Outlet",
+};
+
+export const PENJELASAN_SCOPE_MANPOWER: Record<ScopeManpower, string> = {
+  manajemen: "Permintaan dari divisi kantor pusat.",
+  outlet: "Permintaan dari cabang — diajukan Supervisor outlet yang bersangkutan.",
+};
+
+export function scopeManpowerValid(v: string): v is ScopeManpower {
+  return (SCOPE_MANPOWER as readonly string[]).includes(v);
+}
+
+/**
+ * Scope bawaan untuk seorang pemohon.
+ *
+ * Supervisor memegang satu cabang dan tidak membawahi divisi mana pun, jadi
+ * permintaannya selalu permintaan outlet. Menyodorkan pilihan "Manajemen"
+ * sebagai bawaan kepadanya hanya mengundang salah pilih pada formulir yang ia
+ * isi berulang kali.
+ */
+export function scopeBawaan(role: string | null | undefined): ScopeManpower {
+  return role === "supervisor" ? "outlet" : "manajemen";
+}
+
 /* ───────────────────────────── batas unggah ─────────────────────────────
  * Satu sumber untuk pemohon MAUPUN tim yang mengerjakan. Sebelumnya angkanya
  * ditulis ulang di lima tempat — server, penyandang tanda tangan unggahan,
@@ -175,6 +214,11 @@ export interface HcRequest {
   /** rekrutmen */
   position: string | null;
   headcount: number;
+  /** Manajemen (divisi) atau Outlet — khusus permintaan karyawan. */
+  scope: ScopeManpower;
+  /** Outlet yang meminta; kosong untuk scope Manajemen. */
+  outletId: string | null;
+  outletName: string | null;
   recruited: number;
   /** pelatihan */
   trainingType: string | null;

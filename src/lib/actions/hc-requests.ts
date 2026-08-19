@@ -5,6 +5,7 @@ import { revalidatePath } from "next/cache";
 import { getSessionUser } from "@/lib/auth";
 import { db, dbEnabled } from "@/lib/data/db";
 import { canReachMenu } from "@/lib/nav";
+import { canAccessOutlet } from "@/lib/rbac";
 import { persistMessage } from "@/lib/data/persist";
 import { createHcRequest, deleteHcRequest, getHcRequest, listHcRequests, updateHcRequest } from "@/lib/data/hc-requests";
 import { canSeeRequest, requestScopeFor } from "@/lib/data/request-scope";
@@ -12,16 +13,18 @@ import { notify } from "@/lib/data/notify";
 import {
   antrianUntukPic,
   kelolaAntrianDesign,
+  scopeBawaan,
+  scopeManpowerValid,
   REQUESTER_HREF,
   REVIEWER_DEPARTMENT,
   REVIEWER_HREF,
   UPLOAD_MAX_BYTES,
   UPLOAD_MAX_MB,
 } from "@/lib/hc-request";
-import { getUsers } from "@/lib/data/store";
+import { getOutlets, getUsers } from "@/lib/data/store";
 import { createTask, getTask, updateTask, updateTaskStatus } from "@/lib/data/mutations";
 import { presignPut, r2Enabled, r2Put, R2_PREFIX } from "@/lib/storage/r2";
-import type { HcRequest, HcRequestAttachment, HcRequestKind, HcRequestStatus } from "@/lib/hc-request";
+import type { HcRequest, HcRequestAttachment, HcRequestKind, HcRequestStatus, ScopeManpower } from "@/lib/hc-request";
 import type { UserProfile } from "@/lib/types";
 
 /** Setiap departemen boleh mengajukan (menu hc_request). */
@@ -135,6 +138,8 @@ export interface SubmitRequestInput {
   subjectName?: string;
   position?: string;
   headcount?: number;
+  scope?: ScopeManpower;
+  outletId?: string | null;
   trainingType?: string;
   participants?: number;
   participantNames?: string[];
@@ -151,6 +156,25 @@ export async function submitHcRequestAction(input: SubmitRequestInput): Promise<
   if (!input.title.trim()) return { error: "Judul pengajuan wajib diisi." };
   if (input.kind === "rekrutmen" && (!input.position?.trim() || !input.headcount || input.headcount < 1)) {
     return { error: "Posisi dan jumlah pegawai yang diminta wajib diisi." };
+  }
+
+  // Scope permintaan karyawan — Manajemen (divisi) atau Outlet (cabang).
+  //
+  // Untuk scope Outlet, cabangnya WAJIB disebut dan harus cabang yang memang
+  // dipegang pemohonnya. Tanpa pemeriksaan itu, satu supervisor bisa mengajukan
+  // penambahan orang atas nama cabang lain — dan yang menanggung anggarannya
+  // adalah cabang yang tidak pernah memintanya.
+  let scope: ScopeManpower = "manajemen";
+  let outletId: string | null = null;
+  if (input.kind === "rekrutmen") {
+    scope = scopeManpowerValid(input.scope ?? "") ? (input.scope as ScopeManpower) : scopeBawaan(user!.role);
+    if (scope === "outlet") {
+      outletId = (input.outletId ?? "").trim() || null;
+      if (!outletId) return { error: "Pilih outlet yang mengajukan." };
+      if (!canAccessOutlet(user!, outletId, getOutlets())) {
+        return { error: "Outlet itu bukan cabang Anda." };
+      }
+    }
   }
   if (input.kind === "pelatihan" && !input.trainingType?.trim()) {
     return { error: "Jenis pelatihan wajib dipilih." };
@@ -171,6 +195,8 @@ export async function submitHcRequestAction(input: SubmitRequestInput): Promise<
       subjectName: input.subjectName?.trim() ?? "",
       position: input.position?.trim() || null,
       headcount: input.headcount ?? 0,
+      scope,
+      outletId,
       trainingType: input.trainingType?.trim() || null,
       participants: input.participants ?? 0,
       participantNames: input.participantNames ?? [],

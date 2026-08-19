@@ -15,7 +15,10 @@ import {
   hcDecideRequestAction,
 } from "@/lib/actions/hc-requests";
 import { Combobox } from "@/components/ui/combobox";
+import { SegmentedTabs } from "@/components/ui/segmented-tabs";
 import {
+  LABEL_SCOPE_MANPOWER,
+  SCOPE_MANPOWER,
   UPLOAD_HINT,
   fmtRupiah,
   nextActions,
@@ -24,6 +27,7 @@ import {
   type HcRequest,
   type HcRequestKind,
   type RequestStage,
+  type ScopeManpower,
 } from "@/lib/hc-request";
 import { StageFilterChips } from "@/components/ui/stage-filter";
 import { DiscussButton } from "@/components/chat/forward-request";
@@ -62,6 +66,7 @@ export function HcRequestReview({
   const [rows, setRows] = React.useState<HcRequest[] | null>(null);
   const [stage, setStage] = React.useState<RequestStage | "all">("all");
   const [pic, setPic] = React.useState("all");
+  const [scope, setScope] = React.useState<ScopeManpower | "all">("all");
 
   const load = React.useCallback(async () => {
     setRows(mode === "hc" ? await allHcRequestsAction(kind) : await financeTrainingRequestsAction());
@@ -89,11 +94,17 @@ export function HcRequestReview({
   // Saringan PIC diterapkan LEBIH DULU, supaya angka di tiap tahap ikut
   // menyesuaikan. Kalau tidak, "Sedang Dikerjakan (7)" akan tetap tertulis 7
   // padahal yang tampil setelah memilih satu nama hanya dua.
+  // Permintaan karyawan dipisah Manajemen / Outlet — keduanya ditangani orang
+  // yang berbeda dan diukur dengan cara yang berbeda, jadi dicampur dalam satu
+  // daftar keduanya sama-sama sulit dibaca.
+  const saringScope = kind === "rekrutmen";
+
   const semua = React.useMemo(() => {
-    const list = rows ?? [];
+    let list = rows ?? [];
+    if (saringScope && scope !== "all") list = list.filter((r) => r.scope === scope);
     if (!saringPic || pic === "all") return list;
     return pic === "belum" ? list.filter((r) => !r.assigneeId) : list.filter((r) => r.assigneeId === pic);
-  }, [rows, saringPic, pic]);
+  }, [rows, saringPic, pic, saringScope, scope]);
 
   const tahapDari = React.useCallback(
     (r: HcRequest) => requestStage({ kind: r.kind, status: r.status, revisions: r.revisions }),
@@ -110,6 +121,21 @@ export function HcRequestReview({
 
   return (
     <div>
+      {saringScope && (
+        <SegmentedTabs
+          className="mb-3 max-w-lg"
+          size="sm"
+          value={scope}
+          onChange={(v) => setScope(v as ScopeManpower | "all")}
+          items={[
+            { value: "all", label: `Semua (${(rows ?? []).length})` },
+            ...SCOPE_MANPOWER.map((v) => ({
+              value: v,
+              label: `${LABEL_SCOPE_MANPOWER[v]} (${(rows ?? []).filter((r) => r.scope === v).length})`,
+            })),
+          ]}
+        />
+      )}
       {saringPic && (
         <div className="mb-3 flex flex-wrap items-center gap-2">
           <span className="text-xs text-muted-foreground">Tampilkan pekerjaan</span>

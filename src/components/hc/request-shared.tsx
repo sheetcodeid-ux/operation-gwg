@@ -9,6 +9,7 @@ import { DetailRows, DetailTitle, type DetailRow } from "@/components/ui/detail-
 import { presignHcUploadAction, uploadHcRequestFileAction } from "@/lib/actions/hc-requests";
 import {
   DIRECT_UPLOAD_MIN,
+  LABEL_SCOPE_MANPOWER,
   UPLOAD_MAX_BYTES,
   UPLOAD_MAX_FILES,
   UPLOAD_MAX_MB,
@@ -264,6 +265,12 @@ function RequestDetail({ r }: { r: HcRequest }) {
   ];
 
   if (r.kind === "rekrutmen") {
+    // Asal permintaan ditaruh paling atas: itu yang menentukan siapa yang
+    // menanganinya dan dengan ukuran apa lamanya proses dihitung.
+    rows.push({
+      label: "Permintaan untuk",
+      value: r.scope === "outlet" ? `Outlet — ${r.outletName ?? "belum ditentukan"}` : LABEL_SCOPE_MANPOWER.manajemen,
+    });
     rows.push({ label: "Posisi", value: r.position || "—" });
     rows.push({ label: "Jumlah diminta", value: `${r.headcount} orang` });
     if (r.plannedDate) rows.push({ label: "Target mulai kerja", value: fmtDate(r.plannedDate) });
