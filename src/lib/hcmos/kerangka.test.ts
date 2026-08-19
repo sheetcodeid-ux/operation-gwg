@@ -23,7 +23,7 @@ const MENU_BY_KEY = Object.fromEntries(NAV_MENUS.map((m) => [m.key, m]));
 const hrefEntri = (e: NavGroupEntry): string =>
   typeof e === "string" ? (MENU_BY_KEY[e]?.href ?? "") : e.href;
 
-/** Grup yang memang bukan pilar — pembungkus dasbor dan menu administrasi. */
+/** Grup yang memang bukan pilar — baris pembuka dan menu administrasi. */
 const BUKAN_PILAR = ["HC-MOS", "Menu Administrasi"];
 const grupPilar = grup.filter((g) => !BUKAN_PILAR.includes(g.name));
 
@@ -52,6 +52,17 @@ describe("kerangka HC-MOS: sidebar vs definisi pilar", () => {
         .filter((h): h is string => !!h);
       expect(diSidebar, `pilar ${pilar.label}`).toEqual(diDefinisi);
     }
+  });
+
+  it("Matriks RACI dan Dashboard jadi baris lepas di paling atas", () => {
+    // Keduanya tujuan pertama orang saat membuka divisinya. Di balik satu
+    // lipatan berarti dua klik untuk sesuatu yang seharusnya langsung terlihat.
+    const pembuka = grup[0];
+    expect(pembuka.datar, "grup pembuka harus datar").toBe(true);
+    expect(pembuka.menus.map(kunciEntri)).toEqual(["hcmos_raci", "hcmos"]);
+    // Grup lain TIDAK boleh datar — tanpa kepala lipat, sembilan pilar akan
+    // tumpah jadi satu daftar panjang tanpa pembatas.
+    for (const g of grup.slice(1)) expect(g.datar, g.name).toBeFalsy();
   });
 
   it("setiap baris sidebar punya alamat", () => {

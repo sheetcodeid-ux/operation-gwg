@@ -14,7 +14,8 @@ export type NavBlock =
 export function navBlocks(items: NavItem[]): NavBlock[] {
   const out: NavBlock[] = [];
   for (const item of items) {
-    if (!item.group) {
+    // Grup datar hanya alat penyusun urutan; di layar isinya baris biasa.
+    if (!item.group || item.groupFlat) {
       out.push({ kind: "item", item });
       continue;
     }

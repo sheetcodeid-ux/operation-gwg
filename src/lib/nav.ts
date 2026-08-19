@@ -92,6 +92,8 @@ export interface NavItem {
   sectionIcon?: string;
   /** Sub-group inside the division ("Talent Acquisition"), if the menu is in one. */
   group?: string;
+  /** Grup ini ditampilkan tanpa kepala lipat — barisnya berdiri sendiri. */
+  groupFlat?: boolean;
   /** Lucide icon name for that sub-group's header. */
   groupIcon?: string;
   /** Reachable by route but never listed in the sidebar — it lives inside
@@ -323,6 +325,19 @@ export interface NavGroupDef {
    * mengikuti urutan yang ditulis, bukan abjad.
    */
   urutan?: number;
+  /**
+   * Isinya ditampilkan sebagai baris lepas, tanpa kepala grup yang bisa dilipat.
+   *
+   * Dipakai untuk baris pembuka sebuah divisi — Matriks RACI dan Dashboard
+   * HC-MOS — yang memang tujuan pertama orang saat membuka divisinya. Menaruh
+   * keduanya di balik satu lipatan berarti dua klik untuk sesuatu yang
+   * seharusnya langsung terlihat, dan kepalanya sendiri ("HC-MOS") tidak
+   * menerangkan apa pun yang belum diterangkan nama divisinya.
+   *
+   * Bukan sekadar "menu tanpa grup": menu tanpa grup selalu jatuh ke bawah,
+   * sedangkan baris pembuka justru harus paling atas.
+   */
+  datar?: boolean;
 }
 
 /**
@@ -371,7 +386,7 @@ export const DIVISION_GROUPS: Partial<Record<Division, NavGroupDef[]>> = {
    * keduanya tetap sama.
    */
   "Human Capital": [
-    { name: "HC-MOS", icon: "Network", urutan: 0, menus: ["hcmos_raci", "hcmos"] },
+    { name: "HC-MOS", icon: "Network", urutan: 0, datar: true, menus: ["hcmos_raci", "hcmos"] },
     {
       name: "Organization Development",
       icon: "Network",
@@ -591,10 +606,10 @@ function itemsForDivision(division: string, menus: MenuKey[], sectionIcon: strin
       })
       .map((e) => {
         if (typeof e !== "string") {
-          return { ...e, section: division, sectionIcon, group: g.name, groupIcon: g.icon };
+          return { ...e, section: division, sectionIcon, group: g.name, groupIcon: g.icon, groupFlat: g.datar };
         }
         used.add(e);
-        return { ...MENU_BY_KEY[e]!, section: division, sectionIcon, group: g.name, groupIcon: g.icon };
+        return { ...MENU_BY_KEY[e]!, section: division, sectionIcon, group: g.name, groupIcon: g.icon, groupFlat: g.datar };
       });
     // Bidang kerja yang urutannya bermakna mempertahankan urutan tulisnya.
     grouped.push(...(g.urutan === undefined ? [...items].sort(byName) : items));
