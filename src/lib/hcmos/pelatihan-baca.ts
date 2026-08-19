@@ -15,6 +15,11 @@ export function bacaRekamanPelatihan(rows: BarisHcmos[]): RekamanPelatihan[] {
     batch: String(r.batch ?? ""),
     outletName: r.outletName ?? null,
     tanggal: r.tanggal ? String(r.tanggal) : null,
-    postTest: r.post_test === null || r.post_test === undefined ? null : Number(r.post_test),
+    preTest: angka(r.pre_test),
+    rolePlay: angka(r.role_play),
+    postTest: angka(r.post_test),
   }));
 }
+
+/** Kolom nilai boleh kosong; kosong berarti belum dinilai, bukan nol. */
+const angka = (v: unknown): number | null => (v === null || v === undefined || v === "" ? null : Number(v));

@@ -5,11 +5,11 @@ import { requireSessionUser } from "@/lib/auth";
 import { canReachMenu } from "@/lib/nav";
 import { getActiveCourse, getCourseTree, getProgressMap, getQuizResultsMap } from "@/lib/data/elearning";
 import { canManageElearning } from "@/lib/elearning-shared";
-import { EmptyState, PageHeader } from "@/components/ui/page-header";
+import { EmptyState } from "@/components/ui/page-header";
 import { LearnPath } from "@/components/elearning/learn-path";
-import { AlurBelajar } from "@/components/elearning/alur-belajar";
+import { RuangBelajar } from "@/components/elearning/ruang-belajar";
 
-export const metadata: Metadata = { title: "E-Learning" };
+export const metadata: Metadata = { title: "Self-Learning (LMS)" };
 
 export default async function ElearningPage() {
   const user = await requireSessionUser();
@@ -18,41 +18,46 @@ export default async function ElearningPage() {
   const canManage = canManageElearning(user);
   const course = await getActiveCourse();
 
-  if (!course) {
-    return (
-      <div className="w-full">
-        <PageHeader
-          icon={GraduationCap}
-          title="E-Learning"
-          description="Pusat pembelajaran mandiri untuk onboarding & pengembangan. Belajar bertahap, kerjakan assessment, dan pantau progres Anda."
-        />
-        <EmptyState
-          icon={GraduationCap}
-          title="Belum ada materi pembelajaran"
-          description={
-            canManage
-              ? "Buka Kelola E-Learning untuk membuat course, menyusun Hari 1–7, dan mengunggah materi."
-              : "Materi pembelajaran belum tersedia. Silakan cek kembali nanti — Head Operational sedang menyiapkannya."
-          }
-        />
-      </div>
-    );
-  }
+  // Kurikulumnya ditampilkan lebih dulu dan SELALU, juga ketika belum ada satu
+  // pun materi digital yang terbit. Sebelumnya halaman ini berhenti di layar
+  // kosong "belum ada materi", sehingga orang yang membukanya tidak punya cara
+  // tahu ia sebenarnya sedang menunggu apa — padahal daftar materi yang wajib
+  // ia jalani sudah ditetapkan Learning & Development sejak awal.
+  const [days, progress, quizResults] = course
+    ? await Promise.all([
+        getCourseTree(course.id),
+        getProgressMap(user.id, course.id),
+        getQuizResultsMap(user.id, course.id),
+      ])
+    : [[], {}, {}];
 
-  const [days, progress, quizResults] = await Promise.all([
-    getCourseTree(course.id),
-    getProgressMap(user.id, course.id),
-    getQuizResultsMap(user.id, course.id),
-  ]);
+  // Progres dihitung dari materi yang BENAR-BENAR terbit, bukan dari kurikulum
+  // rekomendasi. Kurikulum belum tentu sudah ada versi digitalnya, dan memakai
+  // jumlahnya sebagai pembagi membuat progres orang terlihat mandek padahal ia
+  // sudah menyelesaikan semua yang tersedia.
+  const materiTerbit = days.flatMap((d) => d.lessons ?? []);
+  const materiTuntas = materiTerbit.filter((l) => progress[l.id]?.completed).length;
 
   return (
     <div className="w-full space-y-4">
-      {/* Alurnya dijelaskan sekali di atas, sebelum daftar materinya.
-          Fast Start & Fast Track tidak lagi jadi halaman terpisah (hasil
-          Meeting Fitur HRD), jadi di sinilah crew outlet menemukan
-          penjelasannya — bukan di menu yang sudah tidak ada. */}
-      <AlurBelajar />
-      <LearnPath course={course} days={days} progress={progress} quizResults={quizResults} canManage={canManage} />
+      <RuangBelajar
+        namaPengguna={user.name.split(" ")[0] || user.name}
+        materiTuntas={materiTuntas}
+        totalMateriTerbit={materiTerbit.length}
+      />
+      {course ? (
+        <LearnPath course={course} days={days} progress={progress} quizResults={quizResults} canManage={canManage} />
+      ) : (
+        <EmptyState
+          icon={GraduationCap}
+          title="Materi digitalnya belum terbit"
+          description={
+            canManage
+              ? "Kurikulum di atas sudah ditetapkan. Buka Kelola E-Learning untuk menyusun materinya jadi course yang bisa dikerjakan."
+              : "Kurikulum di atas sudah ditetapkan, materi digitalnya sedang disiapkan Learning & Development."
+          }
+        />
+      )}
     </div>
   );
 }

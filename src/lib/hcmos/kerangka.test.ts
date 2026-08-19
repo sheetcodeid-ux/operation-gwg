@@ -85,11 +85,23 @@ describe("revisi hasil Meeting Fitur HRD", () => {
     }
   });
 
-  it("Fast Start & Fast Track dan Pre/Post Test lebur ke Self-Learning", () => {
-    expect(adaSlug("self-learning")).toBe(true);
-    for (const lama of ["fast-start-fast-track", "pre-post-test"]) {
-      expect(adaSlug(lama), `"${lama}" seharusnya sudah lebur`).toBe(false);
+  it("Fast Start & Fast Track dan Pre/Post Test berdiri sendiri di sebelah Self-Learning", () => {
+    // Sempat dilebur jadi satu pintu, lalu dikembalikan mengikuti rujukan
+    // HC-MOS terbaru. Ketiganya menjawab pertanyaan yang berbeda: dua yang
+    // pertama dibuka Human Capital untuk memantau jalannya program, yang
+    // terakhir dibuka karyawan untuk belajar.
+    for (const slug of ["fast-start-fast-track", "pre-post-test", "self-learning"]) {
+      expect(adaSlug(slug), `sub-menu "${slug}" hilang`).toBe(true);
     }
+  });
+
+  it("Fast Start & Fast Track dan Pre/Post Test hanya berlaku untuk outlet", () => {
+    for (const slug of ["fast-start-fast-track", "pre-post-test"]) {
+      expect(semuaSub.find((x) => x.slug === slug)!.scopeOnly, slug).toBe("outlet");
+    }
+    // Self-Learning justru TIDAK boleh dibatasi satu scope — staf manajemen
+    // punya kurikulum onboarding-nya sendiri di sana.
+    expect(semuaSub.find((x) => x.slug === "self-learning")!.scopeOnly).toBeUndefined();
   });
 
   it("Appraisal Review diganti Request Intervensi", () => {

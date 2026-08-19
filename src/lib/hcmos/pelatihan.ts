@@ -45,6 +45,8 @@ export interface RekamanPelatihan {
   batch: string;
   outletName: string | null;
   tanggal: string | null;
+  preTest: number | null;
+  rolePlay: number | null;
   postTest: number | null;
 }
 

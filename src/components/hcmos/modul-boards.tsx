@@ -774,6 +774,8 @@ export function FastTrackBoard({
         batch: t(r, "batch"),
         outletName: r.outletName ?? null,
         tanggal: t(r, "tanggal") || null,
+        preTest: n(r, "pre_test"),
+        rolePlay: n(r, "role_play"),
         postTest: n(r, "post_test"),
       })),
     [rows],

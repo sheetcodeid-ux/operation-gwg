@@ -218,18 +218,40 @@ export const HC_PILLARS: HcPillar[] = [
         raci: { R: "Riva", A: "Adrian", C: "Kepala Divisi Terkait", I: "Karyawan/Crew" },
       },
       {
-        // Fast Start & Fast Track dan Pre/Post Test dulu berdiri sendiri di
-        // sebelah Self-Learning. Hasil Meeting Fitur HRD: SATU PINTU.
-        //
-        // Alasannya bukan sekadar merapikan menu. Ketiganya adalah bagian dari
-        // satu perjalanan belajar yang sama — masuk, pre test, studi kasus,
-        // materi utama, post test — dan memisahkannya membuat orang harus tahu
-        // lebih dulu ia sedang berada di program yang mana sebelum bisa
-        // melanjutkan. Yang seharusnya ia tahu cuma: pelajaran saya sampai mana.
+        // Program wajib crew outlet. Sempat dilebur ke Self-Learning, lalu
+        // dikembalikan mengikuti rujukan HC-MOS terbaru — dan pemisahannya
+        // memang punya alasan: yang dibuka orang di sini bukan pelajarannya,
+        // melainkan JALANNYA PROGRAM (batch mana berjalan, siapa pesertanya).
+        // Itu pertanyaan Human Capital, bukan pertanyaan peserta.
+        slug: "fast-start-fast-track",
+        label: "Fast Start & Fast Track",
+        fungsi: "Program wajib crew outlet per batch — Fast Start untuk modul dasar, Fast Track untuk modul lanjutan.",
+        icon: "Rocket",
+        scopeOnly: "outlet",
+        href: "/hc-mos/fast-track",
+        hrefLabel: "Fast Start & Fast Track",
+        raci: { R: "Dini", A: "Adrian", C: "Riva, Outlet Manager", I: "Crew Outlet" },
+      },
+      {
+        slug: "pre-post-test",
+        label: "Pre Test & Post Test",
+        fungsi:
+          "Penilaian tiap materi Fast Start / Fast Track: Pre Test sebagai garis dasar, Role Play, lalu Post Test yang menentukan kelulusan.",
+        icon: "ClipboardCheck",
+        scopeOnly: "outlet",
+        href: "/hc-mos/assessment",
+        hrefLabel: "Pre Test & Post Test",
+        raci: { R: "Riva", A: "Adrian", C: "Dini, Trainer/Supervisor", I: "Crew Outlet" },
+      },
+      {
+        // Belajar mandiri untuk SELURUH karyawan, dua scope: kurikulum
+        // onboarding manajemen dan kurikulum outlet. Bedanya dengan dua baris
+        // di atas: di sinilah orangnya mengerjakan, bukan tempat Human Capital
+        // memantau jalannya program.
         slug: "self-learning",
         label: "Self-Learning (LMS)",
         fungsi:
-          "Satu pintu belajar mandiri: pre test → studi kasus → materi utama → post test. Fast Start & Fast Track untuk crew outlet berjalan di alur yang sama.",
+          "Platform belajar mandiri seluruh karyawan: pre test → studi kasus → materi utama → post test, dengan materi berbeda per scope.",
         icon: "MonitorPlay",
         href: "/elearning",
         hrefLabel: "E-Learning",

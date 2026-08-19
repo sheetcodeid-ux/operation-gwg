@@ -24,6 +24,7 @@ import { labelSumbu, singkat, singkatPeriode } from "@/lib/hcmos/singkat";
  */
 
 const BIRU = "#3b82f6";
+const HIJAU = "#10b981";
 const R = 66;
 const STROKE = 22;
 const CIRC = 2 * Math.PI * R;
@@ -127,7 +128,18 @@ export function GrafikBatang({
 
   return (
     <Bingkai judul={judul} subjudul={subjudul}>
-      <div className="min-h-[15rem] flex-1" style={{ outline: "none" }}>
+      {/* Dua lapis, dan keduanya perlu.
+          ResponsiveContainer memakai height="100%", sedangkan persen hanya bisa
+          dihitung terhadap tinggi induk yang PASTI. Lapis luar memberi tinggi
+          itu lewat min-height (dan tetap boleh memanjang lewat flex-1 saat
+          kartunya berada di dalam grid); lapis dalam yang absolut mengambil
+          tinggi terpakai induknya, berapa pun hasilnya.
+
+          Tanpa lapis dalam, `flex-1` membuat flex-basis 0 dan grafik yang tidak
+          kebetulan berada di dalam grid dihitung setinggi NOL — kartunya tampil
+          kosong tanpa satu pun galat di konsol. */}
+      <div className="relative min-h-[15rem] flex-1" style={{ outline: "none" }}>
+        <div className="absolute inset-0">
         <ResponsiveContainer width="100%" height="100%">
           <ComposedChart data={baris} margin={{ top: 8, right: 8, left: 0, bottom: 0 }} accessibilityLayer={false}>
             <defs>
@@ -158,7 +170,8 @@ export function GrafikBatang({
             />
             <Bar dataKey="nilai" name="Jumlah" fill="url(#hcGrey)" radius={[3, 3, 0, 0]} maxBarSize={34} />
           </ComposedChart>
-        </ResponsiveContainer>
+          </ResponsiveContainer>
+        </div>
       </div>
     </Bingkai>
   );
@@ -190,7 +203,18 @@ export function GrafikGaris({
 
   return (
     <Bingkai judul={judul} subjudul={subjudul}>
-      <div className="min-h-[15rem] flex-1" style={{ outline: "none" }}>
+      {/* Dua lapis, dan keduanya perlu.
+          ResponsiveContainer memakai height="100%", sedangkan persen hanya bisa
+          dihitung terhadap tinggi induk yang PASTI. Lapis luar memberi tinggi
+          itu lewat min-height (dan tetap boleh memanjang lewat flex-1 saat
+          kartunya berada di dalam grid); lapis dalam yang absolut mengambil
+          tinggi terpakai induknya, berapa pun hasilnya.
+
+          Tanpa lapis dalam, `flex-1` membuat flex-basis 0 dan grafik yang tidak
+          kebetulan berada di dalam grid dihitung setinggi NOL — kartunya tampil
+          kosong tanpa satu pun galat di konsol. */}
+      <div className="relative min-h-[15rem] flex-1" style={{ outline: "none" }}>
+        <div className="absolute inset-0">
         <ResponsiveContainer width="100%" height="100%">
           <ComposedChart data={baris} margin={{ top: 8, right: 28, left: 0, bottom: 0 }} accessibilityLayer={false}>
             <defs>
@@ -230,9 +254,160 @@ export function GrafikGaris({
               className="chart-glow-blue"
             />
           </ComposedChart>
-        </ResponsiveContainer>
+          </ResponsiveContainer>
+        </div>
       </div>
     </Bingkai>
+  );
+}
+
+/* ───────────────────────── batang berpasangan ───────────────────────── */
+
+export interface TitikGanda {
+  nama: string;
+  kiri: number | null;
+  kanan: number | null;
+}
+
+/**
+ * Dua batang berdampingan per kategori — dipakai membandingkan Pre Test dengan
+ * Post Test.
+ *
+ * Ini SATU-SATUNYA grafik HC-MOS yang memakai dua warna, dan itu justru
+ * mengikuti aturan yang sama dengan grafik lainnya: warna dipakai untuk
+ * membedakan hal yang memang berbeda. Di sini kedua batang mengukur dua
+ * pengukuran yang berlainan atas materi yang sama, jadi tanpa warna pembacanya
+ * harus menghitung posisi batang untuk tahu mana yang mana.
+ *
+ * Kategori yang salah satu nilainya belum ada tidak digambar. Nilai kosong yang
+ * dipaksa jadi nol terbaca sebagai "nilainya nol", bukan "belum dinilai" —
+ * kesalahan baca yang membuat pelatihan terlihat gagal total.
+ */
+export function GrafikBatangGanda({
+  judul,
+  subjudul,
+  data,
+  labelKiri,
+  labelKanan,
+  satuan,
+  pesanKosong = "Belum ada datanya.",
+}: {
+  judul: string;
+  subjudul?: string;
+  data: TitikGanda[];
+  labelKiri: string;
+  labelKanan: string;
+  satuan?: string;
+  pesanKosong?: string;
+}) {
+  const baris = React.useMemo(() => {
+    const lengkap = data.filter((d) => d.kiri !== null && d.kanan !== null);
+    const label = labelSumbu(lengkap.map((d) => d.nama));
+    return lengkap.map((d, i) => ({ nama: label[i], penuh: d.nama, kiri: d.kiri as number, kanan: d.kanan as number }));
+  }, [data]);
+
+  if (baris.length === 0) return <Kosong judul={judul} subjudul={subjudul} pesan={pesanKosong} />;
+
+  return (
+    <Bingkai judul={judul} subjudul={subjudul}>
+      {/* Dua lapis, dan keduanya perlu.
+          ResponsiveContainer memakai height="100%", sedangkan persen hanya bisa
+          dihitung terhadap tinggi induk yang PASTI. Lapis luar memberi tinggi
+          itu lewat min-height (dan tetap boleh memanjang lewat flex-1 saat
+          kartunya berada di dalam grid); lapis dalam yang absolut mengambil
+          tinggi terpakai induknya, berapa pun hasilnya.
+
+          Tanpa lapis dalam, `flex-1` membuat flex-basis 0 dan grafik yang tidak
+          kebetulan berada di dalam grid dihitung setinggi NOL — kartunya tampil
+          kosong tanpa satu pun galat di konsol. */}
+      <div className="relative min-h-[15rem] flex-1" style={{ outline: "none" }}>
+        <div className="absolute inset-0">
+        <ResponsiveContainer width="100%" height="100%">
+          <ComposedChart data={baris} margin={{ top: 8, right: 8, left: 0, bottom: 0 }} accessibilityLayer={false}>
+            <CartesianGrid strokeDasharray="3 3" stroke="rgba(148,163,184,0.16)" vertical={false} />
+            <XAxis
+              dataKey="nama"
+              tick={{ fill: "var(--foreground)", fontSize: 10, fontWeight: 600 }}
+              tickLine={false}
+              axisLine={false}
+              interval={0}
+              height={22}
+            />
+            <YAxis
+              allowDecimals={false}
+              tick={{ fill: "var(--foreground)", fontSize: 11, fontWeight: 600 }}
+              tickLine={false}
+              axisLine={false}
+              width={34}
+            />
+            <Tooltip
+              cursor={{ fill: "rgba(148,163,184,0.08)" }}
+              content={(p) => (
+                <TipGanda
+                  {...(p as unknown as { active?: boolean; payload?: readonly { payload?: BarisGanda }[] })}
+                  labelKiri={labelKiri}
+                  labelKanan={labelKanan}
+                  satuan={satuan}
+                />
+              )}
+            />
+            <Bar dataKey="kiri" name={labelKiri} fill="#94a3b8" radius={[3, 3, 0, 0]} maxBarSize={18} />
+            <Bar dataKey="kanan" name={labelKanan} fill={HIJAU} radius={[3, 3, 0, 0]} maxBarSize={18} />
+          </ComposedChart>
+          </ResponsiveContainer>
+        </div>
+      </div>
+      <div className="mt-2 flex items-center justify-center gap-4 text-[11px] text-muted-foreground">
+        <span className="inline-flex items-center gap-1.5">
+          <span className="size-2.5 rounded-sm" style={{ background: "#94a3b8" }} /> {labelKiri}
+        </span>
+        <span className="inline-flex items-center gap-1.5">
+          <span className="size-2.5 rounded-sm" style={{ background: HIJAU }} /> {labelKanan}
+        </span>
+      </div>
+    </Bingkai>
+  );
+}
+
+interface BarisGanda {
+  nama: string;
+  penuh: string;
+  kiri: number;
+  kanan: number;
+}
+
+function TipGanda({
+  active,
+  payload,
+  labelKiri,
+  labelKanan,
+  satuan,
+}: {
+  active?: boolean;
+  payload?: readonly { payload?: BarisGanda }[];
+  labelKiri: string;
+  labelKanan: string;
+  satuan?: string;
+}) {
+  const d = active ? payload?.[0]?.payload : undefined;
+  if (!d) return null;
+  const naik = Math.round((d.kanan - d.kiri) * 10) / 10;
+  return (
+    <div className="rounded-lg border border-border bg-popover px-2.5 py-1.5 text-xs shadow-md">
+      <p className="font-medium text-foreground">{d.penuh}</p>
+      <p className="text-muted-foreground">
+        {labelKiri}: {d.kiri}
+        {satuan ? ` ${satuan}` : ""}
+      </p>
+      <p className="text-muted-foreground">
+        {labelKanan}: {d.kanan}
+        {satuan ? ` ${satuan}` : ""}
+      </p>
+      <p className={naik >= 0 ? "text-emerald-600 dark:text-emerald-400" : "text-red-600 dark:text-red-400"}>
+        {naik >= 0 ? "+" : ""}
+        {naik} poin
+      </p>
+    </div>
   );
 }
 
