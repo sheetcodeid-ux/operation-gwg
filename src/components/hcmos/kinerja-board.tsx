@@ -3,7 +3,7 @@
 import * as React from "react";
 import { type ColumnDef } from "@tanstack/react-table";
 import { useRouter } from "next/navigation";
-import { ClipboardCheck, Grid3x3, Loader2, Pencil, Plus, Star, Trash2 } from "lucide-react";
+import { ClipboardCheck, Grid3x3, LifeBuoy, Loader2, Pencil, Plus, Star, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -17,19 +17,26 @@ import { SegmentedTabs } from "@/components/ui/segmented-tabs";
 import { StatTile } from "@/components/ui/stat";
 import { useConfirm } from "@/components/ui/confirm";
 import { KompetensiBoard, type PilihanOutlet } from "./modul-boards";
+import { IntervensiBoard } from "./intervensi-board";
 import type { BarisRekaman } from "./rekaman";
 import { hapusBarisAction, simpanBarisAction } from "@/lib/actions/hcmos-lanjutan";
 import { SCOPE_LABEL } from "@/lib/hcmos/pillars";
 import { ASPEK_KINERJA, predikatKinerja, skorKinerja } from "@/lib/hcmos/lanjutan";
-import { formatDate } from "@/lib/utils";
 
 /**
- * Penilaian Kinerja & Appraisal Review.
+ * Penilaian Kinerja, Request Intervensi, dan Competency Matrix.
  *
- * Keduanya satu baris yang sama: appraisal review adalah sesi peninjauan atas
- * penilaian yang sudah dibuat, bukan penilaian kedua. Dipisah jadi dua tabel,
- * hasil review akan menunjuk ke penilaian yang bisa berubah setelahnya, dan
- * tidak ada yang tahu versi mana yang sebenarnya ditinjau.
+ * "Appraisal Review" dihapus di Meeting Fitur HRD dan digantikan Request
+ * Intervensi. Keduanya sekilas mirip — sama-sama membahas kinerja seseorang
+ * bersama atasannya — tapi pemicunya berlawanan: appraisal review dijadwalkan
+ * untuk semua orang dan diisi karena kalendernya tiba, sedangkan intervensi
+ * muncul untuk satu orang karena ada yang memutuskan sesuatu perlu ditangani.
+ * Yang perlu tercatat adalah keputusan itu, bukan kehadiran di agenda.
+ *
+ * Kolom `status`, `tgl_review`, dan `hasil_review` sengaja TIDAK dihapus dari
+ * baris penilaian: di situlah tersimpan review yang sudah pernah dilakukan.
+ * Membuang kolomnya berarti membuang catatan yang sudah ada, hanya supaya
+ * tabelnya terlihat rapi.
  */
 
 const STATUS_REVIEW = {
@@ -61,12 +68,14 @@ type FormKinerja = ReturnType<typeof kosong>;
 export function KinerjaBoard({
   penilaian,
   kompetensi,
+  intervensi,
   outlets,
   bolehUbah,
   tabAwal = "penilaian",
 }: {
   penilaian: BarisRekaman[];
   kompetensi: BarisRekaman[];
+  intervensi: BarisRekaman[];
   outlets: PilihanOutlet[];
   bolehUbah: boolean;
   tabAwal?: string;
@@ -76,8 +85,8 @@ export function KinerjaBoard({
   const [tab, setTab] = React.useState(tabAwal);
   const [form, setForm] = React.useState<FormKinerja | null>(null);
 
-  const ditinjau = penilaian.filter((p) => t(p, "status") === "ditinjau");
-  const perluTinjau = penilaian.filter((p) => t(p, "status") === "selesai");
+  const selesaiDinilai = penilaian.filter((p) => t(p, "status") !== "draf");
+  const intervensiBaru = intervensi.filter((r) => t(r, "status") === "baru").length;
   const rerata = penilaian.length
     ? Math.round(penilaian.reduce((a, p) => a + skorKinerja(nilaiOf(p)), 0) / penilaian.length)
     : 0;
@@ -100,7 +109,7 @@ export function KinerjaBoard({
   );
 
   const kolom = React.useCallback(
-    (mode: "penilaian" | "review"): ColumnDef<BarisRekaman>[] => [
+    (): ColumnDef<BarisRekaman>[] => [
       {
         accessorKey: "nama",
         header: "Karyawan",
@@ -134,34 +143,18 @@ export function KinerjaBoard({
           );
         },
       },
-      mode === "review"
-        ? {
-            id: "review",
-            header: "Peninjauan",
-            cell: ({ row }) => {
-              const tgl = t(row.original, "tgl_review");
-              return (
-                <div className="min-w-0">
-                  <p className="text-foreground">{tgl ? formatDate(tgl) : "belum dijadwalkan"}</p>
-                  <p className="max-w-xs truncate text-[11px] text-muted-foreground">
-                    {t(row.original, "hasil_review") || "—"}
-                  </p>
-                </div>
-              );
-            },
-          }
-        : {
-            accessorKey: "status",
-            header: "Status",
-            cell: ({ row }) => {
-              const m = STATUS_REVIEW[t(row.original, "status") as StatusReview];
-              return (
-                <Badge tone={m?.tone ?? "neutral"} dot>
-                  {m?.label ?? "—"}
-                </Badge>
-              );
-            },
-          },
+      {
+        accessorKey: "status",
+        header: "Status",
+        cell: ({ row }) => {
+          const m = STATUS_REVIEW[t(row.original, "status") as StatusReview];
+          return (
+            <Badge tone={m?.tone ?? "neutral"} dot>
+              {m?.label ?? "—"}
+            </Badge>
+          );
+        },
+      },
       {
         id: "aksi",
         header: "",
@@ -185,8 +178,13 @@ export function KinerjaBoard({
     <div className="space-y-4">
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
         <StatTile icon={Star} label="Penilaian" value={penilaian.length} sub="seluruh periode" />
-        <StatTile icon={ClipboardCheck} label="Menunggu Peninjauan" value={perluTinjau.length} sub="sudah dinilai" />
-        <StatTile icon={ClipboardCheck} label="Sudah Ditinjau" value={ditinjau.length} sub="selesai penuh" />
+        <StatTile
+          icon={LifeBuoy}
+          label="Request Intervensi"
+          value={intervensi.length}
+          sub={`${intervensiBaru} belum ditangani`}
+        />
+        <StatTile icon={ClipboardCheck} label="Penilaian Selesai" value={selesaiDinilai.length} sub="bukan draf" />
         <StatTile icon={Star} label="Rerata Skor" value={rerata} sub="dari 100" />
       </div>
 
@@ -196,7 +194,7 @@ export function KinerjaBoard({
         onChange={setTab}
         items={[
           { value: "penilaian", label: "Penilaian Kinerja", icon: Star },
-          { value: "review", label: "Appraisal Review", icon: ClipboardCheck },
+          { value: "intervensi", label: "Request Intervensi", icon: LifeBuoy },
           { value: "kompetensi", label: "Competency Matrix", icon: Grid3x3 },
         ]}
       />
@@ -204,7 +202,7 @@ export function KinerjaBoard({
       {tab === "penilaian" && (
         <DataTable
           tableId="hcmos-penilaian"
-          columns={kolom("penilaian")}
+          columns={kolom()}
           data={penilaian}
           searchPlaceholder="Cari nama, periode…"
           toolbar={
@@ -217,22 +215,7 @@ export function KinerjaBoard({
         />
       )}
 
-      {tab === "review" && (
-        <>
-          {/* Yang ditinjau hanyalah penilaian yang penilaiannya sudah selesai —
-              meninjau draf berarti meninjau angka yang masih bisa berubah. */}
-          <DataTable
-            tableId="hcmos-appraisal"
-            columns={kolom("review")}
-            data={penilaian.filter((p) => t(p, "status") !== "draf")}
-            searchPlaceholder="Cari nama…"
-          />
-          <p className="text-[11px] text-muted-foreground">
-            Hanya penilaian berstatus selesai atau sudah ditinjau yang muncul di sini. Draf masih bisa berubah, jadi
-            belum layak ditinjau bersama atasan.
-          </p>
-        </>
-      )}
+      {tab === "intervensi" && <IntervensiBoard rows={intervensi} outlets={outlets} bolehUbah={bolehUbah} />}
 
       {tab === "kompetensi" && <KompetensiBoard rows={kompetensi} bolehUbah={bolehUbah} />}
 

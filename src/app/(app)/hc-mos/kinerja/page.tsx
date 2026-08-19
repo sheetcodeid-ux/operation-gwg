@@ -18,7 +18,11 @@ export default async function KinerjaPage({ searchParams }: { searchParams: Prom
   if (!canReachMenu(user, "hcmos")) redirect("/dashboard");
 
   const sp = await searchParams;
-  const [penilaian, kompetensi] = await Promise.all([listTabel("hc_reviews"), listTabel("hc_competency")]);
+  const [penilaian, kompetensi, intervensi] = await Promise.all([
+    listTabel("hc_reviews"),
+    listTabel("hc_competency"),
+    listTabel("hc_interventions"),
+  ]);
   const outlets = scopeOutlets(user, getOutlets()).map((o) => ({ id: o.id, name: o.name }));
 
   return (
@@ -29,14 +33,15 @@ export default async function KinerjaPage({ searchParams }: { searchParams: Prom
       <PageHeader
         icon={Target}
         title="Kinerja & Kompetensi"
-        description="Penilaian kinerja, peninjauan bersama atasan, dan pemetaan kompetensi terhadap standar jabatan."
+        description="Penilaian kinerja, permintaan intervensi saat kinerja turun, dan pemetaan kompetensi terhadap standar jabatan."
       />
       <KinerjaBoard
         penilaian={penilaian}
         kompetensi={kompetensi}
+        intervensi={intervensi}
         outlets={outlets}
         bolehUbah={bolehUbahHc(user)}
-        tabAwal={sp.tab === "review" || sp.tab === "kompetensi" ? sp.tab : "penilaian"}
+        tabAwal={sp.tab === "intervensi" || sp.tab === "kompetensi" ? sp.tab : "penilaian"}
       />
     </div>
   );

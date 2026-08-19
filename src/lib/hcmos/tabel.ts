@@ -29,6 +29,15 @@ export const TABEL_HCMOS = {
   hc_benefits: ["nama", "scope", "outlet_id", "bpjs_kesehatan", "bpjs_tk", "status", "tgl_daftar", "catatan"],
   hc_salary_grades: ["golongan", "jabatan", "scope", "gaji_min", "gaji_max", "tunjangan"],
   hc_cases: ["jenis", "nama", "jabatan", "scope", "outlet_id", "kategori", "tanggal", "ringkasan", "tindakan", "status"],
+  // Request Intervensi — pengganti Appraisal Review (Meeting Fitur HRD).
+  // `peran_pemohon` disimpan terpisah dari `pemohon` karena yang menentukan
+  // bobot sebuah permintaan adalah dari lapis mana ia datang, dan orang bisa
+  // berpindah jabatan sementara catatannya tidak ikut berubah.
+  hc_interventions: [
+    "nama", "jabatan", "divisi", "scope", "outlet_id",
+    "pemohon", "peran_pemohon", "tanggal", "gejala", "urgensi",
+    "tindakan", "status", "catatan",
+  ],
 } as const;
 
 export type TabelHcmos = keyof typeof TABEL_HCMOS;
@@ -45,6 +54,7 @@ export const URUTAN_HCMOS: Record<TabelHcmos, { kolom: string; naik: boolean }> 
   hc_benefits: { kolom: "nama", naik: true },
   hc_salary_grades: { kolom: "golongan", naik: true },
   hc_cases: { kolom: "tanggal", naik: false },
+  hc_interventions: { kolom: "tanggal", naik: false },
 };
 
 /** Apakah nama tabel yang diterima memang salah satu yang boleh disentuh. */
