@@ -7,6 +7,7 @@ import { canReachMenu } from "@/lib/nav";
 import { getUsers } from "@/lib/data/store";
 import { listKontrak } from "@/lib/data/hcmos";
 import { PageHeader } from "@/components/ui/page-header";
+import { Badge } from "@/components/ui/badge";
 import { KaryawanBoard, type KaryawanManajemen } from "@/components/hcmos/karyawan-board";
 
 export const metadata: Metadata = { title: "Database Karyawan — HC-MOS" };
@@ -24,6 +25,7 @@ export default async function KaryawanPage() {
       departemen: (u.department ?? "").trim() || "—",
       jabatan: (u.jabatan ?? "").trim() || "—",
       aktif: u.active,
+      bergabung: u.createdAt ?? null,
     }))
     .sort((a, b) => a.nama.localeCompare(b.nama, "id"));
 
@@ -41,8 +43,14 @@ export default async function KaryawanPage() {
       <PageHeader
         icon={Database}
         title="Database Karyawan"
-        description="Manajemen (GWG) dari User Management, Outlet dari Kontrak Tracker."
+        description="Basis data induk karyawan — Manajemen (GWG) dari User Management, Outlet dari Kontrak Tracker."
       />
+      <div className="mb-4 flex flex-wrap gap-2">
+        <Badge tone="neutral">Organization Development</Badge>
+        <Badge tone="neutral">PIC: Uswatun</Badge>
+        <Badge tone="neutral">Scope: Manajemen &amp; Outlet</Badge>
+      </div>
+
       <KaryawanBoard manajemen={manajemen} outlet={outlet} />
     </div>
   );

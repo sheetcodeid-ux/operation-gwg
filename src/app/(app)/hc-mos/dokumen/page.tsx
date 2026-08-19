@@ -1,4 +1,4 @@
-import { ArrowLeft, ScrollText } from "lucide-react";
+import { ArrowLeft, HeartHandshake, ScrollText } from "lucide-react";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { redirect } from "next/navigation";
@@ -8,6 +8,10 @@ import { listDokumen } from "@/lib/data/hcmos-dokumen";
 import { JENIS_DOKUMEN, type JenisDokumen } from "@/lib/hcmos/dokumen";
 import { PageHeader } from "@/components/ui/page-header";
 import { DokumenBoard } from "@/components/hcmos/dokumen-board";
+import { Badge } from "@/components/ui/badge";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { NAV_ICONS } from "@/components/layout/icons";
+import { CORE_VALUES } from "@/lib/hcmos/budaya";
 
 export const metadata: Metadata = { title: "Pusat Dokumen — HC-MOS" };
 
@@ -40,11 +44,59 @@ export default async function DokumenPage({
       </Link>
 
       <PageHeader
-        icon={ScrollText}
-        title="Pusat Dokumen"
-        description="SOP tiap pilar, kebijakan, culture & value, dokumen kepatuhan, dan PKS kemitraan."
+        icon={jenis === "culture" ? HeartHandshake : ScrollText}
+        title={jenis === "culture" ? "Culture & Value" : "Pusat Dokumen"}
+        description={
+          jenis === "culture"
+            ? "Nilai-nilai inti GWG Group yang jadi acuan perilaku seluruh karyawan manajemen dan outlet."
+            : "SOP tiap pilar, kebijakan, culture & value, dokumen kepatuhan, dan PKS kemitraan."
+        }
       />
+
+      <div className="mb-4 flex flex-wrap gap-2">
+        <Badge tone="neutral">Organization Development</Badge>
+        <Badge tone="neutral">PIC: {jenis === "culture" ? "Riva" : "Uswatun"}</Badge>
+        <Badge tone="neutral">Scope: Manajemen &amp; Outlet</Badge>
+      </div>
+
+      {/* Nilai intinya ditampilkan lebih dulu, dokumennya menyusul.
+          Yang dicari orang saat membuka Culture & Value adalah NILAINYA; poster
+          dan deck onboarding hanyalah turunannya, dan menaruh daftar berkas di
+          atas membuat halaman ini terbaca sebagai lemari arsip. */}
+      {jenis === "culture" && <CoreValues />}
+
       <DokumenBoard rows={rows} jenisAwal={jenis} pilarAwal={sp.pilar ?? ""} bolehUbah={bolehUbah} />
     </div>
+  );
+}
+
+
+/** Lima nilai inti — tetap, tidak disunting lewat formulir. */
+function CoreValues() {
+  return (
+    <Card className="mb-4">
+      <CardHeader className="pb-2">
+        <CardTitle>Core Values GWG Group</CardTitle>
+        <p className="text-[11px] text-muted-foreground">Ditanamkan sejak proses onboarding</p>
+      </CardHeader>
+      <CardContent>
+        <ul className="divide-y divide-border">
+          {CORE_VALUES.map((v) => {
+            const Icon = NAV_ICONS[v.icon] ?? HeartHandshake;
+            return (
+              <li key={v.nama} className="flex items-start gap-3 py-3 first:pt-0 last:pb-0">
+                <span className="grid size-9 shrink-0 place-items-center rounded-xl bg-muted ring-1 ring-border">
+                  <Icon className="size-4 text-foreground/70" />
+                </span>
+                <span className="min-w-0 flex-1">
+                  <span className="block text-sm font-semibold text-foreground">{v.nama}</span>
+                  <span className="block text-[12px] leading-relaxed text-muted-foreground">{v.arti}</span>
+                </span>
+              </li>
+            );
+          })}
+        </ul>
+      </CardContent>
+    </Card>
   );
 }

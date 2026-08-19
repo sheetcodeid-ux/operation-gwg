@@ -1,4 +1,5 @@
 import {
+  Sparkles,
   AlertCircle,
   Book,
   Building2,
@@ -125,6 +126,7 @@ export const NAV_ICONS: Record<string, LucideIcon> = {
   Rocket,
   TrendingUp,
   Waves,
+  Sparkles,
   // Kerangka HC-MOS (9 pilar)
   AlertCircle,
   Book,
