@@ -8,6 +8,7 @@ import { learnerIds, logElearningAudit } from "@/lib/data/elearning-admin";
 import type { AuditAction, AuditEntity } from "@/lib/elearning-shared";
 import { canReachMenu } from "@/lib/nav";
 import { canManageElearning, type LessonFileKind } from "@/lib/elearning-shared";
+import { faseKuisValid, LABEL_FASE, type FaseKuis } from "@/lib/elearning-fase";
 import { presignPut, r2Enabled, R2_PREFIX } from "@/lib/storage/r2";
 import {
   addLessonFile,
@@ -327,16 +328,21 @@ function clampScore(n: number): number {
 /* ------------------------------------------------------------------ */
 
 /** Admin: fetch the full quiz (WITH answer key) for the editor. */
-export async function getQuizAdminAction(lessonId: string): Promise<{ ok: true; quiz: AdminQuiz | null } | { ok: false; error: string }> {
+export async function getQuizAdminAction(
+  lessonId: string,
+  fase: FaseKuis = "post",
+): Promise<{ ok: true; quiz: AdminQuiz | null } | { ok: false; error: string }> {
   const user = await getSessionUser();
   if (!manage(user)) return { ok: false, error: "Tidak punya akses." };
-  return { ok: true, quiz: await getQuizAdmin(lessonId) };
+  if (!faseKuisValid(fase)) return { ok: false, error: "Tahap tidak dikenal." };
+  return { ok: true, quiz: await getQuizAdmin(lessonId, fase) };
 }
 
-export async function saveQuizSettingsAction(input: { courseId: string; lessonId: string; title: string; timeLimitSec: number; passScore: number; shuffleQuestions: boolean; shuffleAnswers: boolean }) {
+export async function saveQuizSettingsAction(input: { courseId: string; lessonId: string; fase: FaseKuis; title: string; timeLimitSec: number; passScore: number; shuffleQuestions: boolean; shuffleAnswers: boolean }) {
   const user = await getSessionUser();
   if (!manage(user)) return { error: "Tidak punya akses." };
-  const quizId = await ensureQuiz(input.courseId, input.lessonId);
+  if (!faseKuisValid(input.fase)) return { error: "Tahap tidak dikenal." };
+  const quizId = await ensureQuiz(input.courseId, input.lessonId, input.fase);
   if (!quizId) return { error: "Gagal menyiapkan quiz." };
   const res = await updateQuizSettings(quizId, {
     title: input.title.trim() || "Assessment",
@@ -379,12 +385,13 @@ function validateQuestion(q: Omit<QuizQuestion, "id" | "sortOrder">): string | n
   return null;
 }
 
-export async function addQuestionAction(input: { courseId: string; lessonId: string; question: Omit<QuizQuestion, "id" | "sortOrder"> }) {
+export async function addQuestionAction(input: { courseId: string; lessonId: string; fase: FaseKuis; question: Omit<QuizQuestion, "id" | "sortOrder"> }) {
   const user = await getSessionUser();
   if (!manage(user)) return { error: "Tidak punya akses." };
+  if (!faseKuisValid(input.fase)) return { error: "Tahap tidak dikenal." };
   const err = validateQuestion(input.question);
   if (err) return { error: err };
-  const quizId = await ensureQuiz(input.courseId, input.lessonId);
+  const quizId = await ensureQuiz(input.courseId, input.lessonId, input.fase);
   if (!quizId) return { error: "Gagal menyiapkan quiz." };
   const rec = await addQuestion(quizId, input.question);
   if (!rec) return { error: "Gagal menyimpan soal." };
@@ -439,15 +446,17 @@ export interface QuizSubmitResult {
  */
 export async function submitQuizAction(input: {
   lessonId: string;
+  fase?: FaseKuis;
   answers: QuizAnswers;
   startedAt: string | null;
 }): Promise<{ ok: true; result: QuizSubmitResult } | { ok: false; error: string }> {
   const user = await getSessionUser();
   if (!learn(user) && !manage(user)) return { ok: false, error: "Tidak punya akses." };
 
-  const quiz = await getQuizAdmin(input.lessonId);
-  if (!quiz) return { ok: false, error: "Quiz tidak ditemukan." };
-  if (quiz.questions.length === 0) return { ok: false, error: "Quiz belum memiliki soal." };
+  const fase: FaseKuis = faseKuisValid(input.fase ?? "") ? (input.fase as FaseKuis) : "post";
+  const quiz = await getQuizAdmin(input.lessonId, fase);
+  if (!quiz) return { ok: false, error: `${LABEL_FASE[fase]} tidak ditemukan.` };
+  if (quiz.questions.length === 0) return { ok: false, error: `${LABEL_FASE[fase]} belum memiliki soal.` };
 
   const grade = gradeQuiz(quiz.questions, input.answers);
   const passed = grade.total > 0 && grade.score >= quiz.passScore;
@@ -456,6 +465,7 @@ export async function submitQuizAction(input: {
     quizId: quiz.id,
     lessonId: quiz.lessonId,
     courseId: quiz.courseId,
+    fase,
     userId: user!.id,
     score: grade.score,
     passed,
@@ -465,16 +475,22 @@ export async function submitQuizAction(input: {
     startedAt: input.startedAt,
   });
 
-  if (passed) {
+  // HANYA Post Test yang menutup sebuah materi.
+  //
+  // Pre Test dan Studi Kasus dikerjakan SEBELUM materinya dipelajari; kalau
+  // salah satunya ikut menandai materi selesai, orangnya lolos tanpa pernah
+  // membuka bahannya — dan justru nilai Pre Test yang jelek (yang memang wajar)
+  // akan menutup materi itu selamanya karena dianggap sudah dilalui.
+  if (fase === "post" && passed) {
     await upsertProgress({ userId: user!.id, courseId: quiz.courseId, lessonId: quiz.lessonId, completed: true });
-    await notifyUser(user!.id, "Assessment lulus ✅", `Anda lulus assessment dengan skor ${grade.score}. Materi berikutnya telah terbuka.`);
+    await notifyUser(user!.id, "Post Test lulus ✅", `Anda lulus dengan skor ${grade.score}. Materi berikutnya telah terbuka.`);
     const cert = await maybeIssueCertificate(user!.id, quiz.courseId);
     if (cert.issued) {
       const course = await getCourse(quiz.courseId);
       await notifyUser(user!.id, "Training selesai 🎉", `Selamat! Anda menyelesaikan "${course?.title ?? "pembelajaran"}". Sertifikat Anda sudah terbit.`);
     }
-  } else {
-    await notifyUser(user!.id, "Assessment belum lulus", `Skor Anda ${grade.score} (minimal ${quiz.passScore}). Silakan pelajari ulang dan coba lagi.`, "warning");
+  } else if (fase === "post") {
+    await notifyUser(user!.id, "Post Test belum lulus", `Skor Anda ${grade.score} (minimal ${quiz.passScore}). Silakan pelajari ulang dan coba lagi.`, "warning");
   }
 
   revalidatePath("/elearning");

@@ -14,6 +14,7 @@ import {
   type QuizQuestionPublic,
 } from "@/lib/elearning-quiz";
 import { submitQuizAction, type QuizSubmitResult } from "@/lib/actions/elearning";
+import { LABEL_FASE, type FaseKuis } from "@/lib/elearning-fase";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -35,11 +36,14 @@ function prepare(quiz: PublicQuiz): PreparedQuestion[] {
 
 export function QuizRunner({
   lessonId,
+  fase = "post",
   quiz,
   onPassed,
   onClose,
 }: {
   lessonId: string;
+  /** Tahap yang sedang dikerjakan — menentukan apakah lulus itu syarat. */
+  fase?: FaseKuis;
   quiz: PublicQuiz;
   onPassed: () => void;
   onClose: () => void;
@@ -66,18 +70,20 @@ export function QuizRunner({
         if (unanswered > 0 && !window.confirm(`${unanswered} soal belum dijawab. Kirim sekarang?`)) return;
       }
       setSubmitting(true);
-      submitQuizAction({ lessonId, answers, startedAt: startedAt.current })
+      submitQuizAction({ lessonId, fase, answers, startedAt: startedAt.current })
         .then((r) => {
           if (!r.ok) {
             toast.error(r.error);
             return;
           }
           setResult(r.result);
-          if (r.result.passed) toast.success(`Lulus! Skor ${r.result.score}.`);
+          // Pre Test dan Studi Kasus memang belum tentu lulus — itu wajar dan
+          // bukan kabar buruk. Yang diberitakan cuma hasil Post Test.
+          if (fase === "post" && r.result.passed) toast.success(`Lulus! Skor ${r.result.score}.`);
         })
         .finally(() => setSubmitting(false));
     },
-    [submitting, result, questions, answers, lessonId],
+    [submitting, result, questions, answers, lessonId, fase],
   );
 
   // Countdown → auto-submit at zero.
@@ -97,7 +103,7 @@ export function QuizRunner({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [quiz.timeLimitSec, result]);
 
-  if (result) return <ResultView result={result} onPassed={onPassed} onClose={onClose} onRetry={() => window.location.reload()} />;
+  if (result) return <ResultView result={result} fase={fase} onPassed={onPassed} onClose={onClose} onRetry={() => window.location.reload()} />;
 
   const answeredCount = questions.filter((q) => isAnswered(q, answers[q.id])).length;
 
@@ -204,30 +210,72 @@ function OrderInput({ ids, options, onChange }: { ids: string[]; options: QuizOp
   );
 }
 
-function ResultView({ result, onPassed, onClose, onRetry }: { result: QuizSubmitResult; onPassed: () => void; onClose: () => void; onRetry: () => void }) {
+/**
+ * Layar hasil.
+ *
+ * Pre Test dan Studi Kasus TIDAK menahan siapa pun. Keduanya dikerjakan sebelum
+ * materinya dipelajari, jadi nilai yang rendah memang yang diharapkan — menahan
+ * orang di situ sampai "lulus" berarti menyuruhnya menebak-nebak jawaban
+ * sesuatu yang belum diajarkan, dan angka yang keluar setelahnya tidak lagi
+ * menggambarkan titik awalnya.
+ *
+ * Yang benar-benar menentukan lulus hanya Post Test.
+ */
+function ResultView({
+  result,
+  fase,
+  onPassed,
+  onClose,
+  onRetry,
+}: {
+  result: QuizSubmitResult;
+  fase: FaseKuis;
+  onPassed: () => void;
+  onClose: () => void;
+  onRetry: () => void;
+}) {
+  const menilai = fase === "post";
   const pass = result.passed;
+  const lolos = !menilai || pass;
   return (
     <div className="space-y-5 p-8 text-center">
-      <div className="mx-auto grid size-20 place-items-center rounded-full" style={{ background: pass ? "rgba(34,197,94,.12)" : "rgba(239,68,68,.12)" }}>
-        {pass ? <CheckCircle2 className="size-10 text-brand-500" /> : <XCircle className="size-10 text-red-500" />}
+      <div
+        className="mx-auto grid size-20 place-items-center rounded-full"
+        style={{ background: lolos ? "rgba(34,197,94,.12)" : "rgba(239,68,68,.12)" }}
+      >
+        {lolos ? <CheckCircle2 className="size-10 text-brand-500" /> : <XCircle className="size-10 text-red-500" />}
       </div>
       <div>
         <p className="text-3xl font-bold tabular-nums text-foreground">{result.score}</p>
-        <p className="mt-1 text-sm text-muted-foreground">Nilai lulus minimal {result.passScore}</p>
+        <p className="mt-1 text-sm text-muted-foreground">
+          {menilai ? `Nilai lulus minimal ${result.passScore}` : `Nilai ${LABEL_FASE[fase]} Anda — jadi titik awal, bukan penilaian.`}
+        </p>
       </div>
-      <Badge tone={pass ? "success" : "danger"}>{pass ? "LULUS" : "BELUM LULUS"}</Badge>
+      {menilai ? (
+        <Badge tone={pass ? "success" : "danger"}>{pass ? "LULUS" : "BELUM LULUS"}</Badge>
+      ) : (
+        <Badge tone="cyan">TERCATAT</Badge>
+      )}
+      {!menilai && (
+        <p className="mx-auto max-w-sm text-xs leading-relaxed text-muted-foreground">
+          Nilai ini tidak menentukan lulus. Ia dibandingkan dengan Post Test nanti untuk melihat seberapa jauh Anda
+          bertambah setelah mempelajari materinya.
+        </p>
+      )}
       {result.needsReview && (
         <p className="mx-auto flex max-w-sm items-center justify-center gap-2 text-xs text-amber-600 dark:text-amber-400">
           <AlertTriangle className="size-4" /> Terdapat soal essay yang akan dinilai manual oleh Head Operational.
         </p>
       )}
       <div className="flex justify-center gap-2 pt-2">
-        {pass ? (
-          <Button onClick={onPassed}><CheckCircle2 className="size-4" /> Lanjutkan</Button>
+        {lolos ? (
+          <Button onClick={onPassed}>
+            <CheckCircle2 className="size-4" /> {menilai ? "Lanjutkan" : "Lanjut ke Tahap Berikutnya"}
+          </Button>
         ) : (
           <>
             <Button variant="outline" onClick={onClose}>Tutup</Button>
-            <Button onClick={onRetry}><RotateCcw className="size-4" /> Ulangi Assessment</Button>
+            <Button onClick={onRetry}><RotateCcw className="size-4" /> Ulangi Post Test</Button>
           </>
         )}
       </div>

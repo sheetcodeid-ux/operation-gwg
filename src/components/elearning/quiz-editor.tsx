@@ -27,24 +27,46 @@ import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { Combobox } from "@/components/ui/combobox";
 import { Field, Input, Textarea } from "@/components/ui/input";
+import { SegmentedTabs } from "@/components/ui/segmented-tabs";
+import { FASE_KUIS, LABEL_FASE, PENJELASAN_FASE, type FaseKuis } from "@/lib/elearning-fase";
 
 const rid = () => Math.random().toString(36).slice(2, 8);
 
+/**
+ * Penyunting soal — satu jendela untuk KETIGA tahap sebuah materi.
+ *
+ * Tahapnya dipilih lewat tab di dalam, bukan tiga tombol terpisah di daftar
+ * materi. Yang menyusun materi memikirkan satu materi utuh: soal pembukanya,
+ * kasusnya, lalu ujiannya. Tiga pintu masuk membuat ia harus mengingat sendiri
+ * mana yang sudah diisi dan mana yang belum.
+ */
 export function QuizEditor({ courseId, lessonId, open, onOpenChange }: { courseId: string; lessonId: string; open: boolean; onOpenChange: (v: boolean) => void }) {
   const router = useRouter();
+  const [fase, setFase] = React.useState<FaseKuis>("pre");
   const [quiz, setQuiz] = React.useState<AdminQuiz | null>(null);
   const [loading, setLoading] = React.useState(true);
   const [savingSettings, setSavingSettings] = React.useState(false);
   const [editing, setEditing] = React.useState<QuizQuestion | "new" | null>(null);
-  const [settings, setSettings] = React.useState({ title: "Assessment", timeLimitMin: 0, passScore: 70, shuffleQuestions: true, shuffleAnswers: true });
+  const [settings, setSettings] = React.useState({ title: LABEL_FASE.pre, timeLimitMin: 0, passScore: 70, shuffleQuestions: true, shuffleAnswers: true });
 
   const reload = React.useCallback(async () => {
-    const r = await getQuizAdminAction(lessonId);
-    if (r.ok) {
-      setQuiz(r.quiz);
-      if (r.quiz) setSettings({ title: r.quiz.title, timeLimitMin: Math.round(r.quiz.timeLimitSec / 60), passScore: r.quiz.passScore, shuffleQuestions: r.quiz.shuffleQuestions, shuffleAnswers: r.quiz.shuffleAnswers });
-    }
-  }, [lessonId]);
+    const r = await getQuizAdminAction(lessonId, fase);
+    if (!r.ok) return;
+    setQuiz(r.quiz);
+    // Tahap yang belum pernah dibuat tetap perlu pengaturan awal yang masuk
+    // akal, bukan sisa pengaturan tahap yang barusan dibuka.
+    setSettings(
+      r.quiz
+        ? {
+            title: r.quiz.title,
+            timeLimitMin: Math.round(r.quiz.timeLimitSec / 60),
+            passScore: r.quiz.passScore,
+            shuffleQuestions: r.quiz.shuffleQuestions,
+            shuffleAnswers: r.quiz.shuffleAnswers,
+          }
+        : { title: LABEL_FASE[fase], timeLimitMin: 0, passScore: 70, shuffleQuestions: true, shuffleAnswers: true },
+    );
+  }, [lessonId, fase]);
 
   React.useEffect(() => {
     if (!open) return;
@@ -54,10 +76,10 @@ export function QuizEditor({ courseId, lessonId, open, onOpenChange }: { courseI
 
   const saveSettings = () => {
     setSavingSettings(true);
-    saveQuizSettingsAction({ courseId, lessonId, title: settings.title, timeLimitSec: settings.timeLimitMin * 60, passScore: settings.passScore, shuffleQuestions: settings.shuffleQuestions, shuffleAnswers: settings.shuffleAnswers })
+    saveQuizSettingsAction({ courseId, lessonId, fase, title: settings.title, timeLimitSec: settings.timeLimitMin * 60, passScore: settings.passScore, shuffleQuestions: settings.shuffleQuestions, shuffleAnswers: settings.shuffleAnswers })
       .then((r) => {
         if (r?.error) return toast.error(r.error);
-        toast.success("Pengaturan quiz disimpan.");
+        toast.success(`Pengaturan ${LABEL_FASE[fase]} disimpan.`);
         reload();
         router.refresh();
       })
@@ -66,10 +88,10 @@ export function QuizEditor({ courseId, lessonId, open, onOpenChange }: { courseI
 
   const removeQuiz = () => {
     if (!quiz) return;
-    if (!window.confirm("Hapus seluruh Assessment untuk materi ini?")) return;
+    if (!window.confirm(`Hapus seluruh soal ${LABEL_FASE[fase]} untuk materi ini?`)) return;
     deleteQuizAction(quiz.id).then((r) => {
       if (r?.error) return toast.error(r.error);
-      toast.success("Assessment dihapus.");
+      toast.success(`${LABEL_FASE[fase]} dihapus.`);
       setQuiz(null);
       router.refresh();
     });
@@ -95,7 +117,21 @@ export function QuizEditor({ courseId, lessonId, open, onOpenChange }: { courseI
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent title="Assessment / Quiz" description="Soal & jawaban diacak otomatis saat peserta mengerjakan." align="center" className="max-w-2xl">
+      <DialogContent
+        title="Soal Materi"
+        description="Pre Test dikerjakan sebelum belajar, Post Test setelah materinya tuntas. Soal & jawaban diacak otomatis."
+        align="center"
+        className="max-w-2xl"
+      >
+        <div className="border-b border-border px-5 pt-4">
+          <SegmentedTabs
+            size="sm"
+            value={fase}
+            onChange={(v) => setFase(v as FaseKuis)}
+            items={FASE_KUIS.map((f) => ({ value: f, label: LABEL_FASE[f] }))}
+          />
+          <p className="mt-2 pb-3 text-[11px] leading-relaxed text-muted-foreground">{PENJELASAN_FASE[fase]}</p>
+        </div>
         <div className="max-h-[78vh] space-y-4 overflow-y-auto p-5">
           {loading ? (
             <div className="flex items-center justify-center gap-2 py-10 text-sm text-muted-foreground"><Loader2 className="size-4 animate-spin" /> Memuat…</div>
@@ -103,7 +139,7 @@ export function QuizEditor({ courseId, lessonId, open, onOpenChange }: { courseI
             <>
               {/* Settings */}
               <div className="space-y-3 rounded-xl border border-border p-4">
-                <Field label="Judul Assessment"><Input value={settings.title} onChange={(e) => setSettings((s) => ({ ...s, title: e.target.value }))} /></Field>
+                <Field label="Judul"><Input value={settings.title} onChange={(e) => setSettings((s) => ({ ...s, title: e.target.value }))} /></Field>
                 <div className="grid gap-3 sm:grid-cols-2">
                   <Field label="Batas Waktu (menit)" hint="0 = tanpa batas"><Input type="number" min={0} value={settings.timeLimitMin} onChange={(e) => setSettings((s) => ({ ...s, timeLimitMin: Number(e.target.value) }))} /></Field>
                   <Field label="Nilai Kelulusan (%)"><Input type="number" min={0} max={100} value={settings.passScore} onChange={(e) => setSettings((s) => ({ ...s, passScore: Number(e.target.value) }))} /></Field>
@@ -113,7 +149,7 @@ export function QuizEditor({ courseId, lessonId, open, onOpenChange }: { courseI
                   <Toggle label="Acak urutan jawaban" checked={settings.shuffleAnswers} onChange={(v) => setSettings((s) => ({ ...s, shuffleAnswers: v }))} />
                 </div>
                 <div className="flex justify-end gap-2">
-                  {quiz && <Button variant="ghost" className="text-red-600 dark:text-red-400" onClick={removeQuiz}><Trash2 className="size-4" /> Hapus Assessment</Button>}
+                  {quiz && <Button variant="ghost" className="text-red-600 dark:text-red-400" onClick={removeQuiz}><Trash2 className="size-4" /> Hapus {LABEL_FASE[fase]}</Button>}
                   <Button onClick={saveSettings} disabled={savingSettings}>{savingSettings && <Loader2 className="size-4 animate-spin" />} Simpan Pengaturan</Button>
                 </div>
               </div>
@@ -154,6 +190,7 @@ export function QuizEditor({ courseId, lessonId, open, onOpenChange }: { courseI
         <QuestionEditor
           courseId={courseId}
           lessonId={lessonId}
+          fase={fase}
           question={editing === "new" ? null : editing}
           onSaved={() => {
             setEditing(null);
@@ -177,7 +214,7 @@ interface QForm {
   correctMulti: string[];
 }
 
-function QuestionEditor({ courseId, lessonId, question, onSaved, onClose }: { courseId: string; lessonId: string; question: QuizQuestion | null; onSaved: () => void; onClose: () => void }) {
+function QuestionEditor({ courseId, lessonId, fase, question, onSaved, onClose }: { courseId: string; lessonId: string; fase: FaseKuis; question: QuizQuestion | null; onSaved: () => void; onClose: () => void }) {
   const [busy, setBusy] = React.useState(false);
   const [f, setF] = React.useState<QForm>(() => init(question));
 
@@ -237,7 +274,7 @@ function QuestionEditor({ courseId, lessonId, question, onSaved, onClose }: { co
       correct,
     };
     setBusy(true);
-    const p = question ? updateQuestionAction(question.id, payload) : addQuestionAction({ courseId, lessonId, question: payload });
+    const p = question ? updateQuestionAction(question.id, payload) : addQuestionAction({ courseId, lessonId, fase, question: payload });
     p.then((r) => {
       if (r && "error" in r && r.error) return toast.error(r.error);
       toast.success(question ? "Soal diperbarui." : "Soal ditambahkan.");

@@ -43,6 +43,7 @@ import {
 import { uploadToR2 } from "./upload";
 import { QuizEditor } from "./quiz-editor";
 import { cn } from "@/lib/utils";
+import { LABEL_FASE } from "@/lib/elearning-fase";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
@@ -334,13 +335,18 @@ function LessonRow({ course, lesson, index, count, onMove }: { course: ELearning
           {lesson.allowSkip && <span>· boleh skip</span>}
           {lesson.estimatedMinutes > 0 && <span className="inline-flex items-center gap-0.5">· <Clock className="size-3" /> {fmtMinutes(lesson.estimatedMinutes)}</span>}
           {lesson.fileCount > 0 && <span>· {lesson.fileCount} lampiran</span>}
-          {lesson.hasQuiz && <span className="inline-flex items-center gap-0.5 text-brand-600 dark:text-brand-400">· <ClipboardCheck className="size-3" /> Assessment</span>}
+          {lesson.faseKuis.length > 0 && (
+            <span className="inline-flex items-center gap-0.5 text-brand-600 dark:text-brand-400">
+              · <ClipboardCheck className="size-3" />{" "}
+              {lesson.faseKuis.map((f) => LABEL_FASE[f]).join(" · ")}
+            </span>
+          )}
         </div>
       </div>
       <div className="flex shrink-0 items-center gap-0.5">
         <IconBtn title="Naik" disabled={index === 0} onClick={() => onMove(-1)}><ChevronsUpDown className="size-4 rotate-180" /></IconBtn>
         <IconBtn title="Turun" disabled={index === count - 1} onClick={() => onMove(1)}><ChevronsUpDown className="size-4" /></IconBtn>
-        <IconBtn title="Assessment / Quiz" onClick={() => setQuizOpen(true)}><ClipboardCheck className={cn("size-4", lesson.hasQuiz && "text-brand-500")} /></IconBtn>
+        <IconBtn title="Soal: Pre Test · Studi Kasus · Post Test" onClick={() => setQuizOpen(true)}><ClipboardCheck className={cn("size-4", lesson.faseKuis.length > 0 && "text-brand-500")} /></IconBtn>
         <IconBtn title="Edit materi" onClick={() => setEdit(true)}><Pencil className="size-4" /></IconBtn>
         <IconBtn title="Hapus materi" danger onClick={remove}><Trash2 className="size-4" /></IconBtn>
       </div>

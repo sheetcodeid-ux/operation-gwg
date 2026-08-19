@@ -6,6 +6,8 @@
  * answers; the learner is only ever sent `PublicQuiz` (correct answers stripped).
  */
 
+import type { FaseKuis } from "./elearning-fase";
+
 export type QuestionType = "single" | "truefalse" | "multiple" | "order" | "case" | "essay";
 
 export const QUESTION_TYPES: { value: QuestionType; label: string; hint: string }[] = [
@@ -47,6 +49,8 @@ export interface QuizMeta {
   id: string;
   lessonId: string;
   courseId: string;
+  /** Tahap tempat kuis ini dikerjakan: Pre Test, Studi Kasus, atau Post Test. */
+  fase: FaseKuis;
   title: string;
   timeLimitSec: number;
   passScore: number;

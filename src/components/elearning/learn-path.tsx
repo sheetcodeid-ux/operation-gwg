@@ -39,7 +39,19 @@ import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { VideoPlayer } from "./video-player";
 import { QuizRunner } from "./quiz-runner";
-import { Award, ClipboardCheck, GraduationCap, RotateCcw } from "lucide-react";
+import {
+  FASE_BELAJAR,
+  FASE_KUIS,
+  faseBerjalan,
+  faseTerbuka,
+  LABEL_FASE,
+  PENJELASAN_FASE,
+  type FaseBelajar,
+  type FaseKuis,
+  kunciHasil,
+  type KeadaanFase,
+} from "@/lib/elearning-fase";
+import { Award, ClipboardCheck, GraduationCap } from "lucide-react";
 
 export function LearnPath({
   course,
@@ -157,6 +169,7 @@ export function LearnPath({
               lessonMeta={activeLesson}
               alreadyDone={!!progress[activeLesson.id]?.completed}
               savedSeconds={progress[activeLesson.id]?.videoSeconds ?? 0}
+              quizResults={quizResults}
               hasNext={!!nextLessonId}
               onNext={() => nextLessonId && setActiveId(nextLessonId)}
               onClose={() => setActiveId(null)}
@@ -274,10 +287,15 @@ function DaySection({
                       {l.estimatedMinutes > 0 && <span className="inline-flex items-center gap-0.5"><Clock className="size-3" /> {fmtMinutes(l.estimatedMinutes)}</span>}
                       {l.hasVideo && <span className="inline-flex items-center gap-0.5"><PlayCircle className="size-3" /> Video</span>}
                       {l.fileCount > 0 && <span>{l.fileCount} lampiran</span>}
-                      {l.hasQuiz && (
-                        <span className={cn("inline-flex items-center gap-0.5 rounded px-1.5 py-0.5 font-medium", quizResults[l.id]?.passed ? "bg-brand-500/10 text-brand-600 dark:text-brand-400" : quizResults[l.id] ? "bg-red-500/10 text-red-600 dark:text-red-400" : "bg-muted text-muted-foreground")}>
+                      {l.faseKuis.length > 0 && (
+                        <span className={cn("inline-flex items-center gap-0.5 rounded px-1.5 py-0.5 font-medium", quizResults[kunciHasil(l.id, "post")]?.passed ? "bg-brand-500/10 text-brand-600 dark:text-brand-400" : quizResults[kunciHasil(l.id, "post")] ? "bg-red-500/10 text-red-600 dark:text-red-400" : "bg-muted text-muted-foreground")}>
                           <ClipboardCheck className="size-3" />
-                          {quizResults[l.id]?.passed ? `Lulus ${quizResults[l.id].score}` : quizResults[l.id] ? `Ulangi (${quizResults[l.id].score})` : "Assessment"}
+                          {(() => {
+                            const post = quizResults[kunciHasil(l.id, "post")];
+                            if (post?.passed) return `Lulus ${post.score}`;
+                            if (post) return `Ulangi (${post.score})`;
+                            return l.faseKuis.map((f) => LABEL_FASE[f]).join(" · ");
+                          })()}
                         </span>
                       )}
                     </div>
@@ -304,6 +322,7 @@ function LessonViewer({
   lessonMeta,
   alreadyDone,
   savedSeconds,
+  quizResults,
   hasNext,
   onNext,
   onClose,
@@ -311,6 +330,7 @@ function LessonViewer({
   courseId: string;
   lessonMeta: ELearningLesson;
   alreadyDone: boolean;
+  quizResults: Record<string, QuizResultSummary>;
   savedSeconds: number;
   hasNext: boolean;
   onNext: () => void;
@@ -321,13 +341,17 @@ function LessonViewer({
   const [loading, setLoading] = React.useState(true);
   const [videoDone, setVideoDone] = React.useState(false);
   const [saving, setSaving] = React.useState(false);
-  const [quizMode, setQuizMode] = React.useState(false);
+  /** Tahap soal yang sedang dikerjakan; null = sedang di layar materi. */
+  const [kuisAktif, setKuisAktif] = React.useState<FaseKuis | null>(null);
+  /** Tahap yang baru dikerjakan di sesi ini — mendahului data server. */
+  const [sudahLokal, setSudahLokal] = React.useState<Partial<Record<FaseKuis, boolean>>>({});
 
   React.useEffect(() => {
     let live = true;
     setLoading(true);
     setVideoDone(false);
-    setQuizMode(false);
+    setKuisAktif(null);
+    setSudahLokal({});
     getLessonDetailAction(lessonMeta.id).then((r) => {
       if (!live) return;
       if (r.ok) setLesson(r.lesson);
@@ -349,8 +373,22 @@ function LessonViewer({
   const requireVideo = lessonMeta.mustCompleteVideo && lessonMeta.hasVideo;
   const canComplete = !requireVideo || videoDone || alreadyDone;
 
-  const handleQuizPassed = () => {
+  /**
+   * Satu tahap selesai dikerjakan.
+   *
+   * Hanya Post Test yang menutup materi dan melanjutkan ke materi berikutnya.
+   * Pre Test dan Studi Kasus mengembalikan orangnya ke layar materi — di
+   * situlah ia melanjutkan ke tahap berikutnya, bukan melompat keluar.
+   */
+  const selesaiKuis = (fase: FaseKuis) => {
     router.refresh();
+    if (fase !== "post") {
+      setKuisAktif(null);
+      // Ditandai langsung supaya tahap berikutnya terbuka tanpa menunggu data
+      // dari server datang kembali — jeda itu terbaca sebagai "masih terkunci".
+      setSudahLokal((v) => ({ ...v, [fase]: true }));
+      return;
+    }
     if (hasNext) onNext();
     else onClose();
   };
@@ -384,12 +422,34 @@ function LessonViewer({
   }
   if (!lesson) return <div className="p-8 text-center text-sm text-muted-foreground">Materi tidak dapat dimuat.</div>;
 
-  if (quizMode && lesson.quiz) {
-    return <QuizRunner lessonId={lessonMeta.id} quiz={lesson.quiz} onPassed={handleQuizPassed} onClose={() => setQuizMode(false)} />;
-  }
+  const kuisFase = (f: FaseKuis) => lesson.quiz?.[f] ?? null;
+  const hasilFase: Partial<Record<FaseKuis, QuizResultSummary>> = Object.fromEntries(
+    FASE_KUIS.map((f) => [f, quizResults[kunciHasil(lessonMeta.id, f)]]).filter(([, v]) => !!v),
+  );
+  const adaKuis: Partial<Record<FaseKuis, boolean>> = Object.fromEntries(
+    FASE_KUIS.map((f) => [f, (kuisFase(f)?.questions.length ?? 0) > 0]),
+  );
+  const sudahDikerjakan: Partial<Record<FaseKuis, boolean>> = Object.fromEntries(
+    FASE_KUIS.map((f) => [f, !!sudahLokal[f] || !!hasilFase[f]]),
+  );
+  // Materi dianggap tuntas bila videonya habis ditonton — atau memang tidak ada
+  // video yang wajib ditonton, sehingga membacanya sampai bawah sudah cukup.
+  const materiTuntas = alreadyDone || videoDone || !requireVideo;
+  const keadaan: KeadaanFase = { adaKuis, sudahDikerjakan, materiTuntas };
+  const terbuka = faseTerbuka(keadaan);
+  const berjalan = faseBerjalan(keadaan);
 
-  const hasQuiz = !!lesson.quiz && lesson.quiz.questions.length > 0;
-  const canStartQuiz = !requireVideo || videoDone || alreadyDone;
+  if (kuisAktif && kuisFase(kuisAktif)) {
+    return (
+      <QuizRunner
+        lessonId={lessonMeta.id}
+        fase={kuisAktif}
+        quiz={kuisFase(kuisAktif)!}
+        onPassed={() => selesaiKuis(kuisAktif)}
+        onClose={() => setKuisAktif(null)}
+      />
+    );
+  }
 
   return (
     <div className="max-h-[80vh] space-y-4 overflow-y-auto p-5">
@@ -445,32 +505,135 @@ function LessonViewer({
         </div>
       )}
 
-      <div className="flex items-center justify-between gap-3 border-t border-border pt-4">
-        <span className="text-xs text-muted-foreground">
-          {alreadyDone
-            ? "Sudah selesai — bisa ditinjau ulang kapan saja."
-            : hasQuiz
-              ? "Selesaikan Assessment untuk menyelesaikan materi ini."
-              : lesson.required
-                ? "Materi wajib"
-                : "Materi opsional"}
-        </span>
-        {alreadyDone ? (
-          <div className="flex gap-2">
-            {hasQuiz && <Button variant="outline" onClick={() => setQuizMode(true)}><RotateCcw className="size-4" /> Ulangi</Button>}
-            <Button variant="outline" onClick={onClose}>Tutup</Button>
-            {hasNext && <Button onClick={onNext}>Materi Berikutnya</Button>}
-          </div>
-        ) : hasQuiz ? (
-          <Button onClick={() => setQuizMode(true)} disabled={!canStartQuiz}>
-            <ClipboardCheck className="size-4" /> Mulai Assessment
-          </Button>
-        ) : (
-          <Button onClick={markDone} disabled={!canComplete || saving}>
-            {saving ? <Loader2 className="size-4 animate-spin" /> : <CheckCircle2 className="size-4" />} {hasNext ? "Selesai & Lanjut" : "Tandai Selesai"}
-          </Button>
-        )}
+      <div className="space-y-3 border-t border-border pt-4">
+        <TahapBelajar
+          adaKuis={adaKuis}
+          sudah={sudahDikerjakan}
+          terbuka={terbuka}
+          berjalan={berjalan}
+          hasil={hasilFase}
+          onBuka={(f) => setKuisAktif(f)}
+        />
+
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <span className="text-xs text-muted-foreground">
+            {alreadyDone
+              ? "Sudah selesai — bisa ditinjau ulang kapan saja."
+              : adaKuis.post
+                ? terbuka.post
+                  ? "Post Test sudah terbuka."
+                  : "Selesaikan materi utama dulu untuk membuka Post Test."
+                : lesson.required
+                  ? "Materi wajib"
+                  : "Materi opsional"}
+          </span>
+          {alreadyDone ? (
+            <div className="flex gap-2">
+              <Button variant="outline" onClick={onClose}>Tutup</Button>
+              {hasNext && <Button onClick={onNext}>Materi Berikutnya</Button>}
+            </div>
+          ) : adaKuis.post ? (
+            <Button onClick={() => setKuisAktif("post")} disabled={!terbuka.post}>
+              <ClipboardCheck className="size-4" /> {terbuka.post ? "Mulai Post Test" : "Post Test Terkunci"}
+            </Button>
+          ) : (
+            <Button onClick={markDone} disabled={!canComplete || saving}>
+              {saving ? <Loader2 className="size-4 animate-spin" /> : <CheckCircle2 className="size-4" />} {hasNext ? "Selesai & Lanjut" : "Tandai Selesai"}
+            </Button>
+          )}
+        </div>
       </div>
     </div>
+  );
+}
+
+
+/**
+ * Peta tahap belajar satu materi.
+ *
+ * Ditampilkan sebagai deretan, bukan daftar tersembunyi, karena pertanyaan
+ * pertama orang yang membuka materi selalu sama: "saya harus apa sekarang, dan
+ * masih berapa lagi?". Tahap yang terkunci tetap DITAMPILKAN — menyembunyikannya
+ * membuat Post Test seolah tidak ada, lalu muncul tiba-tiba dan terasa seperti
+ * kejutan yang tidak diminta.
+ */
+function TahapBelajar({
+  adaKuis,
+  sudah,
+  terbuka,
+  berjalan,
+  hasil,
+  onBuka,
+}: {
+  adaKuis: Partial<Record<FaseKuis, boolean>>;
+  sudah: Partial<Record<FaseKuis, boolean>>;
+  terbuka: Record<FaseBelajar, boolean>;
+  berjalan: FaseBelajar;
+  hasil: Partial<Record<FaseKuis, QuizResultSummary>>;
+  onBuka: (f: FaseKuis) => void;
+}) {
+  // Tahap yang memang tidak punya soal tidak ditampilkan sama sekali: baris
+  // "Studi Kasus" yang tidak bisa diklik dan tidak akan pernah ada isinya hanya
+  // membuat alurnya terlihat lebih panjang daripada yang sebenarnya dijalani.
+  const tampil = FASE_BELAJAR.filter((f) => f === "materi" || adaKuis[f as FaseKuis]);
+  if (tampil.length <= 1) return null;
+
+  return (
+    <ol className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
+      {tampil.map((f, i) => {
+        const isKuis = f !== "materi";
+        const kuis = f as FaseKuis;
+        const selesai = isKuis ? !!sudah[kuis] : terbuka.post;
+        const bisa = terbuka[f];
+        const kini = berjalan === f;
+        const nilai = isKuis ? hasil[kuis]?.score : undefined;
+        return (
+          <li key={f}>
+            <button
+              type="button"
+              disabled={!isKuis || !bisa}
+              onClick={() => isKuis && bisa && onBuka(kuis)}
+              className={cn(
+                "flex w-full items-start gap-2.5 rounded-xl border p-3 text-left transition-colors",
+                selesai
+                  ? "border-emerald-500/40 bg-emerald-500/10"
+                  : kini && bisa
+                    ? "border-brand-500/50 bg-brand-500/10"
+                    : bisa
+                      ? "border-border bg-background/40"
+                      : "border-dashed border-border bg-muted/30 opacity-70",
+                isKuis && bisa && "hover:bg-muted/50",
+              )}
+            >
+              <span
+                className={cn(
+                  "grid size-6 shrink-0 place-items-center rounded-full border text-[11px] font-semibold",
+                  selesai
+                    ? "border-emerald-500/45 bg-emerald-500/15 text-emerald-600 dark:text-emerald-400"
+                    : bisa
+                      ? "border-brand-500/45 bg-brand-500/15 text-brand-600 dark:text-brand-400"
+                      : "border-border bg-muted text-muted-foreground",
+                )}
+              >
+                {selesai ? <CheckCircle2 className="size-3.5" /> : bisa ? i + 1 : <Lock className="size-3" />}
+              </span>
+              <span className="min-w-0 flex-1">
+                <span className="flex items-center gap-1.5">
+                  <span className="truncate text-[13px] font-medium text-foreground">{LABEL_FASE[f]}</span>
+                  {nilai !== undefined && (
+                    <span className="shrink-0 rounded bg-muted px-1.5 py-0.5 text-[10px] font-semibold tabular-nums text-foreground">
+                      {nilai}
+                    </span>
+                  )}
+                </span>
+                <span className="mt-0.5 block text-[11px] leading-snug text-muted-foreground">
+                  {bisa ? PENJELASAN_FASE[f] : "Terbuka setelah tahap sebelumnya selesai."}
+                </span>
+              </span>
+            </button>
+          </li>
+        );
+      })}
+    </ol>
   );
 }

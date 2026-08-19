@@ -1,6 +1,7 @@
 import type { Tone } from "@/lib/constants";
 import type { Role } from "@/lib/types";
 import type { PublicQuiz } from "@/lib/elearning-quiz";
+import type { FaseKuis } from "@/lib/elearning-fase";
 
 /**
  * Shared E-Learning types + helpers. Lives OUTSIDE the server-only data module so
@@ -85,16 +86,32 @@ export interface ELearningLesson {
   tags: string[];
   sortOrder: number;
   fileCount: number;
-  /** Whether an assessment/quiz is attached to this lesson. */
-  hasQuiz: boolean;
+  /**
+   * Tahap yang benar-benar punya soal terisi — dipakai daftar materi untuk
+   * menandai apa saja yang menanti tanpa memuat seluruh soalnya.
+   */
+  faseKuis: FaseKuis[];
   files?: ELearningFile[];
-  /** Learner-facing quiz (answer key stripped) — only in the detail view. */
-  quiz?: PublicQuiz | null;
+  /**
+   * Soal tiap tahap tanpa kunci jawaban — hanya diisi pada tampilan detail.
+   *
+   * Sengaja peta per tahap, bukan satu kuis: satu materi kini melewati Pre
+   * Test, Studi Kasus, dan Post Test, dan ketiganya punya soal sendiri.
+   */
+  quiz?: Partial<Record<FaseKuis, PublicQuiz | null>>;
 }
 
-/** A learner's quiz outcome for one lesson (best attempt). */
+/**
+ * Hasil kuis seorang peserta untuk satu tahap satu materi.
+ *
+ * `score` adalah nilai PERCOBAAN PERTAMA, bukan yang tertinggi. Materi boleh
+ * diulang berkali-kali, tapi angka resminya tidak ikut bergeser — kalau ikut,
+ * nilai akhirnya hanya menunjukkan siapa yang paling telaten mengulang.
+ * `attempts` tetap dicatat supaya usaha memperbaiki diri tetap terlihat.
+ */
 export interface QuizResultSummary {
   lessonId: string;
+  fase: FaseKuis;
   score: number;
   passed: boolean;
   attempts: number;

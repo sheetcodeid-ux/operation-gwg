@@ -14,7 +14,8 @@ import type {
   LessonProgress,
   QuizResultSummary,
 } from "@/lib/elearning-shared";
-import { toPublicQuiz, type AdminQuiz, type QuestionType, type QuizAnswers, type QuizQuestion } from "@/lib/elearning-quiz";
+import { toPublicQuiz, type AdminQuiz, type PublicQuiz, type QuestionType, type QuizAnswers, type QuizQuestion } from "@/lib/elearning-quiz";
+import { FASE_KUIS, faseKuisValid, kunciHasil, nilaiResmi, type FaseKuis } from "@/lib/elearning-fase";
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
@@ -64,7 +65,7 @@ const courseFromRow = (r: any, thumbUrl: string | null): ELearningCourse => ({
   updatedAt: r.updated_at ?? r.created_at,
 });
 
-const lessonFromRow = (r: any, thumbUrl: string | null, fileCount: number, hasQuiz = false): ELearningLesson => ({
+const lessonFromRow = (r: any, thumbUrl: string | null, fileCount: number, faseKuis: FaseKuis[] = []): ELearningLesson => ({
   id: r.id,
   courseId: r.course_id,
   dayId: r.day_id,
@@ -82,7 +83,7 @@ const lessonFromRow = (r: any, thumbUrl: string | null, fileCount: number, hasQu
   tags: Array.isArray(r.tags) ? r.tags : [],
   sortOrder: r.sort_order ?? 0,
   fileCount,
-  hasQuiz,
+  faseKuis,
 });
 
 const questionFromRow = (r: any): QuizQuestion => ({
@@ -100,6 +101,8 @@ const quizFromRows = (r: any, questions: QuizQuestion[]): AdminQuiz => ({
   id: r.id,
   lessonId: r.lesson_id,
   courseId: r.course_id,
+  // Kuis lama dibuat sebelum ada tahap; perannya memang ujian setelah materi.
+  fase: faseKuisValid(r.fase) ? r.fase : "post",
   title: r.title ?? "Assessment",
   timeLimitSec: r.time_limit_sec ?? 0,
   passScore: r.pass_score ?? 70,
@@ -177,18 +180,35 @@ export async function getCourseTree(courseId: string): Promise<ELearningDay[]> {
     for (const f of (fileRows ?? []) as any[]) counts.set(f.lesson_id, (counts.get(f.lesson_id) ?? 0) + 1);
   }
 
-  // Which lessons have a quiz (one query for the course).
-  const quizzed = new Set<string>();
+  // Tahap mana saja yang punya soal, satu kueri untuk seluruh course.
+  //
+  // Kuis yang ADA tapi belum berisi soal sengaja tidak dihitung: tahap kosong
+  // yang tampil sebagai "ada" akan mengunci peserta pada layar tanpa satu pun
+  // pertanyaan, dan tidak ada jalan keluarnya selain menghubungi admin.
+  const faseLesson = new Map<string, FaseKuis[]>();
   if (lessons.length) {
-    const { data: quizRows } = await db().from("elearning_quizzes").select("lesson_id").eq("course_id", courseId);
-    for (const qz of (quizRows ?? []) as any[]) quizzed.add(qz.lesson_id);
+    const { data: quizRows } = await db().from("elearning_quizzes").select("id,lesson_id,fase").eq("course_id", courseId);
+    const rows = (quizRows ?? []) as any[];
+    const berisi = new Set<string>();
+    if (rows.length) {
+      const { data: qRows } = await db()
+        .from("elearning_questions")
+        .select("quiz_id")
+        .in("quiz_id", rows.map((q) => q.id));
+      for (const q of (qRows ?? []) as any[]) berisi.add(q.quiz_id);
+    }
+    for (const qz of rows) {
+      if (!berisi.has(qz.id)) continue;
+      const f = faseKuisValid(qz.fase) ? qz.fase : "post";
+      faseLesson.set(qz.lesson_id, [...(faseLesson.get(qz.lesson_id) ?? []), f]);
+    }
   }
 
   const thumbs = await signBatch(lessons.map((l) => l.thumbnail_path));
   const byDay = new Map<string, ELearningLesson[]>();
   for (const l of lessons) {
     const arr = byDay.get(l.day_id) ?? [];
-    arr.push(lessonFromRow(l, l.thumbnail_path ? thumbs.get(l.thumbnail_path) ?? null : null, counts.get(l.id) ?? 0, quizzed.has(l.id)));
+    arr.push(lessonFromRow(l, l.thumbnail_path ? thumbs.get(l.thumbnail_path) ?? null : null, counts.get(l.id) ?? 0, faseLesson.get(l.id) ?? []));
     byDay.set(l.day_id, arr);
   }
   return days.map((d) => ({
@@ -215,12 +235,15 @@ export async function getLessonDetail(lessonId: string): Promise<ELearningLesson
   const files = (fileRows ?? []) as any[];
   const fileUrls = await signBatch(files.map((f) => f.path));
   const [videoUrl, thumbUrl, subtitleUrl] = await Promise.all([sign1(r.video_path), sign1(r.thumbnail_path), sign1(r.subtitle_path)]);
-  const quiz = await getQuizAdmin(lessonId);
-  const lesson = lessonFromRow(r, thumbUrl, files.length, !!quiz);
+  const kuis = await getQuizzesForLesson(lessonId);
+  const berisi = FASE_KUIS.filter((f) => (kuis[f]?.questions.length ?? 0) > 0);
+  const lesson = lessonFromRow(r, thumbUrl, files.length, berisi);
   lesson.videoUrl = videoUrl;
   lesson.subtitleUrl = subtitleUrl;
   lesson.files = files.map((f) => fileFromRow(f, f.path ? fileUrls.get(f.path) ?? null : null));
-  lesson.quiz = quiz ? toPublicQuiz(quiz) : null;
+  lesson.quiz = Object.fromEntries(
+    FASE_KUIS.map((f) => [f, kuis[f] ? toPublicQuiz(kuis[f]!) : null]),
+  ) as Partial<Record<FaseKuis, PublicQuiz | null>>;
   return lesson;
 }
 
@@ -506,13 +529,47 @@ export async function upsertProgress(input: {
 
 /* ---------------- quiz ---------------- */
 
-/** The full quiz (with answer key) for a lesson, or null. Server/admin only. */
-export async function getQuizAdmin(lessonId: string): Promise<AdminQuiz | null> {
+/** Kuis satu TAHAP sebuah materi, lengkap dengan kunci jawaban. Server/admin. */
+export async function getQuizAdmin(lessonId: string, fase: FaseKuis = "post"): Promise<AdminQuiz | null> {
   if (!dbEnabled) return null;
-  const { data } = await db().from("elearning_quizzes").select("*").eq("lesson_id", lessonId).maybeSingle();
+  const { data } = await db()
+    .from("elearning_quizzes")
+    .select("*")
+    .eq("lesson_id", lessonId)
+    .eq("fase", fase)
+    .maybeSingle();
   if (!data) return null;
   const { data: qRows } = await db().from("elearning_questions").select("*").eq("quiz_id", (data as any).id).order("sort_order", { ascending: true });
   return quizFromRows(data, ((qRows ?? []) as any[]).map(questionFromRow));
+}
+
+/**
+ * Ketiga tahap sekaligus — satu kueri kuis, satu kueri soal.
+ *
+ * Memanggil `getQuizAdmin` tiga kali akan menghasilkan enam kueri untuk satu
+ * halaman materi, dan itu terasa: halaman ini dibuka berkali-kali dalam satu
+ * sesi belajar.
+ */
+export async function getQuizzesForLesson(lessonId: string): Promise<Partial<Record<FaseKuis, AdminQuiz>>> {
+  if (!dbEnabled) return {};
+  const { data } = await db().from("elearning_quizzes").select("*").eq("lesson_id", lessonId);
+  const rows = (data ?? []) as any[];
+  if (rows.length === 0) return {};
+  const { data: qRows } = await db()
+    .from("elearning_questions")
+    .select("*")
+    .in("quiz_id", rows.map((r) => r.id))
+    .order("sort_order", { ascending: true });
+  const perKuis = new Map<string, QuizQuestion[]>();
+  for (const q of (qRows ?? []) as any[]) {
+    perKuis.set(q.quiz_id, [...(perKuis.get(q.quiz_id) ?? []), questionFromRow(q)]);
+  }
+  const out: Partial<Record<FaseKuis, AdminQuiz>> = {};
+  for (const r of rows) {
+    const f: FaseKuis = faseKuisValid(r.fase) ? r.fase : "post";
+    out[f] = quizFromRows(r, perKuis.get(r.id) ?? []);
+  }
+  return out;
 }
 
 export async function getQuizById(quizId: string): Promise<AdminQuiz | null> {
@@ -523,14 +580,22 @@ export async function getQuizById(quizId: string): Promise<AdminQuiz | null> {
   return quizFromRows(data, ((qRows ?? []) as any[]).map(questionFromRow));
 }
 
-/** Find-or-create the quiz for a lesson; returns its id. */
-export async function ensureQuiz(courseId: string, lessonId: string): Promise<string | null> {
+/** Cari-atau-buat kuis satu tahap sebuah materi; mengembalikan id-nya. */
+export async function ensureQuiz(courseId: string, lessonId: string, fase: FaseKuis = "post"): Promise<string | null> {
   if (!dbEnabled) return null;
   markLocalWrite();
-  const existing = await db().from("elearning_quizzes").select("id").eq("lesson_id", lessonId).maybeSingle();
+  const existing = await db()
+    .from("elearning_quizzes")
+    .select("id")
+    .eq("lesson_id", lessonId)
+    .eq("fase", fase)
+    .maybeSingle();
   if (existing.data) return (existing.data as any).id;
   const id = `elq_${randomUUID()}`;
-  const { error } = await db().from("elearning_quizzes").insert({ id, course_id: courseId, lesson_id: lessonId });
+  const judul = { pre: "Pre Test", kasus: "Studi Kasus", post: "Post Test" }[fase];
+  const { error } = await db()
+    .from("elearning_quizzes")
+    .insert({ id, course_id: courseId, lesson_id: lessonId, fase, title: judul });
   return error ? null : id;
 }
 
@@ -598,6 +663,7 @@ export async function saveQuizResult(input: {
   quizId: string;
   lessonId: string;
   courseId: string;
+  fase: FaseKuis;
   userId: string;
   score: number;
   passed: boolean;
@@ -620,6 +686,7 @@ export async function saveQuizResult(input: {
     quiz_id: input.quizId,
     lesson_id: input.lessonId,
     course_id: input.courseId,
+    fase: input.fase,
     user_id: input.userId,
     attempt,
     score: input.score,
@@ -645,24 +712,52 @@ export async function passQuizResult(resultId: string): Promise<{ userId: string
   return { userId: r.user_id, courseId: r.course_id, lessonId: r.lesson_id };
 }
 
-/** Best quiz outcome per lesson for a learner (highest score wins). */
+/**
+ * Hasil kuis seorang peserta, per materi PER TAHAP.
+ *
+ * Nilainya diambil dari percobaan PERTAMA, bukan yang tertinggi. Materi boleh
+ * diulang sebanyak apa pun — riwayatnya tetap tersimpan dan `attempts` ikut
+ * dihitung — tapi angka resminya tidak bergeser. Kalau ia ikut bergeser, nilai
+ * akhirnya hanya menunjukkan siapa yang paling telaten mengulang, dan Pre Test
+ * yang boleh diulang setelah menonton sama saja dengan tidak punya Pre Test.
+ */
 export async function getQuizResultsMap(userId: string, courseId: string): Promise<Record<string, QuizResultSummary>> {
   if (!dbEnabled || !userId) return {};
   const { data } = await db()
     .from("elearning_quiz_results")
-    .select("lesson_id,score,passed,needs_review")
+    .select("lesson_id,fase,attempt,score,passed,needs_review")
     .eq("user_id", userId)
     .eq("course_id", courseId);
-  const out: Record<string, QuizResultSummary> = {};
+
+  interface BarisHasil {
+    attempt: number;
+    score: number;
+    passed: boolean;
+    needs_review: boolean;
+  }
+  const perTahap = new Map<string, { fase: FaseKuis; lessonId: string; rows: BarisHasil[] }>();
   for (const r of (data ?? []) as any[]) {
-    const cur = out[r.lesson_id];
-    if (!cur) out[r.lesson_id] = { lessonId: r.lesson_id, score: r.score, passed: !!r.passed, attempts: 1, needsReview: !!r.needs_review };
-    else {
-      cur.attempts += 1;
-      cur.passed = cur.passed || !!r.passed;
-      cur.score = Math.max(cur.score, r.score);
-      cur.needsReview = cur.needsReview || !!r.needs_review;
-    }
+    const fase: FaseKuis = faseKuisValid(r.fase) ? r.fase : "post";
+    const k = kunciHasil(r.lesson_id, fase);
+    const cur = perTahap.get(k) ?? { fase, lessonId: r.lesson_id as string, rows: [] as BarisHasil[] };
+    cur.rows.push({ attempt: r.attempt ?? 1, score: r.score ?? 0, passed: !!r.passed, needs_review: !!r.needs_review });
+    perTahap.set(k, cur);
+  }
+
+  const out: Record<string, QuizResultSummary> = {};
+  for (const [k, v] of perTahap) {
+    const pertama = v.rows.reduce((a, b) => (b.attempt < a.attempt ? b : a));
+    out[k] = {
+      lessonId: v.lessonId,
+      fase: v.fase,
+      // Sengaja lewat `nilaiResmi` supaya aturannya cuma ada di satu tempat dan
+      // teruji — bukan diulang sebagai `reduce` di sini.
+      score: nilaiResmi(v.rows) ?? 0,
+      // Lulus dinilai dari percobaan pertama juga, sejalan dengan nilainya.
+      passed: !!pertama.passed,
+      attempts: v.rows.length,
+      needsReview: v.rows.some((r) => r.needs_review),
+    };
   }
   return out;
 }
