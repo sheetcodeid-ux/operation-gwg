@@ -7,6 +7,7 @@ import { getActiveCourse, getCourseTree, getProgressMap, getQuizResultsMap } fro
 import { canManageElearning } from "@/lib/elearning-shared";
 import { EmptyState, PageHeader } from "@/components/ui/page-header";
 import { LearnPath } from "@/components/elearning/learn-path";
+import { AlurBelajar } from "@/components/elearning/alur-belajar";
 
 export const metadata: Metadata = { title: "E-Learning" };
 
@@ -44,5 +45,14 @@ export default async function ElearningPage() {
     getQuizResultsMap(user.id, course.id),
   ]);
 
-  return <LearnPath course={course} days={days} progress={progress} quizResults={quizResults} canManage={canManage} />;
+  return (
+    <div className="w-full space-y-4">
+      {/* Alurnya dijelaskan sekali di atas, sebelum daftar materinya.
+          Fast Start & Fast Track tidak lagi jadi halaman terpisah (hasil
+          Meeting Fitur HRD), jadi di sinilah crew outlet menemukan
+          penjelasannya — bukan di menu yang sudah tidak ada. */}
+      <AlurBelajar />
+      <LearnPath course={course} days={days} progress={progress} quizResults={quizResults} canManage={canManage} />
+    </div>
+  );
 }

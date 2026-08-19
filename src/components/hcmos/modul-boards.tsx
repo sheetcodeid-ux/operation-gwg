@@ -22,6 +22,13 @@ import { Combobox } from "@/components/ui/combobox";
 import { SegmentedTabs } from "@/components/ui/segmented-tabs";
 import { StatTile } from "@/components/ui/stat";
 import { RekamanBoard, type BarisRekaman, type Bidang } from "./rekaman";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  ARTI_LEVEL,
+  JABATAN_STANDAR,
+  SKALA_KOMPETENSI,
+  STANDAR_OUTLET,
+} from "@/lib/hcmos/kompetensi";
 import { SCOPE_LABEL, type HcScope } from "@/lib/hcmos/pillars";
 import {
   JENIS_CUTI,
@@ -911,6 +918,8 @@ export function KompetensiBoard({ rows, bolehUbah }: { rows: BarisRekaman[]; bol
         />
       </div>
 
+      <StandarKompetensiCard />
+
       <RekamanBoard
         tabel="hc_competency"
         rute="/hc-mos/kinerja"
@@ -973,5 +982,71 @@ export function KompetensiBoard({ rows, bolehUbah }: { rows: BarisRekaman[]; bol
         ]}
       />
     </div>
+  );
+}
+
+
+/**
+ * Standar kompetensi jabatan outlet — acuan, bukan penilaian.
+ *
+ * Ditaruh di atas daftar penilaiannya karena tanpa acuan di layar yang sama,
+ * angka "level aktual 3" tidak bisa dibaca sebagai kurang atau cukup: yang
+ * menentukan itu standar jabatannya, dan standar yang harus dicari di dokumen
+ * lain adalah standar yang tidak dipakai.
+ */
+function StandarKompetensiCard() {
+  return (
+    <Card>
+      <CardHeader className="pb-2">
+        <CardTitle>Standar Kompetensi Jabatan Outlet</CardTitle>
+        <p className="text-[11px] text-muted-foreground">
+          Skala {SKALA_KOMPETENSI.min} (dasar) – {SKALA_KOMPETENSI.max} (panutan). Angkanya level yang diharapkan, bukan
+          nilai seseorang.
+        </p>
+      </CardHeader>
+      <CardContent>
+        <div className="-mx-4 overflow-x-auto px-4">
+          <table className="w-full min-w-[520px] border-collapse text-sm">
+            <thead>
+              <tr className="border-b border-border text-left">
+                <th className="px-3 py-2 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+                  Kompetensi
+                </th>
+                {JABATAN_STANDAR.map((j) => (
+                  <th
+                    key={j}
+                    className="px-3 py-2 text-center text-[11px] font-semibold uppercase tracking-wide text-muted-foreground"
+                  >
+                    {j}
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {STANDAR_OUTLET.map((r) => (
+                <tr key={r.kompetensi} className="border-b border-border/60 last:border-0">
+                  <td className="px-3 py-2.5 font-medium text-foreground">{r.kompetensi}</td>
+                  {JABATAN_STANDAR.map((j) => (
+                    <td key={j} className="px-3 py-2.5 text-center">
+                      <span
+                        title={ARTI_LEVEL[r.level[j]]}
+                        className="inline-grid size-7 place-items-center rounded-lg bg-muted text-[12px] font-semibold tabular-nums text-foreground ring-1 ring-border"
+                      >
+                        {r.level[j]}
+                      </span>
+                    </td>
+                  ))}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+        <p className="mt-3 text-[11px] leading-relaxed text-muted-foreground">
+          {Object.entries(ARTI_LEVEL)
+            .map(([n, arti]) => `${n} = ${arti}`)
+            .join(" · ")}
+        </p>
+      </CardContent>
+    </Card>
   );
 }

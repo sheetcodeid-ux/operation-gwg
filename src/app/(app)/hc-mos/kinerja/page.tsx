@@ -9,6 +9,7 @@ import { scopeOutlets } from "@/lib/rbac";
 import { listTabel } from "@/lib/data/hcmos-lanjutan";
 import { PageHeader } from "@/components/ui/page-header";
 import { KinerjaBoard } from "@/components/hcmos/kinerja-board";
+import { Badge } from "@/components/ui/badge";
 import { bolehUbahHc } from "@/lib/hcmos/akses";
 
 export const metadata: Metadata = { title: "Kinerja & Kompetensi — HC-MOS" };
@@ -35,6 +36,12 @@ export default async function KinerjaPage({ searchParams }: { searchParams: Prom
         title="Kinerja & Kompetensi"
         description="Penilaian kinerja, permintaan intervensi saat kinerja turun, dan pemetaan kompetensi terhadap standar jabatan."
       />
+      <div className="mb-4 flex flex-wrap gap-2">
+        <Badge tone="neutral">{sp.tab === "kompetensi" ? "Learning & Development" : "Performance Management"}</Badge>
+        <Badge tone="neutral">PIC: Riva</Badge>
+        <Badge tone="neutral">Scope: Manajemen &amp; Outlet</Badge>
+      </div>
+
       <KinerjaBoard
         penilaian={penilaian}
         kompetensi={kompetensi}
