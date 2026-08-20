@@ -46,13 +46,34 @@ const g = globalThis as typeof globalThis & {
 };
 
 /**
- * Re-read from the database at most once per window. Previously hydration ran
- * exactly once per process, so a serverless instance served a boot-time
- * snapshot and never saw writes made by other instances. With a short TTL the
- * in-memory arrays become a fresh cache and the database is the source of
- * truth: every instance converges within TTL of any write.
+ * Re-read from the database at most once per window. Hydration dulu berjalan
+ * sekali per proses, sehingga satu instance melayani cuplikan saat boot dan
+ * tidak pernah melihat tulisan instance lain. Dengan TTL, larik di memori jadi
+ * singgahan segar dan basis data tetap sumber kebenaran: setiap instance
+ * menyusul dalam satu TTL setelah tulisan mana pun.
+ *
+ * NILAINYA PERNAH 3 DETIK, DAN ITU MEMATIKAN PRODUKSI.
+ *
+ * Sekali hidrasi menarik seluruh isi enam tabel: hospitality, tasks, events,
+ * hygiene, complaints, notifications — sekitar 1,5 MB mentah, dan lebih besar
+ * lagi setelah jadi JSON di kabel. Pada 3 detik, SATU instance yang dipakai
+ * terus-menerus menarik ±30 MB per menit; Vercel menjalankan banyak instance
+ * sekaligus. Jatah egress Supabase paket gratis 5 GB bisa habis dalam hitungan
+ * jam, dan begitu habis SELURUH project diblokir: aplikasi tidak bisa membaca
+ * apa pun, tidak ada yang bisa login, dan layarnya jatuh ke data contoh.
+ *
+ * Itu benar-benar terjadi — 38,5 GB terpakai dari jatah 5 GB, produksi mati.
+ *
+ * Angkanya kini disamakan dengan REFERENCE_TTL_MS. Konsekuensinya jujur:
+ * perubahan yang dibuat orang lain baru terlihat di instance lain paling lama
+ * satu TTL kemudian. Untuk aplikasi operasional internal, tertinggal setengah
+ * menit jauh lebih murah daripada seluruh sistem berhenti. Yang menulis tetap
+ * melihat hasilnya seketika lewat `markLocalWrite` + `revalidatePath`.
+ *
+ * Bisa disetel lewat GWG_HYDRATION_TTL_MS bila perlu diubah tanpa deploy —
+ * tapi JANGAN dikecilkan lagi tanpa mengukur egress-nya lebih dulu.
  */
-const HYDRATION_TTL_MS = 3000;
+const HYDRATION_TTL_MS = Math.max(5_000, Number(process.env.GWG_HYDRATION_TTL_MS) || 30_000);
 
 /**
  * Reference data — users, credentials, areas, outlets — only changes when an
