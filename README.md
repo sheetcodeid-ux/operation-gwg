@@ -58,6 +58,12 @@ Aplikasi berjalan penuh dalam **mode demo** tanpa kredensial apa pun — cukup
 `npm install && npm run dev`, lalu pilih persona di halaman login. Kredensial
 hanya diperlukan untuk mengakses data produksi.
 
+Mode demo hanya berlaku di `npm run dev`. Pada **build produksi**, aplikasi
+tanpa variabel Supabase akan MENOLAK menampilkan halaman dan menyebutkan
+variabel apa yang kurang — data contoh tidak pernah disajikan diam-diam, karena
+layarnya sama persis dengan layar sungguhan. Untuk peragaan yang memang
+disengaja, setel `GWG_DEMO=1`; layarnya diberi pita kuning.
+
 ## Scripts
 
 ```bash

@@ -234,7 +234,13 @@ sama persis seperti di produksi:
 | Supervisor | Hanya outlet yang ditugaskan kepadanya |
 
 Data yang tampil adalah **data contoh yang dibangkitkan di memori**, bukan data
-produksi. Ini perilaku yang benar selama berkas `.env.local` belum ada.
+produksi. Ini perilaku yang benar selama berkas `.env.local` belum ada — dan
+hanya berlaku untuk `npm run dev`.
+
+Build produksi (`npm run build && npm start`) tidak melakukan hal yang sama:
+tanpa variabel Supabase ia menolak menampilkan halaman dan menyebutkan variabel
+mana yang kurang. Untuk menjalankan peragaan dengan data contoh secara sengaja,
+setel `GWG_DEMO=1` — layarnya lalu diberi pita kuning bertuliskan DATA CONTOH.
 
 ---
 
@@ -430,8 +436,14 @@ Bila terjadi konflik saat `git stash pop`, selesaikan konfliknya lalu
 <details>
 <summary><strong>Aplikasi berjalan tetapi seluruh datanya contoh</strong></summary>
 
-Ini perilaku yang benar. Aplikasi berjalan dalam mode demo selama `.env.local`
-belum ada. Lihat [bagian 9](#9-menghubungkan-data-produksi-opsional).
+Ini perilaku yang benar di `npm run dev`. Aplikasi berjalan dalam mode demo
+selama `.env.local` belum ada. Lihat
+[bagian 9](#9-menghubungkan-data-produksi-opsional).
+
+Kalau yang muncul justru layar **"Aplikasi belum terhubung ke basis data"**,
+berarti Anda menjalankan build produksi tanpa variabel Supabase. Itu juga
+perilaku yang benar: data contoh sengaja tidak disajikan di server, sebab
+tampilannya tidak bisa dibedakan dari data sungguhan.
 </details>
 
 <details>

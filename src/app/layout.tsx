@@ -4,6 +4,7 @@ import { Toaster } from "sonner";
 import { ThemeProvider } from "@/components/theme-provider";
 import { PwaRegister } from "@/components/pwa-register";
 import { ClientErrorReporter } from "@/components/client-error-reporter";
+import { PenjagaData } from "@/components/layout/penjaga-data";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -47,7 +48,11 @@ export default function RootLayout({
         <ThemeProvider attribute="class" defaultTheme="dark" enableSystem disableTransitionOnChange>
           <PwaRegister />
           <ClientErrorReporter />
-          {children}
+          {/* Dipasang di lapis PALING LUAR, bukan di dalam layout aplikasi,
+              supaya halaman login pun ikut terjaga. Layar login yang menerima
+              kata sandi sementara basis datanya tidak tersambung adalah cara
+              tercepat membuat orang mengira akunnya bermasalah. */}
+          <PenjagaData>{children}</PenjagaData>
           <Toaster
             theme="system"
             position="top-right"
