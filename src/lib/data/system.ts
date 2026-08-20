@@ -184,6 +184,10 @@ export async function createSystemRequest(input: SysCreateInput): Promise<{ id: 
     requester_id: input.requesterId,
     requester_name: input.requesterName,
     position: input.position,
+    // Kolom ini NOT NULL dan tidak menunjuk ke tabel lain, jadi string kosong
+    // sah di sini sebagai penanda "cabang tidak dipilih". Yang tidak sah adalah
+    // membawanya ke `tasks.outlet_id` yang punya kunci asing — penormalannya ada
+    // di `rows.ts`, di batas tempat objek berubah menjadi baris basis data.
     outlet_id: input.outletId,
     wa_number: input.waNumber,
     request_type: input.requestType,

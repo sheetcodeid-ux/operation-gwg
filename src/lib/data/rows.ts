@@ -12,6 +12,8 @@ import type {
   WorkTask,
 } from "../types";
 
+import { fk } from "./fk";
+
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
 /** camelCase entities ⇄ snake_case Postgres rows (schema: init_operation_gwg_schema). */
@@ -21,7 +23,7 @@ export const userToRow = (u: UserProfile) => ({
   name: u.name,
   email: u.email,
   role: u.role,
-  area_id: u.areaId ?? null,
+  area_id: fk(u.areaId),
   outlet_ids: u.outletIds ?? [],
   avatar_url: u.avatarUrl ?? null,
   phone: u.phone ?? null,
@@ -49,7 +51,7 @@ export const userFromRow = (r: any): UserProfile => ({
   createdAt: r.created_at,
 });
 
-export const areaToRow = (a: Area) => ({ id: a.id, name: a.name, code: a.code, coordinator_id: a.coordinatorId });
+export const areaToRow = (a: Area) => ({ id: a.id, name: a.name, code: a.code, coordinator_id: fk(a.coordinatorId) });
 export const areaFromRow = (r: any): Area => ({ id: r.id, name: r.name, code: r.code, coordinatorId: r.coordinator_id });
 
 export const outletToRow = (o: Outlet) => ({
@@ -57,9 +59,9 @@ export const outletToRow = (o: Outlet) => ({
   name: o.name,
   code: o.code,
   city: o.city,
-  area_id: o.areaId,
-  supervisor_id: o.supervisorId,
-  pic_id: o.picId,
+  area_id: fk(o.areaId),
+  supervisor_id: fk(o.supervisorId),
+  pic_id: fk(o.picId),
   active: o.active,
 });
 export const outletFromRow = (r: any): Outlet => ({
@@ -75,9 +77,9 @@ export const outletFromRow = (r: any): Outlet => ({
 
 export const hospitalityToRow = (h: HospitalityAssessment) => ({
   id: h.id,
-  outlet_id: h.outletId,
-  area_id: h.areaId,
-  assessor_id: h.assessorId,
+  outlet_id: fk(h.outletId),
+  area_id: fk(h.areaId),
+  assessor_id: fk(h.assessorId),
   staff_name: h.staffName,
   staff_position: h.staffPosition,
   date: h.date,
@@ -106,12 +108,12 @@ export const taskToRow = (t: WorkTask) => ({
   priority: t.priority,
   status: t.status,
   division: t.division,
-  outlet_id: t.outletId,
+  outlet_id: fk(t.outletId),
   outlet_ids: t.outletIds ?? [],
   brands: t.brands ?? [],
-  area_id: t.areaId,
+  area_id: fk(t.areaId),
   pic_ids: t.picIds,
-  pic_id: t.picId,
+  pic_id: fk(t.picId),
   start_date: t.startDate,
   due_date: t.dueDate,
   completion_date: t.completionDate ?? null,
@@ -145,9 +147,9 @@ export const taskFromRow = (r: any): WorkTask => ({
 export const eventToRow = (e: OpsEvent) => ({
   id: e.id,
   name: e.name,
-  outlet_id: e.outletId,
-  area_id: e.areaId,
-  pic_id: e.picId,
+  outlet_id: fk(e.outletId),
+  area_id: fk(e.areaId),
+  pic_id: fk(e.picId),
   description: e.description,
   budget: e.budget,
   start_date: e.startDate,
@@ -175,8 +177,8 @@ export const eventFromRow = (r: any): OpsEvent => ({
 
 export const hygieneToRow = (h: HygieneAudit) => ({
   id: h.id,
-  outlet_id: h.outletId,
-  area_id: h.areaId,
+  outlet_id: fk(h.outletId),
+  area_id: fk(h.areaId),
   date: h.date,
   shift: h.shift,
   inspector_name: h.inspectorName,
@@ -235,8 +237,8 @@ export const complaintToRow = (c: Complaint) => ({
   rating: c.rating ?? null,
   content: c.content,
   review_date: c.reviewDate,
-  outlet_id: c.outletId,
-  area_id: c.areaId,
+  outlet_id: fk(c.outletId),
+  area_id: fk(c.areaId),
   category: c.category,
   status: c.status,
   // The `priority` column predates the Priority→Status refactor and is still
@@ -270,9 +272,9 @@ export const notificationToRow = (n: AppNotification) => ({
   kind: n.kind,
   title: n.title,
   message: n.message,
-  outlet_id: n.outletId ?? null,
-  area_id: n.areaId ?? null,
-  target_user: n.targetUser ?? null,
+  outlet_id: fk(n.outletId),
+  area_id: fk(n.areaId),
+  target_user: fk(n.targetUser),
   department: n.department ?? null,
   href: n.href ?? null,
   actor_name: n.actorName ?? null,
