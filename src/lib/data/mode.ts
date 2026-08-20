@@ -38,7 +38,15 @@ export type ModeData =
   /** Data contoh, dan itu memang disengaja. */
   | "demo"
   /** Tidak ada basis data dan demo tidak diizinkan — jangan sajikan apa pun. */
-  | "tanpa-basis-data";
+  | "tanpa-basis-data"
+  /**
+   * Alamat basis datanya ADA, tapi belum sekali pun bisa dibaca.
+   *
+   * Ini pintu kedua, dan yang lolos lewat sini justru lebih berbahaya daripada
+   * yang pertama: konfigurasinya terlihat benar, jadi tidak ada yang curiga.
+   * Padahal isi memori masih data contoh bawaan.
+   */
+  | "gagal-terhubung";
 
 export interface KeadaanLingkungan {
   /** `GWG_SUPABASE_URL` dan kuncinya terbaca. */
@@ -47,16 +55,24 @@ export interface KeadaanLingkungan {
   pengembangan: boolean;
   /** `GWG_DEMO=1` — izin sadar untuk menyajikan data contoh. */
   demoDiizinkan: boolean;
+  /**
+   * Instance ini pernah berhasil memuat data dari basis data.
+   *
+   * Hanya diperiksa ketika `dbAktif`. Tidak diisi (undefined) berarti belum
+   * ada informasinya — diperlakukan sama dengan belum pernah berhasil, karena
+   * menganggapnya berhasil berarti menyajikan data contoh saat ragu.
+   */
+  hidrasiBerhasil?: boolean;
 }
 
 export function modeData(k: KeadaanLingkungan): ModeData {
-  if (k.dbAktif) return "basis-data";
+  if (k.dbAktif) return k.hidrasiBerhasil ? "basis-data" : "gagal-terhubung";
   if (k.pengembangan || k.demoDiizinkan) return "demo";
   return "tanpa-basis-data";
 }
 
 /** Halaman aplikasi boleh dirender? */
-export const bolehMelayani = (m: ModeData): boolean => m !== "tanpa-basis-data";
+export const bolehMelayani = (m: ModeData): boolean => m === "basis-data" || m === "demo";
 
 /**
  * Perlu diberi tanda bahwa isinya karangan?

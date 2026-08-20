@@ -102,6 +102,28 @@ const USER_COLUMNS =
 const HYGIENE_COLUMNS =
   "id,outlet_id,area_id,date,shift,inspector_name,supervisor_name,findings,is_clean,hygiene_score,created_at";
 
+/**
+ * Apakah instance ini PERNAH berhasil memuat data dari basis data?
+ *
+ * Bedanya besar, dan inilah yang membedakan data basi dari data palsu:
+ *
+ *  • Pernah berhasil, lalu penyegaran berikutnya gagal → yang tersaji adalah
+ *    data SUNGGUHAN yang agak lama. Itu masih layak disajikan; memang begitu
+ *    cara singgahan ini dirancang.
+ *  • BELUM PERNAH berhasil → larik di memori masih berisi data contoh bawaan,
+ *    59 nama karangan lengkap dengan outlet dan nilainya. Menyajikannya sama
+ *    saja dengan berbohong, dan tidak ada satu pun tanda di layar yang
+ *    membedakannya dari data perusahaan.
+ *
+ * Yang kedua itulah yang terjadi 20 Agustus 2026: Supabase memblokir project
+ * karena egress habis, hidrasi gagal di setiap instance baru, dan aplikasi
+ * menyajikan data contoh seolah tidak terjadi apa-apa. Pemiliknya menyimpulkan
+ * seluruh datanya terhapus.
+ */
+export function hidrasiPernahBerhasil(): boolean {
+  return (g.__GWG_HYDRATION__?.at ?? 0) > 0;
+}
+
 export function ensureHydrated(): Promise<void> {
   if (!dbEnabled) return Promise.resolve();
   const state = (g.__GWG_HYDRATION__ ??= { at: 0, inflight: null });

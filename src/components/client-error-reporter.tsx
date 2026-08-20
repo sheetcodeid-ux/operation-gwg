@@ -22,6 +22,24 @@ import { useEffect } from "react";
  */
 const BATAS_KIRIM = 5;
 
+/**
+ * Bukan galat — alur kendali Next.js yang memang dilempar sebagai pengecualian.
+ *
+ * `redirect()` dan `notFound()` bekerja dengan MELEMPAR. Itu keputusan
+ * rancangan Next, dan artinya setiap kali sebuah halaman mengalihkan
+ * pengunjung — misalnya karena izinnya kurang atau sesinya habis — sebuah
+ * "galat" bernama NEXT_REDIRECT muncul di peramban.
+ *
+ * Mencatatnya bukan sekadar mubazir, tapi merugikan: pengalihan terjadi
+ * puluhan kali sehari pada pemakaian yang sepenuhnya normal, dan catatan galat
+ * jadi penuh olehnya. Saat suatu hari ada kerusakan sungguhan, ia tenggelam di
+ * antara ratusan baris yang tidak berarti apa-apa — dan yang mencari jadi
+ * berhenti mempercayai catatan itu sama sekali.
+ */
+const ALUR_KENDALI = ["NEXT_REDIRECT", "NEXT_NOT_FOUND", "NEXT_HTTP_ERROR_FALLBACK"];
+
+const alurKendali = (pesan: string): boolean => ALUR_KENDALI.some((k) => pesan.includes(k));
+
 export function ClientErrorReporter() {
   useEffect(() => {
     let terkirim = 0;
@@ -29,6 +47,7 @@ export function ClientErrorReporter() {
 
     const kirim = (kind: string, message: string, stack?: string) => {
       if (terkirim >= BATAS_KIRIM) return;
+      if (alurKendali(message)) return;
       // Pesan yang persis sama cukup dicatat sekali per kunjungan.
       const kunci = `${kind}:${message}`;
       if (sudah.has(kunci)) return;
@@ -77,6 +96,8 @@ export function ClientErrorReporter() {
 export function laporkanGalat(kind: string, error: unknown) {
   try {
     const e = error as { message?: string; stack?: string; digest?: string };
+    // Pengalihan yang sampai ke layar galat pun tetap bukan kerusakan.
+    if (alurKendali(e?.message ?? String(error))) return;
     void fetch("/api/galat-klien", {
       method: "POST",
       headers: { "content-type": "application/json" },

@@ -2,7 +2,7 @@ import "server-only";
 
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 
-import { modeData, variabelKurang } from "./mode";
+import { variabelKurang } from "./mode";
 
 /**
  * Server-only Supabase client for the DATA layer (persistence).
@@ -20,11 +20,17 @@ export const dbEnabled = Boolean(url && key);
  * Mode data yang sedang berjalan — lihat `mode.ts` soal mengapa data contoh
  * kini harus diizinkan, bukan sekadar terjadi.
  */
-export const MODE_DATA = modeData({
+/**
+ * Bagian mode data yang bisa ditentukan dari lingkungan saja.
+ *
+ * Sisanya — apakah basis datanya benar-benar bisa dibaca — baru diketahui
+ * setelah hidrasi mencoba, jadi dilengkapi di tempat pemakaiannya.
+ */
+export const MODE_DATA_DASAR = {
   dbAktif: dbEnabled,
   pengembangan: process.env.NODE_ENV !== "production",
   demoDiizinkan: process.env.GWG_DEMO === "1",
-});
+};
 
 /** Nama variabel yang belum terisi — dipakai halaman penjaga. Tanpa nilainya. */
 export const VARIABEL_KURANG = variabelKurang({

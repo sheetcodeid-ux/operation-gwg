@@ -5,6 +5,9 @@ const k = (p: Partial<Parameters<typeof modeData>[0]> = {}) => ({
   dbAktif: false,
   pengembangan: false,
   demoDiizinkan: false,
+  // Basis data aktif DAN terbaca adalah keadaan normal; masing-masing uji yang
+  // menyoal kegagalan koneksi mematikannya sendiri.
+  hidrasiBerhasil: true,
   ...p,
 });
 
@@ -26,6 +29,39 @@ describe("modeData", () => {
     // Inilah perilaku yang diperbaiki: dulu keadaan ini menyajikan 59 orang
     // karangan tanpa satu pun tanda bahwa datanya bukan kenyataan.
     expect(modeData(k())).toBe("tanpa-basis-data");
+  });
+});
+
+describe("pintu kedua: basis data ada tapi tidak bisa dibaca", () => {
+  it("belum sekali pun berhasil dibaca berarti gagal terhubung, bukan basis-data", () => {
+    // Inilah yang terjadi 20 Agustus 2026: kuota Supabase habis, hidrasi gagal
+    // di setiap instance baru, dan yang tersaji adalah data contoh bawaan —
+    // padahal konfigurasinya terlihat benar sehingga tidak ada yang curiga.
+    expect(modeData(k({ dbAktif: true, hidrasiBerhasil: false }))).toBe("gagal-terhubung");
+  });
+
+  it("tidak melayani halaman saat gagal terhubung", () => {
+    expect(bolehMelayani("gagal-terhubung")).toBe(false);
+  });
+
+  it("informasi yang belum ada diperlakukan sebagai belum berhasil", () => {
+    // Saat ragu, jangan menyajikan data contoh.
+    expect(modeData({ dbAktif: true, pengembangan: false, demoDiizinkan: false })).toBe("gagal-terhubung");
+  });
+
+  it("sudah pernah berhasil tetap melayani, walau penyegaran berikutnya gagal", () => {
+    // Data SUNGGUHAN yang agak lama masih layak disajikan — itu memang cara
+    // singgahan ini dirancang. Yang tidak boleh adalah data karangan.
+    expect(modeData(k({ dbAktif: true, hidrasiBerhasil: true }))).toBe("basis-data");
+  });
+
+  it("mode demo tidak terpengaruh keadaan hidrasi", () => {
+    // Tanpa basis data, hidrasi memang tidak pernah jalan.
+    expect(modeData(k({ pengembangan: true, hidrasiBerhasil: false }))).toBe("demo");
+  });
+
+  it("gagal terhubung TIDAK diberi pita data contoh — layarnya memang tidak tampil", () => {
+    expect(perluTandaDemo("gagal-terhubung")).toBe(false);
   });
 });
 
