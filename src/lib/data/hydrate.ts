@@ -2,6 +2,7 @@ import "server-only";
 
 import { db, dbEnabled } from "./db";
 import { selectAll } from "./paged";
+import { sidikTersimpan, tabelPerluDibaca, type PetaSidik } from "./sidik";
 import { SEED } from "./seed";
 import { loadCredentials, snapshotCredentials } from "./credentials";
 import {
@@ -43,6 +44,8 @@ const g = globalThis as typeof globalThis & {
   __GWG_REF_AT__?: number;
   /** Avatars refresh slowest of all — they are large and change rarely. */
   __GWG_AVATARS__?: { at: number; map: Map<string, string | null> };
+  /** Pencacah perubahan per tabel dari hidrasi terakhir — lihat `sidik.ts`. */
+  __GWG_SIDIK__?: PetaSidik | null;
 };
 
 /**
@@ -186,6 +189,29 @@ async function avatarMap(): Promise<Map<string, string | null>> {
   return map;
 }
 
+/** Seluruh tabel yang ikut hidrasi — dipakai membandingkan sidik. */
+const TABEL_HIDRASI = [
+  "hospitality", "tasks", "events", "hygiene", "complaints", "notifications",
+  "users", "credentials", "areas", "outlets",
+] as const;
+
+/**
+ * Pencacah perubahan per tabel, satu panggilan kecil.
+ *
+ * Gagal DIAM-DIAM dan mengembalikan null — itu disengaja. Sidik hanyalah alat
+ * penghemat; kalau ia tidak bisa dibaca, hidrasi kembali ke perilaku lamanya
+ * (baca semua) alih-alih menggagalkan seluruh pemuatan data.
+ */
+async function bacaSidik(): Promise<PetaSidik | null> {
+  try {
+    const { data, error } = await db().rpc("gwg_sidik_tabel");
+    if (error || !Array.isArray(data)) return null;
+    return new Map((data as { tabel: string; sidik: string }[]).map((r) => [r.tabel, r.sidik]));
+  } catch {
+    return null;
+  }
+}
+
 async function hydrate() {
   const supabase = db();
 
@@ -207,11 +233,32 @@ async function hydrate() {
    * memakai `id`, tapi `credentials` tidak punya kolom itu sama sekali, dan
    * mengurutkan pakai kolom yang tidak ada membuat SELURUH tabel gagal dimuat.
    */
+  const sidikBaru = await bacaSidik();
+  const sidikLama = g.__GWG_SIDIK__ ?? null;
+  const perlu = tabelPerluDibaca(TABEL_HIDRASI, sidikBaru, sidikLama);
+
+  /**
+   * Tabel yang BENAR-BENAR selesai dibaca pada putaran ini.
+   *
+   * Dibutuhkan terpisah dari daftar gagal karena ada cara ketiga sebuah tabel
+   * tidak jadi dibaca: data acuan (users, credentials, areas, outlets) punya
+   * jamnya sendiri dan dilewati saat jam itu belum jatuh tempo. Tanpa catatan
+   * ini, sidiknya tetap maju seolah sudah dibaca — dan perubahannya hilang
+   * diam-diam sampai tabel itu kebetulan berubah lagi.
+   */
+  const berhasil = new Set<string>();
+
   const get = async (table: string, columns = "*", key = "id") => {
+    // Tidak ada baris yang berpindah sejak pembacaan terakhir — isi memori
+    // sudah benar, menariknya ulang cuma memboroskan egress. `null` di sini
+    // berarti "pertahankan yang sudah ada", sama seperti saat pembacaan gagal.
+    if (!perlu.has(table)) return null;
     try {
-      return await selectAll<Record<string, unknown>>(`hydrate ${table}`, (from, to) =>
+      const rows = await selectAll<Record<string, unknown>>(`hydrate ${table}`, (from, to) =>
         supabase.from(table).select(columns).order(key, { ascending: true }).range(from, to),
       );
+      berhasil.add(table);
+      return rows;
     } catch (e) {
       console.error(`[hydrate] ${table} gagal dimuat — mempertahankan data sebelumnya:`, e);
       failed.push(table);
@@ -288,6 +335,19 @@ async function hydrate() {
       notifications.map(notificationFromRow).sort((a, b) => +new Date(b.createdAt) - +new Date(a.createdAt)),
     );
   }
+  // Sidik hanya boleh maju untuk tabel yang benar-benar selesai dibaca.
+  //
+  // Yang perlu dibaca tapi tidak jadi terbaca — gagal, atau dilewati karena
+  // jam data acuan belum jatuh tempo — mempertahankan sidik lamanya, supaya
+  // putaran berikutnya tetap mengambilnya. Sidik yang maju tanpa pembacaan
+  // adalah cara paling halus kehilangan perubahan: tidak ada galat, tidak ada
+  // tanda apa pun, datanya cuma berhenti ikut berubah.
+  const tertinggal = [...perlu].filter((t) => !berhasil.has(t));
+
+  // Disimpan SEBELUM melempar: tabel yang berhasil dibaca tidak perlu dibaca
+  // ulang hanya karena tetangganya gagal.
+  g.__GWG_SIDIK__ = sidikTersimpan(sidikBaru, sidikLama, tertinggal);
+
   // Gagal sebagian ⇒ jangan tandai segar, supaya permintaan berikutnya mencoba
   // lagi alih-alih menunggu satu TTL penuh dengan data yang belum lengkap.
   if (failed.length > 0) throw new Error(`tabel gagal dimuat: ${failed.join(", ")}`);
