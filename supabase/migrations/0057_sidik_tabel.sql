@@ -39,5 +39,11 @@ $$;
 comment on function public.gwg_sidik_tabel() is
   'Pencacah perubahan per tabel untuk hidrasi bersyarat. Tidak mengembalikan data pengguna.';
 
-revoke all on function public.gwg_sidik_tabel() from public, anon;
+-- `authenticated` disebut TERPISAH dari `public` karena Supabase memberi hak
+-- jalan ke peran itu secara bawaan untuk fungsi baru di skema public. Mencabut
+-- dari `public` saja tidak cukup — hak bawaannya tetap tertinggal, dan database
+-- linter menandainya sebagai fungsi SECURITY DEFINER yang bisa dijalankan
+-- pengguna yang sudah login. Fungsinya memang tidak mengembalikan data
+-- pengguna, tapi hak yang tidak dipakai tetap sebaiknya tidak diberikan.
+revoke all on function public.gwg_sidik_tabel() from public, anon, authenticated;
 grant execute on function public.gwg_sidik_tabel() to service_role;
