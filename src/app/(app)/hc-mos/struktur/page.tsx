@@ -74,6 +74,7 @@ export default async function StrukturPage() {
     posY: d.posY,
     jumlahOrang: orangPerDep.get(d.name) ?? 0,
     jabatan: d.jabatan,
+    deskripsi: d.deskripsi,
   }));
 
   const perArea = areas
@@ -220,12 +221,9 @@ export default async function StrukturPage() {
           sudah dijawab User Management. Yang tidak terjawab di mana pun adalah
           "siapa melapor ke siapa" — dan itu justru yang paling sering
           ditanyakan orang baru. */}
-      <h2 className="mb-2.5 flex items-center gap-2 text-sm font-semibold text-foreground">
-        <Network className="size-4 text-muted-foreground" /> Bagan Struktur Organisasi
-      </h2>
-      <p className="mb-3 max-w-3xl text-[12px] leading-relaxed text-muted-foreground">
-        Posisinya diambil dari daftar departemen di User Management — tambah departemen di sana,
-        kotaknya muncul di sini. Level dan garis pelaporannya disusun sendiri lewat Human Capital.
+      <p className="mb-2.5 max-w-3xl text-[12px] leading-relaxed text-muted-foreground">
+        Role-nya diambil dari daftar departemen di User Management — tambah departemen di sana,
+        kartunya muncul di sini. Level dan garis pelaporannya disusun lewat Human Capital.
       </p>
       <div className="mb-6">
         <BaganOrganisasi simpul={simpulBagan} bolehUbah={bolehUbahHc(user)} />

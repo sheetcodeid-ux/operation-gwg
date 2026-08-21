@@ -22,6 +22,8 @@ export interface UserDept {
    *  dengan 0 yang berarti memang ditaruh di pojok. */
   posX: number | null;
   posY: number | null;
+  /** Keterangan singkat yang muncul di kartu bagan. */
+  deskripsi: string | null;
 }
 
 interface DeptRow {
@@ -33,9 +35,10 @@ interface DeptRow {
   urutan: number | null;
   pos_x: number | null;
   pos_y: number | null;
+  deskripsi: string | null;
 }
 
-const KOLOM = "id,name,jabatan,level,parent_id,urutan,pos_x,pos_y";
+const KOLOM = "id,name,jabatan,level,parent_id,urutan,pos_x,pos_y,deskripsi";
 
 const dariBaris = (r: DeptRow): UserDept => ({
   id: r.id,
@@ -46,6 +49,7 @@ const dariBaris = (r: DeptRow): UserDept => ({
   urutan: r.urutan,
   posX: r.pos_x,
   posY: r.pos_y,
+  deskripsi: r.deskripsi,
 });
 
 const slug = (s: string) =>
@@ -78,7 +82,7 @@ export async function saveUserDepartment(name: string, jabatan: string[]): Promi
   // De-dupe + drop blanks, preserve order.
   const jab = [...new Set(jabatan.map((j) => j.trim()).filter(Boolean))];
   if (!dbEnabled) {
-    mem.set(id, { id, name: clean, jabatan: jab, level: null, parentId: null, urutan: null, posX: null, posY: null });
+    mem.set(id, { id, name: clean, jabatan: jab, level: null, parentId: null, urutan: null, posX: null, posY: null, deskripsi: null });
     return { id };
   }
   await db()

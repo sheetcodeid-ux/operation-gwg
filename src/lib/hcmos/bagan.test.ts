@@ -2,8 +2,12 @@ import { describe, expect, it } from "vitest";
 
 import {
   LEBAR_KARTU,
+  LEBAR_KOLOM,
   bolehJadiAtasan,
   cocok,
+  inisialDari,
+  jumlahKeturunan,
+  tataKolom,
   garisBagan,
   perLevel,
   tataPohon,
@@ -143,5 +147,99 @@ describe("cocok", () => {
 
   it("pencarian kosong mencocokkan semuanya", () => {
     expect(cocok(s("a"), "   ")).toBe(true);
+  });
+});
+
+describe("inisialDari", () => {
+  it("mengambil huruf pertama dua kata pertama", () => {
+    expect(inisialDari("Managing Director")).toBe("MD");
+    expect(inisialDari("Supply Chain & Warehouse")).toBe("SC");
+  });
+
+  it("satu kata hanya satu huruf", () => {
+    expect(inisialDari("IT")).toBe("I");
+    expect(inisialDari("Legal")).toBe("L");
+  });
+
+  it("tanda baca ikut apa adanya bila memang kata kedua", () => {
+    expect(inisialDari("Accounting & Verification")).toBe("A&");
+  });
+
+  it("nama kosong tidak membuat gagal", () => {
+    expect(inisialDari("   ")).toBe("?");
+  });
+});
+
+describe("jumlahKeturunan", () => {
+  const pohon = [
+    s("bos"),
+    s("a", { parentId: "bos" }),
+    s("b", { parentId: "bos" }),
+    s("a1", { parentId: "a" }),
+    s("a2", { parentId: "a" }),
+    s("a1x", { parentId: "a1" }),
+  ];
+
+  it("menghitung seluruh keturunan, bukan cuma anak langsung", () => {
+    expect(jumlahKeturunan(pohon, "bos")).toBe(5);
+    expect(jumlahKeturunan(pohon, "a")).toBe(3);
+  });
+
+  it("daun tidak punya keturunan", () => {
+    expect(jumlahKeturunan(pohon, "b")).toBe(0);
+  });
+
+  it("lingkaran tidak membuat hitungan berputar selamanya", () => {
+    expect(jumlahKeturunan([s("x", { parentId: "y" }), s("y", { parentId: "x" })], "x")).toBe(2);
+  });
+});
+
+describe("tataKolom", () => {
+  // bos → (ea) → (div1, div2); div1 → sub1 → sub1a
+  const pohon = [
+    s("bos"),
+    s("ea", { parentId: "bos" }),
+    s("div1", { parentId: "ea", urutan: 1 }),
+    s("div2", { parentId: "ea", urutan: 2 }),
+    s("sub1", { parentId: "div1" }),
+    s("sub1a", { parentId: "sub1" }),
+  ];
+
+  it("keturunan sebuah kolom menumpuk pada x yang SAMA", () => {
+    const t = tataKolom(pohon);
+    const [div1, sub1, sub1a] = ["div1", "sub1", "sub1a"].map((id) => t.find((n) => n.id === id)!);
+    expect(sub1.x).toBe(div1.x);
+    expect(sub1a.x).toBe(div1.x);
+    expect(sub1.y).toBeGreaterThan(div1.y);
+    expect(sub1a.y).toBeGreaterThan(sub1.y);
+  });
+
+  it("kolom yang berbeda tidak saling menimpa", () => {
+    const t = tataKolom(pohon);
+    const [div1, div2] = ["div1", "div2"].map((id) => t.find((n) => n.id === id)!);
+    expect(Math.abs(div1.x - div2.x)).toBeGreaterThanOrEqual(LEBAR_KOLOM);
+  });
+
+  it("melipat sebuah simpul menyembunyikan seluruh keturunannya", () => {
+    const t = tataKolom(pohon, new Set(["div1"]));
+    expect(t.find((n) => n.id === "sub1")).toBeUndefined();
+    expect(t.find((n) => n.id === "sub1a")).toBeUndefined();
+    expect(t.find((n) => n.id === "div1")).toBeDefined();
+  });
+
+  it("akar berada di paling atas", () => {
+    const t = tataKolom(pohon);
+    const bos = t.find((n) => n.id === "bos")!;
+    expect(bos.y).toBe(0);
+    expect(t.every((n) => n.y >= bos.y)).toBe(true);
+  });
+
+  it("lingkaran tidak membuat penelusuran berputar selamanya", () => {
+    const t = tataKolom([s("a", { parentId: "b" }), s("b", { parentId: "a" })]);
+    expect(t).toHaveLength(2);
+  });
+
+  it("seluruh simpul tergambar, tidak ada yang hilang", () => {
+    expect(tataKolom(pohon)).toHaveLength(pohon.length);
   });
 });

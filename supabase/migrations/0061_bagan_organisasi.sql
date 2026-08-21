@@ -96,3 +96,9 @@ insert into public.user_departments (id, name, level, urutan) values
   ('dep_packing-dan-helper-kering', 'Packing & Helper Kering', 6, 3),
   ('dep_staff-outlet', 'Staff Outlet', 6, 4)
 on conflict (id) do update set level = excluded.level, urutan = excluded.urutan;
+
+-- Menyusul di migrasi yang sama: keterangan kartu, dan enam puluh garis
+-- pelaporan dari daftar resmi Human Capital. Garisnya semula dibiarkan kosong
+-- supaya tidak ada yang ditebak; begitu daftarnya diterima, ia diisi sekaligus.
+alter table public.user_departments add column if not exists deskripsi text;
+alter table public.user_departments add column if not exists inisial text;
