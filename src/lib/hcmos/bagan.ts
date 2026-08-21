@@ -435,3 +435,152 @@ export function silsilah(simpul: SimpulBagan[], id: string): Set<string> {
 export const simpulBercabang = (simpul: SimpulBagan[]): string[] => [
   ...new Set(simpul.map((s) => s.parentId).filter((v): v is string => !!v)),
 ];
+
+
+/* ─────────────────────────── tata letak menurun ─────────────────────────── */
+
+export const LEBAR_TEGAK = 268;
+export const TINGGI_TEGAK = 74;
+const INDENT = 36;
+const SELA_TEGAK = 10;
+
+/**
+ * Tata letak MENURUN — bagan tumbuh ke bawah, bukan ke samping.
+ *
+ * Bentuk kolom melebar seukuran jumlah divisi: sepuluh divisi berarti sepuluh
+ * kolom berdampingan, dan pada layar mana pun itu berarti menggulir ke samping
+ * terus-menerus. Menggulir ke samping jauh lebih melelahkan daripada ke bawah —
+ * layar lebih pendek daripada lebar, tapi roda tetikus dan jari di trackpad
+ * bergerak vertikal.
+ *
+ * Di sini kedalaman diubah jadi INDENTASI, bukan kolom. Lebarnya berhenti
+ * tumbuh pada enam level (enam kali indentasi), sementara tingginya tumbuh
+ * mengikuti jumlah posisi — arah yang memang bisa digulir dengan nyaman.
+ */
+export function tataMenurun(simpul: SimpulBagan[], terlipat: ReadonlySet<string> = new Set()): SimpulTertata[] {
+  const peta = new Map(simpul.map((s) => [s.id, s]));
+  const anak = new Map<string | null, SimpulBagan[]>();
+  for (const s of simpul) {
+    const induk = s.parentId && peta.has(s.parentId) ? s.parentId : null;
+    anak.set(induk, [...(anak.get(induk) ?? []), s]);
+  }
+  for (const [k, v] of anak) {
+    anak.set(k, [...v].sort((a, b) => (a.urutan ?? 999) - (b.urutan ?? 999) || a.nama.localeCompare(b.nama, "id")));
+  }
+
+  const hasil: SimpulTertata[] = [];
+  const dilihat = new Set<string>();
+  let baris = 0;
+
+  const tandaiKeturunan = (id: string) => {
+    for (const a of anak.get(id) ?? []) {
+      if (dilihat.has(a.id)) continue;
+      dilihat.add(a.id);
+      tandaiKeturunan(a.id);
+    }
+  };
+
+  const turun = (s: SimpulBagan, kedalaman: number) => {
+    if (dilihat.has(s.id)) return;
+    dilihat.add(s.id);
+    hasil.push({
+      ...s,
+      x: s.posX ?? kedalaman * INDENT,
+      y: s.posY ?? baris * (TINGGI_TEGAK + SELA_TEGAK),
+      kedalaman,
+    });
+    baris += 1;
+    if (terlipat.has(s.id)) {
+      tandaiKeturunan(s.id);
+      return;
+    }
+    for (const a of anak.get(s.id) ?? []) turun(a, kedalaman + 1);
+  };
+
+  for (const akar of anak.get(null) ?? []) turun(akar, 0);
+  // Simpul tak terjangkau — hanya mungkin bila ada lingkaran. Tetap digambar.
+  for (const s of simpul) {
+    if (dilihat.has(s.id)) continue;
+    dilihat.add(s.id);
+    hasil.push({ ...s, x: s.posX ?? 0, y: s.posY ?? baris * (TINGGI_TEGAK + SELA_TEGAK), kedalaman: 0 });
+    baris += 1;
+  }
+  return hasil;
+}
+
+/** Garis siku untuk tata letak menurun: turun dari induk lalu belok ke anak. */
+export function garisMenurun(tertata: SimpulTertata[]): GarisBagan[] {
+  const peta = new Map(tertata.map((s) => [s.id, s]));
+  const garis: GarisBagan[] = [];
+  for (const s of tertata) {
+    const induk = s.parentId ? peta.get(s.parentId) : null;
+    if (!induk) continue;
+    garis.push({
+      dari: induk.id,
+      ke: s.id,
+      x1: induk.x + INDENT / 2,
+      y1: induk.y + TINGGI_TEGAK,
+      x2: s.x,
+      y2: s.y + TINGGI_TEGAK / 2,
+    });
+  }
+  return garis;
+}
+
+/* ─────────────────────────────── magnet ─────────────────────────────── */
+
+export const KISI = 8;
+const TOLERANSI = 7;
+
+export interface HasilMagnet {
+  x: number;
+  y: number;
+  /** Sumbu x yang sedang disejajarkan — untuk menggambar garis bantu. */
+  panduX: number | null;
+  panduY: number | null;
+}
+
+/**
+ * Menempelkan kartu yang sedang digeser ke kartu lain — "magnet".
+ *
+ * Dua tahap, dan urutannya penting. Pertama dicari kartu lain yang tepinya
+ * hampir sejajar; kalau ada, kartunya ditempelkan PERSIS ke sana dan sumbunya
+ * dikembalikan supaya bisa digambar sebagai garis bantu. Kalau tidak ada, baru
+ * dibulatkan ke kisi.
+ *
+ * Kebalikannya — kisi dulu, baru sejajar — terasa patah: kartunya melompat ke
+ * kisi lebih dulu, jadi tepi yang sudah hampir lurus malah dijauhkan sebelum
+ * sempat menempel.
+ */
+export function magnet(
+  x: number,
+  y: number,
+  lain: { x: number; y: number }[],
+  toleransi = TOLERANSI,
+): HasilMagnet {
+  let hx = x;
+  let hy = y;
+  let panduX: number | null = null;
+  let panduY: number | null = null;
+
+  let terdekatX = toleransi + 1;
+  let terdekatY = toleransi + 1;
+  for (const l of lain) {
+    const dx = Math.abs(l.x - x);
+    if (dx <= toleransi && dx < terdekatX) {
+      terdekatX = dx;
+      hx = l.x;
+      panduX = l.x;
+    }
+    const dy = Math.abs(l.y - y);
+    if (dy <= toleransi && dy < terdekatY) {
+      terdekatY = dy;
+      hy = l.y;
+      panduY = l.y;
+    }
+  }
+
+  if (panduX === null) hx = Math.round(x / KISI) * KISI;
+  if (panduY === null) hy = Math.round(y / KISI) * KISI;
+  return { x: hx, y: hy, panduX, panduY };
+}

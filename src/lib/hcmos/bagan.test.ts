@@ -7,6 +7,8 @@ import {
   cocok,
   inisialDari,
   jumlahKeturunan,
+  magnet,
+  tataMenurun,
   rantaiKeAtas,
   silsilah,
   simpulBercabang,
@@ -291,5 +293,91 @@ describe("simpulBercabang", () => {
   it("hanya simpul yang benar-benar punya bawahan", () => {
     const pohon = [s("bos"), s("a", { parentId: "bos" }), s("b", { parentId: "bos" })];
     expect(simpulBercabang(pohon)).toEqual(["bos"]);
+  });
+});
+
+describe("tataMenurun", () => {
+  //  bos → a → a1 ;  bos → b
+  const pohon = [
+    s("bos"),
+    s("a", { parentId: "bos", urutan: 1 }),
+    s("a1", { parentId: "a" }),
+    s("b", { parentId: "bos", urutan: 2 }),
+  ];
+
+  it("tumbuh ke BAWAH: tiap simpul satu baris, berurutan", () => {
+    const t = tataMenurun(pohon);
+    const urut = ["bos", "a", "a1", "b"].map((id) => t.find((n) => n.id === id)!);
+    for (let i = 1; i < urut.length; i++) expect(urut[i].y).toBeGreaterThan(urut[i - 1].y);
+  });
+
+  it("kedalaman jadi indentasi, bukan kolom baru", () => {
+    const t = tataMenurun(pohon);
+    const [bos, a, a1] = ["bos", "a", "a1"].map((id) => t.find((n) => n.id === id)!);
+    expect(bos.x).toBe(0);
+    expect(a.x).toBeGreaterThan(bos.x);
+    expect(a1.x).toBeGreaterThan(a.x);
+  });
+
+  it("lebarnya berhenti tumbuh jauh sebelum tingginya", () => {
+    const t = tataMenurun(pohon);
+    const lebar = Math.max(...t.map((n) => n.x));
+    const tinggi = Math.max(...t.map((n) => n.y));
+    expect(tinggi).toBeGreaterThan(lebar);
+  });
+
+  it("saudara berbagi indentasi yang sama", () => {
+    const t = tataMenurun(pohon);
+    expect(t.find((n) => n.id === "a")!.x).toBe(t.find((n) => n.id === "b")!.x);
+  });
+
+  it("melipat menyembunyikan keturunannya tanpa memuntahkannya ke tempat lain", () => {
+    const t = tataMenurun(pohon, new Set(["a"]));
+    expect(t.find((n) => n.id === "a1")).toBeUndefined();
+    expect(t).toHaveLength(3);
+  });
+
+  it("lingkaran tidak membuatnya berputar selamanya", () => {
+    expect(tataMenurun([s("x", { parentId: "y" }), s("y", { parentId: "x" })])).toHaveLength(2);
+  });
+
+  it("posisi hasil geseran tetap menang", () => {
+    expect(tataMenurun([s("a", { posX: 400, posY: 900 })])[0]).toMatchObject({ x: 400, y: 900 });
+  });
+});
+
+describe("magnet", () => {
+  it("menempel PERSIS ke tepi kartu lain yang hampir sejajar", () => {
+    const h = magnet(103, 200, [{ x: 100, y: 500 }]);
+    expect(h.x).toBe(100);
+    expect(h.panduX).toBe(100);
+  });
+
+  it("sumbu yang tidak menempel dibulatkan ke kisi", () => {
+    const h = magnet(103, 203, [{ x: 100, y: 500 }]);
+    expect(h.x).toBe(100);
+    expect(h.y).toBe(200); // 203 → kelipatan 8 terdekat
+    expect(h.panduY).toBeNull();
+  });
+
+  it("tanpa kartu lain, keduanya sekadar dibulatkan ke kisi", () => {
+    expect(magnet(13, 29, [])).toEqual({ x: 16, y: 32, panduX: null, panduY: null });
+  });
+
+  it("yang terlalu jauh tidak ditarik — jatuh ke kisi, bukan ke kartu itu", () => {
+    const h = magnet(140, 200, [{ x: 100, y: 200 }]);
+    expect(h.panduX).toBeNull();
+    expect(h.x).toBe(144); // kelipatan 8 terdekat, bukan 100
+  });
+
+  it("di antara dua kandidat, yang TERDEKAT yang menang", () => {
+    const h = magnet(100, 0, [{ x: 96, y: 0 }, { x: 102, y: 0 }]);
+    expect(h.x).toBe(102);
+  });
+
+  it("menempel di dua sumbu sekaligus bila memang keduanya dekat", () => {
+    const h = magnet(101, 301, [{ x: 100, y: 300 }]);
+    expect([h.x, h.y]).toEqual([100, 300]);
+    expect([h.panduX, h.panduY]).toEqual([100, 300]);
   });
 });

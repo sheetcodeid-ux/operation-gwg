@@ -110,9 +110,17 @@ export const HC_PILLARS: HcPillar[] = [
     ringkas: "Struktur organisasi, data karyawan, dan antrian dokumen.",
     submenus: [
       {
-        slug: "struktur-organisasi",
+        slug: "bagan-organisasi",
         label: "Struktur Organisasi",
-        fungsi: "Peta struktur organisasi GWG Group — kantor pusat & seluruh outlet.",
+        fungsi: "Bagan struktur organisasi yang disusun sendiri — level dan garis pelaporan tiap role.",
+        icon: "Network",
+        href: "/hc-mos/bagan",
+        raci: { R: "Riva", A: "Adrian", C: "Uswatun, Head of Operation", I: "Seluruh Karyawan" },
+      },
+      {
+        slug: "profil-organisasi",
+        label: "Profil Organisasi",
+        fungsi: "Ringkasan organisasi: headcount per kelompok, divisi kantor pusat, dan outlet per area.",
         icon: "Building2",
         href: "/hc-mos/struktur",
         raci: { R: "Riva", A: "Adrian", C: "Uswatun, Head of Operation", I: "Seluruh Karyawan" },

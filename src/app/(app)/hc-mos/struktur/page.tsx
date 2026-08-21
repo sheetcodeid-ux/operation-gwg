@@ -13,12 +13,8 @@ import { StatTile } from "@/components/ui/stat";
 import { GrafikBatang } from "@/components/hcmos/grafik";
 import { DIVISI_KANTOR, JENJANG_OUTLET, kelompokDari } from "@/lib/hcmos/struktur";
 import { brandOutlet } from "@/lib/hcmos/kontrak";
-import { getUserDepartments } from "@/lib/data/user-departments";
-import { bolehUbahHc } from "@/lib/hcmos/akses";
-import { BaganOrganisasi } from "@/components/hcmos/bagan-organisasi";
-import type { SimpulBagan } from "@/lib/hcmos/bagan";
 
-export const metadata: Metadata = { title: "Struktur Organisasi — HC-MOS" };
+export const metadata: Metadata = { title: "Profil Organisasi — HC-MOS" };
 
 /**
  * Struktur Organisasi.
@@ -55,28 +51,6 @@ export default async function StrukturPage() {
     .map(([nama, nilai]) => ({ nama, nilai }))
     .sort((a, b) => b.nilai - a.nilai);
 
-  // Bagan organisasi: daftar posisinya dari User Management, jumlah orangnya
-  // dihitung dari profil aktif. Angka yang diketik di bagan akan berhenti
-  // berubah saat orangnya bertambah, dan tidak ada yang menyadarinya sampai
-  // seseorang membandingkannya dengan User Management.
-  const orangPerDep = new Map<string, number>();
-  for (const u of users) {
-    const dep = (u.department ?? "").trim();
-    if (dep) orangPerDep.set(dep, (orangPerDep.get(dep) ?? 0) + 1);
-  }
-  const simpulBagan: SimpulBagan[] = (await getUserDepartments()).map((d) => ({
-    id: d.id,
-    nama: d.name,
-    level: d.level,
-    parentId: d.parentId,
-    urutan: d.urutan,
-    posX: d.posX,
-    posY: d.posY,
-    jumlahOrang: orangPerDep.get(d.name) ?? 0,
-    jabatan: d.jabatan,
-    deskripsi: d.deskripsi,
-  }));
-
   const perArea = areas
     .map((a) => ({
       id: a.id,
@@ -100,7 +74,7 @@ export default async function StrukturPage() {
 
       <PageHeader
         icon={Building2}
-        title="Struktur Organisasi"
+        title="Profil Organisasi"
         description="Peta struktur organisasi GWG Group — kantor pusat manajemen dan struktur operasional di seluruh brand."
       />
 
@@ -214,20 +188,6 @@ export default async function StrukturPage() {
           </p>
         </CardContent>
       </Card>
-
-      {/* ── Bagan struktur organisasi ───────────────────────────────────
-          Menggantikan daftar "Rincian Manajemen per Departemen" yang lama.
-          Daftar itu menjawab "siapa saja di departemen ini", pertanyaan yang
-          sudah dijawab User Management. Yang tidak terjawab di mana pun adalah
-          "siapa melapor ke siapa" — dan itu justru yang paling sering
-          ditanyakan orang baru. */}
-      <p className="mb-2.5 max-w-3xl text-[12px] leading-relaxed text-muted-foreground">
-        Role-nya diambil dari daftar departemen di User Management — tambah departemen di sana,
-        kartunya muncul di sini. Level dan garis pelaporannya disusun lewat Human Capital.
-      </p>
-      <div className="mb-6">
-        <BaganOrganisasi simpul={simpulBagan} bolehUbah={bolehUbahHc(user)} />
-      </div>
 
       <h2 className="mb-2.5 flex items-center gap-2 text-sm font-semibold text-foreground">
         <MapPinned className="size-4 text-muted-foreground" /> Rincian Outlet per Area

@@ -5,6 +5,7 @@ import {
   ChevronRight,
   Expand,
   FoldVertical,
+  Columns3,
   Layers,
   Maximize2,
   Minimize2,
@@ -23,12 +24,16 @@ import { Input } from "@/components/ui/input";
 import { rapikanBaganAction, simpanPenempatanAction } from "@/lib/actions/bagan";
 import {
   LEBAR_KOLOM,
+  LEBAR_TEGAK,
+  TINGGI_TEGAK,
   LEVEL_MAX,
   NAMA_LEVEL,
   TINGGI_KOLOM,
   bolehJadiAtasan,
   cocok,
   garisKolom,
+  garisMenurun,
+  magnet,
   inisialDari,
   jumlahKeturunan,
   perLevel,
@@ -36,6 +41,7 @@ import {
   silsilah,
   simpulBercabang,
   tataKolom,
+  tataMenurun,
   ukuranKanvas,
   type SimpulBagan,
 } from "@/lib/hcmos/bagan";
@@ -74,8 +80,17 @@ const warna = (level: number | null) => (level && WARNA[level]) || NETRAL;
 const ZOOM_MIN = 0.2;
 const ZOOM_MAX = 2;
 
-export function BaganOrganisasi({ simpul, bolehUbah }: { simpul: SimpulBagan[]; bolehUbah: boolean }) {
-  const [tampilan, setTampilan] = React.useState<"level" | "kolom">("kolom");
+export function BaganOrganisasi({
+  simpul,
+  bolehUbah,
+  penuhLayar,
+}: {
+  simpul: SimpulBagan[];
+  bolehUbah: boolean;
+  /** Halaman khusus bagan: kanvasnya mengikuti tinggi layar, bukan kotak pendek. */
+  penuhLayar?: boolean;
+}) {
+  const [tampilan, setTampilan] = React.useState<"level" | "menurun" | "kolom">("menurun");
   const [cari, setCari] = React.useState("");
   const [dipilih, setDipilih] = React.useState<string | null>(null);
   const [terlipat, setTerlipat] = React.useState<Set<string>>(new Set());
@@ -91,9 +106,25 @@ export function BaganOrganisasi({ simpul, bolehUbah }: { simpul: SimpulBagan[]; 
     setLokal(simpul);
   }
 
-  const tertata = React.useMemo(() => tataKolom(lokal, terlipat), [lokal, terlipat]);
-  const garis = React.useMemo(() => garisKolom(tertata), [tertata]);
-  const ukuran = React.useMemo(() => ukuranKanvas(tertata), [tertata]);
+  const menurun = tampilan === "menurun";
+  const lebarKartu = menurun ? LEBAR_TEGAK : LEBAR_KOLOM;
+  const tinggiKartu = menurun ? TINGGI_TEGAK : TINGGI_KOLOM;
+  const tertata = React.useMemo(
+    () => (menurun ? tataMenurun(lokal, terlipat) : tataKolom(lokal, terlipat)),
+    [menurun, lokal, terlipat],
+  );
+  const garis = React.useMemo(
+    () => (menurun ? garisMenurun(tertata) : garisKolom(tertata)),
+    [menurun, tertata],
+  );
+  const ukuran = React.useMemo(() => {
+    const u = ukuranKanvas(tertata);
+    // `ukuranKanvas` memakai ukuran kartu bagan kolom; pada tampilan menurun
+    // kartunya lebih lebar dan lebih pendek, jadi kanvasnya dikoreksi di sini.
+    return menurun
+      ? { lebar: u.lebar - LEBAR_KOLOM + LEBAR_TEGAK, tinggi: u.tinggi - TINGGI_KOLOM + TINGGI_TEGAK }
+      : u;
+  }, [tertata, menurun]);
   const namaInduk = React.useMemo(() => new Map(lokal.map((s) => [s.id, s.nama])), [lokal]);
   const hubungan = React.useMemo(
     () => lokal.filter((s) => s.parentId && lokal.some((x) => x.id === s.parentId)).length,
@@ -137,13 +168,23 @@ export function BaganOrganisasi({ simpul, bolehUbah }: { simpul: SimpulBagan[]; 
   /* ── geser kartu & sapu kanvas ── */
   const geser = React.useRef<{ id: string; dx: number; dy: number; asalX: number; asalY: number } | null>(null);
   const sapu = React.useRef<{ x: number; y: number; kiri: number; atas: number } | null>(null);
+  const [pandu, setPandu] = React.useState<{ x: number | null; y: number | null }>({ x: null, y: null });
 
   const saatGerak = (e: React.PointerEvent) => {
     const g = geser.current;
     if (g) {
-      const x = g.asalX + (e.clientX - g.dx) / zoom;
-      const y = g.asalY + (e.clientY - g.dy) / zoom;
-      setLokal((prev) => prev.map((s) => (s.id === g.id ? { ...s, posX: x, posY: y } : s)));
+      const kasar = { x: g.asalX + (e.clientX - g.dx) / zoom, y: g.asalY + (e.clientY - g.dy) / zoom };
+      // Ditempelkan ke tepi kartu lain, atau ke kisi bila tidak ada yang dekat.
+      // Menyusun bagan dengan tangan tanpa magnet berarti selisih dua-tiga
+      // piksel yang tidak terlihat saat diperkecil, lalu terlihat semua begitu
+      // diperbesar — dan tidak ada yang mau merapikan enam puluh kartu.
+      const h = magnet(
+        kasar.x,
+        kasar.y,
+        tertata.filter((t) => t.id !== g.id).map((t) => ({ x: t.x, y: t.y })),
+      );
+      setPandu({ x: h.panduX, y: h.panduY });
+      setLokal((prev) => prev.map((s) => (s.id === g.id ? { ...s, posX: h.x, posY: h.y } : s)));
       return;
     }
     const p = sapu.current;
@@ -157,6 +198,7 @@ export function BaganOrganisasi({ simpul, bolehUbah }: { simpul: SimpulBagan[]; 
     const g = geser.current;
     geser.current = null;
     sapu.current = null;
+    setPandu({ x: null, y: null });
     if (!g) return;
     const s = lokal.find((x) => x.id === g.id);
     if (!s || (s.posX === g.asalX && s.posY === g.asalY)) return;
@@ -247,12 +289,15 @@ export function BaganOrganisasi({ simpul, bolehUbah }: { simpul: SimpulBagan[]; 
           <TombolTampilan aktif={tampilan === "level"} onClick={() => setTampilan("level")} ikon={Layers}>
             Per level
           </TombolTampilan>
-          <TombolTampilan aktif={tampilan === "kolom"} onClick={() => setTampilan("kolom")} ikon={Network}>
-            Bagan kolom
+          <TombolTampilan aktif={tampilan === "menurun"} onClick={() => setTampilan("menurun")} ikon={Network}>
+            Bagan
+          </TombolTampilan>
+          <TombolTampilan aktif={tampilan === "kolom"} onClick={() => setTampilan("kolom")} ikon={Columns3}>
+            Kolom
           </TombolTampilan>
         </div>
 
-        {tampilan === "kolom" && (
+        {tampilan !== "level" && (
           <div className="flex items-center gap-0.5 rounded-xl border border-border bg-background p-0.5">
             <Button
               variant="ghost"
@@ -279,13 +324,13 @@ export function BaganOrganisasi({ simpul, bolehUbah }: { simpul: SimpulBagan[]; 
               <Button
                 variant="ghost"
                 size="icon"
-                aria-label="Rapikan posisi"
+                aria-label="Rapikan otomatis"
                 onClick={async () => {
                   const res = await rapikanBaganAction();
                   if (res.error) toast.error(res.error);
                   else {
                     setLokal((prev) => prev.map((s) => ({ ...s, posX: null, posY: null })));
-                    toast.success("Posisi dikembalikan ke tata letak otomatis.");
+                    toast.success("Bagan dirapikan otomatis.");
                   }
                 }}
               >
@@ -326,7 +371,11 @@ export function BaganOrganisasi({ simpul, bolehUbah }: { simpul: SimpulBagan[]; 
             ref={gulir}
             className={cn(
               "relative overflow-auto bg-muted/20 bg-[radial-gradient(circle,var(--color-border)_1px,transparent_1px)] [background-size:24px_24px]",
-              layarPenuh ? "h-[calc(100vh-7.5rem)]" : "h-[34rem]",
+              layarPenuh
+                ? "h-[calc(100vh-7.5rem)]"
+                : penuhLayar
+                  ? "h-[calc(100vh-13rem)] min-h-[32rem]"
+                  : "h-[34rem]",
             )}
             onPointerDown={(e) => {
               if ((e.target as HTMLElement).dataset.kanvas === "1") {
@@ -388,7 +437,7 @@ export function BaganOrganisasi({ simpul, bolehUbah }: { simpul: SimpulBagan[]; 
                   <div
                     key={s.id}
                     className="absolute"
-                    style={{ left: s.x + 32, top: s.y + 32, width: LEBAR_KOLOM, height: TINGGI_KOLOM }}
+                    style={{ left: s.x + 32, top: s.y + 32, width: lebarKartu, height: tinggiKartu }}
                     onPointerDown={(e) => {
                       if (!bolehUbah) return;
                       (e.target as HTMLElement).setPointerCapture?.(e.pointerId);
@@ -398,7 +447,7 @@ export function BaganOrganisasi({ simpul, bolehUbah }: { simpul: SimpulBagan[]; 
                     <KartuRole
                       simpul={s}
                       namaInduk={namaInduk}
-                      padat
+                      padat={!menurun}
                       dipilih={dipilih === s.id}
                       redup={!!disorot && !disorot.has(s.id)}
                       bawahan={jumlahKeturunan(lokal, s.id)}
@@ -417,10 +466,33 @@ export function BaganOrganisasi({ simpul, bolehUbah }: { simpul: SimpulBagan[]; 
                   </div>
                 );
               })}
+              {/* Garis bantu magnet — muncul hanya selama kartunya menempel,
+                  dan hilang begitu dilepas. Garis bantu yang menetap berubah
+                  jadi kisi permanen yang justru menambah kebisingan. */}
+              {pandu.x !== null && (
+                <span
+                  className="pointer-events-none absolute top-0 w-px bg-sky-500/70"
+                  style={{ left: pandu.x + 32, height: ukuran.tinggi + 64 }}
+                />
+              )}
+              {pandu.y !== null && (
+                <span
+                  className="pointer-events-none absolute left-0 h-px bg-sky-500/70"
+                  style={{ top: pandu.y + 32, width: ukuran.lebar + 64 }}
+                />
+              )}
             </div>
           </div>
 
-          <PetaKecil tertata={tertata} ukuran={ukuran} disorot={disorot} gulir={gulir} zoom={zoom} />
+          <PetaKecil
+            tertata={tertata}
+            ukuran={ukuran}
+            disorot={disorot}
+            gulir={gulir}
+            zoom={zoom}
+            lebarKartu={lebarKartu}
+            tinggiKartu={tinggiKartu}
+          />
         </div>
       )}
 
@@ -446,9 +518,9 @@ export function BaganOrganisasi({ simpul, bolehUbah }: { simpul: SimpulBagan[]; 
             </span>
           ))}
         </span>
-        {tampilan === "kolom" && (
+        {tampilan !== "level" && (
           <span className="ml-auto hidden lg:block">
-            Klik kartu untuk menyorot jalurnya · Ctrl+scroll zoom · seret area kosong untuk menggeser
+            Klik kartu untuk menyorot jalurnya · geser kartu menempel otomatis · Ctrl+scroll zoom
           </span>
         )}
       </div>
@@ -484,12 +556,16 @@ function PetaKecil({
   disorot,
   gulir,
   zoom,
+  lebarKartu,
+  tinggiKartu,
 }: {
   tertata: { id: string; x: number; y: number; level: number | null }[];
   ukuran: { lebar: number; tinggi: number };
   disorot: Set<string> | null;
   gulir: React.RefObject<HTMLDivElement | null>;
   zoom: number;
+  lebarKartu: number;
+  tinggiKartu: number;
 }) {
   const LEBAR = 168;
   const skala = LEBAR / Math.max(ukuran.lebar, 1);
@@ -515,8 +591,8 @@ function PetaKecil({
           style={{
             left: s.x * skala,
             top: s.y * skala,
-            width: Math.max(LEBAR_KOLOM * skala, 2),
-            height: Math.max(TINGGI_KOLOM * skala, 1.5),
+            width: Math.max(lebarKartu * skala, 2),
+            height: Math.max(tinggiKartu * skala, 1.5),
             background: warna(s.level).pekat,
             opacity: !disorot || disorot.has(s.id) ? 0.85 : 0.15,
           }}

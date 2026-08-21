@@ -30,6 +30,7 @@ export type MenuKey =
   | "hcmos"
   | "hcmos_raci"
   | "hc_struktur"
+  | "hc_bagan"
   | "hc_karyawan"
   | "hc_culture"
   | "hc_sop"
@@ -137,7 +138,12 @@ export const NAV_MENUS: Omit<NavItem, "section" | "group" | "groupIcon">[] = [
   { key: "elearning_admin", label: "Kelola E-Learning", href: "/elearning/kelola", icon: "LibraryBig" },
   { key: "hcmos", label: "Dashboard HC-MOS", href: "/hc-mos", icon: "LayoutDashboard" },
   { key: "hcmos_raci", label: "Matriks RACI", href: "/hc-mos/raci", icon: "Table2" },
-  { key: "hc_struktur", label: "Struktur Organisasi", href: "/hc-mos/struktur", icon: "Building2" },
+  // Bagan organisasi berdiri sendiri, bukan seksi di dalam halaman lain:
+  // ia dipakai layar penuh dan berlama-lama, sementara halaman di sebelahnya
+  // dibaca sekilas. Menumpuk keduanya berarti yang satu selalu mengganggu
+  // yang lain.
+  { key: "hc_bagan", label: "Struktur Organisasi", href: "/hc-mos/bagan", icon: "Network" },
+  { key: "hc_struktur", label: "Profil Organisasi", href: "/hc-mos/struktur", icon: "Building2" },
   { key: "hc_karyawan", label: "Database Karyawan", href: "/hc-mos/karyawan", icon: "Database" },
   { key: "hc_culture", label: "Culture & Value", href: "/hc-mos/dokumen?jenis=culture", icon: "HeartHandshake" },
   // Satu izin untuk seluruh SOP; tautannya berbeda per pilar lewat baris
@@ -258,7 +264,7 @@ export const ROLE_MENUS: Record<Role, MenuKey[]> = {
   bar_rnd: ["hpp_dash", "work", "hpp", "hpp_db", "hpp_bahan", "hpp_price", "hpp_comp", "assessment"],
   kitchen_rnd: ["hpp_dash", "work", "hpp", "hpp_db", "hpp_bahan", "hpp_price", "hpp_comp", "assessment"],
   coordinator_rnd: ["hpp_dash", "work", "hpp", "hpp_db", "hpp_bahan", "hpp_price", "hpp_comp", "assessment"],
-  legal: ["work", "hcmos", "hcmos_raci", "hc_struktur", "hc_karyawan", "hc_culture", "hc_sop", "hc_rekrutmen", "hc_kompetensi", "hc_modul", "hc_faststart", "hc_pretest", "hc_selflearning", "hc_kinerja", "hc_appraisal", "hc_intervensi", "hc_career", "hc_kompensasi", "hc_relasi", "hc_compliance", "hc_kebijakan", "hc_monitoring", "hc_kpi", "hc_kontrak", "hc_review", "hc_reqreview", "hc_training", "assessment", "elearning"], // HRD — seluruh kerangka HC-MOS
+  legal: ["work", "hcmos", "hcmos_raci", "hc_bagan", "hc_struktur", "hc_karyawan", "hc_culture", "hc_sop", "hc_rekrutmen", "hc_kompetensi", "hc_modul", "hc_faststart", "hc_pretest", "hc_selflearning", "hc_kinerja", "hc_appraisal", "hc_intervensi", "hc_career", "hc_kompensasi", "hc_relasi", "hc_compliance", "hc_kebijakan", "hc_monitoring", "hc_kpi", "hc_kontrak", "hc_review", "hc_reqreview", "hc_training", "assessment", "elearning"], // HRD — seluruh kerangka HC-MOS
   assessor: ["assessment"], // division Head / evaluator — assessment only
   member: ["assessment"], // HO staff — assessment; other access via `department`
 };
@@ -400,6 +406,7 @@ export const DIVISION_GROUPS: Partial<Record<Division, NavGroupDef[]>> = {
       icon: "Network",
       urutan: 1,
       menus: [
+        "hc_bagan",
         "hc_struktur",
         "hc_karyawan",
         // Antrian dokumen memang milik HC-MOS, bukan menu HC yang berdiri
@@ -498,7 +505,7 @@ export const DIVISION_MENUS: { division: Division; menus: MenuKey[] }[] = [
   // penyaringnya di `complaintCategoryScope`, dan memasukkan komplain tetap
   // milik Marketing Communication.
   { division: "Product Development & Quality", menus: ["hpp_dash", "work", "hpp", "hpp_db", "hpp_bahan", "hpp_price", "hpp_comp", "complaints"] },
-  { division: "Human Capital", menus: ["work", "hcmos", "hcmos_raci", "hc_struktur", "hc_karyawan", "hc_culture", "hc_sop", "hc_rekrutmen", "hc_kompetensi", "hc_modul", "hc_faststart", "hc_pretest", "hc_selflearning", "hc_kinerja", "hc_appraisal", "hc_intervensi", "hc_career", "hc_kompensasi", "hc_relasi", "hc_compliance", "hc_kebijakan", "hc_monitoring", "hc_kpi", "hc_kontrak", "hc_review", "hc_reqreview", "hc_training", "assessment", "elearning"] },
+  { division: "Human Capital", menus: ["work", "hcmos", "hcmos_raci", "hc_bagan", "hc_struktur", "hc_karyawan", "hc_culture", "hc_sop", "hc_rekrutmen", "hc_kompetensi", "hc_modul", "hc_faststart", "hc_pretest", "hc_selflearning", "hc_kinerja", "hc_appraisal", "hc_intervensi", "hc_career", "hc_kompensasi", "hc_relasi", "hc_compliance", "hc_kebijakan", "hc_monitoring", "hc_kpi", "hc_kontrak", "hc_review", "hc_reqreview", "hc_training", "assessment", "elearning"] },
   // New department-aligned divisions — Work Tracker only for now.
   { division: "Finance", menus: ["work", "fin_training"] },
   { division: "Creative", menus: ["work", "creative_design"] },
