@@ -25,8 +25,20 @@ export const TABEL_HCMOS = {
   hc_career_paths: ["jabatan", "level", "scope", "jabatan_berikutnya", "syarat", "masa_minimum_bulan"],
   hc_succession: ["posisi", "pemegang", "kandidat", "kesiapan", "catatan"],
   hc_leaves: ["nama", "scope", "outlet_id", "jenis", "tgl_mulai", "tgl_selesai", "alasan", "status", "disetujui_oleh"],
-  hc_payroll: ["periode", "nama", "scope", "outlet_id", "gaji_pokok", "tunjangan", "lembur", "potongan", "catatan"],
-  hc_benefits: ["nama", "scope", "outlet_id", "bpjs_kesehatan", "bpjs_tk", "status", "tgl_daftar", "catatan"],
+  // `sumber` memisahkan Office dari Warehouse, `status` menandai apakah baris
+  // itu sudah diproses — dua-duanya dari migrasi 0058.
+  hc_payroll: [
+    "periode", "nama", "scope", "outlet_id", "sumber",
+    "gaji_pokok", "tunjangan", "lembur", "potongan", "status", "catatan",
+  ],
+  // `status` lama sengaja tidak ada di sini: statusnya kini per program
+  // (`status_tk`, `status_kes`), dan menyimpan rangkumannya sekali lagi berarti
+  // ada dua kebenaran yang bisa berbeda.
+  hc_benefits: [
+    "nama", "scope", "outlet_id", "bpjs_kesehatan", "bpjs_tk",
+    "status_tk", "status_kes", "tgl_masuk", "tgl_daftar", "catatan",
+  ],
+  hc_benefit_programs: ["program", "scope", "peserta", "target", "catatan"],
   hc_salary_grades: ["golongan", "jabatan", "scope", "gaji_min", "gaji_max", "tunjangan"],
   hc_cases: [
     "jenis", "nama", "jabatan", "scope", "outlet_id", "kategori", "tanggal", "ringkasan", "tindakan", "status",
@@ -57,6 +69,7 @@ export const URUTAN_HCMOS: Record<TabelHcmos, { kolom: string; naik: boolean }> 
   hc_leaves: { kolom: "tgl_mulai", naik: false },
   hc_payroll: { kolom: "periode", naik: false },
   hc_benefits: { kolom: "nama", naik: true },
+  hc_benefit_programs: { kolom: "program", naik: true },
   hc_salary_grades: { kolom: "golongan", naik: true },
   hc_cases: { kolom: "tanggal", naik: false },
   hc_appraisal_sessions: { kolom: "tanggal", naik: false },

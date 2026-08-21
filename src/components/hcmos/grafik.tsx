@@ -35,6 +35,15 @@ const WARNA = ["#3b82f6", "#f59e0b", "#06b6d4", "#8b5cf6", "#10b981", "#f43f5e",
 export interface TitikData {
   nama: string;
   nilai: number;
+  /**
+   * Warna khusus untuk bagian ini.
+   *
+   * Bawaannya palet berputar, dan itu benar untuk kategori yang setara —
+   * warnanya cuma pembeda. Tapi ada donat yang warnanya BERARTI: "sudah
+   * terdaftar" hijau, "belum terdaftar" merah. Di situ warna yang diputar
+   * sembarang justru menyesatkan.
+   */
+  warna?: string;
 }
 
 function Bingkai({
@@ -439,7 +448,7 @@ export function GrafikDonat({
   const [aktifKey, setAktifKey] = React.useState<string | null>(null);
 
   const slices = React.useMemo(
-    () => data.filter((d) => d.nilai > 0).map((d, i) => ({ ...d, warna: WARNA[i % WARNA.length] })),
+    () => data.filter((d) => d.nilai > 0).map((d, i) => ({ ...d, warna: d.warna ?? WARNA[i % WARNA.length] })),
     [data],
   );
   const total = slices.reduce((a, s) => a + s.nilai, 0);
