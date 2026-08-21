@@ -13,6 +13,10 @@ import { StatTile } from "@/components/ui/stat";
 import { GrafikBatang } from "@/components/hcmos/grafik";
 import { DIVISI_KANTOR, JENJANG_OUTLET, kelompokDari } from "@/lib/hcmos/struktur";
 import { brandOutlet } from "@/lib/hcmos/kontrak";
+import { getUserDepartments } from "@/lib/data/user-departments";
+import { bolehUbahHc } from "@/lib/hcmos/akses";
+import { BaganOrganisasi } from "@/components/hcmos/bagan-organisasi";
+import type { SimpulBagan } from "@/lib/hcmos/bagan";
 
 export const metadata: Metadata = { title: "Struktur Organisasi — HC-MOS" };
 
@@ -51,15 +55,26 @@ export default async function StrukturPage() {
     .map(([nama, nilai]) => ({ nama, nilai }))
     .sort((a, b) => b.nilai - a.nilai);
 
-  // Rincian: departemen → orang, dan area → outlet → supervisor.
-  const perDep = new Map<string, { jabatan: string; nama: string }[]>();
+  // Bagan organisasi: daftar posisinya dari User Management, jumlah orangnya
+  // dihitung dari profil aktif. Angka yang diketik di bagan akan berhenti
+  // berubah saat orangnya bertambah, dan tidak ada yang menyadarinya sampai
+  // seseorang membandingkannya dengan User Management.
+  const orangPerDep = new Map<string, number>();
   for (const u of users) {
-    const dep = (u.department ?? "").trim() || "Tanpa Departemen";
-    perDep.set(dep, [...(perDep.get(dep) ?? []), { jabatan: (u.jabatan ?? "").trim() || "—", nama: u.name }]);
+    const dep = (u.department ?? "").trim();
+    if (dep) orangPerDep.set(dep, (orangPerDep.get(dep) ?? 0) + 1);
   }
-  const departemen = [...perDep.entries()]
-    .map(([nama, orang]) => ({ nama, orang: orang.sort((a, b) => a.nama.localeCompare(b.nama, "id")) }))
-    .sort((a, b) => b.orang.length - a.orang.length);
+  const simpulBagan: SimpulBagan[] = (await getUserDepartments()).map((d) => ({
+    id: d.id,
+    nama: d.name,
+    level: d.level,
+    parentId: d.parentId,
+    urutan: d.urutan,
+    posX: d.posX,
+    posY: d.posY,
+    jumlahOrang: orangPerDep.get(d.name) ?? 0,
+    jabatan: d.jabatan,
+  }));
 
   const perArea = areas
     .map((a) => ({
@@ -199,29 +214,21 @@ export default async function StrukturPage() {
         </CardContent>
       </Card>
 
-      {/* ── Rincian orang & cabang ──────────────────────────────────────── */}
-      <h2 className="mb-2.5 text-sm font-semibold text-foreground">Rincian Manajemen per Departemen</h2>
-      <div className="mb-6 grid grid-cols-[minmax(0,1fr)] gap-3 lg:grid-cols-2">
-        {departemen.map((d) => (
-          <Card key={d.nama}>
-            <CardHeader className="pb-2">
-              <CardTitle className="flex items-center justify-between gap-2">
-                <span className="truncate">{d.nama}</span>
-                <Badge tone="neutral">{d.orang.length} orang</Badge>
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <ul className="space-y-1.5">
-                {d.orang.map((o, i) => (
-                  <li key={`${o.nama}-${i}`} className="flex items-baseline justify-between gap-3 text-sm">
-                    <span className="truncate text-foreground">{o.nama}</span>
-                    <span className="shrink-0 text-[11px] text-muted-foreground">{o.jabatan}</span>
-                  </li>
-                ))}
-              </ul>
-            </CardContent>
-          </Card>
-        ))}
+      {/* ── Bagan struktur organisasi ───────────────────────────────────
+          Menggantikan daftar "Rincian Manajemen per Departemen" yang lama.
+          Daftar itu menjawab "siapa saja di departemen ini", pertanyaan yang
+          sudah dijawab User Management. Yang tidak terjawab di mana pun adalah
+          "siapa melapor ke siapa" — dan itu justru yang paling sering
+          ditanyakan orang baru. */}
+      <h2 className="mb-2.5 flex items-center gap-2 text-sm font-semibold text-foreground">
+        <Network className="size-4 text-muted-foreground" /> Bagan Struktur Organisasi
+      </h2>
+      <p className="mb-3 max-w-3xl text-[12px] leading-relaxed text-muted-foreground">
+        Posisinya diambil dari daftar departemen di User Management — tambah departemen di sana,
+        kotaknya muncul di sini. Level dan garis pelaporannya disusun sendiri lewat Human Capital.
+      </p>
+      <div className="mb-6">
+        <BaganOrganisasi simpul={simpulBagan} bolehUbah={bolehUbahHc(user)} />
       </div>
 
       <h2 className="mb-2.5 flex items-center gap-2 text-sm font-semibold text-foreground">
