@@ -140,6 +140,18 @@ export interface SimpulTertata extends SimpulBagan {
   y: number;
   /** Kedalaman baris di bagan — dipakai untuk animasi bertahap. */
   kedalaman: number;
+  /**
+   * Ditempatkan sebagai TUMPUKAN di dalam kolom divisinya (Level 4 ke bawah),
+   * bukan sebagai anggota baris mendatar (Level 1–3).
+   *
+   * Dicatat saat menata, bukan ditebak belakangan dari posisinya. Menebaknya
+   * dari posisi pernah membuat kesalahan yang kelihatan jelas: Legal berada di
+   * kanan-bawah Managing Director, jadi ia dikira tumpukan kolom dan garisnya
+   * masuk dari SISI KIRI kartunya, padahal ia anggota baris mendatar yang
+   * garisnya harus masuk dari tengah atas — sama seperti Executive Assistant di
+   * kiri yang kebetulan lolos karena posisinya di kiri.
+   */
+  dalamKolom: boolean;
 }
 
 /**
@@ -252,7 +264,9 @@ export function tataKolom(simpul: SimpulBagan[], terlipat: ReadonlySet<string> =
   const tumpuk = (s: SimpulBagan, x: number, y: number, dalam: number): number => {
     if (dilihat.has(s.id)) return y;
     dilihat.add(s.id);
-    hasil.push({ ...s, x: s.posX ?? x, y: s.posY ?? y, kedalaman: dalam });
+    // `dalam > 2` — kepala kolom (Level 3) sendiri anggota baris mendatar;
+    // yang menumpuk adalah keturunannya.
+    hasil.push({ ...s, x: s.posX ?? x, y: s.posY ?? y, kedalaman: dalam, dalamKolom: dalam > 2 });
     let bawah = y + TINGGI_KOLOM + SELA_Y;
     if (terlipat.has(s.id)) {
       tandaiKeturunan(s.id);
@@ -294,7 +308,7 @@ export function tataKolom(simpul: SimpulBagan[], terlipat: ReadonlySet<string> =
         .map((a) => xKolom.get(a.id))
         .filter((v): v is number => v !== undefined);
       const px = kolomAnak.length ? (Math.min(...kolomAnak) + Math.max(...kolomAnak)) / 2 : kx;
-      hasil.push({ ...s, x: s.posX ?? px, y: s.posY ?? y, kedalaman: dalam });
+      hasil.push({ ...s, x: s.posX ?? px, y: s.posY ?? y, kedalaman: dalam, dalamKolom: false });
       kx += LEBAR_KOLOM + SELA_X;
     }
   };
@@ -307,7 +321,7 @@ export function tataKolom(simpul: SimpulBagan[], terlipat: ReadonlySet<string> =
   for (const s of simpul) {
     if (dilihat.has(s.id)) continue;
     dilihat.add(s.id);
-    hasil.push({ ...s, x: s.posX ?? xSisa, y: s.posY ?? -(TINGGI_KOLOM + SELA_TIER), kedalaman: 0 });
+    hasil.push({ ...s, x: s.posX ?? xSisa, y: s.posY ?? -(TINGGI_KOLOM + SELA_TIER), kedalaman: 0, dalamKolom: false });
     xSisa += LEBAR_KOLOM + SELA_X;
   }
   return hasil;
@@ -328,7 +342,7 @@ export function garisKolom(tertata: SimpulTertata[]): GarisBagan[] {
   for (const s of tertata) {
     const induk = s.parentId ? peta.get(s.parentId) : null;
     if (!induk) continue;
-    const menumpuk = s.x > induk.x && s.y > induk.y + TINGGI_KOLOM / 2;
+    const menumpuk = s.dalamKolom;
     garis.push(
       menumpuk
         ? {

@@ -4,6 +4,7 @@ import {
   LEBAR_KOLOM,
   bolehJadiAtasan,
   cocok,
+  garisKolom,
   inisialDari,
   jumlahKeturunan,
   magnet,
@@ -206,6 +207,49 @@ describe("tataKolom", () => {
 
   it("seluruh simpul tergambar, tidak ada yang hilang", () => {
     expect(tataKolom(pohon)).toHaveLength(pohon.length);
+  });
+});
+
+describe("garisKolom", () => {
+  const pohon = [
+    s("md", { level: 1 }),
+    s("kiri", { level: 2, parentId: "md", urutan: 1 }),
+    s("kanan", { level: 2, parentId: "md", urutan: 2 }),
+    s("divisi", { level: 3, parentId: "md" }),
+    s("unit", { level: 4, parentId: "divisi" }),
+  ];
+  const garis = garisKolom(tataKolom(pohon));
+  const ke = (id: string) => garis.find((g) => g.ke === id)!;
+
+  it("anggota baris mendatar SELALU disambung dari tengah atas — kiri maupun KANAN", () => {
+    // Inilah yang dulu salah: yang di kanan induk dikira tumpukan kolom, jadi
+    // garisnya masuk dari sisi kiri kartunya, bukan dari tengah atasnya.
+    expect(ke("kiri").bentuk).toBe("tier");
+    expect(ke("kanan").bentuk).toBe("tier");
+    expect(ke("divisi").bentuk).toBe("tier");
+  });
+
+  it("kanan dan kiri diperlakukan persis sama", () => {
+    const t = tataKolom(pohon);
+    const [kiri, kanan, md] = ["kiri", "kanan", "md"].map((id) => t.find((n) => n.id === id)!);
+    expect(kiri.x).toBeLessThan(md.x);
+    expect(kanan.x).toBeGreaterThan(md.x);
+    expect(ke("kiri").bentuk).toBe(ke("kanan").bentuk);
+  });
+
+  it("garis tier berakhir di TENGAH ATAS kartu anaknya", () => {
+    const t = tataKolom(pohon);
+    const kanan = t.find((n) => n.id === "kanan")!;
+    expect(ke("kanan").x2).toBe(kanan.x + LEBAR_KOLOM / 2);
+    expect(ke("kanan").y2).toBe(kanan.y);
+  });
+
+  it("hanya keturunan di dalam kolom yang memakai tulang", () => {
+    expect(ke("unit").bentuk).toBe("tulang");
+  });
+
+  it("akar tanpa induk tidak menghasilkan garis menggantung", () => {
+    expect(garis.some((g) => g.ke === "md")).toBe(false);
   });
 });
 
