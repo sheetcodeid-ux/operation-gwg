@@ -5,43 +5,39 @@ import {
   ChevronRight,
   Expand,
   FoldVertical,
-  Columns3,
   Layers,
   Maximize2,
   Minimize2,
   Minus,
+  MousePointerSquareDashed,
   Network,
   Plus,
-  RotateCcw,
-  Search,
+  Sparkles,
   UnfoldVertical,
   Users,
   X,
 } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
+import { Combobox } from "@/components/ui/combobox";
 import { Input } from "@/components/ui/input";
 import { rapikanBaganAction, simpanPenempatanAction } from "@/lib/actions/bagan";
 import {
   LEBAR_KOLOM,
-  LEBAR_TEGAK,
-  TINGGI_TEGAK,
   LEVEL_MAX,
   NAMA_LEVEL,
   TINGGI_KOLOM,
   bolehJadiAtasan,
   cocok,
   garisKolom,
-  garisMenurun,
-  magnet,
   inisialDari,
   jumlahKeturunan,
+  magnet,
   perLevel,
   rantaiKeAtas,
   silsilah,
   simpulBercabang,
   tataKolom,
-  tataMenurun,
   ukuranKanvas,
   type SimpulBagan,
 } from "@/lib/hcmos/bagan";
@@ -50,25 +46,21 @@ import { cn } from "@/lib/utils";
 /**
  * Bagan struktur organisasi.
  *
- * Bagan enam puluh kotak punya satu masalah yang tidak dimiliki bagan sepuluh
- * kotak: begitu semuanya tergambar, tidak ada satu pun yang menonjol. Karena
- * itu yang ditambahkan di sini bukan hiasan melainkan cara MEMPERSEMPIT —
+ * Satu bentuk bagan saja, dan itu disengaja: kolom per divisi, keturunan
+ * menumpuk lurus ke bawah di dalam kolomnya. Sempat ada bentuk kedua
+ * (indentasi), lalu dibuang — dua bentuk untuk satu data berarti dua tempat
+ * bagi orang untuk menyusun, dan susunan yang dibuat di satu bentuk tidak
+ * terbaca di bentuk lain.
  *
- *  • SOROT SILSILAH. Menunjuk satu kotak akan menyalakan jalurnya ke puncak
- *    beserta seluruh bawahannya, dan meredupkan sisanya. Pertanyaan yang
- *    sebenarnya dibawa orang ke bagan bukan "kotak ini apa" melainkan "kotak
- *    ini bagian dari jalur yang mana".
- *  • JEJAK. Rantai atasan ditulis sebagai remah di batang alat, jadi jalurnya
- *    tetap terbaca meski kotak induknya sedang di luar layar.
- *  • LIPAT. Cabang yang tidak sedang dilihat bisa ditutup, dan tombolnya
- *    menyebut berapa yang disembunyikan — bukan cuma tanda panah.
- *  • PETA KECIL. Pada 61 kotak, penggeser layar tidak memberi tahu di mana
- *    posisi kita; peta kecil memberi tahu.
+ * Bagan enam puluh kotak punya masalah yang tidak dimiliki bagan sepuluh
+ * kotak: begitu semuanya tergambar, tidak ada satu pun yang menonjol. Karena
+ * itu yang ada di sini bukan hiasan melainkan cara MEMPERSEMPIT — sorot
+ * silsilah, jejak, lipat cabang, peta kecil, dan seleksi jamak.
  */
 
 const WARNA: Record<number, { pekat: string; muda: string; lembut: string }> = {
-  1: { pekat: "#7c3aed", muda: "#a78bfa", lembut: "#f3f0ff" },
-  2: { pekat: "#2563eb", muda: "#60a5fa", lembut: "#eff5ff" },
+  1: { pekat: "#7c3aed", muda: "#a78bfa", lembut: "#f5f3ff" },
+  2: { pekat: "#2563eb", muda: "#60a5fa", lembut: "#eff6ff" },
   3: { pekat: "#0891b2", muda: "#22d3ee", lembut: "#ecfeff" },
   4: { pekat: "#059669", muda: "#34d399", lembut: "#ecfdf5" },
   5: { pekat: "#d97706", muda: "#fbbf24", lembut: "#fffbeb" },
@@ -80,23 +72,15 @@ const warna = (level: number | null) => (level && WARNA[level]) || NETRAL;
 const ZOOM_MIN = 0.2;
 const ZOOM_MAX = 2;
 
-export function BaganOrganisasi({
-  simpul,
-  bolehUbah,
-  penuhLayar,
-}: {
-  simpul: SimpulBagan[];
-  bolehUbah: boolean;
-  /** Halaman khusus bagan: kanvasnya mengikuti tinggi layar, bukan kotak pendek. */
-  penuhLayar?: boolean;
-}) {
-  const [tampilan, setTampilan] = React.useState<"level" | "menurun" | "kolom">("menurun");
+export function BaganOrganisasi({ simpul, bolehUbah }: { simpul: SimpulBagan[]; bolehUbah: boolean }) {
+  const [tampilan, setTampilan] = React.useState<"level" | "bagan">("bagan");
   const [cari, setCari] = React.useState("");
-  const [dipilih, setDipilih] = React.useState<string | null>(null);
+  const [pilihan, setPilihan] = React.useState<Set<string>>(new Set());
   const [terlipat, setTerlipat] = React.useState<Set<string>>(new Set());
   const [zoom, setZoom] = React.useState(0.55);
   const [layarPenuh, setLayarPenuh] = React.useState(false);
   const [lokal, setLokal] = React.useState(simpul);
+  const [daftarOrang, setDaftarOrang] = React.useState<{ simpul: SimpulBagan; jenis: "orang" | "bawahan" } | null>(null);
   const bingkai = React.useRef<HTMLDivElement>(null);
   const gulir = React.useRef<HTMLDivElement>(null);
 
@@ -106,25 +90,9 @@ export function BaganOrganisasi({
     setLokal(simpul);
   }
 
-  const menurun = tampilan === "menurun";
-  const lebarKartu = menurun ? LEBAR_TEGAK : LEBAR_KOLOM;
-  const tinggiKartu = menurun ? TINGGI_TEGAK : TINGGI_KOLOM;
-  const tertata = React.useMemo(
-    () => (menurun ? tataMenurun(lokal, terlipat) : tataKolom(lokal, terlipat)),
-    [menurun, lokal, terlipat],
-  );
-  const garis = React.useMemo(
-    () => (menurun ? garisMenurun(tertata) : garisKolom(tertata)),
-    [menurun, tertata],
-  );
-  const ukuran = React.useMemo(() => {
-    const u = ukuranKanvas(tertata);
-    // `ukuranKanvas` memakai ukuran kartu bagan kolom; pada tampilan menurun
-    // kartunya lebih lebar dan lebih pendek, jadi kanvasnya dikoreksi di sini.
-    return menurun
-      ? { lebar: u.lebar - LEBAR_KOLOM + LEBAR_TEGAK, tinggi: u.tinggi - TINGGI_KOLOM + TINGGI_TEGAK }
-      : u;
-  }, [tertata, menurun]);
+  const tertata = React.useMemo(() => tataKolom(lokal, terlipat), [lokal, terlipat]);
+  const garis = React.useMemo(() => garisKolom(tertata), [tertata]);
+  const ukuran = React.useMemo(() => ukuranKanvas(tertata), [tertata]);
   const namaInduk = React.useMemo(() => new Map(lokal.map((s) => [s.id, s.nama])), [lokal]);
   const hubungan = React.useMemo(
     () => lokal.filter((s) => s.parentId && lokal.some((x) => x.id === s.parentId)).length,
@@ -135,22 +103,19 @@ export function BaganOrganisasi({
     [lokal, cari],
   );
   const mencari = cari.trim() !== "";
+  const utama = pilihan.size === 1 ? [...pilihan][0] : null;
 
-  // Sorotan: kalau ada yang dipilih, jalurnya yang menyala; kalau tidak, hasil
-  // pencarian. Keduanya tidak pernah aktif bersamaan — dua sorotan di layar
-  // yang sama saling meniadakan artinya.
   const disorot = React.useMemo(() => {
-    if (dipilih) return silsilah(lokal, dipilih);
+    if (utama) return silsilah(lokal, utama);
+    if (pilihan.size > 1) return pilihan;
     if (mencari) return cocokIds;
     return null;
-  }, [dipilih, mencari, cocokIds, lokal]);
+  }, [utama, pilihan, mencari, cocokIds, lokal]);
 
-  const jejak = React.useMemo(
-    () => (dipilih ? rantaiKeAtas(lokal, dipilih).reverse() : []),
-    [dipilih, lokal],
-  );
+  const jejak = React.useMemo(() => (utama ? rantaiKeAtas(lokal, utama).reverse() : []), [utama, lokal]);
   const bercabang = React.useMemo(() => simpulBercabang(lokal), [lokal]);
   const semuaTerlipat = terlipat.size >= bercabang.length && bercabang.length > 0;
+  const terpilih = utama ? (lokal.find((s) => s.id === utama) ?? null) : null;
 
   const simpan = React.useCallback(
     async (input: Parameters<typeof simpanPenempatanAction>[0]) => {
@@ -165,26 +130,39 @@ export function BaganOrganisasi({
     [simpul],
   );
 
-  /* ── geser kartu & sapu kanvas ── */
-  const geser = React.useRef<{ id: string; dx: number; dy: number; asalX: number; asalY: number } | null>(null);
+  /* ── geser (satu kartu maupun beberapa sekaligus) ── */
+  const geser = React.useRef<{
+    dx: number;
+    dy: number;
+    asal: Map<string, { x: number; y: number }>;
+    utama: string;
+  } | null>(null);
   const sapu = React.useRef<{ x: number; y: number; kiri: number; atas: number } | null>(null);
   const [pandu, setPandu] = React.useState<{ x: number | null; y: number | null }>({ x: null, y: null });
 
   const saatGerak = (e: React.PointerEvent) => {
     const g = geser.current;
     if (g) {
-      const kasar = { x: g.asalX + (e.clientX - g.dx) / zoom, y: g.asalY + (e.clientY - g.dy) / zoom };
-      // Ditempelkan ke tepi kartu lain, atau ke kisi bila tidak ada yang dekat.
-      // Menyusun bagan dengan tangan tanpa magnet berarti selisih dua-tiga
-      // piksel yang tidak terlihat saat diperkecil, lalu terlihat semua begitu
-      // diperbesar — dan tidak ada yang mau merapikan enam puluh kartu.
+      const u = g.asal.get(g.utama)!;
+      const kasarX = u.x + (e.clientX - g.dx) / zoom;
+      const kasarY = u.y + (e.clientY - g.dy) / zoom;
+      // Magnet dihitung dari kartu UTAMA saja, lalu selisihnya diteruskan ke
+      // kartu lain yang ikut terpilih. Kalau tiap kartu bermagnet sendiri-
+      // sendiri, kelompoknya berantakan justru saat digeser bersama.
       const h = magnet(
-        kasar.x,
-        kasar.y,
-        tertata.filter((t) => t.id !== g.id).map((t) => ({ x: t.x, y: t.y })),
+        kasarX,
+        kasarY,
+        tertata.filter((t) => !g.asal.has(t.id)).map((t) => ({ x: t.x, y: t.y })),
       );
       setPandu({ x: h.panduX, y: h.panduY });
-      setLokal((prev) => prev.map((s) => (s.id === g.id ? { ...s, posX: h.x, posY: h.y } : s)));
+      const geserX = h.x - u.x;
+      const geserY = h.y - u.y;
+      setLokal((prev) =>
+        prev.map((s) => {
+          const a = g.asal.get(s.id);
+          return a ? { ...s, posX: a.x + geserX, posY: a.y + geserY } : s;
+        }),
+      );
       return;
     }
     const p = sapu.current;
@@ -200,9 +178,11 @@ export function BaganOrganisasi({
     sapu.current = null;
     setPandu({ x: null, y: null });
     if (!g) return;
-    const s = lokal.find((x) => x.id === g.id);
-    if (!s || (s.posX === g.asalX && s.posY === g.asalY)) return;
-    void simpan({ id: g.id, posX: s.posX, posY: s.posY });
+    const berubah = lokal.filter((s) => {
+      const a = g.asal.get(s.id);
+      return a && (s.posX !== a.x || s.posY !== a.y);
+    });
+    for (const s of berubah) void simpan({ id: s.id, posX: s.posX, posY: s.posY });
   };
 
   const muat = React.useCallback(() => {
@@ -218,41 +198,45 @@ export function BaganOrganisasi({
     return () => document.removeEventListener("fullscreenchange", ganti);
   }, []);
 
-  // Esc melepas pilihan — jalan keluar yang sama di setiap layar.
   React.useEffect(() => {
-    const tekan = (e: KeyboardEvent) => e.key === "Escape" && setDipilih(null);
+    const tekan = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        setPilihan(new Set());
+        setDaftarOrang(null);
+      }
+    };
     window.addEventListener("keydown", tekan);
     return () => window.removeEventListener("keydown", tekan);
   }, []);
 
-  const terpilih = lokal.find((s) => s.id === dipilih) ?? null;
+  const pilih = (id: string, tambah: boolean) =>
+    setPilihan((prev) => {
+      if (!tambah) return prev.size === 1 && prev.has(id) ? new Set() : new Set([id]);
+      const n = new Set(prev);
+      if (n.has(id)) n.delete(id);
+      else n.add(id);
+      return n;
+    });
 
   return (
     <div
       ref={bingkai}
-      className={cn(
-        "flex flex-col overflow-hidden rounded-2xl border border-border bg-card shadow-sm",
-        layarPenuh && "h-screen rounded-none",
-      )}
+      className="flex min-h-0 flex-1 flex-col overflow-hidden bg-card"
     >
       {/* ── batang alat ── */}
-      <div className="flex flex-wrap items-center gap-2 border-b border-border bg-gradient-to-b from-muted/40 to-transparent px-3 py-2.5">
-        <span className="grid size-10 shrink-0 place-items-center rounded-xl bg-gradient-to-br from-violet-500 to-indigo-600 text-white shadow-sm">
+      <div className="flex shrink-0 flex-wrap items-center gap-2 border-b border-border bg-gradient-to-b from-muted/50 to-transparent px-3 py-2.5">
+        <span className="grid size-10 shrink-0 place-items-center rounded-2xl bg-gradient-to-br from-violet-500 via-indigo-500 to-blue-600 text-white shadow-md shadow-indigo-500/20">
           <Network className="size-5" />
         </span>
         <div className="mr-auto min-w-0">
-          <p className="truncate text-sm font-semibold leading-tight text-foreground">Struktur Organisasi</p>
-          {/* Jejak menggantikan hitungan saat ada yang dipilih: yang dibutuhkan
-              saat itu bukan "berapa totalnya" melainkan "saya sedang di mana". */}
+          <p className="truncate text-[15px] font-semibold leading-tight tracking-tight text-foreground">
+            Struktur Organisasi
+          </p>
           {jejak.length > 0 ? (
             <p className="flex min-w-0 items-center gap-1 truncate text-[11px] leading-tight text-muted-foreground">
               {jejak.map((j) => (
                 <React.Fragment key={j.id}>
-                  <button
-                    type="button"
-                    onClick={() => setDipilih(j.id)}
-                    className="truncate hover:text-foreground hover:underline"
-                  >
+                  <button type="button" onClick={() => pilih(j.id, false)} className="truncate hover:text-foreground hover:underline">
                     {j.nama}
                   </button>
                   <ChevronRight className="size-3 shrink-0 opacity-50" />
@@ -262,24 +246,23 @@ export function BaganOrganisasi({
             </p>
           ) : (
             <p className="text-[11px] leading-tight text-muted-foreground">
-              {lokal.length} role · {hubungan} hubungan pelaporan
+              {pilihan.size > 1 ? `${pilihan.size} kartu terpilih` : `${lokal.length} role · ${hubungan} hubungan pelaporan`}
             </p>
           )}
         </div>
 
-        <div className="relative w-full sm:w-56">
-          <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+        <div className="relative order-last w-full sm:order-none sm:w-52">
           <Input
             value={cari}
             onChange={(e) => {
               setCari(e.target.value);
-              setDipilih(null);
+              setPilihan(new Set());
             }}
             placeholder="Cari role…"
-            className="h-9 pl-9 pr-14"
+            className="h-9 pr-14"
           />
           {mencari && (
-            <span className="absolute right-2.5 top-1/2 -translate-y-1/2 rounded-md bg-muted px-1.5 py-0.5 text-[10px] font-medium tabular-nums text-muted-foreground">
+            <span className="absolute right-2.5 top-1/2 -translate-y-1/2 rounded-md bg-muted px-1.5 py-0.5 text-[10px] font-semibold tabular-nums text-muted-foreground">
               {cocokIds.size}/{lokal.length}
             </span>
           )}
@@ -289,16 +272,31 @@ export function BaganOrganisasi({
           <TombolTampilan aktif={tampilan === "level"} onClick={() => setTampilan("level")} ikon={Layers}>
             Per level
           </TombolTampilan>
-          <TombolTampilan aktif={tampilan === "menurun"} onClick={() => setTampilan("menurun")} ikon={Network}>
+          <TombolTampilan aktif={tampilan === "bagan"} onClick={() => setTampilan("bagan")} ikon={Network}>
             Bagan
-          </TombolTampilan>
-          <TombolTampilan aktif={tampilan === "kolom"} onClick={() => setTampilan("kolom")} ikon={Columns3}>
-            Kolom
           </TombolTampilan>
         </div>
 
-        {tampilan !== "level" && (
-          <div className="flex items-center gap-0.5 rounded-xl border border-border bg-background p-0.5">
+        {tampilan === "bagan" && (
+          <div className="flex items-center gap-0.5 rounded-xl border border-border bg-background p-0.5 shadow-sm">
+            {bolehUbah && (
+              <Button
+                variant="ghost"
+                size="sm"
+                className="gap-1.5 px-2"
+                onClick={async () => {
+                  const res = await rapikanBaganAction();
+                  if (res.error) toast.error(res.error);
+                  else {
+                    setLokal((prev) => prev.map((s) => ({ ...s, posX: null, posY: null })));
+                    setTerlipat(new Set());
+                    toast.success("Bagan dirapikan mengikuti level dan urutannya.");
+                  }
+                }}
+              >
+                <Sparkles className="size-4" /> Rapikan
+              </Button>
+            )}
             <Button
               variant="ghost"
               size="icon"
@@ -320,23 +318,6 @@ export function BaganOrganisasi({
             <Button variant="ghost" size="sm" onClick={muat} className="gap-1.5 px-2">
               <Expand className="size-4" /> Fit
             </Button>
-            {bolehUbah && (
-              <Button
-                variant="ghost"
-                size="icon"
-                aria-label="Rapikan otomatis"
-                onClick={async () => {
-                  const res = await rapikanBaganAction();
-                  if (res.error) toast.error(res.error);
-                  else {
-                    setLokal((prev) => prev.map((s) => ({ ...s, posX: null, posY: null })));
-                    toast.success("Bagan dirapikan otomatis.");
-                  }
-                }}
-              >
-                <RotateCcw className="size-4" />
-              </Button>
-            )}
           </div>
         )}
 
@@ -355,37 +336,26 @@ export function BaganOrganisasi({
 
       {/* ── isi ── */}
       {tampilan === "level" ? (
-        <div className={cn("overflow-auto bg-muted/20 p-4", layarPenuh ? "flex-1" : "max-h-[34rem]")}>
+        <div className="min-h-0 flex-1 overflow-auto bg-muted/20 p-4">
           <TampilanLevel
             simpul={mencari ? lokal.filter((s) => cocokIds.has(s.id)) : lokal}
             semua={lokal}
             namaInduk={namaInduk}
-            dipilih={dipilih}
-            disorot={dipilih ? disorot : null}
-            onPilih={(id) => setDipilih((k) => (k === id ? null : id))}
+            pilihan={pilihan}
+            disorot={utama ? disorot : null}
+            onPilih={pilih}
+            onLihatOrang={(s, jenis) => setDaftarOrang({ simpul: s, jenis })}
           />
         </div>
       ) : (
-        <div className="relative">
+        <div className="relative min-h-0 flex-1">
           <div
             ref={gulir}
-            className={cn(
-              "relative overflow-auto bg-muted/20 bg-[radial-gradient(circle,var(--color-border)_1px,transparent_1px)] [background-size:24px_24px]",
-              layarPenuh
-                ? "h-[calc(100vh-7.5rem)]"
-                : penuhLayar
-                  ? "h-[calc(100vh-13rem)] min-h-[32rem]"
-                  : "h-[34rem]",
-            )}
+            className="absolute inset-0 overflow-auto bg-muted/20 bg-[radial-gradient(circle,var(--color-border)_1px,transparent_1px)] [background-size:24px_24px]"
             onPointerDown={(e) => {
               if ((e.target as HTMLElement).dataset.kanvas === "1") {
-                setDipilih(null);
-                sapu.current = {
-                  x: e.clientX,
-                  y: e.clientY,
-                  kiri: e.currentTarget.scrollLeft,
-                  atas: e.currentTarget.scrollTop,
-                };
+                if (!e.shiftKey) setPilihan(new Set());
+                sapu.current = { x: e.clientX, y: e.clientY, kiri: e.currentTarget.scrollLeft, atas: e.currentTarget.scrollTop };
               }
             }}
             onPointerMove={saatGerak}
@@ -399,7 +369,7 @@ export function BaganOrganisasi({
           >
             <div
               data-kanvas="1"
-              className="relative origin-top-left transition-transform duration-150"
+              className="relative origin-top-left"
               style={{ width: ukuran.lebar + 64, height: ukuran.tinggi + 64, transform: `scale(${zoom})` }}
             >
               <svg
@@ -423,157 +393,196 @@ export function BaganOrganisasi({
                         key={`${g.dari}-${g.ke}`}
                         d={d}
                         fill="none"
-                        strokeWidth={nyala && disorot ? 2 : 1.25}
-                        stroke={nyala && disorot ? warna(lokal.find((s) => s.id === g.ke)?.level ?? null).muda : "currentColor"}
-                        className={cn("text-border transition-opacity", !nyala && "opacity-20")}
+                        strokeWidth={nyala && disorot ? 2.5 : 1.25}
+                        strokeLinecap="round"
+                        stroke={nyala && disorot ? warna(lokal.find((s) => s.id === g.ke)?.level ?? null).pekat : "currentColor"}
+                        className={cn("text-border transition-opacity", !nyala && "opacity-15")}
                       />
                     );
                   })}
                 </g>
               </svg>
-              {tertata.map((s) => {
-                const anakLangsung = lokal.filter((x) => x.parentId === s.id).length;
-                return (
-                  <div
-                    key={s.id}
-                    className="absolute"
-                    style={{ left: s.x + 32, top: s.y + 32, width: lebarKartu, height: tinggiKartu }}
-                    onPointerDown={(e) => {
-                      if (!bolehUbah) return;
-                      (e.target as HTMLElement).setPointerCapture?.(e.pointerId);
-                      geser.current = { id: s.id, dx: e.clientX, dy: e.clientY, asalX: s.x, asalY: s.y };
-                    }}
-                  >
-                    <KartuRole
-                      simpul={s}
-                      namaInduk={namaInduk}
-                      padat={!menurun}
-                      dipilih={dipilih === s.id}
-                      redup={!!disorot && !disorot.has(s.id)}
-                      bawahan={jumlahKeturunan(lokal, s.id)}
-                      anakLangsung={anakLangsung}
-                      terlipat={terlipat.has(s.id)}
-                      onLipat={() =>
-                        setTerlipat((prev) => {
-                          const n = new Set(prev);
-                          if (n.has(s.id)) n.delete(s.id);
-                          else n.add(s.id);
-                          return n;
-                        })
-                      }
-                      onKlik={() => setDipilih((k) => (k === s.id ? null : s.id))}
-                    />
-                  </div>
-                );
-              })}
-              {/* Garis bantu magnet — muncul hanya selama kartunya menempel,
-                  dan hilang begitu dilepas. Garis bantu yang menetap berubah
-                  jadi kisi permanen yang justru menambah kebisingan. */}
+
+              {tertata.map((s) => (
+                <div
+                  key={s.id}
+                  className="absolute"
+                  style={{ left: s.x + 32, top: s.y + 32, width: LEBAR_KOLOM, height: TINGGI_KOLOM }}
+                  onPointerDown={(e) => {
+                    if (!bolehUbah) return;
+                    (e.target as HTMLElement).setPointerCapture?.(e.pointerId);
+                    // Menggeser kartu yang termasuk seleksi akan menggeser
+                    // SELURUH seleksi; menggeser kartu di luar seleksi memulai
+                    // geseran tunggal, seperti yang orang harapkan.
+                    const ikut = pilihan.has(s.id) ? [...pilihan] : [s.id];
+                    geser.current = {
+                      dx: e.clientX,
+                      dy: e.clientY,
+                      utama: s.id,
+                      asal: new Map(
+                        tertata.filter((t) => ikut.includes(t.id)).map((t) => [t.id, { x: t.x, y: t.y }]),
+                      ),
+                    };
+                  }}
+                >
+                  <KartuRole
+                    simpul={s}
+                    namaInduk={namaInduk}
+                    padat
+                    dipilih={pilihan.has(s.id)}
+                    redup={!!disorot && !disorot.has(s.id)}
+                    bawahan={jumlahKeturunan(lokal, s.id)}
+                    anakLangsung={lokal.filter((x) => x.parentId === s.id).length}
+                    terlipat={terlipat.has(s.id)}
+                    onLipat={() =>
+                      setTerlipat((prev) => {
+                        const n = new Set(prev);
+                        if (n.has(s.id)) n.delete(s.id);
+                        else n.add(s.id);
+                        return n;
+                      })
+                    }
+                    onKlik={(e) => pilih(s.id, e.shiftKey || e.metaKey || e.ctrlKey)}
+                    onLihatOrang={(jenis) => setDaftarOrang({ simpul: s, jenis })}
+                  />
+                </div>
+              ))}
+
+              {/* Garis bantu magnet — hanya selama menempel. Garis bantu yang
+                  menetap berubah jadi kisi permanen yang menambah kebisingan. */}
               {pandu.x !== null && (
-                <span
-                  className="pointer-events-none absolute top-0 w-px bg-sky-500/70"
-                  style={{ left: pandu.x + 32, height: ukuran.tinggi + 64 }}
-                />
+                <span className="pointer-events-none absolute top-0 w-px bg-sky-500" style={{ left: pandu.x + 32, height: ukuran.tinggi + 64 }} />
               )}
               {pandu.y !== null && (
-                <span
-                  className="pointer-events-none absolute left-0 h-px bg-sky-500/70"
-                  style={{ top: pandu.y + 32, width: ukuran.lebar + 64 }}
-                />
+                <span className="pointer-events-none absolute left-0 h-px bg-sky-500" style={{ top: pandu.y + 32, width: ukuran.lebar + 64 }} />
               )}
             </div>
           </div>
 
-          <PetaKecil
-            tertata={tertata}
-            ukuran={ukuran}
-            disorot={disorot}
-            gulir={gulir}
-            zoom={zoom}
-            lebarKartu={lebarKartu}
-            tinggiKartu={tinggiKartu}
-          />
+          <PetaKecil tertata={tertata} ukuran={ukuran} disorot={disorot} gulir={gulir} zoom={zoom} />
         </div>
       )}
 
-      {/* ── kaki ── */}
-      <div className="flex flex-wrap items-center gap-x-4 gap-y-2 border-t border-border px-3 py-2 text-[11px] text-muted-foreground">
-        <span
-          className={cn(
-            "rounded-md px-1.5 py-0.5 font-medium",
-            bolehUbah ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400" : "bg-muted",
-          )}
-        >
-          {bolehUbah ? "Bisa disusun" : "Mode hanya lihat"}
-        </span>
-        <span className="flex flex-wrap items-center gap-x-3 gap-y-1">
-          <span className="font-medium text-foreground">Legenda:</span>
-          {Array.from({ length: LEVEL_MAX }, (_, i) => i + 1).map((l) => (
-            <span key={l} className="flex items-center gap-1.5">
-              <span
-                className="size-2.5 rounded-full ring-2"
-                style={{ background: warna(l).pekat, "--tw-ring-color": warna(l).lembut } as React.CSSProperties}
-              />
-              Level {l}
-            </span>
-          ))}
-        </span>
-        {tampilan !== "level" && (
-          <span className="ml-auto hidden lg:block">
-            Klik kartu untuk menyorot jalurnya · geser kartu menempel otomatis · Ctrl+scroll zoom
-          </span>
-        )}
-      </div>
+      <LegendaLevel simpul={lokal} bolehUbah={bolehUbah} banyakDipilih={pilihan.size} />
 
       {terpilih && bolehUbah && (
         <PanelPenempatan
           simpul={terpilih}
           semua={lokal}
-          onTutup={() => setDipilih(null)}
+          onTutup={() => setPilihan(new Set())}
           onSimpan={async (patch) => {
             setLokal((prev) => prev.map((s) => (s.id === terpilih.id ? { ...s, ...patch } : s)));
             if (await simpan({ id: terpilih.id, ...patch })) toast.success("Penempatan tersimpan.");
           }}
         />
       )}
+
+      {daftarOrang && <DaftarOrang isi={daftarOrang} semua={lokal} onTutup={() => setDaftarOrang(null)} />}
+    </div>
+  );
+}
+
+/* ─────────────────────────────── legenda ─────────────────────────────── */
+
+/**
+ * Legenda level yang juga menyebut ISINYA.
+ *
+ * Legenda biasa hanya menerangkan arti warna — sesuatu yang jelas setelah
+ * dilihat sekali, lalu memakan tempat selamanya. Yang ini menyebut jumlah role
+ * dan jumlah orang tiap level, jadi ia tetap terpakai setelah warnanya hafal:
+ * baris ini sekaligus jawaban atas "organisasi ini gemuk di lapis mana".
+ */
+function LegendaLevel({
+  simpul,
+  bolehUbah,
+  banyakDipilih,
+}: {
+  simpul: SimpulBagan[];
+  bolehUbah: boolean;
+  banyakDipilih: number;
+}) {
+  const rekap = React.useMemo(() => {
+    const m = new Map<number, { role: number; orang: number }>();
+    for (const s of simpul) {
+      if (!s.level) continue;
+      const p = m.get(s.level) ?? { role: 0, orang: 0 };
+      m.set(s.level, { role: p.role + 1, orang: p.orang + s.jumlahOrang });
+    }
+    return m;
+  }, [simpul]);
+  const puncak = Math.max(1, ...[...rekap.values()].map((v) => v.role));
+
+  return (
+    <div className="flex shrink-0 flex-wrap items-center gap-x-3 gap-y-2 border-t border-border bg-gradient-to-t from-muted/40 to-transparent px-3 py-2">
+      <span
+        className={cn(
+          "shrink-0 rounded-lg px-2 py-1 text-[11px] font-semibold",
+          bolehUbah ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400" : "bg-muted text-muted-foreground",
+        )}
+      >
+        {bolehUbah ? "Bisa disusun" : "Mode hanya lihat"}
+      </span>
+
+      <div className="flex min-w-0 flex-1 flex-wrap items-center gap-1.5">
+        {Array.from({ length: LEVEL_MAX }, (_, i) => i + 1).map((l) => {
+          const w = warna(l);
+          const r = rekap.get(l) ?? { role: 0, orang: 0 };
+          return (
+            <span
+              key={l}
+              className="flex items-center gap-1.5 rounded-lg border border-border bg-card px-1.5 py-1"
+              title={`Level ${l} — ${NAMA_LEVEL[l]}: ${r.role} role, ${r.orang} orang`}
+            >
+              <span
+                className="grid size-5 shrink-0 place-items-center rounded-md text-[9px] font-bold text-white"
+                style={{ backgroundImage: `linear-gradient(135deg, ${w.pekat}, ${w.muda})` }}
+              >
+                {l}
+              </span>
+              <span className="hidden text-[10px] font-medium leading-none text-foreground md:block">{NAMA_LEVEL[l]}</span>
+              {/* Batang tipis sepanjang porsi role level ini — sebaran lapisan
+                  terbaca sekilas tanpa perlu membandingkan angka satu per satu. */}
+              <span className="hidden h-1 w-8 overflow-hidden rounded-full bg-muted lg:block">
+                <span className="block h-full rounded-full" style={{ width: `${(r.role / puncak) * 100}%`, background: w.pekat }} />
+              </span>
+              <span className="text-[10px] font-semibold tabular-nums leading-none text-muted-foreground">{r.role}</span>
+            </span>
+          );
+        })}
+      </div>
+
+      <span className="hidden shrink-0 items-center gap-1.5 text-[11px] text-muted-foreground xl:flex">
+        <MousePointerSquareDashed className="size-3.5" />
+        {banyakDipilih > 1
+          ? `${banyakDipilih} kartu terpilih — seret salah satunya untuk memindahkan semua`
+          : "Shift+klik untuk memilih beberapa · Ctrl+scroll zoom"}
+      </span>
     </div>
   );
 }
 
 /* ─────────────────────────────── peta kecil ─────────────────────────────── */
 
-/**
- * Peta kecil di pojok kanvas.
- *
- * Pada 61 kotak, batang penggulir tidak memberi tahu apa pun soal DI MANA kita
- * berada — ia hanya menyatakan sejauh apa sudah digulir. Peta kecil menjawabnya
- * langsung, dan sekaligus jadi cara melompat: klik di mana pun, kanvasnya
- * pindah ke sana.
- */
 function PetaKecil({
   tertata,
   ukuran,
   disorot,
   gulir,
   zoom,
-  lebarKartu,
-  tinggiKartu,
 }: {
   tertata: { id: string; x: number; y: number; level: number | null }[];
   ukuran: { lebar: number; tinggi: number };
   disorot: Set<string> | null;
   gulir: React.RefObject<HTMLDivElement | null>;
   zoom: number;
-  lebarKartu: number;
-  tinggiKartu: number;
 }) {
-  const LEBAR = 168;
+  const LEBAR = 176;
   const skala = LEBAR / Math.max(ukuran.lebar, 1);
-  const tinggi = Math.min(ukuran.tinggi * skala, 120);
+  const tinggi = Math.min(ukuran.tinggi * skala, 128);
 
   return (
     <div
-      className="pointer-events-auto absolute bottom-3 right-3 hidden overflow-hidden rounded-xl border border-border bg-card/90 shadow-md backdrop-blur sm:block"
+      className="pointer-events-auto absolute bottom-3 right-3 hidden overflow-hidden rounded-xl border border-border bg-card/85 shadow-lg backdrop-blur-sm sm:block"
       style={{ width: LEBAR, height: tinggi }}
       onClick={(e) => {
         const el = gulir.current;
@@ -591,10 +600,10 @@ function PetaKecil({
           style={{
             left: s.x * skala,
             top: s.y * skala,
-            width: Math.max(lebarKartu * skala, 2),
-            height: Math.max(tinggiKartu * skala, 1.5),
+            width: Math.max(LEBAR_KOLOM * skala, 2),
+            height: Math.max(TINGGI_KOLOM * skala, 1.5),
             background: warna(s.level).pekat,
-            opacity: !disorot || disorot.has(s.id) ? 0.85 : 0.15,
+            opacity: !disorot || disorot.has(s.id) ? 0.85 : 0.12,
           }}
         />
       ))}
@@ -641,6 +650,7 @@ function KartuRole({
   terlipat,
   onLipat,
   onKlik,
+  onLihatOrang,
 }: {
   simpul: SimpulBagan;
   namaInduk: Map<string, string>;
@@ -651,10 +661,12 @@ function KartuRole({
   anakLangsung?: number;
   terlipat?: boolean;
   onLipat?: () => void;
-  onKlik: () => void;
+  onKlik: (e: React.MouseEvent) => void;
+  onLihatOrang: (jenis: "orang" | "bawahan") => void;
 }) {
   const w = warna(simpul.level);
   const induk = simpul.parentId ? namaInduk.get(simpul.parentId) : null;
+  const pil = padat ? "px-1 py-px text-[7.5px]" : "px-2 py-0.5 text-[10px]";
 
   return (
     <div className="relative h-full w-full">
@@ -662,35 +674,27 @@ function KartuRole({
         role="button"
         tabIndex={0}
         onClick={onKlik}
-        onKeyDown={(e) => (e.key === "Enter" || e.key === " ") && onKlik()}
+        onKeyDown={(e) => (e.key === "Enter" || e.key === " ") && onKlik(e as unknown as React.MouseEvent)}
         className={cn(
           "group relative flex h-full w-full cursor-pointer overflow-hidden rounded-xl border bg-card text-left transition-all duration-150",
           dipilih
-            ? "border-transparent shadow-lg ring-2 ring-offset-2 ring-offset-background"
-            : "border-border shadow-sm hover:-translate-y-0.5 hover:shadow-md",
+            ? "border-transparent shadow-xl ring-2 ring-offset-2 ring-offset-background"
+            : "border-border shadow-sm hover:-translate-y-0.5 hover:shadow-lg",
           redup && "opacity-20 saturate-0",
         )}
         style={
           dipilih
-            ? ({ "--tw-ring-color": w.pekat, background: `linear-gradient(180deg, ${w.lembut}, transparent 60%)` } as React.CSSProperties)
+            ? ({ "--tw-ring-color": w.pekat, backgroundImage: `linear-gradient(180deg, ${w.lembut}, transparent 65%)` } as React.CSSProperties)
             : undefined
         }
       >
-        {/* Pita gradien di tepi kiri — penanda level yang tetap terbaca ketika
-            bagannya diperkecil sampai tulisannya hilang. */}
-        <span
-          className="absolute inset-y-0 left-0 w-1"
-          style={{ background: `linear-gradient(180deg, ${w.pekat}, ${w.muda})` }}
-        />
+        <span className="absolute inset-y-0 left-0 w-1" style={{ backgroundImage: `linear-gradient(180deg, ${w.pekat}, ${w.muda})` }} />
 
         <div className={cn("flex min-w-0 flex-1 flex-col", padat ? "gap-0.5 py-1.5 pl-3 pr-2" : "gap-1.5 py-3 pl-4 pr-3")}>
           <div className="flex min-w-0 items-start gap-2">
             <span
-              className={cn(
-                "grid shrink-0 place-items-center rounded-lg font-bold shadow-sm",
-                padat ? "size-6 text-[9px]" : "size-10 text-xs",
-              )}
-              style={{ background: `linear-gradient(135deg, ${w.pekat}, ${w.muda})`, color: "#fff" }}
+              className={cn("grid shrink-0 place-items-center rounded-lg font-bold text-white shadow-sm", padat ? "size-6 text-[9px]" : "size-10 text-xs")}
+              style={{ backgroundImage: `linear-gradient(135deg, ${w.pekat}, ${w.muda})` }}
             >
               {inisialDari(simpul.nama)}
             </span>
@@ -709,38 +713,40 @@ function KartuRole({
           )}
 
           <div className={cn("mt-auto flex items-center gap-1", padat ? "pt-0.5" : "border-t border-border/70 pt-2")}>
-            <span
-              className={cn("rounded-md font-bold", padat ? "px-1 py-px text-[7.5px]" : "px-2 py-0.5 text-[10px]")}
-              style={{ background: w.lembut, color: w.pekat }}
-            >
+            <span className={cn("rounded-md font-bold", pil)} style={{ background: w.lembut, color: w.pekat }}>
               Level {simpul.level ?? "–"}
             </span>
-            <span
-              className={cn(
-                "flex items-center gap-0.5 rounded-md bg-muted font-medium text-muted-foreground",
-                padat ? "px-1 py-px text-[7.5px]" : "px-2 py-0.5 text-[10px]",
-              )}
+            {/* Angka orang dan bawahan bisa DIKLIK — pertanyaan yang menyusul
+                angka itu selalu "siapa saja", dan sebelumnya jawabannya ada di
+                layar lain. */}
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                onLihatOrang("orang");
+              }}
+              onPointerDown={(e) => e.stopPropagation()}
+              className={cn("flex items-center gap-0.5 rounded-md bg-muted font-medium text-muted-foreground transition hover:bg-foreground/10 hover:text-foreground", pil)}
             >
               <Users className={padat ? "size-2" : "size-3"} /> {simpul.jumlahOrang}
-            </span>
+            </button>
             {bawahan > 0 && (
-              <span
-                className={cn(
-                  "rounded-md bg-muted font-medium text-muted-foreground",
-                  padat ? "px-1 py-px text-[7.5px]" : "px-2 py-0.5 text-[10px]",
-                )}
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onLihatOrang("bawahan");
+                }}
+                onPointerDown={(e) => e.stopPropagation()}
+                className={cn("rounded-md bg-muted font-medium text-muted-foreground transition hover:bg-foreground/10 hover:text-foreground", pil)}
               >
                 {bawahan} bawahan
-              </span>
+              </button>
             )}
           </div>
         </div>
       </div>
 
-      {/* Tombol lipat menggantung di TEPI BAWAH kartu, tepat di pangkal garis
-          keturunannya — di situlah matanya sudah tertuju saat bertanya "apa
-          isinya". Saat tertutup ia menyebut berapa yang disembunyikan; tanda
-          panah saja tidak memberi tahu apakah isinya satu atau tiga belas. */}
       {(anakLangsung ?? 0) > 0 && onLipat && (
         <button
           type="button"
@@ -751,14 +757,123 @@ function KartuRole({
           }}
           onPointerDown={(e) => e.stopPropagation()}
           className={cn(
-            "absolute left-1/2 z-10 flex -translate-x-1/2 translate-y-[-45%] items-center gap-0.5 rounded-full border border-border bg-card px-1.5 py-px text-[8px] font-bold shadow-sm transition hover:scale-110",
-            terlipat ? "text-foreground" : "text-muted-foreground",
+            "absolute left-1/2 z-10 flex -translate-x-1/2 translate-y-[-45%] items-center gap-0.5 rounded-full border bg-card px-1.5 py-px text-[8px] font-bold shadow-sm transition hover:scale-110",
+            terlipat ? "border-current" : "border-border text-muted-foreground",
           )}
-          style={{ top: "100%", borderColor: terlipat ? w.pekat : undefined, color: terlipat ? w.pekat : undefined }}
+          style={{ top: "100%", color: terlipat ? w.pekat : undefined }}
         >
           {terlipat ? `+${bawahan}` : <ChevronRight className="size-2.5 rotate-90" />}
         </button>
       )}
+    </div>
+  );
+}
+
+/* ───────────────────────────── daftar orang ───────────────────────────── */
+
+/** Siapa saja yang ada di balik angka — muncul saat angkanya diklik. */
+function DaftarOrang({
+  isi,
+  semua,
+  onTutup,
+}: {
+  isi: { simpul: SimpulBagan; jenis: "orang" | "bawahan" };
+  semua: SimpulBagan[];
+  onTutup: () => void;
+}) {
+  const { simpul, jenis } = isi;
+  const w = warna(simpul.level);
+  const orang = simpul.orang ?? [];
+  const bawahan = React.useMemo(() => {
+    const anak = new Map<string, SimpulBagan[]>();
+    for (const s of semua) {
+      if (!s.parentId) continue;
+      anak.set(s.parentId, [...(anak.get(s.parentId) ?? []), s]);
+    }
+    const hasil: { simpul: SimpulBagan; kedalaman: number }[] = [];
+    const dilihat = new Set<string>();
+    const turun = (id: string, d: number) => {
+      for (const a of anak.get(id) ?? []) {
+        if (dilihat.has(a.id)) continue;
+        dilihat.add(a.id);
+        hasil.push({ simpul: a, kedalaman: d });
+        turun(a.id, d + 1);
+      }
+    };
+    turun(simpul.id, 0);
+    return hasil;
+  }, [semua, simpul.id]);
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 p-0 backdrop-blur-sm sm:items-center sm:p-6" onClick={onTutup}>
+      <div
+        className="flex max-h-[80vh] w-full flex-col overflow-hidden rounded-t-2xl border border-border bg-card shadow-2xl sm:max-w-md sm:rounded-2xl"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="flex items-start gap-3 border-b border-border p-4">
+          <span
+            className="grid size-10 shrink-0 place-items-center rounded-xl text-xs font-bold text-white shadow-sm"
+            style={{ backgroundImage: `linear-gradient(135deg, ${w.pekat}, ${w.muda})` }}
+          >
+            {inisialDari(simpul.nama)}
+          </span>
+          <div className="min-w-0 flex-1">
+            <p className="truncate text-sm font-semibold text-foreground">{simpul.nama}</p>
+            <p className="text-[11px] text-muted-foreground">
+              {jenis === "orang" ? `${orang.length} orang di role ini` : `${bawahan.length} role di bawahnya`}
+            </p>
+          </div>
+          <Button variant="ghost" size="icon" aria-label="Tutup" onClick={onTutup}>
+            <X className="size-4" />
+          </Button>
+        </div>
+
+        <div className="min-h-0 flex-1 overflow-auto p-2">
+          {jenis === "orang" ? (
+            orang.length === 0 ? (
+              <p className="px-2 py-8 text-center text-[13px] text-muted-foreground">
+                Belum ada karyawan aktif dengan departemen ini di User Management.
+              </p>
+            ) : (
+              <ul className="divide-y divide-border">
+                {orang.map((o, i) => (
+                  <li key={`${o.nama}-${i}`} className="flex items-center gap-3 px-2 py-2.5">
+                    <span className="grid size-8 shrink-0 place-items-center rounded-full bg-muted text-[10px] font-bold text-muted-foreground">
+                      {inisialDari(o.nama)}
+                    </span>
+                    <span className="min-w-0 flex-1">
+                      <span className="block truncate text-[13px] font-medium text-foreground">{o.nama}</span>
+                      <span className="block truncate text-[11px] text-muted-foreground">{o.jabatan}</span>
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            )
+          ) : (
+            <ul className="divide-y divide-border">
+              {bawahan.map(({ simpul: b, kedalaman }) => {
+                const bw = warna(b.level);
+                return (
+                  <li key={b.id} className="flex items-center gap-2.5 px-2 py-2" style={{ paddingLeft: 8 + kedalaman * 14 }}>
+                    <span
+                      className="grid size-6 shrink-0 place-items-center rounded-md text-[8px] font-bold text-white"
+                      style={{ backgroundImage: `linear-gradient(135deg, ${bw.pekat}, ${bw.muda})` }}
+                    >
+                      {inisialDari(b.nama)}
+                    </span>
+                    <span className="min-w-0 flex-1">
+                      <span className="block truncate text-[13px] text-foreground">{b.nama}</span>
+                      <span className="block truncate text-[10.5px] text-muted-foreground">
+                        Level {b.level ?? "–"} · {b.jumlahOrang} orang
+                      </span>
+                    </span>
+                  </li>
+                );
+              })}
+            </ul>
+          )}
+        </div>
+      </div>
     </div>
   );
 }
@@ -769,16 +884,18 @@ function TampilanLevel({
   simpul,
   semua,
   namaInduk,
-  dipilih,
+  pilihan,
   disorot,
   onPilih,
+  onLihatOrang,
 }: {
   simpul: SimpulBagan[];
   semua: SimpulBagan[];
   namaInduk: Map<string, string>;
-  dipilih: string | null;
+  pilihan: Set<string>;
   disorot: Set<string> | null;
-  onPilih: (id: string) => void;
+  onPilih: (id: string, tambah: boolean) => void;
+  onLihatOrang: (s: SimpulBagan, jenis: "orang" | "bawahan") => void;
 }) {
   const baris = perLevel(simpul);
   if (baris.length === 0) {
@@ -793,20 +910,19 @@ function TampilanLevel({
     <div className="space-y-5">
       {baris.map((b) => {
         const w = warna(b.level);
+        const orang = b.simpul.reduce((a, s) => a + s.jumlahOrang, 0);
         return (
           <div key={String(b.level)} className="flex gap-4">
-            {/* Label level menempel di kiri dan LENGKET saat digulir — pada
-                daftar sepanjang tiga puluh kartu, level yang sedang dilihat
-                hilang dari layar jauh sebelum barisnya habis. */}
             <div className="sticky top-0 w-20 shrink-0 self-start pt-1">
               <span
-                className="inline-block rounded-lg px-2 py-1 text-xs font-bold shadow-sm"
-                style={{ background: `linear-gradient(135deg, ${w.pekat}, ${w.muda})`, color: "#fff" }}
+                className="inline-block rounded-lg px-2 py-1 text-xs font-bold text-white shadow-sm"
+                style={{ backgroundImage: `linear-gradient(135deg, ${w.pekat}, ${w.muda})` }}
               >
                 Level {b.level ?? "–"}
               </span>
-              <p className="mt-1 text-[11px] font-medium text-foreground">{b.simpul.length} role</p>
-              <p className="text-[10px] leading-tight text-muted-foreground">
+              <p className="mt-1 text-[11px] font-semibold text-foreground">{b.simpul.length} role</p>
+              <p className="text-[10px] leading-tight text-muted-foreground">{orang} orang</p>
+              <p className="mt-0.5 text-[10px] leading-tight text-muted-foreground">
                 {b.level ? NAMA_LEVEL[b.level] : "belum ditempatkan"}
               </p>
             </div>
@@ -816,10 +932,11 @@ function TampilanLevel({
                   <KartuRole
                     simpul={s}
                     namaInduk={namaInduk}
-                    dipilih={dipilih === s.id}
+                    dipilih={pilihan.has(s.id)}
                     redup={!!disorot && !disorot.has(s.id)}
                     bawahan={semua.filter((x) => x.parentId === s.id).length}
-                    onKlik={() => onPilih(s.id)}
+                    onKlik={(e) => onPilih(s.id, e.shiftKey || e.metaKey || e.ctrlKey)}
+                    onLihatOrang={(jenis) => onLihatOrang(s, jenis)}
                   />
                 </div>
               ))}
@@ -848,15 +965,17 @@ function PanelPenempatan({
   // Hanya tawarkan atasan yang TIDAK membuat lingkaran. Menawarkan pilihan yang
   // pasti ditolak lalu memarahi pemakainya adalah cara paling membingungkan
   // untuk menegakkan aturan.
-  const calon = semua.filter((s) => bolehJadiAtasan(semua, simpul.id, s.id));
+  const calon = semua
+    .filter((s) => bolehJadiAtasan(semua, simpul.id, s.id))
+    .sort((a, b) => (a.level ?? 9) - (b.level ?? 9) || a.nama.localeCompare(b.nama, "id"));
 
   return (
-    <div className="border-t border-border bg-muted/30 p-3">
+    <div className="shrink-0 border-t border-border bg-muted/40 p-3">
       <div className="mb-2.5 flex items-start justify-between gap-3">
         <div className="flex min-w-0 items-center gap-2.5">
           <span
             className="grid size-10 shrink-0 place-items-center rounded-xl text-xs font-bold text-white shadow-sm"
-            style={{ background: `linear-gradient(135deg, ${w.pekat}, ${w.muda})` }}
+            style={{ backgroundImage: `linear-gradient(135deg, ${w.pekat}, ${w.muda})` }}
           >
             {inisialDari(simpul.nama)}
           </span>
@@ -873,40 +992,37 @@ function PanelPenempatan({
       </div>
 
       <div className="grid gap-3 sm:grid-cols-2">
-        <label className="block">
+        <div>
           <span className="mb-1 block text-[11px] font-medium text-muted-foreground">Level</span>
-          <select
-            value={simpul.level ?? ""}
-            onChange={(e) => onSimpan({ level: e.target.value ? Number(e.target.value) : null })}
-            className="h-9 w-full rounded-xl border border-border bg-background px-3 text-sm text-foreground"
-          >
-            <option value="">Belum diberi level</option>
-            {Array.from({ length: LEVEL_MAX }, (_, i) => i + 1).map((l) => (
-              <option key={l} value={l}>
-                Level {l} — {NAMA_LEVEL[l]}
-              </option>
-            ))}
-          </select>
-        </label>
-        <label className="block">
+          <Combobox
+            value={simpul.level ? String(simpul.level) : ""}
+            onChange={(v) => onSimpan({ level: v ? Number(v) : null })}
+            placeholder="Belum diberi level"
+            matchTriggerWidth
+            options={[
+              { value: "", label: "Belum diberi level" },
+              ...Array.from({ length: LEVEL_MAX }, (_, i) => i + 1).map((l) => ({
+                value: String(l),
+                label: `Level ${l} — ${NAMA_LEVEL[l]}`,
+              })),
+            ]}
+          />
+        </div>
+        <div>
           <span className="mb-1 block text-[11px] font-medium text-muted-foreground">Melapor ke</span>
-          <select
+          <Combobox
             value={simpul.parentId ?? ""}
-            onChange={(e) => onSimpan({ parentId: e.target.value || null })}
-            className="h-9 w-full rounded-xl border border-border bg-background px-3 text-sm text-foreground"
-          >
-            <option value="">— Tidak ada (puncak bagan)</option>
-            {calon
-              .slice()
-              .sort((a, b) => (a.level ?? 9) - (b.level ?? 9) || a.nama.localeCompare(b.nama, "id"))
-              .map((s) => (
-                <option key={s.id} value={s.id}>
-                  {s.level ? `L${s.level} · ` : ""}
-                  {s.nama}
-                </option>
-              ))}
-          </select>
-        </label>
+            onChange={(v) => onSimpan({ parentId: v || null })}
+            placeholder="Tidak ada (puncak bagan)"
+            searchable
+            searchPlaceholder="Cari role…"
+            matchTriggerWidth
+            options={[
+              { value: "", label: "— Tidak ada (puncak bagan)" },
+              ...calon.map((s) => ({ value: s.id, label: `${s.level ? `L${s.level} · ` : ""}${s.nama}` })),
+            ]}
+          />
+        </div>
       </div>
     </div>
   );

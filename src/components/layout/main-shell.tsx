@@ -7,13 +7,13 @@ import { Footer } from "./footer";
 /**
  * Isi halaman + kerangka di sekitarnya.
  *
- * Sebagian halaman adalah APLIKASI, bukan dokumen: Pesan mengisi seluruh layar
- * dan mengatur gulirannya sendiri. Untuk halaman seperti itu, breadcrumb,
+ * Sebagian halaman adalah APLIKASI, bukan dokumen: Pesan dan Bagan Struktur
+ * Organisasi mengisi seluruh layar dan mengatur gulirannya sendiri. Untuk halaman seperti itu, breadcrumb,
  * padding, dan footer justru merugikan — halaman jadi lebih tinggi dari layar,
  * seluruh isinya ikut bergeser saat digulir, dan kotak tulis hilang dari
  * pandangan. Di sini kerangka itu dilepas, bukan dilawan dengan margin negatif.
  */
-const FULL_BLEED = ["/pesan"];
+const FULL_BLEED = ["/pesan", "/hc-mos/bagan"];
 
 export function MainShell({ children, showHome }: { children: React.ReactNode; showHome: boolean }) {
   const pathname = usePathname();

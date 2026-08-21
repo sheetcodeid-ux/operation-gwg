@@ -8,7 +8,6 @@ import {
   inisialDari,
   jumlahKeturunan,
   magnet,
-  tataMenurun,
   rantaiKeAtas,
   silsilah,
   simpulBercabang,
@@ -293,56 +292,6 @@ describe("simpulBercabang", () => {
   it("hanya simpul yang benar-benar punya bawahan", () => {
     const pohon = [s("bos"), s("a", { parentId: "bos" }), s("b", { parentId: "bos" })];
     expect(simpulBercabang(pohon)).toEqual(["bos"]);
-  });
-});
-
-describe("tataMenurun", () => {
-  //  bos → a → a1 ;  bos → b
-  const pohon = [
-    s("bos"),
-    s("a", { parentId: "bos", urutan: 1 }),
-    s("a1", { parentId: "a" }),
-    s("b", { parentId: "bos", urutan: 2 }),
-  ];
-
-  it("tumbuh ke BAWAH: tiap simpul satu baris, berurutan", () => {
-    const t = tataMenurun(pohon);
-    const urut = ["bos", "a", "a1", "b"].map((id) => t.find((n) => n.id === id)!);
-    for (let i = 1; i < urut.length; i++) expect(urut[i].y).toBeGreaterThan(urut[i - 1].y);
-  });
-
-  it("kedalaman jadi indentasi, bukan kolom baru", () => {
-    const t = tataMenurun(pohon);
-    const [bos, a, a1] = ["bos", "a", "a1"].map((id) => t.find((n) => n.id === id)!);
-    expect(bos.x).toBe(0);
-    expect(a.x).toBeGreaterThan(bos.x);
-    expect(a1.x).toBeGreaterThan(a.x);
-  });
-
-  it("lebarnya berhenti tumbuh jauh sebelum tingginya", () => {
-    const t = tataMenurun(pohon);
-    const lebar = Math.max(...t.map((n) => n.x));
-    const tinggi = Math.max(...t.map((n) => n.y));
-    expect(tinggi).toBeGreaterThan(lebar);
-  });
-
-  it("saudara berbagi indentasi yang sama", () => {
-    const t = tataMenurun(pohon);
-    expect(t.find((n) => n.id === "a")!.x).toBe(t.find((n) => n.id === "b")!.x);
-  });
-
-  it("melipat menyembunyikan keturunannya tanpa memuntahkannya ke tempat lain", () => {
-    const t = tataMenurun(pohon, new Set(["a"]));
-    expect(t.find((n) => n.id === "a1")).toBeUndefined();
-    expect(t).toHaveLength(3);
-  });
-
-  it("lingkaran tidak membuatnya berputar selamanya", () => {
-    expect(tataMenurun([s("x", { parentId: "y" }), s("y", { parentId: "x" })])).toHaveLength(2);
-  });
-
-  it("posisi hasil geseran tetap menang", () => {
-    expect(tataMenurun([s("a", { posX: 400, posY: 900 })])[0]).toMatchObject({ x: 400, y: 900 });
   });
 });
 

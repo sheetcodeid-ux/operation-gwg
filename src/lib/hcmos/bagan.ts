@@ -27,6 +27,14 @@ export interface SimpulBagan {
   jabatan: string[];
   /** Keterangan singkat di kartu. Kosong berarti barisnya tidak digambar. */
   deskripsi?: string | null;
+  /**
+   * Orang yang benar-benar menempati role ini — dari User Management.
+   *
+   * Dibawa serta, bukan cuma jumlahnya, karena pertanyaan yang menyusul angka
+   * itu selalu sama: "siapa saja". Menyimpan angkanya saja memaksa orang
+   * berpindah ke layar lain untuk pertanyaan yang seharusnya dijawab di tempat.
+   */
+  orang?: { nama: string; jabatan: string }[];
 }
 
 /**
@@ -436,96 +444,6 @@ export const simpulBercabang = (simpul: SimpulBagan[]): string[] => [
   ...new Set(simpul.map((s) => s.parentId).filter((v): v is string => !!v)),
 ];
 
-
-/* ─────────────────────────── tata letak menurun ─────────────────────────── */
-
-export const LEBAR_TEGAK = 268;
-export const TINGGI_TEGAK = 74;
-const INDENT = 36;
-const SELA_TEGAK = 10;
-
-/**
- * Tata letak MENURUN — bagan tumbuh ke bawah, bukan ke samping.
- *
- * Bentuk kolom melebar seukuran jumlah divisi: sepuluh divisi berarti sepuluh
- * kolom berdampingan, dan pada layar mana pun itu berarti menggulir ke samping
- * terus-menerus. Menggulir ke samping jauh lebih melelahkan daripada ke bawah —
- * layar lebih pendek daripada lebar, tapi roda tetikus dan jari di trackpad
- * bergerak vertikal.
- *
- * Di sini kedalaman diubah jadi INDENTASI, bukan kolom. Lebarnya berhenti
- * tumbuh pada enam level (enam kali indentasi), sementara tingginya tumbuh
- * mengikuti jumlah posisi — arah yang memang bisa digulir dengan nyaman.
- */
-export function tataMenurun(simpul: SimpulBagan[], terlipat: ReadonlySet<string> = new Set()): SimpulTertata[] {
-  const peta = new Map(simpul.map((s) => [s.id, s]));
-  const anak = new Map<string | null, SimpulBagan[]>();
-  for (const s of simpul) {
-    const induk = s.parentId && peta.has(s.parentId) ? s.parentId : null;
-    anak.set(induk, [...(anak.get(induk) ?? []), s]);
-  }
-  for (const [k, v] of anak) {
-    anak.set(k, [...v].sort((a, b) => (a.urutan ?? 999) - (b.urutan ?? 999) || a.nama.localeCompare(b.nama, "id")));
-  }
-
-  const hasil: SimpulTertata[] = [];
-  const dilihat = new Set<string>();
-  let baris = 0;
-
-  const tandaiKeturunan = (id: string) => {
-    for (const a of anak.get(id) ?? []) {
-      if (dilihat.has(a.id)) continue;
-      dilihat.add(a.id);
-      tandaiKeturunan(a.id);
-    }
-  };
-
-  const turun = (s: SimpulBagan, kedalaman: number) => {
-    if (dilihat.has(s.id)) return;
-    dilihat.add(s.id);
-    hasil.push({
-      ...s,
-      x: s.posX ?? kedalaman * INDENT,
-      y: s.posY ?? baris * (TINGGI_TEGAK + SELA_TEGAK),
-      kedalaman,
-    });
-    baris += 1;
-    if (terlipat.has(s.id)) {
-      tandaiKeturunan(s.id);
-      return;
-    }
-    for (const a of anak.get(s.id) ?? []) turun(a, kedalaman + 1);
-  };
-
-  for (const akar of anak.get(null) ?? []) turun(akar, 0);
-  // Simpul tak terjangkau — hanya mungkin bila ada lingkaran. Tetap digambar.
-  for (const s of simpul) {
-    if (dilihat.has(s.id)) continue;
-    dilihat.add(s.id);
-    hasil.push({ ...s, x: s.posX ?? 0, y: s.posY ?? baris * (TINGGI_TEGAK + SELA_TEGAK), kedalaman: 0 });
-    baris += 1;
-  }
-  return hasil;
-}
-
-/** Garis siku untuk tata letak menurun: turun dari induk lalu belok ke anak. */
-export function garisMenurun(tertata: SimpulTertata[]): GarisBagan[] {
-  const peta = new Map(tertata.map((s) => [s.id, s]));
-  const garis: GarisBagan[] = [];
-  for (const s of tertata) {
-    const induk = s.parentId ? peta.get(s.parentId) : null;
-    if (!induk) continue;
-    garis.push({
-      dari: induk.id,
-      ke: s.id,
-      x1: induk.x + INDENT / 2,
-      y1: induk.y + TINGGI_TEGAK,
-      x2: s.x,
-      y2: s.y + TINGGI_TEGAK / 2,
-    });
-  }
-  return garis;
-}
 
 /* ─────────────────────────────── magnet ─────────────────────────────── */
 

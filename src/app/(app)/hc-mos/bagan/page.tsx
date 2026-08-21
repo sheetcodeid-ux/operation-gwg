@@ -1,6 +1,4 @@
-import { ArrowLeft } from "lucide-react";
 import type { Metadata } from "next";
-import Link from "next/link";
 import { redirect } from "next/navigation";
 import { requireSessionUser } from "@/lib/auth";
 import { canReachMenu } from "@/lib/nav";
@@ -28,10 +26,14 @@ export default async function BaganPage() {
   if (!canReachMenu(user, "hcmos")) redirect("/dashboard");
 
   const users = getUsers().filter((u) => u.active);
-  const orangPerDep = new Map<string, number>();
+  const orangPerDep = new Map<string, { nama: string; jabatan: string }[]>();
   for (const u of users) {
     const dep = (u.department ?? "").trim();
-    if (dep) orangPerDep.set(dep, (orangPerDep.get(dep) ?? 0) + 1);
+    if (!dep) continue;
+    orangPerDep.set(dep, [...(orangPerDep.get(dep) ?? []), { nama: u.name, jabatan: (u.jabatan ?? "").trim() || "—" }]);
+  }
+  for (const [k, v] of orangPerDep) {
+    orangPerDep.set(k, [...v].sort((a, b) => a.nama.localeCompare(b.nama, "id")));
   }
 
   const simpul: SimpulBagan[] = (await getUserDepartments()).map((d) => ({
@@ -45,22 +47,14 @@ export default async function BaganPage() {
     // Jumlah orang dihitung dari profil aktif, tidak pernah diketik. Angka yang
     // diketik di bagan berhenti berubah saat orangnya bertambah, dan tidak ada
     // yang menyadarinya sampai seseorang membandingkannya dengan User Management.
-    jumlahOrang: orangPerDep.get(d.name) ?? 0,
+    jumlahOrang: (orangPerDep.get(d.name) ?? []).length,
+    orang: orangPerDep.get(d.name) ?? [],
     jabatan: d.jabatan,
     deskripsi: d.deskripsi,
   }));
 
-  return (
-    <div className="flex w-full flex-col">
-      <div className="mb-3 flex items-center justify-between gap-3">
-        <Link href="/hc-mos" className="inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground">
-          <ArrowLeft className="size-4" /> HC-MOS
-        </Link>
-        <p className="hidden text-[12px] text-muted-foreground sm:block">
-          Role diambil dari daftar departemen di User Management
-        </p>
-      </div>
-      <BaganOrganisasi simpul={simpul} bolehUbah={bolehUbahHc(user)} penuhLayar />
-    </div>
-  );
+  // Tanpa breadcrumb, tanpa tautan kembali, tanpa keterangan: halaman ini
+  // adalah kanvas, dan setiap baris di atasnya memotong tinggi kanvas itu.
+  // Jalan kembali tetap ada di sidebar, tempat orang memang mencarinya.
+  return <BaganOrganisasi simpul={simpul} bolehUbah={bolehUbahHc(user)} />;
 }
