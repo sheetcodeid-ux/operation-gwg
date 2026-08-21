@@ -9,6 +9,8 @@ import { getUserDepartments } from "@/lib/data/user-departments";
 import { allDepartments, setOrgExtras } from "@/lib/assessment/org";
 import { assignableDivisions, groupsFor, kunciEntri, setNavExtras, visibleMenusOf, type NavExtra } from "@/lib/nav";
 import type { DivisionGroups } from "@/components/admin/group-manager";
+import { listAkunYatim } from "@/lib/data/akun-yatim";
+import { AkunYatimKartu } from "@/components/admin/akun-yatim";
 import { UserManager, type OrgDept, type OutletLite, type UserRow } from "@/components/admin/user-manager";
 
 export const metadata: Metadata = { title: "User Management" };
@@ -88,8 +90,13 @@ export default async function UsersPage({ searchParams }: { searchParams: Promis
     ]),
   ];
 
+  // Akun login yang tidak punya profil — pertanyaan "kenapa dia tidak bisa
+  // masuk" bermuara ke halaman ini, jadi jawabannya harus ada di halaman ini.
+  const yatim = await listAkunYatim();
+
   return (
     <div className="w-full">
+      <AkunYatimKartu rows={yatim} />
       <UserManager
         users={userRows}
         outlets={outletLite}

@@ -70,8 +70,24 @@ export async function signInWithPassword(_prev: { error?: string } | null, formD
       // cookie (hybrid): the app session survives access-token expiry.
       const { getUsers } = await import("@/lib/data/store");
       const profile = getUsers().find((u) => u.email.toLowerCase() === username.toLowerCase());
-      if (!profile) return { error: "Akun terautentikasi tapi profil tidak ditemukan. Hubungi admin." };
-      if (!profile.active) return { error: "This account is inactive. Contact your administrator." };
+      if (!profile || !profile.active) {
+        // Penting: GoTrue SUDAH memasang cookie sesinya begitu passwordnya benar,
+        // dan tanpa dicabut cookie itu tertinggal di peramban. Akibatnya perangkat
+        // itu terus membawa sesi setengah jadi — aplikasi tidak menemukan
+        // profilnya, melempar ke /login, lalu berulang. Dari sisi pemakainya
+        // tampak seperti "password saya ditolak" di satu perangkat saja,
+        // sementara di perangkat lain baik-baik saja.
+        //
+        // Ini benar-benar terjadi: satu akun punya tiga alamat email, dua di
+        // antaranya tidak punya profil, dan pemiliknya berminggu-minggu mengira
+        // passwordnya yang bermasalah.
+        await supabase?.auth.signOut();
+        return {
+          error: profile
+            ? "This account is inactive. Contact your administrator."
+            : `Email ${username} terdaftar sebagai akun login, tapi belum punya profil karyawan. Coba email kantor Anda yang lain, atau hubungi Human Capital.`,
+        };
+      }
       const store = await cookies();
       store.set(SESSION_COOKIE, signSession(profile.id), COOKIE_OPTS);
       rateLimitReset(rlKey);
