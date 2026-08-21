@@ -261,6 +261,8 @@ export async function monitoringHcmos(user: UserProfile, periode = periodeKey())
 
   /* ── 10. Contract Tracker ── */
   const perStatusKontrak = hitung(aktif, (k) => STATUS_KONTRAK_META[k.status].label);
+  const pkwtt = aktif.filter((k) => k.jenis === "PKWTT").length;
+  const pkwt = aktif.filter((k) => k.jenis === "PKWT").length;
 
   return [
     {
@@ -531,14 +533,15 @@ export async function monitoringHcmos(user: UserProfile, periode = periodeKey())
       label: "Contract Tracker",
       ikon: "FileSignature",
       angka: [
-        { label: "Karyawan Outlet", nilai: aktif.length },
+        // Tab ini bernama Contract Tracker (PKWT/PKWTT) tapi selama ini tidak
+        // pernah menyebut jenis kontraknya sama sekali — padahal itu pembeda
+        // yang paling penting: PKWT punya batas masa berlaku menurut undang-
+        // undang, PKWTT tidak. Satu angka "karyawan outlet" menyembunyikan
+        // keduanya di balik satu jumlah.
+        { label: "PKWTT (Tetap) Aktif", nilai: pkwtt, catatan: "tanpa tanggal berakhir" },
+        { label: "PKWT (Kontrak) Aktif", nilai: pkwt, catatan: `${aktif.length - pkwtt - pkwt} belum ditetapkan` },
         { label: "Segera Berakhir", nilai: aktif.filter((k) => k.status === "segera_berakhir").length, catatan: "≤ 60 hari" },
-        { label: "Berakhir", nilai: aktif.filter((k) => k.status === "berakhir").length },
-        {
-          label: "Kepatuhan Lapor",
-          nilai: `${rekap.length ? Math.round((rekap.filter((o) => o.sudahLapor).length / rekap.length) * 100) : 0}%`,
-          catatan: `${rekap.filter((o) => o.sudahLapor).length} dari ${rekap.length} outlet`,
-        },
+        { label: "Sudah Lewat Jatuh Tempo", nilai: aktif.filter((k) => k.status === "berakhir").length },
       ],
       tabelJudul: "Outlet dengan Kontrak Perlu Tindakan",
       tabelKepala: ["Outlet", "Segera Berakhir", "Berakhir", "Tanpa Kontrak"],
@@ -546,6 +549,15 @@ export async function monitoringHcmos(user: UserProfile, periode = periodeKey())
         .filter((o) => o.segera + o.berakhir + o.belumAdaKontrak > 0)
         .map((o) => ({ kolom: [o.name, String(o.segera), String(o.berakhir), String(o.belumAdaKontrak)] })),
       grafik: [
+        {
+          bentuk: "donat",
+          judul: "Komposisi Kontrak",
+          subjudul: "PKWTT (tetap) vs PKWT (kontrak)",
+          data: [
+            { nama: "PKWTT (Tetap)", nilai: pkwtt },
+            { nama: "PKWT (Kontrak)", nilai: pkwt },
+          ],
+        },
         { bentuk: "donat", judul: "Status Kontrak", data: perStatusKontrak },
         {
           bentuk: "batang",

@@ -34,6 +34,17 @@ export interface KpiIndikator {
   target: number;
   /** Untuk turnover, makin KECIL makin baik. */
   makinKecilMakinBaik?: boolean;
+  /**
+   * Bobot indikator ini terhadap skor total, dalam persen. Seluruhnya 100.
+   *
+   * Angka-angka ini KEBIJAKAN, bukan hasil hitungan — Human Capital yang
+   * menentukan seberapa penting tiap indikator, dan wajar kalau kelak diubah.
+   * Dicantumkan justru supaya bisa diperdebatkan: rata-rata biasa yang dipakai
+   * sebelumnya juga sebuah pembobotan — semuanya dianggap sama penting — hanya
+   * saja tidak pernah ada yang memutuskannya, dan tidak terlihat sehingga tidak
+   * pernah bisa dikoreksi.
+   */
+  bobot: number;
   sumber: string;
   tindakLanjut: string;
 }
@@ -41,6 +52,7 @@ export interface KpiIndikator {
 export const KPI_HC: KpiIndikator[] = [
   {
     key: "pemenuhan_rekrutmen",
+    bobot: 15,
     label: "Pemenuhan Permintaan Pegawai",
     satuan: "persen",
     target: 90,
@@ -49,6 +61,7 @@ export const KPI_HC: KpiIndikator[] = [
   },
   {
     key: "kecepatan_rekrutmen",
+    bobot: 10,
     label: "Kecepatan Pemenuhan",
     satuan: "hari",
     target: 30,
@@ -58,6 +71,7 @@ export const KPI_HC: KpiIndikator[] = [
   },
   {
     key: "kepatuhan_kontrak",
+    bobot: 25,
     label: "Kepatuhan Kontrak Kerja",
     satuan: "persen",
     target: 95,
@@ -66,6 +80,7 @@ export const KPI_HC: KpiIndikator[] = [
   },
   {
     key: "kepatuhan_laporan",
+    bobot: 15,
     label: "Kepatuhan Update Bulanan",
     satuan: "persen",
     target: 90,
@@ -74,6 +89,7 @@ export const KPI_HC: KpiIndikator[] = [
   },
   {
     key: "penyelesaian_onboarding",
+    bobot: 15,
     label: "Penyelesaian Onboarding",
     satuan: "persen",
     target: 85,
@@ -82,6 +98,7 @@ export const KPI_HC: KpiIndikator[] = [
   },
   {
     key: "turnover",
+    bobot: 20,
     label: "Turnover Karyawan Outlet",
     satuan: "persen",
     target: 10,
@@ -121,4 +138,55 @@ export interface BarisKpi {
   realisasi: number | null;
   /** Penjelasan angkanya, mis. "18 dari 20 permintaan". */
   rincian: string;
+}
+
+export interface SkorKpi {
+  /** 0–100, atau null bila belum ada satu pun indikator yang terukur. */
+  nilai: number | null;
+  /** Bobot indikator yang benar-benar terukur — penyebut yang dipakai. */
+  bobotTerukur: number;
+  terukur: number;
+  belumTerukur: number;
+}
+
+/**
+ * Skor KPI total, ditimbang menurut bobot tiap indikator.
+ *
+ * Indikator yang BELUM TERUKUR dikeluarkan dari pembilang MAUPUN penyebut —
+ * bukan dihitung nol. Nol berarti "gagal total", dan itu tuduhan yang berbeda
+ * dari "belum diukur"; menghitungnya nol membuat tim terlihat buruk justru pada
+ * bulan-bulan awal sebuah modul dipakai, ketika datanya memang belum lengkap.
+ */
+export function skorKpi(baris: { key: KpiKey; realisasi: number | null }[]): SkorKpi {
+  let jumlah = 0;
+  let bobotTerukur = 0;
+  let terukur = 0;
+  for (const b of baris) {
+    const ind = KPI_BY_KEY[b.key];
+    if (!ind) continue;
+    const c = capaian(ind, b.realisasi);
+    if (c === null) continue;
+    jumlah += c * ind.bobot;
+    bobotTerukur += ind.bobot;
+    terukur += 1;
+  }
+  return {
+    nilai: bobotTerukur ? Math.round(jumlah / bobotTerukur) : null,
+    bobotTerukur,
+    terukur,
+    belumTerukur: baris.length - terukur,
+  };
+}
+
+export const STATUS_SKOR = [
+  { batas: 100, label: "Baik", tone: "success" as const },
+  { batas: 85, label: "Cukup", tone: "brand" as const },
+  { batas: 70, label: "Perlu Perhatian", tone: "warning" as const },
+  { batas: 0, label: "Kurang", tone: "danger" as const },
+];
+
+/** Sebutan untuk skor total — ambangnya sama dengan `nadaCapaian`. */
+export function statusSkor(nilai: number | null): { label: string; tone: NadaKpi } {
+  if (nilai === null) return { label: "Belum Terukur", tone: "brand" };
+  return STATUS_SKOR.find((x) => nilai >= x.batas) ?? STATUS_SKOR[STATUS_SKOR.length - 1];
 }

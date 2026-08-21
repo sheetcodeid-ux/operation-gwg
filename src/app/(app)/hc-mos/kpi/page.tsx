@@ -5,7 +5,7 @@ import { redirect } from "next/navigation";
 import { requireSessionUser } from "@/lib/auth";
 import { canReachMenu } from "@/lib/nav";
 import { hitungKpiHc } from "@/lib/data/hcmos-kpi";
-import { KPI_BY_KEY, capaian, nadaCapaian } from "@/lib/hcmos/kpi";
+import { KPI_BY_KEY, capaian, nadaCapaian, skorKpi, statusSkor } from "@/lib/hcmos/kpi";
 import { periodeLabel } from "@/lib/hcmos/kontrak";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
@@ -21,13 +21,12 @@ export default async function KpiPage() {
 
   const hasil = await hitungKpiHc(user);
 
-  // Skor keseluruhan hanya dari indikator yang benar-benar punya data.
-  // Memasukkan yang belum terukur sebagai nol akan menuduh tim gagal pada hal
-  // yang bahkan belum diukur.
-  const terukur = hasil.baris
-    .map((b) => capaian(KPI_BY_KEY[b.key], b.realisasi))
-    .filter((c): c is number => c !== null);
-  const skor = terukur.length ? Math.round(terukur.reduce((a, b) => a + b, 0) / terukur.length) : null;
+  // Skor keseluruhan DITIMBANG menurut bobot tiap indikator, dan hanya dari
+  // indikator yang benar-benar punya data. Memasukkan yang belum terukur
+  // sebagai nol akan menuduh tim gagal pada hal yang bahkan belum diukur.
+  const ringkas = skorKpi(hasil.baris);
+  const skor = ringkas.nilai;
+  const status = statusSkor(skor);
 
   return (
     <div className="w-full">
@@ -50,10 +49,11 @@ export default async function KpiPage() {
               </p>
             ) : (
               <>
-                <ScoreRing value={Math.min(skor, 100)} size={132} stroke={13} label="capaian rata-rata" />
+                <ScoreRing value={Math.min(skor, 100)} size={132} stroke={13} label="skor KPI" />
+                <Badge tone={status.tone}>Status: {status.label}</Badge>
                 <p className="text-center text-[11px] text-muted-foreground">
-                  Dihitung dari {terukur.length} indikator yang sudah punya data
-                  {terukur.length < hasil.baris.length && `, ${hasil.baris.length - terukur.length} belum terukur`}.
+                  Ditimbang dari {ringkas.terukur} indikator yang sudah punya data ({ringkas.bobotTerukur}% bobot)
+                  {ringkas.belumTerukur > 0 && `, ${ringkas.belumTerukur} belum terukur`}.
                 </p>
               </>
             )}
@@ -99,7 +99,13 @@ export default async function KpiPage() {
                 <div className="flex flex-wrap items-start justify-between gap-3">
                   <div className="min-w-0">
                     <p className="truncate text-sm font-semibold text-foreground">{ind.label}</p>
-                    <p className="mt-0.5 text-[11px] text-muted-foreground">{ind.sumber}</p>
+                    {/* Bobotnya ditulis di sebelah namanya, bukan disembunyikan
+                        di kepala halaman: tanpa itu, dua indikator yang sama-sama
+                        merah terlihat sama gawatnya padahal satu menyeret skor
+                        lebih dari dua kali lipat yang lain. */}
+                    <p className="mt-0.5 text-[11px] text-muted-foreground">
+                      Bobot {ind.bobot}% · {ind.sumber}
+                    </p>
                   </div>
                   <div className="shrink-0 text-right">
                     <p className="text-xl font-semibold tabular-nums text-foreground">
