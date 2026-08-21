@@ -5,7 +5,7 @@ import { listKontrak, outletsForUser, rekapOutlet } from "./hcmos";
 import { listKandidat, listOnboarding } from "./hcmos-rekrutmen";
 import { listDokumen } from "./hcmos-dokumen";
 import { turnoverBulanan, turnoverYtd, type RiwayatKerja } from "@/lib/hcmos/turnover";
-import { cutiAktif, persenKehadiran } from "@/lib/hcmos/kompensasi";
+import { cutiAktif, periodeBulanLalu, persenKehadiran, rekapPayroll } from "@/lib/hcmos/kompensasi";
 import { listTabel } from "./hcmos-lanjutan";
 import { getUsers } from "./store";
 import { STATUS_KONTRAK_META, periodeKey } from "@/lib/hcmos/kontrak";
@@ -139,6 +139,7 @@ export async function monitoringHcmos(user: UserProfile, periode = periodeKey())
     kinerja,
     suksesi,
     karier,
+    kompetensi,
     minta,
     belajar,
   ] = await Promise.all([
@@ -153,6 +154,7 @@ export async function monitoringHcmos(user: UserProfile, periode = periodeKey())
     listTabel("hc_reviews"),
     listTabel("hc_succession"),
     listTabel("hc_career_paths"),
+    listTabel("hc_competency"),
     permintaanBerjalan(),
     selfLearning(),
   ]);
@@ -201,6 +203,38 @@ export async function monitoringHcmos(user: UserProfile, periode = periodeKey())
   const cutiManajemen = sedangCuti.filter((c) => c.scope === "manajemen").length;
 
   /* ── 5. Payroll ── */
+  // Payroll dibayarkan tanggal 25 untuk bulan SEBELUMNYA, jadi "periode
+  // berjalan" adalah bulan lalu. Angka utama tab ini menyoroti periode itu;
+  // total seluruh riwayat tetap ada di grafik, tapi bukan sebagai angka utama —
+  // jumlah gaji sepanjang masa bukan sesuatu yang dipakai siapa pun.
+  const periodeGaji = periodeBulanLalu(sekarang);
+  const barisGaji = payroll.map((p) => ({
+    nama: s(p.nama),
+    scope: s(p.scope) || "manajemen",
+    periode: s(p.periode),
+    sumber: s(p.sumber),
+    outletName: (p.outletName as string | null) ?? null,
+    status: s(p.status),
+  }));
+  const gajiPeriode = barisGaji.filter((p) => p.periode === periodeGaji);
+  const gajiSelesai = gajiPeriode.filter((p) => p.status === "selesai").length;
+  const kelompokGaji = rekapPayroll(barisGaji, periodeGaji, (p) =>
+    p.scope === "outlet" ? (p.outletName ?? "Outlet") : p.sumber === "warehouse" ? "Warehouse" : "Office",
+  );
+  const thpPeriode = payroll
+    .filter((p) => s(p.periode) === periodeGaji)
+    .reduce(
+      (a, p) =>
+        a +
+        takeHomePay({
+          gajiPokok: n(p.gaji_pokok),
+          tunjangan: n(p.tunjangan),
+          lembur: n(p.lembur),
+          potongan: n(p.potongan),
+        }),
+      0,
+    );
+
   const thpPerPeriode = new Map<string, number>();
   for (const p of payroll) {
     const per = s(p.periode) || "—";
@@ -223,6 +257,7 @@ export async function monitoringHcmos(user: UserProfile, periode = periodeKey())
     ? Math.round(skorKinerjaSemua.reduce((a, b) => a + b, 0) / skorKinerjaSemua.length)
     : 0;
   const perPredikat = hitung(skorKinerjaSemua, (x) => predikatKinerja(x).label);
+  const ditinjau = kinerja.filter((k) => s(k.status) === "ditinjau").length;
 
   /* ── 10. Contract Tracker ── */
   const perStatusKontrak = hitung(aktif, (k) => STATUS_KONTRAK_META[k.status].label);
@@ -354,14 +389,28 @@ export async function monitoringHcmos(user: UserProfile, periode = periodeKey())
       label: "Payroll",
       ikon: "Banknote",
       angka: [
-        { label: "Baris Payroll", nilai: payroll.length },
-        { label: "Periode Tercatat", nilai: thpPerPeriode.size },
         {
-          label: "Total Take Home",
-          nilai: "Rp" + Math.round([...thpPerPeriode.values()].reduce((a, b) => a + b, 0)).toLocaleString("id-ID"),
+          label: `Take Home Periode ${periodeGaji}`,
+          nilai: "Rp" + Math.round(thpPeriode).toLocaleString("id-ID"),
+          catatan: "dihitung dari komponennya, bukan angka tersimpan",
         },
-        { label: "Karyawan Digaji", nilai: new Set(payroll.map((p) => s(p.nama))).size },
+        {
+          label: "Karyawan Digaji",
+          nilai: `${gajiPeriode.length}/${totalTerpantau}`,
+          catatan: `periode ${periodeGaji}`,
+        },
+        {
+          label: "Sudah Diproses",
+          nilai: gajiPeriode.length ? `${Math.round((gajiSelesai / gajiPeriode.length) * 100)}%` : "0%",
+          catatan: `${gajiSelesai} dari ${gajiPeriode.length} baris`,
+        },
+        { label: "Periode Tercatat", nilai: thpPerPeriode.size, catatan: "sepanjang riwayat" },
       ],
+      tabelJudul: `Status Payroll Periode ${periodeGaji}`,
+      tabelKepala: ["Unit / Brand", "Jumlah Karyawan", "Status"],
+      tabel: kelompokGaji.map((k) => ({
+        kolom: [k.nama, String(k.jumlah), k.status === "selesai" ? "Selesai Diproses" : "Dalam Proses"],
+      })),
       grafik: [
         {
           bentuk: "batang",
@@ -398,9 +447,20 @@ export async function monitoringHcmos(user: UserProfile, periode = periodeKey())
       label: "Performance",
       ikon: "Target",
       angka: [
-        { label: "Penilaian", nilai: kinerja.length },
-        { label: "Rerata Skor", nilai: rerataKinerja, catatan: "dari 100" },
-        { label: "Sudah Ditinjau", nilai: kinerja.filter((k) => s(k.status) === "ditinjau").length },
+        {
+          label: "Review Kinerja Selesai",
+          nilai: `${ditinjau}/${totalTerpantau}`,
+          catatan: "terhadap seluruh karyawan terpantau",
+        },
+        {
+          // Penyebutnya jumlah KARYAWAN, bukan jumlah baris penilaian. Kalau
+          // penyebutnya diambil dari tabel penilaian, setiap orang yang belum
+          // dinilai ikut hilang dan angkanya selalu mendekati 100%.
+          label: "Penyelesaian Penilaian",
+          nilai: `${totalTerpantau ? Math.round((ditinjau / totalTerpantau) * 100) : 0}%`,
+          catatan: `${totalTerpantau - ditinjau} belum ditinjau`,
+        },
+        { label: "Rata-rata Skor Kinerja", nilai: rerataKinerja, catatan: "dari 100" },
         { label: "Masih Draf", nilai: kinerja.filter((k) => s(k.status) === "draf").length },
       ],
       grafik: [
@@ -421,7 +481,13 @@ export async function monitoringHcmos(user: UserProfile, periode = periodeKey())
         { label: "Posisi Kunci", nilai: suksesi.length },
         { label: "Penerus Siap", nilai: suksesi.filter((x) => s(x.kesiapan) === "siap_sekarang").length },
         { label: "Jenjang Jabatan", nilai: karier.length },
-        { label: "Kompetensi Dipetakan", nilai: 0, catatan: "lihat tab Kinerja & Kompetensi" },
+        {
+          // Dulu dipatok 0 dengan catatan "lihat tab lain" — angka yang tidak
+          // pernah berubah apa pun datanya. Sekarang dibaca dari tabelnya.
+          label: "Kompetensi Dipetakan",
+          nilai: new Set(kompetensi.map((k) => s(k.nama)).filter(Boolean)).size,
+          catatan: `${kompetensi.length} baris pemetaan`,
+        },
       ],
       grafik: [
         {
