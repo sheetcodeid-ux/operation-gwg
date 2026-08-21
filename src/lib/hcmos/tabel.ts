@@ -44,6 +44,10 @@ export const TABEL_HCMOS = {
     "jenis", "nama", "jabatan", "scope", "outlet_id", "kategori", "tanggal", "ringkasan", "tindakan", "status",
     // Ditambahkan untuk Case Management & Offboarding — lihat migrasi 0055.
     "tgl_selesai", "eskalasi", "exit_interview", "serah_aset", "payroll_final",
+    // Penunjuk orangnya — migrasi 0059. Tanpa ini, menutup offboarding hanya
+    // bisa mencocokkan NAMA, dan menonaktifkan akun berdasarkan tebakan nama
+    // berarti sesekali mengunci karyawan yang masih bekerja.
+    "user_id", "kontrak_id",
   ],
   // Request Intervensi — pengganti Appraisal Review (Meeting Fitur HRD).
   // `peran_pemohon` disimpan terpisah dari `pemohon` karena yang menentukan

@@ -544,3 +544,27 @@ export async function simpanUpdateBulanan(input: {
   );
   if (error) throw new Error(error.message);
 }
+
+/**
+ * Isi tanggal resign satu kontrak, HANYA bila kolomnya masih kosong.
+ *
+ * Dipakai penutupan Offboarding otomatis. Syarat "masih kosong" itu bagian dari
+ * keamanannya: kalau Human Capital sudah menuliskan tanggal sendiri — mungkin
+ * berbeda dari tanggal perkaranya ditutup, dan mereka yang tahu duduk soalnya —
+ * penutupan otomatis tidak boleh menimpanya.
+ */
+export async function tandaiResignKontrak(
+  kontrakId: string,
+  tanggal: string,
+  olehId: string,
+): Promise<boolean> {
+  if (!dbEnabled) return false;
+  const { data, error } = await db()
+    .from("hc_contracts")
+    .update({ tgl_resign: tanggal, updated_at: new Date().toISOString(), updated_by: olehId })
+    .eq("id", kontrakId)
+    .is("tgl_resign", null)
+    .select("id");
+  if (error) throw new Error(error.message);
+  return (data ?? []).length > 0;
+}

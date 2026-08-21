@@ -4,6 +4,9 @@ import { revalidatePath } from "next/cache";
 import { getSessionUser } from "@/lib/auth";
 import { canReachMenu } from "@/lib/nav";
 import { hapusBaris, simpanBaris } from "@/lib/data/hcmos-lanjutan";
+import { tandaiResignKontrak } from "@/lib/data/hcmos";
+import { setUserActive } from "@/lib/data/user-mutations";
+import { tindakanPenutupan } from "@/lib/hcmos/offboarding";
 import { tabelValid } from "@/lib/hcmos/tabel";
 import type { UserProfile } from "@/lib/types";
 
@@ -30,6 +33,7 @@ export async function simpanBarisAction(input: {
 
   try {
     await simpanBaris(input.tabel, input.isi, input.id, user!.id);
+    if (input.tabel === "hc_cases") await tutupOffboarding(input.isi, user!.id);
     // Hanya rute HC-MOS yang boleh disegarkan — rute sembarang dari peramban
     // tidak boleh dipakai untuk membatalkan cache halaman lain.
     if (input.rute.startsWith("/hc-mos")) revalidatePath(input.rute);
@@ -54,5 +58,45 @@ export async function hapusBarisAction(input: {
     return { ok: true };
   } catch (e) {
     return { error: e instanceof Error ? e.message : "Gagal menghapus." };
+  }
+}
+
+
+/**
+ * Langkah kelima alur Offboarding, dijalankan begitu perkaranya ditandai
+ * selesai: kontraknya diberi tanggal resign dan akunnya dinonaktifkan.
+ *
+ * Sebelumnya langkah ini sepenuhnya manual dan ada di menu lain, jadi kalau
+ * terlupa tidak ada yang memberi tahu — sementara justru langkah inilah yang
+ * benar-benar mencabut akses. Orang yang sudah keluar tetap bisa masuk.
+ *
+ * Kegagalannya sengaja TIDAK membatalkan penyimpanan perkaranya. Perkara yang
+ * sudah tersimpan dengan benar tidak boleh hilang gara-gara langkah susulan
+ * gagal; yang tertinggal akan muncul sendiri di daftar "Perlu Ditutup" pada
+ * halaman Offboarding, tempat manusia bisa melihat dan menuntaskannya.
+ */
+async function tutupOffboarding(isi: Record<string, unknown>, olehId: string): Promise<void> {
+  const teks = (k: string) => {
+    const v = isi[k];
+    return v === null || v === undefined ? null : String(v) || null;
+  };
+  const tindakan = tindakanPenutupan({
+    id: "",
+    jenis: teks("jenis") ?? "",
+    nama: teks("nama") ?? "",
+    status: teks("status") ?? "",
+    userId: teks("user_id"),
+    kontrakId: teks("kontrak_id"),
+    tglSelesai: teks("tgl_selesai"),
+    tanggal: teks("tanggal"),
+  });
+
+  try {
+    if (tindakan.tandaiResign) {
+      await tandaiResignKontrak(tindakan.tandaiResign.kontrakId, tindakan.tandaiResign.tanggal, olehId);
+    }
+    if (tindakan.nonaktifkanUser) setUserActive(tindakan.nonaktifkanUser, false);
+  } catch {
+    // Ditelan dengan sengaja — lihat catatan di atas.
   }
 }

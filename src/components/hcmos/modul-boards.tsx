@@ -46,6 +46,7 @@ import {
   type KeluarPerBrand,
   type PerkaraRingkas,
 } from "@/lib/hcmos/relasi";
+import { ALASAN_SISA, type SisaPenutupan } from "@/lib/hcmos/offboarding";
 import { GrafikBatang, GrafikDonat, GrafikGaris } from "./grafik";
 import {
   STATUS_MODUL_META,
@@ -318,12 +319,21 @@ export function RelasiBoard({
   kasus,
   keluar,
   outlets,
+  orangManajemen,
+  orangOutlet,
+  sisaPenutupan,
   bolehUbah,
   tabAwal = "kasus",
 }: {
   kasus: BarisRekaman[];
   keluar: BarisRekaman[];
   outlets: PilihanOutlet[];
+  /** Karyawan manajemen yang akunnya masih aktif — untuk penunjuk offboarding. */
+  orangManajemen: PilihanOutlet[];
+  /** Crew outlet yang kontraknya masih berjalan. */
+  orangOutlet: PilihanOutlet[];
+  /** Perkara selesai yang jejaknya belum tuntas. */
+  sisaPenutupan: SisaPenutupan[];
   bolehUbah: boolean;
   tabAwal?: string;
 }) {
@@ -425,6 +435,20 @@ export function RelasiBoard({
           },
         ] as Bidang[])
       : ([
+          {
+            key: "user_id",
+            label: "Akun Karyawan (Manajemen)",
+            tipe: "pilihan",
+            opsi: opsiOutlet(orangManajemen),
+            hint: "Akun ini otomatis dinonaktifkan begitu status diubah jadi Selesai.",
+          },
+          {
+            key: "kontrak_id",
+            label: "Baris Kontrak (Outlet)",
+            tipe: "pilihan",
+            opsi: opsiOutlet(orangOutlet),
+            hint: "Tanggal resign kontrak ini otomatis diisi saat perkara ditutup.",
+          },
           { key: "exit_interview", label: "Exit Interview Selesai", tipe: "boolean" },
           { key: "serah_aset", label: "Serah Terima Aset Selesai", tipe: "boolean" },
           { key: "payroll_final", label: "Payroll Final Diproses", tipe: "boolean" },
@@ -512,6 +536,8 @@ export function RelasiBoard({
           Sembilan crew keluar terbagi rata di empat brand adalah keadaan yang
           sama sekali berbeda dari sembilan-sembilanya dari satu brand, padahal
           grafik alasan menampilkan keduanya persis sama. */}
+      {tab === "keluar" && sisaPenutupan.length > 0 && <SisaPenutupanKartu rows={sisaPenutupan} />}
+
       {tab === "keluar" && scope === "manajemen" && (
         <GrafikBatang
           judul={`Alasan Keluar (${tahun})`}
@@ -1072,6 +1098,45 @@ function RekapBrandKeluar({ rows }: { rows: KeluarPerBrand[] }) {
             </table>
           </div>
         )}
+      </CardContent>
+    </Card>
+  );
+}
+
+
+/**
+ * Perkara offboarding yang sudah ditandai selesai tapi jejaknya belum tuntas.
+ *
+ * Ditaruh di ATAS grafik, bukan di kaki halaman: ini satu-satunya kartu di
+ * modul ini yang menuntut tindakan, dan kartu yang menuntut tindakan tidak
+ * boleh perlu digulir untuk ditemukan.
+ */
+function SisaPenutupanKartu({ rows }: { rows: SisaPenutupan[] }) {
+  return (
+    <Card className="border-amber-500/40">
+      <CardHeader className="pb-2">
+        <CardTitle className="flex items-center gap-2">
+          <AlertTriangle className="size-4 text-amber-500" />
+          Perlu Ditutup — {rows.length} perkara
+        </CardTitle>
+        <p className="text-[11px] text-muted-foreground">
+          Sudah ditandai selesai, tapi aksesnya belum benar-benar dicabut
+        </p>
+      </CardHeader>
+      <CardContent>
+        <ul className="divide-y divide-border">
+          {rows.map((r, i) => (
+            <li key={`${r.kasusId}-${i}`} className="flex items-start gap-3 py-2.5 first:pt-0 last:pb-0">
+              <span className="min-w-0 flex-1">
+                <span className="block truncate text-sm font-medium text-foreground">{r.nama || "—"}</span>
+                <span className="block text-[12px] text-muted-foreground">{ALASAN_SISA[r.alasan]}</span>
+              </span>
+              <Badge tone={r.alasan === "akun-masih-aktif" ? "danger" : "warning"}>
+                {r.alasan === "akun-masih-aktif" ? "Akses aktif" : "Belum lengkap"}
+              </Badge>
+            </li>
+          ))}
+        </ul>
       </CardContent>
     </Card>
   );
