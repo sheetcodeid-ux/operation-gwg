@@ -383,3 +383,55 @@ export function garisKolom(tertata: SimpulTertata[]): GarisBagan[] {
   }
   return garis;
 }
+
+
+/* ──────────────────────────── silsilah & sorotan ──────────────────────────── */
+
+/** Rantai atasan dari sebuah simpul sampai puncak, terdekat lebih dulu. */
+export function rantaiKeAtas(simpul: SimpulBagan[], id: string): SimpulBagan[] {
+  const peta = new Map(simpul.map((s) => [s.id, s]));
+  const hasil: SimpulBagan[] = [];
+  const dilihat = new Set<string>([id]);
+  let kini = peta.get(id)?.parentId ?? null;
+  while (kini && !dilihat.has(kini)) {
+    dilihat.add(kini);
+    const s = peta.get(kini);
+    if (!s) break;
+    hasil.push(s);
+    kini = s.parentId;
+  }
+  return hasil;
+}
+
+/**
+ * Silsilah sebuah simpul: dirinya, seluruh atasannya ke atas, dan seluruh
+ * bawahannya ke bawah.
+ *
+ * Inilah yang sebenarnya ditanyakan orang saat menunjuk satu kotak di bagan
+ * enam puluh kotak — bukan "kotak ini apa", melainkan "kotak ini bagian dari
+ * jalur yang mana". Menyorot jalurnya dan meredupkan sisanya menjawab itu
+ * seketika; tanpa itu, matanya harus menyusuri garis satu per satu.
+ */
+export function silsilah(simpul: SimpulBagan[], id: string): Set<string> {
+  const hasil = new Set<string>([id]);
+  for (const s of rantaiKeAtas(simpul, id)) hasil.add(s.id);
+
+  const anak = new Map<string, string[]>();
+  for (const s of simpul) {
+    if (!s.parentId) continue;
+    anak.set(s.parentId, [...(anak.get(s.parentId) ?? []), s.id]);
+  }
+  const antre = [...(anak.get(id) ?? [])];
+  while (antre.length) {
+    const k = antre.pop()!;
+    if (hasil.has(k)) continue; // penjaga lingkaran
+    hasil.add(k);
+    antre.push(...(anak.get(k) ?? []));
+  }
+  return hasil;
+}
+
+/** Seluruh simpul yang punya bawahan — dipakai tombol "lipat semua". */
+export const simpulBercabang = (simpul: SimpulBagan[]): string[] => [
+  ...new Set(simpul.map((s) => s.parentId).filter((v): v is string => !!v)),
+];

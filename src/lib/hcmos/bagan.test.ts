@@ -7,6 +7,9 @@ import {
   cocok,
   inisialDari,
   jumlahKeturunan,
+  rantaiKeAtas,
+  silsilah,
+  simpulBercabang,
   tataKolom,
   garisBagan,
   perLevel,
@@ -241,5 +244,52 @@ describe("tataKolom", () => {
 
   it("seluruh simpul tergambar, tidak ada yang hilang", () => {
     expect(tataKolom(pohon)).toHaveLength(pohon.length);
+  });
+});
+
+describe("silsilah", () => {
+  //  bos → a → a1 → a1x ;  bos → b
+  const pohon = [
+    s("bos"),
+    s("a", { parentId: "bos" }),
+    s("b", { parentId: "bos" }),
+    s("a1", { parentId: "a" }),
+    s("a1x", { parentId: "a1" }),
+  ];
+
+  it("mencakup dirinya, atasannya ke atas, dan bawahannya ke bawah", () => {
+    expect([...silsilah(pohon, "a1")].sort()).toEqual(["a", "a1", "a1x", "bos"]);
+  });
+
+  it("tidak menarik cabang saudara", () => {
+    expect(silsilah(pohon, "a1").has("b")).toBe(false);
+  });
+
+  it("dari puncak mencakup semuanya", () => {
+    expect(silsilah(pohon, "bos").size).toBe(pohon.length);
+  });
+
+  it("lingkaran tidak membuatnya berputar selamanya", () => {
+    const l = [s("x", { parentId: "y" }), s("y", { parentId: "x" })];
+    expect(silsilah(l, "x").size).toBe(2);
+  });
+});
+
+describe("rantaiKeAtas", () => {
+  const pohon = [s("bos"), s("a", { parentId: "bos" }), s("a1", { parentId: "a" })];
+
+  it("mengurut dari atasan terdekat ke puncak", () => {
+    expect(rantaiKeAtas(pohon, "a1").map((x) => x.id)).toEqual(["a", "bos"]);
+  });
+
+  it("puncak tidak punya atasan", () => {
+    expect(rantaiKeAtas(pohon, "bos")).toEqual([]);
+  });
+});
+
+describe("simpulBercabang", () => {
+  it("hanya simpul yang benar-benar punya bawahan", () => {
+    const pohon = [s("bos"), s("a", { parentId: "bos" }), s("b", { parentId: "bos" })];
+    expect(simpulBercabang(pohon)).toEqual(["bos"]);
   });
 });
