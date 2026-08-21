@@ -33,7 +33,7 @@ export function Popover({
   const [open, setOpen] = React.useState(false);
   const ref = React.useRef<HTMLDivElement>(null);
   const menuRef = React.useRef<HTMLDivElement>(null);
-  const [pos, setPos] = React.useState<{ top: number; left: number; width: number; maxW: number } | null>(null);
+  const [pos, setPos] = React.useState<{ top: number; left: number; width: number; maxW: number; maxH: number } | null>(null);
   const close = React.useCallback(() => setOpen(false), []);
 
   const place = React.useCallback(() => {
@@ -56,7 +56,23 @@ export function Popover({
     let left = align === "end" ? triggerLeft + triggerWidth - mw : triggerLeft;
     left = Math.min(left, vw - margin - mw);
     left = Math.max(margin, left);
-    setPos({ top: r.bottom / z + 8, left, width: triggerWidth, maxW });
+    // Menu dibalik ke ATAS bila ruang di bawah tidak cukup.
+    //
+    // Sebelumnya ia selalu turun, jadi setiap pemilih yang berada di dekat kaki
+    // layar membuka daftar yang terpotong tepi bawah — isinya ada, tapi tidak
+    // bisa dicapai. Yang paling sering kena justru panel yang memang duduk di
+    // bawah, seperti panel penempatan di bagan organisasi.
+    const vh = window.innerHeight / z;
+    const atas = r.top / z;
+    const bawah = r.bottom / z;
+    const menuH = menuRef.current ? menuRef.current.getBoundingClientRect().height / z : 0;
+    const ruangBawah = vh - bawah - margin * 2;
+    const ruangAtas = atas - margin * 2;
+    // Dibalik hanya kalau ruang di atas benar-benar LEBIH lega — kalau
+    // dua-duanya sempit, tetap ke bawah supaya arah bukanya bisa ditebak.
+    const keAtas = menuH > 0 && menuH > ruangBawah && ruangAtas > ruangBawah;
+    const top = keAtas ? Math.max(margin, atas - menuH - 8) : bawah + 8;
+    setPos({ top, left, width: triggerWidth, maxW, maxH: Math.max(120, (keAtas ? ruangAtas : ruangBawah)) });
   }, [align]);
 
   // Place BEFORE paint (layout effect) so the menu is never shown at its
@@ -105,7 +121,7 @@ export function Popover({
       ref={menuRef}
       className={cn(
         // Solid surface, crisp border, no blur/shadow and no open animation.
-        "rounded-xl border border-border bg-popover text-popover-foreground p-1.5",
+        "overflow-auto rounded-xl border border-border bg-popover text-popover-foreground p-1.5",
         // Portalled menus must clear overlays like the SlideOver (z-[90]); the
         // in-flow variant only needs to beat page content.
         portal ? "fixed z-[120]" : cn("absolute z-50 mt-2 min-w-56", align === "end" ? "right-0" : "left-0"),
@@ -118,6 +134,10 @@ export function Popover({
                 top: pos.top,
                 left: pos.left,
                 maxWidth: pos.maxW,
+                // Tinggi dibatasi ruang yang tersedia di arah bukanya, jadi
+                // daftar panjang menggulir DI DALAM menunya, bukan menembus
+                // tepi layar.
+                maxHeight: pos.maxH,
                 // Only matchTriggerWidth pins a pos-derived width. Otherwise width
                 // is CSS-driven (w-max / min-w) and STABLE across renders — a
                 // pos-derived minWidth would change the menu width after the first

@@ -59,6 +59,20 @@ export function setUserActive(id: string, active: boolean) {
   void saveUser(user);
 }
 
+/**
+ * Pindahkan seorang karyawan ke departemen lain — atau keluarkan dari semuanya.
+ *
+ * Dipakai bagan organisasi untuk menambah/melepas anggota sebuah role. Nama
+ * departemen, bukan id, karena itulah yang tersimpan di profil dan yang dipakai
+ * seluruh penyaringan menu.
+ */
+export function setUserDepartment(id: string, department: string | null) {
+  const user = getUser(id);
+  if (!user) return;
+  user.department = department ?? undefined;
+  void saveUser(user);
+}
+
 export function setUserAssignment(id: string, patch: { areaId?: string | null; outletIds?: string[] }) {
   const user = getUser(id);
   if (!user) return;

@@ -81,3 +81,33 @@ export async function rapikanBaganAction(): Promise<{ ok?: true; error?: string 
     return { error: persistMessage(e) };
   }
 }
+
+/**
+ * Menempatkan seorang karyawan ke sebuah role di bagan.
+ *
+ * Yang benar-benar diubah adalah kolom `department` di User Management —
+ * bukan tabel tersendiri milik bagan. Bagan MEMBACA departemen; kalau ia
+ * menyimpan keanggotaannya sendiri, akan ada dua daftar untuk pertanyaan yang
+ * sama ("orang ini di mana"), dan dua daftar seperti itu selalu berakhir
+ * berbeda tanpa ada yang menyadarinya.
+ *
+ * Efek sampingnya nyata dan disengaja: mengubah keanggotaan di sini sama
+ * dengan mengubahnya di User Management, termasuk menu apa saja yang terbuka
+ * untuk orang itu. Karena itu izinnya sama dengan izin menyusun bagan.
+ */
+export async function tempatkanOrangAction(input: {
+  userId: string;
+  /** Nama departemen/role tujuan; kosong berarti dikeluarkan dari role mana pun. */
+  departemen: string | null;
+}): Promise<{ ok?: true; error?: string }> {
+  if (!(await penyusun())) return { error: "Hanya Human Capital yang boleh mengubah penempatan." };
+  try {
+    const { setUserDepartment } = await import("@/lib/data/user-mutations");
+    setUserDepartment(input.userId, input.departemen?.trim() || null);
+    revalidatePath("/hc-mos/bagan");
+    revalidatePath("/admin/users");
+    return { ok: true };
+  } catch (e) {
+    return { error: persistMessage(e) };
+  }
+}

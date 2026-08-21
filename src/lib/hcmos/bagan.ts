@@ -138,83 +138,11 @@ export function perLevel(simpul: SimpulBagan[]): BarisLevel[] {
 export interface SimpulTertata extends SimpulBagan {
   x: number;
   y: number;
-  /** Kedalaman dari akar — dipakai mewarnai bila levelnya belum diisi. */
+  /** Kedalaman baris di bagan — dipakai untuk animasi bertahap. */
   kedalaman: number;
 }
 
-export const LEBAR_KARTU = 208;
-export const TINGGI_KARTU = 88;
-const JARAK_X = 32;
-const JARAK_Y = 72;
-
-/**
- * Tata letak pohon: anak-anak berjajar di bawah induknya, induk berada di
- * TENGAH rentang anak-anaknya.
- *
- * Ditata dari daun ke akar, bukan sebaliknya. Menempatkan induk lebih dulu
- * berarti menebak selebar apa cabang di bawahnya, dan tebakan itu meleset
- * setiap kali cabangnya tidak seimbang — persis keadaan yang paling sering
- * terjadi pada struktur organisasi sungguhan.
- */
-export function tataPohon(simpul: SimpulBagan[]): SimpulTertata[] {
-  const peta = new Map(simpul.map((s) => [s.id, s]));
-  const anak = new Map<string | null, SimpulBagan[]>();
-  for (const s of simpul) {
-    // Atasan yang tidak dikenal diperlakukan sebagai tanpa atasan, supaya
-    // simpul yatim tetap tergambar dan bisa disambungkan lagi.
-    const induk = s.parentId && peta.has(s.parentId) ? s.parentId : null;
-    anak.set(induk, [...(anak.get(induk) ?? []), s]);
-  }
-  for (const [k, v] of anak) {
-    anak.set(
-      k,
-      [...v].sort((a, b) => (a.urutan ?? 999) - (b.urutan ?? 999) || a.nama.localeCompare(b.nama, "id")),
-    );
-  }
-
-  const hasil: SimpulTertata[] = [];
-  const dilihat = new Set<string>();
-  let kursor = 0;
-
-  const tempatkan = (s: SimpulBagan, kedalaman: number): number => {
-    // Penjaga lingkaran: kalau simpul ini sudah pernah ditempatkan di jalur yang
-    // sama, berhenti. Tanpa ini penelusuran berputar tanpa akhir.
-    if (dilihat.has(s.id)) return kursor;
-    dilihat.add(s.id);
-
-    const anaknya = anak.get(s.id) ?? [];
-    const y = kedalaman * (TINGGI_KARTU + JARAK_Y);
-    let x: number;
-
-    if (anaknya.length === 0) {
-      x = kursor;
-      kursor += LEBAR_KARTU + JARAK_X;
-    } else {
-      const posisiAnak = anaknya.map((a) => tempatkan(a, kedalaman + 1));
-      const sah = posisiAnak.filter((p) => Number.isFinite(p));
-      x = sah.length ? (Math.min(...sah) + Math.max(...sah)) / 2 : kursor;
-    }
-
-    hasil.push({ ...s, x: s.posX ?? x, y: s.posY ?? y, kedalaman });
-    return x;
-  };
-
-  for (const akar of anak.get(null) ?? []) {
-    tempatkan(akar, 0);
-    kursor += JARAK_X * 2; // jarak antar pohon
-  }
-  // Simpul yang tidak terjangkau dari akar mana pun — hanya mungkin bila ada
-  // lingkaran. Tetap digambar supaya bisa diperbaiki.
-  for (const s of simpul) {
-    if (!dilihat.has(s.id)) {
-      hasil.push({ ...s, x: s.posX ?? kursor, y: s.posY ?? 0, kedalaman: 0 });
-      kursor += LEBAR_KARTU + JARAK_X;
-    }
-  }
-  return hasil;
-}
-
-/** Garis penghubung induk → anak, dari titik tengah bawah ke tengah atas. */
+/** Garis penghubung induk → anak. */
 export interface GarisBagan {
   dari: string;
   ke: string;
@@ -224,33 +152,6 @@ export interface GarisBagan {
   y2: number;
 }
 
-export function garisBagan(tertata: SimpulTertata[]): GarisBagan[] {
-  const peta = new Map(tertata.map((s) => [s.id, s]));
-  const garis: GarisBagan[] = [];
-  for (const s of tertata) {
-    const induk = s.parentId ? peta.get(s.parentId) : null;
-    if (!induk) continue;
-    garis.push({
-      dari: induk.id,
-      ke: s.id,
-      x1: induk.x + LEBAR_KARTU / 2,
-      y1: induk.y + TINGGI_KARTU,
-      x2: s.x + LEBAR_KARTU / 2,
-      y2: s.y,
-    });
-  }
-  return garis;
-}
-
-/** Ukuran kanvas yang dibutuhkan — dipakai tombol "Muat" (fit). */
-export function ukuranKanvas(tertata: SimpulTertata[]): { lebar: number; tinggi: number } {
-  if (tertata.length === 0) return { lebar: LEBAR_KARTU, tinggi: TINGGI_KARTU };
-  return {
-    lebar: Math.max(...tertata.map((s) => s.x)) + LEBAR_KARTU,
-    tinggi: Math.max(...tertata.map((s) => s.y)) + TINGGI_KARTU,
-  };
-}
-
 /** Cocok dengan pencarian: nama departemen atau salah satu jabatan di dalamnya. */
 export function cocok(s: SimpulBagan, kata: string): boolean {
   const q = kata.trim().toLowerCase();
@@ -258,30 +159,46 @@ export function cocok(s: SimpulBagan, kata: string): boolean {
   return s.nama.toLowerCase().includes(q) || s.jabatan.some((j) => j.toLowerCase().includes(q));
 }
 
-
 /* ───────────────────────────── tata letak kolom ───────────────────────────── */
 
 export const LEBAR_KOLOM = 176;
 export const TINGGI_KOLOM = 78;
-const SELA_X = 24;
-const SELA_Y = 12;
-const SELA_TIER = 56;
+const SELA_X = 28;
+const SELA_Y = 14;
+const SELA_TIER = 64;
+const INDENT_KOLOM = 16;
+/** Ruang cadangan di kanan tiap kolom untuk indentasi keturunannya. */
+const RUANG_INDENT = INDENT_KOLOM * 3;
 
 /**
- * Tata letak KOLOM — bentuk yang dipakai bagan organisasi sungguhan.
+ * Tingkat sebuah simpul di bagan — dari kolom `level`, bukan dari kedalaman
+ * pohon.
  *
- * Pohon simetris (induk tepat di tengah anak-anaknya) terlihat rapi pada contoh
- * kecil, tapi pada struktur nyata dengan sepuluh divisi dan enam puluh posisi
- * ia melebar sampai puluhan ribu piksel: setiap daun menuntut lebarnya sendiri,
- * dan lebar itu menjalar ke atas. Yang tersisa cuma pita tipis di tengah layar
- * dengan ruang kosong menganga di kiri-kanannya.
+ * Ini bagian yang sempat saya buat keliru dan akibatnya terlihat langsung.
+ * SELURUH sepuluh kepala divisi melapor ke Managing Director, persis seperti
+ * Executive Assistant, Internal Audit, dan Legal. Kalau tingkat dihitung dari
+ * kedalaman pohon, ketiga belasnya jadi satu tingkat — dan tiap unit di
+ * bawahnya naik pangkat jadi kepala kolom sendiri, sehingga bagan melebar ke
+ * samping alih-alih menurun.
  *
- * Bentuk kolom membalik itu. Dua tingkat teratas tetap mendatar — di situ
- * memang sedikit simpulnya dan hubungannya perlu terlihat sekaligus. Mulai
- * tingkat ketiga, tiap kepala divisi memulai KOLOMNYA SENDIRI dan seluruh
- * keturunannya ditumpuk lurus ke bawah. Tingginya tumbuh dengan jumlah orang,
- * bukan lebarnya — dan layar memang bisa digulir ke bawah jauh lebih nyaman
- * daripada ke samping.
+ * Level yang ditetapkan Human Capital-lah yang tahu bedanya, dan hanya itu.
+ */
+const tingkat = (s: SimpulBagan, kedalaman: number): number => s.level ?? kedalaman + 1;
+
+/**
+ * Tata letak KOLOM.
+ *
+ *   Level 1  — satu baris mendatar di puncak.
+ *   Level 2  — satu baris mendatar di bawahnya.
+ *   Level 3  — satu baris mendatar; tiap kepala divisi membuka KOLOMNYA sendiri.
+ *   Level 4+ — menumpuk LURUS KE BAWAH di dalam kolom divisinya, berindentasi
+ *              sedikit tiap turun satu tingkat.
+ *
+ * Tiga baris teratas mendatar karena di situ simpulnya sedikit dan hubungannya
+ * perlu terlihat sekaligus. Sisanya menurun karena di situlah jumlahnya
+ * meledak: tiga puluh unit dan dua belas staf: kalau ikut melebar, bagannya
+ * menuntut gulir menyamping puluhan ribu piksel — dan menggulir menyamping jauh
+ * lebih melelahkan daripada ke bawah.
  */
 export function tataKolom(simpul: SimpulBagan[], terlipat: ReadonlySet<string> = new Set()): SimpulTertata[] {
   const peta = new Map(simpul.map((s) => [s.id, s]));
@@ -290,95 +207,126 @@ export function tataKolom(simpul: SimpulBagan[], terlipat: ReadonlySet<string> =
     const induk = s.parentId && peta.has(s.parentId) ? s.parentId : null;
     anak.set(induk, [...(anak.get(induk) ?? []), s]);
   }
-  for (const [k, v] of anak) {
-    anak.set(k, [...v].sort((a, b) => (a.urutan ?? 999) - (b.urutan ?? 999) || a.nama.localeCompare(b.nama, "id")));
+  const urut = (v: SimpulBagan[]) =>
+    [...v].sort((a, b) => (a.urutan ?? 999) - (b.urutan ?? 999) || a.nama.localeCompare(b.nama, "id"));
+  for (const [k, v] of anak) anak.set(k, urut(v));
+
+  // Kedalaman dipakai HANYA sebagai cadangan bagi simpul yang levelnya belum
+  // diisi — supaya bagan tetap terbentuk sebelum Human Capital menetapkannya.
+  const kedalaman = new Map<string, number>();
+  {
+    const antre: { id: string; d: number }[] = (anak.get(null) ?? []).map((s) => ({ id: s.id, d: 0 }));
+    while (antre.length) {
+      const { id, d } = antre.pop()!;
+      if (kedalaman.has(id)) continue;
+      kedalaman.set(id, d);
+      for (const a of anak.get(id) ?? []) antre.push({ id: a.id, d: d + 1 });
+    }
   }
+  const lvl = (s: SimpulBagan) => tingkat(s, kedalaman.get(s.id) ?? 0);
 
   const hasil: SimpulTertata[] = [];
   const dilihat = new Set<string>();
-  const akar = anak.get(null) ?? [];
 
-  // Tingkat 0 dan 1: mendatar, dipusatkan belakangan setelah lebar totalnya
-  // diketahui. Tingkat 2 ke bawah: satu kolom per simpul tingkat 2.
-  const tier1 = akar.flatMap((a) => anak.get(a.id) ?? []);
-  const tier2 = tier1.flatMap((a) => anak.get(a.id) ?? []);
-
-  const kolomDari = (s: SimpulBagan, x: number, y: number, kedalaman: number): number => {
-    if (dilihat.has(s.id)) return y;
-    dilihat.add(s.id);
-    hasil.push({ ...s, x: s.posX ?? x, y: s.posY ?? y, kedalaman });
-    let bawah = y + TINGGI_KOLOM + SELA_Y;
-    if (terlipat.has(s.id)) {
-      // Keturunannya ikut ditandai sudah-dilihat meski tidak digambar.
-      // Tanpa itu, jaring "tak terjangkau" di bawah menganggapnya simpul yatim
-      // lalu menggambarnya kembali di luar bagan — melipat sebuah cabang justru
-      // memuntahkan isinya ke tempat yang lebih mencolok.
-      tandaiKeturunan(s.id);
-      return bawah;
-    }
-    for (const a of anak.get(s.id) ?? []) bawah = kolomDari(a, x, bawah, kedalaman + 1);
-    return bawah;
-  };
-
-  function tandaiKeturunan(id: string) {
+  const tandaiKeturunan = (id: string) => {
     for (const a of anak.get(id) ?? []) {
       if (dilihat.has(a.id)) continue;
       dilihat.add(a.id);
       tandaiKeturunan(a.id);
     }
-  }
+  };
 
-  // Kolom-kolomnya dulu, supaya lebar totalnya diketahui sebelum dua tingkat
-  // teratas dipusatkan terhadapnya.
+  /** Menumpuk satu simpul dan seluruh keturunannya lurus ke bawah. */
+  const tumpuk = (s: SimpulBagan, x: number, y: number, dalam: number): number => {
+    if (dilihat.has(s.id)) return y;
+    dilihat.add(s.id);
+    hasil.push({ ...s, x: s.posX ?? x, y: s.posY ?? y, kedalaman: dalam });
+    let bawah = y + TINGGI_KOLOM + SELA_Y;
+    if (terlipat.has(s.id)) {
+      tandaiKeturunan(s.id);
+      return bawah;
+    }
+    for (const a of anak.get(s.id) ?? []) bawah = tumpuk(a, x + INDENT_KOLOM, bawah, dalam + 1);
+    return bawah;
+  };
+
+  // Kepala kolom: level 3 ke bawah yang induknya berada di atas level 3 — atau
+  // tidak punya induk sama sekali.
+  const kepalaKolom = urut(
+    simpul.filter((s) => {
+      if (lvl(s) < 3) return false;
+      const induk = s.parentId ? peta.get(s.parentId) : null;
+      return !induk || lvl(induk) < 3;
+    }),
+  );
+
   const yKolom = 2 * (TINGGI_KOLOM + SELA_TIER);
-  let x = 0;
   const xKolom = new Map<string, number>();
-  for (const s of tier2) {
+  let x = 0;
+  for (const s of kepalaKolom) {
     xKolom.set(s.id, x);
-    kolomDari(s, x, yKolom, 2);
-    x += LEBAR_KOLOM + SELA_X;
+    tumpuk(s, x, yKolom, 2);
+    x += LEBAR_KOLOM + RUANG_INDENT + SELA_X;
   }
   const lebarTotal = Math.max(x - SELA_X, LEBAR_KOLOM);
 
-  // Tingkat 1 dipusatkan di atas rentang kolom anak-anaknya; yang tidak punya
-  // kolom dijajarkan merata.
-  const lebarTier1 = tier1.length * LEBAR_KOLOM + (tier1.length - 1) * SELA_X;
-  let xTier1 = (lebarTotal - lebarTier1) / 2;
-  for (const s of tier1) {
-    const anaknya = (anak.get(s.id) ?? []).map((a) => xKolom.get(a.id)).filter((v): v is number => v !== undefined);
-    const px = anaknya.length ? (Math.min(...anaknya) + Math.max(...anaknya)) / 2 : xTier1;
-    dilihat.add(s.id);
-    hasil.push({ ...s, x: s.posX ?? px, y: s.posY ?? TINGGI_KOLOM + SELA_TIER, kedalaman: 1 });
-    xTier1 += LEBAR_KOLOM + SELA_X;
-  }
+  const barisMendatar = (isi: SimpulBagan[], y: number, dalam: number) => {
+    const lebar = isi.length * LEBAR_KOLOM + Math.max(0, isi.length - 1) * SELA_X;
+    let kx = (lebarTotal - lebar) / 2;
+    for (const s of isi) {
+      if (dilihat.has(s.id)) continue;
+      dilihat.add(s.id);
+      // Simpul yang punya kolom di bawahnya dipusatkan di atas rentang kolom
+      // itu; sisanya dijajarkan merata.
+      const kolomAnak = (anak.get(s.id) ?? [])
+        .map((a) => xKolom.get(a.id))
+        .filter((v): v is number => v !== undefined);
+      const px = kolomAnak.length ? (Math.min(...kolomAnak) + Math.max(...kolomAnak)) / 2 : kx;
+      hasil.push({ ...s, x: s.posX ?? px, y: s.posY ?? y, kedalaman: dalam });
+      kx += LEBAR_KOLOM + SELA_X;
+    }
+  };
 
-  for (const s of akar) {
-    dilihat.add(s.id);
-    hasil.push({ ...s, x: s.posX ?? (lebarTotal - LEBAR_KOLOM) / 2, y: s.posY ?? 0, kedalaman: 0 });
-  }
+  barisMendatar(urut(simpul.filter((s) => lvl(s) === 2)), TINGGI_KOLOM + SELA_TIER, 1);
+  barisMendatar(urut(simpul.filter((s) => lvl(s) <= 1)), 0, 0);
 
-  // Simpul yang tak terjangkau — hanya mungkin bila ada lingkaran. Tetap
-  // digambar supaya bisa diperbaiki.
+  // Simpul tak terjangkau — hanya mungkin bila ada lingkaran. Tetap digambar.
   let xSisa = 0;
   for (const s of simpul) {
     if (dilihat.has(s.id)) continue;
+    dilihat.add(s.id);
     hasil.push({ ...s, x: s.posX ?? xSisa, y: s.posY ?? -(TINGGI_KOLOM + SELA_TIER), kedalaman: 0 });
     xSisa += LEBAR_KOLOM + SELA_X;
   }
   return hasil;
 }
 
-/** Garis siku — dua tingkat teratas turun tegak, kolom menyamping dari kiri. */
+/**
+ * Garis penghubung.
+ *
+ * Dua bentuk, dan bedanya mengikuti bentuk tata letaknya: antar-baris mendatar
+ * ia turun dari tengah bawah induk lalu belok ke tengah atas anak; di dalam
+ * kolom ia turun sebagai TULANG di sisi kiri induk lalu menyiku ke tepi kiri
+ * anak — bentuk yang sama seperti daftar bertingkat, dan itu memang yang sedang
+ * digambarkan.
+ */
 export function garisKolom(tertata: SimpulTertata[]): GarisBagan[] {
   const peta = new Map(tertata.map((s) => [s.id, s]));
   const garis: GarisBagan[] = [];
   for (const s of tertata) {
     const induk = s.parentId ? peta.get(s.parentId) : null;
     if (!induk) continue;
-    const menumpuk = Math.abs(induk.x - s.x) < 1;
+    const menumpuk = s.x > induk.x && s.y > induk.y + TINGGI_KOLOM / 2;
     garis.push(
       menumpuk
-        ? { dari: induk.id, ke: s.id, x1: induk.x + 16, y1: induk.y + TINGGI_KOLOM, x2: s.x + 16, y2: s.y }
+        ? {
+            dari: induk.id,
+            ke: s.id,
+            x1: induk.x + INDENT_KOLOM / 2,
+            y1: induk.y + TINGGI_KOLOM,
+            x2: s.x,
+            y2: s.y + TINGGI_KOLOM / 2,
+          }
         : {
             dari: induk.id,
             ke: s.id,
@@ -392,6 +340,14 @@ export function garisKolom(tertata: SimpulTertata[]): GarisBagan[] {
   return garis;
 }
 
+/** Ukuran kanvas yang dibutuhkan — dipakai tombol "Fit". */
+export function ukuranKanvas(tertata: SimpulTertata[]): { lebar: number; tinggi: number } {
+  if (tertata.length === 0) return { lebar: LEBAR_KOLOM, tinggi: TINGGI_KOLOM };
+  return {
+    lebar: Math.max(...tertata.map((s) => s.x)) + LEBAR_KOLOM,
+    tinggi: Math.max(...tertata.map((s) => s.y)) + TINGGI_KOLOM,
+  };
+}
 
 /* ──────────────────────────── silsilah & sorotan ──────────────────────────── */
 

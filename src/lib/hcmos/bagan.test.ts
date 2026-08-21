@@ -1,7 +1,6 @@
 import { describe, expect, it } from "vitest";
 
 import {
-  LEBAR_KARTU,
   LEBAR_KOLOM,
   bolehJadiAtasan,
   cocok,
@@ -12,9 +11,7 @@ import {
   silsilah,
   simpulBercabang,
   tataKolom,
-  garisBagan,
   perLevel,
-  tataPohon,
   ukuranKanvas,
   type SimpulBagan,
 } from "./bagan";
@@ -57,70 +54,6 @@ describe("bolehJadiAtasan", () => {
   it("id yang tidak dikenal ditolak", () => {
     expect(bolehJadiAtasan(pohon, "c", "entah")).toBe(false);
     expect(bolehJadiAtasan(pohon, "entah", "a")).toBe(false);
-  });
-});
-
-describe("tataPohon", () => {
-  it("induk berada tepat di tengah anak-anaknya", () => {
-    const rows = [s("bos"), s("x", { parentId: "bos" }), s("y", { parentId: "bos" })];
-    const t = tataPohon(rows);
-    const bos = t.find((n) => n.id === "bos")!;
-    const x = t.find((n) => n.id === "x")!;
-    const y = t.find((n) => n.id === "y")!;
-    expect(bos.x).toBe((x.x + y.x) / 2);
-    expect(bos.y).toBeLessThan(x.y);
-  });
-
-  it("anak tunggal membuat induk tepat di atasnya", () => {
-    const t = tataPohon([s("bos"), s("x", { parentId: "bos" })]);
-    expect(t.find((n) => n.id === "bos")!.x).toBe(t.find((n) => n.id === "x")!.x);
-  });
-
-  it("posisi hasil geseran menang atas tata letak otomatis", () => {
-    const t = tataPohon([s("a", { posX: 999, posY: 555 })]);
-    expect(t[0]).toMatchObject({ x: 999, y: 555 });
-  });
-
-  it("LINGKARAN tidak membuat penelusuran berputar selamanya", () => {
-    const rows = [s("a", { parentId: "b" }), s("b", { parentId: "a" })];
-    const t = tataPohon(rows);
-    expect(t).toHaveLength(2);
-  });
-
-  it("atasan yang menunjuk id terhapus tetap digambar sebagai akar", () => {
-    const t = tataPohon([s("a", { parentId: "sudah-dihapus" })]);
-    expect(t).toHaveLength(1);
-    expect(t[0].kedalaman).toBe(0);
-  });
-
-  it("beberapa akar tidak saling menimpa", () => {
-    const t = tataPohon([s("a"), s("b")]);
-    const [a, b] = ["a", "b"].map((id) => t.find((n) => n.id === id)!);
-    expect(Math.abs(a.x - b.x)).toBeGreaterThanOrEqual(LEBAR_KARTU);
-  });
-
-  it("urutan menentukan siapa di kiri", () => {
-    const rows = [
-      s("bos"),
-      s("kanan", { parentId: "bos", urutan: 2 }),
-      s("kiri", { parentId: "bos", urutan: 1 }),
-    ];
-    const t = tataPohon(rows);
-    expect(t.find((n) => n.id === "kiri")!.x).toBeLessThan(t.find((n) => n.id === "kanan")!.x);
-  });
-});
-
-describe("garisBagan", () => {
-  it("menggambar satu garis per hubungan induk-anak", () => {
-    const t = tataPohon([s("bos"), s("x", { parentId: "bos" })]);
-    const g = garisBagan(t);
-    expect(g).toHaveLength(1);
-    expect(g[0]).toMatchObject({ dari: "bos", ke: "x" });
-    expect(g[0].y1).toBeLessThan(g[0].y2);
-  });
-
-  it("akar tanpa induk tidak menghasilkan garis menggantung", () => {
-    expect(garisBagan(tataPohon([s("a")]))).toEqual([]);
   });
 });
 
@@ -199,48 +132,76 @@ describe("jumlahKeturunan", () => {
 });
 
 describe("tataKolom", () => {
-  // bos → (ea) → (div1, div2); div1 → sub1 → sub1a
+  // Struktur seperti GWG: MD di puncak; Level 2 dan Level 3 sama-sama melapor
+  // ke MD; unit Level 4 ke bawah menggantung di divisinya.
   const pohon = [
-    s("bos"),
-    s("ea", { parentId: "bos" }),
-    s("div1", { parentId: "ea", urutan: 1 }),
-    s("div2", { parentId: "ea", urutan: 2 }),
-    s("sub1", { parentId: "div1" }),
-    s("sub1a", { parentId: "sub1" }),
+    s("md", { level: 1 }),
+    s("ea", { level: 2, parentId: "md" }),
+    s("audit", { level: 2, parentId: "md" }),
+    s("it", { level: 3, parentId: "md", urutan: 1 }),
+    s("hc", { level: 3, parentId: "md", urutan: 2 }),
+    s("bs", { level: 4, parentId: "it", urutan: 1 }),
+    s("sd", { level: 4, parentId: "it", urutan: 2 }),
+    s("staf", { level: 5, parentId: "bs" }),
   ];
 
-  it("keturunan sebuah kolom menumpuk pada x yang SAMA", () => {
+  it("Level 2 SEBARIS mendatar, bukan bertumpuk", () => {
     const t = tataKolom(pohon);
-    const [div1, sub1, sub1a] = ["div1", "sub1", "sub1a"].map((id) => t.find((n) => n.id === id)!);
-    expect(sub1.x).toBe(div1.x);
-    expect(sub1a.x).toBe(div1.x);
-    expect(sub1.y).toBeGreaterThan(div1.y);
-    expect(sub1a.y).toBeGreaterThan(sub1.y);
+    const [ea, audit] = ["ea", "audit"].map((id) => t.find((n) => n.id === id)!);
+    expect(ea.y).toBe(audit.y);
+    expect(Math.abs(ea.x - audit.x)).toBeGreaterThanOrEqual(LEBAR_KOLOM);
   });
 
-  it("kolom yang berbeda tidak saling menimpa", () => {
+  it("Level 3 sebaris mendatar DI BAWAH Level 2, meski sama-sama melapor ke MD", () => {
+    // Inilah yang salah saat tingkat dihitung dari kedalaman pohon: ketiga
+    // belasnya jadi satu baris karena induknya sama-sama Managing Director.
     const t = tataKolom(pohon);
-    const [div1, div2] = ["div1", "div2"].map((id) => t.find((n) => n.id === id)!);
-    expect(Math.abs(div1.x - div2.x)).toBeGreaterThanOrEqual(LEBAR_KOLOM);
+    const [ea, it, hc] = ["ea", "it", "hc"].map((id) => t.find((n) => n.id === id)!);
+    expect(it.y).toBe(hc.y);
+    expect(it.y).toBeGreaterThan(ea.y);
   });
 
-  it("melipat sebuah simpul menyembunyikan seluruh keturunannya", () => {
-    const t = tataKolom(pohon, new Set(["div1"]));
-    expect(t.find((n) => n.id === "sub1")).toBeUndefined();
-    expect(t.find((n) => n.id === "sub1a")).toBeUndefined();
-    expect(t.find((n) => n.id === "div1")).toBeDefined();
+  it("Level 4 ke bawah MENUMPUK ke bawah di dalam kolom divisinya", () => {
+    const t = tataKolom(pohon);
+    const [it, bs, sd] = ["it", "bs", "sd"].map((id) => t.find((n) => n.id === id)!);
+    expect(bs.y).toBeGreaterThan(it.y);
+    expect(sd.y).toBeGreaterThan(bs.y);
+    // Bertumpuk, bukan berjajar: selisih x-nya hanya sebesar indentasi.
+    expect(Math.abs(bs.x - sd.x)).toBeLessThan(LEBAR_KOLOM);
   });
 
-  it("akar berada di paling atas", () => {
+  it("tiap turun satu tingkat berindentasi sedikit ke kanan", () => {
     const t = tataKolom(pohon);
-    const bos = t.find((n) => n.id === "bos")!;
-    expect(bos.y).toBe(0);
-    expect(t.every((n) => n.y >= bos.y)).toBe(true);
+    const [it, bs, staf] = ["it", "bs", "staf"].map((id) => t.find((n) => n.id === id)!);
+    expect(bs.x).toBeGreaterThan(it.x);
+    expect(staf.x).toBeGreaterThan(bs.x);
+  });
+
+  it("kolom divisi yang berbeda tidak saling menimpa", () => {
+    const t = tataKolom(pohon);
+    const [it, hc] = ["it", "hc"].map((id) => t.find((n) => n.id === id)!);
+    expect(Math.abs(it.x - hc.x)).toBeGreaterThanOrEqual(LEBAR_KOLOM);
+  });
+
+  it("puncak berada di baris paling atas", () => {
+    const t = tataKolom(pohon);
+    expect(t.find((n) => n.id === "md")!.y).toBe(0);
+  });
+
+  it("melipat sebuah divisi menyembunyikan seluruh isinya", () => {
+    const t = tataKolom(pohon, new Set(["it"]));
+    expect(t.find((n) => n.id === "bs")).toBeUndefined();
+    expect(t.find((n) => n.id === "staf")).toBeUndefined();
+    expect(t.find((n) => n.id === "it")).toBeDefined();
+  });
+
+  it("tanpa level sama sekali, kedalaman pohon dipakai sebagai cadangan", () => {
+    const tanpaLevel = [s("a"), s("b", { parentId: "a" }), s("c", { parentId: "b" })];
+    expect(tataKolom(tanpaLevel)).toHaveLength(3);
   });
 
   it("lingkaran tidak membuat penelusuran berputar selamanya", () => {
-    const t = tataKolom([s("a", { parentId: "b" }), s("b", { parentId: "a" })]);
-    expect(t).toHaveLength(2);
+    expect(tataKolom([s("x", { parentId: "y" }), s("y", { parentId: "x" })])).toHaveLength(2);
   });
 
   it("seluruh simpul tergambar, tidak ada yang hilang", () => {

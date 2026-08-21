@@ -21,7 +21,7 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Combobox } from "@/components/ui/combobox";
 import { Input } from "@/components/ui/input";
-import { rapikanBaganAction, simpanPenempatanAction } from "@/lib/actions/bagan";
+import { rapikanBaganAction, simpanPenempatanAction, tempatkanOrangAction } from "@/lib/actions/bagan";
 import {
   LEBAR_KOLOM,
   LEVEL_MAX,
@@ -72,7 +72,22 @@ const warna = (level: number | null) => (level && WARNA[level]) || NETRAL;
 const ZOOM_MIN = 0.2;
 const ZOOM_MAX = 2;
 
-export function BaganOrganisasi({ simpul, bolehUbah }: { simpul: SimpulBagan[]; bolehUbah: boolean }) {
+export interface OrangBagan {
+  id: string;
+  nama: string;
+  jabatan: string;
+  departemen: string;
+}
+
+export function BaganOrganisasi({
+  simpul,
+  semuaOrang,
+  bolehUbah,
+}: {
+  simpul: SimpulBagan[];
+  semuaOrang: OrangBagan[];
+  bolehUbah: boolean;
+}) {
   const [tampilan, setTampilan] = React.useState<"level" | "bagan">("bagan");
   const [cari, setCari] = React.useState("");
   const [pilihan, setPilihan] = React.useState<Set<string>>(new Set());
@@ -113,6 +128,45 @@ export function BaganOrganisasi({ simpul, bolehUbah }: { simpul: SimpulBagan[]; 
   }, [utama, pilihan, mencari, cocokIds, lokal]);
 
   const jejak = React.useMemo(() => (utama ? rantaiKeAtas(lokal, utama).reverse() : []), [utama, lokal]);
+
+  /**
+   * Bawa kanvas ke sebuah kartu.
+   *
+   * Pencarian yang hanya menyorot tidak menyelesaikan apa pun pada bagan
+   * selebar ini: kartunya menyala di tempat yang tidak terlihat, dan orangnya
+   * tetap harus menggeser mencari-cari. Menemukan berarti MEMBAWA ke sana.
+   */
+  const bawaKe = React.useCallback(
+    (id: string) => {
+      const el = gulir.current;
+      const t = tertata.find((x) => x.id === id);
+      if (!el || !t) return;
+      el.scrollTo({
+        left: (t.x + 32 + LEBAR_KOLOM / 2) * zoom - el.clientWidth / 2,
+        top: (t.y + 32 + TINGGI_KOLOM / 2) * zoom - el.clientHeight / 2,
+        behavior: "smooth",
+      });
+    },
+    [tertata, zoom],
+  );
+
+  // Begitu pencarian menyisakan SATU kecocokan, kanvasnya langsung ke sana.
+  // Menunggu sampai satu itulah kuncinya: melompat pada setiap ketikan membuat
+  // kanvasnya berlompatan liar sementara orangnya masih mengetik.
+  const cocokTunggal = cocokIds.size === 1 ? [...cocokIds][0] : null;
+  // Penanda "sudah pernah dibawa" disimpan di ref, bukan state: ia tidak
+  // memengaruhi apa yang digambar, dan menaruhnya di state memaksa satu render
+  // tambahan setiap kali pencarian menyempit ke satu hasil.
+  const terakhirDibawa = React.useRef<string | null>(null);
+  React.useEffect(() => {
+    if (!cocokTunggal) {
+      terakhirDibawa.current = null;
+      return;
+    }
+    if (tampilan !== "bagan" || cocokTunggal === terakhirDibawa.current) return;
+    terakhirDibawa.current = cocokTunggal;
+    bawaKe(cocokTunggal);
+  }, [tampilan, cocokTunggal, bawaKe]);
   const bercabang = React.useMemo(() => simpulBercabang(lokal), [lokal]);
   const semuaTerlipat = terlipat.size >= bercabang.length && bercabang.length > 0;
   const terpilih = utama ? (lokal.find((s) => s.id === utama) ?? null) : null;
@@ -236,7 +290,14 @@ export function BaganOrganisasi({ simpul, bolehUbah }: { simpul: SimpulBagan[]; 
             <p className="flex min-w-0 items-center gap-1 truncate text-[11px] leading-tight text-muted-foreground">
               {jejak.map((j) => (
                 <React.Fragment key={j.id}>
-                  <button type="button" onClick={() => pilih(j.id, false)} className="truncate hover:text-foreground hover:underline">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      pilih(j.id, false);
+                      bawaKe(j.id);
+                    }}
+                    className="truncate hover:text-foreground hover:underline"
+                  >
                     {j.nama}
                   </button>
                   <ChevronRight className="size-3 shrink-0 opacity-50" />
@@ -469,6 +530,7 @@ export function BaganOrganisasi({ simpul, bolehUbah }: { simpul: SimpulBagan[]; 
         <PanelPenempatan
           simpul={terpilih}
           semua={lokal}
+          semuaOrang={semuaOrang}
           onTutup={() => setPilihan(new Set())}
           onSimpan={async (patch) => {
             setLokal((prev) => prev.map((s) => (s.id === terpilih.id ? { ...s, ...patch } : s)));
@@ -523,14 +585,16 @@ function LegendaLevel({
         {bolehUbah ? "Bisa disusun" : "Mode hanya lihat"}
       </span>
 
-      <div className="flex min-w-0 flex-1 flex-wrap items-center gap-1.5">
+      {/* Satu baris yang digulir menyamping bila tidak muat — melipat ke
+          baris kedua memakan tinggi kanvas, dan kanvas itulah isi halamannya. */}
+      <div className="scroll-fade-x flex min-w-0 flex-1 items-center gap-1.5 overflow-x-auto">
         {Array.from({ length: LEVEL_MAX }, (_, i) => i + 1).map((l) => {
           const w = warna(l);
           const r = rekap.get(l) ?? { role: 0, orang: 0 };
           return (
             <span
               key={l}
-              className="flex items-center gap-1.5 rounded-lg border border-border bg-card px-1.5 py-1"
+              className="flex shrink-0 items-center gap-1.5 rounded-lg border border-border bg-card px-1.5 py-1"
               title={`Level ${l} — ${NAMA_LEVEL[l]}: ${r.role} role, ${r.orang} orang`}
             >
               <span
@@ -953,11 +1017,13 @@ function TampilanLevel({
 function PanelPenempatan({
   simpul,
   semua,
+  semuaOrang,
   onTutup,
   onSimpan,
 }: {
   simpul: SimpulBagan;
   semua: SimpulBagan[];
+  semuaOrang: OrangBagan[];
   onTutup: () => void;
   onSimpan: (patch: { level?: number | null; parentId?: string | null }) => void;
 }) {
@@ -991,8 +1057,8 @@ function PanelPenempatan({
         </Button>
       </div>
 
-      <div className="grid gap-3 sm:grid-cols-2">
-        <div>
+      <div className="grid gap-3 sm:grid-cols-3">
+        <div className="sm:col-span-1">
           <span className="mb-1 block text-[11px] font-medium text-muted-foreground">Level</span>
           <Combobox
             value={simpul.level ? String(simpul.level) : ""}
@@ -1008,7 +1074,7 @@ function PanelPenempatan({
             ]}
           />
         </div>
-        <div>
+        <div className="sm:col-span-1">
           <span className="mb-1 block text-[11px] font-medium text-muted-foreground">Melapor ke</span>
           <Combobox
             value={simpul.parentId ?? ""}
@@ -1023,7 +1089,46 @@ function PanelPenempatan({
             ]}
           />
         </div>
+        <div className="sm:col-span-1">
+          <span className="mb-1 block text-[11px] font-medium text-muted-foreground">Tambah anggota</span>
+          <Combobox
+            value=""
+            onChange={async (uid) => {
+              if (!uid) return;
+              const res = await tempatkanOrangAction({ userId: uid, departemen: simpul.nama });
+              if (res.error) toast.error(res.error);
+              else toast.success(`${semuaOrang.find((o) => o.id === uid)?.nama ?? "Karyawan"} ditempatkan di ${simpul.nama}.`);
+            }}
+            placeholder="Pilih karyawan…"
+            searchable
+            searchPlaceholder="Cari nama karyawan…"
+            matchTriggerWidth
+            options={semuaOrang
+              .filter((o) => o.departemen !== simpul.nama)
+              .map((o) => ({
+                value: o.id,
+                // Departemen sekarangnya ikut ditulis: memindahkan orang dari
+                // satu role ke role lain tidak boleh terjadi tanpa yang
+                // memindahkan tahu ia sedang mengambilnya dari mana.
+                label: `${o.nama}${o.departemen ? ` — kini di ${o.departemen}` : " — belum ada role"}`,
+              }))}
+          />
+        </div>
       </div>
+
+      {(simpul.orang?.length ?? 0) > 0 && (
+        <div className="mt-2.5 flex flex-wrap items-center gap-1.5">
+          <span className="text-[11px] text-muted-foreground">Anggota:</span>
+          {(simpul.orang ?? []).map((o, i) => (
+            <span key={`${o.nama}-${i}`} className="flex items-center gap-1 rounded-full bg-card px-2 py-0.5 text-[11px] ring-1 ring-border">
+              <span className="grid size-4 place-items-center rounded-full bg-muted text-[7px] font-bold text-muted-foreground">
+                {inisialDari(o.nama)}
+              </span>
+              {o.nama}
+            </span>
+          ))}
+        </div>
+      )}
     </div>
   );
 }

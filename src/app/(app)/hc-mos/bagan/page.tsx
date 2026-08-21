@@ -53,8 +53,16 @@ export default async function BaganPage() {
     deskripsi: d.deskripsi,
   }));
 
+  // Seluruh karyawan aktif — untuk memilih siapa yang ditambahkan ke sebuah
+  // role. Diambil di server, bukan dicari ulang lewat aksi tiap kali panelnya
+  // dibuka: seratusan nama itu ringan, dan menunggu jaringan setiap kali panel
+  // terbuka terasa jauh lebih berat daripada mengirimkannya sekali.
+  const semuaOrang = users
+    .map((u) => ({ id: u.id, nama: u.name, jabatan: (u.jabatan ?? "").trim() || "—", departemen: (u.department ?? "").trim() }))
+    .sort((a, b) => a.nama.localeCompare(b.nama, "id"));
+
   // Tanpa breadcrumb, tanpa tautan kembali, tanpa keterangan: halaman ini
   // adalah kanvas, dan setiap baris di atasnya memotong tinggi kanvas itu.
   // Jalan kembali tetap ada di sidebar, tempat orang memang mencarinya.
-  return <BaganOrganisasi simpul={simpul} bolehUbah={bolehUbahHc(user)} />;
+  return <BaganOrganisasi simpul={simpul} semuaOrang={semuaOrang} bolehUbah={bolehUbahHc(user)} />;
 }
