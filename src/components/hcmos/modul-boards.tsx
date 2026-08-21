@@ -37,13 +37,14 @@ import {
   ESKALASI,
   TAHAP_OFFBOARDING,
   alasanKeluar,
+  kategoriKasus,
   lamaHari,
   ringkasKasus,
   ringkasKeluar,
   type Eskalasi,
   type PerkaraRingkas,
 } from "@/lib/hcmos/relasi";
-import { GrafikBatang, GrafikGaris } from "./grafik";
+import { GrafikBatang, GrafikDonat, GrafikGaris } from "./grafik";
 import {
   STATUS_MODUL_META,
   fastTrackPerBrand,
@@ -342,6 +343,7 @@ export function RelasiBoard({
   const rk = React.useMemo(() => ringkasKasus(kasusScope, tahun), [kasusScope, tahun]);
   const rl = React.useMemo(() => ringkasKeluar(keluarScope, tahun), [keluarScope, tahun]);
   const alasan = React.useMemo(() => alasanKeluar(keluarScope), [keluarScope]);
+  const kategori = React.useMemo(() => kategoriKasus(kasusScope), [kasusScope]);
 
   const kolomPerkara = (kategoriHeader: string): ColumnDef<BarisRekaman>[] => [
     ...kolomNama,
@@ -477,6 +479,18 @@ export function RelasiBoard({
             sub="gaji terakhir & pesangon"
           />
         </div>
+      )}
+
+      {/* Yang ditanyakan setelah "berapa kasusnya" adalah "kasus APA" — sebaran
+          kategorinya menjawab itu tanpa perlu membaca tabelnya baris demi
+          baris. Donat, bukan batang: bagian dari satu keseluruhan. */}
+      {tab === "kasus" && (
+        <GrafikDonat
+          judul="Kasus per Kategori"
+          subjudul={`Rekap seluruh kasus yang tercatat — ${SCOPE_LABEL[scope]}`}
+          data={kategori}
+          pesanKosong="Belum ada kasus yang tercatat untuk scope ini."
+        />
       )}
 
       {tab === "keluar" && (

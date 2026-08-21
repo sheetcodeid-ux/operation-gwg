@@ -106,6 +106,31 @@ export const JENJANG_OUTLET: LevelOutlet[] = [
   { level: 5, jabatan: "Head of Operation", melaporKe: "Direktur" },
 ];
 
+export interface GolonganOutlet {
+  /** Angka Romawi, sesuai penulisan kebijakan internal. */
+  golongan: string;
+  jabatan: string;
+  /** Ditulis bertingkat ("+ Tunjangan jabatan") karena golongan di atasnya
+   *  MENAMBAH komponen dari golongan di bawahnya, bukan menggantinya. */
+  tunjangan: string;
+}
+
+/**
+ * Kerangka golongan outlet beserta komponen tunjangannya.
+ *
+ * Ini ACUAN, bukan data — nominalnya tidak ada di sini dengan sengaja. Angka
+ * rupiah berubah tiap kali kebijakan direvisi, dan menaruhnya di dalam kode
+ * berarti setiap revisi butuh penempatan ulang aplikasi. Nominal per golongan
+ * diisi Human Capital lewat tabel Struktur Kompensasi di halaman yang sama;
+ * yang ditulis di sini hanya bentuk kerangkanya, yang jarang berubah.
+ */
+export const GOLONGAN_OUTLET: GolonganOutlet[] = [
+  { golongan: "I", jabatan: "Crew / Barista", tunjangan: "Tunjangan makan, transport" },
+  { golongan: "II", jabatan: "Shift Leader", tunjangan: "+ Tunjangan jabatan" },
+  { golongan: "III", jabatan: "Supervisor", tunjangan: "+ Tunjangan jabatan & komunikasi" },
+  { golongan: "IV", jabatan: "Outlet Manager", tunjangan: "+ Tunjangan jabatan, komunikasi, kendaraan" },
+];
+
 /**
  * Kelompok besar tempat seorang karyawan kantor bekerja.
  *

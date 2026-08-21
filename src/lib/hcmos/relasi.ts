@@ -104,7 +104,7 @@ export function ringkasKeluar(rows: PerkaraRingkas[], tahun: number): RingkasKel
 }
 
 /** Sebaran alasan keluar — terbanyak lebih dulu. */
-export function alasanKeluar(rows: PerkaraRingkas[]): { nama: string; nilai: number }[] {
+export function perKategori(rows: PerkaraRingkas[]): { nama: string; nilai: number }[] {
   const per = new Map<string, number>();
   for (const r of rows) {
     const k = r.kategori.trim() || "Tidak dicatat";
@@ -114,6 +114,14 @@ export function alasanKeluar(rows: PerkaraRingkas[]): { nama: string; nilai: num
     .map(([nama, nilai]) => ({ nama, nilai }))
     .sort((a, b) => b.nilai - a.nilai || a.nama.localeCompare(b.nama, "id"));
 }
+
+/**
+ * Alasan keluar dan kategori kasus dihitung dengan cara yang sama — dua-duanya
+ * mengelompokkan perkara menurut kolom `kategori`. Namanya dibedakan karena
+ * yang dibaca orang di layar memang dua hal berbeda, tapi hitungannya satu.
+ */
+export const alasanKeluar = perKategori;
+export const kategoriKasus = perKategori;
 
 /**
  * Tahapan baku proses keluar karyawan.

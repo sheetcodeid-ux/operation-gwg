@@ -30,6 +30,7 @@ import {
 } from "./modul-boards";
 import { SCOPE_LABEL, type HcScope } from "@/lib/hcmos/pillars";
 import { brandOutlet } from "@/lib/hcmos/kontrak";
+import { GOLONGAN_OUTLET } from "@/lib/hcmos/struktur";
 import {
   JENIS_CUTI,
   STATUS_BPJS,
@@ -417,6 +418,25 @@ export function KompensasiBoard({
               })}
           />
         </>
+      )}
+
+      {/* Acuan golongan dibuka lebih dulu, tabel nominalnya menyusul. Yang
+          ditanyakan orang saat membuka Struktur Kompensasi hampir selalu
+          "golongan saya dapat tunjangan apa saja" — pertanyaan tentang
+          kerangkanya, bukan tentang isi tabel. */}
+      {tab === "golongan" && (
+        <TabelRingkas
+          judul="Kerangka Golongan Outlet"
+          subjudul="Acuan komponen tunjangan — nominalnya diisi di tabel di bawah"
+          kepala={["Golongan", "Jabatan", "Komponen Tunjangan"]}
+          kosong="—"
+          baris={GOLONGAN_OUTLET.map((g) => [
+            <span key="g" className="font-medium">{g.golongan}</span>,
+            g.jabatan,
+            <span key="t" className="text-muted-foreground">{g.tunjangan}</span>,
+          ])}
+          kaki="Golongan di atas MENAMBAH komponen dari golongan di bawahnya, bukan menggantinya."
+        />
       )}
 
       <PapanIsian
