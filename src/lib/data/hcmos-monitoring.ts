@@ -4,13 +4,16 @@ import { db, dbEnabled } from "./db";
 import { listKontrak, outletsForUser, rekapOutlet } from "./hcmos";
 import { listKandidat, listOnboarding } from "./hcmos-rekrutmen";
 import { listDokumen } from "./hcmos-dokumen";
+import { turnoverBulanan, turnoverYtd, type RiwayatKerja } from "@/lib/hcmos/turnover";
+import { cutiAktif, persenKehadiran } from "@/lib/hcmos/kompensasi";
 import { listTabel } from "./hcmos-lanjutan";
 import { getUsers } from "./store";
-import { STATUS_KONTRAK_META, bulanKeluar, periodeKey } from "@/lib/hcmos/kontrak";
+import { STATUS_KONTRAK_META, periodeKey } from "@/lib/hcmos/kontrak";
 import { STATUS_BERLAKU_META } from "@/lib/hcmos/dokumen";
 import { JENIS_DOKUMEN_META } from "@/lib/hcmos/dokumen";
 import {
   JENIS_CUTI,
+  STATUS_CUTI,
   KESIAPAN,
   PROGRAM_FAST,
   lulus,
@@ -167,9 +170,35 @@ export async function monitoringHcmos(user: UserProfile, periode = periodeKey())
   const perBrand = hitung(aktif, (k) => k.brand ?? "Tanpa Brand");
 
   /* ── 3. Turnover ── */
-  const perBulanKeluar = hitung(keluar, (k) => bulanKeluar(k.tglResign));
   const perKategoriKeluar = hitung(keluar, (k) => (k.kategoriTurnover ?? "").trim() || "Tidak Dicatat");
-  const turnoverPersen = kontrak.length ? Math.round((keluar.length / kontrak.length) * 1000) / 10 : 0;
+  // Turnover dilaporkan sebagai PERSENTASE, bukan cacahan: "3 orang keluar"
+  // tidak berarti apa-apa sampai diketahui dari berapa.
+  const riwayat: RiwayatKerja[] = kontrak.map((k) => ({
+    masuk: k.tglMasukPertama ?? k.tglMulai,
+    resign: k.tglResign,
+  }));
+  const sekarang = new Date();
+  const trenTurnover = turnoverBulanan(riwayat, sekarang, 6);
+  const bulanIni = trenTurnover[trenTurnover.length - 1];
+  const ytd = turnoverYtd(riwayat, sekarang);
+
+  /* ── 4. Attendance ── */
+  // Tab ini bernama Attendance, jadi yang diukur KEHADIRAN — bukan jumlah
+  // formulir yang masuk. Berapa pengajuan cuti tercatat bulan ini tidak
+  // menjawab pertanyaan "hari ini berapa orang yang masuk kerja".
+  const hariIni = sekarang.toISOString().slice(0, 10);
+  const barisCuti = cuti.map((c) => ({
+    nama: s(c.nama),
+    divisi: "",
+    scope: s(c.scope) || "manajemen",
+    jenis: s(c.jenis),
+    status: s(c.status),
+    mulai: s(c.tgl_mulai) || null,
+    selesai: s(c.tgl_selesai) || null,
+  }));
+  const sedangCuti = cutiAktif(barisCuti, hariIni);
+  const totalTerpantau = users.length + aktif.length;
+  const cutiManajemen = sedangCuti.filter((c) => c.scope === "manajemen").length;
 
   /* ── 5. Payroll ── */
   const thpPerPeriode = new Map<string, number>();
@@ -246,16 +275,31 @@ export async function monitoringHcmos(user: UserProfile, periode = periodeKey())
       label: "Turnover",
       ikon: "TrendingUp",
       angka: [
-        { label: "Turnover Kumulatif", nilai: `${turnoverPersen}%`, catatan: `${keluar.length} dari ${kontrak.length} karyawan tercatat` },
-        { label: "Karyawan Keluar", nilai: keluar.length },
-        { label: "Masih Aktif", nilai: aktif.length },
-        { label: "Kategori Tercatat", nilai: perKategoriKeluar.length },
+        {
+          label: "Turnover Bulan Ini",
+          nilai: `${bulanIni?.persen ?? 0}%`,
+          catatan: `${bulanIni?.keluar ?? 0} dari ${bulanIni?.headcount ?? 0} karyawan`,
+        },
+        {
+          label: `Turnover YTD ${sekarang.getFullYear()}`,
+          nilai: `${ytd.persen}%`,
+          catatan: `${ytd.keluar} keluar sejak Januari`,
+        },
+        { label: "Keluar Bulan Ini", nilai: bulanIni?.keluar ?? 0 },
+        { label: "Masih Aktif", nilai: aktif.length, catatan: `${keluar.length} sudah keluar` },
       ],
-      tabelJudul: "Turnover per Kategori",
-      tabelKepala: ["Kategori", "Jumlah"],
-      tabel: perKategoriKeluar.map((k) => ({ kolom: [k.nama, String(k.nilai)] })),
+      tabelJudul: "Tren Turnover 6 Bulan Terakhir",
+      tabelKepala: ["Bulan", "Keluar", "Headcount Rata-rata", "Turnover"],
+      tabel: trenTurnover.map((t) => ({
+        kolom: [t.bulan, String(t.keluar), String(t.headcount), `${t.persen}%`],
+      })),
       grafik: [
-        { bentuk: "garis", judul: "Tren Karyawan Keluar per Bulan", data: [...perBulanKeluar].reverse() },
+        {
+          bentuk: "garis",
+          judul: "Tren Turnover",
+          subjudul: "Persentase bulanan terhadap headcount rata-rata",
+          data: trenTurnover.map((t) => ({ nama: t.bulan, nilai: t.persen })),
+        },
         { bentuk: "donat", judul: "Turnover per Kategori", data: perKategoriKeluar },
       ],
       catatanKosong: "Belum ada karyawan keluar yang tercatat di Kontrak Tracker.",
@@ -265,16 +309,41 @@ export async function monitoringHcmos(user: UserProfile, periode = periodeKey())
       label: "Attendance",
       ikon: "CalendarCheck",
       angka: [
-        { label: "Pengajuan", nilai: cuti.length, catatan: "seluruh periode" },
-        { label: "Disetujui", nilai: cuti.filter((c) => s(c.status) === "disetujui").length },
-        { label: "Menunggu", nilai: cuti.filter((c) => s(c.status) === "diajukan").length },
-        { label: "Alpa Tercatat", nilai: cuti.filter((c) => s(c.jenis) === "alpa").length },
+        {
+          label: "Kehadiran Hari Ini",
+          nilai: `${persenKehadiran(totalTerpantau, sedangCuti.length)}%`,
+          catatan: `${totalTerpantau - sedangCuti.length} dari ${totalTerpantau} karyawan`,
+        },
+        { label: "Cuti/Izin Aktif", nilai: sedangCuti.length, catatan: "sedang berjalan hari ini" },
+        { label: "Total Karyawan Terpantau", nilai: totalTerpantau, catatan: `${users.length} manajemen · ${aktif.length} outlet` },
+        {
+          label: "Kehadiran Manajemen",
+          nilai: `${persenKehadiran(users.length, cutiManajemen)}%`,
+          catatan: `${cutiManajemen} sedang cuti/izin`,
+        },
       ],
+      tabelJudul: "Pengajuan Cuti & Izin Terbaru",
+      tabelKepala: ["Nama", "Jenis", "Tanggal", "Status"],
+      tabel: [...cuti]
+        .sort((a, b) => s(b.tgl_mulai).localeCompare(s(a.tgl_mulai)))
+        .slice(0, 8)
+        .map((c) => ({
+          kolom: [
+            s(c.nama) || "—",
+            JENIS_CUTI[s(c.jenis) as keyof typeof JENIS_CUTI]?.label ?? "—",
+            s(c.tgl_mulai) || "—",
+            STATUS_CUTI[s(c.status) as keyof typeof STATUS_CUTI]?.label ?? "—",
+          ],
+        })),
       grafik: [
         {
           bentuk: "donat",
-          judul: "Komposisi per Jenis",
-          data: hitung(cuti, (c) => JENIS_CUTI[s(c.jenis) as keyof typeof JENIS_CUTI]?.label ?? "Lainnya"),
+          judul: "Kehadiran Hari Ini",
+          subjudul: "Proporsi kehadiran seluruh karyawan",
+          data: [
+            { nama: "Hadir", nilai: Math.max(0, totalTerpantau - sedangCuti.length) },
+            { nama: "Cuti/Izin", nilai: sedangCuti.length },
+          ],
         },
         { bentuk: "batang", judul: "Pengajuan per Bulan", data: hitung(cuti, (c) => s(c.tgl_mulai).slice(0, 7) || null) },
       ],
