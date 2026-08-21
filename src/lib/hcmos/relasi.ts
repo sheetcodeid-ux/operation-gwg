@@ -123,6 +123,45 @@ export function perKategori(rows: PerkaraRingkas[]): { nama: string; nilai: numb
 export const alasanKeluar = perKategori;
 export const kategoriKasus = perKategori;
 
+export interface KeluarPerBrand {
+  brand: string;
+  jumlah: number;
+  alasanTerbanyak: string;
+}
+
+/**
+ * Rekap karyawan keluar per brand, beserta alasan yang paling sering muncul.
+ *
+ * Untuk scope outlet, pertanyaan pertama bukan "alasannya apa" melainkan "di
+ * brand mana" — sembilan crew keluar terbagi rata di empat brand adalah keadaan
+ * yang sama sekali berbeda dari sembilan-sembilanya dari satu brand, padahal
+ * grafik alasan menampilkan keduanya persis sama.
+ *
+ * Alasan terbanyak dipilih dengan pemecah seri menurut abjad, bukan urutan
+ * kedatangan baris: tanpa itu, dua alasan yang sama banyaknya bisa bertukar
+ * tempat setiap kali datanya dibaca ulang, dan pembacanya mengira ada yang
+ * berubah padahal tidak.
+ */
+export function keluarPerBrand(rows: { brand: string; kategori: string }[]): KeluarPerBrand[] {
+  const per = new Map<string, Map<string, number>>();
+  for (const r of rows) {
+    const brand = r.brand.trim() || "Tanpa Brand";
+    const alasan = r.kategori.trim() || "Tidak dicatat";
+    const isi = per.get(brand) ?? new Map<string, number>();
+    isi.set(alasan, (isi.get(alasan) ?? 0) + 1);
+    per.set(brand, isi);
+  }
+  return [...per.entries()]
+    .map(([brand, isi]) => {
+      const jumlah = [...isi.values()].reduce((a, b) => a + b, 0);
+      const [alasanTerbanyak] = [...isi.entries()].sort(
+        (a, b) => b[1] - a[1] || a[0].localeCompare(b[0], "id"),
+      )[0];
+      return { brand, jumlah, alasanTerbanyak };
+    })
+    .sort((a, b) => b.jumlah - a.jumlah || a.brand.localeCompare(b.brand, "id"));
+}
+
 /**
  * Tahapan baku proses keluar karyawan.
  *

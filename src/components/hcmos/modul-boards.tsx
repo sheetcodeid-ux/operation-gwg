@@ -38,10 +38,12 @@ import {
   TAHAP_OFFBOARDING,
   alasanKeluar,
   kategoriKasus,
+  keluarPerBrand,
   lamaHari,
   ringkasKasus,
   ringkasKeluar,
   type Eskalasi,
+  type KeluarPerBrand,
   type PerkaraRingkas,
 } from "@/lib/hcmos/relasi";
 import { GrafikBatang, GrafikDonat, GrafikGaris } from "./grafik";
@@ -344,6 +346,19 @@ export function RelasiBoard({
   const rl = React.useMemo(() => ringkasKeluar(keluarScope, tahun), [keluarScope, tahun]);
   const alasan = React.useMemo(() => alasanKeluar(keluarScope), [keluarScope]);
   const kategori = React.useMemo(() => kategoriKasus(kasusScope), [kasusScope]);
+  // Brand diambil dari nama outlet baris aslinya, bukan dari `keluarScope`:
+  // ringkasan perkara sengaja tidak membawa outlet karena seluruh hitungan
+  // lain di modul ini tidak membutuhkannya.
+  const perBrand = React.useMemo(
+    () =>
+      keluarPerBrand(
+        perScope(keluar).map((r) => ({
+          brand: r.outletName ? (brandOutlet(r.outletName) ?? r.outletName) : "",
+          kategori: t(r, "kategori"),
+        })),
+      ),
+    [keluar, perScope],
+  );
 
   const kolomPerkara = (kategoriHeader: string): ColumnDef<BarisRekaman>[] => [
     ...kolomNama,
@@ -493,7 +508,11 @@ export function RelasiBoard({
         />
       )}
 
-      {tab === "keluar" && (
+      {/* Manajemen ditanya "alasannya apa", outlet ditanya "di brand mana".
+          Sembilan crew keluar terbagi rata di empat brand adalah keadaan yang
+          sama sekali berbeda dari sembilan-sembilanya dari satu brand, padahal
+          grafik alasan menampilkan keduanya persis sama. */}
+      {tab === "keluar" && scope === "manajemen" && (
         <GrafikBatang
           judul={`Alasan Keluar (${tahun})`}
           subjudul={`Sumber: catatan proses keluar — ${SCOPE_LABEL[scope]}`}
@@ -503,6 +522,8 @@ export function RelasiBoard({
           pesanKosong="Belum ada karyawan keluar yang tercatat untuk scope ini."
         />
       )}
+
+      {tab === "keluar" && scope === "outlet" && <RekapBrandKeluar rows={perBrand} />}
 
       {tab === "kasus" && (
         <RekamanBoard
@@ -1009,4 +1030,49 @@ function ThKecil({ children }: { children: React.ReactNode }) {
 
 function TdKecil({ children, className = "" }: { children: React.ReactNode; className?: string }) {
   return <td className={`px-3 py-2.5 align-top text-muted-foreground ${className}`}>{children}</td>;
+}
+
+/** Rekap karyawan keluar per brand — pengganti grafik alasan untuk scope outlet. */
+function RekapBrandKeluar({ rows }: { rows: KeluarPerBrand[] }) {
+  return (
+    <Card>
+      <CardHeader className="pb-2">
+        <CardTitle>Riwayat Crew Keluar per Brand</CardTitle>
+        <p className="text-[11px] text-muted-foreground">Dihitung dari catatan proses keluar tiap outlet</p>
+      </CardHeader>
+      <CardContent>
+        {rows.length === 0 ? (
+          <div className="grid place-items-center rounded-xl border border-dashed border-border bg-muted/20 py-10 text-center text-xs text-muted-foreground">
+            Belum ada crew outlet keluar yang tercatat.
+          </div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[28rem] text-sm">
+              <thead>
+                <tr className="border-b border-border">
+                  {["Brand", "Jumlah Keluar", "Alasan Terbanyak"].map((h) => (
+                    <th
+                      key={h}
+                      className="px-3 py-2 text-left text-[11px] font-medium uppercase tracking-wide text-muted-foreground"
+                    >
+                      {h}
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {rows.map((r) => (
+                  <tr key={r.brand} className="border-b border-border/60 last:border-0">
+                    <td className="px-3 py-2.5 align-middle font-medium text-foreground">{r.brand}</td>
+                    <td className="px-3 py-2.5 align-middle tabular-nums text-foreground">{r.jumlah}</td>
+                    <td className="px-3 py-2.5 align-middle text-muted-foreground">{r.alasanTerbanyak}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  );
 }

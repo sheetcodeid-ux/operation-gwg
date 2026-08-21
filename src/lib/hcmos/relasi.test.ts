@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   alasanKeluar,
+  keluarPerBrand,
   eskalasiValid,
   lamaHari,
   rataWaktuSelesai,
@@ -143,5 +144,49 @@ describe("TAHAP_OFFBOARDING", () => {
 
   it("setiap tahap punya penjelasannya", () => {
     for (const t of TAHAP_OFFBOARDING) expect(t.isi.length).toBeGreaterThan(10);
+  });
+});
+
+describe("keluarPerBrand", () => {
+  const b = (brand: string, kategori: string) => ({ brand, kategori });
+
+  it("menjumlah per brand dan mengurutkan dari yang terbanyak", () => {
+    expect(
+      keluarPerBrand([b("Nordu", "Resign"), b("Nordu", "Resign"), b("Cattu", "PHK")]),
+    ).toEqual([
+      { brand: "Nordu", jumlah: 2, alasanTerbanyak: "Resign" },
+      { brand: "Cattu", jumlah: 1, alasanTerbanyak: "PHK" },
+    ]);
+  });
+
+  it("alasan terbanyak dipilih per brand, bukan menyeluruh", () => {
+    const rows = [
+      b("Nordu", "Resign"),
+      b("Cattu", "Tidak dilanjutkan"),
+      b("Cattu", "Tidak dilanjutkan"),
+      b("Cattu", "Resign"),
+    ];
+    expect(keluarPerBrand(rows)[0]).toEqual({
+      brand: "Cattu",
+      jumlah: 3,
+      alasanTerbanyak: "Tidak dilanjutkan",
+    });
+  });
+
+  it("seri alasan dipecah menurut abjad supaya hasilnya tidak berubah-ubah", () => {
+    const rows = [b("Nordu", "Resign"), b("Nordu", "PHK")];
+    expect(keluarPerBrand(rows)[0].alasanTerbanyak).toBe("PHK");
+    // Urutan baris dibalik — jawabannya harus tetap sama.
+    expect(keluarPerBrand([...rows].reverse())[0].alasanTerbanyak).toBe("PHK");
+  });
+
+  it("brand dan alasan yang kosong ditandai, bukan dibuang", () => {
+    expect(keluarPerBrand([b("  ", "  ")])).toEqual([
+      { brand: "Tanpa Brand", jumlah: 1, alasanTerbanyak: "Tidak dicatat" },
+    ]);
+  });
+
+  it("tanpa baris menghasilkan daftar kosong", () => {
+    expect(keluarPerBrand([])).toEqual([]);
   });
 });

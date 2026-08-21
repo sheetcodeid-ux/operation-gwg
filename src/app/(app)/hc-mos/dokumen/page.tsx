@@ -15,6 +15,7 @@ import { CORE_VALUES } from "@/lib/hcmos/budaya";
 import { alurPilar } from "@/lib/hcmos/alur-sop";
 import { pillarBySlug } from "@/lib/hcmos/pillars";
 import { AlurLangkah } from "@/components/hcmos/alur";
+import { PksTracker } from "@/components/hcmos/pks-tracker";
 
 export const metadata: Metadata = { title: "Pusat Dokumen — HC-MOS" };
 
@@ -81,6 +82,13 @@ export default async function DokumenPage({
       {jenis === "sop" && alur && (
         <AlurLangkah judul={`Alur SOP ${namaPilar}`} ringkas={alur.ringkas} langkah={alur.langkah} />
       )}
+
+      {/* Pelacak PKS menempel di Document & Compliance, bukan di menunya
+          sendiri: yang mengurusnya orang yang sama dengan yang mengurus dokumen
+          kepatuhan, dan pertanyaannya datang bersamaan — "legalitas kita aman
+          tidak bulan ini". Dipisah ke menu lain, satu dari dua jawaban selalu
+          tertinggal tidak dibaca. */}
+      {jenis === "compliance" && <PksTracker rows={rows.filter((d) => d.jenis === "pks")} />}
 
       <DokumenBoard rows={rows} jenisAwal={jenis} pilarAwal={sp.pilar ?? ""} bolehUbah={bolehUbah} />
     </div>
