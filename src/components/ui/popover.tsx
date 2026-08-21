@@ -12,6 +12,20 @@ const useIsoLayoutEffect = typeof document !== "undefined" ? React.useLayoutEffe
 /** Minimal anchored popover with click-outside + escape handling.
  *  Pass `portal` to render the menu into <body> (fixed-positioned) so it is
  *  never clipped by an `overflow` ancestor — needed inside horizontal scrollers. */
+/**
+ * Ke mana menu portal ditempelkan.
+ *
+ * `document.body` benar di keadaan biasa, tapi SALAH saat ada elemen yang
+ * sedang layar-penuh: peramban hanya menggambar elemen itu beserta isinya, jadi
+ * menu yang menempel di body tidak tergambar sama sekali. Dari sisi pemakainya
+ * dropdown-nya "tidak muncul" — bukan salah tempat, benar-benar hilang.
+ *
+ * Karena itu targetnya mengikuti elemen layar-penuh yang sedang aktif.
+ */
+function wadahPortal(): Element {
+  return document.fullscreenElement ?? document.body;
+}
+
 export function Popover({
   trigger,
   children,
@@ -157,7 +171,7 @@ export function Popover({
   return (
     <div ref={ref} className={cn("relative", className)}>
       {trigger({ open, toggle: () => setOpen((v) => !v) })}
-      {portal ? open && typeof document !== "undefined" && createPortal(content, document.body) : content}
+      {portal ? open && typeof document !== "undefined" && createPortal(content, wadahPortal()) : content}
     </div>
   );
 }

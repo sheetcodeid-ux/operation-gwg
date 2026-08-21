@@ -137,13 +137,14 @@ export function BaganOrganisasi({
    * tetap harus menggeser mencari-cari. Menemukan berarti MEMBAWA ke sana.
    */
   const bawaKe = React.useCallback(
-    (id: string) => {
+    (id: string, zoomPakai?: number) => {
       const el = gulir.current;
       const t = tertata.find((x) => x.id === id);
       if (!el || !t) return;
+      const z = zoomPakai ?? zoom;
       el.scrollTo({
-        left: (t.x + 32 + LEBAR_KOLOM / 2) * zoom - el.clientWidth / 2,
-        top: (t.y + 32 + TINGGI_KOLOM / 2) * zoom - el.clientHeight / 2,
+        left: (t.x + 32 + LEBAR_KOLOM / 2) * z - el.clientWidth / 2,
+        top: (t.y + 32 + TINGGI_KOLOM / 2) * z - el.clientHeight / 2,
         behavior: "smooth",
       });
     },
@@ -154,18 +155,42 @@ export function BaganOrganisasi({
   // Menunggu sampai satu itulah kuncinya: melompat pada setiap ketikan membuat
   // kanvasnya berlompatan liar sementara orangnya masih mengetik.
   const cocokTunggal = cocokIds.size === 1 ? [...cocokIds][0] : null;
-  // Penanda "sudah pernah dibawa" disimpan di ref, bukan state: ia tidak
-  // memengaruhi apa yang digambar, dan menaruhnya di state memaksa satu render
-  // tambahan setiap kali pencarian menyempit ke satu hasil.
+
+  /**
+   * Ketemu → dekatkan; lepas → kembali seperti semula.
+   *
+   * Zoom sebelum memfokus disimpan supaya bisa dipulihkan persis. Tanpa itu,
+   * pencarian meninggalkan bagannya dalam keadaan berbeda dari sebelum dicari,
+   * dan orang harus menata pandangannya lagi setiap selesai mencari satu role.
+   *
+   * Ref, bukan state: keduanya tidak memengaruhi apa yang digambar, dan
+   * menaruhnya di state memaksa render tambahan tiap kali pencarian menyempit.
+   */
+  const ZOOM_FOKUS = 1;
   const terakhirDibawa = React.useRef<string | null>(null);
+  const zoomSebelumFokus = React.useRef<number | null>(null);
+
   React.useEffect(() => {
+    if (tampilan !== "bagan") return;
     if (!cocokTunggal) {
       terakhirDibawa.current = null;
+      if (zoomSebelumFokus.current !== null) {
+        setZoom(zoomSebelumFokus.current);
+        zoomSebelumFokus.current = null;
+      }
       return;
     }
-    if (tampilan !== "bagan" || cocokTunggal === terakhirDibawa.current) return;
+    if (cocokTunggal === terakhirDibawa.current) return;
+    if (zoomSebelumFokus.current === null) zoomSebelumFokus.current = zoom;
     terakhirDibawa.current = cocokTunggal;
-    bawaKe(cocokTunggal);
+    setZoom(ZOOM_FOKUS);
+    // Digulir SETELAH zoomnya terpasang — posisi tengah dihitung dari zoom,
+    // jadi menggulir lebih dulu berarti mendarat di tempat yang salah.
+    requestAnimationFrame(() => bawaKe(cocokTunggal, ZOOM_FOKUS));
+    // `zoom` sengaja tidak jadi kebergantungan: ia hanya dibaca sebagai nilai
+    // awal, dan menyertakannya akan memicu ulang efek ini oleh perubahan yang
+    // dibuat efek ini sendiri.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tampilan, cocokTunggal, bawaKe]);
   const bercabang = React.useMemo(() => simpulBercabang(lokal), [lokal]);
   const semuaTerlipat = terlipat.size >= bercabang.length && bercabang.length > 0;
@@ -430,7 +455,7 @@ export function BaganOrganisasi({
           >
             <div
               data-kanvas="1"
-              className="relative origin-top-left"
+              className="relative origin-top-left transition-transform duration-300 ease-out"
               style={{ width: ukuran.lebar + 64, height: ukuran.tinggi + 64, transform: `scale(${zoom})` }}
             >
               <svg
@@ -441,13 +466,17 @@ export function BaganOrganisasi({
               >
                 <g transform="translate(32,32)">
                   {garis.map((g) => {
-                    const menumpuk = Math.abs(g.x1 - g.x2) < 1;
-                    const r = 10;
-                    const tengah = (g.y1 + g.y2) / 2;
-                    const arah = g.x2 > g.x1 ? 1 : -1;
-                    const d = menumpuk
-                      ? `M ${g.x1} ${g.y1} V ${g.y2}`
-                      : `M ${g.x1} ${g.y1} V ${tengah - r} Q ${g.x1} ${tengah} ${g.x1 + r * arah} ${tengah} H ${g.x2 - r * arah} Q ${g.x2} ${tengah} ${g.x2} ${tengah + r} V ${g.y2}`;
+                    // Siku tajam, bukan lengkung: bagan organisasi dibaca
+                    // sebagai jalur, dan sudut membulat membuat dua jalur yang
+                    // berdekatan tampak menyatu di tikungannya.
+                    //
+                    // "tulang" turun lurus di satu sumbu lalu mencabang mendatar
+                    // ke kartunya; "tier" turun ke garis tengah antar-baris,
+                    // melintang, lalu turun lagi.
+                    const d =
+                      g.bentuk === "tulang"
+                        ? `M ${g.x1} ${g.y1} V ${g.y2} H ${g.x2}`
+                        : `M ${g.x1} ${g.y1} V ${(g.y1 + g.y2) / 2} H ${g.x2} V ${g.y2}`;
                     const nyala = !disorot || (disorot.has(g.dari) && disorot.has(g.ke));
                     return (
                       <path
@@ -752,9 +781,22 @@ function KartuRole({
             : undefined
         }
       >
-        <span className="absolute inset-y-0 left-0 w-1" style={{ backgroundImage: `linear-gradient(180deg, ${w.pekat}, ${w.muda})` }} />
+        {/* Penanda level.
+            Pita lurus setinggi kartu terbaca sebagai garis pemisah — mata
+            menganggapnya bagian dari kisi, bukan bagian dari kartunya. Diganti
+            TONGKAT membulat yang mengambang di dalam kartu, ditemani semburat
+            warna tipis yang memudar ke kanan: keduanya jelas milik kartu itu,
+            dan tetap terbaca saat bagannya diperkecil sampai tulisannya hilang. */}
+        <span
+          className="pointer-events-none absolute inset-0"
+          style={{ backgroundImage: `linear-gradient(90deg, ${w.lembut}, transparent 42%)` }}
+        />
+        <span
+          className={cn("absolute left-[5px] w-[3px] rounded-full", padat ? "inset-y-1.5" : "inset-y-3")}
+          style={{ backgroundImage: `linear-gradient(180deg, ${w.pekat}, ${w.muda})`, boxShadow: `0 0 8px ${w.muda}55` }}
+        />
 
-        <div className={cn("flex min-w-0 flex-1 flex-col", padat ? "gap-0.5 py-1.5 pl-3 pr-2" : "gap-1.5 py-3 pl-4 pr-3")}>
+        <div className={cn("flex min-w-0 flex-1 flex-col", padat ? "relative gap-0.5 py-1.5 pl-3.5 pr-2" : "relative gap-1.5 py-3 pl-4.5 pr-3")}>
           <div className="flex min-w-0 items-start gap-2">
             <span
               className={cn("grid shrink-0 place-items-center rounded-lg font-bold text-white shadow-sm", padat ? "size-6 text-[9px]" : "size-10 text-xs")}

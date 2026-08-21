@@ -142,7 +142,18 @@ export interface SimpulTertata extends SimpulBagan {
   kedalaman: number;
 }
 
-/** Garis penghubung induk → anak. */
+/**
+ * Garis penghubung induk → anak.
+ *
+ * `bentuk` menentukan cara menggambarnya, dan itu bukan hiasan: garis antar-
+ * baris mendatar turun–melintang–turun, sedangkan garis di dalam kolom adalah
+ * satu TULANG tegak yang dipakai bersama semua anak, dengan cabang mendatar
+ * pendek ke tiap kartu. Kalau keduanya digambar dengan rumus yang sama, tiap
+ * anak menarik jalurnya sendiri ke titik tengah lalu melintang — dan empat anak
+ * menghasilkan empat jalur yang saling menyilang di ruang yang sama.
+ */
+export type BentukGaris = "tier" | "tulang";
+
 export interface GarisBagan {
   dari: string;
   ke: string;
@@ -150,6 +161,7 @@ export interface GarisBagan {
   y1: number;
   x2: number;
   y2: number;
+  bentuk: BentukGaris;
 }
 
 /** Cocok dengan pencarian: nama departemen atau salah satu jabatan di dalamnya. */
@@ -322,10 +334,14 @@ export function garisKolom(tertata: SimpulTertata[]): GarisBagan[] {
         ? {
             dari: induk.id,
             ke: s.id,
+            // Tulang tegak dipatok di satu sumbu yang sama untuk seluruh anak
+            // sebuah induk — itulah yang membuatnya menyatu jadi satu garis,
+            // bukan berkas garis yang berhimpitan.
             x1: induk.x + INDENT_KOLOM / 2,
             y1: induk.y + TINGGI_KOLOM,
             x2: s.x,
             y2: s.y + TINGGI_KOLOM / 2,
+            bentuk: "tulang",
           }
         : {
             dari: induk.id,
@@ -334,6 +350,7 @@ export function garisKolom(tertata: SimpulTertata[]): GarisBagan[] {
             y1: induk.y + TINGGI_KOLOM,
             x2: s.x + LEBAR_KOLOM / 2,
             y2: s.y,
+            bentuk: "tier",
           },
     );
   }
