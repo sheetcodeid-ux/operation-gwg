@@ -131,7 +131,9 @@ export default async function DashboardPage({
       .filter((u) => u.active && u.department === d)
       .map((u) => ({ id: u.id, name: u.name }));
   }
-  const defaultDivision = (user.department && divisions.includes(user.department) ? user.department : divisions[0]) ?? "";
+  // Departemen orangnya apa adanya — mengganti yang "tidak dikenal" dengan
+  // departemen pertama berarti menyodorkan tim orang lain sebagai miliknya.
+  const defaultDivision = (user.department ?? "").trim() || divisions[0] || "";
   const scopeOptions = [
     ...visibleAreas.map(([id, name]) => ({ value: `area:${id}`, label: name, group: "Wilayah" })),
     ...coordinators.map((c) => ({ value: `ca:${c.id}`, label: c.name, group: "Coordinator Area" })),

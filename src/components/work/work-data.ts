@@ -46,12 +46,33 @@ export function buildWorkRows(user: UserProfile): WorkRow[] {
   }));
 }
 
-/** The selectable org departments/divisions (assessment built-in + admin-added
- *  + custom sidebar divisions) — the single "division" list used for tasks. */
+/**
+ * Daftar departemen yang bisa dipilih untuk tugas.
+ *
+ * Tiga sumber, dan sumber KETIGA yang paling menentukan:
+ *
+ *  1. struktur org bawaan (assessment) + yang ditambahkan admin,
+ *  2. divisi sidebar buatan sendiri,
+ *  3. departemen yang benar-benar tercatat pada akun aktif.
+ *
+ * Yang ketiga dulu tidak ada, dan akibatnya bukan sekadar "satu nama hilang
+ * dari dropdown". Tim System Support — empat orang aktif — tidak tercantum di
+ * struktur bawaan, jadi seluruh timnya lenyap dari Work Tracker: anggotanya
+ * tidak bisa dipilih sebagai PIC, dan tiap anggotanya yang membuka Work Tracker
+ * dilempar ke departemen ORANG LAIN (yang pertama menurut abjad, Finance
+ * Accounting Tax) lengkap dengan papan kosong yang membingungkan.
+ *
+ * Tempat orang benar-benar terdaftar adalah kebenaran tentang tim mana yang
+ * ada. Struktur yang ditulis tangan hanya melengkapinya, tidak membatasinya.
+ */
 export async function departmentList(): Promise<string[]> {
   setOrgExtras(await getOrgExtra());
   const nav = await getNavExtra();
-  return [...new Set([...allDepartments().map((d) => d.name), ...nav.divisions.map((d) => d.name)])];
+  const dariAkun = getUsers()
+    .filter((u) => u.active)
+    .map((u) => (u.department ?? "").trim())
+    .filter(Boolean);
+  return [...new Set([...allDepartments().map((d) => d.name), ...nav.divisions.map((d) => d.name), ...dariAkun])];
 }
 
 /** Coordinator-aware outlets + department members for the New Task sheet.
@@ -76,7 +97,13 @@ export async function buildTaskSheetData(user: UserProfile) {
   const isAdmin = hasGlobalScope(user.role);
   // A member creates tasks only for their OWN department (no division picker);
   // Super Admin may still target any department.
-  const userDepartment = user.department && divisions.includes(user.department) ? user.department : divisions[0] ?? "";
+  //
+  // Departemen orangnya dipakai apa adanya. Dulu ia harus lolos `divisions`
+  // dulu, dan yang tidak lolos diganti `divisions[0]` — bukan "tidak ada
+  // departemen", melainkan departemen tim lain. Itu menampilkan papan tugas
+  // Finance kepada orang System Support, dan tidak ada satu pun di layar yang
+  // memberi tahu bahwa yang ia lihat bukan timnya.
+  const userDepartment = (user.department ?? "").trim() || divisions[0] || "";
   const defaultDivision = userDepartment;
 
   // Category options per department (custom list, or defaults when none defined).

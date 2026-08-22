@@ -10,7 +10,29 @@ import type { Tone } from "@/lib/constants";
  *  assign and close system tickets. */
 /** The exact department + job title that defines the System Support team. */
 export const SYSTEM_SUPPORT_DEPT = "Operational";
+/** Departemen tempat tim ini benar-benar terdaftar di User Management. */
+export const SYSTEM_SUPPORT_DEPT_TEAM = "System Support";
 export const SYSTEM_SUPPORT_JABATAN = "System Support";
+
+/**
+ * Anggota tim System Support — yang boleh dipilih sebagai penanggung jawab
+ * tiket POS & perangkat cabang.
+ *
+ * Lebih luas daripada `isSystemSupport`, dan bedanya disengaja.
+ * `isSystemSupport` menjawab "boleh membuka antriannya?" dan dijawab dari
+ * jabatan. Yang ini menjawab "boleh dibebani tiketnya?" — dan itu keanggotaan
+ * TIM, bukan satu jabatan tertentu: yang berjabatan IT Help Desk pun ikut
+ * memegang tiket POS, jadi mengeluarkannya hanya memaksa orang menugaskan
+ * tiket ke nama yang salah.
+ */
+export function timSystemSupport(
+  user: { department?: string | null; jabatan?: string | null } | null,
+): boolean {
+  if (!user) return false;
+  const dept = (user.department ?? "").trim().toLowerCase();
+  const jab = (user.jabatan ?? "").trim().toLowerCase();
+  return dept === SYSTEM_SUPPORT_DEPT_TEAM.toLowerCase() || jab === SYSTEM_SUPPORT_JABATAN.toLowerCase();
+}
 
 export function isSystemSupport(
   user: { role: string; department?: string | null; jabatan?: string | null } | null,

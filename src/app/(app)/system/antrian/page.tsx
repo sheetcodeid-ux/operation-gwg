@@ -4,7 +4,7 @@ import { redirect } from "next/navigation";
 import { requireSessionUser } from "@/lib/auth";
 import { getUsers } from "@/lib/data/store";
 import { listSystemRequests } from "@/lib/data/system";
-import { isSystemSupport, SYSTEM_SUPPORT_DEPT, SYSTEM_SUPPORT_JABATAN } from "@/lib/system-shared";
+import { isSystemSupport, timSystemSupport } from "@/lib/system-shared";
 import { PageHeader } from "@/components/ui/page-header";
 import { HelpdeskPanel } from "@/components/system/helpdesk-panel";
 
@@ -12,13 +12,26 @@ export const metadata: Metadata = { title: "Antrian System — System Support" }
 
 export default async function SystemAntrianPage() {
   const user = await requireSessionUser();
-  // Only the System Support team (Operational + jabatan System Support) or Admin.
+  // Hanya tim System Support (dikenali dari jabatannya) atau Super Admin.
   if (!isSystemSupport(user)) redirect("/dashboard");
 
   const rows = await listSystemRequests("system");
-  // Handlers = the System Support team (department Operational, jabatan System Support).
+
+  /**
+   * Penanggung jawab yang bisa dipilih = SELURUH tim System Support.
+   *
+   * Dulu syaratnya departemen "Operational" DAN jabatan "System Support"
+   * sekaligus. Tidak ada satu pun akun yang memenuhi keduanya — timnya
+   * terdaftar di departemen "System Support" — sehingga daftarnya kosong dan
+   * tiket yang sudah masuk sama sekali tidak bisa ditugaskan ke siapa pun.
+   *
+   * Yang dipakai sekarang keanggotaan TIM, bukan satu jabatan tertentu. Meja
+   * ini dikerjakan bersama: yang berjabatan IT Help Desk pun ikut memegang
+   * tiket POS, dan mengeluarkannya dari daftar hanya memaksa orang menugaskan
+   * tiket ke nama yang salah.
+   */
   const handlers = getUsers()
-    .filter((u) => u.department === SYSTEM_SUPPORT_DEPT && (u.jabatan ?? "").trim().toLowerCase() === SYSTEM_SUPPORT_JABATAN.toLowerCase())
+    .filter((u) => u.active && timSystemSupport(u))
     .map((u) => ({ id: u.id, name: u.name }))
     .sort((a, b) => a.name.localeCompare(b.name));
 
