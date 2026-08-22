@@ -24,7 +24,14 @@ import {
 import { getOutlets, getUsers } from "@/lib/data/store";
 import { createTask, getTask, updateTask, updateTaskStatus } from "@/lib/data/mutations";
 import { presignPut, r2Enabled, r2Put, R2_PREFIX } from "@/lib/storage/r2";
-import type { HcRequest, HcRequestAttachment, HcRequestKind, HcRequestStatus, ScopeManpower } from "@/lib/hc-request";
+import type {
+  HcRequest,
+  HcRequestAttachment,
+  HcRequestHasil,
+  HcRequestKind,
+  HcRequestStatus,
+  ScopeManpower,
+} from "@/lib/hc-request";
 import type { UserProfile } from "@/lib/types";
 
 /** Setiap departemen boleh mengajukan (menu hc_request). */
@@ -55,6 +62,49 @@ function bolehSentuhDesign(u: UserProfile | null, req: { assigneeId?: string | n
   // Sejalan dengan apa yang terlihat di layar: papan pengumuman (Menunggu)
   // terbuka untuk siapa saja yang mau mengambilnya, sisanya milik PIC-nya.
   return req.status === "menunggu_hc" || req.assigneeId === u!.id;
+}
+
+/**
+ * Boleh MELOLOSKAN hasil design ke pemohon.
+ *
+ * Sengaja lebih sempit dari `bolehSentuhDesign`. Yang mengerjakan boleh
+ * menyerahkan hasilnya — itu memang pekerjaannya — tapi tidak boleh
+ * meloloskan hasilnya sendiri, karena gerbang yang bisa dibuka dari dalam
+ * bukan gerbang. Yang berhak adalah yang mengelola antrian: orang yang sama
+ * yang membagikan pekerjaannya, jadi tidak ada peran baru yang perlu diatur.
+ */
+const bolehAccHasil = (u: UserProfile | null) => canCreative(u) && kelolaAntrianDesign(u);
+
+/**
+ * Siapa yang dikabari saat ada hasil menunggu ACC.
+ *
+ * Hanya yang mengelola antrian Creative — bukan seluruh departemen. Mengirim
+ * ke semua orang berarti tiap designer menerima kabar tentang pekerjaan rekan
+ * yang tidak bisa ia apa-apakan, dan kabar yang tidak bisa ditindaklanjuti
+ * adalah kabar yang berhenti dibaca.
+ */
+function atasanDesign(): UserProfile[] {
+  return getUsers().filter(
+    (u) => u.active && u.department === REVIEWER_DEPARTMENT.design && kelolaAntrianDesign(u),
+  );
+}
+
+/**
+ * Buang hasil yang MASIH DITAHAN dari baris yang akan dikirim ke peramban.
+ *
+ * Inti permintaannya ada di sini: selama belum di-ACC, hasilnya tidak boleh
+ * sampai ke pemohon — dan "tidak boleh sampai" berarti tidak ikut terkirim
+ * sama sekali, bukan sekadar tidak digambar di layar. Nama berkas saja sudah
+ * cukup untuk membocorkan isi pekerjaan yang belum siap ditunjukkan.
+ *
+ * Setelah statusnya terlaksana, hasilnya justru berguna dilihat pemohon: di
+ * situlah tercatat siapa mengerjakan dan siapa yang meloloskannya.
+ */
+function tanpaHasilTertahan(rows: HcRequest[], user: UserProfile): HcRequest[] {
+  const kelola = kelolaAntrianDesign(user);
+  return rows.map((r) =>
+    r.status === "menunggu_atasan" && !kelola && r.assigneeId !== user.id ? { ...r, hasil: null } : r,
+  );
 }
 
 
@@ -253,7 +303,7 @@ export async function myHcRequestsAction(): Promise<HcRequest[]> {
   // Cakupan mengikuti jangkauan orangnya, bukan label departemennya — semua
   // supervisor memakai department yang sama, jadi menyaring dengan itu membuat
   // satu supervisor melihat pengajuan seluruh cabang.
-  return listHcRequests(requestScopeFor(user!));
+  return tanpaHasilTertahan(await listHcRequests(requestScopeFor(user!)), user!);
 }
 
 /** Pengajuan yang masuk ke HC — dibatasi satu jenis bila diminta. */
@@ -266,8 +316,8 @@ export async function allHcRequestsAction(kind?: HcRequestKind): Promise<HcReque
   // dilakukan DI SINI, bukan di layar: yang tidak boleh dilihat sebaiknya tidak
   // pernah sampai ke peramban, dan saringan di layar bisa dilewati siapa pun
   // yang memanggil aksi ini langsung.
-  if (kind === "design" && !kelolaAntrianDesign(user)) return antrianUntukPic(rows, user!.id);
-  return rows;
+  if (kind === "design" && !kelolaAntrianDesign(user)) return tanpaHasilTertahan(antrianUntukPic(rows, user!.id), user!);
+  return tanpaHasilTertahan(rows, user!);
 }
 
 /** Pelatihan yang menunggu / sudah diputus Finance. */
@@ -350,6 +400,11 @@ export async function financeDecideRequestAction(input: {
  * HC menutup pengajuan sebagai TERLAKSANA.
  *  • rekrutmen → isi berapa pegawai yang benar-benar direkrut
  *  • pelatihan → tandai program sudah dijalankan (lampirkan foto/daftar hadir)
+ *
+ * Design TIDAK lewat sini lagi. Menutupnya di sini berarti berkasnya langsung
+ * sampai ke pemohon, yang persis apa yang harus berhenti terjadi: hasil design
+ * diserahkan lewat `submitDesignResultAction` dan baru ditutup oleh atasannya
+ * lewat `accDesignResultAction`.
  */
 export async function completeHcRequestAction(input: {
   id: string;
@@ -361,8 +416,8 @@ export async function completeHcRequestAction(input: {
   const req = await getHcRequest(input.id);
   if (!req) return { error: "Pengajuan tidak ditemukan." };
   if (!canReview(user, req.kind)) return { error: "Tidak punya akses." };
-  if (req.kind === "design" && !bolehSentuhDesign(user, req)) {
-    return { error: `Pengajuan ini dikerjakan ${req.assigneeName ?? "rekan lain"}.` };
+  if (req.kind === "design") {
+    return { error: "Hasil design dikirim lewat tombol Kirim Hasil, lalu di-ACC atasan." };
   }
   const ready = req.kind === "pelatihan" ? req.status === "disetujui_finance" : req.status === "disetujui_hc";
   if (!ready) return { error: "Pengajuan belum siap ditandai terlaksana." };
@@ -398,6 +453,222 @@ export async function completeHcRequestAction(input: {
   });
 
   revalidateAll();
+  return { ok: true };
+}
+
+/* ──────────────────── hasil design: submit → ACC atasan ────────────────────
+ *
+ * Permintaan Seka: "misalnya aku selesai ngerjain desain aku submit, terus baru
+ * ACC lewat kau, baru bisa terkirim ke SPV-nya."
+ *
+ * Yang berubah sebenarnya cuma satu hal, tapi hal itu menentukan: dulu
+ * "designer selesai" dan "pemohon menerima" adalah SATU tombol. Sekarang
+ * keduanya dua langkah terpisah, dengan satu orang di antaranya. Selama
+ * hasilnya menunggu, berkasnya tinggal di kolom `hasil` dan tidak pernah ikut
+ * terkirim ke pemohon — bukan sekadar tidak digambar di layarnya.
+ */
+
+/** Berapa berkas hasil yang boleh disimpan pada satu pengajuan. */
+const MAX_BERKAS_HASIL = 20;
+
+/** Designer menyerahkan hasil pekerjaannya untuk diperiksa atasan. */
+export async function submitDesignResultAction(input: {
+  id: string;
+  note?: string;
+  attachments: HcRequestAttachment[];
+}): Promise<{ ok?: true; langsungTerkirim?: boolean; error?: string }> {
+  const user = await getSessionUser();
+  const req = await getHcRequest(input.id);
+  if (!req) return { error: "Pengajuan tidak ditemukan." };
+  if (req.kind !== "design") return { error: "Hanya pengajuan design yang punya tahap ini." };
+  if (!bolehSentuhDesign(user, req)) {
+    return { error: `Pengajuan ini dikerjakan ${req.assigneeName ?? "rekan lain"}.` };
+  }
+  if (req.status === "menunggu_atasan") return { error: "Hasilnya sudah dikirim dan sedang diperiksa atasan." };
+  if (req.status !== "disetujui_hc") return { error: "Pengajuan ini belum berada di tahap pengerjaan." };
+
+  const berkas = (input.attachments ?? [])
+    .filter((a) => a?.path && a?.name)
+    .slice(0, MAX_BERKAS_HASIL) as HcRequestAttachment[];
+  // Berkas WAJIB ada. Hasil design tanpa berkas tidak bisa diperiksa siapa pun,
+  // dan meloloskannya berarti pemohon menerima pemberitahuan "selesai" untuk
+  // sesuatu yang tidak bisa ia buka.
+  if (berkas.length === 0) return { error: "Lampirkan dulu berkas hasil designnya." };
+
+  const sekarang = new Date().toISOString();
+  const langsung = bolehAccHasil(user);
+  const hasil: HcRequestHasil = {
+    at: sekarang,
+    byId: user!.id,
+    byName: user!.name,
+    note: (input.note ?? "").trim(),
+    attachments: berkas.map((a) => ({ path: a.path, name: a.name })),
+    // Riwayat pengembalian TIDAK direset: kiriman kedua justru paling berguna
+    // dibaca bersama alasan kiriman pertama dikembalikan.
+    tolakan: req.hasil?.tolakan ?? [],
+    accAt: langsung ? sekarang : null,
+    accByName: langsung ? user!.name : null,
+  };
+
+  // Yang mengerjakan sekaligus mengelola antrian tidak perlu menunggu dirinya
+  // sendiri. Gerbangnya ada supaya SETIAP hasil pernah dilihat orang yang
+  // berwenang — kalau ia sendiri orangnya, syarat itu sudah terpenuhi saat ia
+  // menekan kirim.
+  if (langsung) {
+    const res = await kirimHasilKePemohon(req, hasil, user!.name);
+    if (res.error) return { error: res.error };
+    revalidateAssignment();
+    return { ok: true, langsungTerkirim: true };
+  }
+
+  const res = await updateHcRequest(req.id, { status: "menunggu_atasan", hasil });
+  if (res.error) return { error: res.error };
+
+  const atasan = atasanDesign().filter((u) => u.id !== user!.id);
+  if (atasan.length > 0) {
+    await Promise.all(
+      atasan.map((a) =>
+        notify({
+          kind: "request_new",
+          targetUser: a.id,
+          title: "Hasil design menunggu ACC Anda",
+          message: `${req.title} — dikerjakan ${user!.name}`,
+          href: REVIEWER_HREF.design,
+          actorName: user!.name,
+          severity: "warning",
+        }),
+      ),
+    );
+  } else {
+    // Belum ada yang berjabatan pengelola di Creative. Kabarnya tetap harus
+    // keluar — hasil yang menunggu tanpa ada yang tahu jauh lebih buruk
+    // daripada satu notifikasi yang kelebihan penerima.
+    await notify({
+      kind: "request_new",
+      department: REVIEWER_DEPARTMENT.design,
+      title: "Hasil design menunggu ACC",
+      message: `${req.title} — dikerjakan ${user!.name}`,
+      href: REVIEWER_HREF.design,
+      actorName: user!.name,
+      severity: "warning",
+    });
+  }
+
+  revalidateAssignment();
+  return { ok: true };
+}
+
+/**
+ * Memindahkan hasil dari ruang tunggu ke pemohon.
+ *
+ * Pemindahan berkasnya ke `attachments` DAN penutupan statusnya terjadi di satu
+ * tempat ini, dipakai dua jalur (submit langsung oleh pengelola, dan ACC
+ * atasan), supaya tidak ada satu jalur pun yang menutup pengajuan tapi lupa
+ * memindahkan berkasnya — pemohon akan melihat "Selesai" tanpa satu pun berkas.
+ */
+async function kirimHasilKePemohon(
+  req: HcRequest,
+  hasil: HcRequestHasil,
+  olehNama: string,
+): Promise<{ error?: string }> {
+  const gabung = [
+    ...req.attachments.map((a) => ({ path: a.path, name: a.name })),
+    ...hasil.attachments.map((a) => ({ path: a.path, name: a.name })),
+  ].filter((a) => a?.path && a?.name) as HcRequestAttachment[];
+
+  const res = await updateHcRequest(req.id, {
+    status: "terlaksana",
+    completedAt: new Date().toISOString(),
+    attachments: gabung,
+    hasil,
+  });
+  if (res.error) return { error: res.error };
+
+  if (req.workTaskId) updateTaskStatus(req.workTaskId, "done", 100);
+
+  await notify({
+    kind: "request_done",
+    targetUser: req.requesterId,
+    title: "Pengajuan design selesai",
+    message: req.title,
+    href: REQUESTER_HREF,
+    actorName: olehNama,
+    severity: "info",
+  });
+  return {};
+}
+
+/** Atasan meloloskan hasil ke pemohon, atau mengembalikannya ke designer. */
+export async function accDesignResultAction(input: {
+  id: string;
+  approve: boolean;
+  note?: string;
+}): Promise<{ ok?: true; error?: string }> {
+  const user = await getSessionUser();
+  const req = await getHcRequest(input.id);
+  if (!req) return { error: "Pengajuan tidak ditemukan." };
+  if (req.kind !== "design") return { error: "Hanya pengajuan design yang punya tahap ini." };
+  if (!bolehAccHasil(user)) return { error: "Hanya yang mengelola antrian Creative yang bisa meng-ACC hasil." };
+  if (req.status !== "menunggu_atasan") return { error: "Tidak ada hasil yang sedang menunggu ACC di pengajuan ini." };
+  if (!req.hasil) return { error: "Hasilnya tidak ditemukan — minta designer mengirim ulang." };
+
+  const catatan = (input.note ?? "").trim();
+
+  if (input.approve) {
+    const hasil: HcRequestHasil = {
+      ...req.hasil,
+      accAt: new Date().toISOString(),
+      accByName: user!.name,
+      note: catatan ? `${req.hasil.note ? `${req.hasil.note}\n` : ""}${catatan}` : req.hasil.note,
+    };
+    const res = await kirimHasilKePemohon(req, hasil, user!.name);
+    if (res.error) return { error: res.error };
+
+    // Yang mengerjakan ikut dikabari. Ia menyerahkan hasilnya lalu kehilangan
+    // pandangan atasnya; tanpa kabar ini ia tidak pernah tahu pekerjaannya
+    // sudah sampai atau masih menggantung.
+    if (req.assigneeId && req.assigneeId !== user!.id) {
+      await notify({
+        kind: "request_approved",
+        targetUser: req.assigneeId,
+        title: "Hasil design Anda di-ACC",
+        message: `${req.title} — sudah terkirim ke ${req.requesterName}`,
+        href: REVIEWER_HREF.design,
+        actorName: user!.name,
+        severity: "info",
+      });
+    }
+
+    revalidateAssignment();
+    return { ok: true };
+  }
+
+  if (!catatan) return { error: "Tulis dulu apa yang perlu diperbaiki." };
+
+  const hasil: HcRequestHasil = {
+    ...req.hasil,
+    tolakan: [...req.hasil.tolakan, { at: new Date().toISOString(), byName: user!.name, note: catatan }],
+  };
+  // Kembali ke tahap pengerjaan, BUKAN ditolak. Yang dikembalikan hasilnya,
+  // bukan permintaannya — permintaan pemohon masih berdiri dan masih harus
+  // dipenuhi, jadi menandainya "Ditolak" akan salah membaca ke dua arah.
+  const res = await updateHcRequest(req.id, { status: "disetujui_hc", completedAt: null, hasil });
+  if (res.error) return { error: res.error };
+
+  if (req.workTaskId) updateTaskStatus(req.workTaskId, "ongoing", 60);
+
+  await notify({
+    kind: "request_revision",
+    targetUser: req.assigneeId ?? undefined,
+    department: req.assigneeId ? undefined : REVIEWER_DEPARTMENT.design,
+    title: "Hasil design dikembalikan",
+    message: `${req.title} — ${catatan}`,
+    href: REVIEWER_HREF.design,
+    actorName: user!.name,
+    severity: "warning",
+  });
+
+  revalidateAssignment();
   return { ok: true };
 }
 

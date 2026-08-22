@@ -147,9 +147,13 @@ async function syncDesignRequestFromTask(taskId: string, status: TaskStatus) {
   try {
     const req = await getHcRequestByTask(taskId);
     if (!req || req.kind !== "design") return;
-    if (status === "done" && req.status !== "terlaksana") {
-      await updateHcRequest(req.id, { status: "terlaksana", completedAt: new Date().toISOString() });
-    } else if (status !== "done" && req.status === "terlaksana") {
+    if (status === "done" && req.status === "disetujui_hc") {
+      // Menutup tugasnya di Work Tracker TIDAK lagi mengirim hasilnya ke
+      // pemohon — kalau iya, pintu belakang ini akan melewati ACC atasan dan
+      // gerbangnya jadi tidak berarti. Pengajuannya berhenti di ruang tunggu;
+      // berkasnya menyusul saat designer menekan Kirim Hasil.
+      await updateHcRequest(req.id, { status: "menunggu_atasan", completedAt: null });
+    } else if (status !== "done" && (req.status === "terlaksana" || req.status === "menunggu_atasan")) {
       // Tugas dibuka kembali ⇒ pengajuannya ikut kembali berjalan.
       await updateHcRequest(req.id, { status: "disetujui_hc", completedAt: null });
     } else {

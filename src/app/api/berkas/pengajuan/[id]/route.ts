@@ -2,6 +2,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { getSessionUser } from "@/lib/auth";
 import { getHcRequest } from "@/lib/data/hc-requests";
 import { canSeeRequest } from "@/lib/data/request-scope";
+import { kelolaAntrianDesign } from "@/lib/hc-request";
 import { halamanGalatBerkas, sajikanBerkas } from "@/lib/storage/berkas-rute";
 
 /**
@@ -29,7 +30,16 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ id: string 
   // Berkasnya harus benar-benar milik pengajuan ini. Tanpa pemeriksaan ini,
   // siapa pun yang boleh membuka satu pengajuan bisa menukar `p` dengan kunci
   // apa pun di dalam bucket dan mengambilnya lewat rute ini.
-  const lampiran = pengajuan.attachments.find((a) => a.path === jalur);
+  //
+  // Hasil design yang masih menunggu ACC belum ada di `attachments` — memang
+  // sengaja, itulah yang menahannya dari pemohon. Yang memeriksanya tetap harus
+  // bisa membukanya, jadi ruang tunggu itu ikut dicari DI SINI dan hanya untuk
+  // dua pihak yang berkepentingan: yang mengerjakannya dan yang meng-ACC-nya.
+  const bolehLihatHasil =
+    pengajuan.kind === "design" && (pengajuan.assigneeId === user.id || kelolaAntrianDesign(user));
+  const lampiran =
+    pengajuan.attachments.find((a) => a.path === jalur) ??
+    (bolehLihatHasil ? pengajuan.hasil?.attachments.find((a) => a.path === jalur) : undefined);
   if (!lampiran) return halamanGalatBerkas("Berkas tidak ada pada pengajuan ini.", 404);
 
   return (

@@ -4,7 +4,14 @@ import { randomUUID } from "node:crypto";
 import { db, dbEnabled } from "./db";
 import { outletName, userName } from "./store";
 import { scopeManpowerValid } from "@/lib/hc-request";
-import type { HcRequest, HcRequestAttachment, HcRequestKind, HcRequestStatus, ScopeManpower } from "@/lib/hc-request";
+import type {
+  HcRequest,
+  HcRequestAttachment,
+  HcRequestHasil,
+  HcRequestKind,
+  HcRequestStatus,
+  ScopeManpower,
+} from "@/lib/hc-request";
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
@@ -14,6 +21,29 @@ const rawAttachments = (v: any): HcRequestAttachment[] =>
   (Array.isArray(v) ? v : [])
     .filter((a: any) => a && a.path && a.name)
     .map((a: any) => ({ path: String(a.path), name: String(a.name) }));
+
+/**
+ * Hasil design yang tersimpan di kolom `hasil`.
+ *
+ * Baris lama tidak punya kolom ini sama sekali, dan itu bukan kesalahan —
+ * artinya designer-nya memang belum pernah men-submit apa pun. Null, bukan
+ * objek kosong: keduanya terlihat mirip di layar tapi hanya satu yang jujur.
+ */
+const rawHasil = (v: any): HcRequestHasil | null => {
+  if (!v || typeof v !== "object") return null;
+  return {
+    at: String(v.at ?? ""),
+    byId: v.byId ? String(v.byId) : null,
+    byName: String(v.byName ?? "—"),
+    note: String(v.note ?? ""),
+    attachments: rawAttachments(v.attachments),
+    tolakan: (Array.isArray(v.tolakan) ? v.tolakan : [])
+      .filter((t: any) => t && t.note)
+      .map((t: any) => ({ at: String(t.at ?? ""), byName: String(t.byName ?? "—"), note: String(t.note) })),
+    accAt: v.accAt ? String(v.accAt) : null,
+    accByName: v.accByName ? String(v.accByName) : null,
+  };
+};
 
 const fromRow = (r: any): HcRequest => ({
   id: r.id,
@@ -50,6 +80,7 @@ const fromRow = (r: any): HcRequest => ({
   revisions: (Array.isArray(r.revisions) ? r.revisions : [])
     .filter((v: any) => v && v.note)
     .map((v: any) => ({ at: String(v.at ?? ""), byName: String(v.byName ?? "—"), note: String(v.note) })),
+  hasil: rawHasil(r.hasil),
   createdAt: r.created_at ?? new Date().toISOString(),
   updatedAt: r.updated_at ?? r.created_at ?? new Date().toISOString(),
   completedAt: r.completed_at ?? null,
@@ -73,7 +104,10 @@ const fromRow = (r: any): HcRequest => ({
  */
 function tautkanLampiran(list: HcRequest[]): void {
   for (const r of list) {
-    for (const a of r.attachments) {
+    // Hasil yang menunggu ACC ikut ditautkan: atasannya tidak bisa memutuskan
+    // apa pun tanpa membuka berkasnya. Rutenya memeriksa ulang hak akses sesi,
+    // jadi tautannya tetap tidak berguna di tangan yang tidak berhak.
+    for (const a of [...r.attachments, ...(r.hasil?.attachments ?? [])]) {
       if (a.path) a.url = `/api/berkas/pengajuan/${encodeURIComponent(r.id)}?p=${encodeURIComponent(a.path)}`;
     }
   }
@@ -195,6 +229,8 @@ export interface UpdateRequestPatch {
   assigneeId?: string | null;
   workTaskId?: string | null;
   revisions?: { at: string; byName: string; note: string }[];
+  hasil?: HcRequestHasil | null;
+  attachments?: HcRequestAttachment[];
 }
 
 export async function updateHcRequest(id: string, patch: UpdateRequestPatch): Promise<{ error?: string }> {
@@ -210,6 +246,10 @@ export async function updateHcRequest(id: string, patch: UpdateRequestPatch): Pr
   if (patch.assigneeId !== undefined) row.assignee_id = patch.assigneeId;
   if (patch.workTaskId !== undefined) row.work_task_id = patch.workTaskId;
   if (patch.revisions !== undefined) row.revisions = patch.revisions;
+  if (patch.hasil !== undefined) row.hasil = patch.hasil;
+  if (patch.attachments !== undefined) {
+    row.attachments = patch.attachments.filter((a) => a?.path && a?.name).map((a) => ({ path: a.path, name: a.name }));
+  }
 
   if (!dbEnabled) {
     const cur = mem.get(id);

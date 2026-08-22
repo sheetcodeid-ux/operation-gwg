@@ -288,6 +288,9 @@ function RequestDetail({ r }: { r: HcRequest }) {
     if (r.plannedDate) rows.push({ label: "Dibutuhkan", value: fmtDate(r.plannedDate) });
     // Pemohon berhak tahu siapa yang mengerjakan designnya.
     if (r.assigneeName) rows.push({ label: "Dikerjakan oleh", value: r.assigneeName });
+    // Dan siapa yang meloloskannya — itu yang membedakan berkas yang sudah
+    // diperiksa dari berkas yang kebetulan sempat terunggah.
+    if (r.hasil?.accByName) rows.push({ label: "Di-ACC oleh", value: r.hasil.accByName });
   }
 
   const noteLabel = r.kind === "design" ? "Catatan Creative" : "Catatan HC";
@@ -336,6 +339,52 @@ function RequestDetail({ r }: { r: HcRequest }) {
                 Sudah {r.revisions.length}× revisi — berkas hasil terbaru ada di urutan paling akhir.
               </p>
             )}
+          </div>
+        )}
+
+        {/* Ruang tunggu hasil design.
+            Hanya sampai ke peramban orang yang memang boleh melihatnya — server
+            membuangnya dari baris milik pemohon selama belum di-ACC — jadi di
+            sini cukup digambar apa adanya. */}
+        {r.hasil && r.status === "menunggu_atasan" && (
+          <div>
+            <DetailTitle>Hasil Menunggu ACC</DetailTitle>
+            <div className="rounded-xl border border-amber-500/30 bg-amber-500/[0.07] p-2.5">
+              <p className="text-[11px] font-semibold text-amber-700 dark:text-amber-300">
+                Dikirim {r.hasil.byName} · {fmtDate(r.hasil.at)}
+              </p>
+              {r.hasil.note && (
+                <p className="mt-0.5 whitespace-pre-wrap text-[12px] text-foreground/85">{r.hasil.note}</p>
+              )}
+              {r.hasil.attachments.length > 0 && (
+                <div className="mt-1.5 flex flex-wrap gap-1.5">
+                  {r.hasil.attachments.map((a, i) => <FileChip key={i} a={a} />)}
+                </div>
+              )}
+              <p className="mt-1.5 text-[10px] text-muted-foreground">
+                Belum terkirim ke pemohon — menunggu ACC atasan.
+              </p>
+            </div>
+          </div>
+        )}
+
+        {/* Pengembalian oleh atasan disimpan terpisah dari permintaan revisi
+            pemohon. Keduanya sama-sama "diperbaiki dulu", tapi datang dari arah
+            yang berbeda, dan mencampurnya membuat designer tidak tahu yang mana
+            yang sudah pernah ia jawab. */}
+        {r.hasil && r.hasil.tolakan.length > 0 && (
+          <div>
+            <DetailTitle>Dikembalikan Atasan ({r.hasil.tolakan.length})</DetailTitle>
+            <ol className="space-y-1.5">
+              {r.hasil.tolakan.map((t, i) => (
+                <li key={i} className="rounded-lg border border-orange-500/30 bg-orange-500/[0.07] p-2.5">
+                  <p className="text-[11px] font-semibold text-orange-700 dark:text-orange-300">
+                    {t.byName} · {fmtDate(t.at)}
+                  </p>
+                  <p className="mt-0.5 whitespace-pre-wrap text-[12px] text-foreground/85">{t.note}</p>
+                </li>
+              ))}
+            </ol>
           </div>
         )}
 

@@ -1,18 +1,20 @@
 "use client";
 
 import * as React from "react";
-import { CheckCircle2, ClipboardCheck, Loader2, UserRound, Wallet, XCircle } from "lucide-react";
+import { CheckCircle2, ClipboardCheck, Loader2, SendHorizonal, ShieldCheck, Undo2, UserRound, Wallet, XCircle } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { Field, Input, Textarea } from "@/components/ui/input";
 import {
+  accDesignResultAction,
   allHcRequestsAction,
   assignDesignRequestAction,
   completeHcRequestAction,
   financeDecideRequestAction,
   financeTrainingRequestsAction,
   hcDecideRequestAction,
+  submitDesignResultAction,
 } from "@/lib/actions/hc-requests";
 import { Combobox } from "@/components/ui/combobox";
 import { SegmentedTabs } from "@/components/ui/segmented-tabs";
@@ -31,7 +33,7 @@ import {
 } from "@/lib/hc-request";
 import { StageFilterChips } from "@/components/ui/stage-filter";
 import { DiscussButton } from "@/components/chat/forward-request";
-import { FilePicker, RequestEmpty, RequestList, uploadAll, type UploadProgress } from "./request-shared";
+import { FileChip, FilePicker, RequestEmpty, RequestList, uploadAll, type UploadProgress } from "./request-shared";
 
 type Mode = "hc" | "finance";
 
@@ -145,8 +147,10 @@ export function HcRequestReview({
       {kind === "design" && !kelola && (
         <p className="mb-3 rounded-xl border border-border bg-muted/30 px-3 py-2 text-[11px] leading-relaxed text-muted-foreground">
           <b className="text-foreground">Menunggu</b> berisi permintaan baru seluruh tim Creative — siapa pun boleh
-          mengambilnya. Tab lainnya (Sedang Dikerjakan, Revisi, Selesai, Ditolak) hanya berisi{" "}
+          mengambilnya. Tab lainnya (Sedang Dikerjakan, Revisi, Menunggu ACC, Selesai, Ditolak) hanya berisi{" "}
           <b className="text-foreground">pekerjaan Anda sendiri</b>, jadi tidak tercampur dengan pekerjaan rekan.
+          Setelah <b className="text-foreground">Kirim Hasil</b>, berkasnya menunggu ACC atasan dulu — pemohon belum
+          menerima apa pun sampai itu selesai.
         </p>
       )}
       <StageFilterChips className="mb-4" options={opsi} value={stage} onChange={setStage} count={hitung} />
@@ -197,7 +201,7 @@ function Actions({
   onDone: () => void;
 }) {
   const step = nextActions(r);
-  const [dialog, setDialog] = React.useState<null | "hc" | "finance" | "complete" | "assign">(null);
+  const [dialog, setDialog] = React.useState<null | "hc" | "finance" | "complete" | "assign" | "kirim" | "acc">(null);
   const isDesign = r.kind === "design";
 
   if (mode === "hc") {
@@ -230,21 +234,39 @@ function Actions({
             keputusan pembagian beban, bukan keputusan pengerjaan. Tanpa jalan
             ini, satu designer yang berhalangan berarti pekerjaannya tidak
             pernah bisa dilanjutkan siapa pun. */}
-        {isDesign && !step.hc && r.status !== "terlaksana" && kelola && (
+        {isDesign && !step.hc && r.status !== "terlaksana" && r.status !== "menunggu_atasan" && kelola && (
           <Button size="sm" variant="outline" onClick={() => setDialog("assign")}>
             <UserRound className="size-4" /> {r.assigneeName ? "Ganti PIC" : "Tugaskan PIC"}
           </Button>
         )}
+        {/* Design tidak lagi "ditandai selesai" oleh yang mengerjakannya. Ia
+            MENYERAHKAN hasilnya; yang menutupnya adalah atasan di langkah
+            berikutnya. Dua tombol berbeda karena memang dua keputusan berbeda,
+            dan dulu keduanya tertumpuk jadi satu. */}
         {step.complete && (
-          <Button size="sm" onClick={() => setDialog("complete")}>
-            <CheckCircle2 className="size-4" /> {isDesign ? "Tandai Selesai" : "Tandai Terlaksana"}
+          <Button size="sm" onClick={() => setDialog(isDesign ? "kirim" : "complete")}>
+            {isDesign ? <SendHorizonal className="size-4" /> : <CheckCircle2 className="size-4" />}{" "}
+            {isDesign ? "Kirim Hasil" : "Tandai Terlaksana"}
           </Button>
         )}
+        {/* Menunggu ACC. Yang mengerjakan tetap melihat barisnya — supaya ia
+            tahu hasilnya sudah masuk dan sedang di tangan siapa — tapi tombolnya
+            hanya muncul untuk yang berhak memutuskan. */}
+        {step.accAtasan &&
+          (kelola ? (
+            <Button size="sm" onClick={() => setDialog("acc")}>
+              <ShieldCheck className="size-4" /> Periksa Hasil
+            </Button>
+          ) : (
+            <span className="text-[11px] text-muted-foreground">Menunggu ACC atasan</span>
+          ))}
         {dialog === "hc" && <HcDecideDialog r={r} onClose={() => setDialog(null)} onDone={onDone} />}
         {dialog === "assign" && (
           <AssignDialog r={r} picOptions={picOptions} kelola={kelola} meId={meId} onClose={() => setDialog(null)} onDone={onDone} />
         )}
         {dialog === "complete" && <CompleteDialog r={r} onClose={() => setDialog(null)} onDone={onDone} />}
+        {dialog === "kirim" && <KirimHasilDialog r={r} onClose={() => setDialog(null)} onDone={onDone} />}
+        {dialog === "acc" && <AccHasilDialog r={r} onClose={() => setDialog(null)} onDone={onDone} />}
       </>
     );
   }
@@ -369,9 +391,9 @@ function FinanceDecideDialog({ r, onClose, onDone }: { r: HcRequest; onClose: ()
   );
 }
 
+/** Menutup rekrutmen & pelatihan. Design punya jalurnya sendiri (Kirim Hasil → ACC). */
 function CompleteDialog({ r, onClose, onDone }: { r: HcRequest; onClose: () => void; onDone: () => void }) {
   const isRecruit = r.kind === "rekrutmen";
-  const isDesign = r.kind === "design";
   const [recruited, setRecruited] = React.useState(String(r.headcount || 0));
   const [note, setNote] = React.useState("");
   const [files, setFiles] = React.useState<File[]>([]);
@@ -390,7 +412,7 @@ function CompleteDialog({ r, onClose, onDone }: { r: HcRequest; onClose: () => v
         attachments,
       });
       if (res.error) return toast.error(res.error);
-      toast.success(isDesign ? "Design ditandai selesai" : "Ditandai terlaksana");
+      toast.success("Ditandai terlaksana");
       onClose();
       onDone();
     } catch (e) {
@@ -408,9 +430,7 @@ function CompleteDialog({ r, onClose, onDone }: { r: HcRequest; onClose: () => v
           <p className="rounded-lg bg-brand-500/10 px-3 py-2 text-xs text-muted-foreground">
             {isRecruit
               ? "Isi jumlah pegawai yang benar-benar direkrut dari permintaan ini."
-              : isDesign
-                ? "Lampirkan hasil designnya agar pemohon bisa langsung mengunduh dari halaman pengajuannya."
-                : "Tandai bahwa program pelatihannya sudah benar-benar dijalankan."}
+              : "Tandai bahwa program pelatihannya sudah benar-benar dijalankan."}
           </p>
           {isRecruit && (
             <Field label={`Jumlah Direkrut (dari ${r.headcount} diminta)`}>
@@ -418,10 +438,10 @@ function CompleteDialog({ r, onClose, onDone }: { r: HcRequest; onClose: () => v
             </Field>
           )}
           <Field
-            label={isRecruit ? "Bukti (offering letter / SK)" : isDesign ? "Hasil design (JPG / PNG / PDF)" : "Bukti (laporan, daftar hadir, foto kegiatan)"}
+            label={isRecruit ? "Bukti (offering letter / SK)" : "Bukti (laporan, daftar hadir, foto kegiatan)"}
             hint={UPLOAD_HINT}
           >
-            <FilePicker files={files} onChange={setFiles} disabled={busy} label={isDesign ? "Unggah hasil design" : "Unggah bukti"} />
+            <FilePicker files={files} onChange={setFiles} disabled={busy} label="Unggah bukti" />
           </Field>
           <Field label="Catatan (opsional)">
             <Textarea rows={3} value={note} onChange={(e) => setNote(e.target.value)} />
@@ -452,6 +472,183 @@ function CompleteDialog({ r, onClose, onDone }: { r: HcRequest; onClose: () => v
             <Button variant="ghost" onClick={onClose} disabled={busy}>Batal</Button>
             <Button onClick={submit} disabled={busy}>
               {busy ? <Loader2 className="size-4 animate-spin" /> : <CheckCircle2 className="size-4" />} Simpan
+            </Button>
+          </div>
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+/**
+ * Designer menyerahkan hasil pekerjaannya.
+ *
+ * Bedanya dengan "Tandai Selesai" yang lama bukan sekadar nama tombol: berkas
+ * yang diunggah di sini TIDAK langsung sampai ke pemohon. Ia menunggu di
+ * pengajuan yang sama sampai atasannya membukanya, dan itulah yang diminta —
+ * supaya tidak ada lagi hasil yang sampai ke supervisor sebelum ada yang
+ * sempat melihatnya.
+ */
+function KirimHasilDialog({ r, onClose, onDone }: { r: HcRequest; onClose: () => void; onDone: () => void }) {
+  const [note, setNote] = React.useState("");
+  const [files, setFiles] = React.useState<File[]>([]);
+  const [busy, setBusy] = React.useState(false);
+  const [progress, setProgress] = React.useState<UploadProgress | null>(null);
+  const ulang = (r.hasil?.tolakan.length ?? 0) > 0;
+
+  async function submit() {
+    if (files.length === 0) return toast.error("Lampirkan dulu berkas hasil designnya.");
+    setBusy(true);
+    setProgress(null);
+    try {
+      const attachments = await uploadAll(files, setProgress);
+      const res = await submitDesignResultAction({ id: r.id, note, attachments });
+      if (res.error) return toast.error(res.error);
+      toast.success(
+        res.langsungTerkirim
+          ? `Hasil terkirim ke ${r.requesterName}`
+          : "Hasil dikirim — menunggu ACC atasan sebelum sampai ke pemohon",
+      );
+      onClose();
+      onDone();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Gagal menyimpan.");
+    } finally {
+      setBusy(false);
+      setProgress(null);
+    }
+  }
+
+  return (
+    <Dialog open onOpenChange={(v) => !v && onClose()}>
+      <DialogContent title={ulang ? "Kirim Ulang Hasil Design" : "Kirim Hasil Design"} description={r.title} align="center" className="max-w-md">
+        <div className="max-h-[70vh] space-y-3 overflow-y-auto p-5">
+          <p className="rounded-lg bg-brand-500/10 px-3 py-2 text-xs leading-relaxed text-muted-foreground">
+            Hasilnya diperiksa atasan dulu. Setelah di-ACC, berkasnya baru muncul di halaman pengajuan{" "}
+            <b className="text-foreground">{r.requesterName}</b>.
+          </p>
+
+          {/* Alasan pengembalian terakhir ditaruh DI SINI, bukan cuma di rincian
+              kartu: yang perlu membacanya adalah orang yang sedang mengunggah
+              perbaikannya, tepat saat ia mengunggahnya. */}
+          {ulang && r.hasil && (
+            <div className="rounded-lg border border-orange-500/30 bg-orange-500/[0.07] p-3">
+              <p className="text-[11px] font-semibold text-orange-700 dark:text-orange-300">
+                Dikembalikan {r.hasil.tolakan[r.hasil.tolakan.length - 1].byName}
+              </p>
+              <p className="mt-0.5 whitespace-pre-wrap text-[12px] text-foreground/85">
+                {r.hasil.tolakan[r.hasil.tolakan.length - 1].note}
+              </p>
+            </div>
+          )}
+
+          <Field label="Hasil design (JPG / PNG / PDF)" hint={UPLOAD_HINT}>
+            <FilePicker files={files} onChange={setFiles} disabled={busy} label="Unggah hasil design" />
+          </Field>
+          <Field label="Catatan untuk atasan (opsional)">
+            <Textarea
+              rows={3}
+              value={note}
+              onChange={(e) => setNote(e.target.value)}
+              placeholder="Yang perlu diperhatikan sebelum dikirim ke pemohon…"
+            />
+          </Field>
+
+          {progress && (
+            <div className="rounded-xl border border-border bg-muted/30 p-3">
+              <div className="mb-1.5 flex items-center justify-between gap-2 text-[11px]">
+                <span className="min-w-0 truncate text-foreground/80">
+                  Mengunggah {progress.index}/{progress.total} · {progress.fileName}
+                </span>
+                <span className="shrink-0 font-semibold tabular-nums text-foreground">
+                  {Math.round(progress.ratio * 100)}%
+                </span>
+              </div>
+              <div className="h-1.5 overflow-hidden rounded-full bg-muted">
+                <div
+                  className="h-full rounded-full bg-primary transition-[width] duration-150"
+                  style={{ width: `${Math.round(progress.ratio * 100)}%` }}
+                />
+              </div>
+            </div>
+          )}
+
+          <div className="flex justify-end gap-2">
+            <Button variant="ghost" onClick={onClose} disabled={busy}>Batal</Button>
+            <Button onClick={submit} disabled={busy || files.length === 0}>
+              {busy ? <Loader2 className="size-4 animate-spin" /> : <SendHorizonal className="size-4" />} Kirim
+            </Button>
+          </div>
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+/**
+ * Atasan memeriksa hasil sebelum ia keluar dari tim.
+ *
+ * Berkasnya ditampilkan lengkap di sini — memutuskan tanpa membukanya sama saja
+ * dengan tidak memeriksa. Dua jalan keluar: diteruskan ke pemohon, atau
+ * dikembalikan ke designer dengan alasan yang WAJIB ditulis. Tidak ada tombol
+ * "tolak permintaannya": yang dikembalikan hasilnya, sementara permintaan
+ * pemohon masih berdiri dan tetap harus dipenuhi.
+ */
+function AccHasilDialog({ r, onClose, onDone }: { r: HcRequest; onClose: () => void; onDone: () => void }) {
+  const [note, setNote] = React.useState("");
+  const [busy, setBusy] = React.useState(false);
+
+  async function putuskan(approve: boolean) {
+    if (!approve && !note.trim()) return toast.error("Tulis dulu apa yang perlu diperbaiki.");
+    setBusy(true);
+    const res = await accDesignResultAction({ id: r.id, approve, note });
+    setBusy(false);
+    if (res.error) return toast.error(res.error);
+    toast.success(approve ? `Hasil terkirim ke ${r.requesterName}` : "Hasil dikembalikan ke designer");
+    onClose();
+    onDone();
+  }
+
+  return (
+    <Dialog open onOpenChange={(v) => !v && onClose()}>
+      <DialogContent title="Periksa Hasil Design" description={r.title} align="center" className="max-w-md">
+        <div className="max-h-[70vh] space-y-3 overflow-y-auto p-5">
+          <div className="rounded-lg border border-border bg-muted/40 p-3">
+            <p className="text-[11px] text-muted-foreground">
+              Dikirim <b className="text-foreground">{r.hasil?.byName ?? "—"}</b> untuk{" "}
+              <b className="text-foreground">{r.requesterName}</b>
+            </p>
+            {r.hasil?.note && (
+              <p className="mt-1 whitespace-pre-wrap text-[12px] text-foreground/85">{r.hasil.note}</p>
+            )}
+            {r.hasil && r.hasil.attachments.length > 0 ? (
+              <div className="mt-2 flex flex-wrap gap-1.5">
+                {r.hasil.attachments.map((a, i) => <FileChip key={i} a={a} />)}
+              </div>
+            ) : (
+              <p className="mt-2 text-[11px] text-amber-600 dark:text-amber-400">
+                Belum ada berkas hasil — pekerjaannya ditutup dari Work Tracker tanpa mengunggah apa pun.
+                Kembalikan supaya designer mengirim berkasnya.
+              </p>
+            )}
+          </div>
+
+          <Field label="Catatan">
+            <Textarea
+              rows={3}
+              value={note}
+              onChange={(e) => setNote(e.target.value)}
+              placeholder="Wajib diisi bila dikembalikan — apa yang perlu diperbaiki…"
+            />
+          </Field>
+
+          <div className="flex flex-wrap justify-end gap-2">
+            <Button variant="ghost" onClick={onClose} disabled={busy}>Batal</Button>
+            <Button variant="outline" onClick={() => putuskan(false)} disabled={busy}>
+              <Undo2 className="size-4" /> Kembalikan
+            </Button>
+            <Button onClick={() => putuskan(true)} disabled={busy || !r.hasil?.attachments.length}>
+              {busy ? <Loader2 className="size-4 animate-spin" /> : <ShieldCheck className="size-4" />} ACC & Kirim
             </Button>
           </div>
         </div>

@@ -149,9 +149,22 @@ describe("penyaringan dilakukan di server", () => {
   });
 
   it("aksi yang mengubah satu pengajuan design ikut dijaga", () => {
-    for (const nama of ["hcDecideRequestAction", "completeHcRequestAction", "assignDesignRequestAction"]) {
+    for (const nama of ["hcDecideRequestAction", "assignDesignRequestAction", "submitDesignResultAction"]) {
       expect(badanFungsi(nama), `${nama} tidak memeriksa kepemilikan design`).toContain("bolehSentuhDesign");
     }
+  });
+
+  it("completeHcRequestAction menolak design sepenuhnya", () => {
+    // Penjagaan yang lebih keras daripada memeriksa kepemilikan: menutup design
+    // dari sini akan MENGIRIM berkasnya ke pemohon tanpa melewati ACC atasan,
+    // jadi jalannya ditutup, bukan dipersempit.
+    const isi = badanFungsi("completeHcRequestAction");
+    expect(isi).toContain('req.kind === "design"');
+    expect(isi).not.toContain("bolehSentuhDesign");
+  });
+
+  it("hanya pengelola antrian yang bisa meng-ACC hasil", () => {
+    expect(badanFungsi("accDesignResultAction")).toContain("bolehAccHasil");
   });
 });
 

@@ -8,7 +8,8 @@ import type { Tone } from "@/lib/constants";
  *  • pelatihan — permintaan program pelatihan. HC ACC → Finance ACC dana →
  *    dilaksanakan.
  *  • design — permintaan materi desain ke tim Creative. Creative ACC →
- *    dikerjakan → selesai. Tidak melewati Finance.
+ *    dikerjakan → designer submit hasil → ACC atasan → terkirim ke pemohon.
+ *    Tidak melewati Finance.
  *
  * Ketiganya memakai satu mesin status yang sama; hanya labelnya yang
  * menyesuaikan jenis (lihat `statusMeta`).
@@ -86,6 +87,35 @@ export interface HcRequestRevision {
   note: string;
 }
 
+/** Satu kali hasil dikembalikan atasan kepada designer-nya. */
+export interface HcRequestTolakan {
+  at: string;
+  byName: string;
+  note: string;
+}
+
+/**
+ * Hasil design yang sudah di-submit designer.
+ *
+ * Berkasnya sengaja TIDAK disimpan di `attachments`. `attachments` adalah yang
+ * dilihat pemohon; menaruh hasil yang belum di-ACC di sana sama saja dengan
+ * mengirimkannya, dan itu persis yang diminta untuk tidak terjadi. Berkasnya
+ * baru pindah ke `attachments` pada detik atasannya menyetujui.
+ */
+export interface HcRequestHasil {
+  /** Kapan designer men-submit-nya (terbaru, kalau sudah pernah dikembalikan). */
+  at: string;
+  byId: string | null;
+  byName: string;
+  note: string;
+  attachments: HcRequestAttachment[];
+  /** Riwayat pengembalian oleh atasan — kosong berarti belum pernah dikembalikan. */
+  tolakan: HcRequestTolakan[];
+  /** Terisi begitu atasannya menyetujui. */
+  accAt: string | null;
+  accByName: string | null;
+}
+
 /** Penugasan design: siapa yang mengerjakan, dan tugas Work Tracker-nya. */
 export interface HcRequestAssignment {
   assigneeId: string | null;
@@ -99,6 +129,7 @@ export type HcRequestStatus =
   | "menunggu_hc"
   | "ditolak_hc"
   | "disetujui_hc"
+  | "menunggu_atasan"
   | "menunggu_finance"
   | "ditolak_finance"
   | "disetujui_finance"
@@ -144,6 +175,7 @@ export const HC_REQUEST_STATUS_META: Record<HcRequestStatus, { label: string; to
   menunggu_hc: { label: "Menunggu ACC HC", tone: "warning" },
   ditolak_hc: { label: "Ditolak HC", tone: "danger" },
   disetujui_hc: { label: "Disetujui HC", tone: "cyan" },
+  menunggu_atasan: { label: "Menunggu ACC Atasan", tone: "amber" },
   menunggu_finance: { label: "Menunggu ACC Finance", tone: "amber" },
   ditolak_finance: { label: "Ditolak Finance", tone: "danger" },
   disetujui_finance: { label: "Dana Disetujui", tone: "brand" },
@@ -163,6 +195,8 @@ export function statusMeta(kind: HcRequestKind, status: HcRequestStatus): { labe
       return { label: "Ditolak Creative", tone: "danger" };
     case "disetujui_hc":
       return { label: "Sedang Dikerjakan", tone: "cyan" };
+    case "menunggu_atasan":
+      return { label: "Menunggu ACC Atasan", tone: "amber" };
     case "terlaksana":
       return { label: "Selesai", tone: "success" };
     default:
@@ -244,6 +278,8 @@ export interface HcRequest {
   workTaskId: string | null;
   /** Riwayat revisi — kosong berarti belum pernah direvisi. */
   revisions: HcRequestRevision[];
+  /** Design: hasil yang sudah di-submit designer. Null berarti belum ada. */
+  hasil: HcRequestHasil | null;
   createdAt: string;
   updatedAt: string;
   completedAt: string | null;
@@ -256,7 +292,7 @@ export interface HcRequest {
  * kolom tersendiri — jadi tidak mungkin ada tahap yang bertentangan dengan
  * isi pengajuannya.                                                        */
 
-export type RequestStage = "menunggu" | "dikerjakan" | "revisi" | "selesai" | "ditolak";
+export type RequestStage = "menunggu" | "dikerjakan" | "revisi" | "acc" | "selesai" | "ditolak";
 
 export interface StageInput {
   kind: HcRequestKind;
@@ -278,6 +314,10 @@ export function requestStage(r: StageInput): RequestStage {
   if (r.status === "ditolak_hc" || r.status === "ditolak_finance") return "ditolak";
   if (r.status === "terlaksana") return "selesai";
   if (r.status === "menunggu_hc") return "menunggu";
+  // Hasil sudah di-submit dan sedang ditahan atasannya. Tahap sendiri, bukan
+  // "selesai": pekerjaannya memang sudah jadi, tapi belum sampai ke pemohon —
+  // dan selama itu masih bisa dikembalikan.
+  if (r.status === "menunggu_atasan") return "acc";
   if (r.kind === "design" && r.status === "disetujui_hc" && (r.revisions?.length ?? 0) > 0) return "revisi";
   return "dikerjakan";
 }
@@ -296,23 +336,46 @@ export function stageFilters(kind: HcRequestKind): { value: RequestStage | "all"
     { value: "all", label: "Semua" },
     { value: "menunggu", label: "Menunggu" },
     { value: "dikerjakan", label: dikerjakan },
-    ...(kind === "design" ? ([{ value: "revisi", label: "Revisi" }] as const) : []),
+    ...(kind === "design"
+      ? ([
+          { value: "revisi", label: "Revisi" },
+          { value: "acc", label: "Menunggu ACC" },
+        ] as const)
+      : []),
     { value: "selesai", label: "Selesai" },
     { value: "ditolak", label: "Ditolak" },
   ];
 }
 
-/** Langkah berikutnya yang wajar untuk sebuah pengajuan (dipakai tombol aksi). */
-export function nextActions(r: HcRequest): { hc: boolean; finance: boolean; complete: boolean } {
+/**
+ * Langkah berikutnya yang wajar untuk sebuah pengajuan (dipakai tombol aksi).
+ *
+ * `complete` berarti hal yang sedikit berbeda per jenis, dan bedanya penting:
+ * pada rekrutmen & pelatihan ia MENUTUP pengajuannya, sedangkan pada design ia
+ * hanya menyerahkan hasilnya untuk diperiksa. Yang menutup design adalah
+ * `accAtasan`, satu langkah sesudahnya.
+ */
+export function nextActions(r: HcRequest): {
+  hc: boolean;
+  finance: boolean;
+  complete: boolean;
+  accAtasan: boolean;
+} {
   if (r.kind === "pelatihan") {
     return {
       hc: r.status === "menunggu_hc",
       finance: r.status === "menunggu_finance",
       complete: r.status === "disetujui_finance",
+      accAtasan: false,
     };
   }
   // Rekrutmen & design: satu kali persetujuan, lalu ditutup saat selesai.
-  return { hc: r.status === "menunggu_hc", finance: false, complete: r.status === "disetujui_hc" };
+  return {
+    hc: r.status === "menunggu_hc",
+    finance: false,
+    complete: r.status === "disetujui_hc",
+    accAtasan: r.kind === "design" && r.status === "menunggu_atasan",
+  };
 }
 
 /* ─────────────────── siapa melihat pekerjaan siapa (design) ───────────────────
@@ -407,7 +470,14 @@ export interface RequestStep {
  * pemohon selalu tahu posisi berkasnya, bukan sekadar satu label status.
  */
 export function requestSteps(r: HcRequest): RequestStep[] {
-  const afterReview: HcRequestStatus[] = ["disetujui_hc", "menunggu_finance", "ditolak_finance", "disetujui_finance", "terlaksana"];
+  const afterReview: HcRequestStatus[] = [
+    "disetujui_hc",
+    "menunggu_atasan",
+    "menunggu_finance",
+    "ditolak_finance",
+    "disetujui_finance",
+    "terlaksana",
+  ];
   const reviewState: StepState =
     r.status === "ditolak_hc" ? "rejected" : afterReview.includes(r.status) ? "done" : "current";
 
@@ -415,6 +485,40 @@ export function requestSteps(r: HcRequest): RequestStep[] {
     { label: "Diajukan", state: "done", detail: r.requesterName },
     { label: `Persetujuan ${REVIEWER_LABEL[r.kind]}`, state: reviewState, detail: r.hcByName ?? undefined },
   ];
+
+  // Design punya satu langkah yang tidak dimiliki jenis lain: hasilnya
+  // diperiksa atasan SEBELUM sampai ke pemohon. Langkah itu ditampilkan
+  // terpisah supaya pemohon tahu bedanya "belum dikerjakan" dan "sudah jadi,
+  // sedang diperiksa" — dua hal yang dulu memakai label yang sama.
+  if (r.kind === "design") {
+    const selesai = r.status === "terlaksana";
+    const diperiksa = r.status === "menunggu_atasan";
+    const dikerjakan = r.status === "disetujui_hc";
+    if (r.status === "ditolak_hc") {
+      steps.push({ label: "Design Dikerjakan", state: "todo" });
+      steps.push({ label: "ACC Atasan", state: "todo" });
+      steps.push({ label: "Diterima Pemohon", state: "todo" });
+      return steps;
+    }
+    steps.push({
+      label: "Design Dikerjakan",
+      state: selesai || diperiksa ? "done" : dikerjakan ? "current" : "todo",
+      detail: r.assigneeName ?? undefined,
+    });
+    steps.push({
+      label: "ACC Atasan",
+      state: selesai ? "done" : diperiksa ? "current" : "todo",
+      detail:
+        r.hasil?.accByName ??
+        (diperiksa && r.hasil ? `hasil dikirim ${r.hasil.byName}` : undefined),
+    });
+    steps.push({
+      label: "Diterima Pemohon",
+      state: selesai ? "done" : "todo",
+      detail: selesai && r.revisions.length ? `setelah ${r.revisions.length}× revisi` : undefined,
+    });
+    return steps;
+  }
 
   if (r.kind === "pelatihan") {
     const financeState: StepState =
@@ -433,8 +537,7 @@ export function requestSteps(r: HcRequest): RequestStep[] {
   }
 
   const readyToRun = r.kind === "pelatihan" ? r.status === "disetujui_finance" : r.status === "disetujui_hc";
-  const lastLabel =
-    r.kind === "rekrutmen" ? "Pegawai Diterima" : r.kind === "design" ? "Design Selesai" : "Pelatihan Terlaksana";
+  const lastLabel = r.kind === "rekrutmen" ? "Pegawai Diterima" : "Pelatihan Terlaksana";
   steps.push({
     label: lastLabel,
     state: r.status === "terlaksana" ? "done" : readyToRun ? "current" : "todo",
