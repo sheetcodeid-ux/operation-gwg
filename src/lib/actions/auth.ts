@@ -3,7 +3,7 @@
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { SESSION_COOKIE, signSession } from "@/lib/auth";
-import { landingFor } from "@/lib/nav";
+import { landingUntuk } from "@/lib/nav";
 import { getUser } from "@/lib/data/store";
 import { ensureHydrated } from "@/lib/data/hydrate";
 import { verifyCredentials } from "@/lib/data/credentials";
@@ -41,7 +41,7 @@ export async function signInAsDemo(userId: string) {
   if (!demoUser) return { error: "Unknown user" };
   const store = await cookies();
   store.set(SESSION_COOKIE, signSession(userId), COOKIE_OPTS);
-  redirect(landingFor(demoUser.role));
+  redirect(landingUntuk(demoUser));
 }
 
 /** Username (email) + password sign-in. Supabase when live, credential store in demo. */
@@ -91,7 +91,7 @@ export async function signInWithPassword(_prev: { error?: string } | null, formD
       const store = await cookies();
       store.set(SESSION_COOKIE, signSession(profile.id), COOKIE_OPTS);
       rateLimitReset(rlKey);
-      redirect(landingFor(profile.role));
+      redirect(landingUntuk(profile));
     }
     if (res?.error && res.error.message.toLowerCase().includes("invalid")) {
       return { error: "Invalid username or password." };
@@ -109,7 +109,7 @@ export async function signInWithPassword(_prev: { error?: string } | null, formD
   store.set(SESSION_COOKIE, signSession(result.userId), COOKIE_OPTS);
   rateLimitReset(rlKey);
   const signedIn = getUser(result.userId);
-  redirect(signedIn ? landingFor(signedIn.role) : "/dashboard");
+  redirect(signedIn ? landingUntuk(signedIn) : "/dashboard");
 }
 
 export async function signOut() {

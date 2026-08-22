@@ -8,17 +8,25 @@ import type { Tone } from "@/lib/constants";
 /** The System Support team = Operation staff (department "Operational") whose
  *  job title is "System Support". Only they (and Super Admin) may process,
  *  assign and close system tickets. */
+/** The exact department + job title that defines the System Support team. */
+export const SYSTEM_SUPPORT_DEPT = "Operational";
+export const SYSTEM_SUPPORT_JABATAN = "System Support";
+
 export function isSystemSupport(
   user: { role: string; department?: string | null; jabatan?: string | null } | null,
 ): boolean {
   if (!user) return false;
   if (user.role === "super_admin") return true;
-  return user.department === "Operational" && (user.jabatan ?? "").trim().toLowerCase() === "system support";
+  // Dikenali dari JABATAN saja, sama seperti pemegang IT Help Desk di bawah.
+  //
+  // Dulu departemennya harus persis "Operational". Itu keliru: tim System
+  // Support dicatat dengan departemen yang berbeda-beda — ada yang "System
+  // Support", ada yang "Operational" — dan yang departemennya bukan
+  // "Operational" kehilangan seluruh akses ke antrean yang justru dikerjakannya
+  // sehari-hari. Yang menentukan siapa mengerjakan tiket adalah jabatannya,
+  // bukan nama kotak tempat ia didaftarkan.
+  return (user.jabatan ?? "").trim().toLowerCase() === SYSTEM_SUPPORT_JABATAN.toLowerCase();
 }
-
-/** The exact department + job title that defines the System Support team. */
-export const SYSTEM_SUPPORT_DEPT = "Operational";
-export const SYSTEM_SUPPORT_JABATAN = "System Support";
 
 /**
  * DUA meja yang berbeda, memakai alur dan tabel yang sama.

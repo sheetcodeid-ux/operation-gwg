@@ -801,6 +801,7 @@ export function canReachMenu(
   user: { role: Role; grants?: string[] | null; department?: string | null },
   key: MenuKey,
 ): boolean {
+  if (UNIVERSAL_MENUS.includes(key)) return true;
   if (canOpenMenu(user.role, key, user.grants ?? undefined)) return true;
   if (MENU_DIGERBANGI_JABATAN.includes(key)) return false;
   const divisi = divisiDari(user.department);
@@ -832,6 +833,14 @@ export function navOpenPredicate(a: NavAccess): (item: { section: string; key: M
   const grants = new Set(a.grants);
   return (item) =>
     a.isAdmin ||
+    // Menu perusahaan-luas — Pengajuan (HC/System/IT) dan Pesan — terbuka untuk
+    // SIAPA PUN. Itu memang maksudnya: setiap karyawan berhak mengajukan
+    // dokumen ke HC, melaporkan kendala sistem, dan berkirim pesan. Sebelumnya
+    // ia bergantung pada peran/divisi, sehingga seorang desainer Creative atau
+    // staf yang departemennya bukan nama divisi tidak bisa mengajukan apa pun —
+    // dan satu-satunya pintu untuk melaporkan hal itu justru pintu yang sama
+    // yang sedang tertutup.
+    (UNIVERSAL_MENUS.includes(item.key) && !NO_UNIVERSAL.includes(item.section)) ||
     (item.section === a.homeDivision && allowed.has(item.key)) ||
     // Keanggotaan departemen membuka seluruh menu divisinya — kecuali kotak
     // masuk yang digerbangi jabatan, yang tetap hanya lewat grant.
@@ -863,4 +872,61 @@ export function navSectionOpen(
  *  first menu instead of an empty /dashboard. */
 export function landingFor(role: Role): string {
   return navFor(role)[0]?.href ?? "/dashboard";
+}
+
+/**
+ * Halaman pertama sesudah masuk — dihitung dari akses ORANGNYA, bukan dari
+ * perannya saja.
+ *
+ * `landingFor(role)` memakai divisi bawaan peran. Untuk peran `member` divisi
+ * itu "Human Capital" dan satu-satunya menunya "assessment", jadi SETIAP staf
+ * kantor — termasuk yang departemennya Operation — mendarat di halaman
+ * Assessment dan disambut "Akun belum terdaftar di assessment". Halaman pertama
+ * yang dilihat orang sesudah memasukkan password yang benar seharusnya bukan
+ * pemberitahuan bahwa ia bukan siapa-siapa.
+ *
+ * Sekarang dicari menu PERTAMA yang benar-benar bisa ia buka, didahulukan dari
+ * divisi departemennya sendiri.
+ */
+export function landingUntuk(user: {
+  role: Role;
+  grants?: string[] | null;
+  department?: string | null;
+}): string {
+  if (user.role === "super_admin") return "/dashboard";
+
+  const divisi = divisiDari(user.department);
+  const bisa = navOpenPredicate({
+    homeDivision: homeDivision(user.role),
+    allowedKeys: accessibleMenuKeys(user.role),
+    department: divisi,
+    grants: user.grants ?? [],
+    isAdmin: false,
+  });
+
+  // Ditelusuri dari SELURUH menu yang ada, bukan dari daftar menu perannya.
+  // Daftar peran hanya berisi menu bawaan peran itu; untuk `member` isinya cuma
+  // "assessment", jadi menelusurinya selalu berakhir di Assessment lagi —
+  // persis keadaan yang sedang diperbaiki.
+  const semua = navAll();
+
+  // Divisi departemennya lebih dulu — di situlah pekerjaannya. Menu
+  // perusahaan-luas (Pengajuan, Pesan) sengaja dilewati: ia terbuka di
+  // mana-mana, jadi kalau ikut dihitung ia selalu menang dan SEMUA orang
+  // mendarat di Pengajuan.
+  const urutan = [...new Set([divisi, homeDivision(user.role)].filter(Boolean))];
+  for (const seksi of urutan) {
+    for (const item of semua) {
+      if (item.section !== seksi) continue;
+      if (UNIVERSAL_MENUS.includes(item.key)) continue;
+      if (bisa({ section: item.section, key: item.key })) return item.href;
+    }
+  }
+  // Belum ada menu kerja yang terbuka — barulah menu perusahaan-luas dipakai,
+  // supaya orang baru tetap mendarat di halaman yang bisa ia buka, bukan di
+  // halaman yang menolaknya.
+  for (const item of semua) {
+    if (UNIVERSAL_MENUS.includes(item.key) && bisa({ section: item.section, key: item.key })) return item.href;
+  }
+  return "/dashboard";
 }

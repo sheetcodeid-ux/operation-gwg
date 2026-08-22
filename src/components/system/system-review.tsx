@@ -1,5 +1,19 @@
 "use client";
 
+// Dikecualikan dari React Compiler.
+//
+// Antrian System dan Antrian IT Help Desk berulang kali menabrak React error
+// #310 di produksi — jumlah hook yang dirender berubah antar-render. Pemeriksa
+// aturan hook TIDAK menemukan satu pun pelanggaran di berkas-berkas ini, jadi
+// urutan hook di sumbernya memang benar; yang berbeda adalah keluaran
+// kompilernya. Berkas ini juga memakai TanStack Table, yang kompilernya sendiri
+// tandai "incompatible library".
+//
+// Dilepas dari kompiler, bukan ditambal dengan penjaga: menambal gejalanya
+// berarti menebak, sementara yang pasti adalah halamannya harus berhenti
+// mogok untuk orang yang mengerjakan tiket sehari-hari.
+"use no memo";
+
 import { useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
