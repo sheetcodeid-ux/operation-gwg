@@ -3,13 +3,23 @@
 import { presignAttachmentAction, type UploadScope } from "@/lib/actions/uploads";
 
 /**
- * Unggah berkas dari browser tanpa melewati batas ukuran fungsi serverless.
+ * Unggah berkas dari browser tanpa menyinggahkannya di fungsi serverless.
  *
- * Badan permintaan menuju server action dibatasi beberapa MB dan ditolak di
- * lapisan platform — sebelum kode kita sempat jalan — jadi berkas besar gagal
- * dengan pesan generik "an unexpected response was received from the server".
- * Berkas di atas ambang ini naik langsung ke R2 lewat presigned URL; sisanya
- * tetap lewat server action supaya jalur lama tidak berubah perilakunya.
+ * R2 dicoba lebih dulu untuk SEMUA ukuran, bukan hanya berkas besar.
+ *
+ * Sebelumnya hanya berkas di atas 3 MB yang naik langsung; sisanya dibawa
+ * melalui server action. Itu terdengar aman, tapi justru menyisakan lubang yang
+ * paling sering kena: foto KTP dari HP hampir selalu 1–3 MB — persis di bawah
+ * ambang. Berkas sebesar itu tetap harus menempuh badan permintaan fungsi
+ * serverless, dan kegagalan apa pun di sana (batas platform, koneksi seluler
+ * yang putus di tengah, waktu habis) ditolak SEBELUM kode kita sempat jalan.
+ * Yang sampai ke layar hanyalah pesan bawaan yang isinya disunting, sehingga
+ * `try/catch` di dalam aksinya tidak pernah kebagian menjelaskan apa pun.
+ *
+ * Jalur Pengajuan Design sudah diperbaiki begini lebih dulu dan berhenti
+ * bermasalah; jalur dokumen HC memakai penolong ini dan tertinggal. Ambangnya
+ * kini hanya menentukan apa yang boleh MUNDUR ke server saat R2 tidak aktif —
+ * bukan lagi apa yang boleh naik langsung.
  */
 const DIRECT_MIN = 3 * 1024 * 1024;
 
@@ -50,12 +60,19 @@ async function direct(scope: UploadScope, file: File): Promise<UploadedFile | nu
   return { path: signed.path, name: file.name };
 }
 
-/** Unggah satu berkas: langsung ke R2 bila besar, selain itu lewat `legacy`. */
+/** Unggah satu berkas: langsung ke R2, dan hanya mundur ke `legacy` bila perlu. */
 export async function uploadOne(scope: UploadScope, file: File, legacy: LegacyUpload): Promise<UploadedFile> {
-  if (file.size > DIRECT_MIN) {
+  try {
     const up = await direct(scope, file);
     if (up) return up;
+  } catch (e) {
+    // Berkas besar TIDAK boleh mundur ke server action: di sana ia pasti
+    // ditolak lagi, dan penolakannya kali ini tanpa alasan yang bisa dibaca.
+    // Yang kecil boleh mencoba jalur lama — itu jaring pengaman saat R2 sedang
+    // menolak, bukan jalur utama.
+    if (file.size > DIRECT_MIN) throw e;
   }
+
   const fd = new FormData();
   fd.append("file", file);
   const res = await legacy(fd);

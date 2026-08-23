@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { isChunkLoadError, isVersiBasi } from "./chunk-recovery";
+import { isChunkLoadError, isVersiBasi, pesanGalatAksi } from "./chunk-recovery";
 import { canReachMenu } from "./nav";
 
 /**
@@ -17,17 +17,21 @@ import { canReachMenu } from "./nav";
  * membuat kegagalan seperti itu mustahil dibiarkan buram lagi.
  */
 
-describe("halaman versi lama dikenali, bukan cuma chunk mati", () => {
+describe("versi basi dikenali dari penanda yang benar-benar khas", () => {
   const PESAN_PRODUKSI =
     "An error occurred in the Server Components render. The specific message is omitted in production builds to avoid leaking sensitive details.";
 
-  it("mengenali kalimat yang PERSIS dilihat pengguna", () => {
-    expect(isVersiBasi(new Error(PESAN_PRODUKSI))).toBe(true);
+  it("pesan produksi bawaan Next BUKAN penanda versi basi", () => {
+    // Ini pernah salah, dan salahnya mahal: kalimat itu adalah pesan bawaan
+    // untuk SETIAP kegagalan sisi server di produksi. Diperlakukan sebagai
+    // versi basi, aplikasi memuat ulang halaman pada kegagalan apa pun — dan
+    // formulir yang sudah diisi belasan baris hilang. Bagi yang mengisinya itu
+    // lebih buruk daripada galat aslinya.
+    expect(isVersiBasi(new Error(PESAN_PRODUKSI))).toBe(false);
   });
 
-  it("mengenali server action milik build lama", () => {
+  it("tetap mengenali server action milik build lama", () => {
     expect(isVersiBasi(new Error("Failed to find Server Action 'abc123'."))).toBe(true);
-    expect(isVersiBasi(new Error("Connection closed."))).toBe(true);
   });
 
   it("chunk mati tetap ikut — pemulihannya sama", () => {
@@ -36,12 +40,35 @@ describe("halaman versi lama dikenali, bukan cuma chunk mati", () => {
     expect(isVersiBasi(e)).toBe(true);
   });
 
-  it("galat biasa TIDAK diperlakukan sebagai versi basi", () => {
-    // Kalau ini keliru, tiap kegagalan wajar akan memuat ulang halaman dan
-    // menghapus isian orang — jauh lebih buruk daripada bug aslinya.
+  it("galat biasa tidak pernah memicu muat ulang", () => {
     expect(isVersiBasi(new Error("Nama karyawan wajib diisi."))).toBe(false);
     expect(isVersiBasi(new Error("Cabang di luar cakupan Anda."))).toBe(false);
     expect(isVersiBasi(null)).toBe(false);
+  });
+
+  it("kegagalan server memberi tahu bahwa isiannya masih utuh", () => {
+    // Yang berguna bagi pembacanya bukan pesan teknis yang sudah disunting,
+    // melainkan bahwa pekerjaannya tidak hilang dan tombolnya boleh ditekan lagi.
+    const pesan = pesanGalatAksi(new Error(PESAN_PRODUKSI));
+    expect(pesan).toContain("masih utuh");
+    expect(pesan).not.toContain("dimuat ulang");
+  });
+});
+
+describe("berkas naik langsung ke R2, tidak singgah di server", () => {
+  const KLIEN = readFileSync(join(process.cwd(), "src/lib/upload-client.ts"), "utf8");
+  const fn = KLIEN.slice(KLIEN.indexOf("export async function uploadOne"));
+
+  it("dicoba untuk SEMUA ukuran, bukan hanya berkas besar", () => {
+    // Lubang yang paling sering kena justru di bawah ambang lama: foto KTP dari
+    // HP hampir selalu 1–3 MB, jadi selalu menempuh badan permintaan fungsi
+    // serverless — tempat kegagalannya ditolak sebelum kode kita sempat jalan.
+    expect(fn).not.toContain("if (file.size > DIRECT_MIN) {\n    const up = await direct");
+    expect(fn.indexOf("await direct(scope, file)")).toBeLessThan(fn.indexOf("legacy(fd)"));
+  });
+
+  it("berkas besar tidak mundur ke server action saat R2 menolak", () => {
+    expect(fn).toContain("if (file.size > DIRECT_MIN) throw e;");
   });
 });
 

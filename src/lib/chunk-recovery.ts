@@ -46,17 +46,19 @@ const CHUNK_PATTERNS = [
 /**
  * Tanda server action dipanggil dari kerangka halaman versi lama.
  *
- * Pola pertama adalah kalimat yang PERSIS dilihat pengguna. Ia memang bisa
- * muncul untuk sebab lain — galat sungguhan di dalam aksinya — dan itu
- * diterima: sesudah muat ulang, galat sungguhan akan muncul lagi dan kali ini
- * lewat jalur yang mencatat pesan aslinya. Yang jelas keliru adalah membiarkan
- * pengguna menatap kalimat itu tanpa satu pun jalan keluar.
+ * Daftar ini pernah memuat "An error occurred in the Server Components render"
+ * dan itu KELIRU. Kalimat itu adalah pesan bawaan Next untuk SETIAP kegagalan
+ * sisi server di build produksi — bukan penanda versi. Memperlakukannya sebagai
+ * versi basi membuat aplikasi memuat ulang halaman pada kegagalan apa pun,
+ * dan formulir yang sudah diisi belasan baris hilang begitu saja. Bagi yang
+ * mengisinya, itu lebih buruk daripada galat aslinya: sebelumnya ia melihat
+ * pesan yang tidak berguna, sesudahnya ia kehilangan pekerjaannya juga.
+ *
+ * Yang tersisa di sini hanya penanda yang benar-benar khas versi basi.
  */
 const VERSI_PATTERNS = [
-  /An error occurred in the Server Components render/i,
   /Failed to find Server Action/i,
   /the server action was not found/i,
-  /Connection closed/i,
   /Invalid Server Actions request/i,
 ];
 
@@ -110,5 +112,15 @@ export function pesanGalatAksi(error: unknown): string {
     }
     return "Aplikasi baru saja diperbarui, halaman ini masih versi lama. Halaman dimuat ulang sebentar lagi — silakan kirim ulang setelah itu.";
   }
-  return error instanceof Error && error.message ? error.message : "Gagal mengirim. Coba lagi sebentar lagi.";
+
+  // Pesan bawaan Next untuk kegagalan sisi server di produksi. Isinya memang
+  // disunting, jadi tidak ada gunanya diteruskan apa adanya — yang berguna bagi
+  // yang membacanya adalah bahwa ISIANNYA MASIH ADA dan tombolnya boleh ditekan
+  // lagi. Halaman TIDAK dimuat ulang: satu-satunya salinan pekerjaannya ada di
+  // formulir itu.
+  const pesan = error instanceof Error ? error.message : String(error ?? "");
+  if (/An error occurred in the Server Components render|Connection closed/i.test(pesan)) {
+    return "Server menolak pengirimannya. Isian Anda masih utuh — tekan Kirim sekali lagi. Kalau tetap gagal, coba hapus lampiran KTP-nya dulu lalu kirim, dan laporkan lewat IT Help Desk.";
+  }
+  return pesan || "Gagal mengirim. Isian Anda masih utuh — coba tekan Kirim sekali lagi.";
 }
