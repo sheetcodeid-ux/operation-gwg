@@ -54,14 +54,27 @@ async function uploadFile(userId: string, folder: string, file: File): Promise<{
 /* Supervisor — submit a request                                       */
 /* ------------------------------------------------------------------ */
 
-/** Upload the employee KTP scan; returns the storage path (kept private). */
+/**
+ * Upload the employee KTP scan; returns the storage path (kept private).
+ *
+ * Terbungkus seluruhnya: aksi yang melempar galat tak tertangkap sampai ke
+ * layar sebagai "An error occurred in the Server Components render", kalimat
+ * yang tidak bisa ditindaklanjuti siapa pun. Apa pun yang meledak di
+ * penyimpanan, orangnya harus tetap menerima alasan yang bisa dibaca dan bisa
+ * dilaporkan.
+ */
 export async function uploadHcKtpAction(formData: FormData) {
-  const user = await getSessionUser();
-  if (!canSubmit(user)) return { error: "Tidak punya akses." };
-  if (!dbEnabled) return { error: "Storage belum aktif." };
-  const file = formData.get("file");
-  if (!(file instanceof File)) return { error: "Tidak ada berkas." };
-  return uploadFile(user!.id, "ktp", file);
+  try {
+    const user = await getSessionUser();
+    if (!canSubmit(user)) return { error: "Tidak punya akses." };
+    if (!dbEnabled) return { error: "Storage belum aktif." };
+    const file = formData.get("file");
+    if (!(file instanceof File)) return { error: "Tidak ada berkas." };
+    return await uploadFile(user!.id, "ktp", file);
+  } catch (e) {
+    console.error("[hc] unggah KTP gagal total:", e);
+    return { error: `Gagal mengunggah berkas: ${e instanceof Error ? e.message : "penyimpanan tidak merespons"}.` };
+  }
 }
 
 export interface HcSubmitInput {
@@ -72,7 +85,24 @@ export interface HcSubmitInput {
   details: HcDetails;
 }
 
+/**
+ * Mengirim pengajuan dokumen ke Human Capital.
+ *
+ * Sama seperti unggahnya: terbungkus seluruhnya. Formulir ini diisi belasan
+ * baris oleh orang yang sedang di cabang, dan kegagalan yang tidak menyebutkan
+ * sebabnya berarti seluruh isian itu diketik ulang tanpa tahu apa yang harus
+ * diubah.
+ */
 export async function submitHcRequestAction(input: HcSubmitInput) {
+  try {
+    return await kirimPengajuanHc(input);
+  } catch (e) {
+    console.error("[hc] pengajuan dokumen gagal:", e);
+    return { error: `Gagal menyimpan pengajuan: ${e instanceof Error ? e.message : "server tidak merespons"}.` };
+  }
+}
+
+async function kirimPengajuanHc(input: HcSubmitInput) {
   const user = await getSessionUser();
   if (!canSubmit(user)) return { error: "Tidak punya akses." };
   if (!dbEnabled) return { error: "Database belum aktif." };

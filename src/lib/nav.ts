@@ -255,7 +255,13 @@ const OPERATION_FULL: MenuKey[] = [
 export const ROLE_MENUS: Record<Role, MenuKey[]> = {
   super_admin: NAV_MENUS.map((m) => m.key), // everything, incl. admin menus
   head_operation: [...OPERATION_FULL, "elearning", "elearning_admin", "assessment"], // manages E-Learning + monitors every branch
-  area_coordinator: [...OPERATION_FULL, "elearning", "assessment"], // learner (E-Learning), menus scoped to their area
+  // Coordinator Area ikut memegang Pengajuan Dokumen. Ia membawahi beberapa
+  // cabang dan sering mengurus berkas karyawan cabang yang supervisornya baru,
+  // berhalangan, atau justru sedang diurus dokumennya; tanpa menu ini ia harus
+  // menitipkannya ke orang lain, dan pengajuan itu tercatat atas nama yang
+  // salah. Cakupan cabangnya sudah dibatasi `visibleOutlets`, jadi ia tetap
+  // hanya bisa mengajukan untuk cabang yang memang dipegangnya.
+  area_coordinator: [...OPERATION_FULL, "elearning", "assessment", "hc_submit"], // learner (E-Learning), menus scoped to their area
   data_operation: ["work", "op_analysis", "assessment"],
   pos_operation: ["work", "op_analysis", "assessment"],
   admin_operation: ["work", "complaints", "op_analysis", "assessment"],

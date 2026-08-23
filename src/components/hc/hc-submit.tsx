@@ -15,6 +15,7 @@ import { StatusFilter } from "@/components/ui/status-filter";
 import { cn } from "@/lib/utils";
 import { submitHcRequestAction, uploadHcKtpAction } from "@/lib/actions/hc";
 import { uploadOne } from "@/lib/upload-client";
+import { pesanGalatAksi } from "@/lib/chunk-recovery";
 import {
   HC_DOC_LABEL,
   HC_DOC_TYPES,
@@ -70,26 +71,35 @@ function SubmissionForm({ outlets }: { outlets: { id: string; name: string }[] }
     if (docType === "bpjs" && !details.motherName?.trim()) return toast.error("Nama ibu kandung wajib untuk BPJS.");
     if (HC_NEEDS_CHRONOLOGY.includes(docType) && !details.chronology?.trim()) return toast.error("Kronologi wajib diisi.");
 
+    // SELURUH badan pengiriman terbungkus.
+    //
+    // Server action yang melempar galat tak tertangkap muncul di layar sebagai
+    // "An error occurred in the Server Components render. The specific message
+    // is omitted in production builds" — kalimat yang tidak memberi tahu apa
+    // pun, dan yang paling sering menyebabkannya bukan galat di dalam aksinya
+    // melainkan halaman yang masih memegang versi lama setelah aplikasi
+    // diperbarui. `pesanGalatAksi` menyebut sebab itu dan memuat ulang
+    // halamannya, karena tanpa muat ulang percobaan berikutnya pasti gagal
+    // lagi dengan cara yang sama.
     startTransition(async () => {
-      let ktpPath: string | null = null;
-      const outgoing: HcDetails = { ...details };
-      if (ktp) {
-        try {
+      try {
+        let ktpPath: string | null = null;
+        const outgoing: HcDetails = { ...details };
+        if (ktp) {
           ktpPath = (await uploadOne("hcdoc", ktp, uploadHcKtpAction)).path;
-        } catch (e) {
-          toast.error(e instanceof Error ? e.message : "Gagal mengunggah berkas.");
+          outgoing.ktpName = ktp.name; // keep the original filename (e.g. dfsfs.jpg)
+        }
+        const res = await submitHcRequestAction({ employeeName: employeeName.trim(), docType, outletId, ktpPath, details: outgoing });
+        if (res?.error) {
+          toast.error(res.error);
           return;
         }
-        outgoing.ktpName = ktp.name; // keep the original filename (e.g. dfsfs.jpg)
+        toast.success("Pengajuan terkirim ke Human Capital.");
+        setOpen(false);
+        router.refresh();
+      } catch (e) {
+        toast.error(pesanGalatAksi(e));
       }
-      const res = await submitHcRequestAction({ employeeName: employeeName.trim(), docType, outletId, ktpPath, details: outgoing });
-      if (res?.error) {
-        toast.error(res.error);
-        return;
-      }
-      toast.success("Pengajuan terkirim ke Human Capital.");
-      setOpen(false);
-      router.refresh();
     });
   }
 
