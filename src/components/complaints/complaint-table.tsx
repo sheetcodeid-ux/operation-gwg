@@ -19,7 +19,7 @@ import type {
   ComplaintStatus,
   RootCauseCategory,
 } from "@/lib/types";
-import { COMPLAINT_STAGE, type ComplaintStage } from "@/lib/complaints-access";
+import { COMPLAINT_STAGE, tautanFotoKomplain, type ComplaintStage } from "@/lib/complaints-access";
 import {
   approveComplaintAction,
   complaintSupervisorsAction,
@@ -419,9 +419,18 @@ function ResolutionSummary({ complaint }: { complaint: ComplaintRow }) {
           </p>
           {a.note && <p className="mt-1.5 whitespace-pre-line text-sm text-foreground/90">{a.note}</p>}
           {a.photoUrl && (
-            <a href={a.photoUrl} target="_blank" rel="noreferrer" className="mt-2 block">
+            <a
+              href={tautanFotoKomplain(complaint.id, a.photoUrl)}
+              target="_blank"
+              rel="noreferrer"
+              className="mt-2 block"
+            >
               {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src={a.photoUrl} alt={t("complaint.approvalPhotoView")} className="max-h-48 rounded-lg ring-1 ring-border" />
+              <img
+                src={tautanFotoKomplain(complaint.id, a.photoUrl)}
+                alt={t("complaint.approvalPhotoView")}
+                className="max-h-48 rounded-lg ring-1 ring-border"
+              />
             </a>
           )}
         </div>

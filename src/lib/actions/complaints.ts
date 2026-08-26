@@ -13,6 +13,7 @@ import {
   submitComplaintForApproval,
 } from "@/lib/data/mutations";
 import { db, dbEnabled } from "@/lib/data/db";
+import { R2_PREFIX, r2Enabled, r2Put } from "@/lib/storage/r2";
 import { persistMessage } from "@/lib/data/persist";
 import { notify } from "@/lib/data/notify";
 import { complaintInputSchema, parseInput, resolveComplaintSchema } from "@/lib/validation";
@@ -281,9 +282,24 @@ export async function approveComplaintAction(formData: FormData) {
     if (!file.type.startsWith("image/")) return { error: "File harus berupa gambar." };
     const ext = (file.name.split(".").pop() || "jpg").toLowerCase().replace(/[^a-z0-9]/g, "") || "jpg";
     const path = `complaint-approvals/${id}/${Date.now()}.${ext}`;
-    const { error } = await db().storage.from("avatars").upload(path, file, { contentType: file.type, upsert: true });
-    if (error) return { error: `Upload foto gagal: ${error.message}` };
-    photoUrl = db().storage.from("avatars").getPublicUrl(path).data.publicUrl;
+    // Bukan bucket `avatars`. Bucket itu publik karena foto profil memang harus
+    // terbuka; menumpangkan bukti verifikasi ke sana membuatnya ikut terbuka.
+    if (r2Enabled()) {
+      try {
+        await r2Put(path, await file.arrayBuffer(), file.type);
+      } catch (e) {
+        console.error("[complaint] unggah foto verifikasi gagal:", e);
+        return { error: "Upload foto gagal: penyimpanan tidak merespons." };
+      }
+      photoUrl = `${R2_PREFIX}${path}`;
+    } else {
+      const { error } = await db().storage.from("system-attachments").upload(path, file, {
+        contentType: file.type,
+        upsert: true,
+      });
+      if (error) return { error: `Upload foto gagal: ${error.message}` };
+      photoUrl = path;
+    }
   }
 
   approveComplaint({ id, approverId: user.id, approverName: user.name, note: note || null, photoUrl });

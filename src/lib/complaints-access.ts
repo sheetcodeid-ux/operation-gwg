@@ -145,3 +145,21 @@ export const COMPLAINT_STAGE = {
     tone: "emerald" as const,
   },
 };
+
+/**
+ * Alamat tetap untuk foto verifikasi Coordinator Area.
+ *
+ * Fotonya dulu diunggah ke bucket `avatars` — satu-satunya bucket yang publik,
+ * karena foto profil memang ditampilkan di topbar setiap halaman. Yang ikut
+ * terbawa: bukti verifikasi komplain jadi bisa diambil siapa pun yang tahu
+ * jalurnya, tanpa masuk sama sekali. Sekarang fotonya disimpan privat, dan yang
+ * ditanam di halaman adalah alamat aplikasi ini — tanda tangannya baru dibuat
+ * saat gambarnya diminta, setelah haknya diperiksa ulang.
+ *
+ * Tautan `https://` lama tetap dilewatkan apa adanya supaya baris lama tidak
+ * berubah jadi gambar rusak.
+ */
+export function tautanFotoKomplain(complaintId: string, foto: string): string {
+  if (/^https?:\/\//i.test(foto)) return foto;
+  return `/api/berkas/complaint/${encodeURIComponent(complaintId)}?p=${encodeURIComponent(foto)}`;
+}
