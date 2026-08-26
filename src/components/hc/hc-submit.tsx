@@ -22,6 +22,7 @@ import {
   HC_STATUS_META,
   HC_NEEDS_CHRONOLOGY,
   HC_CONTRACT_LIKE,
+  HC_PROMOSI_LIKE,
   type HcDetails,
   type HcDocType,
   type HcStatus,
@@ -156,6 +157,32 @@ function SubmissionForm({ outlets }: { outlets: { id: string; name: string }[] }
         </div>
       )}
 
+      {/* Surat Promosi. Kalimat inti suratnya persis "dari jabatan A menjadi
+          jabatan B", jadi jabatan lamanya bukan tambahan — tanpa itu suratnya
+          tidak bisa ditulis, dan HC harus menanyakannya lewat chat satu per
+          satu. Tidak ada durasi di sini: promosi mengubah jabatan, bukan masa
+          kontrak. */}
+      {HC_PROMOSI_LIKE.includes(docType) && (
+        <div className="grid gap-3 sm:grid-cols-2">
+          <Field label="Jabatan Sebelumnya">
+            <Input
+              value={details.previousPosition ?? ""}
+              onChange={(e) => setD({ previousPosition: e.target.value })}
+              placeholder="cth. Barista"
+            />
+          </Field>
+          <Field label="Jabatan Baru">
+            <Input value={details.position ?? ""} onChange={(e) => setD({ position: e.target.value })} placeholder="cth. Shift Leader" />
+          </Field>
+          <Field label="Berlaku Mulai">
+            <DatePicker value={details.startDate ?? ""} onChange={(v) => setD({ startDate: v })} />
+          </Field>
+          <Field label="Gaji Baru (opsional)">
+            <Input value={details.salary ?? ""} onChange={(e) => setD({ salary: e.target.value })} placeholder="cth. 3.500.000" />
+          </Field>
+        </div>
+      )}
+
       {HC_NEEDS_CHRONOLOGY.includes(docType) && (
         <Field label={docType === "phk" ? "Alasan / Kronologi PHK" : "Kronologi Pelanggaran"}>
           <Textarea
@@ -233,7 +260,7 @@ export function SubmissionList({ rows }: { rows: HcSubmission[] }) {
         value={status}
         onChange={setStatus}
         allCount={rows.length}
-        options={(["waiting", "processing", "pending", "done"] as HcStatus[]).map((v) => ({
+        options={(["waiting", "processing", "pending", "done", "rejected"] as HcStatus[]).map((v) => ({
           value: v,
           label: HC_STATUS_META[v].label,
           count: counts(v),
@@ -307,7 +334,8 @@ export function SubmissionList({ rows }: { rows: HcSubmission[] }) {
                           { label: "Diajukan oleh", value: r.supervisorName },
                           { label: "Tanggal pengajuan", value: fmtDate(r.createdAt) },
                           { label: "Nama ibu kandung", value: d.motherName, skipEmpty: true },
-                          { label: "Posisi / jabatan", value: d.position, skipEmpty: true },
+                          { label: "Jabatan sebelumnya", value: d.previousPosition, skipEmpty: true },
+                          { label: r.docType === "promosi" ? "Jabatan baru" : "Posisi / jabatan", value: d.position, skipEmpty: true },
                           { label: "Durasi kontrak", value: d.contractDuration, skipEmpty: true },
                           { label: "Tanggal mulai", value: d.startDate ? fmtDate(d.startDate) : "", skipEmpty: true },
                           { label: "Gaji", value: d.salary, skipEmpty: true },
@@ -329,7 +357,12 @@ export function SubmissionList({ rows }: { rows: HcSubmission[] }) {
 
                       {r.hcNote && (
                         <div>
-                          <DetailTitle>Keterangan Human Capital</DetailTitle>
+                          {/* Judulnya menyesuaikan: pada pengajuan yang batal,
+                              isi kolom ini adalah ALASANNYA — dan itu yang
+                              dicari pemohonnya, bukan "keterangan". */}
+                          <DetailTitle>
+                            {r.status === "rejected" ? "Alasan Pembatalan" : "Keterangan Human Capital"}
+                          </DetailTitle>
                           <p className="whitespace-pre-wrap rounded-xl border border-border bg-muted/40 px-3 py-2 text-xs leading-relaxed text-foreground/85">
                             {r.hcNote}
                           </p>

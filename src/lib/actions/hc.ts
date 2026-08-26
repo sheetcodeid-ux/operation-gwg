@@ -13,6 +13,7 @@ import {
   deleteHcSubmission,
   getHcSubmissionRow,
   holdHcSubmission,
+  rejectHcSubmission,
   startHcProcessing,
 } from "@/lib/data/hc";
 import { canReachMenu } from "@/lib/nav";
@@ -195,6 +196,54 @@ export async function holdHcRequestAction(input: { id: string; note: string }) {
   revalidatePath("/hc/antrian");
   revalidatePath("/hc/pengajuan");
   return { ok: true };
+}
+
+/**
+ * Menutup pengajuan yang batal.
+ *
+ * Sebelum ini status hanya bisa MAJU, sehingga pengajuan yang dibatalkan cabang
+ * atau yang salah kirim menggantung di antrian selamanya. Satu-satunya jalan
+ * keluarnya adalah menandainya "selesai" — yang berarti mencatat dokumen terbit
+ * padahal tidak pernah ada, dan angka di dasbor ikut berbohong.
+ *
+ * Alasannya WAJIB. Pengajuan yang tiba-tiba hilang dari antrian tanpa
+ * keterangan mengundang pertanyaan yang sama berulang kali ke HC, dan yang
+ * mengajukannya berhak tahu mengapa permintaannya tidak jadi.
+ */
+export async function rejectHcRequestAction(input: { id: string; reason: string }) {
+  try {
+    const user = await getSessionUser();
+    if (!canReview(user)) return { error: "Tidak punya akses." };
+    const alasan = input.reason?.trim() ?? "";
+    if (!alasan) return { error: "Tulis dulu alasan pembatalannya." };
+
+    const rec = await getHcSubmissionRow(input.id);
+    if (!rec) return { error: "Pengajuan tidak ditemukan." };
+    if (rec.status === "done") return { error: "Pengajuan sudah selesai — dokumennya sudah terbit." };
+    if (rec.status === "rejected") return { error: "Pengajuan ini sudah dibatalkan." };
+
+    const res = await rejectHcSubmission(input.id, user!.id, alasan);
+    if (res.error) return { error: res.error };
+
+    await saveNotification({
+      id: `ntf_${randomUUID()}`,
+      kind: "hc_done",
+      title: "Pengajuan dokumen dibatalkan",
+      message: `Pengajuan ${rec.employee_name} (${outletLabel(rec.outlet_id)}) dibatalkan Human Capital. Alasan: ${alasan}`,
+      targetUser: rec.supervisor_id,
+      href: "/hc/pengajuan",
+      severity: "warning",
+      read: false,
+      createdAt: new Date().toISOString(),
+    });
+
+    revalidatePath("/hc/antrian");
+    revalidatePath("/hc/pengajuan");
+    return { ok: true };
+  } catch (e) {
+    console.error("[hc] pembatalan pengajuan gagal:", e);
+    return { error: `Gagal membatalkan: ${e instanceof Error ? e.message : "server tidak merespons"}.` };
+  }
 }
 
 export async function completeHcRequestAction(input: { id: string; note: string; finalDocPath: string }) {

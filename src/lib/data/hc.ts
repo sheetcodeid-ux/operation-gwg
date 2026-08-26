@@ -214,6 +214,30 @@ export async function holdHcSubmission(id: string, note: string): Promise<{ erro
   return error ? { error: error.message } : {};
 }
 
+/**
+ * Menutup pengajuan yang batal — tanpa dokumen terbit.
+ *
+ * Bukan penghapusan, dan itu disengaja: siapa yang membatalkan dan alasannya
+ * tetap tersimpan, karena pertanyaan "kenapa surat itu tidak jadi" muncul
+ * justru berminggu-minggu kemudian. Yang sudah selesai tidak bisa dibatalkan —
+ * dokumennya sudah terbit dan sudah ada di tangan orang.
+ */
+export async function rejectHcSubmission(id: string, userId: string, alasan: string): Promise<{ error?: string }> {
+  if (!dbEnabled) return { error: "Database belum aktif." };
+  markLocalWrite();
+  const { error } = await db()
+    .from("hc_submissions")
+    .update({
+      status: "rejected",
+      hc_note: alasan,
+      processed_by: userId,
+      processed_at: new Date().toISOString(),
+    })
+    .eq("id", id)
+    .in("status", ["waiting", "processing", "pending"]);
+  return error ? { error: error.message } : {};
+}
+
 /** Processing/Pending → Done (HC attaches the finished doc + optional note). Locks the item. */
 export async function completeHcSubmission(
   id: string,

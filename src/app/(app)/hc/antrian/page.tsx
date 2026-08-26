@@ -20,7 +20,7 @@ export default async function HcAntrianPage() {
 
   // Dihitung sekali di sini dan dipakai kartu ringkas; panel di bawah menghitung
   // ulang untuk saringannya sendiri, dan itu memang beda urusan.
-  const hitung = { waiting: 0, processing: 0, pending: 0, done: 0 };
+  const hitung = { waiting: 0, processing: 0, pending: 0, done: 0, rejected: 0 };
   for (const r of rows) hitung[r.status] += 1;
 
   return (

@@ -3,6 +3,7 @@
 import { useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import {
+  Ban,
   CheckCircle2,
   Clock,
   Download,
@@ -30,6 +31,7 @@ import {
   completeHcRequestAction,
   deleteHcRequestAction,
   holdHcRequestAction,
+  rejectHcRequestAction,
   startHcProcessingAction,
   uploadHcFinalAction,
 } from "@/lib/actions/hc";
@@ -53,6 +55,7 @@ const STATUS_FILTERS: { value: HcStatus | "all"; label: string }[] = [
   { value: "processing", label: "Diproses" },
   { value: "pending", label: "Menunggu Berkas" },
   { value: "done", label: "Selesai" },
+  { value: "rejected", label: "Dibatalkan" },
 ];
 
 export function HcReviewPanel({ rows, canDelete = false }: { rows: HcSubmission[]; canDelete?: boolean }) {
@@ -65,7 +68,7 @@ export function HcReviewPanel({ rows, canDelete = false }: { rows: HcSubmission[
   );
   const selected = rows.find((r) => r.id === selectedId) ?? null;
   const counts = useMemo(() => {
-    const c: Record<HcStatus, number> = { waiting: 0, processing: 0, pending: 0, done: 0 };
+    const c: Record<HcStatus, number> = { waiting: 0, processing: 0, pending: 0, done: 0, rejected: 0 };
     for (const r of rows) c[r.status]++;
     return c;
   }, [rows]);
@@ -248,9 +251,30 @@ function DetailPanel({ row, canDelete, onDeleted }: { row: HcSubmission; canDele
   const [pending, startTransition] = useTransition();
   const [note, setNote] = useState(row.hcNote ?? "");
   const [finalFile, setFinalFile] = useState<File | null>(null);
+  const [alasanBatal, setAlasanBatal] = useState("");
+  const [bukaBatal, setBukaBatal] = useState(false);
   const st = HC_STATUS_META[row.status];
   const locked = row.status === "done";
+  const dibatalkan = row.status === "rejected";
   const d = row.details;
+
+  /** Menutup pengajuan yang batal — tanpa dokumen terbit. */
+  function batalkan() {
+    if (!alasanBatal.trim()) {
+      toast.error("Tulis dulu alasan pembatalannya.");
+      return;
+    }
+    startTransition(async () => {
+      const res = await rejectHcRequestAction({ id: row.id, reason: alasanBatal.trim() });
+      if (res?.error) {
+        toast.error(res.error);
+        return;
+      }
+      toast.success("Pengajuan dibatalkan — pemohonnya diberi tahu.");
+      setBukaBatal(false);
+      router.refresh();
+    });
+  }
 
   function startProcessing() {
     startTransition(async () => {
@@ -408,6 +432,56 @@ function DetailPanel({ row, canDelete, onDeleted }: { row: HcSubmission; canDele
           <Button onClick={startProcessing} disabled={pending} className="shrink-0">
             {pending ? <Loader2 className="animate-spin" /> : <Play className="size-4" />} Mulai Proses
           </Button>
+        </div>
+      )}
+
+      {/* Sudah ditutup tanpa dokumen — yang tersisa hanya alasannya, dan itu
+          justru yang paling sering dicari berminggu-minggu kemudian. */}
+      {dibatalkan && (
+        <div className="mt-4 rounded-xl border border-border bg-muted/40 p-4">
+          <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Dibatalkan</p>
+          <p className="mt-1 whitespace-pre-wrap text-sm text-foreground/85">{row.hcNote || "—"}</p>
+          {row.processedByName && (
+            <p className="mt-1 text-[11px] text-muted-foreground">oleh {row.processedByName}</p>
+          )}
+        </div>
+      )}
+
+      {/* Menutup pengajuan yang batal.
+          Ada di SEMUA tahap yang belum selesai, bukan hanya "Menunggu":
+          pembatalan paling sering datang justru setelah HC mulai mengerjakan —
+          cabang menarik permintaannya, atau orangnya keluar lebih dulu. */}
+      {!locked && !dibatalkan && (
+        <div className="mt-4 rounded-xl border border-dashed border-border p-4">
+          {!bukaBatal ? (
+            <div className="flex flex-col items-start gap-2 sm:flex-row sm:items-center sm:justify-between">
+              <p className="text-sm text-muted-foreground">
+                Permintaannya batal atau salah kirim? Tutup di sini supaya tidak menggantung di antrian.
+              </p>
+              <Button variant="subtle" onClick={() => setBukaBatal(true)} disabled={pending} className="shrink-0">
+                <Ban className="size-4" /> Batalkan
+              </Button>
+            </div>
+          ) : (
+            <div className="space-y-3">
+              <Field label="Alasan pembatalan (dikirim ke pemohon)">
+                <Textarea
+                  value={alasanBatal}
+                  onChange={(e) => setAlasanBatal(e.target.value)}
+                  placeholder="Contoh: diminta batal oleh cabang, karyawannya sudah resign, atau salah jenis surat…"
+                  rows={3}
+                />
+              </Field>
+              <div className="flex flex-col gap-2 sm:flex-row sm:justify-end">
+                <Button variant="ghost" onClick={() => setBukaBatal(false)} disabled={pending}>
+                  Kembali
+                </Button>
+                <Button variant="subtle" onClick={batalkan} disabled={pending || !alasanBatal.trim()} className="shrink-0">
+                  {pending ? <Loader2 className="animate-spin" /> : <Ban className="size-4" />} Tutup Pengajuan
+                </Button>
+              </div>
+            </div>
+          )}
         </div>
       )}
 
