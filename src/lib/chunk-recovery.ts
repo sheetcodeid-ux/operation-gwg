@@ -71,6 +71,33 @@ export function isChunkLoadError(error: unknown): boolean {
   return CHUNK_PATTERNS.some((re) => re.test(msg));
 }
 
+/**
+ * Galat urutan hook React — #300, #301, #310.
+ *
+ * Jejak produksinya menunjuk ke dalam Router App milik Next sendiri: hook yang
+ * meledak adalah `useMemo` tepat sesudah `useActionQueue`, bukan hook di
+ * komponen mana pun milik kita. Pemeriksa aturan hook memang tidak menemukan
+ * apa-apa di kode kita — memang tidak ada.
+ *
+ * Yang bisa kita kerjakan bukan mencegahnya, melainkan berhenti meninggalkan
+ * orang di layar mati. Render pohonnya sudah gagal, jadi `reset()` menyusun
+ * ulang pohon yang sama dan gagal lagi; hanya muat ulang keras yang memulai
+ * dari awal. Aman dilakukan DARI BATAS GALAT karena di titik itu halamannya
+ * sudah mogok — tidak ada isian yang bisa hilang, sudah hilang lebih dulu.
+ */
+const HOOK_PATTERNS = [
+  /Minified React error #3(00|01|10)\b/i,
+  /Rendered more hooks than during the previous render/i,
+  /Rendered fewer hooks than expected/i,
+  /Should have a queue\./i,
+];
+
+export function isGalatUrutanHook(error: unknown): boolean {
+  if (!error) return false;
+  const msg = String((error as { message?: string })?.message ?? error);
+  return HOOK_PATTERNS.some((re) => re.test(msg));
+}
+
 /** Apakah galat ini berarti "halaman yang Anda pegang versi lama"? */
 export function isVersiBasi(error: unknown): boolean {
   if (!error) return false;
@@ -79,11 +106,20 @@ export function isVersiBasi(error: unknown): boolean {
   return VERSI_PATTERNS.some((re) => re.test(msg));
 }
 
-/** Reload once (hard) when the error is a stale-chunk failure. No-op otherwise,
- *  and no-op if we already reloaded very recently (prevents reload loops). */
+/**
+ * Muat ulang keras SEKALI untuk galat yang memang hanya bisa dipulihkan begitu.
+ *
+ * Dua kelas: halaman versi lama, dan galat urutan hook React. Keduanya membuat
+ * `reset()` tidak berguna — yang pertama karena berkasnya sudah tidak ada di
+ * CDN, yang kedua karena pohon yang sama akan gagal lagi.
+ *
+ * Dipanggil dari batas galat, tempat halamannya memang sudah mogok. Penjaga
+ * sessionStorage memastikan ia tidak mungkin berputar: kalau setelah dimuat
+ * ulang masih gagal, tampilan galat biasa yang muncul.
+ */
 export function recoverFromChunkError(error: unknown): void {
   if (typeof window === "undefined") return;
-  if (!isVersiBasi(error)) return;
+  if (!isVersiBasi(error) && !isGalatUrutanHook(error)) return;
   try {
     const last = Number(sessionStorage.getItem(RELOAD_FLAG) || 0);
     if (Date.now() - last < RELOAD_COOLDOWN_MS) return; // already tried — avoid a loop

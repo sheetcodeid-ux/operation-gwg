@@ -7,13 +7,28 @@ import { useEffect } from "react";
  * root layout, so it must render its own <html>/<body>. Kept dependency-free
  * (no shared components) because those may be what failed.
  */
-/** Detect a stale-deploy chunk-load failure (inlined — this boundary stays
- *  dependency-free since shared modules may be what failed to load). */
+/**
+ * Galat yang hanya bisa dipulihkan dengan MUAT ULANG KERAS — ditulis ulang di
+ * sini, bukan diimpor, karena batas ini sengaja tanpa ketergantungan: modul
+ * bersama justru bisa jadi yang gagal dimuat.
+ *
+ * Dua kelas:
+ *  • kerangka halaman versi lama (ChunkLoadError dan kerabatnya);
+ *  • galat urutan hook React (#300/#301/#310). Jejaknya menunjuk ke dalam
+ *    Router App milik Next sendiri, jadi tidak ada yang bisa ditambal di kode
+ *    kita — yang bisa dikerjakan adalah berhenti meninggalkan orang di layar
+ *    mati. Menyusun ulang pohon yang sama akan gagal lagi; hanya memulai dari
+ *    awal yang menolong.
+ */
 function isChunkError(error: unknown): boolean {
   const err = error as { name?: string; message?: string } | null;
   if (!err) return false;
   if (err.name === "ChunkLoadError") return true;
-  return /ChunkLoadError|Loading (chunk|CSS chunk)|dynamically imported module|module script failed/i.test(String(err.message ?? error));
+  const msg = String(err.message ?? error);
+  return (
+    /ChunkLoadError|Loading (chunk|CSS chunk)|dynamically imported module|module script failed/i.test(msg) ||
+    /Minified React error #3(00|01|10)\b|Rendered more hooks than during the previous render/i.test(msg)
+  );
 }
 
 /**
@@ -68,7 +83,8 @@ export default function GlobalError({ error, reset }: { error: Error & { digest?
       /* diabaikan */
     }
 
-    // Stale page shell after a deploy → hard-reload once (guarded against loops).
+    // Kerangka versi lama, atau galat urutan hook → muat ulang sekali
+    // (dijaga supaya tidak berputar).
     if (typeof window !== "undefined" && isChunkError(error)) {
       try {
         const last = Number(sessionStorage.getItem("gwg_chunk_reload_at") || 0);
