@@ -137,6 +137,27 @@ export function periodeLabel(periode: string): string {
 }
 
 /** Brand GWG menurut nama outlet — dipakai saringan brand di Kontrak Tracker. */
+/* ───────────────────────── karyawan tanpa outlet ─────────────────────────
+ * Karyawan kantor pusat dan gudang tidak terikat outlet mana pun. Sebelumnya
+ * mereka sama sekali tidak bisa dicatat di Kontrak Tracker, sehingga masa
+ * berlaku kontraknya dipantau di luar aplikasi — dan satu-satunya modul yang
+ * seharusnya menjawab "siapa kontraknya habis bulan depan" menjawabnya hanya
+ * untuk sebagian orang.
+ *
+ * Di basis data mereka dikenali dari `outlet_id` yang NULL. Di layar mereka
+ * perlu nama, jadi di sinilah namanya ditetapkan — sekali, dipakai semua
+ * layar. Sengaja BUKAN outlet palsu bernama "Kantor Pusat": outlet palsu akan
+ * ikut terhitung di rekap cabang, di Update Bulanan Supervisor, dan di setiap
+ * angka yang membagi sesuatu per outlet.                                     */
+
+/** Penanda cakupan Manajemen di antarmuka — bukan id outlet yang nyata. */
+export const LINGKUP_MANAJEMEN = "manajemen";
+export const LABEL_MANAJEMEN = "Manajemen (Kantor Pusat & Gudang)";
+export const LABEL_MANAJEMEN_SINGKAT = "Manajemen";
+
+/** Baris ini milik Manajemen? Satu-satunya penentunya: tidak punya outlet. */
+export const kontrakManajemen = (outletId: string | null | undefined): boolean => !outletId;
+
 export const BRANDS = ["Nordu", "Cattu", "Busari", "Lesung Pipi"] as const;
 export type Brand = (typeof BRANDS)[number];
 

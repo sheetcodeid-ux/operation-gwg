@@ -12,9 +12,12 @@ import {
   Pencil,
   Plus,
   Trash2,
+  Upload,
+  Paperclip,
   Users,
   BellRing,
   Search,
+  X,
 } from "lucide-react";
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
@@ -39,9 +42,13 @@ import {
   periodeLabel,
   sisaHari,
   statusKontrak,
+  LABEL_MANAJEMEN,
   type JenisKontrak,
   type PrioritasRenewal,
 } from "@/lib/hcmos/kontrak";
+import { uploadOne } from "@/lib/upload-client";
+import { pesanGalatAksi } from "@/lib/chunk-recovery";
+import { uploadKontrakFileAction } from "@/lib/actions/hcmos";
 import {
   hapusKontrakAction,
   kirimPengingatAction,
@@ -67,9 +74,10 @@ import { formatDate } from "@/lib/utils";
  *     tidak ada kolom status yang bisa basi diam-diam.
  */
 
-const kosong = (outletId: string) => ({
+const kosong = (outletId: string | null) => ({
   id: undefined as string | undefined,
-  outletId,
+  /** Kosong berarti karyawan Manajemen — bukan "outlet belum dipilih". */
+  outletId: outletId ?? "",
   nip: "",
   nama: "",
   jabatan: "",
@@ -96,19 +104,27 @@ export function KontrakBoard({
   kontrak,
   periode,
   outletSaya,
+  bolehManajemen,
 }: {
   outlets: OutletKontrak[];
   kontrak: KontrakRow[];
   periode: string;
   /** Outlet yang boleh ditulis pengguna ini — dari server, bukan dari peran di peramban. */
   outletSaya: string[];
+  /** Boleh mengisi karyawan Manajemen (kantor pusat & gudang) — juga dari server. */
+  bolehManajemen: boolean;
 }) {
   const [tab, setTab] = React.useState("outlet");
   const [brand, setBrand] = React.useState("all");
   const [form, setForm] = React.useState<FormKontrak | null>(null);
   const [lapor, setLapor] = React.useState<OutletKontrak | null>(null);
 
-  const bolehTulis = React.useCallback((outletId: string) => outletSaya.includes(outletId), [outletSaya]);
+  // Baris Manajemen (tanpa outlet) tidak bisa dijawab daftar outlet — yang
+  // menentukan adalah wewenang atas data HC, dan itu ditetapkan server.
+  const bolehTulis = React.useCallback(
+    (outletId: string | null) => (outletId ? outletSaya.includes(outletId) : bolehManajemen),
+    [outletSaya, bolehManajemen],
+  );
 
   const outletTersaring = React.useMemo(
     () => (brand === "all" ? outlets : outlets.filter((o) => o.brand === brand)),
@@ -176,7 +192,20 @@ export function KontrakBoard({
       {tab === "karyawan" && (
         <TabelKaryawan
           rows={kontrakTersaring}
-          toolbar={saringBrand}
+          toolbar={
+            <div className="flex flex-wrap items-center gap-2">
+              {saringBrand}
+              {/* Satu-satunya pintu masuk karyawan Manajemen. Tombol "Tambah"
+                  yang lain menempel pada barisnya masing-masing di tab Outlet,
+                  dan karyawan kantor pusat tidak punya baris outlet untuk
+                  ditumpangi. */}
+              {bolehManajemen && (
+                <Button size="sm" variant="subtle" onClick={() => setForm(kosong(null))}>
+                  <Plus className="size-3.5" /> Karyawan Manajemen
+                </Button>
+              )}
+            </div>
+          }
           bolehTulis={bolehTulis}
           onUbah={(k) => setForm(keForm(k))}
         />
@@ -201,7 +230,7 @@ export function KontrakBoard({
 
 const keForm = (k: KontrakRow): FormKontrak => ({
   id: k.id,
-  outletId: k.outletId,
+  outletId: k.outletId ?? "",
   nip: k.nip ?? "",
   nama: k.nama,
   jabatan: k.jabatan ?? "",
@@ -220,6 +249,97 @@ const keForm = (k: KontrakRow): FormKontrak => ({
   kategoriTurnover: k.kategoriTurnover ?? "",
   alasanKeluar: k.alasanKeluar ?? "",
 });
+
+/* ─────────────────────────── berkas satu baris ───────────────────────────
+ * Menggantikan tiga isian "https://…". Menempel tautan menuntut orangnya
+ * mengunggah dulu ke tempat lain, mengatur izin berbaginya, menyalin
+ * alamatnya, lalu kembali ke sini — empat langkah di luar aplikasi untuk satu
+ * berkas. Hasilnya terlihat di datanya sendiri: dari 41 baris, hanya 12 yang
+ * ketiga tautannya terisi.
+ *
+ * Baris lama tetap menyimpan URL Google Drive, dan itu TIDAK dikonversi:
+ * mengubahnya berarti mengunduh berkas orang lain dari Drive tanpa diminta.
+ * Keduanya dibuka lewat pintu yang sama, dan rutenya yang membedakan.        */
+
+function BerkasKontrak({
+  label,
+  nilai,
+  kontrakId,
+  jenis,
+  onGanti,
+}: {
+  label: string;
+  nilai: string;
+  /** Belum ada saat karyawannya baru — berkasnya tetap bisa diunggah, hanya
+   *  tautan pratinjaunya yang menunggu tersimpan. */
+  kontrakId: string | undefined;
+  jenis: "kontrak" | "ktp" | "foto";
+  onGanti: (v: string) => void;
+}) {
+  const [naik, setNaik] = React.useState(false);
+  const adaBerkas = nilai.trim() !== "";
+  const tautanLuar = /^https?:\/\//i.test(nilai);
+  const bisaDibuka = adaBerkas && (tautanLuar || !!kontrakId);
+  const alamat = tautanLuar ? nilai : `/api/berkas/kontrak/${kontrakId}?j=${jenis}`;
+
+  async function pilih(file: File | null) {
+    if (!file) return;
+    setNaik(true);
+    try {
+      const { path } = await uploadOne("kontrak", file, uploadKontrakFileAction);
+      onGanti(path);
+      toast.success(`${label} terunggah — tekan Simpan untuk menyimpannya.`);
+    } catch (e) {
+      toast.error(pesanGalatAksi(e));
+    } finally {
+      setNaik(false);
+    }
+  }
+
+  return (
+    <Field label={label} hint="Gambar atau PDF, maks 10 MB.">
+      <div className="flex min-w-0 flex-wrap items-center gap-2">
+        <label className="inline-flex shrink-0 cursor-pointer items-center gap-2 rounded-lg border border-input bg-background/40 px-3 py-2 text-sm text-foreground/80 hover:bg-muted/50">
+          {naik ? <Loader2 className="size-4 animate-spin" /> : <Upload className="size-4" />}
+          {adaBerkas ? "Ganti" : "Unggah"}
+          <input
+            type="file"
+            accept="image/*,application/pdf"
+            className="hidden"
+            disabled={naik}
+            onChange={(e) => void pilih(e.target.files?.[0] ?? null)}
+          />
+        </label>
+
+        {adaBerkas ? (
+          <span className="flex min-w-0 flex-1 items-center gap-1.5 rounded-lg bg-muted/60 px-2.5 py-1.5 text-xs text-foreground/80">
+            <Paperclip className="size-3.5 shrink-0" />
+            {bisaDibuka ? (
+              <a href={alamat} target="_blank" rel="noreferrer" className="min-w-0 flex-1 truncate hover:underline">
+                {tautanLuar ? "Tautan tersimpan" : "Berkas tersimpan"}
+              </a>
+            ) : (
+              // Baris baru: berkasnya sudah naik tapi barisnya belum punya id,
+              // jadi belum ada alamat untuk membukanya. Dikatakan apa adanya,
+              // bukan disodorkan tautan yang pasti gagal.
+              <span className="min-w-0 flex-1 truncate">Terunggah — tersimpan setelah data disimpan</span>
+            )}
+            <button
+              type="button"
+              aria-label={`Hapus ${label}`}
+              onClick={() => onGanti("")}
+              className="shrink-0 text-muted-foreground hover:text-foreground"
+            >
+              <X className="size-3.5" />
+            </button>
+          </span>
+        ) : (
+          <span className="text-xs text-muted-foreground">Belum ada berkas</span>
+        )}
+      </div>
+    </Field>
+  );
+}
 
 /* ───────────────────────────── tabel outlet ───────────────────────────── */
 
@@ -332,7 +452,8 @@ function TabelKaryawan({
 }: {
   rows: KontrakRow[];
   toolbar: React.ReactNode;
-  bolehTulis: (id: string) => boolean;
+  /** Menerima null: baris Manajemen memang tidak punya outlet. */
+  bolehTulis: (id: string | null) => boolean;
   onUbah: (k: KontrakRow) => void;
 }) {
   const router = useRouter();
@@ -734,7 +855,7 @@ function DialogKaryawan({
     router.refresh();
   }
 
-  const outletName = outlets.find((o) => o.id === f.outletId)?.name ?? "—";
+  const outletName = f.outletId ? (outlets.find((o) => o.id === f.outletId)?.name ?? "—") : LABEL_MANAJEMEN;
 
   return (
     <Dialog open onOpenChange={(v) => !v && onClose()}>
@@ -819,16 +940,34 @@ function DialogKaryawan({
             </div>
           </div>
 
+          {/* Berkasnya diunggah langsung, tidak lagi ditempel sebagai tautan.
+              Menempel tautan menuntut orangnya mengunggah dulu ke tempat lain,
+              mengatur izin berbaginya, menyalin alamatnya, lalu kembali ke
+              sini — dan hasilnya terlihat di data: dari 41 baris, hanya 12
+              yang tautannya terisi. Baris lama yang sudah berisi tautan tetap
+              bisa dibuka apa adanya. */}
           <Bagian judul="Soft File & Lampiran">
-            <Field label="Link Kontrak">
-              <Input value={f.linkKontrak} onChange={(e) => set("linkKontrak", e.target.value)} placeholder="https://…" />
-            </Field>
-            <Field label="Link KTP">
-              <Input value={f.linkKtp} onChange={(e) => set("linkKtp", e.target.value)} placeholder="https://…" />
-            </Field>
-            <Field label="Link Foto">
-              <Input value={f.linkFoto} onChange={(e) => set("linkFoto", e.target.value)} placeholder="https://…" />
-            </Field>
+            <BerkasKontrak
+              label="Berkas Kontrak"
+              nilai={f.linkKontrak}
+              kontrakId={f.id}
+              jenis="kontrak"
+              onGanti={(v) => set("linkKontrak", v)}
+            />
+            <BerkasKontrak
+              label="Scan KTP"
+              nilai={f.linkKtp}
+              kontrakId={f.id}
+              jenis="ktp"
+              onGanti={(v) => set("linkKtp", v)}
+            />
+            <BerkasKontrak
+              label="Foto Karyawan"
+              nilai={f.linkFoto}
+              kontrakId={f.id}
+              jenis="foto"
+              onGanti={(v) => set("linkFoto", v)}
+            />
             <Field label="Catatan Dokumen" className="sm:col-span-2">
               <Textarea rows={2} value={f.catatan} onChange={(e) => set("catatan", e.target.value)} />
             </Field>

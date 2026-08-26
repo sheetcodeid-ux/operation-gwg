@@ -50,16 +50,21 @@ export async function presignHygieneUploadsAction(files: { name: string; type: s
  * "an unexpected response was received from the server", bukan pesan kita.
  * Pola ini sudah dipakai foto Hygiene; di sini disediakan untuk sisanya.
  */
-export type UploadScope = "hcdoc" | "marcomm" | "system";
+export type UploadScope = "hcdoc" | "marcomm" | "system" | "kontrak";
 
 const SCOPE_MENUS: Record<UploadScope, MenuKey[]> = {
   hcdoc: ["hc_submit", "hc_review"],
+  // Berkas kontrak, KTP, dan foto karyawan di Kontrak Tracker. Menu yang sama
+  // dengan halamannya: yang boleh membukanya boleh mengunggah ke dalamnya, dan
+  // hak menulis baris tertentu diperiksa lagi saat menyimpan.
+  kontrak: ["hc_kontrak"],
   marcomm: ["mc_events", "events"],
   system: ["sys_submit", "sys_review"],
 };
 
 const SCOPE_PREFIX: Record<UploadScope, string> = {
   hcdoc: "hc",
+  kontrak: "hc/kontrak",
   marcomm: "marcomm",
   system: "system",
 };

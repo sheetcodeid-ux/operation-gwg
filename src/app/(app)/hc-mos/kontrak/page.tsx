@@ -6,6 +6,7 @@ import { canReachMenu } from "@/lib/nav";
 import { getOutlets } from "@/lib/data/store";
 import { canAccessOutlet } from "@/lib/rbac";
 import { listKontrak, rekapOutlet } from "@/lib/data/hcmos";
+import { bolehUbahHc } from "@/lib/hcmos/akses";
 import { periodeKey } from "@/lib/hcmos/kontrak";
 import { PageHeader } from "@/components/ui/page-header";
 import { KontrakBoard } from "@/components/hcmos/kontrak-board";
@@ -31,9 +32,18 @@ export default async function KontrakPage() {
       <PageHeader
         icon={FileSignature}
         title="Kontrak Tracker"
-        description="PKWT/PKWTT seluruh outlet — masa berlaku, prioritas perpanjangan, dan Update Bulanan Supervisor."
+        description="PKWT/PKWTT seluruh outlet dan Manajemen — masa berlaku, prioritas perpanjangan, dan Update Bulanan Supervisor."
       />
-      <KontrakBoard outlets={outlets} kontrak={kontrak} periode={periode} outletSaya={outletSaya} />
+      {/* Karyawan Manajemen tidak punya outlet, jadi wewenangnya tidak bisa
+          diturunkan dari daftar outlet mana pun — ditentukan terpisah, di
+          server, lalu diperiksa ulang setiap penyimpanan. */}
+      <KontrakBoard
+        outlets={outlets}
+        kontrak={kontrak}
+        periode={periode}
+        outletSaya={outletSaya}
+        bolehManajemen={bolehUbahHc(user)}
+      />
     </div>
   );
 }

@@ -5,8 +5,10 @@ import { selectAll } from "./paged";
 import { getAreas, getOutlets, getUsers, userName } from "./store";
 import { scopeOutlets } from "../rbac";
 import {
+  LABEL_MANAJEMEN_SINGKAT,
   brandOutlet,
   bulanKeluar,
+  kontrakManajemen,
   periodeKey,
   statusKontrak,
   type Brand,
@@ -15,6 +17,7 @@ import {
   type StatusKontrak,
 } from "@/lib/hcmos/kontrak";
 import { TAHAP_AKTIF, TAHAP_META, type TahapKandidat } from "@/lib/hcmos/rekrutmen";
+import { bolehUbahHc } from "@/lib/hcmos/akses";
 import type { HcScope } from "@/lib/hcmos/pillars";
 import type { UserProfile } from "@/lib/types";
 
@@ -38,9 +41,12 @@ import type { UserProfile } from "@/lib/types";
 
 export interface KontrakRow {
   id: string;
-  outletId: string;
+  /** NULL berarti karyawan Manajemen — tidak terikat outlet mana pun. */
+  outletId: string | null;
   outletName: string;
   outletCode: string;
+  /** Turunan dari `outletId`; disediakan supaya layar tidak perlu menebaknya. */
+  manajemen: boolean;
   brand: Brand | null;
   nip: string | null;
   nama: string;
@@ -92,17 +98,29 @@ export function outletsForUser(user: UserProfile) {
   }));
 }
 
-function toRow(r: Record<string, unknown>, outlet: { name: string; code: string; brand: Brand | null }): KontrakRow {
+/**
+ * Satu baris kontrak.
+ *
+ * `outlet` boleh null — itulah karyawan Manajemen. Namanya diambil dari satu
+ * tempat di domain, bukan diketik ulang di sini, supaya layar mana pun
+ * menyebutnya dengan kata yang sama.
+ */
+function toRow(
+  r: Record<string, unknown>,
+  outlet: { name: string; code: string; brand: Brand | null } | null,
+): KontrakRow {
   const jenis = (r.jenis as JenisKontrak | null) ?? null;
   const tglMulai = (r.tgl_mulai as string | null) ?? null;
   const tglBerakhir = (r.tgl_berakhir as string | null) ?? null;
   const tglResign = (r.tgl_resign as string | null) ?? null;
+  const outletId = (r.outlet_id as string | null) ?? null;
   return {
     id: String(r.id),
-    outletId: String(r.outlet_id),
-    outletName: outlet.name,
-    outletCode: outlet.code,
-    brand: outlet.brand,
+    outletId,
+    outletName: outlet?.name ?? LABEL_MANAJEMEN_SINGKAT,
+    outletCode: outlet?.code ?? "—",
+    manajemen: kontrakManajemen(outletId),
+    brand: outlet?.brand ?? null,
     nip: (r.nip as string | null) ?? null,
     nama: String(r.nama ?? ""),
     jabatan: (r.jabatan as string | null) ?? null,
@@ -125,23 +143,46 @@ function toRow(r: Record<string, unknown>, outlet: { name: string; code: string;
   };
 }
 
-/** Seluruh karyawan kontrak pada outlet yang boleh dilihat pengguna. */
+/**
+ * Karyawan kontrak yang boleh dilihat pengguna ini.
+ *
+ * Dua kelompok, dibaca terpisah karena aturan siapa-boleh-lihatnya memang
+ * berbeda:
+ *
+ *  • CABANG — dibatasi outlet yang jadi jangkauan orangnya. Supervisor hanya
+ *    melihat cabangnya sendiri, seperti sebelumnya.
+ *  • MANAJEMEN — karyawan kantor pusat & gudang, dikenali dari `outlet_id`
+ *    yang NULL. Ini bukan milik cabang mana pun, jadi tidak boleh ikut terbawa
+ *    oleh jangkauan outlet siapa pun; hanya yang berwenang atas data HC yang
+ *    melihatnya. Tanpa pemisahan ini, seorang supervisor cabang akan melihat
+ *    kontrak dan gaji seluruh kantor pusat.
+ */
 export async function listKontrak(user: UserProfile): Promise<KontrakRow[]> {
-  const outlets = outletsForUser(user);
-  if (outlets.length === 0) return [];
   if (!dbEnabled) return [];
-
+  const outlets = outletsForUser(user);
   const byId = new Map(outlets.map((o) => [o.id, o]));
   const ids = outlets.map((o) => o.id);
-  const rows = await selectAll<Record<string, unknown>>("hc_contracts", (from, to) =>
-    db().from("hc_contracts").select(KOLOM_KONTRAK).in("outlet_id", ids).order("nama").range(from, to),
-  );
-  return rows
+
+  const cabang = ids.length
+    ? await selectAll<Record<string, unknown>>("hc_contracts", (from, to) =>
+        db().from("hc_contracts").select(KOLOM_KONTRAK).in("outlet_id", ids).order("nama").range(from, to),
+      )
+    : [];
+
+  const manajemen = bolehUbahHc(user)
+    ? await selectAll<Record<string, unknown>>("hc_contracts", (from, to) =>
+        db().from("hc_contracts").select(KOLOM_KONTRAK).is("outlet_id", null).order("nama").range(from, to),
+      )
+    : [];
+
+  const hasil = cabang
     .map((r) => {
       const o = byId.get(String(r.outlet_id));
       return o ? toRow(r, o) : null;
     })
     .filter((r): r is KontrakRow => r !== null);
+
+  return [...hasil, ...manajemen.map((r) => toRow(r, null))];
 }
 
 /** Update Bulanan satu periode untuk outlet yang boleh dilihat pengguna. */
@@ -475,7 +516,9 @@ const nol = (v: string) => (v.trim() === "" ? null : v.trim());
 export async function simpanKontrak(input: SimpanKontrakInput, olehId: string): Promise<{ id: string }> {
   if (!dbEnabled) throw new Error("Database tidak aktif.");
   const baris = {
-    outlet_id: input.outletId,
+    // Kosong berarti Manajemen — bukan "lupa diisi". Wewenangnya sudah
+    // diperiksa di lapisan aksi sebelum sampai ke sini.
+    outlet_id: input.outletId?.trim() ? input.outletId.trim() : null,
     nip: nol(input.nip),
     nama: input.nama.trim(),
     jabatan: nol(input.jabatan),
@@ -513,12 +556,49 @@ export async function hapusKontrak(id: string): Promise<void> {
   if (error) throw new Error(error.message);
 }
 
-/** Outlet sebuah baris kontrak — dipakai memeriksa wewenang sebelum menulis. */
-export async function outletDariKontrak(id: string): Promise<string | null> {
+/**
+ * Berkas satu baris kontrak, beserta pemiliknya.
+ *
+ * Dipakai rute pembuka berkas. Sengaja mengambil pemiliknya sekaligus: hak
+ * membuka berkas mengikuti hak melihat barisnya, dan memisahkan keduanya jadi
+ * dua pembacaan hanya membuka peluang keduanya menjawab berbeda.
+ */
+export async function berkasKontrak(id: string): Promise<
+  { outletId: string | null; nama: string; linkKontrak: string | null; linkKtp: string | null; linkFoto: string | null } | null
+> {
   if (!dbEnabled) return null;
+  const { data, error } = await db()
+    .from("hc_contracts")
+    .select("outlet_id,nama,link_kontrak,link_ktp,link_foto")
+    .eq("id", id)
+    .maybeSingle();
+  if (error) throw new Error(error.message);
+  if (!data) return null;
+  return {
+    outletId: (data.outlet_id as string | null) ?? null,
+    nama: String(data.nama ?? ""),
+    linkKontrak: (data.link_kontrak as string | null) ?? null,
+    linkKtp: (data.link_ktp as string | null) ?? null,
+    linkFoto: (data.link_foto as string | null) ?? null,
+  };
+}
+
+/**
+ * Pemilik satu baris kontrak — dipakai memeriksa wewenang sebelum menulis.
+ *
+ * Membedakan DUA "tidak ada" yang dulu tercampur jadi satu `null`: barisnya
+ * memang tidak ada, dan barisnya ada tapi milik Manajemen. Dicampur, baris
+ * Manajemen selalu ditolak dengan pesan "data tidak ditemukan" — padahal ada,
+ * dan yang membukanya memang berhak mengubahnya.
+ */
+export async function pemilikKontrak(
+  id: string,
+): Promise<{ ada: false } | { ada: true; outletId: string | null }> {
+  if (!dbEnabled) return { ada: false };
   const { data, error } = await db().from("hc_contracts").select("outlet_id").eq("id", id).maybeSingle();
   if (error) throw new Error(error.message);
-  return data ? String(data.outlet_id) : null;
+  if (!data) return { ada: false };
+  return { ada: true, outletId: (data.outlet_id as string | null) ?? null };
 }
 
 export async function simpanUpdateBulanan(input: {
