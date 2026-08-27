@@ -1,11 +1,9 @@
-import { FileCheck2, FileClock, FolderInput, Inbox, Loader } from "lucide-react";
+import { FileCheck2, FileClock, Inbox, Loader } from "lucide-react";
 import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 import { requireSessionUser } from "@/lib/auth";
 import { canReachMenu } from "@/lib/nav";
 import { listHcSubmissions } from "@/lib/data/hc";
-import { PageHeader } from "@/components/ui/page-header";
-import { PanduanModul } from "@/components/hcmos/panduan-modul";
 import { KonteksModul } from "@/components/hcmos/konteks-modul";
 import { HcReviewPanel } from "@/components/hc/hc-review";
 import { StatTile } from "@/components/ui/stat";
@@ -24,14 +22,10 @@ export default async function HcAntrianPage() {
   const hitung = { waiting: 0, processing: 0, pending: 0, done: 0, rejected: 0 };
   for (const r of rows) hitung[r.status] += 1;
 
+  // Tanpa kepala halaman: bingkai modulnya membawa judul, angka ringkas,
+  // pencarian, dan panduannya sendiri.
   return (
-    <div className="w-full">
-      <PageHeader
-        icon={FolderInput}
-        title="Antrian Dokumen"
-        description="Tinjau & proses pengajuan dokumen dari seluruh cabang, lalu kirim dokumen jadi kembali ke Supervisor."
-        actions={<PanduanModul panduan="hc_antrian" />}
-      />
+    <div className="flex w-full flex-col">
       <KonteksModul panduan="hc_antrian" />
 
 

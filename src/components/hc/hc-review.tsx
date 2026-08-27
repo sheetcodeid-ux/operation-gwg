@@ -28,6 +28,13 @@ import { Badge } from "@/components/ui/badge";
 import { Field, Textarea } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 import {
+  BilahModul,
+  KerangkaModul,
+  LegendaHitung,
+  LencanaHak,
+  useLayarPenuh,
+} from "@/components/hcmos/kit-modul";
+import {
   completeHcRequestAction,
   deleteHcRequestAction,
   holdHcRequestAction,
@@ -60,12 +67,24 @@ const STATUS_FILTERS: { value: HcStatus | "all"; label: string }[] = [
 
 export function HcReviewPanel({ rows, canDelete = false }: { rows: HcSubmission[]; canDelete?: boolean }) {
   const [filter, setFilter] = useState<HcStatus | "all">("all");
+  const [cari, setCari] = useState("");
   const [selectedId, setSelectedId] = useState<string | null>(rows[0]?.id ?? null);
+  const { bingkai, layarPenuh, alih } = useLayarPenuh();
 
-  const filtered = useMemo(
-    () => (filter === "all" ? rows : rows.filter((r) => r.status === filter)),
-    [rows, filter],
-  );
+  /**
+   * Pencarian nama karyawan — yang paling sering dibawa orang ke antrean ini.
+   *
+   * Sebelumnya hanya ada saringan status. Mencari satu pengajuan atas nama
+   * tertentu berarti menggulir seluruh antrean, dan antreannya tidak pendek.
+   */
+  const q = cari.trim().toLowerCase();
+  const filtered = useMemo(() => {
+    const hasil = filter === "all" ? rows : rows.filter((r) => r.status === filter);
+    if (!q) return hasil;
+    return hasil.filter((r) =>
+      `${r.employeeName ?? ""} ${r.docType} ${r.outletName ?? ""} ${r.supervisorName ?? ""}`.toLowerCase().includes(q),
+    );
+  }, [rows, filter, q]);
   const selected = rows.find((r) => r.id === selectedId) ?? null;
   const counts = useMemo(() => {
     const c: Record<HcStatus, number> = { waiting: 0, processing: 0, pending: 0, done: 0, rejected: 0 };
@@ -73,36 +92,46 @@ export function HcReviewPanel({ rows, canDelete = false }: { rows: HcSubmission[
     return c;
   }, [rows]);
 
+  // Legenda status dihitung dari SELURUH antrean, bukan dari yang tampak:
+  // menyorot "Selesai" tidak boleh membuat "Menunggu" jatuh ke nol.
+  const rekapStatus = STATUS_FILTERS.filter((f) => f.value !== "all").map((f) => ({
+    key: f.value as string,
+    kode: KODE_STATUS[f.value as HcStatus],
+    label: f.label,
+    jumlah: counts[f.value as HcStatus],
+    warna: WARNA_STATUS[f.value as HcStatus],
+    judulPenuh: f.label,
+  }));
+
   return (
-    <div className="grid grid-cols-[minmax(0,1fr)] gap-4 lg:grid-cols-[minmax(0,380px)_minmax(0,1fr)]">
+    <KerangkaModul ref={bingkai}>
+      <BilahModul
+        ikon={Inbox}
+        gradien="from-blue-500 via-indigo-500 to-violet-600 shadow-indigo-500/20"
+        judul="Antrian Dokumen"
+        ringkas={
+          <>
+            {rows.length} pengajuan · {counts.waiting} menunggu · {counts.processing} diproses · {counts.done} selesai
+          </>
+        }
+        cari={cari}
+        onCari={setCari}
+        cariPlaceholder="Cari nama karyawan, jenis, cabang…"
+        hitung={{ tampil: filtered.length, total: rows.length }}
+        menyaring={q !== "" || filter !== "all"}
+        onBersihkan={() => {
+          setCari("");
+          setFilter("all");
+        }}
+        panduan="hc_antrian"
+        layarPenuh={layarPenuh}
+        onLayarPenuh={alih}
+      />
+
+      <div className="grid min-h-0 flex-1 grid-cols-[minmax(0,1fr)] gap-4 overflow-auto p-3 lg:grid-cols-[minmax(0,380px)_minmax(0,1fr)]">
       {/* Left — Antrean Masuk */}
       <div className="flex flex-col rounded-2xl border border-border bg-card">
-        <div className="border-b border-border p-3">
-          <div className="mb-2.5 flex items-center gap-2 px-1 text-sm font-semibold text-foreground">
-            <Inbox className="size-4 text-muted-foreground" /> Antrean Masuk
-            <span className="ml-auto text-xs font-normal text-muted-foreground">{rows.length} total</span>
-          </div>
-          <div className="flex flex-wrap gap-1.5">
-            {STATUS_FILTERS.map((f) => {
-              const n = f.value === "all" ? rows.length : counts[f.value];
-              return (
-                <button
-                  key={f.value}
-                  onClick={() => setFilter(f.value)}
-                  className={cn(
-                    "rounded-full px-2.5 py-1 text-xs font-medium transition-colors",
-                    filter === f.value
-                      ? "bg-brand-500 text-white"
-                      : "bg-muted text-muted-foreground hover:bg-muted/70",
-                  )}
-                >
-                  {f.label} <span className="tabular-nums opacity-70">{n}</span>
-                </button>
-              );
-            })}
-          </div>
-        </div>
-        <div className="max-h-[70vh] space-y-1.5 overflow-y-auto p-2">
+        <div className="space-y-1.5 overflow-y-auto p-2">
           {filtered.length === 0 && (
             <p className="p-8 text-center text-sm text-muted-foreground">Tidak ada pengajuan pada filter ini.</p>
           )}
@@ -146,9 +175,32 @@ export function HcReviewPanel({ rows, canDelete = false }: { rows: HcSubmission[
           </div>
         )}
       </div>
-    </div>
+      </div>
+
+      <LegendaHitung
+        butir={rekapStatus}
+        sorot={filter === "all" ? null : filter}
+        onSorot={(k) => setFilter((v) => (v === k ? "all" : (k as HcStatus)))}
+        kiri={<LencanaHak bolehUbah catatan="Antrean Human Capital" />}
+      />
+    </KerangkaModul>
   );
 }
+
+const KODE_STATUS: Record<HcStatus, string> = {
+  waiting: "M",
+  processing: "P",
+  pending: "B",
+  done: "S",
+  rejected: "X",
+};
+const WARNA_STATUS: Record<HcStatus, [string, string]> = {
+  waiting: ["#64748b", "#94a3b8"],
+  processing: ["#4f46e5", "#818cf8"],
+  pending: ["#d97706", "#fbbf24"],
+  done: ["#059669", "#34d399"],
+  rejected: ["#dc2626", "#f87171"],
+};
 
 function InfoRow({ label, value }: { label: string; value: React.ReactNode }) {
   return (

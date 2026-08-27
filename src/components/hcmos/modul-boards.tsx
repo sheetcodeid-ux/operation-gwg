@@ -176,36 +176,78 @@ export function TalentBoard({
   tabAwal?: string;
 }) {
   const [tab, setTab] = React.useState(tabAwal);
+  const [cari, setCari] = React.useState("");
+  const { bingkai, layarPenuh, alih } = useLayarPenuh();
   const rute = "/hc-mos/talent";
   const siap = suksesi.filter((s) => t(s, "kesiapan") === "siap_sekarang").length;
 
+  const q = cari.trim().toLowerCase();
+  const saring = React.useCallback(
+    (rows: BarisRekaman[]) =>
+      q
+        ? rows.filter((r) =>
+            `${t(r, "jabatan")} ${t(r, "nama")} ${t(r, "posisi")} ${t(r, "kandidat")}`.toLowerCase().includes(q),
+          )
+        : rows,
+    [q],
+  );
+  const karierTampil = React.useMemo(() => saring(karier), [karier, saring]);
+  const suksesiTampil = React.useMemo(() => saring(suksesi), [suksesi, saring]);
+
   return (
-    <div className="space-y-4">
+    <KerangkaModul ref={bingkai}>
+      <BilahModul
+        ikon={tab === "suksesi" ? UsersRound : GitBranch}
+        gradien="from-lime-500 via-green-500 to-emerald-600 shadow-green-500/20"
+        judul={tab === "suksesi" ? "Succession Plan" : "Career Path"}
+        ringkas={
+          <>
+            {karier.length} jenjang jabatan · {suksesi.length} posisi kunci dipetakan · {siap} penerus siap sekarang
+          </>
+        }
+        cari={cari}
+        onCari={setCari}
+        cariPlaceholder="Cari jabatan, nama, posisi…"
+        hitung={{
+          tampil: tab === "suksesi" ? suksesiTampil.length : karierTampil.length,
+          total: tab === "suksesi" ? suksesi.length : karier.length,
+        }}
+        menyaring={q !== ""}
+        onBersihkan={() => setCari("")}
+        panduan="talent"
+        tampilan={
+          <SegmentedTabs
+            className="w-full sm:w-auto"
+            size="sm"
+            value={tab}
+            onChange={setTab}
+            items={[
+              { value: "karier", label: "Career Path", icon: GitBranch },
+              { value: "suksesi", label: "Succession Plan", icon: UsersRound },
+            ]}
+          />
+        }
+        layarPenuh={layarPenuh}
+        onLayarPenuh={alih}
+      />
+
+      <div className="min-h-0 flex-1 space-y-4 overflow-auto p-3">
       <div className="grid gap-3 sm:grid-cols-3">
         <StatTile icon={GitBranch} label="Jenjang Jabatan" value={karier.length} sub="career path" />
         <StatTile icon={UsersRound} label="Posisi Kunci" value={suksesi.length} sub="dipetakan" />
         <StatTile icon={Award} label="Penerus Siap" value={siap} sub="siap sekarang" />
       </div>
 
-      <SegmentedTabs
-        className="max-w-md"
-        value={tab}
-        onChange={setTab}
-        items={[
-          { value: "karier", label: "Career Path", icon: GitBranch },
-          { value: "suksesi", label: "Succession Plan", icon: UsersRound },
-        ]}
-      />
-
       {tab === "karier" && (
         <RekamanBoard
           tabel="hc_career_paths"
           rute={rute}
           tableId="hcmos-karier"
-          rows={karier}
+          rows={karierTampil}
           bolehUbah={bolehUbah}
           labelTambah="Jenjang"
-          searchPlaceholder="Cari jabatan…"
+          showSearch={false}
+          maxHeight="none"
           bawaan={{ scope: "manajemen", level: 1 }}
           columns={[
             {
@@ -260,10 +302,11 @@ export function TalentBoard({
           tabel="hc_succession"
           rute={rute}
           tableId="hcmos-suksesi"
-          rows={suksesi}
+          rows={suksesiTampil}
           bolehUbah={bolehUbah}
           labelTambah="Posisi Kunci"
-          searchPlaceholder="Cari posisi, kandidat…"
+          showSearch={false}
+          maxHeight="none"
           bawaan={{ kesiapan: "perlu_dikembangkan" }}
           columns={[
             {
@@ -317,7 +360,8 @@ export function TalentBoard({
           ]}
         />
       )}
-    </div>
+      </div>
+    </KerangkaModul>
   );
 }
 

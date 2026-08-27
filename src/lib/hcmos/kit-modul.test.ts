@@ -250,3 +250,31 @@ describe("Pusat Dokumen dan Database Karyawan memakai bingkai itu", () => {
     expect(KAR).not.toContain('searchPlaceholder="Cari nama, outlet…"');
   });
 });
+
+describe("Antrian Dokumen dan Talent memakai bingkai itu", () => {
+  const ANTRIAN = baca("src/components/hc/hc-review.tsx");
+  const MODUL = baca("src/components/hcmos/modul-boards.tsx");
+
+  it("Antrian Dokumen akhirnya punya pencarian", () => {
+    // Sebelumnya hanya ada saringan status. Mencari satu pengajuan atas nama
+    // tertentu berarti menggulir seluruh antrean, dan antreannya tidak pendek.
+    expect(ANTRIAN).toContain("cariPlaceholder=\"Cari nama karyawan, jenis, cabang…\"");
+    for (const bagian of ["KerangkaModul", "BilahModul", "LegendaHitung", "useLayarPenuh"]) {
+      expect(ANTRIAN, bagian).toContain(bagian);
+    }
+  });
+
+  it("saringan statusnya pindah ke legenda kaki, tidak digandakan", () => {
+    // Chip status yang lama memakan tinggi kolom antrean; legendanya
+    // menjawab hal yang sama dan bisa diklik.
+    expect(ANTRIAN).toContain("sorot={filter === \"all\" ? null : filter}");
+    expect(ANTRIAN).not.toContain('className="mb-2.5 flex items-center gap-2 px-1 text-sm font-semibold');
+  });
+
+  it("Career Path & Succession: satu pencarian untuk kedua tab", () => {
+    const fn = MODUL.slice(MODUL.indexOf("export function TalentBoard"), MODUL.indexOf("export function RelasiBoard"));
+    expect(fn).toContain("karierTampil");
+    expect(fn).toContain("suksesiTampil");
+    expect(fn).toContain("KerangkaModul");
+  });
+});
