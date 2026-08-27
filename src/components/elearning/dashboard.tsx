@@ -8,7 +8,7 @@ import { Award, BadgeCheck, CheckCircle2, ClipboardList, GraduationCap, Loader2,
 import { toast } from "sonner";
 import { AUDIT_ACTION_LABEL, AUDIT_ENTITY_LABEL, LEARNER_STATUS_META, type ElearningAuditRow, type ElearningDashboard, type EssayReviewItem, type ParticipantRow } from "@/lib/elearning-shared";
 import { markEssayPassedAction } from "@/lib/actions/elearning";
-import { cn, fromNow } from "@/lib/utils";
+import { fromNow } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { SegmentedTabs } from "@/components/ui/segmented-tabs";

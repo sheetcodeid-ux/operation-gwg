@@ -11,6 +11,7 @@ import { canManageElearning, type LessonFileKind } from "@/lib/elearning-shared"
 import { faseKuisValid, LABEL_FASE, type FaseKuis } from "@/lib/elearning-fase";
 import { presignPut, r2Enabled, R2_PREFIX } from "@/lib/storage/r2";
 import { pesertaCourse, simpanPesertaCourse } from "@/lib/data/elearning-peserta";
+import { reportElearning } from "@/lib/data/elearning-report";
 import {
   addLessonFile,
   addQuestion,
@@ -560,4 +561,18 @@ export async function pesertaSubjectAction(courseId: string) {
   const user = await getSessionUser();
   if (!manage(user)) return { error: "Tidak berwenang." };
   return { ok: true as const, userIds: await pesertaCourse(courseId) };
+}
+
+
+/**
+ * Rekap lintas subject untuk layar Report.
+ *
+ * Dihitung saat diminta, bukan ikut dimuat setiap kali halaman Kelola dibuka:
+ * ia menyentuh seluruh riwayat progres dan hasil kuis, sementara yang membuka
+ * halaman ini biasanya datang untuk menyunting materi, bukan membaca rekap.
+ */
+export async function reportElearningAction() {
+  const user = await getSessionUser();
+  if (!manage(user)) return { error: "Tidak berwenang." };
+  return { ok: true as const, report: await reportElearning() };
 }

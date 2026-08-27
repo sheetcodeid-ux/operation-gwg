@@ -94,3 +94,51 @@ describe("layarnya menerangkan aturan itu, bukan menyembunyikannya", () => {
     expect(UI).toContain("Sedang berjalan");
   });
 });
+
+describe("Report lintas subject", () => {
+  const R = baca("src/lib/data/elearning-report.ts");
+  const UI = baca("src/components/elearning/report-lms.tsx");
+
+  it("penyebut ketuntasan adalah PESERTA, bukan seluruh karyawan", () => {
+    // Subject yang ditugaskan ke lima orang dan tuntas kelimanya adalah 100%,
+    // bukan 5% dari seratus karyawan. Ini satu-satunya alasan penugasan
+    // peserta dibuat — tanpa penyebut yang benar, persentasenya cuma hiasan.
+    expect(R).toContain("pesertaEfektif(ditugaskan.get(c.id) ?? [], semuaPeserta)");
+    expect(R).toContain("completion: persen(selesai, peserta.length)");
+  });
+
+  it("subject tanpa materi berarti 0%, bukan 100%", () => {
+    // Tanpa penjagaan ini, subject kosong akan terbaca tuntas sempurna dan
+    // menaikkan rata-rata seluruh pelatihan.
+    expect(R).toContain("materi.length === 0 ? 0 :");
+  });
+
+  it("peserta unik dihitung sebagai orang, bukan penjumlahan baris", () => {
+    // Satu orang yang ikut tiga subject tidak boleh terhitung tiga kali.
+    expect(R).toContain("const pesertaUnik = new Set<string>()");
+  });
+
+  it("rekapnya satu kali untuk semua subject, bukan sekueri per subject", () => {
+    // Satu kueri per subject berarti belasan bolak-balik ke basis data untuk
+    // satu layar.
+    const fn = R.slice(R.indexOf("export async function reportElearning"));
+    expect(fn).toContain("await Promise.all([");
+    expect(fn).toContain('db().from("elearning_progress")');
+    expect(fn).toContain('db().from("elearning_quiz_results")');
+  });
+
+  it("dihitung saat dibuka, bukan ikut setiap kunjungan halaman Kelola", () => {
+    const A = baca("src/lib/actions/elearning.ts");
+    expect(A).toContain("export async function reportElearningAction");
+    expect(UI).toContain("void muat();");
+    // Halamannya tidak boleh ikut memuatnya di server.
+    const H = baca("src/app/(app)/elearning/kelola/page.tsx");
+    expect(H).not.toContain("reportElearning");
+  });
+
+  it("yang paling tertinggal ditaruh paling atas, bukan yang sudah selesai", () => {
+    // Daftar yang diurut dari yang paling tuntas tidak menunjukkan siapa pun
+    // yang perlu ditindaklanjuti.
+    expect(UI).toContain("a.completion - b.completion");
+  });
+});

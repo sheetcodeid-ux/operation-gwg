@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import { useRouter } from "next/navigation";
-import { BookOpen, LibraryBig, Loader2, Pencil, Plus, Users } from "lucide-react";
+import { BarChart3, BookOpen, LibraryBig, Loader2, Pencil, Plus, Users } from "lucide-react";
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -13,6 +13,7 @@ import { MultiCombobox } from "@/components/ui/multi-combobox";
 import { StatTile } from "@/components/ui/stat";
 import { BilahModul, KerangkaModul, LegendaHitung, LencanaHak, useLayarPenuh } from "@/components/hcmos/kit-modul";
 import { createCourseAction, pesertaSubjectAction, simpanPesertaSubjectAction, updateCourseAction } from "@/lib/actions/elearning";
+import { ReportLms } from "./report-lms";
 
 /**
  * Daftar subject E-Learning — pintu masuk pengelolaan materi.
@@ -76,6 +77,7 @@ export function DaftarSubject({
   const [departemen, setDepartemen] = React.useState("all");
   const [urutan, setUrutan] = React.useState<Urutan>("terbaru");
   const [form, setForm] = React.useState<null | { id?: string; judul: string; keterangan: string; aktif: boolean; userIds: string[] }>(null);
+  const [report, setReport] = React.useState(false);
 
   const departemenOptions = React.useMemo(() => {
     const set = [...new Set(peserta.map((p) => p.departemen).filter(Boolean))].sort((a, b) => a.localeCompare(b, "id"));
@@ -231,9 +233,14 @@ export function DaftarSubject({
           </>
         }
         aksi={
-          <Button size="sm" onClick={() => setForm({ judul: "", keterangan: "", aktif: true, userIds: [] })}>
-            <Plus className="size-3.5" /> Subject
-          </Button>
+          <>
+            <Button size="sm" variant="outline" onClick={() => setReport(true)}>
+              <BarChart3 className="size-3.5" /> Report
+            </Button>
+            <Button size="sm" onClick={() => setForm({ judul: "", keterangan: "", aktif: true, userIds: [] })}>
+              <Plus className="size-3.5" /> Subject
+            </Button>
+          </>
         }
         layarPenuh={layarPenuh}
         onLayarPenuh={alih}
@@ -314,6 +321,8 @@ export function DaftarSubject({
       </div>
 
       <LegendaHitung butir={rekap} kiri={<LencanaHak bolehUbah catatan="Pengelola E-Learning" />} />
+
+      {report && <ReportLms onClose={() => setReport(false)} />}
 
       {form && (
         <DialogSubject
