@@ -1,7 +1,8 @@
 "use client";
 
 import * as React from "react";
-import { Maximize2, Minimize2, X } from "lucide-react";
+import { CircleDashed, Maximize2, Minimize2, X } from "lucide-react";
+import { NAV_ICONS } from "@/components/layout/icons";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { PanduanModul } from "@/components/hcmos/panduan-modul";
@@ -328,7 +329,16 @@ export function BingkaiLaporan({
   panduan,
   children,
 }: {
-  ikon: React.ComponentType<{ className?: string }>;
+  /**
+   * NAMA ikonnya (kunci `NAV_ICONS`), bukan komponennya.
+   *
+   * Ini bukan pilihan gaya. Pemakainya adalah komponen SERVER, dan komponen
+   * React tidak bisa menyeberangi batas server→klien: mengirimkannya sebagai
+   * prop menjatuhkan halamannya di produksi dengan pesan "An error occurred in
+   * the Server Components render" yang tidak menyebut sebabnya sama sekali.
+   * Nama ikonnya cuma teks, dan teks menyeberang dengan selamat.
+   */
+  ikon: string;
   gradien?: string;
   judul: string;
   ringkas: React.ReactNode;
@@ -336,10 +346,11 @@ export function BingkaiLaporan({
   children: React.ReactNode;
 }) {
   const { bingkai, layarPenuh, alih } = useLayarPenuh();
+  const Ikon = NAV_ICONS[ikon] ?? CircleDashed;
   return (
     <KerangkaModul ref={bingkai}>
       <BilahModul
-        ikon={ikon}
+        ikon={Ikon}
         gradien={gradien}
         judul={judul}
         ringkas={ringkas}

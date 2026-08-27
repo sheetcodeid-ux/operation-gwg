@@ -1,4 +1,4 @@
-import { Network, Table2 } from "lucide-react";
+import { Table2 } from "lucide-react";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { redirect } from "next/navigation";
@@ -23,7 +23,7 @@ export default async function HcmosPage() {
   return (
     <div className="flex w-full flex-col">
       <BingkaiLaporan
-        ikon={Network}
+        ikon="Network"
         gradien="from-brand-500 via-indigo-500 to-violet-600 shadow-indigo-500/20"
         judul="HC-MOS"
         ringkas={"Human Capital Management Operating System — 9 pilar, dua scope: Manajemen & Outlet"}

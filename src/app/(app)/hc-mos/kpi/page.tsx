@@ -1,4 +1,4 @@
-import { ArrowLeft, PieChart } from "lucide-react";
+import { ArrowLeft } from "lucide-react";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { redirect } from "next/navigation";
@@ -40,7 +40,7 @@ export default async function KpiPage() {
       <KonteksModul panduan="kpi" />
 
       <BingkaiLaporan
-        ikon={PieChart}
+        ikon="PieChart"
         gradien="from-pink-500 via-rose-500 to-red-500 shadow-rose-500/20"
         judul="Report & KPI Human Capital"
         ringkas={`Periode ${periodeLabel(hasil.periode)} — ${ringkas.terukur} dari ${hasil.baris.length} indikator sudah terukur (${ringkas.bobotTerukur}% bobot)`}

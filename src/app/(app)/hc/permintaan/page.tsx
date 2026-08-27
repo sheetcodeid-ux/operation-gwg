@@ -1,4 +1,4 @@
-import { CheckCircle2, ClipboardCheck, ClipboardList, Store, UserPlus } from "lucide-react";
+import { CheckCircle2, ClipboardList, Store, UserPlus } from "lucide-react";
 import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 import { requireSessionUser } from "@/lib/auth";
@@ -52,7 +52,7 @@ export default async function HcRecruitReviewPage() {
       <HcRequestReview
         mode="hc"
         kind="rekrutmen"
-        bingkai={{ judul: "Permintaan Karyawan", ikon: ClipboardCheck, gradien: "from-emerald-500 via-teal-500 to-cyan-600 shadow-teal-500/20", panduan: "hc_permintaan" }}
+        bingkai={{ judul: "Permintaan Karyawan", ikon: "ClipboardCheck", gradien: "from-emerald-500 via-teal-500 to-cyan-600 shadow-teal-500/20", panduan: "hc_permintaan" }}
       />
     </div>
   );

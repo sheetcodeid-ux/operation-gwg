@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { CheckCircle2, ClipboardCheck, Loader2, SendHorizonal, ShieldCheck, Undo2, UserRound, Wallet, XCircle } from "lucide-react";
+import { CheckCircle2, CircleDashed, ClipboardCheck, Loader2, SendHorizonal, ShieldCheck, Undo2, UserRound, Wallet, XCircle } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
@@ -23,6 +23,7 @@ import {
   KerangkaModul,
   useLayarPenuh,
 } from "@/components/hcmos/kit-modul";
+import { NAV_ICONS } from "@/components/layout/icons";
 import {
   LABEL_SCOPE_MANPOWER,
   SCOPE_MANPOWER,
@@ -78,7 +79,7 @@ export function HcRequestReview({
    * dan Antrian Design di luar Human Capital; memaksakan bingkainya ke semua
    * pemakai berarti mengubah dua modul yang tidak sedang diminta berubah.
    */
-  bingkai?: { judul: string; ikon: React.ComponentType<{ className?: string }>; gradien?: string; panduan: string };
+  bingkai?: { judul: string; ikon: string; gradien?: string; panduan: string };
 }) {
   const [rows, setRows] = React.useState<HcRequest[] | null>(null);
   const [stage, setStage] = React.useState<RequestStage | "all">("all");
@@ -219,7 +220,7 @@ export function HcRequestReview({
   return (
     <KerangkaModul ref={refBingkai}>
       <BilahModul
-        ikon={kepala.ikon}
+        ikon={NAV_ICONS[kepala.ikon] ?? CircleDashed}
         gradien={kepala.gradien}
         judul={kepala.judul}
         ringkas={

@@ -1,4 +1,4 @@
-import { ArrowLeft, Building2, Layers, MapPinned, Network, Store, UserRound } from "lucide-react";
+import { ArrowLeft, Layers, MapPinned, Network, Store, UserRound } from "lucide-react";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { redirect } from "next/navigation";
@@ -79,7 +79,7 @@ export default async function StrukturPage() {
       <KonteksModul panduan="struktur" />
 
       <BingkaiLaporan
-        ikon={Building2}
+        ikon="Building2"
         gradien="from-slate-500 via-gray-500 to-zinc-600 shadow-gray-500/20"
         judul="Profil Organisasi"
         ringkas="Kantor pusat manajemen dan struktur operasional seluruh brand GWG Group"

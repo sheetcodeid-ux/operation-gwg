@@ -1,4 +1,3 @@
-import { GraduationCap } from "lucide-react";
 import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 import { requireSessionUser } from "@/lib/auth";
@@ -19,7 +18,7 @@ export default async function HcTrainingReviewPage() {
       <HcRequestReview
         mode="hc"
         kind="pelatihan"
-        bingkai={{ judul: "Pelatihan", ikon: GraduationCap, gradien: "from-indigo-500 via-blue-500 to-sky-600 shadow-blue-500/20", panduan: "hc_pelatihan" }}
+        bingkai={{ judul: "Pelatihan", ikon: "GraduationCap", gradien: "from-indigo-500 via-blue-500 to-sky-600 shadow-blue-500/20", panduan: "hc_pelatihan" }}
       />
     </div>
   );

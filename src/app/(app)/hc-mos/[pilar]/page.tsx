@@ -29,8 +29,6 @@ export default async function PilarPage({ params }: { params: Promise<{ pilar: s
   const p = pillarBySlug(pilar);
   if (!p) notFound();
 
-  const Icon = NAV_ICONS[p.icon] ?? CircleDashed;
-
   // Bingkainya membawa nama pilar, PIC-nya, panduan, dan layar penuh; kartunya
   // tetap dirender di server.
   return (
@@ -43,7 +41,7 @@ export default async function PilarPage({ params }: { params: Promise<{ pilar: s
       </Link>
 
       <BingkaiLaporan
-        ikon={Icon}
+        ikon={p.icon}
         gradien="from-violet-500 via-indigo-500 to-blue-600 shadow-indigo-500/20"
         judul={p.label}
         ringkas={`${p.ringkas} · PIC ${p.pic} (${p.picRole}) · ${p.submenus.length} sub-menu`}

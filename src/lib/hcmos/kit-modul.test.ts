@@ -349,3 +349,55 @@ describe("seluruh halaman Human Capital memakai bentuk yang sama", () => {
     expect(REVIEW).toContain("if (!kepala) return <div>{isi}</div>;");
   });
 });
+
+describe("komponen tidak pernah menyeberangi batas server→klien", () => {
+  /**
+   * Regresi yang menjatuhkan halaman pilar di produksi.
+   *
+   * `BingkaiLaporan` dan bingkai antrean adalah komponen KLIEN, sedangkan yang
+   * memakainya halaman SERVER. Ikon lucide adalah fungsi React, dan fungsi
+   * tidak bisa menyeberangi batas itu — begitu dikirim sebagai prop, seluruh
+   * halamannya mati dengan pesan "An error occurred in the Server Components
+   * render" yang tidak menyebut sebabnya sama sekali. Build tetap hijau, tes
+   * tetap hijau; yang tahu cuma orang yang membuka halamannya.
+   *
+   * Obatnya: yang dikirim NAMA ikonnya, dan yang mengubahnya jadi komponen
+   * adalah sisi klien.
+   */
+  const HALAMAN_SERVER = [
+    "src/app/(app)/hc-mos/page.tsx",
+    "src/app/(app)/hc-mos/[pilar]/page.tsx",
+    "src/app/(app)/hc-mos/struktur/page.tsx",
+    "src/app/(app)/hc-mos/kpi/page.tsx",
+    "src/app/(app)/hc/permintaan/page.tsx",
+    "src/app/(app)/hc/pelatihan/page.tsx",
+  ];
+
+  it("ikonnya dikirim sebagai nama, bukan sebagai komponen", () => {
+    for (const f of HALAMAN_SERVER) {
+      const isi = baca(f);
+      expect(isi, `${f}: ikon dikirim sebagai komponen`).not.toMatch(/ikon=\{[A-Z]/);
+      expect(isi, `${f}: ikon dikirim sebagai komponen`).not.toMatch(/ikon:\s*[A-Z]\w*,/);
+    }
+  });
+
+  it("tipenya yang menegakkan aturan itu, bukan kedisiplinan penulisnya", () => {
+    // Kalau tipenya masih menerima komponen, kesalahan yang sama akan lolos
+    // lagi dan baru ketahuan dari layar mati di produksi.
+    const KIT = baca("src/components/hcmos/kit-modul.tsx");
+    const fn = KIT.slice(KIT.indexOf("export function BingkaiLaporan"));
+    expect(fn.slice(0, 900)).toContain("ikon: string;");
+    expect(fn).toContain("NAV_ICONS[ikon]");
+
+    const REVIEW = baca("src/components/hc/request-review.tsx");
+    expect(REVIEW).toContain("ikon: string;");
+    expect(REVIEW).toContain("NAV_ICONS[kepala.ikon]");
+  });
+
+  it("nama ikon yang dipakai memang ada di NAV_ICONS", () => {
+    const IKON = baca("src/components/layout/icons.tsx");
+    for (const nama of ["Network", "Building2", "PieChart", "ClipboardCheck", "GraduationCap"]) {
+      expect(IKON, `NAV_ICONS tidak punya ${nama}`).toContain(nama);
+    }
+  });
+});
