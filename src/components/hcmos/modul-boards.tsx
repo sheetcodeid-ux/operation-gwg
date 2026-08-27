@@ -22,6 +22,13 @@ import { Badge } from "@/components/ui/badge";
 import { Combobox } from "@/components/ui/combobox";
 import { SegmentedTabs } from "@/components/ui/segmented-tabs";
 import { StatTile } from "@/components/ui/stat";
+import {
+  BilahModul,
+  KerangkaModul,
+  LegendaHitung,
+  LencanaHak,
+  useLayarPenuh,
+} from "@/components/hcmos/kit-modul";
 import { RekamanBoard, type BarisRekaman, type Bidang } from "./rekaman";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
@@ -66,6 +73,7 @@ import {
   NILAI_LULUS,
   PROGRAM_FAST,
   STATUS_PERKARA,
+  type StatusPerkara,
   lulus,
   peningkatan,
   senjangKompetensi,
@@ -342,6 +350,9 @@ export function RelasiBoard({
   // kantor dan di outlet ditangani orang berbeda dengan aturan berbeda;
   // menjumlahkan keduanya menghasilkan angka yang tidak dipakai siapa pun.
   const [scope, setScope] = React.useState<HcScope>("manajemen");
+  const [cari, setCari] = React.useState("");
+  const [sorotStatus, setSorotStatus] = React.useState<StatusPerkara | null>(null);
+  const { bingkai, layarPenuh, alih } = useLayarPenuh();
   const rute = "/hc-mos/relasi";
   const tahun = new Date().getFullYear();
 
@@ -349,6 +360,30 @@ export function RelasiBoard({
     (rows: BarisRekaman[]) => rows.filter((r) => (t(r, "scope") || "manajemen") === scope),
     [scope],
   );
+
+  /**
+   * Pencarian dan saringan status berlaku untuk KEDUA tab.
+   *
+   * Perkara dan proses keluar sering menyangkut orang yang sama — seseorang
+   * yang kasusnya berujung resign muncul di dua tab sekaligus. Saringan yang
+   * hilang saat berpindah tab memaksa mengetik ulang nama yang sama.
+   */
+  const q = cari.trim().toLowerCase();
+  const perTampilan = React.useCallback(
+    (rows: BarisRekaman[]) => {
+      let hasil = perScope(rows);
+      if (sorotStatus) hasil = hasil.filter((r) => (t(r, "status") || "terbuka") === sorotStatus);
+      if (!q) return hasil;
+      return hasil.filter((r) =>
+        `${t(r, "nama")} ${t(r, "jabatan")} ${t(r, "kategori")} ${t(r, "ringkasan")}`.toLowerCase().includes(q),
+      );
+    },
+    [perScope, sorotStatus, q],
+  );
+
+  const kasusTampil = React.useMemo(() => perTampilan(kasus), [kasus, perTampilan]);
+  const keluarTampil = React.useMemo(() => perTampilan(keluar), [keluar, perTampilan]);
+  const menyaring = q !== "" || sorotStatus !== null;
 
   const kasusScope = React.useMemo(() => perScope(kasus).map(bacaPerkara), [kasus, perScope]);
   const keluarScope = React.useMemo(() => perScope(keluar).map(bacaPerkara), [keluar, perScope]);
@@ -457,27 +492,72 @@ export function RelasiBoard({
     { key: "tindakan", label: "Tindakan / Kesepakatan", tipe: "panjang", span: 3 },
   ];
 
+  // Legenda dihitung dari seluruh baris scope ini, bukan dari yang tampak:
+  // menyorot satu status tidak boleh membuat dua lainnya jatuh ke nol.
+  const dasarLegenda = tab === "kasus" ? perScope(kasus) : perScope(keluar);
+  const rekapStatus = (Object.keys(STATUS_PERKARA) as StatusPerkara[]).map((st) => ({
+    key: st,
+    kode: KODE_PERKARA[st],
+    label: STATUS_PERKARA[st].label,
+    jumlah: dasarLegenda.filter((r) => (t(r, "status") || "terbuka") === st).length,
+    warna: WARNA_PERKARA[st],
+    judulPenuh: STATUS_PERKARA[st].label,
+  }));
+
+  const tampil = tab === "kasus" ? kasusTampil.length : keluarTampil.length;
+  const total = dasarLegenda.length;
+
   return (
-    <div className="space-y-4">
-      <SegmentedTabs
-        className="max-w-md"
-        value={scope}
-        onChange={(v) => setScope(v as HcScope)}
-        items={[
-          { value: "manajemen", label: SCOPE_LABEL.manajemen, icon: Building2 },
-          { value: "outlet", label: SCOPE_LABEL.outlet, icon: Store },
-        ]}
+    <KerangkaModul ref={bingkai}>
+      <BilahModul
+        ikon={tab === "kasus" ? AlertCircle : LogOut}
+        gradien="from-rose-500 via-pink-500 to-fuchsia-600 shadow-pink-500/20"
+        judul={tab === "kasus" ? "Case Management" : "Offboarding / Exit Process"}
+        ringkas={
+          <>
+            {SCOPE_LABEL[scope]} · {rk.berjalan} kasus berjalan · {rl.keluarTahunIni} keluar {tahun}
+            {rk.eskalasiTinggi > 0 && ` · ${rk.eskalasiTinggi} eskalasi tinggi`}
+          </>
+        }
+        cari={cari}
+        onCari={setCari}
+        cariPlaceholder="Cari nama, kategori, ringkasan…"
+        hitung={{ tampil, total }}
+        menyaring={menyaring}
+        onBersihkan={() => {
+          setCari("");
+          setSorotStatus(null);
+        }}
+        panduan="relasi"
+        saringan={
+          <SegmentedTabs
+            className="w-full sm:w-auto"
+            size="sm"
+            value={scope}
+            onChange={(v) => setScope(v as HcScope)}
+            items={[
+              { value: "manajemen", label: SCOPE_LABEL.manajemen, icon: Building2 },
+              { value: "outlet", label: SCOPE_LABEL.outlet, icon: Store },
+            ]}
+          />
+        }
+        tampilan={
+          <SegmentedTabs
+            className="w-full sm:w-auto"
+            size="sm"
+            value={tab}
+            onChange={setTab}
+            items={[
+              { value: "kasus", label: "Kasus", icon: AlertCircle },
+              { value: "keluar", label: "Offboarding", icon: LogOut },
+            ]}
+          />
+        }
+        layarPenuh={layarPenuh}
+        onLayarPenuh={alih}
       />
 
-      <SegmentedTabs
-        className="max-w-md"
-        value={tab}
-        onChange={setTab}
-        items={[
-          { value: "kasus", label: "Case Management", icon: AlertCircle },
-          { value: "keluar", label: "Offboarding", icon: LogOut },
-        ]}
-      />
+      <div className="min-h-0 flex-1 space-y-4 overflow-auto p-3">
 
       {tab === "kasus" ? (
         <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
@@ -556,10 +636,11 @@ export function RelasiBoard({
           tabel="hc_cases"
           rute={rute}
           tableId="hcmos-kasus"
-          rows={perScope(kasus)}
+          rows={kasusTampil}
           bolehUbah={bolehUbah}
           labelTambah="Kasus"
-          searchPlaceholder="Cari nama, kategori…"
+          showSearch={false}
+          maxHeight="none"
           bawaan={{ jenis: "kasus", scope: "manajemen", status: "terbuka" }}
           columns={kolomPerkara("Kategori")}
           bidang={bidangPerkara("kasus", KATEGORI_KASUS)}
@@ -571,10 +652,11 @@ export function RelasiBoard({
           tabel="hc_cases"
           rute={rute}
           tableId="hcmos-offboarding"
-          rows={perScope(keluar)}
+          rows={keluarTampil}
           bolehUbah={bolehUbah}
           labelTambah="Proses Keluar"
-          searchPlaceholder="Cari nama…"
+          showSearch={false}
+          maxHeight="none"
           bawaan={{ jenis: "offboarding", scope: "manajemen", status: "terbuka" }}
           columns={kolomPerkara("Alasan Keluar")}
           bidang={bidangPerkara("offboarding", KATEGORI_KELUAR)}
@@ -588,9 +670,24 @@ export function RelasiBoard({
           langkah={TAHAP_OFFBOARDING}
         />
       )}
-    </div>
+      </div>
+
+      <LegendaHitung
+        butir={rekapStatus}
+        sorot={sorotStatus}
+        onSorot={(k) => setSorotStatus((v) => (v === k ? null : (k as StatusPerkara)))}
+        kiri={<LencanaHak bolehUbah={bolehUbah} />}
+      />
+    </KerangkaModul>
   );
 }
+
+const KODE_PERKARA: Record<StatusPerkara, string> = { terbuka: "T", proses: "P", selesai: "S" };
+const WARNA_PERKARA: Record<StatusPerkara, [string, string]> = {
+  terbuka: ["#dc2626", "#f87171"],
+  proses: ["#d97706", "#fbbf24"],
+  selesai: ["#059669", "#34d399"],
+};
 
 /* ══════════════════════ Fast Start, Fast Track & Tes ══════════════════════ */
 

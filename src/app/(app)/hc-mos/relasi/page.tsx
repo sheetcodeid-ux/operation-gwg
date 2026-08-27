@@ -10,7 +10,6 @@ import { listTabel } from "@/lib/data/hcmos-lanjutan";
 import { listKontrak } from "@/lib/data/hcmos";
 import { perluDitutup, type KasusOffboarding } from "@/lib/hcmos/offboarding";
 import { EmptyState, PageHeader } from "@/components/ui/page-header";
-import { PanduanModul } from "@/components/hcmos/panduan-modul";
 import { KonteksModul } from "@/components/hcmos/konteks-modul";
 import { RelasiBoard } from "@/components/hcmos/modul-boards";
 import { bolehUbahHc } from "@/lib/hcmos/akses";
@@ -77,21 +76,13 @@ export default async function RelasiPage({ searchParams }: { searchParams: Promi
     new Set(kontrak.filter((k) => !k.tglResign).map((k) => k.id)),
   );
 
+  // Tanpa kepala halaman: bingkai modulnya membawa judul per tab, angka
+  // ringkas, pencarian, dan panduannya sendiri.
   return (
-    <div className="w-full">
+    <div className="flex w-full flex-col">
       <Link href="/hc-mos" className="mb-3 inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground">
         <ArrowLeft className="size-4" /> HC-MOS
       </Link>
-      <PageHeader
-        icon={MessageSquare}
-        title={tab === "keluar" ? "Offboarding / Exit Process" : "Case Management"}
-        description={
-          tab === "keluar"
-            ? "Proses karyawan keluar (resign atau PHK) — dari notifikasi sampai statusnya non-aktif di Database Karyawan."
-            : "Penanganan kasus hubungan industrial — pilih tampilan sesuai scope: Manajemen (GWG) atau Outlet."
-        }
-        actions={<PanduanModul panduan="relasi" />}
-      />
       <KonteksModul panduan="relasi" />
       <RelasiBoard
         kasus={semua.filter((r) => r.jenis === "kasus")}

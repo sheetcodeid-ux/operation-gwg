@@ -1,4 +1,4 @@
-import { ArrowLeft, Target } from "lucide-react";
+import { ArrowLeft } from "lucide-react";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { redirect } from "next/navigation";
@@ -10,8 +10,6 @@ import { listTabel } from "@/lib/data/hcmos-lanjutan";
 import { listKontrak } from "@/lib/data/hcmos";
 import { rekapUnit, type ReviewRingkas } from "@/lib/hcmos/penilaian";
 import { StatusPenilaian } from "@/components/hcmos/status-penilaian";
-import { PageHeader } from "@/components/ui/page-header";
-import { PanduanModul } from "@/components/hcmos/panduan-modul";
 import { KonteksModul } from "@/components/hcmos/konteks-modul";
 import { KinerjaBoard } from "@/components/hcmos/kinerja-board";
 import { bolehUbahHc } from "@/lib/hcmos/akses";
@@ -19,24 +17,10 @@ import { bolehUbahHc } from "@/lib/hcmos/akses";
 export const metadata: Metadata = { title: "Kinerja & Kompetensi — HC-MOS" };
 
 
-/** Halaman ini melayani tiga menu sidebar; judulnya ikut menu yang membukanya
- *  supaya orang tidak merasa mendarat di tempat lain dari yang ia klik. */
-const JUDUL_TAB: Record<string, string> = {
-  penilaian: "Penilaian Kinerja",
-  intervensi: "Request Intervensi",
-  kompetensi: "Competency Matrix",
-};
-
 const PANDUAN_TAB: Record<string, string> = {
   penilaian: "kinerja",
   kompetensi: "kompetensi",
   intervensi: "intervensi",
-};
-
-const URAIAN_TAB: Record<string, string> = {
-  penilaian: "Proses penilaian kinerja periodik untuk karyawan manajemen dan crew outlet.",
-  intervensi: "Permintaan intervensi kinerja dari head divisi untuk anggota timnya, atau dari Owner untuk head divisi.",
-  kompetensi: "Pemetaan kompetensi karyawan terhadap standar jabatannya.",
 };
 
 export default async function KinerjaPage({ searchParams }: { searchParams: Promise<{ tab?: string }> }) {
@@ -68,21 +52,13 @@ export default async function KinerjaPage({ searchParams }: { searchParams: Prom
     rekapUnit(`Outlet — ${outlets.length} cabang`, "outlet", kontrak.length, ringkas),
   ];
 
+  // Tanpa kepala halaman: bingkai modulnya membawa judul per tab, angka
+  // ringkas, pencarian, dan panduannya sendiri.
   return (
-    <div className="w-full">
+    <div className="flex w-full flex-col">
       <Link href="/hc-mos" className="mb-3 inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground">
         <ArrowLeft className="size-4" /> HC-MOS
       </Link>
-      {/* Tiga tab, tiga pengisi yang berbeda: penilaian diisi atasan langsung,
-          kompetensi hanya dibaca, intervensi diajukan siapa pun yang membawahi
-          orangnya. Panduannya ikut berganti — satu panduan untuk ketiganya akan
-          keliru untuk dua di antaranya. */}
-      <PageHeader
-        icon={Target}
-        title={JUDUL_TAB[tab] ?? JUDUL_TAB.penilaian}
-        description={URAIAN_TAB[tab] ?? URAIAN_TAB.penilaian}
-        actions={<PanduanModul panduan={PANDUAN_TAB[tab] ?? "kinerja"} />}
-      />
       <KonteksModul panduan={PANDUAN_TAB[tab] ?? "kinerja"} />
 
       {/* Ringkasan dulu, daftarnya belakangan. Pertanyaan pertama saat periode

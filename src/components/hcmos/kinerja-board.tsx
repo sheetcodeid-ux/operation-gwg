@@ -16,6 +16,13 @@ import { Progress } from "@/components/ui/progress";
 import { SegmentedTabs } from "@/components/ui/segmented-tabs";
 import { StatTile } from "@/components/ui/stat";
 import { useConfirm } from "@/components/ui/confirm";
+import {
+  BilahModul,
+  KerangkaModul,
+  LegendaHitung,
+  LencanaHak,
+  useLayarPenuh,
+} from "@/components/hcmos/kit-modul";
 import { KompetensiBoard, type PilihanOutlet } from "./modul-boards";
 import { IntervensiBoard } from "./intervensi-board";
 import type { BarisRekaman } from "./rekaman";
@@ -84,6 +91,9 @@ export function KinerjaBoard({
   const { confirm, dialog } = useConfirm();
   const [tab, setTab] = React.useState(tabAwal);
   const [form, setForm] = React.useState<FormKinerja | null>(null);
+  const [cari, setCari] = React.useState("");
+  const [sorotStatus, setSorotStatus] = React.useState<StatusReview | null>(null);
+  const { bingkai, layarPenuh, alih } = useLayarPenuh();
 
   const selesaiDinilai = penilaian.filter((p) => t(p, "status") !== "draf");
   const intervensiBaru = intervensi.filter((r) => t(r, "status") === "baru").length;
@@ -174,60 +184,178 @@ export function KinerjaBoard({
     [bolehUbah, hapus],
   );
 
-  return (
-    <div className="space-y-4">
-      {/* Ringkasan penilaian sudah ditampilkan halamannya sendiri di atas, dan
-          jauh lebih berguna di sana karena punya penyebutnya. Menampilkannya
-          dua kali membuat pembacanya membandingkan dua angka yang sebenarnya
-          mengukur hal yang sama. */}
-      <div className={`grid gap-3 sm:grid-cols-2 lg:grid-cols-4 ${tab === "penilaian" ? "hidden" : ""}`}>
-        <StatTile icon={Star} label="Penilaian" value={penilaian.length} sub="seluruh periode" />
-        <StatTile
-          icon={LifeBuoy}
-          label="Request Intervensi"
-          value={intervensi.length}
-          sub={`${intervensiBaru} belum ditangani`}
-        />
-        <StatTile icon={ClipboardCheck} label="Penilaian Selesai" value={selesaiDinilai.length} sub="bukan draf" />
-        <StatTile icon={Star} label="Rerata Skor" value={rerata} sub="dari 100" />
-      </div>
+  /**
+   * Pencarian dan saringan status milik modul, bukan milik satu tab.
+   *
+   * Ketiga tab berbicara tentang orang yang sama. Saringan yang hilang saat
+   * berpindah tab memaksa orang mengetik ulang nama yang sedang ditelusurinya
+   * — dan yang paling sering ditelusuri justru lintas tab: nilainya berapa,
+   * intervensinya apa, kompetensinya kurang di mana.
+   */
+  const q = cari.trim().toLowerCase();
+  const penilaianTersaring = React.useMemo(() => {
+    let hasil = penilaian;
+    if (sorotStatus) hasil = hasil.filter((r) => (t(r, "status") || "draf") === sorotStatus);
+    if (!q) return hasil;
+    return hasil.filter((r) =>
+      `${t(r, "nama")} ${t(r, "jabatan")} ${t(r, "periode")} ${t(r, "penilai")}`.toLowerCase().includes(q),
+    );
+  }, [penilaian, sorotStatus, q]);
 
-      <SegmentedTabs
-        className="max-w-xl"
-        value={tab}
-        onChange={setTab}
-        items={[
-          { value: "penilaian", label: "Penilaian Kinerja", icon: Star },
-          { value: "intervensi", label: "Request Intervensi", icon: LifeBuoy },
-          { value: "kompetensi", label: "Competency Matrix", icon: Grid3x3 },
-        ]}
+  const intervensiTersaring = React.useMemo(
+    () => (q ? intervensi.filter((r) => `${t(r, "nama")} ${t(r, "jabatan")}`.toLowerCase().includes(q)) : intervensi),
+    [intervensi, q],
+  );
+  const kompetensiTersaring = React.useMemo(
+    () => (q ? kompetensi.filter((r) => `${t(r, "nama")} ${t(r, "jabatan")}`.toLowerCase().includes(q)) : kompetensi),
+    [kompetensi, q],
+  );
+
+  const menyaring = q !== "" || sorotStatus !== null;
+
+  // Legenda dihitung dari SELURUH penilaian: menyorot satu status tidak boleh
+  // membuat dua status lain jatuh ke nol, kalau tidak ia tak bisa dipakai untuk
+  // kembali.
+  const rekapStatus = React.useMemo(
+    () =>
+      (Object.keys(STATUS_REVIEW) as StatusReview[]).map((st) => ({
+        key: st,
+        kode: KODE_REVIEW[st],
+        label: STATUS_REVIEW[st].label,
+        jumlah: penilaian.filter((r) => (t(r, "status") || "draf") === st).length,
+        warna: WARNA_REVIEW[st],
+        judulPenuh: STATUS_REVIEW[st].label,
+      })),
+    [penilaian],
+  );
+
+  const tampil =
+    tab === "intervensi" ? intervensiTersaring.length : tab === "kompetensi" ? kompetensiTersaring.length : penilaianTersaring.length;
+  const total = tab === "intervensi" ? intervensi.length : tab === "kompetensi" ? kompetensi.length : penilaian.length;
+
+  return (
+    <KerangkaModul ref={bingkai}>
+      <BilahModul
+        ikon={JUDUL_TAB[tab]?.ikon ?? Star}
+        gradien="from-fuchsia-500 via-purple-500 to-violet-600 shadow-purple-500/20"
+        judul={JUDUL_TAB[tab]?.judul ?? "Penilaian Kinerja"}
+        ringkas={
+          <>
+            {penilaian.length} penilaian · {selesaiDinilai.length} selesai · rerata {rerata}/100 ·{" "}
+            {intervensiBaru} intervensi belum ditangani
+          </>
+        }
+        cari={cari}
+        onCari={setCari}
+        cariPlaceholder="Cari nama, periode, penilai…"
+        hitung={{ tampil, total }}
+        menyaring={menyaring}
+        onBersihkan={() => {
+          setCari("");
+          setSorotStatus(null);
+        }}
+        panduan={PANDUAN_TAB[tab] ?? "kinerja"}
+        tampilan={
+          <SegmentedTabs
+            className="w-full sm:w-auto"
+            size="sm"
+            value={tab}
+            onChange={setTab}
+            items={[
+              { value: "penilaian", label: "Penilaian", icon: Star },
+              { value: "intervensi", label: "Intervensi", icon: LifeBuoy },
+              { value: "kompetensi", label: "Kompetensi", icon: Grid3x3 },
+            ]}
+          />
+        }
+        aksi={
+          bolehUbah && tab === "penilaian" ? (
+            <Button size="sm" className="shrink-0" onClick={() => setForm(kosong())}>
+              <Plus className="size-3.5" /> Penilaian
+            </Button>
+          ) : null
+        }
+        layarPenuh={layarPenuh}
+        onLayarPenuh={alih}
       />
 
-      {tab === "penilaian" && (
-        <DataTable
-          tableId="hcmos-penilaian"
-          columns={kolom()}
-          data={penilaian}
-          searchPlaceholder="Cari nama, periode…"
-          toolbar={
-            bolehUbah ? (
-              <Button size="sm" className="shrink-0" onClick={() => setForm(kosong())}>
-                <Plus className="size-3.5" /> Penilaian
-              </Button>
-            ) : undefined
-          }
-        />
-      )}
+      <div className="min-h-0 flex-1 overflow-auto p-3">
+        {/* Ringkasan penilaian sudah ditampilkan halamannya sendiri di atas, dan
+            jauh lebih berguna di sana karena punya penyebutnya. Menampilkannya
+            dua kali membuat pembacanya membandingkan dua angka yang sebenarnya
+            mengukur hal yang sama. */}
+        {tab !== "penilaian" && (
+          <div className="mb-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+            <StatTile icon={Star} label="Penilaian" value={penilaian.length} sub="seluruh periode" />
+            <StatTile
+              icon={LifeBuoy}
+              label="Request Intervensi"
+              value={intervensi.length}
+              sub={`${intervensiBaru} belum ditangani`}
+            />
+            <StatTile icon={ClipboardCheck} label="Penilaian Selesai" value={selesaiDinilai.length} sub="bukan draf" />
+            <StatTile icon={Star} label="Rerata Skor" value={rerata} sub="dari 100" />
+          </div>
+        )}
 
-      {tab === "intervensi" && <IntervensiBoard rows={intervensi} outlets={outlets} bolehUbah={bolehUbah} />}
+        {tab === "penilaian" && (
+          <DataTable
+            tableId="hcmos-penilaian"
+            columns={kolom()}
+            data={penilaianTersaring}
+            showSearch={false}
+            maxHeight="none"
+          />
+        )}
 
-      {tab === "kompetensi" && <KompetensiBoard rows={kompetensi} bolehUbah={bolehUbah} />}
+        {tab === "intervensi" && (
+          <IntervensiBoard rows={intervensiTersaring} outlets={outlets} bolehUbah={bolehUbah} />
+        )}
+
+        {tab === "kompetensi" && <KompetensiBoard rows={kompetensiTersaring} bolehUbah={bolehUbah} />}
+      </div>
+
+      <LegendaHitung
+        butir={rekapStatus}
+        sorot={sorotStatus}
+        onSorot={(k) => {
+          setSorotStatus((v) => (v === k ? null : (k as StatusReview)));
+          setTab("penilaian");
+        }}
+        kiri={<LencanaHak bolehUbah={bolehUbah} />}
+      />
 
       {form && <DialogKinerja key={form.id ?? "baru"} awal={form} outlets={outlets} onClose={() => setForm(null)} />}
       {dialog}
-    </div>
+    </KerangkaModul>
   );
 }
+
+/**
+ * Judul dan panduan mengikuti tab, bukan halamannya.
+ *
+ * Tiga menu sidebar bermuara ke satu modul ini, dan tabnya bisa berpindah tanpa
+ * halamannya dimuat ulang — jadi aturannya harus hidup di sini, bukan di berkas
+ * halaman. Pengisinya pun berbeda: penilaian diisi atasan langsung, kompetensi
+ * hanya dibaca, intervensi diajukan siapa pun yang membawahi orangnya.
+ */
+const JUDUL_TAB: Record<string, { judul: string; ikon: typeof Star }> = {
+  penilaian: { judul: "Penilaian Kinerja", ikon: Star },
+  intervensi: { judul: "Request Intervensi", ikon: LifeBuoy },
+  kompetensi: { judul: "Competency Matrix", ikon: Grid3x3 },
+};
+const PANDUAN_TAB: Record<string, string> = {
+  penilaian: "kinerja",
+  intervensi: "intervensi",
+  kompetensi: "kompetensi",
+};
+
+const KODE_REVIEW: Record<StatusReview, string> = { draf: "D", selesai: "S", ditinjau: "T" };
+const WARNA_REVIEW: Record<StatusReview, [string, string]> = {
+  draf: ["#d97706", "#fbbf24"],
+  selesai: ["#4f46e5", "#818cf8"],
+  ditinjau: ["#059669", "#34d399"],
+};
 
 const keForm = (r: BarisRekaman): FormKinerja => ({
   id: r.id,

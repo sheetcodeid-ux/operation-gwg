@@ -141,3 +141,54 @@ describe("Compensation & Benefit memakai bingkai itu", () => {
     expect(BOARD).toContain("baris={belumTampil.map");
   });
 });
+
+describe("Kinerja, Intervensi, dan Kompetensi memakai bingkai itu", () => {
+  const BOARD = baca("src/components/hcmos/kinerja-board.tsx");
+
+  it("bingkai, batang alat, legenda, dan layar penuh terpasang", () => {
+    for (const bagian of ["KerangkaModul", "BilahModul", "LegendaHitung", "useLayarPenuh"]) {
+      expect(BOARD, bagian).toContain(bagian);
+    }
+  });
+
+  it("judul dan panduan ikut tab, karena pengisinya memang berbeda", () => {
+    // Penilaian diisi atasan langsung, Kompetensi hanya dibaca, Intervensi
+    // diajukan siapa pun yang membawahi orangnya. Satu judul dan satu panduan
+    // untuk ketiganya akan keliru untuk dua di antaranya.
+    expect(BOARD).toContain("const JUDUL_TAB");
+    expect(BOARD).toContain("const PANDUAN_TAB");
+    expect(BOARD).toContain("panduan={PANDUAN_TAB[tab] ?? \"kinerja\"}");
+  });
+
+  it("pencarian berlaku di ketiga tab, tidak hilang saat berpindah", () => {
+    expect(BOARD).toContain("penilaianTersaring");
+    expect(BOARD).toContain("intervensiTersaring");
+    expect(BOARD).toContain("kompetensiTersaring");
+  });
+});
+
+describe("Case Management & Offboarding memakai bingkai itu", () => {
+  const BOARD = baca("src/components/hcmos/modul-boards.tsx");
+  const REKAMAN = baca("src/components/hcmos/rekaman.tsx");
+
+  it("bingkai, batang alat, legenda, dan layar penuh terpasang", () => {
+    const fn = BOARD.slice(BOARD.indexOf("export function RelasiBoard"), BOARD.indexOf("Fast Start, Fast Track"));
+    for (const bagian of ["KerangkaModul", "BilahModul", "LegendaHitung", "useLayarPenuh"]) {
+      expect(fn, bagian).toContain(bagian);
+    }
+  });
+
+  it("saringannya berlaku di kedua tab", () => {
+    // Perkara yang berujung resign muncul di dua tab sekaligus; saringan yang
+    // hilang saat berpindah memaksa mengetik ulang nama yang sama.
+    expect(BOARD).toContain("const kasusTampil");
+    expect(BOARD).toContain("const keluarTampil");
+    expect(BOARD).toContain("rows={kasusTampil}");
+    expect(BOARD).toContain("rows={keluarTampil}");
+  });
+
+  it("tabel rekaman bisa mematikan kotak carinya sendiri", () => {
+    expect(REKAMAN).toContain("showSearch = true");
+    expect(REKAMAN).toContain("showSearch={showSearch}");
+  });
+});

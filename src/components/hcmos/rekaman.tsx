@@ -62,6 +62,8 @@ export function RekamanBoard({
   labelTambah,
   toolbar,
   searchPlaceholder,
+  showSearch = true,
+  maxHeight,
 }: {
   tabel: TabelHcmos;
   rute: string;
@@ -75,6 +77,13 @@ export function RekamanBoard({
   labelTambah: string;
   toolbar?: React.ReactNode;
   searchPlaceholder?: string;
+  /**
+   * Modul yang sudah punya kotak cari sendiri di batang alatnya mematikan yang
+   * ini. Dua kotak cari yang menyaring hal berbeda — dan yang satu tidak
+   * menghitung yang lain — adalah cara tercepat membuat orang salah baca.
+   */
+  showSearch?: boolean;
+  maxHeight?: string;
 }) {
   const router = useRouter();
   const { confirm, dialog } = useConfirm();
@@ -124,6 +133,8 @@ export function RekamanBoard({
         tableId={tableId}
         columns={kolomLengkap}
         data={rows}
+        showSearch={showSearch}
+        maxHeight={maxHeight}
         searchPlaceholder={searchPlaceholder ?? "Cari…"}
         toolbar={
           <div className="contents">
