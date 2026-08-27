@@ -14,6 +14,7 @@ import { Button } from "@/components/ui/button";
 import { SegmentedTabs } from "@/components/ui/segmented-tabs";
 import { StatTile } from "@/components/ui/stat";
 import { ManageElearning } from "./manage";
+import { DaftarSubject, type BarisSubject, type PilihanPeserta } from "./daftar-subject";
 import type { ELearningCourse, ELearningDay } from "@/lib/elearning-shared";
 
 interface CertRow {
@@ -30,6 +31,9 @@ export function KelolaShell({
   essays,
   certificates,
   audit = [],
+  subjects,
+  pilihanPeserta,
+  courseAktifId,
 }: {
   course: ELearningCourse | null;
   days: ELearningDay[];
@@ -38,19 +42,41 @@ export function KelolaShell({
   essays: EssayReviewItem[];
   certificates: CertRow[];
   audit?: ElearningAuditRow[];
+  subjects: BarisSubject[];
+  pilihanPeserta: PilihanPeserta[];
+  courseAktifId: string | null;
 }) {
-  const [tab, setTab] = React.useState("materi");
+  const router = useRouter();
+  /**
+   * Daftar subject dulu, bukan langsung materi satu course.
+   *
+   * Halaman ini dulu membuka satu course aktif dan hanya itu — subject lain
+   * tidak punya jalan masuk sama sekali. Sekarang daftarnya yang jadi pintu,
+   * dan memilih satu subject barulah membuka materinya.
+   */
+  const [tab, setTab] = React.useState("subject");
+
+  // Subject dipilih lewat alamat, bukan keadaan di peramban: materinya,
+  // dashboard-nya, dan pesertanya semua dihitung di server untuk course itu.
+  const bukaSubject = (id: string) => {
+    router.push(`/elearning/kelola?course=${encodeURIComponent(id)}`);
+    setTab("materi");
+  };
+
   return (
     <div className="space-y-4">
       <SegmentedTabs
         value={tab}
         onChange={setTab}
         items={[
+          { value: "subject", label: `Subject (${subjects.length})` },
           { value: "materi", label: "Kelola Materi" },
           { value: "dashboard", label: "Dashboard & Peserta" },
         ]}
       />
-      {tab === "materi" ? (
+      {tab === "subject" ? (
+        <DaftarSubject rows={subjects} peserta={pilihanPeserta} courseAktifId={courseAktifId} onBuka={bukaSubject} />
+      ) : tab === "materi" ? (
         <ManageElearning course={course} days={days} />
       ) : dashboard ? (
         <DashboardView dashboard={dashboard} participants={participants} essays={essays} certificates={certificates} audit={audit} />

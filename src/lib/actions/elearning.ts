@@ -10,6 +10,7 @@ import { canReachMenu } from "@/lib/nav";
 import { canManageElearning, type LessonFileKind } from "@/lib/elearning-shared";
 import { faseKuisValid, LABEL_FASE, type FaseKuis } from "@/lib/elearning-fase";
 import { presignPut, r2Enabled, R2_PREFIX } from "@/lib/storage/r2";
+import { pesertaCourse, simpanPesertaCourse } from "@/lib/data/elearning-peserta";
 import {
   addLessonFile,
   addQuestion,
@@ -512,4 +513,51 @@ export async function markEssayPassedAction(resultId: string) {
   }
   revalidate();
   return { ok: true };
+}
+
+
+/* ─────────────────────────────── peserta subject ─────────────────────────────── */
+
+/**
+ * Menetapkan siapa saja peserta satu subject.
+ *
+ * Daftarnya DIGANTI seluruhnya, bukan ditambah — layar penyuntingannya
+ * menampilkan daftar utuh, jadi yang dikirimnya juga daftar utuh.
+ *
+ * Ingat aturan kosongnya (lihat `elearning-peserta.ts`): mengosongkan daftar
+ * TIDAK menutup subject, melainkan membukanya kembali untuk semua peserta.
+ * Karena itu pesan suksesnya menyebut akibatnya apa adanya — orang yang baru
+ * saja menghapus nama terakhir perlu tahu ia justru baru membukanya.
+ */
+export async function simpanPesertaSubjectAction(input: { courseId: string; userIds: string[] }) {
+  const user = await getSessionUser();
+  if (!manage(user)) return { error: "Tidak berwenang." };
+  if (!input.courseId) return { error: "Subject tidak dikenali." };
+
+  const res = await simpanPesertaCourse(input.courseId, input.userIds, user!.id);
+  if (!res.ok) return { error: res.error };
+
+  await logElearningAudit(
+    user!.id,
+    user!.name,
+    "update",
+    "course",
+    input.userIds.length === 0
+      ? "Peserta dikosongkan — subject kembali terbuka untuk semua"
+      : `Peserta ditetapkan: ${input.userIds.length} orang`,
+  ).catch(() => {});
+
+  revalidate();
+  return {
+    ok: true as const,
+    terbuka: input.userIds.length === 0,
+    jumlah: input.userIds.length,
+  };
+}
+
+/** Daftar peserta satu subject — untuk mengisi layar penyuntingannya. */
+export async function pesertaSubjectAction(courseId: string) {
+  const user = await getSessionUser();
+  if (!manage(user)) return { error: "Tidak berwenang." };
+  return { ok: true as const, userIds: await pesertaCourse(courseId) };
 }

@@ -5,6 +5,7 @@ import { requireSessionUser } from "@/lib/auth";
 import { canReachMenu } from "@/lib/nav";
 import { getActiveCourse, getCourseTree, getProgressMap, getQuizResultsMap } from "@/lib/data/elearning";
 import { canManageElearning } from "@/lib/elearning-shared";
+import { bolehIkut, pesertaCourse } from "@/lib/data/elearning-peserta";
 import { EmptyState } from "@/components/ui/page-header";
 import { LearnPath } from "@/components/elearning/learn-path";
 import { RuangBelajar } from "@/components/elearning/ruang-belajar";
@@ -16,7 +17,26 @@ export default async function ElearningPage() {
   if (!canReachMenu(user, "elearning")) redirect("/dashboard");
 
   const canManage = canManageElearning(user);
-  const course = await getActiveCourse();
+
+  /**
+   * Subject yang boleh dibuka orang ini.
+   *
+   * Subject tanpa daftar peserta TERBUKA untuk semua — itu perilaku lama, dan
+   * seluruh course yang sudah ada memang begitu. Begitu HC menetapkan peserta,
+   * subject itu berhenti terbuka. Yang tidak ditugaskan tidak boleh sekadar
+   * "tidak melihatnya di daftar": ia benar-benar tidak dimuat, supaya materi
+   * yang bukan untuknya tidak pernah sampai ke perambannya.
+   *
+   * Pengelola dikecualikan — merekalah yang menyusun materinya, dan tidak bisa
+   * meninjau apa yang tidak boleh mereka buka.
+   */
+  const aktif = await getActiveCourse();
+  const course =
+    !aktif || canManage
+      ? aktif
+      : bolehIkut(await pesertaCourse(aktif.id), user.id)
+        ? aktif
+        : null;
 
   // Kurikulumnya ditampilkan lebih dulu dan SELALU, juga ketika belum ada satu
   // pun materi digital yang terbit. Sebelumnya halaman ini berhenti di layar
@@ -48,13 +68,19 @@ export default async function ElearningPage() {
       {course ? (
         <LearnPath course={course} days={days} progress={progress} quizResults={quizResults} canManage={canManage} />
       ) : (
+        /* Dua sebab, dua kalimat. Yang belum ditugaskan tidak boleh dibilang
+           "materinya belum terbit" — materinya ADA, cuma bukan untuknya, dan
+           kalimat yang salah membuatnya menunggu sesuatu yang tidak akan
+           pernah datang alih-alih menanyakannya ke Human Capital. */
         <EmptyState
           icon={GraduationCap}
-          title="Materi digitalnya belum terbit"
+          title={aktif ? "Belum ada subject untuk Anda" : "Materi digitalnya belum terbit"}
           description={
-            canManage
-              ? "Kurikulum di atas sudah ditetapkan. Buka Kelola E-Learning untuk menyusun materinya jadi course yang bisa dikerjakan."
-              : "Kurikulum di atas sudah ditetapkan, materi digitalnya sedang disiapkan Learning & Development."
+            aktif
+              ? "Subject yang berjalan saat ini pesertanya sudah ditetapkan dan nama Anda belum termasuk. Hubungi Human Capital bila seharusnya ikut."
+              : canManage
+                ? "Kurikulum di atas sudah ditetapkan. Buka Kelola E-Learning untuk menyusun materinya jadi course yang bisa dikerjakan."
+                : "Kurikulum di atas sudah ditetapkan, materi digitalnya sedang disiapkan Learning & Development."
           }
         />
       )}
