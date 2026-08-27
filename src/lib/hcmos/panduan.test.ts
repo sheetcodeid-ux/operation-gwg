@@ -89,7 +89,9 @@ describe("terpasang di halamannya, bukan cuma tersedia", () => {
     bagan: "src/components/hcmos/bagan-organisasi.tsx",
     struktur: "src/app/(app)/hc-mos/struktur/page.tsx",
     karyawan: "src/app/(app)/hc-mos/karyawan/page.tsx",
-    kontrak: "src/app/(app)/hc-mos/kontrak/page.tsx",
+    // Modul yang sudah memakai bingkai kit: panduannya duduk di batang alat
+    // modulnya, karena halamannya sengaja tidak lagi punya kepala halaman.
+    kontrak: "src/components/hcmos/kontrak-board.tsx",
     rekrutmen: "src/app/(app)/hc-mos/rekrutmen/page.tsx",
     modul: "src/app/(app)/hc-mos/modul/page.tsx",
     "fast-track": "src/app/(app)/hc-mos/fast-track/page.tsx",
@@ -111,7 +113,9 @@ describe("terpasang di halamannya, bukan cuma tersedia", () => {
   it("tiap halaman HC memasang panduannya sendiri", () => {
     for (const [id, berkas] of Object.entries(HALAMAN)) {
       const isi = readFileSync(join(process.cwd(), berkas), "utf8");
-      expect(isi, `${berkas} belum memasang PanduanModul`).toContain("PanduanModul");
+      // Sebagian memasangnya langsung, sebagian lewat batang alat modul yang
+      // meneruskannya — keduanya berakhir pada tombol yang sama.
+      expect(isi, `${berkas} belum memasang panduan`).toMatch(/PanduanModul|BilahModul/);
       // Halaman bertab memilih panduannya lewat peta tab, bukan menuliskannya
       // langsung di atributnya — keduanya sah.
       const terpasang = isi.includes(`panduan="${id}"`) || isi.includes(`: "${id}"`);

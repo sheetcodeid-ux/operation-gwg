@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import {
   Building2,
   CalendarClock,
+  FileSignature,
   ClipboardList,
   Loader2,
   Lock,
@@ -33,9 +34,17 @@ import { SegmentedTabs } from "@/components/ui/segmented-tabs";
 import { StatTile } from "@/components/ui/stat";
 import { useConfirm } from "@/components/ui/confirm";
 import {
+  BilahModul,
+  KerangkaModul,
+  LegendaHitung,
+  LencanaHak,
+  useLayarPenuh,
+} from "@/components/hcmos/kit-modul";
+import {
   BRANDS,
   KATEGORI_TURNOVER,
   PRIORITAS_META,
+  SEGERA_BERAKHIR_HARI,
   STATUS_KONTRAK_META,
   durasiBulan,
   masaKerja,
@@ -46,6 +55,7 @@ import {
   type JenisKontrak,
   type PrioritasRenewal,
 } from "@/lib/hcmos/kontrak";
+import type { StatusKontrak } from "@/lib/hcmos/kontrak";
 import { uploadOne } from "@/lib/upload-client";
 import { pesanGalatAksi } from "@/lib/chunk-recovery";
 import { uploadKontrakFileAction } from "@/lib/actions/hcmos";
@@ -116,8 +126,11 @@ export function KontrakBoard({
 }) {
   const [tab, setTab] = React.useState("outlet");
   const [brand, setBrand] = React.useState("all");
+  const [sorotStatus, setSorotStatus] = React.useState<StatusKontrak | null>(null);
+  const [cari, setCari] = React.useState("");
   const [form, setForm] = React.useState<FormKontrak | null>(null);
   const [lapor, setLapor] = React.useState<OutletKontrak | null>(null);
+  const { bingkai, layarPenuh, alih } = useLayarPenuh();
 
   // Baris Manajemen (tanpa outlet) tidak bisa dijawab daftar outlet — yang
   // menentukan adalah wewenang atas data HC, dan itu ditetapkan server.
@@ -126,17 +139,55 @@ export function KontrakBoard({
     [outletSaya, bolehManajemen],
   );
 
-  const outletTersaring = React.useMemo(
-    () => (brand === "all" ? outlets : outlets.filter((o) => o.brand === brand)),
-    [outlets, brand],
-  );
-  const kontrakTersaring = React.useMemo(
-    () => (brand === "all" ? kontrak : kontrak.filter((k) => k.brand === brand)),
-    [kontrak, brand],
-  );
+  const outletTersaring = React.useMemo(() => {
+    const dasar = brand === "all" ? outlets : outlets.filter((o) => o.brand === brand);
+    const q = cari.trim().toLowerCase();
+    if (!q) return dasar;
+    return dasar.filter((o) => `${o.name} ${o.code ?? ""} ${o.brand ?? ""}`.toLowerCase().includes(q));
+  }, [outlets, brand, cari]);
+
+  /**
+   * Saringan diterapkan berurutan — brand, lalu status, baru pencarian.
+   * Urutannya menentukan angka "n dari total" di kotak pencarian; dibalik,
+   * penghitungnya melaporkan jumlah yang tidak sesuai dengan yang tampak.
+   */
+  const kontrakTersaring = React.useMemo(() => {
+    let hasil = brand === "all" ? kontrak : kontrak.filter((k) => k.brand === brand);
+    if (sorotStatus) hasil = hasil.filter((k) => k.status === sorotStatus);
+    const q = cari.trim().toLowerCase();
+    if (!q) return hasil;
+    return hasil.filter((k) =>
+      `${k.nama} ${k.nip ?? ""} ${k.jabatan ?? ""} ${k.outletName} ${k.noKontrak ?? ""}`.toLowerCase().includes(q),
+    );
+  }, [kontrak, brand, sorotStatus, cari]);
 
   const aktif = kontrak.filter((k) => !k.keluar);
   const lapors = outlets.filter((o) => o.sudahLapor).length;
+  const menyaring = brand !== "all" || sorotStatus !== null || cari.trim() !== "";
+
+  /**
+   * Legenda status dihitung dari SELURUH baris, bukan dari yang sedang tampak.
+   *
+   * Dihitung dari yang tampak, menyorot satu status akan membuat tiga status
+   * lainnya jatuh ke nol — dan legendanya berhenti bisa dipakai untuk kembali.
+   */
+  const rekapStatus = React.useMemo(() => {
+    const dasar = brand === "all" ? kontrak : kontrak.filter((k) => k.brand === brand);
+    return STATUS_URUT.map((st) => ({
+      key: st,
+      kode: KODE_STATUS[st],
+      label: STATUS_KONTRAK_META[st].label,
+      jumlah: dasar.filter((k) => k.status === st).length,
+      warna: WARNA_STATUS[st],
+      judulPenuh: STATUS_KONTRAK_META[st].label,
+    }));
+  }, [kontrak, brand]);
+
+  const bersihkan = () => {
+    setBrand("all");
+    setSorotStatus(null);
+    setCari("");
+  };
 
   const saringBrand = (
     <Combobox
@@ -144,89 +195,132 @@ export function KontrakBoard({
       searchable={false}
       value={brand}
       onChange={setBrand}
-      className="w-44 shrink-0"
+      className="w-full shrink-0 sm:w-44"
       options={[{ value: "all", label: "Semua Brand" }, ...BRANDS.map((b) => ({ value: b, label: b }))]}
     />
   );
 
-  return (
-    <div className="space-y-4">
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-        <StatTile icon={Building2} label="Outlet" value={outlets.length} sub="dalam lingkup Anda" />
-        <StatTile icon={Users} label="Karyawan Aktif" value={aktif.length} sub="belum keluar" />
-        <StatTile
-          icon={CalendarClock}
-          label="Segera Berakhir"
-          value={aktif.filter((k) => k.status === "segera_berakhir").length}
-          sub="≤ 60 hari lagi"
-        />
-        <StatTile
-          icon={ClipboardList}
-          label={`Lapor ${periodeLabel(periode)}`}
-          value={`${lapors}/${outlets.length}`}
-          sub="Update Bulanan"
-        />
-      </div>
+  const jumlahTampil = tab === "karyawan" ? kontrakTersaring.length : outletTersaring.length;
+  const jumlahTotal = tab === "karyawan" ? kontrak.length : outlets.length;
 
-      <SegmentedTabs
-        className="max-w-xl"
-        value={tab}
-        onChange={setTab}
-        items={[
-          { value: "outlet", label: "Outlet", icon: Building2 },
-          { value: "karyawan", label: "Karyawan", icon: Users },
-          { value: "lapor", label: "Update Bulanan", icon: ClipboardList },
-        ]}
+  return (
+    <KerangkaModul ref={bingkai}>
+      <BilahModul
+        ikon={FileSignature}
+        gradien="from-indigo-500 via-violet-500 to-purple-600 shadow-violet-500/20"
+        judul="Kontrak Tracker"
+        ringkas={
+          <>
+            {aktif.length} karyawan aktif · {outlets.length} outlet · {aktif.filter((k) => k.status === "segera_berakhir").length}{" "}
+            segera berakhir · lapor {lapors}/{outlets.length}
+          </>
+        }
+        cari={cari}
+        onCari={setCari}
+        cariPlaceholder={tab === "karyawan" ? "Cari nama, NIP, jabatan…" : "Cari outlet…"}
+        hitung={{ tampil: jumlahTampil, total: jumlahTotal }}
+        menyaring={menyaring}
+        onBersihkan={bersihkan}
+        panduan="kontrak"
+        saringan={saringBrand}
+        tampilan={
+          <SegmentedTabs
+            className="w-full sm:w-auto"
+            size="sm"
+            value={tab}
+            onChange={setTab}
+            items={[
+              { value: "outlet", label: "Outlet", icon: Building2 },
+              { value: "karyawan", label: "Karyawan", icon: Users },
+              { value: "lapor", label: "Update Bulanan", icon: ClipboardList },
+            ]}
+          />
+        }
+        aksi={
+          // Satu-satunya pintu masuk karyawan Manajemen. Tombol "Tambah" yang
+          // lain menempel pada barisnya masing-masing di tab Outlet, dan
+          // karyawan kantor pusat tidak punya baris outlet untuk ditumpangi.
+          bolehManajemen && tab === "karyawan" ? (
+            <Button size="sm" variant="subtle" onClick={() => setForm(kosong(null))}>
+              <Plus className="size-3.5" /> Karyawan Manajemen
+            </Button>
+          ) : null
+        }
+        layarPenuh={layarPenuh}
+        onLayarPenuh={alih}
       />
 
-      {tab === "outlet" && (
-        <TabelOutlet
-          rows={outletTersaring}
-          toolbar={saringBrand}
-          bolehTulis={bolehTulis}
-          onTambah={(o) => setForm(kosong(o.id))}
-          onLapor={setLapor}
-        />
-      )}
+      <div className="min-h-0 flex-1 overflow-auto p-3">
+        {/* Angka ringkas dulu, daftarnya menyusul. Pertanyaan pertama saat
+            membuka modul ini selalu "berapa yang harus diperpanjang bulan ini",
+            bukan "siapa saja karyawannya". */}
+        <div className="mb-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+          <StatTile icon={Building2} label="Outlet" value={outlets.length} sub="dalam lingkup Anda" />
+          <StatTile icon={Users} label="Karyawan Aktif" value={aktif.length} sub="belum keluar" />
+          <StatTile
+            icon={CalendarClock}
+            label="Segera Berakhir"
+            value={aktif.filter((k) => k.status === "segera_berakhir").length}
+            sub={`≤ ${SEGERA_BERAKHIR_HARI} hari lagi`}
+          />
+          <StatTile
+            icon={ClipboardList}
+            label={`Lapor ${periodeLabel(periode)}`}
+            value={`${lapors}/${outlets.length}`}
+            sub="Update Bulanan"
+          />
+        </div>
 
-      {tab === "karyawan" && (
-        <TabelKaryawan
-          rows={kontrakTersaring}
-          toolbar={
-            <div className="flex flex-wrap items-center gap-2">
-              {saringBrand}
-              {/* Satu-satunya pintu masuk karyawan Manajemen. Tombol "Tambah"
-                  yang lain menempel pada barisnya masing-masing di tab Outlet,
-                  dan karyawan kantor pusat tidak punya baris outlet untuk
-                  ditumpangi. */}
-              {bolehManajemen && (
-                <Button size="sm" variant="subtle" onClick={() => setForm(kosong(null))}>
-                  <Plus className="size-3.5" /> Karyawan Manajemen
-                </Button>
-              )}
-            </div>
-          }
-          bolehTulis={bolehTulis}
-          onUbah={(k) => setForm(keForm(k))}
-        />
-      )}
+        {tab === "outlet" && (
+          <TabelOutlet
+            rows={outletTersaring}
+            bolehTulis={bolehTulis}
+            onTambah={(o) => setForm(kosong(o.id))}
+            onLapor={setLapor}
+          />
+        )}
 
-      {tab === "lapor" && (
-        <PanelLapor rows={outletTersaring} periode={periode} bolehTulis={bolehTulis} onLapor={setLapor} />
-      )}
+        {tab === "karyawan" && (
+          <TabelKaryawan rows={kontrakTersaring} bolehTulis={bolehTulis} onUbah={(k) => setForm(keForm(k))} />
+        )}
+
+        {tab === "lapor" && (
+          <PanelLapor rows={outletTersaring} periode={periode} bolehTulis={bolehTulis} onLapor={setLapor} />
+        )}
+      </div>
+
+      <LegendaHitung
+        butir={rekapStatus}
+        sorot={sorotStatus}
+        onSorot={(k) => {
+          setSorotStatus((s) => (s === k ? null : (k as StatusKontrak)));
+          setTab("karyawan");
+        }}
+        kiri={<LencanaHak bolehUbah={outletSaya.length > 0 || bolehManajemen} catatan="Bisa mengisi" />}
+      />
 
       {form && (
-        <DialogKaryawan
-          key={form.id ?? "baru"}
-          awal={form}
-          outlets={outlets}
-          onClose={() => setForm(null)}
-        />
+        <DialogKaryawan key={form.id ?? "baru"} awal={form} outlets={outlets} onClose={() => setForm(null)} />
       )}
       {lapor && <DialogLapor key={lapor.id} outlet={lapor} periode={periode} onClose={() => setLapor(null)} />}
-    </div>
+    </KerangkaModul>
   );
 }
+
+/** Urutan legenda mengikuti perjalanan satu kontrak, bukan abjad. */
+const STATUS_URUT: StatusKontrak[] = ["aktif", "segera_berakhir", "berakhir", "belum_ada"];
+const KODE_STATUS: Record<StatusKontrak, string> = {
+  aktif: "A",
+  segera_berakhir: "SB",
+  berakhir: "B",
+  belum_ada: "—",
+};
+const WARNA_STATUS: Record<StatusKontrak, [string, string]> = {
+  aktif: ["#059669", "#34d399"],
+  segera_berakhir: ["#d97706", "#fbbf24"],
+  berakhir: ["#dc2626", "#f87171"],
+  belum_ada: ["#64748b", "#94a3b8"],
+};
 
 const keForm = (k: KontrakRow): FormKontrak => ({
   id: k.id,
@@ -345,13 +439,11 @@ function BerkasKontrak({
 
 function TabelOutlet({
   rows,
-  toolbar,
   bolehTulis,
   onTambah,
   onLapor,
 }: {
   rows: OutletKontrak[];
-  toolbar: React.ReactNode;
   bolehTulis: (id: string) => boolean;
   onTambah: (o: OutletKontrak) => void;
   onLapor: (o: OutletKontrak) => void;
@@ -439,19 +531,20 @@ function TabelOutlet({
     [bolehTulis, onTambah, onLapor],
   );
 
-  return <DataTable tableId="hcmos-outlet" columns={columns} data={rows} toolbar={toolbar} searchPlaceholder="Cari outlet…" />;
+  // Pencarian dan saringannya sudah naik ke batang alat modul. Dibiarkan di
+  // sini juga, ada dua kotak cari di satu layar yang menyaring hal berbeda —
+  // dan yang satu tidak menghitung yang lain.
+  return <DataTable tableId="hcmos-outlet" columns={columns} data={rows} showSearch={false} maxHeight="none" />;
 }
 
 /* ──────────────────────────── tabel karyawan ──────────────────────────── */
 
 function TabelKaryawan({
   rows,
-  toolbar,
   bolehTulis,
   onUbah,
 }: {
   rows: KontrakRow[];
-  toolbar: React.ReactNode;
   /** Menerima null: baris Manajemen memang tidak punya outlet. */
   bolehTulis: (id: string | null) => boolean;
   onUbah: (k: KontrakRow) => void;
@@ -570,13 +663,7 @@ function TabelKaryawan({
 
   return (
     <>
-      <DataTable
-        tableId="hcmos-karyawan"
-        columns={columns}
-        data={rows}
-        toolbar={toolbar}
-        searchPlaceholder="Cari karyawan…"
-      />
+      <DataTable tableId="hcmos-karyawan" columns={columns} data={rows} showSearch={false} maxHeight="none" />
       {dialog}
     </>
   );

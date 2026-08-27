@@ -1,4 +1,3 @@
-import { FileSignature } from "lucide-react";
 import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 import { requireSessionUser } from "@/lib/auth";
@@ -8,8 +7,6 @@ import { canAccessOutlet } from "@/lib/rbac";
 import { listKontrak, rekapOutlet } from "@/lib/data/hcmos";
 import { bolehUbahHc } from "@/lib/hcmos/akses";
 import { periodeKey } from "@/lib/hcmos/kontrak";
-import { PageHeader } from "@/components/ui/page-header";
-import { PanduanModul } from "@/components/hcmos/panduan-modul";
 import { KonteksModul } from "@/components/hcmos/konteks-modul";
 import { KontrakBoard } from "@/components/hcmos/kontrak-board";
 
@@ -29,14 +26,11 @@ export default async function KontrakPage() {
   const semua = getOutlets();
   const outletSaya = outlets.filter((o) => canAccessOutlet(user, o.id, semua)).map((o) => o.id);
 
+  // Tanpa kepala halaman: bingkai modulnya sudah membawa judul, angka ringkas,
+  // pencarian, dan panduannya sendiri — sama seperti Struktur Organisasi dan
+  // Matriks RACI. Dua judul untuk satu layar hanya memakan tinggi.
   return (
-    <div className="w-full">
-      <PageHeader
-        icon={FileSignature}
-        title="Kontrak Tracker"
-        description="PKWT/PKWTT seluruh outlet dan Manajemen — masa berlaku, prioritas perpanjangan, dan Update Bulanan Supervisor."
-        actions={<PanduanModul panduan="kontrak" />}
-      />
+    <div className="flex w-full flex-col">
       <KonteksModul panduan="kontrak" />
       {/* Karyawan Manajemen tidak punya outlet, jadi wewenangnya tidak bisa
           diturunkan dari daftar outlet mana pun — ditentukan terpisah, di
