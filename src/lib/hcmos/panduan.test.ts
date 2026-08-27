@@ -88,7 +88,7 @@ describe("terpasang di halamannya, bukan cuma tersedia", () => {
     raci: "src/components/hcmos/matriks-raci.tsx",
     bagan: "src/components/hcmos/bagan-organisasi.tsx",
     struktur: "src/app/(app)/hc-mos/struktur/page.tsx",
-    karyawan: "src/app/(app)/hc-mos/karyawan/page.tsx",
+    karyawan: "src/components/hcmos/karyawan-board.tsx",
     // Modul yang sudah memakai bingkai kit: panduannya duduk di batang alat
     // modulnya, karena halamannya sengaja tidak lagi punya kepala halaman.
     kontrak: "src/components/hcmos/kontrak-board.tsx",
@@ -101,7 +101,7 @@ describe("terpasang di halamannya, bukan cuma tersedia", () => {
     talent: "src/app/(app)/hc-mos/talent/page.tsx",
     kompensasi: "src/components/hcmos/kompensasi-board.tsx",
     relasi: "src/components/hcmos/modul-boards.tsx",
-    dokumen: "src/app/(app)/hc-mos/dokumen/page.tsx",
+    dokumen: "src/components/hcmos/dokumen-board.tsx",
     monitoring: "src/app/(app)/hc-mos/monitoring/page.tsx",
     kpi: "src/app/(app)/hc-mos/kpi/page.tsx",
     hc_pengajuan: "src/app/(app)/hc/pengajuan/page.tsx",

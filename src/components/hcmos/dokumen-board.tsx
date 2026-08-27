@@ -3,7 +3,7 @@
 import * as React from "react";
 import { type ColumnDef } from "@tanstack/react-table";
 import { useRouter } from "next/navigation";
-import { ExternalLink, Eye, Loader2, Pencil, Plus, Trash2 } from "lucide-react";
+import { ExternalLink, Eye, FileText, Loader2, Pencil, Plus, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -13,6 +13,13 @@ import { DatePicker } from "@/components/ui/date-picker";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { Field, Input, Textarea } from "@/components/ui/input";
 import { useConfirm } from "@/components/ui/confirm";
+import {
+  BilahModul,
+  KerangkaModul,
+  LegendaHitung,
+  LencanaHak,
+  useLayarPenuh,
+} from "@/components/hcmos/kit-modul";
 import { HC_PILLARS } from "@/lib/hcmos/pillars";
 import {
   JENIS_DOKUMEN,
@@ -64,14 +71,24 @@ export function DokumenBoard({
   const [pilar, setPilar] = React.useState(pilarAwal || "all");
   const [form, setForm] = React.useState<FormDokumen | null>(null);
   const [baca, setBaca] = React.useState<DokumenRow | null>(null);
+  const [cari, setCari] = React.useState("");
+  const [sorotStatus, setSorotStatus] = React.useState<StatusDokumen | null>(null);
+  const { bingkai, layarPenuh, alih } = useLayarPenuh();
 
-  const tersaring = React.useMemo(
-    () =>
-      rows.filter(
-        (r) => r.jenis === jenis && (jenis !== "sop" || pilar === "all" || r.pilar === pilar),
-      ),
+  const sejenis = React.useMemo(
+    () => rows.filter((r) => r.jenis === jenis && (jenis !== "sop" || pilar === "all" || r.pilar === pilar)),
     [rows, jenis, pilar],
   );
+
+  const q = cari.trim().toLowerCase();
+  const tersaring = React.useMemo(() => {
+    let hasil = sejenis;
+    if (sorotStatus) hasil = hasil.filter((r) => r.status === sorotStatus);
+    if (!q) return hasil;
+    return hasil.filter((r) =>
+      `${r.judul} ${r.ringkasan ?? ""} ${r.pemilik ?? ""} ${r.versi ?? ""}`.toLowerCase().includes(q),
+    );
+  }, [sejenis, sorotStatus, q]);
 
   const hapus = React.useCallback(
     async (d: DokumenRow) => {
@@ -170,21 +187,42 @@ export function DokumenBoard({
     [bolehUbah, hapus],
   );
 
+  // Legenda dihitung dari dokumen sejenis, bukan dari yang sedang tampak:
+  // menyorot "arsip" tidak boleh membuat "aktif" jatuh ke nol.
+  const rekapStatus = (["draf", "aktif", "arsip"] as StatusDokumen[]).map((st) => ({
+    key: st,
+    kode: KODE_DOKUMEN[st],
+    label: STATUS_DOKUMEN_META[st].label,
+    jumlah: sejenis.filter((r) => r.status === st).length,
+    warna: WARNA_DOKUMEN[st],
+    judulPenuh: STATUS_DOKUMEN_META[st].label,
+  }));
+
   return (
-    <div className="space-y-3">
-      <DataTable
-        tableId={`hcmos-dokumen-${jenis}`}
-        columns={columns}
-        data={tersaring}
-        searchPlaceholder="Cari judul dokumen…"
-        toolbar={
-          <div className="contents">
+    <KerangkaModul ref={bingkai}>
+      <BilahModul
+        ikon={FileText}
+        gradien="from-slate-500 via-zinc-500 to-stone-600 shadow-zinc-500/20"
+        judul={JENIS_DOKUMEN_META[jenis].label}
+        ringkas={JENIS_DOKUMEN_META[jenis].ringkas}
+        cari={cari}
+        onCari={setCari}
+        cariPlaceholder="Cari judul, ringkasan, pemilik…"
+        hitung={{ tampil: tersaring.length, total: sejenis.length }}
+        menyaring={q !== "" || sorotStatus !== null}
+        onBersihkan={() => {
+          setCari("");
+          setSorotStatus(null);
+        }}
+        panduan="dokumen"
+        saringan={
+          <>
             <Combobox
               portal
               searchable={false}
               value={jenis}
               onChange={(v) => setJenis(v as JenisDokumen)}
-              className="w-48 shrink-0"
+              className="w-full shrink-0 sm:w-48"
               options={JENIS_DOKUMEN.map((j) => ({ value: j, label: JENIS_DOKUMEN_META[j].label }))}
             />
             {/* Saringan pilar hanya masuk akal untuk SOP — jenis lain berlaku
@@ -195,33 +233,60 @@ export function DokumenBoard({
                 portal
                 value={pilar}
                 onChange={setPilar}
-                className="w-56 shrink-0"
+                className="w-full shrink-0 sm:w-56"
                 options={[
                   { value: "all", label: "Semua Pilar" },
                   ...HC_PILLARS.map((p) => ({ value: p.slug, label: p.label })),
                 ]}
               />
             )}
-            {bolehUbah && (
-              <Button
-                size="sm"
-                className="shrink-0"
-                onClick={() => setForm(kosong(jenis, jenis === "sop" && pilar !== "all" ? pilar : ""))}
-              >
-                <Plus className="size-3.5" /> Dokumen
-              </Button>
-            )}
-          </div>
+          </>
         }
+        aksi={
+          bolehUbah ? (
+            <Button
+              size="sm"
+              className="shrink-0"
+              onClick={() => setForm(kosong(jenis, jenis === "sop" && pilar !== "all" ? pilar : ""))}
+            >
+              <Plus className="size-3.5" /> Dokumen
+            </Button>
+          ) : null
+        }
+        layarPenuh={layarPenuh}
+        onLayarPenuh={alih}
       />
-      <p className="text-[11px] text-muted-foreground">{JENIS_DOKUMEN_META[jenis].ringkas}</p>
+
+      <div className="min-h-0 flex-1 overflow-auto p-3">
+        <DataTable
+          tableId={`hcmos-dokumen-${jenis}`}
+          columns={columns}
+          data={tersaring}
+          showSearch={false}
+          maxHeight="none"
+        />
+      </div>
+
+      <LegendaHitung
+        butir={rekapStatus}
+        sorot={sorotStatus}
+        onSorot={(k) => setSorotStatus((v) => (v === k ? null : (k as StatusDokumen)))}
+        kiri={<LencanaHak bolehUbah={bolehUbah} />}
+      />
 
       {form && <DialogDokumen key={form.id ?? "baru"} awal={form} onClose={() => setForm(null)} />}
       {baca && <DialogBaca key={baca.id} d={baca} onClose={() => setBaca(null)} />}
       {dialog}
-    </div>
+    </KerangkaModul>
   );
 }
+
+const KODE_DOKUMEN: Record<StatusDokumen, string> = { draf: "D", aktif: "A", arsip: "R" };
+const WARNA_DOKUMEN: Record<StatusDokumen, [string, string]> = {
+  draf: ["#d97706", "#fbbf24"],
+  aktif: ["#059669", "#34d399"],
+  arsip: ["#64748b", "#94a3b8"],
+};
 
 const keForm = (d: DokumenRow): FormDokumen => ({
   id: d.id,

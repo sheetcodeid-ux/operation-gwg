@@ -2,11 +2,16 @@
 
 import * as React from "react";
 import { type ColumnDef } from "@tanstack/react-table";
-import { Building2, UserMinus, UserPlus, Users } from "lucide-react";
+import { Building2, Database, UserMinus, UserPlus, Users } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { DataTable } from "@/components/ui/data-table";
 import { SegmentedTabs } from "@/components/ui/segmented-tabs";
 import { StatTile } from "@/components/ui/stat";
+import {
+  BilahModul,
+  KerangkaModul,
+  useLayarPenuh,
+} from "@/components/hcmos/kit-modul";
 import { GrafikBatang, GrafikDonat } from "./grafik";
 import { kelompokDari } from "@/lib/hcmos/struktur";
 import { formatDate } from "@/lib/utils";
@@ -40,6 +45,21 @@ export function KaryawanBoard({
   outlet: KontrakRow[];
 }) {
   const [scope, setScope] = React.useState<HcScope>("manajemen");
+  const [cari, setCari] = React.useState("");
+  const { bingkai, layarPenuh, alih } = useLayarPenuh();
+
+  const q = cari.trim().toLowerCase();
+  const manajemenTampil = React.useMemo(
+    () =>
+      q
+        ? manajemen.filter((k) => `${k.nama} ${k.email} ${k.departemen} ${k.jabatan}`.toLowerCase().includes(q))
+        : manajemen,
+    [manajemen, q],
+  );
+  const cocokOutlet = React.useCallback(
+    (k: KontrakRow) => !q || `${k.nama} ${k.outletName} ${k.jabatan ?? ""} ${k.nip ?? ""}`.toLowerCase().includes(q),
+    [q],
+  );
 
   const kolomManajemen = React.useMemo<ColumnDef<KaryawanManajemen>[]>(
     () => [
@@ -161,6 +181,9 @@ export function KaryawanBoard({
     [outlet],
   );
 
+  const outletTampil = React.useMemo(() => outlet.filter(cocokOutlet), [outlet, cocokOutlet]);
+  const keluarTampil = React.useMemo(() => keluarOutlet.filter(cocokOutlet), [keluarOutlet, cocokOutlet]);
+
   const kolomKeluar = React.useMemo<ColumnDef<KontrakRow>[]>(
     () => [
       {
@@ -204,17 +227,46 @@ export function KaryawanBoard({
   );
 
   return (
-    <div className="space-y-4">
-      <SegmentedTabs
-        className="max-w-md"
-        value={scope}
-        onChange={(v) => setScope(v as HcScope)}
-        items={[
-          { value: "manajemen", label: SCOPE_LABEL.manajemen, icon: Building2 },
-          { value: "outlet", label: SCOPE_LABEL.outlet, icon: Users },
-        ]}
+    <KerangkaModul ref={bingkai}>
+      <BilahModul
+        ikon={Database}
+        gradien="from-teal-500 via-emerald-500 to-green-600 shadow-emerald-500/20"
+        judul="Database Karyawan"
+        ringkas={
+          <>
+            {SCOPE_LABEL[scope]} ·{" "}
+            {scope === "manajemen"
+              ? `${ringkas.aktif} aktif · ${ringkas.nonaktif} nonaktif · ${ringkas.kelompok.length} kelompok divisi`
+              : `${outlet.length} karyawan outlet — sumber Kontrak Tracker`}
+          </>
+        }
+        cari={cari}
+        onCari={setCari}
+        cariPlaceholder={scope === "manajemen" ? "Cari nama, email, departemen…" : "Cari nama, outlet…"}
+        hitung={{
+          tampil: scope === "manajemen" ? manajemenTampil.length : outletTampil.length,
+          total: scope === "manajemen" ? manajemen.length : outlet.length,
+        }}
+        menyaring={q !== ""}
+        onBersihkan={() => setCari("")}
+        panduan="karyawan"
+        saringan={
+          <SegmentedTabs
+            className="w-full sm:w-auto"
+            size="sm"
+            value={scope}
+            onChange={(v) => setScope(v as HcScope)}
+            items={[
+              { value: "manajemen", label: SCOPE_LABEL.manajemen, icon: Building2 },
+              { value: "outlet", label: SCOPE_LABEL.outlet, icon: Users },
+            ]}
+          />
+        }
+        layarPenuh={layarPenuh}
+        onLayarPenuh={alih}
       />
 
+      <div className="min-h-0 flex-1 space-y-4 overflow-auto p-3">
       {scope === "manajemen" ? (
         <>
           <div className="grid grid-cols-[minmax(0,1fr)] gap-3 sm:grid-cols-2 xl:grid-cols-4">
@@ -242,8 +294,9 @@ export function KaryawanBoard({
           <DataTable
             tableId="hcmos-karyawan-manajemen"
             columns={kolomManajemen}
-            data={manajemen}
-            searchPlaceholder="Cari nama, email, departemen…"
+            data={manajemenTampil}
+            showSearch={false}
+            maxHeight="none"
           />
           <p className="text-[11px] text-muted-foreground">
             Sumber: User Management. Penambahan, perubahan jabatan, dan penonaktifan dilakukan di sana.
@@ -254,8 +307,9 @@ export function KaryawanBoard({
           <DataTable
             tableId="hcmos-karyawan-outlet"
             columns={kolomOutlet}
-            data={outlet}
-            searchPlaceholder="Cari nama, outlet…"
+            data={outletTampil}
+            showSearch={false}
+            maxHeight="none"
           />
           <p className="text-[11px] text-muted-foreground">
             Sumber: Kontrak Tracker. Data diisi Supervisor outlet masing-masing.
@@ -267,13 +321,15 @@ export function KaryawanBoard({
               <DataTable
                 tableId="hcmos-karyawan-keluar"
                 columns={kolomKeluar}
-                data={keluarOutlet}
-                searchPlaceholder="Cari nama, outlet…"
+                data={keluarTampil}
+                showSearch={false}
+                maxHeight="none"
               />
             </>
           )}
         </>
       )}
-    </div>
+      </div>
+    </KerangkaModul>
   );
 }

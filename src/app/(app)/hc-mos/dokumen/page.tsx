@@ -1,4 +1,4 @@
-import { ArrowLeft, HeartHandshake, ScrollText } from "lucide-react";
+import { ArrowLeft, HeartHandshake } from "lucide-react";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { redirect } from "next/navigation";
@@ -6,8 +6,6 @@ import { requireSessionUser } from "@/lib/auth";
 import { canReachMenu } from "@/lib/nav";
 import { listDokumen } from "@/lib/data/hcmos-dokumen";
 import { JENIS_DOKUMEN, type JenisDokumen } from "@/lib/hcmos/dokumen";
-import { PageHeader } from "@/components/ui/page-header";
-import { PanduanModul } from "@/components/hcmos/panduan-modul";
 import { KonteksModul } from "@/components/hcmos/konteks-modul";
 import { DokumenBoard } from "@/components/hcmos/dokumen-board";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -41,8 +39,10 @@ export default async function DokumenPage({
   const bolehUbah =
     user.role === "super_admin" || user.role === "legal" || user.department === "Human Capital";
 
+  // Tanpa kepala halaman: bingkai modulnya membawa judul per jenis dokumen,
+  // pencarian, dan panduannya sendiri.
   return (
-    <div className="w-full">
+    <div className="flex w-full flex-col">
       <Link
         href="/hc-mos"
         className="mb-3 inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground"
@@ -50,18 +50,6 @@ export default async function DokumenPage({
         <ArrowLeft className="size-4" /> HC-MOS
       </Link>
 
-      <PageHeader
-        icon={jenis === "culture" ? HeartHandshake : ScrollText}
-        title={jenis === "culture" ? "Culture & Value" : jenis === "sop" && namaPilar ? `SOP ${namaPilar}` : "Pusat Dokumen"}
-        description={
-          jenis === "culture"
-            ? "Nilai-nilai inti GWG Group yang jadi acuan perilaku seluruh karyawan manajemen dan outlet."
-            : jenis === "sop" && namaPilar
-              ? `Prosedur standar operasional pilar ${namaPilar} beserta dokumen resminya.`
-              : "SOP tiap pilar, kebijakan, culture & value, dokumen kepatuhan, dan PKS kemitraan."
-        }
-        actions={<PanduanModul panduan="dokumen" />}
-      />
       <KonteksModul panduan="dokumen" pilar={jenis === "sop" ? sp.pilar : jenis === "culture" ? "organization-development" : null} />
 
 

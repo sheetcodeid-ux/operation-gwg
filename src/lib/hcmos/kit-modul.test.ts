@@ -221,3 +221,32 @@ describe("modul Learning & Development memakai bingkai itu", () => {
     expect(TES).not.toContain("onCari=");
   });
 });
+
+describe("Pusat Dokumen dan Database Karyawan memakai bingkai itu", () => {
+  const DOK = baca("src/components/hcmos/dokumen-board.tsx");
+  const KAR = baca("src/components/hcmos/karyawan-board.tsx");
+
+  it("Pusat Dokumen: judulnya ikut jenis dokumen yang dibuka", () => {
+    // Satu halaman melayani empat menu sidebar — SOP, Kebijakan, Culture,
+    // Compliance. Judul yang tetap membuat orang merasa salah mendarat.
+    expect(DOK).toContain("judul={JENIS_DOKUMEN_META[jenis].label}");
+    for (const bagian of ["KerangkaModul", "BilahModul", "LegendaHitung", "useLayarPenuh"]) {
+      expect(DOK, bagian).toContain(bagian);
+    }
+  });
+
+  it("Pusat Dokumen: legenda status dihitung dari dokumen sejenis", () => {
+    // Menyorot "arsip" tidak boleh membuat "aktif" jatuh ke nol.
+    const mulai = DOK.indexOf("const rekapStatus");
+    const fn = DOK.slice(mulai, DOK.indexOf("return (", mulai));
+    expect(fn).toContain("sejenis.filter");
+    expect(fn).not.toContain("tersaring.filter");
+  });
+
+  it("Database Karyawan: satu pencarian untuk kedua scope dan tabel keluar", () => {
+    expect(KAR).toContain("manajemenTampil");
+    expect(KAR).toContain("outletTampil");
+    expect(KAR).toContain("keluarTampil");
+    expect(KAR).not.toContain('searchPlaceholder="Cari nama, outlet…"');
+  });
+});
