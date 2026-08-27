@@ -192,3 +192,32 @@ describe("Case Management & Offboarding memakai bingkai itu", () => {
     expect(REKAMAN).toContain("showSearch={showSearch}");
   });
 });
+
+describe("modul Learning & Development memakai bingkai itu", () => {
+  const FAST = baca("src/components/hcmos/modul-boards.tsx");
+  const LMS = baca("src/components/hcmos/modul-pelatihan-board.tsx");
+  const TES = baca("src/components/hcmos/assessment-board.tsx");
+
+  it("Fast Start & Fast Track: bingkai, legenda program, layar penuh", () => {
+    const fn = FAST.slice(FAST.indexOf("export function FastTrackBoard"), FAST.indexOf("function rataRata"));
+    for (const bagian of ["KerangkaModul", "BilahModul", "LegendaHitung", "useLayarPenuh"]) {
+      expect(fn, bagian).toContain(bagian);
+    }
+    expect(fn).toContain("showSearch={false}");
+  });
+
+  it("Modul Pelatihan: legenda status modul bisa diklik", () => {
+    for (const bagian of ["KerangkaModul", "BilahModul", "LegendaHitung", "useLayarPenuh"]) {
+      expect(LMS, bagian).toContain(bagian);
+    }
+    expect(LMS).toContain("setSorotStatus");
+  });
+
+  it("Pre/Post Test sengaja TIDAK diberi kotak cari", () => {
+    // Isinya sepuluh materi tetap. Kotak cari yang ada hanya karena modul lain
+    // punya cuma menambah satu hal untuk diabaikan.
+    expect(TES).toContain("KerangkaModul");
+    expect(TES).toContain("BilahModul");
+    expect(TES).not.toContain("onCari=");
+  });
+});

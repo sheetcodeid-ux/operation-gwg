@@ -1,12 +1,10 @@
-import { ArrowLeft, BookOpen } from "lucide-react";
+import { ArrowLeft } from "lucide-react";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { requireSessionUser } from "@/lib/auth";
 import { canReachMenu } from "@/lib/nav";
 import { listTabel } from "@/lib/data/hcmos-lanjutan";
-import { PageHeader } from "@/components/ui/page-header";
-import { PanduanModul } from "@/components/hcmos/panduan-modul";
 import { KonteksModul } from "@/components/hcmos/konteks-modul";
 import { ModulPelatihanBoard } from "@/components/hcmos/modul-pelatihan-board";
 import { bacaRekamanPelatihan } from "@/lib/hcmos/pelatihan-baca";
@@ -27,8 +25,10 @@ export default async function ModulPelatihanPage() {
 
   const rekaman = bacaRekamanPelatihan(await listTabel("hc_training_records"));
 
+  // Tanpa kepala halaman: bingkai modulnya membawa judul, angka ringkas, dan
+  // panduannya sendiri.
   return (
-    <div className="w-full">
+    <div className="flex w-full flex-col">
       <Link
         href="/hc-mos"
         className="mb-3 inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground"
@@ -36,12 +36,6 @@ export default async function ModulPelatihanPage() {
         <ArrowLeft className="size-4" /> HC-MOS
       </Link>
 
-      <PageHeader
-        icon={BookOpen}
-        title="Modul Pelatihan (LMS)"
-        description="Kurikulum pelatihan Manajemen dan Outlet beserta pelaksanaannya — modul mana yang sudah berjalan, siapa saja pesertanya."
-        actions={<PanduanModul panduan="modul" />}
-      />
       <KonteksModul panduan="modul" />
 
       <ModulPelatihanBoard rekaman={rekaman} />

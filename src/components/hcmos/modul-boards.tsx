@@ -701,10 +701,17 @@ export function FastTrackBoard({
   bolehUbah: boolean;
 }) {
   const [program, setProgram] = React.useState("all");
-  const tersaring = React.useMemo(
-    () => (program === "all" ? rows : rows.filter((r) => t(r, "program") === program)),
-    [rows, program],
-  );
+  const [cari, setCari] = React.useState("");
+  const { bingkai, layarPenuh, alih } = useLayarPenuh();
+
+  const q = cari.trim().toLowerCase();
+  const tersaring = React.useMemo(() => {
+    const hasil = program === "all" ? rows : rows.filter((r) => t(r, "program") === program);
+    if (!q) return hasil;
+    return hasil.filter((r) =>
+      `${t(r, "nama")} ${t(r, "batch")} ${t(r, "materi")} ${r.outletName ?? ""}`.toLowerCase().includes(q),
+    );
+  }, [rows, program, q]);
 
   const rerataPre = rataRata(rows.map((r) => n(r, "pre_test")));
   const rerataPost = rataRata(rows.map((r) => n(r, "post_test")));
@@ -741,8 +748,57 @@ export function FastTrackBoard({
   const persenFastStart = fastStart.length === 0 ? null : Math.round((lulusFastStart / fastStart.length) * 100);
   const jalurFastTrack = perBrand.reduce((a, b) => a + b.nilai, 0);
 
+  // Legenda dihitung dari SELURUH baris: menyorot satu program tidak boleh
+  // membuat program lain jatuh ke nol.
+  const rekapProgram = (Object.keys(PROGRAM_FAST) as (keyof typeof PROGRAM_FAST)[]).map((pr) => ({
+    key: pr as string,
+    kode: pr === "fast_track" ? "FT" : "FS",
+    label: PROGRAM_FAST[pr],
+    jumlah: rows.filter((r) => t(r, "program") === pr).length,
+    warna: (pr === "fast_track" ? ["#4f46e5", "#818cf8"] : ["#0891b2", "#22d3ee"]) as [string, string],
+    judulPenuh: PROGRAM_FAST[pr],
+  }));
+
   return (
-    <div className="space-y-4">
+    <KerangkaModul ref={bingkai}>
+      <BilahModul
+        ikon={Rocket}
+        gradien="from-cyan-500 via-sky-500 to-blue-600 shadow-sky-500/20"
+        judul="Fast Start & Fast Track"
+        ringkas={
+          <>
+            {batch.length} batch · {batchBerjalan} berjalan · {jumlahPeserta(rekaman)} crew ·{" "}
+            {persenFastStart === null ? "belum dinilai" : `${persenFastStart}% lulus Fast Start`}
+          </>
+        }
+        cari={cari}
+        onCari={setCari}
+        cariPlaceholder="Cari nama, batch, materi…"
+        hitung={{ tampil: tersaring.length, total: rows.length }}
+        menyaring={program !== "all" || q !== ""}
+        onBersihkan={() => {
+          setProgram("all");
+          setCari("");
+        }}
+        panduan="fast-track"
+        saringan={
+          <Combobox
+            portal
+            searchable={false}
+            value={program}
+            onChange={setProgram}
+            className="w-full shrink-0 sm:w-44"
+            options={[
+              { value: "all", label: "Semua Program" },
+              ...Object.entries(PROGRAM_FAST).map(([v, l]) => ({ value: v, label: l })),
+            ]}
+          />
+        }
+        layarPenuh={layarPenuh}
+        onLayarPenuh={alih}
+      />
+
+      <div className="min-h-0 flex-1 space-y-4 overflow-auto p-3">
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
         <StatTile
           icon={Rocket}
@@ -873,21 +929,9 @@ export function FastTrackBoard({
         rows={tersaring}
         bolehUbah={bolehUbah}
         labelTambah="Peserta"
-        searchPlaceholder="Cari nama, batch, materi…"
+        showSearch={false}
+        maxHeight="none"
         bawaan={{ program: "fast_start" }}
-        toolbar={
-          <Combobox
-            portal
-            searchable={false}
-            value={program}
-            onChange={setProgram}
-            className="w-44 shrink-0"
-            options={[
-              { value: "all", label: "Semua Program" },
-              ...Object.entries(PROGRAM_FAST).map(([v, l]) => ({ value: v, label: l })),
-            ]}
-          />
-        }
         columns={[
           {
             accessorKey: "nama",
@@ -983,7 +1027,15 @@ export function FastTrackBoard({
           { key: "catatan", label: "Catatan", tipe: "panjang", span: 2 },
         ]}
       />
-    </div>
+      </div>
+
+      <LegendaHitung
+        butir={rekapProgram}
+        sorot={program === "all" ? null : program}
+        onSorot={(k) => setProgram((v) => (v === k ? "all" : k))}
+        kiri={<LencanaHak bolehUbah={bolehUbah} />}
+      />
+    </KerangkaModul>
   );
 }
 

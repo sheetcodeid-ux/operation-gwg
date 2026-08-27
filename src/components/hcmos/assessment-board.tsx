@@ -6,6 +6,11 @@ import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { StatTile } from "@/components/ui/stat";
 import { GrafikBatangGanda } from "./grafik";
+import {
+  BilahModul,
+  KerangkaModul,
+  useLayarPenuh,
+} from "@/components/hcmos/kit-modul";
 import { AlurLangkah } from "./alur";
 import {
   ALUR_ASSESSMENT,
@@ -29,9 +34,31 @@ import type { RekamanPelatihan } from "@/lib/hcmos/pelatihan";
 export function AssessmentBoard({ rekaman }: { rekaman: RekamanPelatihan[] }) {
   const baris = React.useMemo(() => ringkasAssessment(rekaman), [rekaman]);
   const program = React.useMemo(() => ringkasProgram(baris), [baris]);
+  const { bingkai, layarPenuh, alih } = useLayarPenuh();
 
   return (
-    <div className="space-y-4">
+    <KerangkaModul ref={bingkai}>
+      {/* Tanpa kotak cari: isinya sepuluh materi tetap, dan sepuluh baris tidak
+          perlu dicari. Kotak cari yang ada karena modul lain punya hanya
+          menambah satu hal untuk diabaikan. */}
+      <BilahModul
+        ikon={ClipboardCheck}
+        gradien="from-violet-500 via-purple-500 to-indigo-600 shadow-purple-500/20"
+        judul="Pre Test & Post Test"
+        ringkas={
+          <>
+            {program.totalMateri} materi · {program.materiSelesai} Post Test lengkap · lulus minimal{" "}
+            {program.nilaiMinimum}
+            {program.rerataPeningkatan !== null &&
+              ` · peningkatan rata-rata ${program.rerataPeningkatan >= 0 ? "+" : ""}${program.rerataPeningkatan}`}
+          </>
+        }
+        panduan="assessment"
+        layarPenuh={layarPenuh}
+        onLayarPenuh={alih}
+      />
+
+      <div className="min-h-0 flex-1 space-y-4 overflow-auto p-3">
       <div className="grid grid-cols-[minmax(0,1fr)] gap-3 sm:grid-cols-2 xl:grid-cols-4">
         <StatTile
           icon={BookOpen}
@@ -203,7 +230,8 @@ export function AssessmentBoard({ rekaman }: { rekaman: RekamanPelatihan[] }) {
           </ul>
         </CardContent>
       </Card>
-    </div>
+      </div>
+    </KerangkaModul>
   );
 }
 

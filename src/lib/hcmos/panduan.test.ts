@@ -93,9 +93,9 @@ describe("terpasang di halamannya, bukan cuma tersedia", () => {
     // modulnya, karena halamannya sengaja tidak lagi punya kepala halaman.
     kontrak: "src/components/hcmos/kontrak-board.tsx",
     rekrutmen: "src/components/hcmos/rekrutmen-board.tsx",
-    modul: "src/app/(app)/hc-mos/modul/page.tsx",
-    "fast-track": "src/app/(app)/hc-mos/fast-track/page.tsx",
-    assessment: "src/app/(app)/hc-mos/assessment/page.tsx",
+    modul: "src/components/hcmos/modul-pelatihan-board.tsx",
+    "fast-track": "src/components/hcmos/modul-boards.tsx",
+    assessment: "src/components/hcmos/assessment-board.tsx",
     kinerja: "src/components/hcmos/kinerja-board.tsx",
     appraisal: "src/app/(app)/hc-mos/appraisal/page.tsx",
     talent: "src/app/(app)/hc-mos/talent/page.tsx",

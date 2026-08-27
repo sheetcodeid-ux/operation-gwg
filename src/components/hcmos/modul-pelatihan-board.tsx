@@ -8,6 +8,13 @@ import { Badge } from "@/components/ui/badge";
 import { DataTable } from "@/components/ui/data-table";
 import { SegmentedTabs } from "@/components/ui/segmented-tabs";
 import { StatTile } from "@/components/ui/stat";
+import {
+  BilahModul,
+  KerangkaModul,
+  LegendaHitung,
+  LencanaHak,
+  useLayarPenuh,
+} from "@/components/hcmos/kit-modul";
 import { GrafikBatang } from "./grafik";
 import { SCOPE_LABEL, type HcScope } from "@/lib/hcmos/pillars";
 import {
@@ -29,6 +36,9 @@ import {
  */
 export function ModulPelatihanBoard({ rekaman }: { rekaman: RekamanPelatihan[] }) {
   const [scope, setScope] = React.useState<HcScope>("manajemen");
+  const [cari, setCari] = React.useState("");
+  const [sorotStatus, setSorotStatus] = React.useState<string | null>(null);
+  const { bingkai, layarPenuh, alih } = useLayarPenuh();
 
   const baris = React.useMemo(() => ringkasModul(scope, rekaman), [scope, rekaman]);
   const aktif = baris.filter((m) => m.status !== "belum");
@@ -94,18 +104,64 @@ export function ModulPelatihanBoard({ rekaman }: { rekaman: RekamanPelatihan[] }
     [],
   );
 
+  const q = cari.trim().toLowerCase();
+  const tampil = React.useMemo(() => {
+    let hasil = baris;
+    if (sorotStatus) hasil = hasil.filter((m) => m.status === sorotStatus);
+    if (!q) return hasil;
+    return hasil.filter((m) => `${m.judul} ${m.target} ${m.bentuk}`.toLowerCase().includes(q));
+  }, [baris, sorotStatus, q]);
+
+  // Legenda dihitung dari seluruh kurikulum scope ini: menyorot satu status
+  // tidak boleh membuat status lain jatuh ke nol.
+  const rekapStatus = (["belum", "berjalan", "selesai"] as const).map((st) => ({
+    key: st as string,
+    kode: KODE_STATUS[st],
+    label: STATUS_MODUL_META[st].label,
+    jumlah: baris.filter((m) => m.status === st).length,
+    warna: WARNA_STATUS[st],
+    judulPenuh: STATUS_MODUL_META[st].label,
+  }));
+
   return (
-    <div className="space-y-4">
-      <SegmentedTabs
-        className="max-w-md"
-        value={scope}
-        onChange={(v) => setScope(v as HcScope)}
-        items={[
-          { value: "manajemen", label: SCOPE_LABEL.manajemen, icon: Building2 },
-          { value: "outlet", label: SCOPE_LABEL.outlet, icon: Users },
-        ]}
+    <KerangkaModul ref={bingkai}>
+      <BilahModul
+        ikon={BookOpen}
+        gradien="from-emerald-500 via-teal-500 to-cyan-600 shadow-teal-500/20"
+        judul="Modul Pelatihan (LMS)"
+        ringkas={
+          <>
+            {SCOPE_LABEL[scope]} · {aktif.length} dari {baris.length} modul berjalan ·{" "}
+            {jumlahPeserta(rekamanScope)} partisipan · {Math.round((totalMenit / 60) * 10) / 10} jam
+          </>
+        }
+        cari={cari}
+        onCari={setCari}
+        cariPlaceholder="Cari modul, target peserta…"
+        hitung={{ tampil: tampil.length, total: baris.length }}
+        menyaring={q !== "" || sorotStatus !== null}
+        onBersihkan={() => {
+          setCari("");
+          setSorotStatus(null);
+        }}
+        panduan="modul"
+        saringan={
+          <SegmentedTabs
+            className="w-full sm:w-auto"
+            size="sm"
+            value={scope}
+            onChange={(v) => setScope(v as HcScope)}
+            items={[
+              { value: "manajemen", label: SCOPE_LABEL.manajemen, icon: Building2 },
+              { value: "outlet", label: SCOPE_LABEL.outlet, icon: Users },
+            ]}
+          />
+        }
+        layarPenuh={layarPenuh}
+        onLayarPenuh={alih}
       />
 
+      <div className="min-h-0 flex-1 space-y-4 overflow-auto p-3">
       <div className="grid grid-cols-[minmax(0,1fr)] gap-3 sm:grid-cols-2 xl:grid-cols-4">
         <StatTile icon={BookOpen} label="Modul Aktif" value={aktif.length} sub={`dari ${baris.length} modul kurikulum`} />
         <StatTile
@@ -137,9 +193,10 @@ export function ModulPelatihanBoard({ rekaman }: { rekaman: RekamanPelatihan[] }
         </div>
         <DataTable
           columns={kolom}
-          data={baris}
+          data={tampil}
           tableId={`hcmos-modul-${scope}`}
-          searchPlaceholder="Cari modul…"
+          showSearch={false}
+          maxHeight="none"
           pageSize={10}
         />
       </div>
@@ -165,6 +222,25 @@ export function ModulPelatihanBoard({ rekaman }: { rekaman: RekamanPelatihan[] }
         </Link>
         .
       </p>
-    </div>
+      </div>
+
+      <LegendaHitung
+        butir={rekapStatus}
+        sorot={sorotStatus}
+        onSorot={(k) => setSorotStatus((v) => (v === k ? null : k))}
+        kiri={<LencanaHak bolehUbah={false} />}
+      />
+    </KerangkaModul>
   );
 }
+
+const KODE_STATUS: Record<"belum" | "berjalan" | "selesai", string> = {
+  belum: "—",
+  berjalan: "J",
+  selesai: "S",
+};
+const WARNA_STATUS: Record<"belum" | "berjalan" | "selesai", [string, string]> = {
+  belum: ["#64748b", "#94a3b8"],
+  berjalan: ["#d97706", "#fbbf24"],
+  selesai: ["#059669", "#34d399"],
+};
