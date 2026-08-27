@@ -9,6 +9,7 @@ import { NAV_ICONS } from "@/components/layout/icons";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { PageHeader } from "@/components/ui/page-header";
+import { PanduanModul } from "@/components/hcmos/panduan-modul";
 
 /** Semua pilar sudah diketahui sejak awal — tidak perlu menunggu permintaan masuk. */
 export function generateStaticParams() {
@@ -40,7 +41,7 @@ export default async function PilarPage({ params }: { params: Promise<{ pilar: s
         <ArrowLeft className="size-4" /> HC-MOS
       </Link>
 
-      <PageHeader icon={Icon} title={p.label} description={p.ringkas} />
+      <PageHeader icon={Icon} title={p.label} description={p.ringkas} actions={<PanduanModul panduan="pilar" />} />
 
       <Card className="mb-4">
         <CardContent className="p-4">

@@ -19,6 +19,7 @@ import {
 import Link from "next/link";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
+import { PanduanModul } from "@/components/hcmos/panduan-modul";
 import { Combobox } from "@/components/ui/combobox";
 import { Input } from "@/components/ui/input";
 import {
@@ -268,6 +269,8 @@ export function MatriksRaci({
             <X className="size-4" /> Bersihkan
           </Button>
         )}
+
+        <PanduanModul panduan="raci" />
 
         <Button
           variant="outline"

@@ -10,8 +10,9 @@ import { listTabel } from "@/lib/data/hcmos-lanjutan";
 import { listKontrak } from "@/lib/data/hcmos";
 import { perluDitutup, type KasusOffboarding } from "@/lib/hcmos/offboarding";
 import { EmptyState, PageHeader } from "@/components/ui/page-header";
+import { PanduanModul } from "@/components/hcmos/panduan-modul";
+import { KonteksModul } from "@/components/hcmos/konteks-modul";
 import { RelasiBoard } from "@/components/hcmos/modul-boards";
-import { Badge } from "@/components/ui/badge";
 import { bolehUbahHc } from "@/lib/hcmos/akses";
 
 export const metadata: Metadata = { title: "Hubungan Industrial — HC-MOS" };
@@ -89,12 +90,9 @@ export default async function RelasiPage({ searchParams }: { searchParams: Promi
             ? "Proses karyawan keluar (resign atau PHK) — dari notifikasi sampai statusnya non-aktif di Database Karyawan."
             : "Penanganan kasus hubungan industrial — pilih tampilan sesuai scope: Manajemen (GWG) atau Outlet."
         }
+        actions={<PanduanModul panduan="relasi" />}
       />
-      <div className="mb-4 flex flex-wrap gap-2">
-        <Badge tone="neutral">Employee &amp; Industrial Relations</Badge>
-        <Badge tone="neutral">PIC: {tab === "keluar" ? "Adrian & Uswatun" : "Adrian"}</Badge>
-        <Badge tone="neutral">Scope: Manajemen &amp; Outlet</Badge>
-      </div>
+      <KonteksModul panduan="relasi" />
       <RelasiBoard
         kasus={semua.filter((r) => r.jenis === "kasus")}
         keluar={semua.filter((r) => r.jenis === "offboarding")}

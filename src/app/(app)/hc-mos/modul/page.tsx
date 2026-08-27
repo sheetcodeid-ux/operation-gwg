@@ -6,7 +6,8 @@ import { requireSessionUser } from "@/lib/auth";
 import { canReachMenu } from "@/lib/nav";
 import { listTabel } from "@/lib/data/hcmos-lanjutan";
 import { PageHeader } from "@/components/ui/page-header";
-import { Badge } from "@/components/ui/badge";
+import { PanduanModul } from "@/components/hcmos/panduan-modul";
+import { KonteksModul } from "@/components/hcmos/konteks-modul";
 import { ModulPelatihanBoard } from "@/components/hcmos/modul-pelatihan-board";
 import { bacaRekamanPelatihan } from "@/lib/hcmos/pelatihan-baca";
 
@@ -39,12 +40,9 @@ export default async function ModulPelatihanPage() {
         icon={BookOpen}
         title="Modul Pelatihan (LMS)"
         description="Kurikulum pelatihan Manajemen dan Outlet beserta pelaksanaannya — modul mana yang sudah berjalan, siapa saja pesertanya."
+        actions={<PanduanModul panduan="modul" />}
       />
-      <div className="mb-4 flex flex-wrap gap-2">
-        <Badge tone="neutral">Learning &amp; Development</Badge>
-        <Badge tone="neutral">PIC: Riva</Badge>
-        <Badge tone="neutral">Scope: Manajemen &amp; Outlet</Badge>
-      </div>
+      <KonteksModul panduan="modul" />
 
       <ModulPelatihanBoard rekaman={rekaman} />
     </div>

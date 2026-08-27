@@ -6,6 +6,8 @@ import { requireSessionUser } from "@/lib/auth";
 import { canReachMenu } from "@/lib/nav";
 import { monitoringHcmos } from "@/lib/data/hcmos-monitoring";
 import { PageHeader } from "@/components/ui/page-header";
+import { PanduanModul } from "@/components/hcmos/panduan-modul";
+import { KonteksModul } from "@/components/hcmos/konteks-modul";
 import { MonitoringBoard } from "@/components/hcmos/monitoring-board";
 
 export const metadata: Metadata = { title: "Dashboard Monitoring — HC-MOS" };
@@ -25,7 +27,9 @@ export default async function MonitoringPage() {
         icon={LayoutDashboard}
         title="Dashboard Monitoring"
         description="Sebelas metrik HR — seluruh angkanya dihitung dari data yang sudah masuk, bukan angka contoh."
+        actions={<PanduanModul panduan="monitoring" />}
       />
+      <KonteksModul panduan="monitoring" />
       <MonitoringBoard tabs={tabs} />
     </div>
   );

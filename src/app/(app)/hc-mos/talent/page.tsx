@@ -6,9 +6,10 @@ import { requireSessionUser } from "@/lib/auth";
 import { canReachMenu } from "@/lib/nav";
 import { listTabel } from "@/lib/data/hcmos-lanjutan";
 import { PageHeader } from "@/components/ui/page-header";
+import { PanduanModul } from "@/components/hcmos/panduan-modul";
+import { KonteksModul } from "@/components/hcmos/konteks-modul";
 import { TalentBoard } from "@/components/hcmos/modul-boards";
 import { bolehUbahHc } from "@/lib/hcmos/akses";
-import { Badge } from "@/components/ui/badge";
 import { JenjangKarier } from "@/components/hcmos/jenjang-karier";
 import { JENJANG_MANAJEMEN, JENJANG_OUTLET } from "@/lib/hcmos/struktur";
 
@@ -35,12 +36,9 @@ export default async function TalentPage({ searchParams }: { searchParams: Promi
             ? "Perencanaan suksesi untuk posisi kunci di manajemen dan outlet."
             : "Jenjang karier yang tersedia untuk karyawan manajemen maupun crew outlet di GWG Group."
         }
+        actions={<PanduanModul panduan="talent" />}
       />
-      <div className="mb-4 flex flex-wrap gap-2">
-        <Badge tone="neutral">Talent &amp; Career Management</Badge>
-        <Badge tone="neutral">PIC: Riva</Badge>
-        <Badge tone="neutral">Scope: Manajemen &amp; Outlet</Badge>
-      </div>
+      <KonteksModul panduan="talent" />
 
       {/* Tangganya dulu, daftarnya belakangan. Yang ditanyakan orang saat
           membuka Career Path adalah "dari posisi saya, ke mana saya bisa naik"

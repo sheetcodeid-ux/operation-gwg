@@ -10,6 +10,8 @@ import { periodeLabel } from "@/lib/hcmos/kontrak";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { PageHeader } from "@/components/ui/page-header";
+import { PanduanModul } from "@/components/hcmos/panduan-modul";
+import { KonteksModul } from "@/components/hcmos/konteks-modul";
 import { Progress } from "@/components/ui/progress";
 import { ScoreRing } from "@/components/ui/score-ring";
 
@@ -38,7 +40,9 @@ export default async function KpiPage() {
         icon={PieChart}
         title="Report & KPI Human Capital"
         description={`Periode ${periodeLabel(hasil.periode)} — setiap angka dihitung dari data yang sudah ada, tidak ada yang diketik manual.`}
+        actions={<PanduanModul panduan="kpi" />}
       />
+      <KonteksModul panduan="kpi" />
 
       <div className="mb-4 grid gap-3 lg:grid-cols-3">
         <Card>

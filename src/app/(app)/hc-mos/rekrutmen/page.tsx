@@ -7,8 +7,9 @@ import { canReachMenu } from "@/lib/nav";
 import { getOutlets } from "@/lib/data/store";
 import { scopeOutlets } from "@/lib/rbac";
 import { listKandidat, listOnboarding } from "@/lib/data/hcmos-rekrutmen";
-import { Badge } from "@/components/ui/badge";
 import { EmptyState, PageHeader } from "@/components/ui/page-header";
+import { PanduanModul } from "@/components/hcmos/panduan-modul";
+import { KonteksModul } from "@/components/hcmos/konteks-modul";
 import { RekrutmenBoard } from "@/components/hcmos/rekrutmen-board";
 
 export const metadata: Metadata = { title: "Rekrutmen — HC-MOS" };
@@ -52,13 +53,10 @@ export default async function RekrutmenPage({ searchParams }: { searchParams: Pr
         icon={UserPlus}
         title="Rekrutmen & Seleksi"
         description="Satu berkas per kandidat: melamar, diwawancara, diterima, lalu menjalani orientasi."
+        actions={<PanduanModul panduan="rekrutmen" />}
       />
 
-      <div className="mb-4 flex flex-wrap gap-2">
-        <Badge tone="neutral">Recruitment &amp; Selection</Badge>
-        <Badge tone="neutral">PIC: Dini</Badge>
-        <Badge tone="neutral">Scope: Manajemen &amp; Outlet</Badge>
-      </div>
+      <KonteksModul panduan="rekrutmen" />
       <RekrutmenBoard
         kandidat={kandidat}
         onboarding={onboarding}

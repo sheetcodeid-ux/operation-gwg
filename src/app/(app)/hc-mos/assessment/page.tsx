@@ -6,7 +6,8 @@ import { requireSessionUser } from "@/lib/auth";
 import { canReachMenu } from "@/lib/nav";
 import { listTabel } from "@/lib/data/hcmos-lanjutan";
 import { PageHeader } from "@/components/ui/page-header";
-import { Badge } from "@/components/ui/badge";
+import { PanduanModul } from "@/components/hcmos/panduan-modul";
+import { KonteksModul } from "@/components/hcmos/konteks-modul";
 import { AssessmentBoard } from "@/components/hcmos/assessment-board";
 import { bacaRekamanPelatihan } from "@/lib/hcmos/pelatihan-baca";
 import { DURASI_POST_TEST_MENIT, NILAI_LULUS } from "@/lib/hcmos/lanjutan";
@@ -40,12 +41,9 @@ export default async function AssessmentPage() {
         icon={ClipboardCheck}
         title="Pre Test & Post Test"
         description={`Penilaian seluruh muatan materi Fast Start / Fast Track — setiap materi punya Pre Test (sebelum materi), Role Play (praktik), dan Post Test (${DURASI_POST_TEST_MENIT} menit, sesudah materi). Nilainya diakumulasikan jadi satu nilai akhir; kelulusan minimal ${NILAI_LULUS}.`}
+        actions={<PanduanModul panduan="assessment" />}
       />
-      <div className="mb-4 flex flex-wrap gap-2">
-        <Badge tone="neutral">Learning &amp; Development</Badge>
-        <Badge tone="neutral">PIC: Riva &amp; Dini</Badge>
-        <Badge tone="neutral">Scope: Outlet</Badge>
-      </div>
+      <KonteksModul panduan="assessment" />
 
       <AssessmentBoard rekaman={rekaman} />
     </div>

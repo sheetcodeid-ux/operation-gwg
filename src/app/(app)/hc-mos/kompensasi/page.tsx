@@ -8,8 +8,9 @@ import { getOutlets, getUsers } from "@/lib/data/store";
 import { scopeOutlets } from "@/lib/rbac";
 import { listTabel } from "@/lib/data/hcmos-lanjutan";
 import { listKontrak } from "@/lib/data/hcmos";
-import { Badge } from "@/components/ui/badge";
 import { EmptyState, PageHeader } from "@/components/ui/page-header";
+import { PanduanModul } from "@/components/hcmos/panduan-modul";
+import { KonteksModul } from "@/components/hcmos/konteks-modul";
 import { KompensasiBoard } from "@/components/hcmos/kompensasi-board";
 import { bolehUbahHc } from "@/lib/hcmos/akses";
 import type { HcScope } from "@/lib/hcmos/pillars";
@@ -81,12 +82,8 @@ export default async function KompensasiPage({ searchParams }: { searchParams: P
       <Link href="/hc-mos" className="mb-3 inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground">
         <ArrowLeft className="size-4" /> HC-MOS
       </Link>
-      <PageHeader icon={Wallet} title={JUDUL[tab]} description={URAIAN[tab]} />
-      <div className="mb-4 flex flex-wrap gap-2">
-        <Badge tone="neutral">Compensation &amp; Benefit</Badge>
-        <Badge tone="neutral">PIC: Uswatun</Badge>
-        <Badge tone="neutral">Scope: Manajemen &amp; Outlet</Badge>
-      </div>
+      <PageHeader icon={Wallet} title={JUDUL[tab]} description={URAIAN[tab]} actions={<PanduanModul panduan="kompensasi" />} />
+      <KonteksModul panduan="kompensasi" />
       <KompensasiBoard
         cuti={cuti}
         payroll={payroll}

@@ -8,7 +8,8 @@ import { getOutlets } from "@/lib/data/store";
 import { scopeOutlets } from "@/lib/rbac";
 import { listTabel } from "@/lib/data/hcmos-lanjutan";
 import { PageHeader } from "@/components/ui/page-header";
-import { Badge } from "@/components/ui/badge";
+import { PanduanModul } from "@/components/hcmos/panduan-modul";
+import { KonteksModul } from "@/components/hcmos/konteks-modul";
 import { FastTrackBoard } from "@/components/hcmos/modul-boards";
 import { bolehUbahHc } from "@/lib/hcmos/akses";
 
@@ -30,12 +31,9 @@ export default async function FastTrackPage() {
         icon={Rocket}
         title="Fast Start & Fast Track"
         description="Pelaksanaan program wajib crew outlet per batch — Pre Test, Role Play, dan Post Test, dengan kelulusan minimal 65."
+        actions={<PanduanModul panduan="fast-track" />}
       />
-      <div className="mb-4 flex flex-wrap gap-2">
-        <Badge tone="neutral">Learning &amp; Development</Badge>
-        <Badge tone="neutral">PIC: Riva</Badge>
-        <Badge tone="neutral">Scope: Outlet</Badge>
-      </div>
+      <KonteksModul panduan="fast-track" />
 
       <FastTrackBoard rows={rows} outlets={outlets} bolehUbah={bolehUbahHc(user)} />
 

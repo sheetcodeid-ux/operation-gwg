@@ -9,6 +9,8 @@ import { scopeOutlets } from "@/lib/rbac";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { PageHeader } from "@/components/ui/page-header";
+import { PanduanModul } from "@/components/hcmos/panduan-modul";
+import { KonteksModul } from "@/components/hcmos/konteks-modul";
 import { StatTile } from "@/components/ui/stat";
 import { GrafikBatang } from "@/components/hcmos/grafik";
 import { DIVISI_KANTOR, JENJANG_OUTLET, kelompokDari } from "@/lib/hcmos/struktur";
@@ -76,13 +78,10 @@ export default async function StrukturPage() {
         icon={Building2}
         title="Profil Organisasi"
         description="Peta struktur organisasi GWG Group — kantor pusat manajemen dan struktur operasional di seluruh brand."
+        actions={<PanduanModul panduan="struktur" />}
       />
 
-      <div className="mb-4 flex flex-wrap gap-2">
-        <Badge tone="neutral">Organization Development</Badge>
-        <Badge tone="neutral">PIC: Riva</Badge>
-        <Badge tone="neutral">Scope: Manajemen &amp; Outlet</Badge>
-      </div>
+      <KonteksModul panduan="struktur" />
 
       <div className="mb-4 grid grid-cols-[minmax(0,1fr)] gap-3 sm:grid-cols-2 xl:grid-cols-4">
         <StatTile

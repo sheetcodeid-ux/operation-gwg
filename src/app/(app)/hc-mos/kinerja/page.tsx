@@ -11,8 +11,9 @@ import { listKontrak } from "@/lib/data/hcmos";
 import { rekapUnit, type ReviewRingkas } from "@/lib/hcmos/penilaian";
 import { StatusPenilaian } from "@/components/hcmos/status-penilaian";
 import { PageHeader } from "@/components/ui/page-header";
+import { PanduanModul } from "@/components/hcmos/panduan-modul";
+import { KonteksModul } from "@/components/hcmos/konteks-modul";
 import { KinerjaBoard } from "@/components/hcmos/kinerja-board";
-import { Badge } from "@/components/ui/badge";
 import { bolehUbahHc } from "@/lib/hcmos/akses";
 
 export const metadata: Metadata = { title: "Kinerja & Kompetensi — HC-MOS" };
@@ -24,6 +25,12 @@ const JUDUL_TAB: Record<string, string> = {
   penilaian: "Penilaian Kinerja",
   intervensi: "Request Intervensi",
   kompetensi: "Competency Matrix",
+};
+
+const PANDUAN_TAB: Record<string, string> = {
+  penilaian: "kinerja",
+  kompetensi: "kompetensi",
+  intervensi: "intervensi",
 };
 
 const URAIAN_TAB: Record<string, string> = {
@@ -66,16 +73,17 @@ export default async function KinerjaPage({ searchParams }: { searchParams: Prom
       <Link href="/hc-mos" className="mb-3 inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground">
         <ArrowLeft className="size-4" /> HC-MOS
       </Link>
+      {/* Tiga tab, tiga pengisi yang berbeda: penilaian diisi atasan langsung,
+          kompetensi hanya dibaca, intervensi diajukan siapa pun yang membawahi
+          orangnya. Panduannya ikut berganti — satu panduan untuk ketiganya akan
+          keliru untuk dua di antaranya. */}
       <PageHeader
         icon={Target}
         title={JUDUL_TAB[tab] ?? JUDUL_TAB.penilaian}
         description={URAIAN_TAB[tab] ?? URAIAN_TAB.penilaian}
+        actions={<PanduanModul panduan={PANDUAN_TAB[tab] ?? "kinerja"} />}
       />
-      <div className="mb-4 flex flex-wrap gap-2">
-        <Badge tone="neutral">{tab === "kompetensi" ? "Learning & Development" : "Performance Management"}</Badge>
-        <Badge tone="neutral">PIC: Riva</Badge>
-        <Badge tone="neutral">Scope: Manajemen &amp; Outlet</Badge>
-      </div>
+      <KonteksModul panduan={PANDUAN_TAB[tab] ?? "kinerja"} />
 
       {/* Ringkasan dulu, daftarnya belakangan. Pertanyaan pertama saat periode
           penilaian berjalan selalu "berapa yang sudah dinilai", bukan "siapa

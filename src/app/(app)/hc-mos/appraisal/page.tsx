@@ -6,7 +6,8 @@ import { requireSessionUser } from "@/lib/auth";
 import { canReachMenu } from "@/lib/nav";
 import { listTabel } from "@/lib/data/hcmos-lanjutan";
 import { PageHeader } from "@/components/ui/page-header";
-import { Badge } from "@/components/ui/badge";
+import { PanduanModul } from "@/components/hcmos/panduan-modul";
+import { KonteksModul } from "@/components/hcmos/konteks-modul";
 import { AppraisalBoard } from "@/components/hcmos/appraisal-board";
 import { bolehUbahHc } from "@/lib/hcmos/akses";
 
@@ -31,12 +32,9 @@ export default async function AppraisalPage() {
         icon={ClipboardList}
         title="Appraisal Review"
         description="Sesi peninjauan hasil appraisal bersama atasan langsung, sebelum penilaiannya difinalisasi."
+        actions={<PanduanModul panduan="appraisal" />}
       />
-      <div className="mb-4 flex flex-wrap gap-2">
-        <Badge tone="neutral">Performance Management</Badge>
-        <Badge tone="neutral">PIC: Riva</Badge>
-        <Badge tone="neutral">Scope: Manajemen &amp; Outlet</Badge>
-      </div>
+      <KonteksModul panduan="appraisal" />
 
       <AppraisalBoard rows={rows} bolehUbah={bolehUbahHc(user)} />
 

@@ -4,8 +4,9 @@ import { redirect } from "next/navigation";
 import { requireSessionUser } from "@/lib/auth";
 import { canReachMenu } from "@/lib/nav";
 import { PageHeader } from "@/components/ui/page-header";
+import { PanduanModul } from "@/components/hcmos/panduan-modul";
+import { KonteksModul } from "@/components/hcmos/konteks-modul";
 import { HcRequestReview } from "@/components/hc/request-review";
-import { Badge } from "@/components/ui/badge";
 import { StatTile } from "@/components/ui/stat";
 import { listHcRequests } from "@/lib/data/hc-requests";
 
@@ -28,12 +29,9 @@ export default async function HcRecruitReviewPage() {
         icon={ClipboardCheck}
         title="Permintaan Karyawan"
         description="Tinjau permintaan pegawai — dipisah Manajemen (divisi kantor) dan Outlet (cabang, diajukan Supervisor)."
+        actions={<PanduanModul panduan="hc_permintaan" />}
       />
-      <div className="mb-4 flex flex-wrap gap-2">
-        <Badge tone="neutral">Recruitment &amp; Selection</Badge>
-        <Badge tone="neutral">PIC: Dini</Badge>
-        <Badge tone="neutral">Scope: Manajemen &amp; Outlet</Badge>
-      </div>
+      <KonteksModul panduan="hc_permintaan" />
 
       <div className="mb-4 grid grid-cols-[minmax(0,1fr)] gap-3 sm:grid-cols-2 xl:grid-cols-4">
         <StatTile icon={ClipboardList} label="Request Berjalan" value={berjalan.length} sub={`${orang(berjalan)} orang diminta`} />

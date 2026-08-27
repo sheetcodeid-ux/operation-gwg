@@ -19,6 +19,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
+import { PanduanModul } from "@/components/hcmos/panduan-modul";
 import { Combobox } from "@/components/ui/combobox";
 import { Input } from "@/components/ui/input";
 import { rapikanBaganAction, simpanPenempatanAction, tempatkanOrangAction } from "@/lib/actions/bagan";
@@ -406,6 +407,8 @@ export function BaganOrganisasi({
             </Button>
           </div>
         )}
+
+        <PanduanModul panduan="bagan" />
 
         <Button
           variant="outline"

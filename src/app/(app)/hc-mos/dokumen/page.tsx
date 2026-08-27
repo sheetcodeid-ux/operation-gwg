@@ -7,8 +7,9 @@ import { canReachMenu } from "@/lib/nav";
 import { listDokumen } from "@/lib/data/hcmos-dokumen";
 import { JENIS_DOKUMEN, type JenisDokumen } from "@/lib/hcmos/dokumen";
 import { PageHeader } from "@/components/ui/page-header";
+import { PanduanModul } from "@/components/hcmos/panduan-modul";
+import { KonteksModul } from "@/components/hcmos/konteks-modul";
 import { DokumenBoard } from "@/components/hcmos/dokumen-board";
-import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { NAV_ICONS } from "@/components/layout/icons";
 import { CORE_VALUES } from "@/lib/hcmos/budaya";
@@ -59,15 +60,10 @@ export default async function DokumenPage({
               ? `Prosedur standar operasional pilar ${namaPilar} beserta dokumen resminya.`
               : "SOP tiap pilar, kebijakan, culture & value, dokumen kepatuhan, dan PKS kemitraan."
         }
+        actions={<PanduanModul panduan="dokumen" />}
       />
+      <KonteksModul panduan="dokumen" pilar={jenis === "sop" ? sp.pilar : jenis === "culture" ? "organization-development" : null} />
 
-      <div className="mb-4 flex flex-wrap gap-2">
-        <Badge tone="neutral">{jenis === "sop" && namaPilar ? namaPilar : "Organization Development"}</Badge>
-        <Badge tone="neutral">
-          PIC: {jenis === "sop" && sp.pilar ? (pillarBySlug(sp.pilar)?.pic ?? "—") : jenis === "culture" ? "Riva" : "Uswatun"}
-        </Badge>
-        <Badge tone="neutral">Scope: Manajemen &amp; Outlet</Badge>
-      </div>
 
       {/* Nilai intinya ditampilkan lebih dulu, dokumennya menyusul.
           Yang dicari orang saat membuka Culture & Value adalah NILAINYA; poster

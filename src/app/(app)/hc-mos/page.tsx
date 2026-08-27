@@ -6,6 +6,7 @@ import { requireSessionUser } from "@/lib/auth";
 import { canReachMenu } from "@/lib/nav";
 import { ringkasHcmos } from "@/lib/data/hcmos";
 import { PageHeader } from "@/components/ui/page-header";
+import { PanduanModul } from "@/components/hcmos/panduan-modul";
 import { buttonVariants } from "@/components/ui/button";
 import { HcmosDashboard } from "@/components/hcmos/hcmos-dashboard";
 
@@ -24,9 +25,12 @@ export default async function HcmosPage() {
         title="HC-MOS"
         description="Human Capital Management Operating System — 9 pilar, dua scope: Manajemen & Outlet."
         actions={
-          <Link href="/hc-mos/raci" className={buttonVariants({ variant: "secondary" })}>
-            <Table2 className="size-4" /> Matriks RACI
-          </Link>
+          <>
+            <PanduanModul panduan="hcmos" />
+            <Link href="/hc-mos/raci" className={buttonVariants({ variant: "secondary" })}>
+              <Table2 className="size-4" /> Matriks RACI
+            </Link>
+          </>
         }
       />
       <HcmosDashboard ringkas={ringkas} />

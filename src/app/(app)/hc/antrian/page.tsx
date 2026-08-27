@@ -5,8 +5,9 @@ import { requireSessionUser } from "@/lib/auth";
 import { canReachMenu } from "@/lib/nav";
 import { listHcSubmissions } from "@/lib/data/hc";
 import { PageHeader } from "@/components/ui/page-header";
+import { PanduanModul } from "@/components/hcmos/panduan-modul";
+import { KonteksModul } from "@/components/hcmos/konteks-modul";
 import { HcReviewPanel } from "@/components/hc/hc-review";
-import { Badge } from "@/components/ui/badge";
 import { StatTile } from "@/components/ui/stat";
 import { HC_STATUS_META } from "@/lib/hc-shared";
 
@@ -29,13 +30,10 @@ export default async function HcAntrianPage() {
         icon={FolderInput}
         title="Antrian Dokumen"
         description="Tinjau & proses pengajuan dokumen dari seluruh cabang, lalu kirim dokumen jadi kembali ke Supervisor."
+        actions={<PanduanModul panduan="hc_antrian" />}
       />
+      <KonteksModul panduan="hc_antrian" />
 
-      <div className="mb-4 flex flex-wrap gap-2">
-        <Badge tone="neutral">Organization Development</Badge>
-        <Badge tone="neutral">PIC: Uswatun</Badge>
-        <Badge tone="neutral">Scope: Manajemen &amp; Outlet</Badge>
-      </div>
 
       {/* Ringkasan di atas, antreannya di bawah.
           Yang ditanyakan orang saat membuka halaman ini bukan "berkas siapa yang
