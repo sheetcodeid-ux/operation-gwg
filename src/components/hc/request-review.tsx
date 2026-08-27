@@ -19,6 +19,11 @@ import {
 import { Combobox } from "@/components/ui/combobox";
 import { SegmentedTabs } from "@/components/ui/segmented-tabs";
 import {
+  BilahModul,
+  KerangkaModul,
+  useLayarPenuh,
+} from "@/components/hcmos/kit-modul";
+import {
   LABEL_SCOPE_MANPOWER,
   SCOPE_MANPOWER,
   UPLOAD_HINT,
@@ -58,15 +63,27 @@ export function HcRequestReview({
   picOptions = [],
   kelola = false,
   meId,
+  bingkai: kepala,
 }: {
   mode: Mode;
   kind?: HcRequestKind;
   picOptions?: PicOption[];
   kelola?: boolean;
   meId?: string;
+  /**
+   * Bila diisi, antreannya dibungkus bingkai modul HC-MOS: batang alat berisi
+   * identitas modul, pencarian, panduan, dan layar penuh.
+   *
+   * Dibuat opsional dengan sengaja. Komponen ini juga dipakai Antrian System
+   * dan Antrian Design di luar Human Capital; memaksakan bingkainya ke semua
+   * pemakai berarti mengubah dua modul yang tidak sedang diminta berubah.
+   */
+  bingkai?: { judul: string; ikon: React.ComponentType<{ className?: string }>; gradien?: string; panduan: string };
 }) {
   const [rows, setRows] = React.useState<HcRequest[] | null>(null);
   const [stage, setStage] = React.useState<RequestStage | "all">("all");
+  const [cari, setCari] = React.useState("");
+  const { bingkai: refBingkai, layarPenuh, alih } = useLayarPenuh();
   const [pic, setPic] = React.useState("all");
   const [scope, setScope] = React.useState<ScopeManpower | "all">("all");
 
@@ -112,17 +129,28 @@ export function HcRequestReview({
     (r: HcRequest) => requestStage({ kind: r.kind, status: r.status, revisions: r.revisions }),
     [],
   );
-  const shown = React.useMemo(
-    () => (stage === "all" ? semua : semua.filter((r) => tahapDari(r) === stage)),
-    [semua, stage, tahapDari],
-  );
+  /**
+   * Pencarian nama pemohon dan judul pengajuan.
+   *
+   * Antrean ini sebelumnya hanya bisa disaring per tahap. Mencari satu
+   * pengajuan tertentu berarti menebak tahapnya lebih dulu — dan kalau salah
+   * tebak, kesimpulannya jadi "pengajuannya hilang".
+   */
+  const q = cari.trim().toLowerCase();
+  const shown = React.useMemo(() => {
+    const perTahap = stage === "all" ? semua : semua.filter((r) => tahapDari(r) === stage);
+    if (!q) return perTahap;
+    return perTahap.filter((r) =>
+      `${r.title ?? ""} ${r.requesterName ?? ""} ${r.department ?? ""}`.toLowerCase().includes(q),
+    );
+  }, [semua, stage, tahapDari, q]);
   const hitung = React.useCallback(
     (v: RequestStage | "all") => (v === "all" ? semua.length : semua.filter((r) => tahapDari(r) === v).length),
     [semua, tahapDari],
   );
 
-  return (
-    <div>
+  const isi = (
+    <>
       {saringScope && (
         <SegmentedTabs
           className="mb-3 max-w-lg"
@@ -181,7 +209,39 @@ export function HcRequestReview({
           )}
         />
       )}
-    </div>
+    </>
+  );
+
+  // Tanpa `bingkai`, tampilannya persis seperti sebelumnya — itu yang dilihat
+  // Antrian System dan Antrian Design.
+  if (!kepala) return <div>{isi}</div>;
+
+  return (
+    <KerangkaModul ref={refBingkai}>
+      <BilahModul
+        ikon={kepala.ikon}
+        gradien={kepala.gradien}
+        judul={kepala.judul}
+        ringkas={
+          rows === null
+            ? "Memuat…"
+            : `${semua.length} pengajuan${stage !== "all" ? ` · saringan tahap aktif` : ""}`
+        }
+        cari={cari}
+        onCari={setCari}
+        cariPlaceholder="Cari judul, pemohon, departemen…"
+        hitung={{ tampil: shown.length, total: semua.length }}
+        menyaring={q !== "" || stage !== "all"}
+        onBersihkan={() => {
+          setCari("");
+          setStage("all");
+        }}
+        panduan={kepala.panduan}
+        layarPenuh={layarPenuh}
+        onLayarPenuh={alih}
+      />
+      <div className="min-h-0 flex-1 overflow-auto p-3">{isi}</div>
+    </KerangkaModul>
   );
 }
 

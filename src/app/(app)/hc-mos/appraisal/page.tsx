@@ -1,12 +1,10 @@
-import { ArrowLeft, ClipboardList } from "lucide-react";
+import { ArrowLeft } from "lucide-react";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { requireSessionUser } from "@/lib/auth";
 import { canReachMenu } from "@/lib/nav";
 import { listTabel } from "@/lib/data/hcmos-lanjutan";
-import { PageHeader } from "@/components/ui/page-header";
-import { PanduanModul } from "@/components/hcmos/panduan-modul";
 import { KonteksModul } from "@/components/hcmos/konteks-modul";
 import { AppraisalBoard } from "@/components/hcmos/appraisal-board";
 import { bolehUbahHc } from "@/lib/hcmos/akses";
@@ -19,8 +17,10 @@ export default async function AppraisalPage() {
 
   const rows = await listTabel("hc_appraisal_sessions");
 
+  // Tanpa kepala halaman: bingkai modulnya membawa judul, angka ringkas,
+  // pencarian, dan panduannya sendiri.
   return (
-    <div className="w-full">
+    <div className="flex w-full flex-col">
       <Link
         href="/hc-mos"
         className="mb-3 inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground"
@@ -28,12 +28,6 @@ export default async function AppraisalPage() {
         <ArrowLeft className="size-4" /> HC-MOS
       </Link>
 
-      <PageHeader
-        icon={ClipboardList}
-        title="Appraisal Review"
-        description="Sesi peninjauan hasil appraisal bersama atasan langsung, sebelum penilaiannya difinalisasi."
-        actions={<PanduanModul panduan="appraisal" />}
-      />
       <KonteksModul panduan="appraisal" />
 
       <AppraisalBoard rows={rows} bolehUbah={bolehUbahHc(user)} />

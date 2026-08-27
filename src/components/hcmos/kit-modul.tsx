@@ -305,3 +305,49 @@ export function LencanaHak({ bolehUbah, catatan }: { bolehUbah: boolean; catatan
     </span>
   );
 }
+
+/* ────────────────────────────── bingkai laporan ────────────────────────────── */
+
+/**
+ * Bingkai siap pakai untuk halaman LAPORAN yang isinya dirender di server.
+ *
+ * `KerangkaModul` menuntut pemakainya memegang `ref` layar penuh, dan itu hanya
+ * bisa dilakukan komponen klien. Halaman seperti Report & KPI isinya dihitung
+ * di server dan tidak punya keadaan apa pun di peramban — memindahkannya jadi
+ * komponen klien hanya demi satu tombol berarti mengirim seluruh perhitungannya
+ * ke peramban tanpa alasan.
+ *
+ * Jadi yang jadi klien cuma bingkainya; isinya tetap datang sebagai `children`
+ * yang sudah jadi dari server.
+ */
+export function BingkaiLaporan({
+  ikon,
+  gradien,
+  judul,
+  ringkas,
+  panduan,
+  children,
+}: {
+  ikon: React.ComponentType<{ className?: string }>;
+  gradien?: string;
+  judul: string;
+  ringkas: React.ReactNode;
+  panduan?: string;
+  children: React.ReactNode;
+}) {
+  const { bingkai, layarPenuh, alih } = useLayarPenuh();
+  return (
+    <KerangkaModul ref={bingkai}>
+      <BilahModul
+        ikon={ikon}
+        gradien={gradien}
+        judul={judul}
+        ringkas={ringkas}
+        panduan={panduan}
+        layarPenuh={layarPenuh}
+        onLayarPenuh={alih}
+      />
+      <div className="min-h-0 flex-1 overflow-auto p-3">{children}</div>
+    </KerangkaModul>
+  );
+}

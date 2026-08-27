@@ -1,12 +1,9 @@
-import { FileUp } from "lucide-react";
 import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 import { requireSessionUser } from "@/lib/auth";
 import { canReachMenu } from "@/lib/nav";
 import { visibleOutlets } from "@/lib/data/store";
 import { listHcSubmissions } from "@/lib/data/hc";
-import { PageHeader } from "@/components/ui/page-header";
-import { PanduanModul } from "@/components/hcmos/panduan-modul";
 import { KonteksModul } from "@/components/hcmos/konteks-modul";
 import { NewSubmissionButton, SubmissionList } from "@/components/hc/hc-submit";
 
@@ -21,20 +18,18 @@ export default async function HcPengajuanPage() {
   // The list doesn't render the KTP, so skip signing it (faster load).
   const rows = await listHcSubmissions({ supervisorId: user.role === "super_admin" ? undefined : user.id, withKtp: false });
 
+  // Tanpa kepala halaman: bingkai modulnya membawa judul, angka ringkas,
+  // pencarian, dan panduannya sendiri.
   return (
-    <div className="w-full">
-      <PageHeader
-        icon={FileUp}
-        title="Pengajuan Dokumen Karyawan"
-        description="Ajukan dokumen karyawan (BPJS, PKWT, Surat Teguran) ke tim Human Capital. Unduh hasil setelah berstatus Selesai."
-        actions={
-          <>
-            <PanduanModul panduan="hc_pengajuan" />
-      <KonteksModul panduan="hc_pengajuan" />
-            <NewSubmissionButton outlets={outlets} />
-          </>
-        }
-      />
+    <div className="flex w-full flex-col">
+      <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
+        <KonteksModul panduan="hc_pengajuan" />
+        {/* Tombol utamanya di luar bingkai: ia membuka formulir baru, bukan
+            mengubah apa yang sedang tampil di dalam bingkai. */}
+        <div className="mb-4">
+          <NewSubmissionButton outlets={outlets} />
+        </div>
+      </div>
       <SubmissionList rows={rows} />
     </div>
   );

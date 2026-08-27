@@ -4,9 +4,14 @@ import * as React from "react";
 import { NAV_ICONS } from "@/components/layout/icons";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { StatTile } from "@/components/ui/stat";
+import {
+  BilahModul,
+  KerangkaModul,
+  useLayarPenuh,
+} from "@/components/hcmos/kit-modul";
 import { GrafikBatang, GrafikDonat, GrafikGaris } from "./grafik";
 import type { TabMonitoring } from "@/lib/data/hcmos-monitoring";
-import { ChartColumnBig } from "lucide-react";
+import { ChartColumnBig, Gauge } from "lucide-react";
 
 /**
  * Dashboard Monitoring — sebelas tab metrik.
@@ -17,13 +22,39 @@ import { ChartColumnBig } from "lucide-react";
  */
 export function MonitoringBoard({ tabs }: { tabs: TabMonitoring[] }) {
   const [aktif, setAktif] = React.useState(tabs[0]?.key ?? "");
+  const { bingkai, layarPenuh, alih } = useLayarPenuh();
   const tab = tabs.find((t) => t.key === aktif) ?? tabs[0];
   if (!tab) return null;
 
   const kosong = tab.angka.every((a) => a.nilai === 0 || a.nilai === "0" || a.nilai === "0%" || a.nilai === "—");
 
+  // Berapa metrik yang benar-benar sudah punya angka. Ini yang paling sering
+  // ditanyakan saat dashboard terlihat sepi: "datanya belum masuk, atau
+  // memang nol?" — dan keduanya keadaan yang sangat berbeda.
+  const adaIsi = tabs.filter(
+    (t) => !t.angka.every((a) => a.nilai === 0 || a.nilai === "0" || a.nilai === "0%" || a.nilai === "—"),
+  ).length;
+
   return (
-    <div className="space-y-4">
+    <KerangkaModul ref={bingkai}>
+      {/* Tanpa kotak cari: isinya sebelas metrik yang seluruhnya sudah terlihat
+          di deret tab. Yang dicari orang di sini adalah metriknya, dan metriknya
+          memang sudah berjajar. */}
+      <BilahModul
+        ikon={Gauge}
+        gradien="from-orange-500 via-amber-500 to-yellow-500 shadow-amber-500/20"
+        judul={tab.label}
+        ringkas={
+          <>
+            {tabs.length} metrik HR · {adaIsi} sudah punya data · seluruhnya dihitung dari modul, tidak diketik
+          </>
+        }
+        panduan="monitoring"
+        layarPenuh={layarPenuh}
+        onLayarPenuh={alih}
+      />
+
+      <div className="min-h-0 flex-1 space-y-4 overflow-auto p-3">
       <div className="scroll-fade-x -mx-1 flex gap-1.5 overflow-x-auto px-1 py-1">
         {tabs.map((t) => {
           const Icon = NAV_ICONS[t.ikon] ?? ChartColumnBig;
@@ -111,6 +142,7 @@ export function MonitoringBoard({ tabs }: { tabs: TabMonitoring[] }) {
           ),
         )}
       </div>
-    </div>
+      </div>
+    </KerangkaModul>
   );
 }

@@ -278,3 +278,74 @@ describe("Antrian Dokumen dan Talent memakai bingkai itu", () => {
     expect(fn).toContain("KerangkaModul");
   });
 });
+
+describe("seluruh halaman Human Capital memakai bentuk yang sama", () => {
+  /**
+   * Sapuan terakhir: tidak ada satu pun halaman HC yang tertinggal memakai
+   * kepala halaman lama sebagai judul utamanya.
+   *
+   * Yang boleh tersisa hanya kepala halaman di cabang AKSES DITOLAK — layar
+   * "khusus Human Capital" yang tampil sebelum datanya dimuat sama sekali.
+   * Di sana memang tidak ada modul untuk dibingkai.
+   */
+  const HALAMAN = [
+    "src/app/(app)/hc-mos/page.tsx",
+    "src/app/(app)/hc-mos/[pilar]/page.tsx",
+    "src/app/(app)/hc-mos/struktur/page.tsx",
+    "src/app/(app)/hc-mos/karyawan/page.tsx",
+    "src/app/(app)/hc-mos/kontrak/page.tsx",
+    "src/app/(app)/hc-mos/rekrutmen/page.tsx",
+    "src/app/(app)/hc-mos/modul/page.tsx",
+    "src/app/(app)/hc-mos/fast-track/page.tsx",
+    "src/app/(app)/hc-mos/assessment/page.tsx",
+    "src/app/(app)/hc-mos/kinerja/page.tsx",
+    "src/app/(app)/hc-mos/appraisal/page.tsx",
+    "src/app/(app)/hc-mos/talent/page.tsx",
+    "src/app/(app)/hc-mos/kompensasi/page.tsx",
+    "src/app/(app)/hc-mos/relasi/page.tsx",
+    "src/app/(app)/hc-mos/dokumen/page.tsx",
+    "src/app/(app)/hc-mos/monitoring/page.tsx",
+    "src/app/(app)/hc-mos/kpi/page.tsx",
+    "src/app/(app)/hc/pengajuan/page.tsx",
+    "src/app/(app)/hc/antrian/page.tsx",
+    "src/app/(app)/hc/permintaan/page.tsx",
+    "src/app/(app)/hc/pelatihan/page.tsx",
+  ];
+
+  it("tidak ada kepala halaman yang mengulang judul bingkainya", () => {
+    for (const f of HALAMAN) {
+      const isi = baca(f);
+      const kepala = (isi.match(/<PageHeader/g) ?? []).length;
+      const ditolak = (isi.match(/EmptyState/g) ?? []).length;
+      // Kepala halaman hanya boleh muncul sebanyak layar akses-ditolaknya.
+      expect(kepala, `${f}: masih ada kepala halaman di luar layar akses ditolak`).toBeLessThanOrEqual(ditolak);
+    }
+  });
+
+  it("setiap halaman tetap membawa bilah konteks pilarnya", () => {
+    // Bingkai modul membawa judul dan panduan; pilar dan PIC-nya tidak, jadi
+    // bilah konteks harus tetap ada.
+    for (const f of HALAMAN) {
+      if (f.endsWith("hc-mos/page.tsx") || f.includes("[pilar]")) continue; // dua ini bukan milik satu pilar
+      expect(baca(f), `${f} kehilangan bilah konteks`).toContain("KonteksModul");
+    }
+  });
+
+  it("bingkai laporan dipakai halaman yang isinya dihitung di server", () => {
+    // Memindahkan halaman laporan jadi komponen klien hanya demi satu tombol
+    // layar penuh berarti mengirim seluruh perhitungannya ke peramban.
+    const KIT = baca("src/components/hcmos/kit-modul.tsx");
+    expect(KIT).toContain("export function BingkaiLaporan");
+    for (const f of ["src/app/(app)/hc-mos/kpi/page.tsx", "src/app/(app)/hc-mos/struktur/page.tsx"]) {
+      expect(baca(f), f).toContain("BingkaiLaporan");
+    }
+  });
+
+  it("komponen antrean bersama tidak dipaksa ikut berubah", () => {
+    // Antrian System dan Antrian Design memakai komponen yang sama. Bingkainya
+    // opsional supaya keduanya tetap seperti sebelumnya.
+    const REVIEW = baca("src/components/hc/request-review.tsx");
+    expect(REVIEW).toContain("bingkai?: {");
+    expect(REVIEW).toContain("if (!kepala) return <div>{isi}</div>;");
+  });
+});

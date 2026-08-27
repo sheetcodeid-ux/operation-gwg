@@ -97,14 +97,14 @@ describe("terpasang di halamannya, bukan cuma tersedia", () => {
     "fast-track": "src/components/hcmos/modul-boards.tsx",
     assessment: "src/components/hcmos/assessment-board.tsx",
     kinerja: "src/components/hcmos/kinerja-board.tsx",
-    appraisal: "src/app/(app)/hc-mos/appraisal/page.tsx",
+    appraisal: "src/components/hcmos/appraisal-board.tsx",
     talent: "src/components/hcmos/modul-boards.tsx",
     kompensasi: "src/components/hcmos/kompensasi-board.tsx",
     relasi: "src/components/hcmos/modul-boards.tsx",
     dokumen: "src/components/hcmos/dokumen-board.tsx",
-    monitoring: "src/app/(app)/hc-mos/monitoring/page.tsx",
+    monitoring: "src/components/hcmos/monitoring-board.tsx",
     kpi: "src/app/(app)/hc-mos/kpi/page.tsx",
-    hc_pengajuan: "src/app/(app)/hc/pengajuan/page.tsx",
+    hc_pengajuan: "src/components/hc/hc-submit.tsx",
     hc_antrian: "src/components/hc/hc-review.tsx",
     hc_permintaan: "src/app/(app)/hc/permintaan/page.tsx",
     hc_pelatihan: "src/app/(app)/hc/pelatihan/page.tsx",
@@ -115,7 +115,10 @@ describe("terpasang di halamannya, bukan cuma tersedia", () => {
       const isi = readFileSync(join(process.cwd(), berkas), "utf8");
       // Sebagian memasangnya langsung, sebagian lewat batang alat modul yang
       // meneruskannya — keduanya berakhir pada tombol yang sama.
-      expect(isi, `${berkas} belum memasang panduan`).toMatch(/PanduanModul|BilahModul/);
+      // Sebagian memasangnya langsung, sebagian meneruskannya lewat batang alat
+      // modul, bingkai laporan, atau prop `bingkai` komponen antrean bersama —
+      // semuanya berakhir pada tombol yang sama.
+      expect(isi, `${berkas} belum memasang panduan`).toMatch(/PanduanModul|BilahModul|BingkaiLaporan|bingkai=\{\{/);
       // Halaman bertab memilih panduannya lewat peta tab, bukan menuliskannya
       // langsung di atributnya — keduanya sah.
       const terpasang = isi.includes(`panduan="${id}"`) || isi.includes(`: "${id}"`);

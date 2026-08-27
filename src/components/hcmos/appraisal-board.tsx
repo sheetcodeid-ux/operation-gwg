@@ -2,9 +2,16 @@
 
 import * as React from "react";
 import { type ColumnDef } from "@tanstack/react-table";
-import { CalendarCheck, CalendarClock, CheckCircle2, Users } from "lucide-react";
+import { CalendarCheck, CalendarClock, CheckCircle2, ClipboardList, Users } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { StatTile } from "@/components/ui/stat";
+import {
+  BilahModul,
+  KerangkaModul,
+  LegendaHitung,
+  LencanaHak,
+  useLayarPenuh,
+} from "@/components/hcmos/kit-modul";
 import { RekamanBoard, type BarisRekaman, type Bidang } from "./rekaman";
 import { SCOPE_LABEL } from "@/lib/hcmos/pillars";
 import { STATUS_SESI, type StatusSesi } from "@/lib/hcmos/penilaian";
@@ -25,6 +32,9 @@ const t = (r: BarisRekaman, k: string) => (r[k] === null || r[k] === undefined ?
 const hariIni = () => new Date().toISOString().slice(0, 10);
 
 export function AppraisalBoard({ rows, bolehUbah }: { rows: BarisRekaman[]; bolehUbah: boolean }) {
+  const [cari, setCari] = React.useState("");
+  const [sorotStatus, setSorotStatus] = React.useState<StatusSesi | null>(null);
+  const { bingkai, layarPenuh, alih } = useLayarPenuh();
   const hari = hariIni();
   const terjadwal = rows.filter((r) => t(r, "status") === "terjadwal");
   // "Akan datang" dihitung dari tanggalnya, bukan dari statusnya. Sesi yang
@@ -106,8 +116,50 @@ export function AppraisalBoard({ rows, bolehUbah }: { rows: BarisRekaman[]; bole
     { key: "catatan", label: "Catatan Hasil Sesi", tipe: "panjang", span: 3 },
   ];
 
+  const q = cari.trim().toLowerCase();
+  const tampil = rows.filter((r) => {
+    if (sorotStatus && (t(r, "status") || "terjadwal") !== sorotStatus) return false;
+    return !q || `${t(r, "peserta")} ${t(r, "reviewer")} ${t(r, "catatan")}`.toLowerCase().includes(q);
+  });
+
+  // Legenda dihitung dari seluruh sesi: menyorot "selesai" tidak boleh membuat
+  // "terjadwal" jatuh ke nol.
+  const rekapStatus = (Object.keys(STATUS_SESI) as StatusSesi[]).map((st) => ({
+    key: st as string,
+    kode: KODE_SESI[st] ?? st.slice(0, 1).toUpperCase(),
+    label: STATUS_SESI[st].label,
+    jumlah: rows.filter((r) => (t(r, "status") || "terjadwal") === st).length,
+    warna: WARNA_SESI[st] ?? (["#64748b", "#94a3b8"] as [string, string]),
+    judulPenuh: STATUS_SESI[st].label,
+  }));
+
   return (
-    <div className="space-y-4">
+    <KerangkaModul ref={bingkai}>
+      <BilahModul
+        ikon={ClipboardList}
+        gradien="from-purple-500 via-fuchsia-500 to-pink-600 shadow-fuchsia-500/20"
+        judul="Appraisal Review"
+        ringkas={
+          <>
+            {rows.length} sesi · {akanDatang} akan datang · {selesai} selesai
+            {lewatTenggat > 0 && ` · ${lewatTenggat} lewat tenggat`}
+          </>
+        }
+        cari={cari}
+        onCari={setCari}
+        cariPlaceholder="Cari peserta, reviewer…"
+        hitung={{ tampil: tampil.length, total: rows.length }}
+        menyaring={q !== "" || sorotStatus !== null}
+        onBersihkan={() => {
+          setCari("");
+          setSorotStatus(null);
+        }}
+        panduan="appraisal"
+        layarPenuh={layarPenuh}
+        onLayarPenuh={alih}
+      />
+
+      <div className="min-h-0 flex-1 space-y-4 overflow-auto p-3">
       <div className="grid grid-cols-[minmax(0,1fr)] gap-3 sm:grid-cols-2 xl:grid-cols-4">
         <StatTile icon={CalendarClock} label="Sesi Akan Datang" value={akanDatang} sub="masih terjadwal" />
         <StatTile
@@ -124,14 +176,30 @@ export function AppraisalBoard({ rows, bolehUbah }: { rows: BarisRekaman[]; bole
         tabel="hc_appraisal_sessions"
         rute="/hc-mos/appraisal"
         tableId="hcmos-appraisal"
-        rows={rows}
+        rows={tampil}
         bolehUbah={bolehUbah}
         labelTambah="Jadwal Review"
-        searchPlaceholder="Cari peserta, reviewer…"
+        showSearch={false}
+        maxHeight="none"
         bawaan={{ scope: "manajemen", status: "terjadwal" }}
         columns={kolom}
         bidang={bidang}
       />
-    </div>
+      </div>
+
+      <LegendaHitung
+        butir={rekapStatus}
+        sorot={sorotStatus}
+        onSorot={(k) => setSorotStatus((v) => (v === k ? null : (k as StatusSesi)))}
+        kiri={<LencanaHak bolehUbah={bolehUbah} />}
+      />
+    </KerangkaModul>
   );
 }
+
+const KODE_SESI: Record<string, string> = { terjadwal: "T", selesai: "S", batal: "X" };
+const WARNA_SESI: Record<string, [string, string]> = {
+  terjadwal: ["#4f46e5", "#818cf8"],
+  selesai: ["#059669", "#34d399"],
+  batal: ["#dc2626", "#f87171"],
+};

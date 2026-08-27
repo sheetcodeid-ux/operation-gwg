@@ -3,8 +3,6 @@ import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 import { requireSessionUser } from "@/lib/auth";
 import { canReachMenu } from "@/lib/nav";
-import { PageHeader } from "@/components/ui/page-header";
-import { PanduanModul } from "@/components/hcmos/panduan-modul";
 import { KonteksModul } from "@/components/hcmos/konteks-modul";
 import { HcRequestReview } from "@/components/hc/request-review";
 import { StatTile } from "@/components/ui/stat";
@@ -23,14 +21,10 @@ export default async function HcRecruitReviewPage() {
   const bulanIni = new Date().toISOString().slice(0, 7);
   const terpenuhi = semua.filter((r) => r.status === "terlaksana" && (r.completedAt ?? "").startsWith(bulanIni));
   const orang = (rows: typeof semua) => rows.reduce((a, r) => a + (r.headcount || 1), 0);
+  // Tanpa kepala halaman: bingkai antreannya membawa judul, angka ringkas,
+  // pencarian, dan panduannya sendiri.
   return (
-    <div className="w-full">
-      <PageHeader
-        icon={ClipboardCheck}
-        title="Permintaan Karyawan"
-        description="Tinjau permintaan pegawai — dipisah Manajemen (divisi kantor) dan Outlet (cabang, diajukan Supervisor)."
-        actions={<PanduanModul panduan="hc_permintaan" />}
-      />
+    <div className="flex w-full flex-col">
       <KonteksModul panduan="hc_permintaan" />
 
       <div className="mb-4 grid grid-cols-[minmax(0,1fr)] gap-3 sm:grid-cols-2 xl:grid-cols-4">
@@ -55,7 +49,11 @@ export default async function HcRecruitReviewPage() {
         />
       </div>
 
-      <HcRequestReview mode="hc" kind="rekrutmen" />
+      <HcRequestReview
+        mode="hc"
+        kind="rekrutmen"
+        bingkai={{ judul: "Permintaan Karyawan", ikon: ClipboardCheck, gradien: "from-emerald-500 via-teal-500 to-cyan-600 shadow-teal-500/20", panduan: "hc_permintaan" }}
+      />
     </div>
   );
 }

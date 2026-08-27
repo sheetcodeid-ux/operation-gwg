@@ -12,6 +12,11 @@ import { Combobox } from "@/components/ui/combobox";
 import { DatePicker } from "@/components/ui/date-picker";
 import { DetailRows, DetailTitle } from "@/components/ui/detail-rows";
 import { StatusFilter } from "@/components/ui/status-filter";
+import {
+  BilahModul,
+  KerangkaModul,
+  useLayarPenuh,
+} from "@/components/hcmos/kit-modul";
 import { cn } from "@/lib/utils";
 import { submitHcRequestAction, uploadHcKtpAction } from "@/lib/actions/hc";
 import { uploadOne } from "@/lib/upload-client";
@@ -241,21 +246,56 @@ function FilePick({ file, onPick, accept }: { file: File | null; onPick: (f: Fil
  *  status, seragam dengan halaman Pengajuan lainnya. */
 export function SubmissionList({ rows }: { rows: HcSubmission[] }) {
   const [status, setStatus] = useState("");
+  const [cari, setCari] = useState("");
   const [openId, setOpenId] = useState<string | null>(null);
-
-  if (rows.length === 0) {
-    return (
-      <div className="rounded-xl border border-dashed border-border p-10 text-center text-sm text-muted-foreground">
-        Belum ada pengajuan. Klik “Ajukan Dokumen” untuk mengirim permintaan ke Human Capital.
-      </div>
-    );
-  }
+  const { bingkai, layarPenuh, alih } = useLayarPenuh();
 
   const counts = (v: HcStatus) => rows.filter((r) => r.status === v).length;
-  const shown = status ? rows.filter((r) => r.status === status) : rows;
+
+  /**
+   * Pencarian nama karyawan.
+   *
+   * Supervisor yang aktif mengirim belasan pengajuan sebulan, dan yang
+   * ditanyakan cabang biasanya "surat si anu sudah jadi belum" — pertanyaan
+   * tentang satu nama, bukan tentang satu status.
+   */
+  const q = cari.trim().toLowerCase();
+  const shown = (status ? rows.filter((r) => r.status === status) : rows).filter(
+    (r) => !q || `${r.employeeName ?? ""} ${r.docType} ${r.outletName ?? ""}`.toLowerCase().includes(q),
+  );
 
   return (
-    <div className="space-y-3">
+    <KerangkaModul ref={bingkai}>
+      <BilahModul
+        ikon={FileUp}
+        gradien="from-sky-500 via-cyan-500 to-teal-500 shadow-cyan-500/20"
+        judul="Pengajuan Dokumen Karyawan"
+        ringkas={
+          rows.length === 0
+            ? "Belum ada pengajuan — klik Ajukan Dokumen untuk mengirim permintaan ke Human Capital"
+            : `${rows.length} pengajuan · ${counts("waiting") + counts("processing") + counts("pending")} berjalan · ${counts("done")} selesai`
+        }
+        cari={cari}
+        onCari={setCari}
+        cariPlaceholder="Cari nama karyawan, jenis dokumen…"
+        hitung={{ tampil: shown.length, total: rows.length }}
+        menyaring={q !== "" || status !== ""}
+        onBersihkan={() => {
+          setCari("");
+          setStatus("");
+        }}
+        panduan="hc_pengajuan"
+        layarPenuh={layarPenuh}
+        onLayarPenuh={alih}
+      />
+
+      <div className="min-h-0 flex-1 space-y-3 overflow-auto p-3">
+      {rows.length === 0 ? (
+        <div className="rounded-xl border border-dashed border-border p-10 text-center text-sm text-muted-foreground">
+          Belum ada pengajuan. Klik “Ajukan Dokumen” untuk mengirim permintaan ke Human Capital.
+        </div>
+      ) : (
+        <>
       <StatusFilter
         value={status}
         onChange={setStatus}
@@ -391,6 +431,9 @@ export function SubmissionList({ rows }: { rows: HcSubmission[] }) {
           })}
         </div>
       )}
-    </div>
+        </>
+      )}
+      </div>
+    </KerangkaModul>
   );
 }
