@@ -3,7 +3,7 @@
 import * as React from "react";
 import { type ColumnDef } from "@tanstack/react-table";
 import { useRouter } from "next/navigation";
-import { CalendarDays, Check, LogIn, Loader2, Pencil, Plus, Trash2, Users } from "lucide-react";
+import { CalendarDays, Check, LogIn, Loader2, Pencil, Plus, Trash2, UserPlus, Users } from "lucide-react";
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -17,6 +17,13 @@ import { Field, Input, Textarea } from "@/components/ui/input";
 import { Progress } from "@/components/ui/progress";
 import { SegmentedTabs } from "@/components/ui/segmented-tabs";
 import { StatTile } from "@/components/ui/stat";
+import {
+  BilahModul,
+  KerangkaModul,
+  LegendaHitung,
+  LencanaHak,
+  useLayarPenuh,
+} from "@/components/hcmos/kit-modul";
 import { AlurLangkah } from "./alur";
 import { TAHAP_ONBOARDING_MANAJEMEN, TAHAP_ONBOARDING_OUTLET } from "@/lib/hcmos/alur-sop";
 import { useConfirm } from "@/components/ui/confirm";
@@ -65,56 +72,179 @@ export function RekrutmenBoard({
   tabAwal?: string;
 }) {
   const [tab, setTab] = React.useState(tabAwal);
+  const [tahap, setTahap] = React.useState<TahapKandidat | "all">("all");
+  const [cari, setCari] = React.useState("");
+  const { bingkai, layarPenuh, alih } = useLayarPenuh();
 
   const aktif = kandidat.filter((k) => TAHAP_AKTIF.includes(k.tahap));
   const wawancara = kandidat.filter((k) => k.jadwalInterview);
   const diterima = kandidat.filter((k) => k.tahap === "diterima");
 
-  return (
-    <div className="space-y-4">
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-        <StatTile icon={Users} label="Kandidat Berjalan" value={aktif.length} sub="belum diputuskan" />
-        <StatTile icon={CalendarDays} label="Terjadwal Wawancara" value={wawancara.length} sub="punya jadwal" />
-        <StatTile icon={Check} label="Diterima" value={diterima.length} sub="lolos seleksi" />
-        <StatTile icon={LogIn} label="Sedang Onboarding" value={onboarding.length} sub="karyawan baru" />
-      </div>
+  /**
+   * Saringannya milik modul, bukan milik tab.
+   *
+   * Sebelumnya saringan tahap hidup di dalam tab Kandidat saja, jadi berpindah
+   * ke Jadwal Interview membuangnya diam-diam — dan yang sedang menelusuri satu
+   * tahap kehilangan tempatnya tanpa diberi tahu.
+   */
+  const cocok = React.useCallback(
+    (r: KandidatRow) => {
+      if (tahap !== "all" && r.tahap !== tahap) return false;
+      const q = cari.trim().toLowerCase();
+      if (!q) return true;
+      return `${r.nama} ${r.posisi ?? ""} ${r.sumber ?? ""} ${r.pewawancara ?? ""} ${r.email ?? ""} ${r.telepon ?? ""}`
+        .toLowerCase()
+        .includes(q);
+    },
+    [tahap, cari],
+  );
 
-      <SegmentedTabs
-        className="max-w-xl"
-        value={tab}
-        onChange={setTab}
-        items={[
-          { value: "kandidat", label: "Kandidat", icon: Users },
-          { value: "interview", label: "Jadwal Interview", icon: CalendarDays },
-          { value: "onboarding", label: "Onboarding", icon: LogIn },
-        ]}
+  const kandidatTersaring = React.useMemo(() => kandidat.filter(cocok), [kandidat, cocok]);
+  const wawancaraTersaring = React.useMemo(() => wawancara.filter(cocok), [wawancara, cocok]);
+  const onboardingTersaring = React.useMemo(() => {
+    const q = cari.trim().toLowerCase();
+    if (!q) return onboarding;
+    return onboarding.filter((o) => `${o.nama} ${o.posisi ?? ""} ${o.mentor ?? ""}`.toLowerCase().includes(q));
+  }, [onboarding, cari]);
+
+  const menyaring = tahap !== "all" || cari.trim() !== "";
+
+  // Legenda dihitung dari SELURUH kandidat, bukan dari yang sedang tampak:
+  // menyorot satu tahap tidak boleh membuat tahap lain jatuh ke nol, kalau
+  // tidak legendanya berhenti bisa dipakai untuk kembali.
+  const rekapTahap = React.useMemo(
+    () =>
+      TAHAP_KANDIDAT.map((t) => ({
+        key: t,
+        kode: KODE_TAHAP[t],
+        label: TAHAP_META[t].label,
+        jumlah: kandidat.filter((k) => k.tahap === t).length,
+        warna: WARNA_TAHAP[t],
+        judulPenuh: TAHAP_META[t].label,
+      })),
+    [kandidat],
+  );
+
+  const tampil =
+    tab === "interview" ? wawancaraTersaring.length : tab === "onboarding" ? onboardingTersaring.length : kandidatTersaring.length;
+  const total = tab === "interview" ? wawancara.length : tab === "onboarding" ? onboarding.length : kandidat.length;
+
+  return (
+    <KerangkaModul ref={bingkai}>
+      <BilahModul
+        ikon={UserPlus}
+        gradien="from-sky-500 via-blue-500 to-indigo-600 shadow-blue-500/20"
+        judul="Rekrutmen & Seleksi"
+        ringkas={
+          <>
+            {aktif.length} kandidat berjalan · {wawancara.length} terjadwal · {diterima.length} diterima ·{" "}
+            {onboarding.length} onboarding
+          </>
+        }
+        cari={cari}
+        onCari={setCari}
+        cariPlaceholder="Cari nama, posisi, pewawancara…"
+        hitung={{ tampil, total }}
+        menyaring={menyaring}
+        onBersihkan={() => {
+          setTahap("all");
+          setCari("");
+        }}
+        panduan="rekrutmen"
+        saringan={
+          <Combobox
+            portal
+            searchable={false}
+            value={tahap}
+            onChange={(v) => setTahap(v as TahapKandidat | "all")}
+            className="w-full shrink-0 sm:w-44"
+            options={[
+              { value: "all", label: "Semua Tahap" },
+              ...TAHAP_KANDIDAT.map((t) => ({ value: t, label: TAHAP_META[t].label })),
+            ]}
+          />
+        }
+        tampilan={
+          <SegmentedTabs
+            className="w-full sm:w-auto"
+            size="sm"
+            value={tab}
+            onChange={setTab}
+            items={[
+              { value: "kandidat", label: "Kandidat", icon: Users },
+              { value: "interview", label: "Interview", icon: CalendarDays },
+              { value: "onboarding", label: "Onboarding", icon: LogIn },
+            ]}
+          />
+        }
+        layarPenuh={layarPenuh}
+        onLayarPenuh={alih}
       />
 
-      {tab === "kandidat" && <TabKandidat rows={kandidat} outlets={outlets} bolehUbah={bolehUbah} />}
-      {tab === "interview" && <TabInterview rows={wawancara} outlets={outlets} bolehUbah={bolehUbah} />}
-      {tab === "onboarding" && (
-        <>
-          {/* Tahapannya ditaruh di atas daftarnya: yang ditanyakan orang saat
-              membuka Onboarding hampir selalu "karyawan baru ini harus melewati
-              apa saja", bukan "siapa saja yang sedang onboarding". */}
-          <div className="grid grid-cols-[minmax(0,1fr)] gap-3 lg:grid-cols-2">
-            <AlurLangkah
-              judul="Tahapan Onboarding Manajemen"
-              ringkas="Materi wajibnya berjalan lewat Self-Learning jalur Manajemen"
-              langkah={TAHAP_ONBOARDING_MANAJEMEN}
-            />
-            <AlurLangkah
-              judul="Tahapan Onboarding Outlet"
-              ringkas="Fast Start & Fast Track berjalan di Self-Learning jalur Outlet"
-              langkah={TAHAP_ONBOARDING_OUTLET}
-            />
-          </div>
-          <TabOnboarding rows={onboarding} outlets={outlets} bolehUbah={bolehUbah} />
-        </>
-      )}
-    </div>
+      <div className="min-h-0 flex-1 overflow-auto p-3">
+        <div className="mb-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+          <StatTile icon={Users} label="Kandidat Berjalan" value={aktif.length} sub="belum diputuskan" />
+          <StatTile icon={CalendarDays} label="Terjadwal Wawancara" value={wawancara.length} sub="punya jadwal" />
+          <StatTile icon={Check} label="Diterima" value={diterima.length} sub="lolos seleksi" />
+          <StatTile icon={LogIn} label="Sedang Onboarding" value={onboarding.length} sub="karyawan baru" />
+        </div>
+
+        {tab === "kandidat" && <TabKandidat rows={kandidatTersaring} outlets={outlets} bolehUbah={bolehUbah} />}
+        {tab === "interview" && <TabInterview rows={wawancaraTersaring} outlets={outlets} bolehUbah={bolehUbah} />}
+        {tab === "onboarding" && (
+          <>
+            {/* Tahapannya ditaruh di atas daftarnya: yang ditanyakan orang saat
+                membuka Onboarding hampir selalu "karyawan baru ini harus melewati
+                apa saja", bukan "siapa saja yang sedang onboarding". */}
+            <div className="grid grid-cols-[minmax(0,1fr)] gap-3 lg:grid-cols-2">
+              <AlurLangkah
+                judul="Tahapan Onboarding Manajemen"
+                ringkas="Materi wajibnya berjalan lewat Self-Learning jalur Manajemen"
+                langkah={TAHAP_ONBOARDING_MANAJEMEN}
+              />
+              <AlurLangkah
+                judul="Tahapan Onboarding Outlet"
+                ringkas="Fast Start & Fast Track berjalan di Self-Learning jalur Outlet"
+                langkah={TAHAP_ONBOARDING_OUTLET}
+              />
+            </div>
+            <div className="mt-3">
+              <TabOnboarding rows={onboardingTersaring} outlets={outlets} bolehUbah={bolehUbah} />
+            </div>
+          </>
+        )}
+      </div>
+
+      <LegendaHitung
+        butir={rekapTahap}
+        sorot={tahap === "all" ? null : tahap}
+        onSorot={(k) => {
+          setTahap((t) => (t === k ? "all" : (k as TahapKandidat)));
+          setTab("kandidat");
+        }}
+        kiri={<LencanaHak bolehUbah={bolehUbah} />}
+      />
+    </KerangkaModul>
   );
 }
+
+/** Kode pendek untuk legenda — cukup dibedakan sekilas, bukan disingkat rapi. */
+const KODE_TAHAP: Record<TahapKandidat, string> = {
+  baru: "B",
+  screening: "SC",
+  interview: "IV",
+  tawaran: "TW",
+  diterima: "OK",
+  ditolak: "X",
+};
+const WARNA_TAHAP: Record<TahapKandidat, [string, string]> = {
+  baru: ["#64748b", "#94a3b8"],
+  screening: ["#4f46e5", "#818cf8"],
+  interview: ["#0891b2", "#22d3ee"],
+  tawaran: ["#d97706", "#fbbf24"],
+  diterima: ["#059669", "#34d399"],
+  ditolak: ["#dc2626", "#f87171"],
+};
 
 /* ─────────────────────────────── kandidat ─────────────────────────────── */
 
@@ -160,13 +290,7 @@ function TabKandidat({
 }) {
   const router = useRouter();
   const { confirm, dialog } = useConfirm();
-  const [tahap, setTahap] = React.useState("all");
   const [form, setForm] = React.useState<FormKandidat | null>(null);
-
-  const tersaring = React.useMemo(
-    () => (tahap === "all" ? rows : rows.filter((r) => r.tahap === tahap)),
-    [rows, tahap],
-  );
 
   const hapus = React.useCallback(
     async (k: KandidatRow) => {
@@ -261,27 +385,15 @@ function TabKandidat({
       <DataTable
         tableId="hcmos-kandidat"
         columns={columns}
-        data={tersaring}
-        searchPlaceholder="Cari nama, posisi…"
+        data={rows}
+        showSearch={false}
+        maxHeight="none"
         toolbar={
-          <div className="contents">
-            <Combobox
-              portal
-              searchable={false}
-              value={tahap}
-              onChange={setTahap}
-              className="w-44 shrink-0"
-              options={[
-                { value: "all", label: "Semua Tahap" },
-                ...TAHAP_KANDIDAT.map((t) => ({ value: t, label: TAHAP_META[t].label })),
-              ]}
-            />
-            {bolehUbah && (
-              <Button size="sm" className="shrink-0" onClick={() => setForm(kandidatKosong())}>
-                <Plus className="size-3.5" /> Kandidat
-              </Button>
-            )}
-          </div>
+          bolehUbah ? (
+            <Button size="sm" className="shrink-0" onClick={() => setForm(kandidatKosong())}>
+              <Plus className="size-3.5" /> Kandidat
+            </Button>
+          ) : undefined
         }
       />
       {form && (

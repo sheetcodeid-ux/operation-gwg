@@ -9,7 +9,6 @@ import { scopeOutlets } from "@/lib/rbac";
 import { listTabel } from "@/lib/data/hcmos-lanjutan";
 import { listKontrak } from "@/lib/data/hcmos";
 import { EmptyState, PageHeader } from "@/components/ui/page-header";
-import { PanduanModul } from "@/components/hcmos/panduan-modul";
 import { KonteksModul } from "@/components/hcmos/konteks-modul";
 import { KompensasiBoard } from "@/components/hcmos/kompensasi-board";
 import { bolehUbahHc } from "@/lib/hcmos/akses";
@@ -18,22 +17,6 @@ import type { HcScope } from "@/lib/hcmos/pillars";
 export const metadata: Metadata = { title: "Compensation & Benefit — HC-MOS" };
 
 const TAB_SAH = ["cuti", "payroll", "bpjs", "golongan"];
-
-/** Satu halaman melayani empat menu sidebar; judulnya ikut menu yang membukanya
- *  supaya orang tidak merasa mendarat di tempat lain dari yang ia klik. */
-const JUDUL: Record<string, string> = {
-  cuti: "Attendance & Cuti",
-  payroll: "Payroll",
-  bpjs: "BPJS & Benefit",
-  golongan: "Struktur Kompensasi",
-};
-
-const URAIAN: Record<string, string> = {
-  cuti: "Rekap kehadiran & pengajuan cuti/izin — pilih tampilan sesuai scope: Manajemen (GWG) atau Outlet.",
-  payroll: "Pengelolaan penggajian bulanan — pilih tampilan sesuai scope: Manajemen (GWG) atau Outlet.",
-  bpjs: "Administrasi BPJS Ketenagakerjaan & Kesehatan, serta program benefit lain di luar BPJS.",
-  golongan: "Struktur kompensasi per golongan jabatan untuk manajemen dan crew outlet.",
-};
 
 export default async function KompensasiPage({ searchParams }: { searchParams: Promise<{ tab?: string }> }) {
   const user = await requireSessionUser();
@@ -77,12 +60,13 @@ export default async function KompensasiPage({ searchParams }: { searchParams: P
     outlet: kontrak.filter((k) => !k.tglResign).length,
   };
 
+  // Tanpa kepala halaman: bingkai modulnya membawa judul, angka ringkas,
+  // pencarian, dan panduannya sendiri.
   return (
-    <div className="w-full">
+    <div className="flex w-full flex-col">
       <Link href="/hc-mos" className="mb-3 inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground">
         <ArrowLeft className="size-4" /> HC-MOS
       </Link>
-      <PageHeader icon={Wallet} title={JUDUL[tab]} description={URAIAN[tab]} actions={<PanduanModul panduan="kompensasi" />} />
       <KonteksModul panduan="kompensasi" />
       <KompensasiBoard
         cuti={cuti}

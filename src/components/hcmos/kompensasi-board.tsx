@@ -12,11 +12,19 @@ import {
   TriangleAlert,
   UserMinus,
   UsersRound,
+  Wallet,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { SegmentedTabs } from "@/components/ui/segmented-tabs";
 import { StatTile } from "@/components/ui/stat";
+import {
+  BilahModul,
+  KerangkaModul,
+  LegendaHitung,
+  LencanaHak,
+  useLayarPenuh,
+} from "@/components/hcmos/kit-modul";
 import { RekamanBoard, type BarisRekaman } from "./rekaman";
 import { GrafikDonat } from "./grafik";
 import {
@@ -72,6 +80,19 @@ import { formatDate } from "@/lib/utils";
  */
 
 const HARI = ["Minggu", "Senin", "Selasa", "Rabu", "Kamis", "Jumat", "Sabtu"];
+
+/**
+ * Satu modul melayani empat menu sidebar, dan judulnya ikut menu yang
+ * membukanya — supaya orang tidak merasa mendarat di tempat lain dari yang ia
+ * klik. Dulu ini hidup di berkas halaman; sekarang di sini, karena tab-nya juga
+ * bisa berpindah tanpa halamannya dimuat ulang.
+ */
+const JUDUL_TAB: Record<string, string> = {
+  cuti: "Attendance & Cuti",
+  payroll: "Payroll",
+  bpjs: "BPJS & Benefit",
+  golongan: "Struktur Kompensasi",
+};
 
 const STATUS_PROSES = {
   selesai: { label: "Selesai Diproses", tone: "success" as const },
@@ -205,6 +226,8 @@ export function KompensasiBoard({
 }) {
   const [tab, setTab] = React.useState(tabAwal);
   const [scope, setScope] = React.useState<HcScope>("manajemen");
+  const [cari, setCari] = React.useState("");
+  const { bingkai, layarPenuh, alih } = useLayarPenuh();
   const rute = "/hc-mos/kompensasi";
   const hariIni = React.useMemo(() => new Date(`${hariIniIso}T00:00:00Z`), [hariIniIso]);
 
@@ -240,20 +263,84 @@ export function KompensasiBoard({
   const belum = React.useMemo(() => belumTerdaftarKeduanya(barisBpjs), [barisBpjs]);
   const persen = (v: number) => (bpjs.total ? Math.round((v / bpjs.total) * 100) : 0);
 
+  /**
+   * Pencarian hanya ditawarkan di tab yang barisnya memang punya nama orang.
+   *
+   * Payroll dan Struktur menampilkan agregat — per brand, per golongan — dan
+   * tidak ada nama yang bisa dicari di sana. Kotak cari yang tampil tapi tidak
+   * menyaring apa pun jauh lebih buruk daripada kotak cari yang tidak ada:
+   * yang mengetik menyimpulkan datanya tidak ada, bukan bahwa tabelnya memang
+   * bukan tentang orang.
+   */
+  const bisaDicari = tab === "cuti" || tab === "bpjs";
+  const q = cari.trim().toLowerCase();
+  const saring = React.useCallback(
+    (nama: string) => !q || nama.toLowerCase().includes(q),
+    [q],
+  );
+  const cutiTampil = React.useMemo(
+    () => (bisaDicari ? cutiScope.filter((r) => saring(`${t(r, "nama")} ${t(r, "jabatan")} ${r.outletName ?? ""}`)) : cutiScope),
+    [cutiScope, bisaDicari, saring],
+  );
+  const belumTampil = React.useMemo(() => belum.filter((r) => saring(r.nama ?? "")), [belum, saring]);
+
+  const tampil = tab === "bpjs" ? belumTampil.length : cutiTampil.length;
+  const total = tab === "bpjs" ? belum.length : cutiScope.length;
+
+  /**
+   * Legenda kaki dihitung per scope dan sama di semua tab — sengaja.
+   *
+   * Empat angka inilah yang dibawa orang keluar dari modul ini apa pun tab
+   * yang sedang dibuka: berapa orangnya, berapa yang sedang tidak masuk,
+   * berapa yang sudah digaji, berapa yang BPJS-nya sudah lengkap.
+   */
+  const rekapKaki = React.useMemo(
+    () => [
+      { key: "karyawan", kode: "K", label: "Karyawan", jumlah: totalKaryawan, warna: ["#4f46e5", "#818cf8"] as [string, string] },
+      { key: "cuti", kode: "C", label: "Cuti/izin", jumlah: sedangCuti.length, warna: ["#d97706", "#fbbf24"] as [string, string] },
+      { key: "gaji", kode: "G", label: `Digaji ${periode}`, jumlah: digaji, warna: ["#0891b2", "#22d3ee"] as [string, string] },
+      { key: "bpjs", kode: "B", label: "BPJS lengkap", jumlah: bpjs.keduanya, warna: ["#059669", "#34d399"] as [string, string] },
+    ],
+    [totalKaryawan, sedangCuti.length, digaji, periode, bpjs.keduanya],
+  );
+
   return (
-    <div className="space-y-4">
-      <SegmentedTabs
-        className="max-w-2xl"
-        value={tab}
-        onChange={setTab}
-        items={[
-          { value: "cuti", label: "Attendance & Cuti", icon: CalendarCheck },
-          { value: "payroll", label: "Payroll", icon: Banknote },
-          { value: "bpjs", label: "BPJS & Benefit", icon: ShieldCheck },
-          { value: "golongan", label: "Struktur", icon: ChartColumnBig },
-        ]}
+    <KerangkaModul ref={bingkai}>
+      <BilahModul
+        ikon={Wallet}
+        gradien="from-amber-500 via-orange-500 to-rose-500 shadow-orange-500/20"
+        judul={JUDUL_TAB[tab] ?? "Compensation & Benefit"}
+        ringkas={
+          <>
+            {SCOPE_LABEL[scope]} · {totalKaryawan} karyawan · {sedangCuti.length} sedang cuti · {digaji} digaji {periode}
+          </>
+        }
+        cari={bisaDicari ? cari : undefined}
+        onCari={bisaDicari ? setCari : undefined}
+        cariPlaceholder="Cari nama karyawan…"
+        hitung={{ tampil, total }}
+        menyaring={q !== ""}
+        onBersihkan={() => setCari("")}
+        panduan="kompensasi"
+        tampilan={
+          <SegmentedTabs
+            className="w-full sm:w-auto"
+            size="sm"
+            value={tab}
+            onChange={setTab}
+            items={[
+              { value: "cuti", label: "Cuti", icon: CalendarCheck },
+              { value: "payroll", label: "Payroll", icon: Banknote },
+              { value: "bpjs", label: "BPJS", icon: ShieldCheck },
+              { value: "golongan", label: "Struktur", icon: ChartColumnBig },
+            ]}
+          />
+        }
+        layarPenuh={layarPenuh}
+        onLayarPenuh={alih}
       />
 
+      <div className="min-h-0 flex-1 space-y-4 overflow-auto p-3">
       <ScopeTabs value={scope} onChange={(v) => setScope(v as HcScope)} semua={false} />
 
       {tab === "cuti" && (
@@ -282,7 +369,7 @@ export function KompensasiBoard({
             judul={berscope("Pengajuan Cuti & Izin", scope)}
             kepala={["Nama", "Divisi", "Jenis", "Tanggal", "Status"]}
             kosong="Belum ada pengajuan cuti atau izin untuk scope ini."
-            baris={cutiScope.slice(0, 12).map((r) => {
+            baris={cutiTampil.slice(0, 12).map((r) => {
               const jenis = JENIS_CUTI[t(r, "jenis") as keyof typeof JENIS_CUTI];
               const st = STATUS_CUTI[t(r, "status") as keyof typeof STATUS_CUTI];
               const a = t(r, "tgl_mulai");
@@ -388,7 +475,7 @@ export function KompensasiBoard({
                 ? `BPJS Kesehatan menjadi celah terbesar — ${bpjs.total - bpjs.kesSelesai} dari ${bpjs.total} karyawan tercatat (termasuk yang BPJS TK-nya sudah selesai) belum terdaftar BPJS Kesehatan.`
                 : undefined
             }
-            baris={belum.map((r) => [
+            baris={belumTampil.map((r) => [
               <span key="n" className="font-medium">{r.nama || "—"}</span>,
               <span key="m" className="text-muted-foreground">{masaKerja(r.tglMasuk, hariIni)}</span>,
               <Badge key="tk" tone="danger">Belum</Badge>,
@@ -451,7 +538,10 @@ export function KompensasiBoard({
         outlets={outlets}
         bolehUbah={bolehUbah}
       />
-    </div>
+      </div>
+
+      <LegendaHitung butir={rekapKaki} kiri={<LencanaHak bolehUbah={bolehUbah} />} />
+    </KerangkaModul>
   );
 }
 

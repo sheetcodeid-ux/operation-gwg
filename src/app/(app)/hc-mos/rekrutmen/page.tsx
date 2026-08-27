@@ -8,7 +8,6 @@ import { getOutlets } from "@/lib/data/store";
 import { scopeOutlets } from "@/lib/rbac";
 import { listKandidat, listOnboarding } from "@/lib/data/hcmos-rekrutmen";
 import { EmptyState, PageHeader } from "@/components/ui/page-header";
-import { PanduanModul } from "@/components/hcmos/panduan-modul";
 import { KonteksModul } from "@/components/hcmos/konteks-modul";
 import { RekrutmenBoard } from "@/components/hcmos/rekrutmen-board";
 
@@ -40,8 +39,10 @@ export default async function RekrutmenPage({ searchParams }: { searchParams: Pr
   const [kandidat, onboarding] = await Promise.all([listKandidat(), listOnboarding()]);
   const outlets = scopeOutlets(user, getOutlets()).map((o) => ({ id: o.id, name: o.name }));
 
+  // Tanpa kepala halaman: bingkai modulnya membawa judul, angka ringkas,
+  // pencarian, dan panduannya sendiri.
   return (
-    <div className="w-full">
+    <div className="flex w-full flex-col">
       <Link
         href="/hc-mos"
         className="mb-3 inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground"
@@ -49,12 +50,6 @@ export default async function RekrutmenPage({ searchParams }: { searchParams: Pr
         <ArrowLeft className="size-4" /> HC-MOS
       </Link>
 
-      <PageHeader
-        icon={UserPlus}
-        title="Rekrutmen & Seleksi"
-        description="Satu berkas per kandidat: melamar, diwawancara, diterima, lalu menjalani orientasi."
-        actions={<PanduanModul panduan="rekrutmen" />}
-      />
 
       <KonteksModul panduan="rekrutmen" />
       <RekrutmenBoard

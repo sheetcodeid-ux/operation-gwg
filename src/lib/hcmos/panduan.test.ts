@@ -92,14 +92,14 @@ describe("terpasang di halamannya, bukan cuma tersedia", () => {
     // Modul yang sudah memakai bingkai kit: panduannya duduk di batang alat
     // modulnya, karena halamannya sengaja tidak lagi punya kepala halaman.
     kontrak: "src/components/hcmos/kontrak-board.tsx",
-    rekrutmen: "src/app/(app)/hc-mos/rekrutmen/page.tsx",
+    rekrutmen: "src/components/hcmos/rekrutmen-board.tsx",
     modul: "src/app/(app)/hc-mos/modul/page.tsx",
     "fast-track": "src/app/(app)/hc-mos/fast-track/page.tsx",
     assessment: "src/app/(app)/hc-mos/assessment/page.tsx",
     kinerja: "src/app/(app)/hc-mos/kinerja/page.tsx",
     appraisal: "src/app/(app)/hc-mos/appraisal/page.tsx",
     talent: "src/app/(app)/hc-mos/talent/page.tsx",
-    kompensasi: "src/app/(app)/hc-mos/kompensasi/page.tsx",
+    kompensasi: "src/components/hcmos/kompensasi-board.tsx",
     relasi: "src/app/(app)/hc-mos/relasi/page.tsx",
     dokumen: "src/app/(app)/hc-mos/dokumen/page.tsx",
     monitoring: "src/app/(app)/hc-mos/monitoring/page.tsx",
@@ -156,6 +156,7 @@ describe("konteks pilar dibaca, bukan diketik ulang", () => {
   it("nama PIC tidak lagi diketik di halaman mana pun", () => {
     // Dulu dua belas halaman menuliskannya sebagai Badge. Begitu seseorang
     // berpindah peran, semuanya menyebut nama yang salah sekaligus.
+    // Bilah konteks selalu di berkas HALAMAN, apa pun tempat panduannya.
     for (const [id, berkas] of Object.entries({
       appraisal: "src/app/(app)/hc-mos/appraisal/page.tsx",
       modul: "src/app/(app)/hc-mos/modul/page.tsx",
