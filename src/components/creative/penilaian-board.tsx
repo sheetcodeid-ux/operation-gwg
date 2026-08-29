@@ -1,11 +1,32 @@
 "use client";
 
 import * as React from "react";
-import { Building2, CalendarClock, ClipboardCheck, Gauge, TriangleAlert, UserRound } from "lucide-react";
+import {
+  CalendarClock,
+  CalendarRange,
+  ClipboardCheck,
+  History,
+  Info,
+  ListChecks,
+  MapPinned,
+  TableProperties,
+  TriangleAlert,
+} from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { SegmentedTabs } from "@/components/ui/segmented-tabs";
-import { StatTile } from "@/components/ui/stat";
-import { BilahModul, KerangkaModul, LegendaHitung, LencanaHak, useLayarPenuh } from "@/components/hcmos/kit-modul";
+import {
+  BatangPersen,
+  BilahSaring,
+  DropdownCreative,
+  KartuTabel,
+  KosongCreative,
+  KotakCari,
+  PitaCreative,
+  StripAngka,
+  Td,
+  Th,
+} from "./kit-creative";
+import { LaporanDialog } from "./laporan-dialog";
 import {
   AMBANG_HIJAU,
   AMBANG_KUNING,
@@ -13,12 +34,18 @@ import {
   BOBOT_WAKTU,
   BUTIR_BRIEF,
   HARI_WAJAR,
+  HEAD_OFFICE,
   LABEL_META,
+  SEMUA_PERIODE,
   WAKTU_META,
+  dalamPeriode,
+  daftarPeriode,
+  labelPeriode,
+  rekapPemohon,
   type Label,
 } from "@/lib/creative/penilaian-request";
-import type { BarisDashboard, DashboardPenilaian } from "@/lib/data/creative-penilaian";
-import { formatDate } from "@/lib/utils";
+import type { BarisDashboard, DashboardPenilaian, PenerimaLaporan } from "@/lib/data/creative-penilaian";
+import { formatDate, formatNumber } from "@/lib/utils";
 
 /**
  * Dashboard penilaian pemohon design.
@@ -31,208 +58,315 @@ import { formatDate } from "@/lib/utils";
  *
  * Yang ditonjolkan karena itu bukan skornya, melainkan PERSEN PERMINTAAN
  * MENDADAK. Skor gabungan mudah diperdebatkan bobotnya; "tujuh dari sepuluh
- * permintaan cabang ini masuk H-1" tidak.
+ * permintaan wilayah ini masuk H-1" tidak.
+ *
+ * SATU TABEL, BUKAN DUA. Dulu ada "Per Outlet" dan "Per Pemohon" — dua tampilan
+ * untuk pertanyaan yang sama, dan yang per outlet tidak pernah bisa menjawabnya
+ * untuk permintaan kantor yang memang tidak punya cabang. Sekarang wilayahnya
+ * jadi KOLOM PERTAMA: satu baris per orang, areanya di sebelah namanya.
  */
 
-type Tampilan = "outlet" | "pemohon" | "riwayat";
+type Tampilan = "rekap" | "riwayat";
 
-export function PenilaianBoard({ data }: { data: DashboardPenilaian }) {
-  const { bingkai, layarPenuh, alih } = useLayarPenuh();
-  const [tampilan, setTampilan] = React.useState<Tampilan>("outlet");
+const WARNA_LABEL: Record<Label, string> = { merah: "#ef4444", kuning: "#f59e0b", hijau: "#22c55e" };
+
+export function PenilaianBoard({
+  data,
+  bolehKirim,
+  penerima,
+  lingkupArea,
+}: {
+  data: DashboardPenilaian;
+  /** Tim Creative mengirim laporannya; Coordinator Area hanya membaca. */
+  bolehKirim: boolean;
+  penerima: PenerimaLaporan[];
+  /**
+   * Wilayah yang sedang dilihat.
+   *
+   * `null` berarti seluruh wilayah. Daftar KOSONG bukan hal yang sama: itu
+   * akun yang belum ditugaskan cabang mana pun, dan tabelnya akan kosong bukan
+   * karena tidak ada permintaan. Membedakannya penting — tanpa itu orangnya
+   * mengira dashboard-nya rusak.
+   */
+  lingkupArea: string[] | null;
+}) {
+  const [tampilan, setTampilan] = React.useState<Tampilan>("rekap");
   const [cari, setCari] = React.useState("");
-  const [sorotLabel, setSorotLabel] = React.useState<Label | null>(null);
+  const [periode, setPeriode] = React.useState<string>(SEMUA_PERIODE);
+  const [label, setLabel] = React.useState<Label | "">("");
+
+  // Bulan yang benar-benar punya permintaan — termasuk yang belum dinilai,
+  // supaya bulan yang isinya "semua belum dinilai" tetap bisa dipilih dan
+  // terlihat sisa pekerjaannya.
+  const periodeAda = React.useMemo(
+    () => daftarPeriode([...data.baris, ...data.belum]),
+    [data.baris, data.belum],
+  );
+
+  const barisPeriode = React.useMemo(() => dalamPeriode(data.baris, periode), [data.baris, periode]);
+  const rekap = React.useMemo(() => rekapPemohon(barisPeriode), [barisPeriode]);
+  const belumPeriode = React.useMemo(() => dalamPeriode(data.belum, periode).length, [data.belum, periode]);
 
   const q = cari.trim().toLowerCase();
-  const rekap = tampilan === "pemohon" ? data.perPemohon : data.perOutlet;
-  const rekapTampil = rekap.filter(
-    (r) => (!sorotLabel || r.label === sorotLabel) && (!q || `${r.nama} ${r.outletNama ?? ""}`.toLowerCase().includes(q)),
-  );
-  const riwayatTampil = data.baris.filter(
-    (b) =>
-      (!sorotLabel || b.hasil.label === sorotLabel) &&
-      (!q || `${b.judul} ${b.pemohonNama} ${b.outletNama ?? ""}`.toLowerCase().includes(q)),
+  const cocok = (teks: string) => !q || teks.toLowerCase().includes(q);
+
+  const rekapTampil = rekap.filter((r) => (!label || r.label === label) && cocok(`${r.nama} ${r.areaNama} ${r.outletNama ?? ""}`));
+  const riwayatTampil = barisPeriode.filter(
+    (b) => (!label || b.hasil.label === label) && cocok(`${b.judul} ${b.pemohonNama} ${b.areaNama} ${b.outletNama ?? ""}`),
   );
 
-  const total = data.baris.length;
-  const mendadak = data.baris.filter((b) => b.waktu === "mendadak").length;
-  const berhari = data.baris.filter((b) => b.hari !== null).map((b) => b.hari!);
+  const total = barisPeriode.length;
+  const mendadak = barisPeriode.filter((b) => b.waktu === "mendadak").length;
+  const berhari = barisPeriode.filter((b) => b.hari !== null).map((b) => b.hari!);
   const rataHari = berhari.length ? Math.round((berhari.reduce((a, b) => a + b, 0) / berhari.length) * 10) / 10 : null;
+  // Desimal dengan KOMA. "5.5 hari" terbaca sebagai angka asing di layar yang
+  // seluruh isinya berbahasa Indonesia.
+  const hari = (n: number) => `${formatNumber(n, { maximumFractionDigits: 1 })} hari`;
+  const merah = rekap.filter((r) => r.label === "merah").length;
 
-  // Legenda dihitung dari SELURUH baris, bukan dari yang sedang tampak:
-  // menyorot merah tidak boleh membuat hijau jatuh ke nol.
-  const legenda = (["merah", "kuning", "hijau"] as Label[]).map((l) => ({
-    key: l,
-    kode: l === "merah" ? "M" : l === "kuning" ? "K" : "H",
-    label: LABEL_META[l].label,
-    jumlah: rekap.filter((r) => r.label === l).length,
-    warna: (l === "merah" ? ["#dc2626", "#f87171"] : l === "kuning" ? ["#d97706", "#fbbf24"] : ["#059669", "#34d399"]) as [
-      string,
-      string,
-    ],
-    judulPenuh: LABEL_META[l].arti,
-  }));
+  const pilihanPeriode = [{ value: SEMUA_PERIODE, label: "Semua bulan" }, ...periodeAda];
+  const pilihanLabel = [
+    { value: "", label: "Semua label" },
+    ...(["merah", "kuning", "hijau"] as Label[]).map((l) => ({
+      value: l,
+      label: LABEL_META[l].label,
+      warna: WARNA_LABEL[l],
+      hint: String(rekap.filter((r) => r.label === l).length),
+    })),
+  ];
 
   return (
-    <KerangkaModul ref={bingkai}>
-      <BilahModul
-        ikon={Gauge}
-        gradien="from-rose-500 via-orange-500 to-amber-500 shadow-orange-500/20"
+    <div className="flex w-full flex-col gap-3">
+      <PitaCreative
+        ikon="Gauge"
+        eyebrow="Creative · Monitoring"
         judul="Penilaian Request Design"
         ringkas={
-          total === 0
-            ? "Belum ada permintaan design selesai yang sudah dinilai"
-            : `${total} permintaan dinilai · ${mendadak} mendadak (${Math.round((mendadak / total) * 100)}%) · rata-rata ${rataHari ?? "—"} hari tenggang`
+          <>
+            Menilai permintaannya, bukan orangnya —{" "}
+            <b className="text-foreground">{BOBOT_WAKTU} poin dihitung otomatis</b> dari jarak hari permintaan ke
+            tanggal dibutuhkan, {BOBOT_BRIEF} poin dari ceklis kelengkapan brief.
+            {lingkupArea !== null &&
+              (lingkupArea.length > 0 ? (
+                <> Wilayah Anda: <b className="text-foreground">{lingkupArea.join(", ")}</b>.</>
+              ) : (
+                <>
+                  {" "}
+                  <b className="text-amber-600 dark:text-amber-400">
+                    Akun Anda belum ditugaskan cabang mana pun
+                  </b>
+                  , jadi tabelnya kosong sampai penugasannya diisi admin.
+                </>
+              ))}
+            {merah > 0 && (
+              <>
+                {" "}
+                <b className="text-red-600 dark:text-red-400">
+                  {merah} pemohon berlabel merah
+                </b>{" "}
+                pada periode ini.
+              </>
+            )}
+          </>
         }
-        cari={cari}
-        onCari={setCari}
-        cariPlaceholder="Cari outlet, pemohon, atau judul…"
-        hitung={{
-          tampil: tampilan === "riwayat" ? riwayatTampil.length : rekapTampil.length,
-          total: tampilan === "riwayat" ? data.baris.length : rekap.length,
-        }}
-        menyaring={q !== "" || sorotLabel !== null}
-        onBersihkan={() => {
-          setCari("");
-          setSorotLabel(null);
-        }}
-        tampilan={
-          <SegmentedTabs
-            className="w-full sm:w-auto"
-            size="sm"
-            value={tampilan}
-            onChange={(v) => setTampilan(v as Tampilan)}
-            items={[
-              { value: "outlet", label: "Per Outlet", icon: Building2 },
-              { value: "pemohon", label: "Per Pemohon", icon: UserRound },
-              { value: "riwayat", label: "Riwayat", icon: ClipboardCheck },
-            ]}
-          />
+        aksi={
+          bolehKirim ? (
+            <LaporanDialog
+              periode={periode}
+              periodeLabel={periode ? labelPeriode(periode) : "seluruh periode"}
+              penerima={penerima}
+              areaTerlihat={[...new Set(barisPeriode.map((b) => b.areaId))]}
+              jumlahPermintaan={total}
+            />
+          ) : null
         }
-        layarPenuh={layarPenuh}
-        onLayarPenuh={alih}
       />
 
-      <div className="min-h-0 flex-1 overflow-auto p-3">
-        <div className="mb-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-          <StatTile icon={ClipboardCheck} label="Permintaan Dinilai" value={total} sub="design yang sudah selesai" />
-          <StatTile
-            icon={TriangleAlert}
-            label="Mendadak (H-1 / hari-H)"
-            value={total === 0 ? "—" : `${Math.round((mendadak / total) * 100)}%`}
-            sub={`${mendadak} dari ${total} permintaan`}
-          />
-          <StatTile
-            icon={CalendarClock}
-            label="Rata-rata Tenggang"
-            value={rataHari === null ? "—" : `${rataHari} hari`}
-            sub={`wajar bila ≥ ${HARI_WAJAR} hari`}
-          />
-          <StatTile
-            icon={Gauge}
-            label="Belum Dinilai"
-            value={data.belumDinilai}
-            sub={data.belumDinilai === 0 ? "semua sudah dinilai" : "menunggu penilaian saat ACC"}
-          />
-        </div>
+      <StripAngka
+        butir={[
+          {
+            ikon: ClipboardCheck,
+            label: "Permintaan dinilai",
+            nilai: total,
+            sub: periode ? labelPeriode(periode) : "seluruh periode",
+          },
+          {
+            ikon: TriangleAlert,
+            label: "Mendadak (H-1 / hari-H)",
+            nilai: total === 0 ? "—" : `${Math.round((mendadak / total) * 100)}%`,
+            sub: `${mendadak} dari ${total} permintaan`,
+            sorot: total > 0 && mendadak / total >= 0.5 ? "bahaya" : "netral",
+          },
+          {
+            ikon: CalendarClock,
+            label: "Rata-rata tenggang",
+            nilai: rataHari === null ? "—" : hari(rataHari),
+            sub: `wajar bila ≥ ${HARI_WAJAR} hari`,
+            sorot: rataHari !== null && rataHari >= HARI_WAJAR ? "aman" : "netral",
+          },
+          {
+            ikon: ListChecks,
+            label: "Belum dinilai",
+            nilai: belumPeriode,
+            sub: belumPeriode === 0 ? "semua sudah dinilai" : "menunggu penilaian saat ACC",
+          },
+        ]}
+      />
 
-        {/* Cara bacanya ditulis di halaman, bukan disimpan di kepala pembuatnya.
-            Dashboard yang angkanya tidak bisa dijelaskan akan dibantah, dan
-            bantahannya tidak bisa dijawab. */}
-        <div className="mb-3 rounded-xl border border-border bg-muted/20 p-3">
-          <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Cara angkanya dihitung</p>
-          <p className="mt-1 text-[12.5px] leading-relaxed text-foreground/85">
-            <b>{BOBOT_WAKTU} poin</b> dari selisih hari antara permintaan dikirim dan tanggal dibutuhkannya — dihitung
-            otomatis dari data, tidak ada yang mengisinya.{" "}
-            <b>{BOBOT_BRIEF} poin</b> dari ceklis fakta kelengkapan brief ({BUTIR_BRIEF.map((b) => b.label.toLowerCase()).join(", ")}),
-            dicentang saat hasil design di-ACC. Label: hijau ≥ {AMBANG_HIJAU}, kuning ≥ {AMBANG_KUNING}, di bawah itu merah.
-            Rata-ratanya dari seluruh permintaan, bukan dari yang terakhir.
-          </p>
-        </div>
+      <BilahSaring>
+        <KotakCari
+          nilai={cari}
+          onNilai={setCari}
+          placeholder="Cari nama, area, atau judul…"
+          hitung={
+            q || label
+              ? {
+                  tampil: tampilan === "riwayat" ? riwayatTampil.length : rekapTampil.length,
+                  total: tampilan === "riwayat" ? barisPeriode.length : rekap.length,
+                }
+              : null
+          }
+          className="w-full min-w-0 sm:w-72"
+        />
 
-        {tampilan === "riwayat" ? (
-          <Riwayat rows={riwayatTampil} />
-        ) : (
-          <div className="overflow-x-auto rounded-xl border border-border">
-            <table className="w-full min-w-[760px] border-collapse text-sm">
-              <thead>
-                <tr className="border-b border-border bg-muted/40 text-left">
-                  <Th className="w-10">#</Th>
-                  <Th>{tampilan === "pemohon" ? "Pemohon" : "Outlet"}</Th>
-                  <Th className="w-24">Label</Th>
-                  <Th className="w-24">Skor</Th>
-                  <Th className="w-32">Mendadak</Th>
-                  <Th className="w-32">Rata-rata tenggang</Th>
-                  <Th className="w-24">Permintaan</Th>
+        <DropdownCreative
+          pilihan={pilihanPeriode}
+          nilai={periode}
+          onNilai={setPeriode}
+          ikon={CalendarRange}
+          className="w-[calc(50%-0.25rem)] sm:w-44"
+        />
+        <DropdownCreative
+          pilihan={pilihanLabel}
+          nilai={label}
+          onNilai={(v) => setLabel(v as Label | "")}
+          className="w-[calc(50%-0.25rem)] sm:w-40"
+        />
+
+        <SegmentedTabs
+          className="ml-auto w-full sm:w-auto"
+          size="sm"
+          value={tampilan}
+          onChange={(v) => setTampilan(v as Tampilan)}
+          items={[
+            { value: "rekap", label: "Rekap Pemohon", icon: TableProperties },
+            { value: "riwayat", label: "Riwayat", icon: History },
+          ]}
+        />
+      </BilahSaring>
+
+      {tampilan === "rekap" ? (
+        <KartuTabel>
+          <table className="w-full min-w-[820px] border-collapse text-sm">
+            <thead>
+              <tr className="border-b border-border bg-muted/40">
+                <Th className="w-12">#</Th>
+                <Th className="w-52">Area</Th>
+                <Th>Nama</Th>
+                <Th className="w-28">Label</Th>
+                <Th className="w-20" align="right">Skor</Th>
+                <Th className="w-36">Mendadak</Th>
+                <Th className="w-32" align="right">Rata-rata tenggang</Th>
+                <Th className="w-28" align="right">Permintaan</Th>
+              </tr>
+            </thead>
+            <tbody>
+              {rekapTampil.length === 0 ? (
+                <tr>
+                  <td colSpan={8}>
+                    <KosongCreative
+                      judul={rekap.length === 0 ? "Belum ada permintaan dinilai" : "Tidak ada yang cocok dengan saringan ini"}
+                      uraian={
+                        rekap.length === 0
+                          ? "Penilaiannya terisi saat hasil design di-ACC. Selama belum ada yang di-ACC pada periode ini, tabelnya memang kosong."
+                          : "Coba ganti bulan, label, atau kosongkan pencariannya."
+                      }
+                    />
+                  </td>
                 </tr>
-              </thead>
-              <tbody>
-                {rekapTampil.length === 0 ? (
-                  <tr>
-                    <td colSpan={7} className="px-3 py-10 text-center text-sm text-muted-foreground">
-                      {rekap.length === 0
-                        ? "Belum ada permintaan design selesai yang dinilai. Penilaiannya terisi saat hasil design di-ACC."
-                        : "Tidak ada yang cocok dengan saringan ini."}
-                    </td>
+              ) : (
+                rekapTampil.map((r, i) => (
+                  <tr key={r.id} className="border-b border-border/60 transition-colors last:border-0 hover:bg-muted/30">
+                    <Td className="tabular-nums text-muted-foreground">{i + 1}</Td>
+                    <Td>
+                      <span className="inline-flex items-center gap-1.5">
+                        <MapPinned
+                          className={
+                            r.areaId === HEAD_OFFICE ? "size-3.5 shrink-0 text-muted-foreground/60" : "size-3.5 shrink-0 text-orange-500"
+                          }
+                        />
+                        <span className="truncate text-[13px] text-foreground/90">{r.areaNama}</span>
+                      </span>
+                    </Td>
+                    <Td>
+                      <p className="font-medium text-foreground">{r.nama}</p>
+                      {r.outletNama && <p className="text-[11px] text-muted-foreground">{r.outletNama}</p>}
+                    </Td>
+                    <Td>
+                      <Badge tone={LABEL_META[r.label].tone} dot title={LABEL_META[r.label].arti}>
+                        {LABEL_META[r.label].label}
+                      </Badge>
+                    </Td>
+                    <Td align="right" className="tabular-nums font-semibold">
+                      {r.rataSkor}
+                    </Td>
+                    <Td>
+                      <BatangPersen persen={r.persenMendadak} warna={WARNA_LABEL[r.label]} />
+                      <span className="text-[11px] text-muted-foreground">
+                        {r.mendadak} dari {r.jumlah}
+                      </span>
+                    </Td>
+                    <Td align="right" className="tabular-nums">
+                      {r.rataHari === null ? "—" : hari(r.rataHari)}
+                    </Td>
+                    <Td align="right" className="tabular-nums text-muted-foreground">
+                      {r.jumlah}
+                    </Td>
                   </tr>
-                ) : (
-                  rekapTampil.map((r, i) => (
-                    <tr key={r.id} className="border-b border-border/60 last:border-0 hover:bg-muted/30">
-                      <Td className="tabular-nums text-muted-foreground">{i + 1}</Td>
-                      <Td>
-                        <p className="font-medium text-foreground">{r.nama}</p>
-                        {tampilan === "pemohon" && r.outletNama && (
-                          <p className="text-[11px] text-muted-foreground">{r.outletNama}</p>
-                        )}
-                      </Td>
-                      <Td>
-                        <Badge tone={LABEL_META[r.label].tone} dot>
-                          {LABEL_META[r.label].label}
-                        </Badge>
-                      </Td>
-                      <Td className="tabular-nums font-medium">{r.rataSkor}</Td>
-                      <Td>
-                        <span className="tabular-nums">{r.persenMendadak}%</span>
-                        <span className="ml-1 text-[11px] text-muted-foreground">({r.mendadak})</span>
-                      </Td>
-                      <Td className="tabular-nums">{r.rataHari === null ? "—" : `${r.rataHari} hari`}</Td>
-                      <Td className="tabular-nums text-muted-foreground">{r.jumlah}</Td>
-                    </tr>
-                  ))
-                )}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </div>
+                ))
+              )}
+            </tbody>
+          </table>
+        </KartuTabel>
+      ) : (
+        <Riwayat rows={riwayatTampil} kosongTotal={barisPeriode.length === 0} />
+      )}
 
-      <LegendaHitung
-        butir={legenda}
-        sorot={sorotLabel}
-        onSorot={(k) => setSorotLabel((v) => (v === k ? null : (k as Label)))}
-        kiri={<LencanaHak bolehUbah={false} catatan="Dinilai saat ACC hasil" />}
-      />
-    </KerangkaModul>
+      <CaraBaca />
+    </div>
   );
 }
 
-function Riwayat({ rows }: { rows: BarisDashboard[] }) {
+/* ─────────────────────────────── riwayat ─────────────────────────────── */
+
+function Riwayat({ rows, kosongTotal }: { rows: BarisDashboard[]; kosongTotal: boolean }) {
   if (rows.length === 0) {
     return (
-      <p className="rounded-xl border border-dashed border-border p-10 text-center text-sm text-muted-foreground">
-        Belum ada permintaan yang dinilai pada saringan ini.
-      </p>
+      <KartuTabel>
+        <KosongCreative
+          judul={kosongTotal ? "Belum ada permintaan dinilai" : "Tidak ada yang cocok dengan saringan ini"}
+          uraian={
+            kosongTotal
+              ? "Riwayat terisi begitu ada hasil design yang di-ACC pada periode ini."
+              : "Coba ganti bulan, label, atau kosongkan pencariannya."
+          }
+        />
+      </KartuTabel>
     );
   }
   return (
-    <div className="space-y-2">
+    <div className="grid gap-2.5 lg:grid-cols-2">
       {rows.map((b) => (
-        <div key={b.requestId} className="rounded-xl border border-border bg-card p-3">
+        <article key={b.requestId} className="rounded-2xl border border-border bg-card p-3.5">
           <div className="flex flex-wrap items-start justify-between gap-2">
             <div className="min-w-0">
               <p className="truncate font-medium text-foreground">{b.judul}</p>
-              <p className="text-[11px] text-muted-foreground">
-                {b.pemohonNama}
-                {b.outletNama ? ` · ${b.outletNama}` : ""} · diminta {formatDate(b.dibuat)}
+              <p className="mt-0.5 text-[11px] leading-relaxed text-muted-foreground">
+                {b.pemohonNama} · {b.areaNama}
+                {b.outletNama ? ` · ${b.outletNama}` : ""}
+              </p>
+              <p className="text-[11px] leading-relaxed text-muted-foreground">
+                Diminta {formatDate(b.dibuat)}
                 {b.deadline ? ` untuk ${formatDate(b.deadline)}` : " · tanpa tanggal dibutuhkan"}
               </p>
             </div>
@@ -244,10 +378,11 @@ function Riwayat({ rows }: { rows: BarisDashboard[] }) {
             </div>
           </div>
 
-          <div className="mt-2 flex flex-wrap gap-1.5">
+          <div className="mt-2.5 flex flex-wrap gap-1.5">
             {BUTIR_BRIEF.map((butir) => (
               <span
                 key={butir.key}
+                title={butir.bantu}
                 className={
                   b.ceklis[butir.key]
                     ? "rounded-md bg-emerald-500/10 px-2 py-0.5 text-[11px] text-emerald-600 dark:text-emerald-400"
@@ -259,17 +394,56 @@ function Riwayat({ rows }: { rows: BarisDashboard[] }) {
             ))}
           </div>
 
-          {b.catatan && <p className="mt-2 whitespace-pre-wrap text-[12px] text-foreground/85">{b.catatan}</p>}
-          <p className="mt-1 text-[11px] text-muted-foreground">Dinilai {b.dinilaiNama}</p>
-        </div>
+          {b.catatan && <p className="mt-2 whitespace-pre-wrap text-[12px] leading-relaxed text-foreground/85">{b.catatan}</p>}
+          <p className="mt-1.5 text-[11px] text-muted-foreground">Dinilai {b.dinilaiNama}</p>
+        </article>
       ))}
     </div>
   );
 }
 
-function Th({ children, className = "" }: { children: React.ReactNode; className?: string }) {
-  return <th className={`px-3 py-2 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground ${className}`}>{children}</th>;
-}
-function Td({ children, className = "" }: { children: React.ReactNode; className?: string }) {
-  return <td className={`px-3 py-2.5 align-top ${className}`}>{children}</td>;
+/* ────────────────────────────── cara baca ────────────────────────────── */
+
+/**
+ * Cara angkanya dihitung, ditulis di halaman.
+ *
+ * Bisa ditutup karena yang membukanya tiap hari sudah hafal, tapi TERBUKA saat
+ * pertama kali: dashboard yang angkanya tidak bisa dijelaskan akan dibantah,
+ * dan bantahannya tidak bisa dijawab.
+ */
+function CaraBaca() {
+  const [buka, setBuka] = React.useState(true);
+  return (
+    <div className="rounded-2xl border border-border bg-muted/20">
+      <button
+        type="button"
+        onClick={() => setBuka((v) => !v)}
+        className="flex w-full items-center gap-2 px-3.5 py-2.5 text-left"
+      >
+        <Info className="size-4 shrink-0 text-muted-foreground" />
+        <span className="text-[12px] font-semibold uppercase tracking-wide text-muted-foreground">
+          Cara angkanya dihitung
+        </span>
+        <span className="ml-auto text-[11px] text-muted-foreground">{buka ? "Sembunyikan" : "Tampilkan"}</span>
+      </button>
+      {buka && (
+        <div className="space-y-2 px-3.5 pb-3.5 text-[12.5px] leading-relaxed text-foreground/85">
+          <p>
+            <b>{BOBOT_WAKTU} poin</b> dari selisih hari antara permintaan dikirim dan tanggal dibutuhkannya — dihitung
+            otomatis dari data, tidak ada yang mengisinya. <b>{BOBOT_BRIEF} poin</b> dari ceklis fakta kelengkapan brief
+            ({BUTIR_BRIEF.map((b) => b.label.toLowerCase()).join(", ")}), dicentang saat hasil design di-ACC.
+          </p>
+          <p>
+            Label: <b>hijau ≥ {AMBANG_HIJAU}</b>, <b>kuning ≥ {AMBANG_KUNING}</b>, di bawah itu <b>merah</b>. Rata-ratanya
+            dari seluruh permintaan pada periode terpilih, bukan dari yang terakhir — satu permintaan rapi tidak menghapus
+            sepuluh yang mendadak sebelumnya.
+          </p>
+          <p className="text-muted-foreground">
+            Area diambil dari cabang pemohonnya. Permintaan dari divisi kantor tercatat sebagai Head Office karena memang
+            tidak berasal dari cabang mana pun.
+          </p>
+        </div>
+      )}
+    </div>
+  );
 }

@@ -263,7 +263,7 @@ export const ROLE_MENUS: Record<Role, MenuKey[]> = {
   // menitipkannya ke orang lain, dan pengajuan itu tercatat atas nama yang
   // salah. Cakupan cabangnya sudah dibatasi `visibleOutlets`, jadi ia tetap
   // hanya bisa mengajukan untuk cabang yang memang dipegangnya.
-  area_coordinator: [...OPERATION_FULL, "elearning", "assessment", "hc_submit"], // learner (E-Learning), menus scoped to their area
+  area_coordinator: [...OPERATION_FULL, "elearning", "assessment", "hc_submit", "creative_penilaian"], // learner (E-Learning), menus scoped to their area
   data_operation: ["work", "op_analysis", "assessment"],
   pos_operation: ["work", "op_analysis", "assessment"],
   admin_operation: ["work", "complaints", "op_analysis", "assessment"],
@@ -381,7 +381,7 @@ export const DIVISION_GROUPS: Partial<Record<Division, NavGroupDef[]>> = {
   Operation: [
     { name: "Monitoring Outlet", icon: "Store", menus: ["outlets", "hospitality", "hygiene", "complaints"] },
     { name: "Keuangan Operasional", icon: "Wallet", menus: ["op_beban", "op_pembelian", "op_pnl", "op_settings"] },
-    { name: "Analisis & Laporan", icon: "ChartColumnBig", menus: ["analytics", "op_analysis", "op_fraud", "op_seasonal", "reports"] },
+    { name: "Analisis & Laporan", icon: "ChartColumnBig", menus: ["analytics", "op_analysis", "op_fraud", "op_seasonal", "reports", "creative_penilaian"] },
     { name: "Pembelajaran", icon: "GraduationCap", menus: ["elearning", "elearning_admin"] },
     { name: "System Support", icon: "Headset", menus: ["sys_review", "it_review"] },
   ],

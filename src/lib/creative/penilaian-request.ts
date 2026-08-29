@@ -159,14 +159,65 @@ export function nilaiPermintaan(dibuat: string, deadline: string | null, ceklis:
   return { hari, waktu, poinWaktu: pw, poinBrief: pb, skor, label: labelDari(skor) };
 }
 
+
+/* ──────────────────────────── periode (bulan) ──────────────────────────── */
+
+export const NAMA_BULAN = [
+  "Januari", "Februari", "Maret", "April", "Mei", "Juni",
+  "Juli", "Agustus", "September", "Oktober", "November", "Desember",
+] as const;
+
+/** Penanda "seluruh bulan" pada saringan periode. */
+export const SEMUA_PERIODE = "";
+
+/** "2026-08-22T…" → "2026-08". Dipotong, bukan diurai lewat `Date`, supaya
+ *  bulannya tidak bergeser mengikuti zona waktu peramban yang membukanya. */
+export const periodeDari = (iso: string): string => iso.slice(0, 7);
+
+/** "2026-08" → "Agustus 2026". */
+export function labelPeriode(periode: string): string {
+  const [th, bl] = periode.split("-");
+  const i = Number(bl) - 1;
+  if (!th || i < 0 || i > 11) return periode;
+  return `${NAMA_BULAN[i]} ${th}`;
+}
+
+/**
+ * Daftar bulan yang BENAR-BENAR punya permintaan, terbaru dulu.
+ *
+ * Bukan dua belas bulan mati: memilih bulan yang isinya pasti kosong hanya
+ * membuat orang mengira dashboard-nya rusak.
+ */
+export function daftarPeriode(rows: { periode: string }[]): { value: string; label: string }[] {
+  const set = new Set(rows.map((r) => r.periode).filter(Boolean));
+  return [...set].sort((a, b) => b.localeCompare(a)).map((p) => ({ value: p, label: labelPeriode(p) }));
+}
+
+/* ─────────────────────────── area / wilayah ─────────────────────────── */
+
+/**
+ * Permintaan yang tidak berasal dari cabang mana pun.
+ *
+ * Bukan "tanpa area": permintaan dari Operation, Marketing, atau Human Capital
+ * memang tidak punya cabang, dan menamainya "tanpa outlet" membuat Coordinator
+ * Area mencari-cari cabang yang tidak pernah ada.
+ */
+export const HEAD_OFFICE = "__head_office";
+export const HEAD_OFFICE_LABEL = "Head Office";
+
 /* ─────────────────────────── rekap per pemohon ─────────────────────────── */
 
 export interface BarisNilai {
   /** Siapa yang meminta. */
   pemohonId: string;
   pemohonNama: string;
-  outletId: string | null;
+  /** Area tempat permintaannya berasal — cabang pemohon, atau Head Office. */
+  areaId: string;
+  areaNama: string;
+  /** Cabangnya, kalau ada. Dipakai sebagai keterangan, bukan pengelompokan. */
   outletNama: string | null;
+  /** "2026-08" — bulan permintaannya dikirim. */
+  periode: string;
   skor: number;
   hari: number | null;
   waktu: KategoriWaktu;
@@ -175,6 +226,8 @@ export interface BarisNilai {
 export interface RekapPemohon {
   id: string;
   nama: string;
+  areaId: string;
+  areaNama: string;
   outletNama: string | null;
   jumlah: number;
   rataSkor: number;
@@ -185,8 +238,34 @@ export interface RekapPemohon {
   rataHari: number | null;
 }
 
+/** Saring baris ke satu bulan. Periode kosong berarti seluruh bulan. */
+export function dalamPeriode<T extends { periode: string }>(rows: T[], periode: string): T[] {
+  return periode ? rows.filter((r) => r.periode === periode) : rows;
+}
+
+const bulatSatu = (n: number) => Math.round(n * 10) / 10;
+
+function ringkas(list: BarisNilai[]) {
+  const rata = Math.round(list.reduce((a, r) => a + r.skor, 0) / list.length);
+  const mendadak = list.filter((r) => r.waktu === "mendadak").length;
+  const berhari = list.filter((r) => r.hari !== null).map((r) => r.hari!);
+  return {
+    jumlah: list.length,
+    rataSkor: rata,
+    label: labelDari(rata),
+    mendadak,
+    persenMendadak: Math.round((mendadak / list.length) * 100),
+    rataHari: berhari.length ? bulatSatu(berhari.reduce((a, b) => a + b, 0) / berhari.length) : null,
+  };
+}
+
 /**
- * Rekap per pemohon.
+ * Rekap per pemohon — satu-satunya tabel rekap yang ada.
+ *
+ * Dulu ada dua: per outlet dan per pemohon. Keduanya menjawab pertanyaan yang
+ * sama dua kali, dan yang per outlet tidak pernah bisa menjawabnya untuk
+ * permintaan kantor. Sekarang areanya jadi KOLOM, bukan tabel terpisah: satu
+ * baris per orang, dengan wilayahnya tertulis di sebelah namanya.
  *
  * LABELNYA DIHITUNG DARI RATA-RATA SKOR, bukan dari permintaan terakhir. Satu
  * permintaan mendadak tidak membuat seseorang merah selamanya, dan satu
@@ -196,57 +275,52 @@ export interface RekapPemohon {
  * label hijau untuk orang yang belum pernah meminta apa pun adalah pujian yang
  * tidak ia kerjakan, dan label merah lebih buruk lagi.
  */
-export function rekapPerPemohon(rows: BarisNilai[]): RekapPemohon[] {
+export function rekapPemohon(rows: BarisNilai[]): RekapPemohon[] {
   const peta = new Map<string, BarisNilai[]>();
   for (const r of rows) peta.set(r.pemohonId, [...(peta.get(r.pemohonId) ?? []), r]);
 
   return [...peta.entries()]
-    .map(([id, list]) => {
-      const rata = Math.round(list.reduce((a, r) => a + r.skor, 0) / list.length);
-      const mendadak = list.filter((r) => r.waktu === "mendadak").length;
-      const berhari = list.filter((r) => r.hari !== null).map((r) => r.hari!);
-      return {
-        id,
-        nama: list[0].pemohonNama,
-        outletNama: list[0].outletNama,
-        jumlah: list.length,
-        rataSkor: rata,
-        label: labelDari(rata),
-        mendadak,
-        persenMendadak: Math.round((mendadak / list.length) * 100),
-        rataHari: berhari.length ? Math.round((berhari.reduce((a, b) => a + b, 0) / berhari.length) * 10) / 10 : null,
-      };
-    })
+    .map(([id, list]) => ({
+      id,
+      nama: list[0].pemohonNama,
+      // Barisnya datang terbaru dulu, jadi yang dipakai area TERAKHIR-nya.
+      // Supervisor yang pindah cabang tidak boleh terus tercatat di area lama.
+      areaId: list[0].areaId,
+      areaNama: list[0].areaNama,
+      outletNama: list[0].outletNama,
+      ...ringkas(list),
+    }))
     .sort((a, b) => a.rataSkor - b.rataSkor || b.jumlah - a.jumlah);
 }
 
-/** Rekap per outlet — pertanyaan "cabang mana yang selalu H-1" dijawab di sini. */
-export function rekapPerOutlet(rows: BarisNilai[]): RekapPemohon[] {
+export interface RekapArea {
+  areaId: string;
+  areaNama: string;
+  jumlah: number;
+  rataSkor: number;
+  label: Label;
+  mendadak: number;
+  persenMendadak: number;
+  rataHari: number | null;
+  orang: RekapPemohon[];
+}
+
+/**
+ * Rekap per area — dipakai laporan yang dikirim ke Coordinator Area.
+ *
+ * Bukan tampilan tersendiri di layar: yang dibaca CA adalah daftar orang di
+ * wilayahnya, dan angka areanya cuma kepala suratnya.
+ */
+export function rekapArea(rows: BarisNilai[]): RekapArea[] {
   const peta = new Map<string, BarisNilai[]>();
-  for (const r of rows) {
-    // Permintaan tanpa outlet (divisi kantor) dikelompokkan terpisah, bukan
-    // dibuang: mereka juga bisa mendadak, dan membuangnya membuat total di
-    // dashboard tidak pernah cocok dengan jumlah permintaan sebenarnya.
-    const kunci = r.outletId ?? "__manajemen";
-    peta.set(kunci, [...(peta.get(kunci) ?? []), r]);
-  }
+  for (const r of rows) peta.set(r.areaId, [...(peta.get(r.areaId) ?? []), r]);
 
   return [...peta.entries()]
-    .map(([id, list]) => {
-      const rata = Math.round(list.reduce((a, r) => a + r.skor, 0) / list.length);
-      const mendadak = list.filter((r) => r.waktu === "mendadak").length;
-      const berhari = list.filter((r) => r.hari !== null).map((r) => r.hari!);
-      return {
-        id,
-        nama: list[0].outletNama ?? "Manajemen (tanpa outlet)",
-        outletNama: list[0].outletNama,
-        jumlah: list.length,
-        rataSkor: rata,
-        label: labelDari(rata),
-        mendadak,
-        persenMendadak: Math.round((mendadak / list.length) * 100),
-        rataHari: berhari.length ? Math.round((berhari.reduce((a, b) => a + b, 0) / berhari.length) * 10) / 10 : null,
-      };
-    })
+    .map(([areaId, list]) => ({
+      areaId,
+      areaNama: list[0].areaNama,
+      ...ringkas(list),
+      orang: rekapPemohon(list),
+    }))
     .sort((a, b) => a.rataSkor - b.rataSkor || b.jumlah - a.jumlah);
 }
