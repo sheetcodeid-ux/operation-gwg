@@ -3,12 +3,18 @@ import {
   BOBOT_BRIEF,
   BOBOT_WAKTU,
   CEKLIS_KOSONG,
+  HEAD_OFFICE,
+  HEAD_OFFICE_LABEL,
+  daftarPeriode,
+  dalamPeriode,
   kategoriWaktu,
   labelDari,
+  labelPeriode,
   nilaiPermintaan,
+  periodeDari,
   poinBrief,
-  rekapPerOutlet,
-  rekapPerPemohon,
+  rekapArea,
+  rekapPemohon,
   selisihHari,
   type BarisNilai,
 } from "./penilaian-request";
@@ -102,16 +108,16 @@ describe("label merah/kuning/hijau", () => {
   });
 });
 
-describe("rekap per pemohon dan per outlet", () => {
+describe("rekap pemohon — satu tabel, wilayahnya jadi kolom", () => {
   const baris: BarisNilai[] = [
-    { pemohonId: "spv_a", pemohonNama: "Spv A", outletId: "out_1", outletNama: "Nordu Kemang", skor: 40, hari: 1, waktu: "mendadak" },
-    { pemohonId: "spv_a", pemohonNama: "Spv A", outletId: "out_1", outletNama: "Nordu Kemang", skor: 40, hari: 0, waktu: "mendadak" },
-    { pemohonId: "spv_b", pemohonNama: "Spv B", outletId: "out_2", outletNama: "Cattu BSD", skor: 100, hari: 10, waktu: "wajar" },
+    { pemohonId: "spv_a", pemohonNama: "Kayla", areaId: "area_1", areaNama: "Area Poetri", outletNama: "Nordu Tanjung Duren", periode: "2026-08", skor: 40, hari: 1, waktu: "mendadak" },
+    { pemohonId: "spv_a", pemohonNama: "Kayla", areaId: "area_1", areaNama: "Area Poetri", outletNama: "Nordu Tanjung Duren", periode: "2026-08", skor: 40, hari: 0, waktu: "mendadak" },
+    { pemohonId: "spv_b", pemohonNama: "Rian", areaId: "area_2", areaNama: "Area Wisnu", outletNama: "Cattu BSD", periode: "2026-07", skor: 100, hari: 10, waktu: "wajar" },
   ];
 
   it("labelnya dari RATA-RATA, bukan dari permintaan terakhir", () => {
     // Satu permintaan rapi tidak menghapus sepuluh yang mendadak sebelumnya.
-    const r = rekapPerPemohon([...baris, { ...baris[0], skor: 100, hari: 14, waktu: "wajar" }]);
+    const r = rekapPemohon([...baris, { ...baris[0], skor: 100, hari: 14, waktu: "wajar" }]);
     const a = r.find((x) => x.id === "spv_a")!;
     expect(a.jumlah).toBe(3);
     expect(a.rataSkor).toBe(60);
@@ -121,27 +127,92 @@ describe("rekap per pemohon dan per outlet", () => {
   it("yang paling bermasalah muncul paling atas", () => {
     // Daftar yang diurut dari yang paling rapi tidak menunjukkan siapa pun
     // yang perlu dievaluasi.
-    expect(rekapPerPemohon(baris)[0].id).toBe("spv_a");
+    expect(rekapPemohon(baris)[0].id).toBe("spv_a");
   });
 
   it("persen mendadak dihitung, karena itu angka yang dibawa ke rapat", () => {
-    const a = rekapPerPemohon(baris).find((x) => x.id === "spv_a")!;
+    const a = rekapPemohon(baris).find((x) => x.id === "spv_a")!;
     expect(a.mendadak).toBe(2);
     expect(a.persenMendadak).toBe(100);
     expect(a.rataHari).toBe(0.5);
   });
 
-  it("permintaan tanpa outlet tidak dibuang, dikelompokkan sendiri", () => {
-    // Dibuang, total di dashboard tidak akan pernah cocok dengan jumlah
-    // permintaan yang sebenarnya masuk.
-    const r = rekapPerOutlet([...baris, { ...baris[2], outletId: null, outletNama: null }]);
-    expect(r.some((x) => x.nama === "Manajemen (tanpa outlet)")).toBe(true);
-    expect(r.reduce((a, x) => a + x.jumlah, 0)).toBe(4);
+  it("area ikut di barisnya, tidak perlu tabel kedua", () => {
+    // Dulu wilayah butuh tampilan sendiri, dan tampilan itu tidak pernah bisa
+    // menjawab untuk permintaan kantor yang memang tanpa cabang.
+    const a = rekapPemohon(baris).find((x) => x.id === "spv_a")!;
+    expect(a.areaNama).toBe("Area Poetri");
+    expect(a.outletNama).toBe("Nordu Tanjung Duren");
+  });
+
+  it("permintaan kantor punya wilayahnya sendiri, bukan 'tanpa outlet'", () => {
+    // "Tanpa outlet" membuat Coordinator Area mencari cabang yang tidak pernah ada.
+    const ho: BarisNilai = { ...baris[2], pemohonId: "ops_1", pemohonNama: "Operation", areaId: HEAD_OFFICE, areaNama: HEAD_OFFICE_LABEL, outletNama: null };
+    expect(rekapPemohon([ho])[0].areaNama).toBe("Head Office");
   });
 
   it("yang belum pernah dinilai tidak muncul sama sekali", () => {
     // Label hijau untuk orang yang belum pernah meminta apa pun adalah pujian
     // yang tidak ia kerjakan; label merah lebih buruk lagi.
-    expect(rekapPerPemohon([]).length).toBe(0);
+    expect(rekapPemohon([]).length).toBe(0);
+  });
+
+  it("pindah cabang tercatat di wilayah barunya", () => {
+    // Barisnya datang terbaru dulu. Kalau yang dipakai wilayah tertua, seorang
+    // supervisor yang pindah akan terus muncul di rapor area lamanya.
+    const pindah = [{ ...baris[0], areaId: "area_2", areaNama: "Area Wisnu" }, baris[1]];
+    expect(rekapPemohon(pindah)[0].areaNama).toBe("Area Wisnu");
+  });
+});
+
+describe("rekap per area — bahan laporan ke Coordinator Area", () => {
+  const baris: BarisNilai[] = [
+    { pemohonId: "a", pemohonNama: "Kayla", areaId: "area_1", areaNama: "Area Poetri", outletNama: "A", periode: "2026-08", skor: 20, hari: 0, waktu: "mendadak" },
+    { pemohonId: "b", pemohonNama: "Sari", areaId: "area_1", areaNama: "Area Poetri", outletNama: "B", periode: "2026-08", skor: 80, hari: 9, waktu: "wajar" },
+    { pemohonId: "c", pemohonNama: "Rian", areaId: "area_2", areaNama: "Area Wisnu", outletNama: "C", periode: "2026-08", skor: 100, hari: 12, waktu: "wajar" },
+  ];
+
+  it("mengelompokkan orang di bawah wilayahnya", () => {
+    const r = rekapArea(baris);
+    expect(r[0].areaNama).toBe("Area Poetri");
+    expect(r[0].orang.map((o) => o.nama)).toEqual(["Kayla", "Sari"]);
+    expect(r[0].rataSkor).toBe(50);
+  });
+
+  it("wilayah terburuk lebih dulu — laporannya dibuka dari yang perlu ditindak", () => {
+    expect(rekapArea(baris).map((a) => a.areaId)).toEqual(["area_1", "area_2"]);
+  });
+});
+
+describe("saringan bulan", () => {
+  const baris = [
+    { periode: "2026-08", nama: "a" },
+    { periode: "2026-07", nama: "b" },
+    { periode: "2026-08", nama: "c" },
+  ];
+
+  it("bulannya diambil dari tanggal, bukan diurai lewat Date", () => {
+    // Diurai lewat `Date`, permintaan 1 Agustus pukul 00.30 WIB berpindah ke
+    // Juli di peramban yang zona waktunya UTC.
+    expect(periodeDari("2026-08-01T00:30:00+07:00")).toBe("2026-08");
+  });
+
+  it("namanya bahasa Indonesia", () => {
+    expect(labelPeriode("2026-08")).toBe("Agustus 2026");
+    expect(labelPeriode("2026-01")).toBe("Januari 2026");
+  });
+
+  it("hanya bulan yang benar-benar punya permintaan yang bisa dipilih", () => {
+    // Dua belas bulan mati membuat orang memilih bulan kosong lalu mengira
+    // dashboard-nya rusak.
+    expect(daftarPeriode(baris)).toEqual([
+      { value: "2026-08", label: "Agustus 2026" },
+      { value: "2026-07", label: "Juli 2026" },
+    ]);
+  });
+
+  it("periode kosong berarti seluruh bulan, bukan nol baris", () => {
+    expect(dalamPeriode(baris, "").length).toBe(3);
+    expect(dalamPeriode(baris, "2026-07").length).toBe(1);
   });
 });

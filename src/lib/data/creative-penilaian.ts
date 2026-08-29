@@ -2,15 +2,17 @@ import "server-only";
 
 import { db, dbEnabled } from "@/lib/data/db";
 import { listHcRequests } from "@/lib/data/hc-requests";
+import { getArea, getOutlet, getOutlets, getUser } from "@/lib/data/store";
+import { areaMilik, asalArea, type AsalArea, type CariOutlet } from "@/lib/creative/area-pemohon";
 import {
   nilaiPermintaan,
-  rekapPerOutlet,
-  rekapPerPemohon,
+  periodeDari,
   type BarisNilai,
   type CeklisBrief,
   type HasilPenilaian,
-  type RekapPemohon,
 } from "@/lib/creative/penilaian-request";
+import type { HcRequest } from "@/lib/hc-request";
+import type { UserProfile } from "@/lib/types";
 
 /**
  * Pembacaan dan penyimpanan penilaian pemohon design.
@@ -41,12 +43,18 @@ export interface BarisDashboard extends BarisNilai {
   hasil: HasilPenilaian;
 }
 
+/** Permintaan selesai yang BELUM dinilai — sisa pekerjaan penilainya. */
+export interface BarisBelum {
+  requestId: string;
+  judul: string;
+  pemohonNama: string;
+  areaNama: string;
+  periode: string;
+}
+
 export interface DashboardPenilaian {
   baris: BarisDashboard[];
-  perPemohon: RekapPemohon[];
-  perOutlet: RekapPemohon[];
-  /** Permintaan design selesai yang BELUM dinilai — sisa pekerjaan penilainya. */
-  belumDinilai: number;
+  belum: BarisBelum[];
 }
 
 const ceklisDari = (r: Record<string, unknown>): CeklisBrief => ({
@@ -95,6 +103,45 @@ export async function simpanPenilaian(input: {
   return { ok: true };
 }
 
+/* ───────────────────────────── area pemohon ───────────────────────────── */
+
+/**
+ * Cabang bisa disebut dengan id aplikasinya ATAU kode POS-nya.
+ *
+ * Penugasan cabang di User Management menyimpan salah satu dari keduanya, dan
+ * yang mana tergantung kapan barisnya dibuat. Mencari dengan id saja membuat
+ * separuh supervisor tampak tidak memegang cabang mana pun.
+ */
+const cariOutlet: CariOutlet = (idAtauKode) =>
+  getOutlet(idAtauKode) ?? getOutlets().find((o) => o.code === idAtauKode);
+
+const namaArea = (areaId: string) => getArea(areaId)?.name;
+
+/** Aturannya ada di `@/lib/creative/area-pemohon`; di sini hanya penyambungnya. */
+export function areaPermintaan(req: { outletId: string | null; requesterId: string }): AsalArea {
+  return asalArea({
+    outletId: req.outletId,
+    pemohonOutletIds: getUser(req.requesterId)?.outletIds ?? [],
+    cariOutlet,
+    namaArea,
+  });
+}
+
+/**
+ * Area yang boleh dilihat seseorang.
+ *
+ * `null` berarti seluruh area — tim Creative yang menilai, dan manajemen yang
+ * mengevaluasi, memang harus bisa membandingkan antar-wilayah. Coordinator Area
+ * hanya melihat wilayahnya sendiri: rapor wilayah lain bukan bahan kerjanya,
+ * dan membukanya untuk semua orang mengubah alat evaluasi jadi bahan gosip.
+ */
+export function areaTerlihat(user: UserProfile, semuaArea: boolean): string[] | null {
+  if (semuaArea) return null;
+  return areaMilik({ outletIds: user.outletIds ?? [], areaId: user.areaId, cariOutlet });
+}
+
+/* ────────────────────────────── dashboard ────────────────────────────── */
+
 /**
  * Seluruh bahan dashboard.
  *
@@ -105,15 +152,15 @@ export async function simpanPenilaian(input: {
  * `outlet_id` di `fromRow`. Memintanya sebagai kolom membuat seluruh kueri
  * gagal tanpa suara, dan yang terlihat di layar cuma "belum ada data".
  *
- * Satu-satunya tempat yang tahu bentuk baris `hc_requests` tetap satu, dan
- * di sinilah alasannya kelihatan.
+ * Rekapnya TIDAK dihitung di sini. Saringan bulan ada di layar dan mengubah
+ * seluruh rata-rata; menghitungnya di server berarti satu perjalanan bolak-balik
+ * setiap kali orang berpindah bulan, untuk data yang sudah ada di tangan.
  */
-export async function dashboardPenilaian(sejak?: string): Promise<DashboardPenilaian> {
-  const kosong: DashboardPenilaian = { baris: [], perPemohon: [], perOutlet: [], belumDinilai: 0 };
-  if (!dbEnabled) return kosong;
+export async function dashboardPenilaian(areaIds?: string[] | null): Promise<DashboardPenilaian> {
+  if (!dbEnabled) return { baris: [], belum: [] };
 
   const [permintaan, nilaiRows] = await Promise.all([
-    listHcRequests({ kind: "design" }),
+    listHcRequests({ kind: "design", semua: true }),
     db().from("design_request_penilaian").select("*"),
   ]);
 
@@ -124,14 +171,17 @@ export async function dashboardPenilaian(sejak?: string): Promise<DashboardPenil
   // berjalan belum punya penilaian, dan memasukkannya sebagai nol akan
   // menuduh orang atas pekerjaan yang belum kelar.
   const selesai = permintaan.filter((r) => r.status === "terlaksana");
-  const dalamRentang = sejak ? selesai.filter((r) => r.createdAt >= sejak) : selesai;
 
   const baris: BarisDashboard[] = [];
-  let belum = 0;
-  for (const r of dalamRentang) {
+  const belum: BarisBelum[] = [];
+  for (const r of selesai) {
+    const area = areaPermintaan(r);
+    if (areaIds && !areaIds.includes(area.areaId)) continue;
+
     const n = nilai.get(r.id);
+    const periode = periodeDari(r.createdAt);
     if (!n) {
-      belum += 1;
+      belum.push({ requestId: r.id, judul: r.title, pemohonNama: r.requesterName, areaNama: area.areaNama, periode });
       continue;
     }
     const ceklis = ceklisDari(n);
@@ -143,8 +193,10 @@ export async function dashboardPenilaian(sejak?: string): Promise<DashboardPenil
       deadline: r.plannedDate,
       pemohonId: r.requesterId,
       pemohonNama: r.requesterName,
-      outletId: r.outletId,
-      outletNama: r.outletName,
+      areaId: area.areaId,
+      areaNama: area.areaNama,
+      outletNama: area.outletNama,
+      periode,
       skor: hasil.skor,
       hari: hasil.hari,
       waktu: hasil.waktu,
@@ -155,10 +207,47 @@ export async function dashboardPenilaian(sejak?: string): Promise<DashboardPenil
     });
   }
 
-  return {
-    baris,
-    perPemohon: rekapPerPemohon(baris),
-    perOutlet: rekapPerOutlet(baris),
-    belumDinilai: belum,
-  };
+  return { baris, belum };
 }
+
+/* ─────────────────────── penerima laporan (CA) ─────────────────────── */
+
+export interface PenerimaLaporan {
+  id: string;
+  nama: string;
+  areaNama: string;
+  /** Area yang ia pegang — dipakai memilih siapa yang dicentang lebih dulu. */
+  areaIds: string[];
+}
+
+/**
+ * Coordinator Area beserta wilayah yang benar-benar dipegangnya.
+ *
+ * Diambil dari penugasan cabang di User Management, bukan dari kolom
+ * `areas.coordinator_id`. Kolom itu peninggalan lama dan seluruh barisnya masih
+ * menunjuk akun admin — mengirim laporan berdasarkan itu berarti seluruh
+ * laporan mendarat di satu orang yang salah.
+ */
+export function penerimaLaporan(kandidat: UserProfile[]): PenerimaLaporan[] {
+  return kandidat
+    .filter((u) => u.active && u.role === "area_coordinator")
+    .map((u) => {
+      const ids = areaMilik({ outletIds: u.outletIds ?? [], areaId: u.areaId, cariOutlet });
+      const nama = ids.map((id) => namaArea(id) ?? "—");
+      return {
+        id: u.id,
+        nama: u.name,
+        areaNama: nama.length ? nama.join(", ") : "Belum ada cabang",
+        areaIds: ids,
+      };
+    })
+    .sort((a, b) => a.nama.localeCompare(b.nama, "id"));
+}
+
+/** Permintaan design yang dipakai laporan — dipanggil ulang di server saat kirim. */
+export async function barisUntukLaporan(areaIds?: string[] | null): Promise<BarisDashboard[]> {
+  const { baris } = await dashboardPenilaian(areaIds);
+  return baris;
+}
+
+export type { HcRequest };

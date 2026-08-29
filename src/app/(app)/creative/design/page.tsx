@@ -1,11 +1,10 @@
-import { Palette } from "lucide-react";
 import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 import { requireSessionUser } from "@/lib/auth";
 import { canReachMenu } from "@/lib/nav";
 import { kelolaAntrianDesign } from "@/lib/hc-request";
 import { getUsers } from "@/lib/data/store";
-import { PageHeader } from "@/components/ui/page-header";
+import { PitaCreative } from "@/components/creative/kit-creative";
 import { HcRequestReview } from "@/components/hc/request-review";
 
 export const metadata: Metadata = { title: "Antrian Design" };
@@ -29,11 +28,15 @@ export default async function CreativeDesignQueuePage() {
   const kelola = kelolaAntrianDesign(user);
 
   return (
-    <div className="w-full">
-      <PageHeader
-        icon={Palette}
-        title="Antrian Design"
-        description={
+    <div className="flex w-full flex-col gap-3">
+      {/* Pita yang sama dengan Penilaian Request. Dua halaman Creative yang
+          memakai kepala berbeda membuat divisinya terbaca seperti dua produk
+          yang kebetulan sama-sama dipasang di sini. */}
+      <PitaCreative
+        ikon="Palette"
+        eyebrow="Creative · Permintaan Masuk"
+        judul="Antrian Design"
+        ringkas={
           kelola
             ? "Permintaan materi desain dari seluruh departemen. Tugaskan PIC-nya, lalu tandai selesai beserta hasilnya."
             : "Tab Menunggu berisi permintaan baru seluruh tim; tab lainnya hanya pekerjaan Anda sendiri. Ambil dari Menunggu untuk mulai mengerjakan, lalu tandai selesai beserta hasilnya."
