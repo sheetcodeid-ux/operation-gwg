@@ -33,6 +33,8 @@ import type {
   ScopeManpower,
 } from "@/lib/hc-request";
 import type { UserProfile } from "@/lib/types";
+import { simpanPenilaian } from "@/lib/data/creative-penilaian";
+import type { CeklisBrief } from "@/lib/creative/penilaian-request";
 
 /** Setiap departemen boleh mengajukan (menu hc_request). */
 const canSubmit = (u: UserProfile | null) => !!u && canReachMenu(u, "hc_request");
@@ -476,6 +478,15 @@ export async function submitDesignResultAction(input: {
   id: string;
   note?: string;
   attachments: HcRequestAttachment[];
+  /**
+   * Penilaian pemohon — hanya terpakai bila pengirimnya SEKALIGUS yang berhak
+   * meng-ACC, sehingga hasilnya langsung terkirim tanpa melewati tahap ACC
+   * terpisah. Tanpa ini, permintaan yang kebetulan dikerjakan sang penilai
+   * sendiri jadi lubang buta: tidak pernah dinilai, dan pemohonnya tidak
+   * pernah muncul di dashboard atas permintaan itu.
+   */
+  ceklis?: CeklisBrief;
+  catatanNilai?: string;
 }): Promise<{ ok?: true; langsungTerkirim?: boolean; error?: string }> {
   const user = await getSessionUser();
   const req = await getHcRequest(input.id);
@@ -517,6 +528,20 @@ export async function submitDesignResultAction(input: {
   if (langsung) {
     const res = await kirimHasilKePemohon(req, hasil, user!.name);
     if (res.error) return { error: res.error };
+
+    // Penilaian pemohon disimpan SESUDAH hasilnya benar-benar terkirim, dan
+    // kegagalannya tidak membatalkan pengiriman: yang menunggu desainnya tidak
+    // boleh ikut tertahan gara-gara catatan evaluasi gagal tersimpan.
+    if (input.ceklis) {
+      const nilai = await simpanPenilaian({
+        requestId: req.id,
+        ceklis: input.ceklis,
+        catatan: (input.catatanNilai ?? "").trim(),
+        olehId: user!.id,
+        olehNama: user!.name,
+      });
+      if (!nilai.ok) console.error("[penilaian design] gagal menyimpan:", nilai.error);
+    }
     revalidateAssignment();
     return { ok: true, langsungTerkirim: true };
   }
@@ -603,6 +628,20 @@ export async function accDesignResultAction(input: {
   id: string;
   approve: boolean;
   note?: string;
+  /**
+   * Penilaian terhadap YANG MEMINTA — ceklis fakta kelengkapan briefnya.
+   *
+   * Menempel pada tombol ACC, bukan jadi layar terpisah: penilaian yang harus
+   * dicari sendiri di menu lain tidak akan pernah terisi, dan dashboard tanpa
+   * isi lebih buruk daripada tidak ada dashboard. Di sini pula orangnya baru
+   * saja membaca permintaannya dari awal sampai akhir.
+   *
+   * Hanya menyertai ACC yang MENYETUJUI. Hasil yang dikembalikan ke designer
+   * bukan akhir permintaannya — menilai pemohon di titik itu berarti menilai
+   * sesuatu yang belum selesai.
+   */
+  ceklis?: CeklisBrief;
+  catatanNilai?: string;
 }): Promise<{ ok?: true; error?: string }> {
   const user = await getSessionUser();
   const req = await getHcRequest(input.id);
@@ -623,6 +662,20 @@ export async function accDesignResultAction(input: {
     };
     const res = await kirimHasilKePemohon(req, hasil, user!.name);
     if (res.error) return { error: res.error };
+
+    // Penilaian pemohon disimpan SESUDAH hasilnya benar-benar terkirim, dan
+    // kegagalannya tidak membatalkan pengiriman: yang menunggu desainnya tidak
+    // boleh ikut tertahan gara-gara catatan evaluasi gagal tersimpan.
+    if (input.ceklis) {
+      const nilai = await simpanPenilaian({
+        requestId: req.id,
+        ceklis: input.ceklis,
+        catatan: (input.catatanNilai ?? "").trim(),
+        olehId: user!.id,
+        olehNama: user!.name,
+      });
+      if (!nilai.ok) console.error("[penilaian design] gagal menyimpan:", nilai.error);
+    }
 
     // Yang mengerjakan ikut dikabari. Ia menyerahkan hasilnya lalu kehilangan
     // pandangan atasnya; tanpa kabar ini ia tidak pernah tahu pekerjaannya

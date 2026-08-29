@@ -3,6 +3,7 @@
 import * as React from "react";
 import { CheckCircle2, CircleDashed, ClipboardCheck, Loader2, SendHorizonal, ShieldCheck, Undo2, UserRound, Wallet, XCircle } from "lucide-react";
 import { toast } from "sonner";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { Field, Input, Textarea } from "@/components/ui/input";
@@ -40,6 +41,16 @@ import {
 import { StageFilterChips } from "@/components/ui/stage-filter";
 import { DiscussButton } from "@/components/chat/forward-request";
 import { FileChip, FilePicker, RequestEmpty, RequestList, uploadAll, type UploadProgress } from "./request-shared";
+import {
+  BOBOT_BRIEF,
+  BOBOT_WAKTU,
+  BUTIR_BRIEF,
+  CEKLIS_KOSONG,
+  LABEL_META,
+  WAKTU_META,
+  nilaiPermintaan,
+  type CeklisBrief,
+} from "@/lib/creative/penilaian-request";
 
 type Mode = "hc" | "finance";
 
@@ -326,7 +337,7 @@ function Actions({
           <AssignDialog r={r} picOptions={picOptions} kelola={kelola} meId={meId} onClose={() => setDialog(null)} onDone={onDone} />
         )}
         {dialog === "complete" && <CompleteDialog r={r} onClose={() => setDialog(null)} onDone={onDone} />}
-        {dialog === "kirim" && <KirimHasilDialog r={r} onClose={() => setDialog(null)} onDone={onDone} />}
+        {dialog === "kirim" && <KirimHasilDialog r={r} kelola={kelola} onClose={() => setDialog(null)} onDone={onDone} />}
         {dialog === "acc" && <AccHasilDialog r={r} onClose={() => setDialog(null)} onDone={onDone} />}
       </>
     );
@@ -550,8 +561,21 @@ function CompleteDialog({ r, onClose, onDone }: { r: HcRequest; onClose: () => v
  * supaya tidak ada lagi hasil yang sampai ke supervisor sebelum ada yang
  * sempat melihatnya.
  */
-function KirimHasilDialog({ r, onClose, onDone }: { r: HcRequest; onClose: () => void; onDone: () => void }) {
+function KirimHasilDialog({
+  r,
+  kelola,
+  onClose,
+  onDone,
+}: {
+  r: HcRequest;
+  /** Pengirimnya sekaligus yang berhak meloloskan hasil — kirimannya langsung sampai ke pemohon. */
+  kelola: boolean;
+  onClose: () => void;
+  onDone: () => void;
+}) {
   const [note, setNote] = React.useState("");
+  const [ceklis, setCeklis] = React.useState<CeklisBrief>(CEKLIS_KOSONG);
+  const [catatanNilai, setCatatanNilai] = React.useState("");
   const [files, setFiles] = React.useState<File[]>([]);
   const [busy, setBusy] = React.useState(false);
   const [progress, setProgress] = React.useState<UploadProgress | null>(null);
@@ -563,7 +587,15 @@ function KirimHasilDialog({ r, onClose, onDone }: { r: HcRequest; onClose: () =>
     setProgress(null);
     try {
       const attachments = await uploadAll(files, setProgress);
-      const res = await submitDesignResultAction({ id: r.id, note, attachments });
+      const res = await submitDesignResultAction({
+        id: r.id,
+        note,
+        attachments,
+        // Hanya bila kirimannya memang langsung sampai ke pemohon. Kalau masih
+        // menunggu ACC, penilaiannya diisi di dialog ACC — mengisinya dua kali
+        // berarti yang belakangan menimpa yang duluan tanpa ada yang tahu.
+        ...(kelola ? { ceklis, catatanNilai } : {}),
+      });
       if (res.error) return toast.error(res.error);
       toast.success(
         res.langsungTerkirim
@@ -584,9 +616,22 @@ function KirimHasilDialog({ r, onClose, onDone }: { r: HcRequest; onClose: () =>
     <Dialog open onOpenChange={(v) => !v && onClose()}>
       <DialogContent title={ulang ? "Kirim Ulang Hasil Design" : "Kirim Hasil Design"} description={r.title} align="center" className="max-w-md">
         <div className="max-h-[70vh] space-y-3 overflow-y-auto p-5">
+          {/* Kalimatnya mengikuti apa yang benar-benar terjadi setelah tombol
+              Kirim ditekan. Yang mengelola antrian tidak menunggu ACC siapa
+              pun — memberitahunya "diperiksa atasan dulu" membuat ia mengira
+              masih ada tahap yang sebetulnya tidak ada. */}
           <p className="rounded-lg bg-brand-500/10 px-3 py-2 text-xs leading-relaxed text-muted-foreground">
-            Hasilnya diperiksa atasan dulu. Setelah di-ACC, berkasnya baru muncul di halaman pengajuan{" "}
-            <b className="text-foreground">{r.requesterName}</b>.
+            {kelola ? (
+              <>
+                Berkasnya langsung sampai ke <b className="text-foreground">{r.requesterName}</b> begitu dikirim, karena
+                Anda sendiri yang berwenang meloloskannya.
+              </>
+            ) : (
+              <>
+                Hasilnya diperiksa atasan dulu. Setelah di-ACC, berkasnya baru muncul di halaman pengajuan{" "}
+                <b className="text-foreground">{r.requesterName}</b>.
+              </>
+            )}
           </p>
 
           {/* Alasan pengembalian terakhir ditaruh DI SINI, bukan cuma di rincian
@@ -606,14 +651,18 @@ function KirimHasilDialog({ r, onClose, onDone }: { r: HcRequest; onClose: () =>
           <Field label="Hasil design (JPG / PNG / PDF)" hint={UPLOAD_HINT}>
             <FilePicker files={files} onChange={setFiles} disabled={busy} label="Unggah hasil design" />
           </Field>
-          <Field label="Catatan untuk atasan (opsional)">
+          <Field label={kelola ? "Catatan hasil (opsional)" : "Catatan untuk atasan (opsional)"}>
             <Textarea
               rows={3}
               value={note}
               onChange={(e) => setNote(e.target.value)}
-              placeholder="Yang perlu diperhatikan sebelum dikirim ke pemohon…"
+              placeholder={kelola ? "Yang perlu diketahui pemohon soal hasilnya…" : "Yang perlu diperhatikan sebelum dikirim ke pemohon…"}
             />
           </Field>
+
+          {kelola && (
+            <PenilaianPemohonPanel r={r} ceklis={ceklis} onCeklis={setCeklis} catatan={catatanNilai} onCatatan={setCatatanNilai} />
+          )}
 
           {progress && (
             <div className="rounded-xl border border-border bg-muted/30 p-3">
@@ -647,6 +696,96 @@ function KirimHasilDialog({ r, onClose, onDone }: { r: HcRequest; onClose: () =>
 }
 
 /**
+ * Penilaian terhadap YANG MEMINTA design.
+ *
+ * Satu komponen dipakai dua dialog karena ada DUA titik akhir permintaan:
+ * atasan yang meng-ACC hasil designer, dan pengelola antrian yang mengerjakan
+ * sendiri lalu hasilnya langsung terkirim. Kalau hanya dipasang di salah
+ * satunya, setiap permintaan yang kebetulan dikerjakan sang penilai hilang
+ * dari dashboard — dan justru pemohon yang paling sering mendadak biasanya
+ * meminta ke orang yang sama.
+ */
+function PenilaianPemohonPanel({
+  r,
+  ceklis,
+  onCeklis,
+  catatan,
+  onCatatan,
+}: {
+  r: HcRequest;
+  ceklis: CeklisBrief;
+  onCeklis: (f: (c: CeklisBrief) => CeklisBrief) => void;
+  catatan: string;
+  onCatatan: (v: string) => void;
+}) {
+  // Selisih hari dihitung di sini juga, dari data yang sudah ada — supaya yang
+  // menilai melihat angka yang sama persis dengan yang nanti masuk dashboard,
+  // bukan mengira-ngira sendiri apakah permintaannya mendadak.
+  const nilai = nilaiPermintaan(r.createdAt, r.plannedDate, ceklis);
+
+  // Menempel pada dialog penutup permintaan, bukan jadi layar terpisah:
+  // penilaian yang harus dicari sendiri di menu lain tidak akan pernah terisi,
+  // dan dashboard tanpa isi lebih buruk daripada tidak ada dashboard. Di titik
+  // ini pula orangnya baru saja membaca permintaannya dari awal sampai akhir.
+  return (
+    <div className="rounded-xl border border-border bg-muted/20 p-3">
+        <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+          <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+            Penilaian pemohon — {r.requesterName}
+          </p>
+          <Badge tone={LABEL_META[nilai.label].tone}>
+            {nilai.skor}/100 · {LABEL_META[nilai.label].label}
+          </Badge>
+        </div>
+
+        {/* Bagian yang TIDAK diisi siapa pun — sudah tercatat sejak
+            permintaannya dikirim, dan itulah yang membuat angkanya tidak
+            bisa diperdebatkan. */}
+        <div className="mb-2.5 flex flex-wrap items-center gap-2 rounded-lg bg-background px-2.5 py-2">
+          <Badge tone={WAKTU_META[nilai.waktu].tone} dot>
+            {WAKTU_META[nilai.waktu].label}
+          </Badge>
+          <span className="text-[11px] text-muted-foreground">
+            {nilai.hari === null
+              ? "Pemohon tidak menyebut kapan desainnya dibutuhkan."
+              : `Diminta ${nilai.hari} hari sebelum dibutuhkan — dihitung otomatis, bukan penilaian.`}
+          </span>
+        </div>
+
+        <div className="space-y-1.5">
+          {BUTIR_BRIEF.map((b) => (
+            <label key={b.key} className="flex cursor-pointer items-start gap-2.5 rounded-lg px-1 py-1 hover:bg-muted/40">
+              <input
+                type="checkbox"
+                className="mt-0.5 size-4 shrink-0 accent-brand-500"
+                checked={ceklis[b.key]}
+                onChange={(e) => onCeklis((c) => ({ ...c, [b.key]: e.target.checked }))}
+              />
+              <span className="min-w-0">
+                <span className="block text-[13px] font-medium text-foreground">{b.label}</span>
+                <span className="block text-[11px] leading-relaxed text-muted-foreground">{b.bantu}</span>
+              </span>
+            </label>
+          ))}
+        </div>
+
+        <Textarea
+          className="mt-2"
+          rows={2}
+          value={catatan}
+          onChange={(e) => onCatatan(e.target.value)}
+          placeholder="Catatan untuk pemohon (opsional) — misalnya materi apa yang kurang…"
+        />
+        <p className="mt-1.5 text-[11px] leading-relaxed text-muted-foreground">
+          Yang dinilai permintaannya, bukan orangnya. Nilainya masuk ke Dashboard Penilaian Request sebagai bahan
+          evaluasi Coordinator Area — {BOBOT_WAKTU} poin dari waktu yang dihitung otomatis, {BOBOT_BRIEF} poin dari
+          ceklis di atas.
+        </p>
+      </div>
+  );
+}
+
+/**
  * Atasan memeriksa hasil sebelum ia keluar dari tim.
  *
  * Berkasnya ditampilkan lengkap di sini — memutuskan tanpa membukanya sama saja
@@ -657,12 +796,22 @@ function KirimHasilDialog({ r, onClose, onDone }: { r: HcRequest; onClose: () =>
  */
 function AccHasilDialog({ r, onClose, onDone }: { r: HcRequest; onClose: () => void; onDone: () => void }) {
   const [note, setNote] = React.useState("");
+  const [ceklis, setCeklis] = React.useState<CeklisBrief>(CEKLIS_KOSONG);
+  const [catatanNilai, setCatatanNilai] = React.useState("");
   const [busy, setBusy] = React.useState(false);
 
   async function putuskan(approve: boolean) {
     if (!approve && !note.trim()) return toast.error("Tulis dulu apa yang perlu diperbaiki.");
     setBusy(true);
-    const res = await accDesignResultAction({ id: r.id, approve, note });
+    const res = await accDesignResultAction({
+      id: r.id,
+      approve,
+      note,
+      // Penilaian hanya menyertai ACC yang menyetujui: hasil yang dikembalikan
+      // ke designer bukan akhir permintaannya, jadi pemohonnya belum bisa
+      // dinilai atas sesuatu yang belum selesai.
+      ...(approve ? { ceklis, catatanNilai } : {}),
+    });
     setBusy(false);
     if (res.error) return toast.error(res.error);
     toast.success(approve ? `Hasil terkirim ke ${r.requesterName}` : "Hasil dikembalikan ke designer");
@@ -702,6 +851,8 @@ function AccHasilDialog({ r, onClose, onDone }: { r: HcRequest; onClose: () => v
               placeholder="Wajib diisi bila dikembalikan — apa yang perlu diperbaiki…"
             />
           </Field>
+
+          <PenilaianPemohonPanel r={r} ceklis={ceklis} onCeklis={setCeklis} catatan={catatanNilai} onCatatan={setCatatanNilai} />
 
           <div className="flex flex-wrap justify-end gap-2">
             <Button variant="ghost" onClick={onClose} disabled={busy}>Batal</Button>
