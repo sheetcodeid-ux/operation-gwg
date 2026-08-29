@@ -1,6 +1,7 @@
 import "server-only";
 
 import { db, dbEnabled } from "@/lib/data/db";
+import { listHcRequests } from "@/lib/data/hc-requests";
 import {
   nilaiPermintaan,
   rekapPerOutlet,
@@ -95,31 +96,26 @@ export async function simpanPenilaian(input: {
 }
 
 /**
- * Seluruh bahan dashboard, dalam dua kueri.
+ * Seluruh bahan dashboard.
  *
- * Permintaan design diambil apa adanya lalu digabung dengan penilaiannya di
- * memori. Bergabung lewat SQL akan lebih rapi, tapi `hc_requests` dibaca
- * lewat penghidrasi yang sama dengan seluruh modul lain — memotong jalannya di
- * sini berarti satu tempat lagi yang harus ikut diperbaiki setiap kali bentuk
- * barisnya berubah.
+ * Permintaannya dibaca lewat `listHcRequests`, BUKAN kueri sendiri ke
+ * `hc_requests`. Sempat ditulis sebagai kueri langsung supaya hemat satu
+ * lapisan, dan hasilnya dashboard yang selalu kosong: nama pemohon dan nama
+ * outlet tidak ada di tabelnya — keduanya disusun dari `requester_id` dan
+ * `outlet_id` di `fromRow`. Memintanya sebagai kolom membuat seluruh kueri
+ * gagal tanpa suara, dan yang terlihat di layar cuma "belum ada data".
+ *
+ * Satu-satunya tempat yang tahu bentuk baris `hc_requests` tetap satu, dan
+ * di sinilah alasannya kelihatan.
  */
 export async function dashboardPenilaian(sejak?: string): Promise<DashboardPenilaian> {
   const kosong: DashboardPenilaian = { baris: [], perPemohon: [], perOutlet: [], belumDinilai: 0 };
   if (!dbEnabled) return kosong;
 
-  // Permintaan design saja, dan hanya kolom yang dipakai. Seluruh riwayat
-  // design masih ratusan baris, jauh di bawah batas satu halaman Supabase —
-  // kalau suatu saat menembusnya, di sinilah pagingnya ditambahkan.
-  const [reqRes, nilaiRows] = await Promise.all([
-    db()
-      .from("hc_requests")
-      .select("id,title,requester_id,requester_name,outlet_id,outlet_name,planned_date,created_at,status")
-      .eq("kind", "design")
-      .order("created_at", { ascending: false })
-      .limit(1000),
+  const [permintaan, nilaiRows] = await Promise.all([
+    listHcRequests({ kind: "design" }),
     db().from("design_request_penilaian").select("*"),
   ]);
-  const reqRows = (reqRes.data ?? []) as Record<string, unknown>[];
 
   const nilai = new Map<string, Record<string, unknown>>();
   for (const r of ((nilaiRows.data ?? []) as Record<string, unknown>[])) nilai.set(String(r.request_id), r);
@@ -127,31 +123,28 @@ export async function dashboardPenilaian(sejak?: string): Promise<DashboardPenil
   // Hanya permintaan yang sudah SELESAI yang masuk hitungan. Yang masih
   // berjalan belum punya penilaian, dan memasukkannya sebagai nol akan
   // menuduh orang atas pekerjaan yang belum kelar.
-  const selesai = reqRows.filter((r) => String(r.status ?? "") === "terlaksana");
-  const dalamRentang = sejak ? selesai.filter((r) => String(r.created_at ?? "") >= sejak) : selesai;
+  const selesai = permintaan.filter((r) => r.status === "terlaksana");
+  const dalamRentang = sejak ? selesai.filter((r) => r.createdAt >= sejak) : selesai;
 
   const baris: BarisDashboard[] = [];
   let belum = 0;
   for (const r of dalamRentang) {
-    const id = String(r.id);
-    const n = nilai.get(id);
+    const n = nilai.get(r.id);
     if (!n) {
       belum += 1;
       continue;
     }
     const ceklis = ceklisDari(n);
-    const dibuat = String(r.created_at ?? "");
-    const deadline = (r.planned_date as string | null) ?? null;
-    const hasil = nilaiPermintaan(dibuat, deadline, ceklis);
+    const hasil = nilaiPermintaan(r.createdAt, r.plannedDate, ceklis);
     baris.push({
-      requestId: id,
-      judul: String(r.title ?? ""),
-      dibuat,
-      deadline,
-      pemohonId: String(r.requester_id ?? ""),
-      pemohonNama: String(r.requester_name ?? "—"),
-      outletId: (r.outlet_id as string | null) ?? null,
-      outletNama: (r.outlet_name as string | null) ?? null,
+      requestId: r.id,
+      judul: r.title,
+      dibuat: r.createdAt,
+      deadline: r.plannedDate,
+      pemohonId: r.requesterId,
+      pemohonNama: r.requesterName,
+      outletId: r.outletId,
+      outletNama: r.outletName,
       skor: hasil.skor,
       hari: hasil.hari,
       waktu: hasil.waktu,

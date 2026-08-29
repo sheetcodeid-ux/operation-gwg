@@ -30,9 +30,17 @@ describe("selisih hari tidak pernah disimpan", () => {
   });
 
   it("dihitung ulang dari hc_requests setiap dibaca", () => {
-    expect(data).toContain("nilaiPermintaan(dibuat, deadline, ceklis)");
-    expect(data).toContain("planned_date");
-    expect(data).toContain("created_at");
+    expect(data).toContain("nilaiPermintaan(r.createdAt, r.plannedDate, ceklis)");
+  });
+});
+
+describe("permintaannya dibaca lewat pembaca yang sama dengan modul lain", () => {
+  it("tidak menyusun kueri hc_requests sendiri", () => {
+    // Nama pemohon dan nama outlet tidak ada di tabelnya — keduanya disusun
+    // dari id-nya di `fromRow`. Kueri sendiri yang memintanya sebagai kolom
+    // gagal tanpa suara, dan yang terlihat cuma dashboard kosong.
+    expect(data).toContain('listHcRequests({ kind: "design" })');
+    expect(data).not.toContain('from("hc_requests")');
   });
 });
 
@@ -87,7 +95,7 @@ describe("hanya permintaan selesai yang masuk hitungan", () => {
   it("yang masih berjalan tidak dihitung nol", () => {
     // Memasukkannya sebagai nol berarti menuduh orang atas pekerjaan yang belum
     // kelar.
-    expect(data).toContain('String(r.status ?? "") === "terlaksana"');
+    expect(data).toContain('r.status === "terlaksana"');
   });
 
   it("yang selesai tapi belum dinilai dihitung terpisah, bukan dibuang", () => {
