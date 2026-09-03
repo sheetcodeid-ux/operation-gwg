@@ -197,12 +197,16 @@ async function designRequest(periode: string): Promise<{ masuk: number; selesai:
 /** Komplain kategori Food Quality bulan itu — bahan indikator Review Customer. */
 async function komplainFoodQuality(periode: string): Promise<number> {
   if (!dbEnabled) return 0;
+  // Dihitung dari TANGGAL KOMPLAINNYA (`review_date`), bukan tanggal barisnya
+  // dibuat. Komplain bulan lalu yang baru sempat dimasukkan hari ini adalah
+  // komplain bulan lalu — memasukkannya ke bulan ini menghukum orang atas
+  // sesuatu yang terjadi di periode yang sudah ditutup.
   const { data } = await db()
     .from("complaints")
-    .select("id,created_at,category")
+    .select("id,review_date,category")
     .eq("category", "food_quality")
-    .gte("created_at", `${periode}-01`)
-    .lt("created_at", `${bulanSetelah(periode)}-01`);
+    .gte("review_date", `${periode}-01`)
+    .lt("review_date", `${bulanSetelah(periode)}-01`);
   return (data ?? []).length;
 }
 
