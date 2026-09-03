@@ -1,279 +1,278 @@
 "use client";
 
 import * as React from "react";
-import { CircleDashed, Info, Lock, SlidersHorizontal } from "lucide-react";
-import { NAV_ICONS } from "@/components/layout/icons";
+import { useRouter } from "next/navigation";
+import { type ColumnDef } from "@tanstack/react-table";
+import { Lock, SlidersHorizontal } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Combobox } from "@/components/ui/combobox";
-import { ScoreRing } from "@/components/ui/score-ring";
-import type { BarisKpi } from "@/lib/kpi/hitung";
+import { DataTable } from "@/components/ui/data-table";
+import { Progress } from "@/components/ui/progress";
+import { KpiIndicatorDonut, KpiPerformanceChart } from "./kpi-charts";
+import type { BarisKpi, BarisEfisiensi } from "@/lib/kpi/hitung";
 import type { DetailFee, DetailPasar, LaporanKpi } from "@/lib/data/kpi";
 import { formatIDR, formatNumber } from "@/lib/utils";
-import { cn } from "@/lib/utils";
 
 /**
- * Halaman KPI satu posisi.
+ * Halaman KPI satu posisi — SATU komponen untuk sepuluh posisi.
  *
- * SATU KOMPONEN UNTUK SEPULUH POSISI. Isinya sepenuhnya ditentukan data yang
- * dikirim server: baris indikator, dan panel tambahan yang hanya muncul bila
- * posisi itu memang memakainya. Membuat satu halaman per posisi akan berarti
- * sepuluh tempat yang harus diubah serempak setiap kali susunan tabelnya
- * bergeser — dan satu yang tertinggal berarti dua orang membaca laporan dengan
- * bentuk yang berbeda.
+ * Susunannya mengikuti Work Tracker baris demi baris: bilah saringan, lalu
+ * grafik kiri + donat kanan pada grid `minmax(0,1fr) 23rem`, lalu tabel dengan
+ * pengurutan, pencarian, dan penomoran halaman yang sama. Yang berbeda hanya
+ * isinya.
+ *
+ * PANEL TAMBAHAN TIDAK PERNAH TERCAMPUR. Efisiensi Beban Operasional dan
+ * Keberhasilan Pasar hanya muncul untuk posisi Product Development & Quality
+ * yang memang dinilai atasnya; Invoice Management Fee hanya untuk Accounting.
+ * Server yang menentukannya — panel yang tidak dipakai posisi ini datang
+ * sebagai `null` dan tidak punya jalan untuk tampil.
  */
 
 const persen = (n: number | null, digit = 2) =>
   n === null ? "—" : `${formatNumber(n, { minimumFractionDigits: digit, maximumFractionDigits: digit })}%`;
 
-const nilai = (n: number | null, satuan?: BarisKpi["satuan"]) => {
-  if (n === null) return "—";
-  if (satuan === "rupiah") return formatIDR(n);
-  if (satuan === "persen") return persen(n);
-  return formatNumber(n, { maximumFractionDigits: 2 });
-};
+const angka = (n: number | null) => (n === null ? "—" : formatNumber(n, { maximumFractionDigits: 2 }));
+
+export interface OpsiPosisi {
+  value: string;
+  label: string;
+}
 
 export function PapanKpi({
   laporan,
+  lalu,
   namaPosisi,
-  pic,
   departemen,
-  ikon,
+  pic,
   periodeOpsi,
+  departemenOpsi,
+  posisiOpsi,
   bolehAtur,
 }: {
   laporan: LaporanKpi;
+  lalu: Record<string, number | null>;
   namaPosisi: string;
-  pic: string[];
   departemen: string;
-  ikon: string;
-  periodeOpsi: { value: string; label: string }[];
+  pic: string[];
+  periodeOpsi: OpsiPosisi[];
+  departemenOpsi: OpsiPosisi[];
+  posisiOpsi: OpsiPosisi[];
   bolehAtur: boolean;
 }) {
-  const Ikon = NAV_ICONS[ikon] ?? CircleDashed;
+  const router = useRouter();
   const { baris, ringkas } = laporan;
-
-  // Bobot yang tidak berjumlah 100 BUKAN kesalahan yang disembunyikan. Sosial
-  // Media memang 90% sampai bobot barunya ditetapkan, dan skor 90 di sana
-  // bukan berarti kinerjanya lebih rendah daripada posisi lain.
+  const subtitle = `${labelPeriode(laporan.periode)} · ${namaPosisi}`;
   const bobotTimpang = Math.abs(ringkas.bobotTotal - 100) > 0.001;
 
-  const kelompok = React.useMemo(() => {
-    const out: { nama: string | null; isi: BarisKpi[] }[] = [];
-    for (const b of baris) {
-      const nama = b.kategori ?? null;
-      const akhir = out[out.length - 1];
-      if (akhir && akhir.nama === nama) akhir.isi.push(b);
-      else out.push({ nama, isi: [b] });
-    }
-    return out;
-  }, [baris]);
+  const kolom = React.useMemo<ColumnDef<BarisKpi>[]>(
+    () => [
+      {
+        accessorKey: "label",
+        header: "Indikator",
+        cell: ({ row }) => (
+          <div className="min-w-0 max-w-[20rem]">
+            <p className="truncate font-medium text-foreground">{row.original.label}</p>
+            <p className="truncate text-[11px] text-muted-foreground">{row.original.alasan ?? row.original.penjelasan}</p>
+          </div>
+        ),
+      },
+      {
+        accessorKey: "kategori",
+        header: "Kategori",
+        cell: ({ getValue }) => {
+          const v = getValue<string | undefined>();
+          return v ? <Badge tone="brand">{v}</Badge> : <span className="text-muted-foreground">—</span>;
+        },
+      },
+      {
+        accessorKey: "bobot",
+        header: "Bobot",
+        cell: ({ getValue }) => <span className="tabular-nums text-muted-foreground">{persen(getValue<number>(), 0)}</span>,
+      },
+      {
+        accessorKey: "target",
+        header: "Target",
+        cell: ({ getValue }) => <span className="tabular-nums text-foreground/80">{angka(getValue<number | null>())}</span>,
+      },
+      {
+        accessorKey: "actual",
+        header: "Actual",
+        cell: ({ getValue }) => <span className="tabular-nums text-foreground/80">{angka(getValue<number | null>())}</span>,
+      },
+      {
+        accessorKey: "persentase",
+        header: "Persentase",
+        cell: ({ row }) => {
+          const p = row.original.persentase;
+          if (p === null) return <span className="text-[11px] text-muted-foreground">belum ada data</span>;
+          return (
+            <div className="flex w-28 items-center gap-2">
+              <Progress value={Math.round(p)} tone={p >= 100 ? "success" : "brand"} />
+              <span className="w-11 text-right text-[11px] tabular-nums text-muted-foreground">{persen(p, 0)}</span>
+            </div>
+          );
+        },
+      },
+      {
+        accessorKey: "persenActual",
+        header: "% Actual",
+        cell: ({ getValue }) => (
+          <span className="font-semibold tabular-nums text-foreground">{persen(getValue<number | null>())}</span>
+        ),
+      },
+    ],
+    [],
+  );
 
-  function gantiPeriode(p: string) {
+  function ganti(param: string, nilai: string) {
     const url = new URL(window.location.href);
-    url.searchParams.set("periode", p);
-    window.location.href = url.toString();
+    if (param === "posisi") {
+      url.pathname = `/kpi/${nilai}`;
+    } else if (param === "departemen") {
+      // Departemen bukan alamat halaman; memilihnya membuka posisi pertamanya.
+      router.push(`/kpi?dep=${nilai}`);
+      return;
+    } else {
+      url.searchParams.set(param, nilai);
+    }
+    router.push(`${url.pathname}${url.search}`);
   }
 
   return (
-    <div className="flex w-full flex-col gap-4">
-      {/* ── kepala ───────────────────────────────────────────────────────── */}
-      <header className="flex flex-wrap items-center gap-3 rounded-2xl border border-border bg-card p-4">
-        <span className="grid size-11 shrink-0 place-items-center rounded-xl bg-muted ring-1 ring-border">
-          <Ikon className="size-5 text-foreground/70" />
-        </span>
-        <div className="mr-auto min-w-0">
-          <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">{departemen}</p>
-          <h1 className="truncate text-xl font-semibold tracking-tight text-foreground">{namaPosisi}</h1>
-          {pic.length > 0 && <p className="truncate text-[12.5px] text-muted-foreground">{pic.join(" · ")}</p>}
-        </div>
-
-        <div className="flex flex-wrap items-center gap-2">
-          <Combobox
-            className="w-40"
-            options={periodeOpsi}
-            value={laporan.periode}
-            onChange={gantiPeriode}
-            matchTriggerWidth
-          />
+    <div>
+      {/* Bilah saringan — bentuknya sama dengan Work Tracker: satu baris yang
+          bisa digeser ke samping di layar kecil. */}
+      <div className="scroll-fade-x -mx-1 mb-4 flex items-center gap-2 px-1 py-0.5">
+        <Combobox
+          portal
+          searchable={false}
+          className="w-44 shrink-0"
+          value={laporan.periode}
+          onChange={(v) => ganti("periode", v)}
+          options={periodeOpsi}
+        />
+        <Combobox
+          portal
+          searchable={false}
+          className="w-56 shrink-0"
+          value={departemen}
+          onChange={(v) => ganti("departemen", v)}
+          options={departemenOpsi}
+        />
+        <Combobox
+          portal
+          searchable={false}
+          className="w-56 shrink-0"
+          value={laporan.posisi}
+          onChange={(v) => ganti("posisi", v)}
+          options={posisiOpsi}
+        />
+        <div className="ml-auto flex shrink-0 items-center gap-2">
           {laporan.dikunci && (
             <Badge tone="neutral">
               <Lock className="size-3" /> Bulan dikunci
             </Badge>
           )}
+          {pic.length > 0 && <span className="hidden text-[11.5px] text-muted-foreground sm:inline">{pic.join(" · ")}</span>}
           {bolehAtur && (
             <Button variant="outline" size="sm" className="gap-1.5">
               <SlidersHorizontal className="size-4" /> Pengaturan
             </Button>
           )}
         </div>
-      </header>
+      </div>
 
-      {/* ── ringkasan ────────────────────────────────────────────────────── */}
-      <section className="grid gap-3 lg:grid-cols-[auto_1fr]">
-        <div className="flex items-center gap-4 rounded-2xl border border-border bg-card p-4">
-          <ScoreRing value={Math.round(ringkas.skor)} size={92} />
-          <div className="min-w-0">
-            <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Skor bulan ini</p>
-            <p className="text-2xl font-semibold tabular-nums tracking-tight text-foreground">
-              {persen(ringkas.skor, 2)}
-            </p>
-            <p className="mt-0.5 text-[11.5px] leading-relaxed text-muted-foreground">
-              dari bobot {persen(ringkas.bobotTotal, 0)}
-              {ringkas.jumlahBelumTerukur > 0 && (
-                <> · {ringkas.jumlahBelumTerukur} indikator belum terukur</>
-              )}
-            </p>
-          </div>
-        </div>
-
-        <div className="grid gap-3 sm:grid-cols-3">
-          <Kotak label="Indikator terukur" nilai={`${ringkas.jumlahTerukur} dari ${baris.length}`} />
-          <Kotak
-            label="Setara skala 100"
-            nilai={ringkas.skorSetara === null ? "—" : persen(ringkas.skorSetara, 2)}
-            catatan="hanya dari indikator yang ada datanya"
-          />
-          <Kotak label="Bobot terpakai" nilai={persen(ringkas.bobotTerpakai, 0)} catatan={`dari ${persen(ringkas.bobotTotal, 0)}`} />
-        </div>
-      </section>
+      {/* Grafik + donat — grid yang sama dengan Work Tracker. */}
+      <div className="mb-4 grid items-stretch gap-4 lg:grid-cols-[minmax(0,1fr)_23rem]">
+        <KpiPerformanceChart baris={baris} lalu={lalu} subtitle={subtitle} />
+        <KpiIndicatorDonut baris={baris} subtitle={subtitle} />
+      </div>
 
       {bobotTimpang && (
-        <p className="rounded-xl border border-amber-500/30 bg-amber-500/[0.07] px-3.5 py-2.5 text-[12.5px] leading-relaxed text-amber-800 dark:text-amber-200">
+        <p className="mb-4 rounded-xl border border-amber-500/30 bg-amber-500/[0.07] px-3.5 py-2.5 text-[12.5px] leading-relaxed text-amber-800 dark:text-amber-200">
           Bobot indikator posisi ini berjumlah <b>{persen(ringkas.bobotTotal, 0)}</b>, bukan 100%. Skor tertingginya ikut
-          terbatas di angka itu. Perbaiki lewat Pengaturan agar bisa dibandingkan setara dengan posisi lain.
+          terbatas di angka itu — perbaiki lewat Pengaturan agar setara dengan posisi lain.
         </p>
       )}
 
-      {/* ── tabel indikator ──────────────────────────────────────────────── */}
-      <div className="overflow-hidden rounded-2xl border border-border bg-card">
-        <div className="overflow-x-auto">
-          <table className="w-full min-w-[760px] border-collapse text-sm">
-            <thead>
-              <tr className="border-b border-border bg-muted/40 text-left">
-                <Th>Indikator</Th>
-                <Th className="w-20" align="right">Bobot</Th>
-                <Th className="w-32" align="right">Target</Th>
-                <Th className="w-32" align="right">Actual</Th>
-                <Th className="w-28" align="right">Persentase</Th>
-                <Th className="w-28" align="right">% Actual</Th>
-              </tr>
-            </thead>
-            <tbody>
-              {kelompok.map((g) => (
-                <React.Fragment key={g.nama ?? "tanpa"}>
-                  {g.nama && (
-                    <tr>
-                      <td
-                        colSpan={6}
-                        className="bg-muted/25 px-3 py-1.5 text-[10.5px] font-semibold uppercase tracking-[0.09em] text-muted-foreground"
-                      >
-                        {g.nama}
-                      </td>
-                    </tr>
-                  )}
-                  {g.isi.map((b) => (
-                    <tr key={b.key} className="border-b border-border/60 last:border-0 hover:bg-muted/20">
-                      <Td>
-                        <p className="font-medium text-foreground">{b.label}</p>
-                        <p className="text-[11px] leading-relaxed text-muted-foreground">{b.alasan ?? b.penjelasan}</p>
-                      </Td>
-                      <Td align="right" className="tabular-nums text-muted-foreground">{persen(b.bobot, 0)}</Td>
-                      <Td align="right" className="tabular-nums">{nilai(b.target, b.satuan)}</Td>
-                      <Td align="right" className="tabular-nums">{nilai(b.actual, b.satuan)}</Td>
-                      <Td align="right" className="tabular-nums">
-                        {b.persentase === null ? (
-                          <span className="text-[11px] text-muted-foreground">belum ada data</span>
-                        ) : (
-                          persen(b.persentase)
-                        )}
-                      </Td>
-                      <Td align="right" className="tabular-nums font-semibold">
-                        {b.persenActual === null ? "—" : persen(b.persenActual)}
-                      </Td>
-                    </tr>
-                  ))}
-                </React.Fragment>
-              ))}
-              <tr className="border-t border-border bg-muted/40">
-                <Td className="font-semibold">Skor</Td>
-                <Td align="right" className="tabular-nums font-semibold text-muted-foreground">{persen(ringkas.bobotTotal, 0)}</Td>
-                <Td colSpan={3} />
-                <Td align="right" className="tabular-nums text-base font-semibold">{persen(ringkas.skor)}</Td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
-      </div>
+      <DataTable
+        tableId="kpi-indikator"
+        columns={kolom}
+        data={baris}
+        searchPlaceholder="Cari indikator…"
+        stickyHeader={false}
+        toolbar={
+          <div className="flex items-center gap-3 text-xs">
+            <span className="text-muted-foreground">Skor bulan ini</span>
+            <span className="text-base font-semibold tabular-nums text-foreground">{persen(ringkas.skor)}</span>
+            <span className="text-muted-foreground">
+              dari bobot {persen(ringkas.bobotTotal, 0)}
+              {ringkas.jumlahBelumTerukur > 0 && ` · ${ringkas.jumlahBelumTerukur} indikator belum terukur`}
+            </span>
+          </div>
+        }
+      />
 
       {laporan.efisiensi && <PanelEfisiensi data={laporan.efisiensi} />}
       {laporan.fee && <PanelFee data={laporan.fee} />}
       {laporan.pasar && <PanelPasar data={laporan.pasar} />}
-
-      <CaraBaca />
     </div>
   );
 }
 
-/* ────────────────────────────── potongan kecil ────────────────────────────── */
-
-function Kotak({ label, nilai: v, catatan }: { label: string; nilai: string; catatan?: string }) {
-  return (
-    <div className="rounded-2xl border border-border bg-card p-4">
-      <p className="text-[11px] font-medium uppercase leading-tight tracking-wide text-muted-foreground">{label}</p>
-      <p className="mt-1 text-xl font-semibold tabular-nums tracking-tight text-foreground">{v}</p>
-      {catatan && <p className="mt-0.5 text-[11px] leading-tight text-muted-foreground">{catatan}</p>}
-    </div>
-  );
+function labelPeriode(p: string): string {
+  const BULAN = ["Januari", "Februari", "Maret", "April", "Mei", "Juni", "Juli", "Agustus", "September", "Oktober", "November", "Desember"];
+  const [th, bl] = p.split("-");
+  const i = Number(bl) - 1;
+  return i >= 0 && i < 12 ? `${BULAN[i]} ${th}` : p;
 }
 
-function Th({ children, className = "", align = "left" }: { children?: React.ReactNode; className?: string; align?: "left" | "right" }) {
-  return (
-    <th
-      className={cn(
-        "whitespace-nowrap px-3 py-2.5 text-[10.5px] font-semibold uppercase tracking-[0.08em] text-muted-foreground",
-        align === "right" ? "text-right" : "text-left",
-        className,
-      )}
-    >
-      {children}
-    </th>
-  );
-}
-
-function Td({
-  children,
-  className = "",
-  align = "left",
-  colSpan,
-}: {
-  children?: React.ReactNode;
-  className?: string;
-  align?: "left" | "right";
-  colSpan?: number;
-}) {
-  return (
-    <td colSpan={colSpan} className={cn("px-3 py-3 align-middle", align === "right" ? "text-right" : "text-left", className)}>
-      {children}
-    </td>
-  );
-}
+/* ─────────────────────────────── panel tambahan ─────────────────────────────── */
 
 function JudulPanel({ judul, ringkas }: { judul: string; ringkas: React.ReactNode }) {
   return (
-    <div className="border-b border-border px-4 py-3">
-      <p className="text-[13px] font-semibold text-foreground">{judul}</p>
-      <p className="mt-0.5 text-[11.5px] leading-relaxed text-muted-foreground">{ringkas}</p>
+    <div className="mb-3 mt-6">
+      <h3 className="text-sm font-semibold tracking-tight text-foreground">{judul}</h3>
+      <p className="text-[11px] leading-relaxed text-muted-foreground">{ringkas}</p>
     </div>
   );
 }
 
-/* ─────────────────────────────── panel-panel ─────────────────────────────── */
-
 function PanelEfisiensi({ data }: { data: NonNullable<LaporanKpi["efisiensi"]> }) {
   const { baris, ringkas } = data;
+  const kolom = React.useMemo<ColumnDef<BarisEfisiensi>[]>(
+    () => [
+      { accessorKey: "outletNama", header: "Outlet", cell: ({ getValue }) => <span className="font-medium text-foreground">{getValue<string>()}</span> },
+      { accessorKey: "average", header: "Average 3 Bln", cell: ({ getValue }) => <Rp v={getValue<number | null>()} /> },
+      { accessorKey: "targetWh", header: "Target WH", cell: ({ getValue }) => <Rp v={getValue<number | null>()} muted /> },
+      { accessorKey: "targetNonWh", header: "Target Non-WH", cell: ({ getValue }) => <Rp v={getValue<number | null>()} muted /> },
+      { accessorKey: "actualWh", header: "Actual WH", cell: ({ getValue }) => <Rp v={getValue<number | null>()} kosong="isi" /> },
+      { accessorKey: "actualNonWh", header: "Actual Non-WH", cell: ({ getValue }) => <Rp v={getValue<number | null>()} kosong="isi" /> },
+      {
+        accessorKey: "persenActual",
+        header: "% Actual",
+        cell: ({ getValue }) => <span className="tabular-nums text-foreground/80">{persen(getValue<number | null>())}</span>,
+      },
+      {
+        accessorKey: "selisih",
+        header: "Status",
+        cell: ({ getValue }) => {
+          const s = getValue<number | null>();
+          if (s === null) return <span className="text-[11px] text-muted-foreground">No Data</span>;
+          return (
+            <Badge tone={s <= 0 ? "success" : "danger"} dot>
+              {s <= 0 ? "Tersisa" : "Melebihi"} {persen(Math.abs(s))}
+            </Badge>
+          );
+        },
+      },
+    ],
+    [],
+  );
+
   return (
-    <section className="overflow-hidden rounded-2xl border border-border bg-card">
+    <section>
       <JudulPanel
         judul="Efisiensi Beban Operasional"
         ringkas={
@@ -293,141 +292,72 @@ function PanelEfisiensi({ data }: { data: NonNullable<LaporanKpi["efisiensi"]> }
           </>
         }
       />
-      <div className="max-h-[26rem] overflow-auto">
-        <table className="w-full min-w-[860px] border-collapse text-sm">
-          <thead className="sticky top-0 z-10">
-            <tr className="border-b border-border bg-muted/60 text-left">
-              <Th>Outlet</Th>
-              <Th align="right">Average 3 bln</Th>
-              <Th align="right">Target WH</Th>
-              <Th align="right">Target non-WH</Th>
-              <Th align="right">Actual WH</Th>
-              <Th align="right">Actual non-WH</Th>
-              <Th align="right">% Actual</Th>
-              <Th>Status</Th>
-            </tr>
-          </thead>
-          <tbody>
-            {baris.map((b) => (
-              <tr key={b.outletId} className="border-b border-border/60 last:border-0 hover:bg-muted/20">
-                <Td className="whitespace-nowrap">{b.outletNama}</Td>
-                <Td align="right" className="tabular-nums">{b.average === null ? "—" : formatIDR(b.average)}</Td>
-                <Td align="right" className="tabular-nums text-muted-foreground">{b.targetWh === null ? "—" : formatIDR(b.targetWh)}</Td>
-                <Td align="right" className="tabular-nums text-muted-foreground">{b.targetNonWh === null ? "—" : formatIDR(b.targetNonWh)}</Td>
-                <Td align="right" className="tabular-nums">{b.actualWh === null ? <span className="text-[11px] text-muted-foreground">isi</span> : formatIDR(b.actualWh)}</Td>
-                <Td align="right" className="tabular-nums">{b.actualNonWh === null ? <span className="text-[11px] text-muted-foreground">isi</span> : formatIDR(b.actualNonWh)}</Td>
-                <Td align="right" className="tabular-nums">{b.persenActual === null ? "—" : persen(b.persenActual)}</Td>
-                <Td>
-                  {b.selisih === null ? (
-                    <span className="text-[11px] text-muted-foreground">No Data</span>
-                  ) : (
-                    <Badge tone={b.selisih <= 0 ? "success" : "danger"}>
-                      {b.selisih <= 0 ? "Tersisa" : "Melebihi"} {persen(Math.abs(b.selisih))}
-                    </Badge>
-                  )}
-                </Td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+      <DataTable tableId="kpi-efisiensi" columns={kolom} data={baris} searchPlaceholder="Cari outlet…" stickyHeader={false} />
     </section>
   );
 }
 
 function PanelFee({ data }: { data: DetailFee[] }) {
   const sesuai = data.filter((d) => d.sesuai).length;
+  const kolom = React.useMemo<ColumnDef<DetailFee>[]>(
+    () => [
+      { accessorKey: "outletNama", header: "Outlet", cell: ({ getValue }) => <span className="font-medium text-foreground">{getValue<string>()}</span> },
+      { accessorKey: "netSales", header: "Net Sales", cell: ({ getValue }) => <Rp v={getValue<number | null>()} /> },
+      { accessorKey: "feeSeharusnya", header: "Fee Seharusnya", cell: ({ getValue }) => <Rp v={getValue<number | null>()} /> },
+      {
+        accessorKey: "sesuai",
+        header: "Sesuai",
+        cell: ({ getValue }) => (
+          <Badge tone={getValue<boolean>() ? "success" : "neutral"} dot>
+            {getValue<boolean>() ? "Sesuai" : "Belum"}
+          </Badge>
+        ),
+      },
+    ],
+    [],
+  );
+
   return (
-    <section className="overflow-hidden rounded-2xl border border-border bg-card">
+    <section>
       <JudulPanel
         judul="Invoice Management Fee"
         ringkas={`${sesuai} dari ${data.length} outlet sudah diceklis sesuai. Management fee seharusnya 5% dari net sales bulan ini — ceklisnya dimulai dari nol setiap ganti bulan.`}
       />
-      <div className="max-h-[26rem] overflow-auto">
-        <table className="w-full min-w-[560px] border-collapse text-sm">
-          <thead className="sticky top-0 z-10">
-            <tr className="border-b border-border bg-muted/60 text-left">
-              <Th>Outlet</Th>
-              <Th align="right">Net sales</Th>
-              <Th align="right">Fee seharusnya</Th>
-              <Th className="w-24">Sesuai</Th>
-            </tr>
-          </thead>
-          <tbody>
-            {data.map((d) => (
-              <tr key={d.outletId} className="border-b border-border/60 last:border-0 hover:bg-muted/20">
-                <Td className="whitespace-nowrap">{d.outletNama}</Td>
-                <Td align="right" className="tabular-nums">{d.netSales === null ? "—" : formatIDR(d.netSales)}</Td>
-                <Td align="right" className="tabular-nums">{d.feeSeharusnya === null ? "—" : formatIDR(d.feeSeharusnya)}</Td>
-                <Td>
-                  <Badge tone={d.sesuai ? "success" : "neutral"} dot>
-                    {d.sesuai ? "Sesuai" : "Belum"}
-                  </Badge>
-                </Td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+      <DataTable tableId="kpi-fee" columns={kolom} data={data} searchPlaceholder="Cari outlet…" stickyHeader={false} />
     </section>
   );
 }
 
 function PanelPasar({ data }: { data: DetailPasar }) {
+  const kolom = React.useMemo<ColumnDef<DetailPasar["baris"][number]>[]>(
+    () => [
+      { accessorKey: "menu", header: "Nama Menu", cell: ({ getValue }) => <span className="font-medium text-foreground">{getValue<string>()}</span> },
+      { accessorKey: "penjualan", header: "Penjualan 3 Bulan", cell: ({ getValue }) => <Rp v={getValue<number>()} /> },
+      {
+        accessorKey: "bagian",
+        header: "Bagian dari Omset",
+        cell: ({ getValue }) => <span className="tabular-nums text-foreground/80">{persen(getValue<number>())}</span>,
+      },
+    ],
+    [],
+  );
+
   return (
-    <section className="overflow-hidden rounded-2xl border border-border bg-card">
+    <section>
       <JudulPanel
         judul="Keberhasilan Pasar"
         ringkas={
           data.baris.length === 0
             ? "Belum ada menu yang dipilih untuk dinilai bulan ini."
-            : `${data.baris.length} menu dipilih · penjualan ${formatIDR(data.total)} dari omset ${formatIDR(data.omset)}`
+            : `${data.baris.length} menu dipilih · penjualan ${formatIDR(data.total)} dari omset ${formatIDR(data.omset)} · ${persen(data.bagianTotal)}`
         }
       />
-      <div className="overflow-x-auto">
-        <table className="w-full min-w-[420px] border-collapse text-sm">
-          <thead>
-            <tr className="border-b border-border bg-muted/40 text-left">
-              <Th>Nama menu</Th>
-              <Th align="right">Penjualan 3 bulan</Th>
-              <Th align="right">Bagian dari omset</Th>
-            </tr>
-          </thead>
-          <tbody>
-            {data.baris.length === 0 ? (
-              <tr>
-                <td colSpan={3} className="px-4 py-10 text-center text-[12.5px] text-muted-foreground">
-                  Pilih menu yang mau dinilai, lalu penjualannya ditarik dari ESB.
-                </td>
-              </tr>
-            ) : (
-              data.baris.map((b) => (
-                <tr key={b.menu} className="border-b border-border/60 last:border-0">
-                  <Td>{b.menu}</Td>
-                  <Td align="right" className="tabular-nums">{formatIDR(b.penjualan)}</Td>
-                  <Td align="right" className="tabular-nums">{persen(b.bagian)}</Td>
-                </tr>
-              ))
-            )}
-          </tbody>
-        </table>
-      </div>
+      <DataTable tableId="kpi-pasar" columns={kolom} data={data.baris} searchPlaceholder="Cari menu…" stickyHeader={false} showExport={false} />
     </section>
   );
 }
 
-function CaraBaca() {
-  return (
-    <div className="rounded-2xl border border-border bg-muted/20 px-4 py-3.5">
-      <p className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
-        <Info className="size-4" /> Cara angkanya dihitung
-      </p>
-      <p className="mt-1.5 max-w-4xl text-[12.5px] leading-relaxed text-foreground/85">
-        <b>Persentase</b> = actual ÷ target, dibatasi 100% — capaian di atas target tidak menambah nilai.{" "}
-        <b>% Actual</b> = bobot × persentase. <b>Skor</b> adalah jumlah seluruh % actual. Indikator yang belum ada
-        datanya tidak dihitung nol, melainkan dikeluarkan dari bobot yang terpakai — nol berarti gagal total, dan itu
-        tuduhan yang berbeda dari belum diukur.
-      </p>
-    </div>
-  );
+function Rp({ v, muted, kosong }: { v: number | null; muted?: boolean; kosong?: string }) {
+  if (v === null) return <span className="text-[11px] text-muted-foreground">{kosong ?? "—"}</span>;
+  return <span className={muted ? "tabular-nums text-muted-foreground" : "tabular-nums text-foreground/80"}>{formatIDR(v)}</span>;
 }

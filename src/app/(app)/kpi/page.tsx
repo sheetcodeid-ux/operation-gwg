@@ -19,9 +19,15 @@ export const metadata: Metadata = { title: "Key Performance Indicator" };
  * lupa dimasukkan; menampilkannya apa adanya membuat sisa pekerjaannya
  * terlihat oleh semua orang.
  */
-export default async function KpiPage() {
+export default async function KpiPage({ searchParams }: { searchParams: Promise<{ dep?: string }> }) {
   const user = await requireSessionUser();
   if (!canReachMenu(user, "kpi")) redirect("/dashboard");
+
+  // Saringan departemen di halaman posisi mengarah ke sini; yang dituju
+  // sebenarnya posisi pertama departemen itu, bukan daftar ini.
+  const { dep } = await searchParams;
+  const tujuan = dep ? DEPARTEMEN.find((d) => d.kode === dep)?.posisi[0] : undefined;
+  if (tujuan) redirect(`/kpi/${tujuan}`);
 
   return (
     <div className="w-full">

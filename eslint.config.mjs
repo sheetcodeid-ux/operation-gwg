@@ -12,6 +12,8 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
+    // Hasil build pratinjau komponen — berkas bundel, bukan kode yang ditulis.
+    ".preview/dist/**",
   ]),
   {
     rules: {
