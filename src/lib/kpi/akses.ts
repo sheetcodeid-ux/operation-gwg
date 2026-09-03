@@ -1,0 +1,32 @@
+import type { KodePosisi } from "./struktur";
+import type { UserProfile } from "@/lib/types";
+
+/**
+ * Menu sidebar untuk tiap posisi.
+ *
+ * Dipisah dari daftar menu supaya halamannya bisa memeriksa izin dengan kunci
+ * yang PERSIS sama dengan yang dipakai sidebar. Menyalin pemetaan ini di dua
+ * tempat berarti suatu saat sidebar menampilkan baris yang halamannya menolak
+ * membuka — dan yang terlihat pengguna cuma menu yang melempar balik.
+ */
+export const MENU_POSISI: Record<KodePosisi, string> = {
+  creative_content: "kpi_creative_content",
+  creative_sosmed: "kpi_creative_sosmed",
+  finance_accounting: "kpi_fin_accounting",
+  finance_finance: "kpi_fin_finance",
+  finance_tax: "kpi_fin_tax",
+  marcomm: "kpi_marcomm",
+  pdq_food: "kpi_pdq_food",
+  pdq_beverage: "kpi_pdq_beverage",
+  pdq_head_food: "kpi_pdq_head_food",
+  pdq_head_pdq: "kpi_pdq_head_pdq",
+};
+
+/**
+ * Siapa boleh mengubah bobot dan target.
+ *
+ * Sengaja lebih sempit daripada yang boleh membaca. Bobot adalah kebijakan
+ * perusahaan; kalau orang yang dinilai bisa mengubahnya sendiri, angkanya
+ * berhenti berarti apa pun.
+ */
+export const bolehAturKpi = (user: UserProfile | null): boolean => user?.role === "super_admin";

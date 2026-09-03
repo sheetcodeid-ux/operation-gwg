@@ -331,6 +331,8 @@ export type NotificationKind =
   | "chat_message"
   // Pengingat Update Bulanan outlet (HC-MOS Kontrak Tracker).
   | "hc_update_due"
+  // Laporan penilaian permintaan design yang dikirim ke Coordinator Area.
+  | "creative_report"
   // Aktivitas komplain.
   | "complaint_new"
   | "complaint_forwarded"

@@ -46,3 +46,6 @@ next-env.d.ts
 .vercel
 .env*
 !.env.example
+
+# hasil build pratinjau komponen (lihat .preview/README.md)
+.preview/dist

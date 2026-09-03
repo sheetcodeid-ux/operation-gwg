@@ -2,6 +2,7 @@ import "server-only";
 
 import { randomUUID } from "node:crypto";
 import { db, dbEnabled } from "./db";
+import { selectAll } from "./paged";
 import { outletName, userName } from "./store";
 import { scopeManpowerValid } from "@/lib/hc-request";
 import type {
@@ -125,6 +126,15 @@ export interface ListRequestOpts {
    * Daftar kosong berarti "tidak ada yang boleh dilihat" — bukan "tanpa filter".
    */
   requesterIds?: string[];
+  /**
+   * Baca SELURUH barisnya, halaman demi halaman, bukan 500 terbaru.
+   *
+   * Dipakai layar yang menghitung rekap sepanjang waktu — memotongnya di 500
+   * membuat bulan-bulan lama diam-diam hilang dari rata-rata, dan tidak ada
+   * yang tampak salah di layar. Antrian harian tetap memakai batas 500: yang
+   * dikerjakan hari ini tidak pernah sebanyak itu.
+   */
+  semua?: boolean;
 }
 
 export async function listHcRequests(opts: ListRequestOpts = {}): Promise<HcRequest[]> {
@@ -146,13 +156,30 @@ export async function listHcRequests(opts: ListRequestOpts = {}): Promise<HcRequ
       )
       .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
   } else {
-    let q = db().from("hc_requests").select("*").order("created_at", { ascending: false }).limit(500);
-    if (opts.kind) q = q.eq("kind", opts.kind);
-    if (opts.department) q = q.eq("department", opts.department);
-    if (opts.requesterId) q = q.eq("requester_id", opts.requesterId);
-    if (opts.requesterIds) q = q.in("requester_id", opts.requesterIds);
-    const { data } = await q;
-    rows = ((data ?? []) as any[]).map(fromRow);
+    const saring = <T extends { eq: any; in: any }>(q: T): T => {
+      let x: any = q;
+      if (opts.kind) x = x.eq("kind", opts.kind);
+      if (opts.department) x = x.eq("department", opts.department);
+      if (opts.requesterId) x = x.eq("requester_id", opts.requesterId);
+      if (opts.requesterIds) x = x.in("requester_id", opts.requesterIds);
+      return x as T;
+    };
+
+    if (opts.semua) {
+      // Halamannya diurut `id` — kunci utama, satu-satunya urutan yang benar
+      // stabil antar halaman. `created_at` tidak unik: dua pengajuan pada detik
+      // yang sama bisa bergeser di batas halaman lalu terlewat atau terbaca dua
+      // kali. Urutan tampilannya dikembalikan di memori sesudahnya.
+      const data = await selectAll<any>("hc_requests", (from, to) =>
+        saring(db().from("hc_requests").select("*").order("id", { ascending: true })).range(from, to),
+      );
+      rows = data.map(fromRow).sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+    } else {
+      const { data } = await saring(
+        db().from("hc_requests").select("*").order("created_at", { ascending: false }).limit(500),
+      );
+      rows = ((data ?? []) as any[]).map(fromRow);
+    }
   }
   tautkanLampiran(rows);
   return rows;

@@ -56,6 +56,18 @@ export type MenuKey =
   | "hc_training"
   | "fin_training"
   | "creative_design"
+  | "creative_penilaian"
+  | "kpi"
+  | "kpi_creative_content"
+  | "kpi_creative_sosmed"
+  | "kpi_fin_accounting"
+  | "kpi_fin_finance"
+  | "kpi_fin_tax"
+  | "kpi_marcomm"
+  | "kpi_pdq_food"
+  | "kpi_pdq_beverage"
+  | "kpi_pdq_head_food"
+  | "kpi_pdq_head_pdq"
   | "mc_events"
   | "assessment"
   | "hpp_dash"
@@ -84,7 +96,8 @@ export type Division =
   | "Business Development"
   | "Supply Chain"
   | "Production"
-  | "Marketing Communication";
+  | "Marketing Communication"
+  | "Key Performance Indicator";
 
 export interface NavItem {
   key: MenuKey;
@@ -171,6 +184,23 @@ export const NAV_MENUS: Omit<NavItem, "section" | "group" | "groupIcon">[] = [
   { key: "hc_training", label: "Pelatihan", href: "/hc/pelatihan", icon: "GraduationCap" },
   { key: "fin_training", label: "ACC Dana Pelatihan", href: "/finance/pelatihan", icon: "Wallet" },
   { key: "creative_design", label: "Antrian Design", href: "/creative/design", icon: "Palette" },
+  { key: "creative_penilaian", label: "Penilaian Request", href: "/creative/penilaian", icon: "Gauge" },
+
+  // Key Performance Indicator — satu baris per posisi yang dinilai. Menunya
+  // per posisi, bukan satu pintu berisi tab: yang membuka halaman ini datang
+  // untuk satu posisi tertentu, dan menu yang menyembunyikan tujuannya di
+  // balik tab membuat setiap kunjungan butuh dua klik yang sama berulang kali.
+  { key: "kpi", label: "Ringkasan KPI", href: "/kpi", icon: "Target" },
+  { key: "kpi_creative_content", label: "Content Creator", href: "/kpi/creative_content", icon: "Clapperboard" },
+  { key: "kpi_creative_sosmed", label: "Sosial Media", href: "/kpi/creative_sosmed", icon: "Share2" },
+  { key: "kpi_fin_accounting", label: "Accounting", href: "/kpi/finance_accounting", icon: "Calculator" },
+  { key: "kpi_fin_finance", label: "Finance", href: "/kpi/finance_finance", icon: "Wallet" },
+  { key: "kpi_fin_tax", label: "Tax", href: "/kpi/finance_tax", icon: "ReceiptText" },
+  { key: "kpi_marcomm", label: "Marketing Communication", href: "/kpi/marcomm", icon: "Megaphone" },
+  { key: "kpi_pdq_food", label: "Food Staff", href: "/kpi/pdq_food", icon: "UtensilsCrossed" },
+  { key: "kpi_pdq_beverage", label: "Beverage Staff", href: "/kpi/pdq_beverage", icon: "CupSoda" },
+  { key: "kpi_pdq_head_food", label: "Head Food Development", href: "/kpi/pdq_head_food", icon: "ChefHat" },
+  { key: "kpi_pdq_head_pdq", label: "Head Product Development & Quality", href: "/kpi/pdq_head_pdq", icon: "FlaskConical" },
   { key: "mc_events", label: "Event Tracker", href: "/marcomm/events", icon: "Megaphone" },
   { key: "reports", label: "Reports", href: "/reports", icon: "FileText" },
   { key: "assessment", label: "Assessment Golongan", href: "/assessment", icon: "Award" },
@@ -208,6 +238,7 @@ export const DIVISION_ICON: Record<Division, string> = {
   "Supply Chain": "Truck",
   Production: "ChefHat",
   "Marketing Communication": "Megaphone",
+  "Key Performance Indicator": "Target",
 };
 
 /** Which division each role sits in (drives the sidebar group header). */
@@ -261,7 +292,7 @@ export const ROLE_MENUS: Record<Role, MenuKey[]> = {
   // menitipkannya ke orang lain, dan pengajuan itu tercatat atas nama yang
   // salah. Cakupan cabangnya sudah dibatasi `visibleOutlets`, jadi ia tetap
   // hanya bisa mengajukan untuk cabang yang memang dipegangnya.
-  area_coordinator: [...OPERATION_FULL, "elearning", "assessment", "hc_submit"], // learner (E-Learning), menus scoped to their area
+  area_coordinator: [...OPERATION_FULL, "elearning", "assessment", "hc_submit", "creative_penilaian"], // learner (E-Learning), menus scoped to their area
   data_operation: ["work", "op_analysis", "assessment"],
   pos_operation: ["work", "op_analysis", "assessment"],
   admin_operation: ["work", "complaints", "op_analysis", "assessment"],
@@ -297,7 +328,10 @@ export const UNIVERSAL_MENUS: MenuKey[] = ["hc_request", "sys_submit", "it_submi
 
 /** Divisions that are NOT a department doing day-to-day work — they don't get
  *  the company-wide menus (Administrator is app configuration, not a team). */
-const NO_UNIVERSAL: string[] = ["Administrator"];
+// Divisi yang BUKAN tempat orang bekerja sehari-hari tidak ikut menerima menu
+// umum (Pengajuan, Pesan, Help Desk). Menaruhnya di sana membuat satu alamat
+// yang sama muncul dua kali di sidebar dengan induk yang berbeda.
+const NO_UNIVERSAL: string[] = ["Administrator", "Key Performance Indicator"];
 
 /** A menu list plus the company-wide menus, without duplicates. */
 const withUniversal = (menus: MenuKey[], division: string): MenuKey[] =>
@@ -379,7 +413,7 @@ export const DIVISION_GROUPS: Partial<Record<Division, NavGroupDef[]>> = {
   Operation: [
     { name: "Monitoring Outlet", icon: "Store", menus: ["outlets", "hospitality", "hygiene", "complaints"] },
     { name: "Keuangan Operasional", icon: "Wallet", menus: ["op_beban", "op_pembelian", "op_pnl", "op_settings"] },
-    { name: "Analisis & Laporan", icon: "ChartColumnBig", menus: ["analytics", "op_analysis", "op_fraud", "op_seasonal", "reports"] },
+    { name: "Analisis & Laporan", icon: "ChartColumnBig", menus: ["analytics", "op_analysis", "op_fraud", "op_seasonal", "reports", "creative_penilaian"] },
     { name: "Pembelajaran", icon: "GraduationCap", menus: ["elearning", "elearning_admin"] },
     { name: "System Support", icon: "Headset", menus: ["sys_review", "it_review"] },
   ],
@@ -491,8 +525,20 @@ export const DIVISION_GROUPS: Partial<Record<Division, NavGroupDef[]>> = {
       menus: ["hc_kontrak", "hc_request", "work"],
     },
   ],
+  "Key Performance Indicator": [
+    { name: "Creative", icon: "Palette", urutan: 1, menus: ["kpi_creative_content", "kpi_creative_sosmed"] },
+    { name: "Finance", icon: "Wallet", urutan: 2, menus: ["kpi_fin_accounting", "kpi_fin_finance", "kpi_fin_tax"] },
+    {
+      name: "Product Development & Quality",
+      icon: "FlaskConical",
+      urutan: 3,
+      menus: ["kpi_pdq_food", "kpi_pdq_beverage", "kpi_pdq_head_food", "kpi_pdq_head_pdq"],
+    },
+    { name: "Marketing Communication", icon: "Megaphone", urutan: 4, menus: ["kpi_marcomm"] },
+  ],
   Creative: [
     { name: "Permintaan Masuk", icon: "Palette", menus: ["creative_design"] },
+    { name: "Monitoring", icon: "Gauge", menus: ["creative_penilaian"] },
   ],
   Finance: [{ name: "Persetujuan Dana", icon: "Wallet", menus: ["fin_training"] }],
   "Marketing Communication": [
@@ -514,7 +560,26 @@ export const DIVISION_MENUS: { division: Division; menus: MenuKey[] }[] = [
   { division: "Human Capital", menus: ["work", "hcmos", "hcmos_raci", "hc_bagan", "hc_struktur", "hc_karyawan", "hc_culture", "hc_sop", "hc_rekrutmen", "hc_kompetensi", "hc_modul", "hc_faststart", "hc_pretest", "hc_selflearning", "hc_kinerja", "hc_appraisal", "hc_intervensi", "hc_career", "hc_kompensasi", "hc_relasi", "hc_compliance", "hc_kebijakan", "hc_monitoring", "hc_kpi", "hc_kontrak", "hc_review", "hc_reqreview", "hc_training", "assessment", "elearning"] },
   // New department-aligned divisions — Work Tracker only for now.
   { division: "Finance", menus: ["work", "fin_training"] },
-  { division: "Creative", menus: ["work", "creative_design"] },
+  { division: "Creative", menus: ["work", "creative_design", "creative_penilaian"] },
+  // Divisi ini bukan tempat orang bekerja sehari-hari, melainkan tempat
+  // capaian seluruh departemen dibaca. Aksesnya karena itu lewat izin
+  // per-pengguna, bukan lewat departemen siapa pun.
+  {
+    division: "Key Performance Indicator",
+    menus: [
+      "kpi",
+      "kpi_creative_content",
+      "kpi_creative_sosmed",
+      "kpi_fin_accounting",
+      "kpi_fin_finance",
+      "kpi_fin_tax",
+      "kpi_pdq_food",
+      "kpi_pdq_beverage",
+      "kpi_pdq_head_food",
+      "kpi_pdq_head_pdq",
+      "kpi_marcomm",
+    ],
+  },
   { division: "Project Manager", menus: ["work"] },
   { division: "Auditor", menus: ["work"] },
   { division: "Executive Assistant", menus: ["work"] },
