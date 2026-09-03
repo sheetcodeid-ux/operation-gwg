@@ -148,6 +148,122 @@ export async function simpanPengaturan(input: {
   return error ? { error: error.message } : {};
 }
 
+/* ──────────────────────────── angka manual ──────────────────────────── */
+
+export async function simpanActual(input: {
+  periode: string;
+  posisi: string;
+  indikator: string;
+  brand: string;
+  nilai: number;
+  catatan: string;
+  olehId: string;
+  olehNama: string;
+}): Promise<{ error?: string }> {
+  if (!dbEnabled) return { error: "Penyimpanan belum aktif." };
+  const { error } = await db().from("kpi_actual").upsert({
+    periode: input.periode,
+    posisi: input.posisi,
+    indikator: input.indikator,
+    brand: input.brand,
+    nilai: input.nilai,
+    catatan: input.catatan.slice(0, 500) || null,
+    diisi_oleh: input.olehId,
+    diisi_nama: input.olehNama,
+    diisi_pada: new Date().toISOString(),
+  });
+  return error ? { error: error.message } : {};
+}
+
+/** Angka manual yang sudah tersimpan — pengisi awal formnya. */
+export async function actualTersimpan(periode: string, posisi: string): Promise<Record<string, Record<string, number>>> {
+  const out: Record<string, Record<string, number>> = {};
+  if (!dbEnabled) return out;
+  const { data } = await db().from("kpi_actual").select("indikator,brand,nilai").eq("periode", periode).eq("posisi", posisi);
+  for (const r of ((data ?? []) as Record<string, unknown>[])) {
+    const k = String(r.indikator);
+    out[k] = out[k] ?? {};
+    out[k][String(r.brand ?? "")] = Number(r.nilai) || 0;
+  }
+  return out;
+}
+
+/* ──────────────────────── efisiensi, fee, menu ──────────────────────── */
+
+export async function simpanEfisiensi(input: {
+  periode: string;
+  posisi: string;
+  outletId: string;
+  actualWh: number | null;
+  actualNonWh: number | null;
+  olehId: string;
+}): Promise<{ error?: string }> {
+  if (!dbEnabled) return { error: "Penyimpanan belum aktif." };
+  const { error } = await db().from("kpi_efisiensi").upsert({
+    periode: input.periode,
+    posisi: input.posisi,
+    outlet_id: input.outletId,
+    actual_wh: input.actualWh,
+    actual_non_wh: input.actualNonWh,
+    diisi_oleh: input.olehId,
+    diisi_pada: new Date().toISOString(),
+  });
+  return error ? { error: error.message } : {};
+}
+
+export async function simpanFee(input: {
+  periode: string;
+  outletId: string;
+  sesuai: boolean;
+  catatan: string;
+  olehId: string;
+}): Promise<{ error?: string }> {
+  if (!dbEnabled) return { error: "Penyimpanan belum aktif." };
+  const { error } = await db().from("kpi_fee").upsert({
+    periode: input.periode,
+    outlet_id: input.outletId,
+    sesuai: input.sesuai,
+    catatan: input.catatan.slice(0, 300) || null,
+    diisi_oleh: input.olehId,
+    diisi_pada: new Date().toISOString(),
+  });
+  return error ? { error: error.message } : {};
+}
+
+export async function simpanMenuPasar(input: {
+  periode: string;
+  posisi: string;
+  menu: string;
+  penjualan: number;
+  omset: number;
+  olehId: string;
+}): Promise<{ error?: string }> {
+  if (!dbEnabled) return { error: "Penyimpanan belum aktif." };
+  const { error } = await db().from("kpi_menu_pasar").upsert({
+    periode: input.periode,
+    posisi: input.posisi,
+    menu: input.menu.slice(0, 160),
+    penjualan: input.penjualan,
+    omset: input.omset,
+    dipilih_oleh: input.olehId,
+    dipilih_pada: new Date().toISOString(),
+  });
+  return error ? { error: error.message } : {};
+}
+
+export async function hapusMenuPasar(periode: string, posisi: string, menu: string): Promise<{ error?: string }> {
+  if (!dbEnabled) return { error: "Penyimpanan belum aktif." };
+  const { error } = await db().from("kpi_menu_pasar").delete().eq("periode", periode).eq("posisi", posisi).eq("menu", menu);
+  return error ? { error: error.message } : {};
+}
+
+/** Apakah bulan itu sudah dikunci untuk posisi ini. */
+export async function periodeDikunci(periode: string, posisi: string): Promise<boolean> {
+  if (!dbEnabled) return false;
+  const { data } = await db().from("kpi_periode").select("dikunci").eq("periode", periode).eq("posisi", posisi).maybeSingle();
+  return !!(data as { dikunci?: boolean } | null)?.dikunci;
+}
+
 /* ───────────────────────────────── entri ───────────────────────────────── */
 
 export async function simpanEntri(input: Omit<EntriKpi, "id" | "dibuatNama"> & { id?: string; olehId: string; olehNama: string }): Promise<{ id?: string; error?: string }> {
@@ -332,10 +448,14 @@ export async function laporanKpi(posisi: KodePosisi, periode: string): Promise<L
     // dipasang. Sampai saat itu daftarnya tetap tampil dengan nilai nol,
     // supaya pilihannya sudah bisa disiapkan lebih dulu.
     const { data } = dbEnabled
-      ? await db().from("kpi_menu_pasar").select("menu").eq("posisi", posisi).eq("periode", periode)
+      ? await db().from("kpi_menu_pasar").select("menu,penjualan,omset").eq("posisi", posisi).eq("periode", periode)
       : { data: [] };
-    const menu = ((data ?? []) as { menu: string }[]).map((m) => ({ menu: m.menu, penjualan: 0 }));
-    const hasil = keberhasilanPasar(menu, 0, 1.5);
+    const rows = (data ?? []) as Record<string, unknown>[];
+    const menu = rows.map((m) => ({ menu: String(m.menu), penjualan: Number(m.penjualan) || 0 }));
+    // Omsetnya dicatat sekali per bulan; baris mana pun membawanya, jadi yang
+    // dipakai baris pertama yang benar-benar terisi.
+    const omset = rows.map((m) => Number(m.omset) || 0).find((v) => v > 0) ?? 0;
+    const hasil = keberhasilanPasar(menu, omset, 1.5);
     pasar = { baris: hasil.baris, omset: hasil.omset, total: hasil.total, bagianTotal: hasil.bagianTotal };
   }
 
@@ -370,6 +490,7 @@ export async function laporanKpi(posisi: KodePosisi, periode: string): Promise<L
     komplain,
     efisiensi,
     fee,
+    pasar,
   }));
 
   return {
@@ -397,6 +518,7 @@ interface KonteksBaris {
   komplain: number | null;
   efisiensi: LaporanKpi["efisiensi"];
   fee: DetailFee[] | null;
+  pasar: DetailPasar | null;
 }
 
 /**
@@ -420,7 +542,13 @@ function susunBaris(i: Indikator, k: KonteksBaris): BarisKpi {
         ? { jenis: "rasio" as const, nilai: k.pengaturan.target }
         : i.target;
 
-  const target = hitungTarget(jenis, {
+  // Efisiensi actual-nya sudah berupa capaian 0–100, jadi targetnya 100:
+  // "belanja tepat sesuai budget". Keberhasilan Pasar TIDAK begitu — actual-nya
+  // bagian penjualan menu terhadap omset (mis. 0,19%) dan targetnya rasio yang
+  // ditetapkan (1,50%), persis seperti hitungan di spreadsheet.
+  const sudahCapaian = i.actual.sumber === "otomatis" && i.actual.kode === "efisiensi_operasional";
+
+  const target = sudahCapaian ? 100 : hitungTarget(jenis, {
     jumlahBrand: k.jumlahBrand,
     jumlahOutlet: k.jumlahOutlet,
     actualBulanLalu: k.lalu,
@@ -458,8 +586,10 @@ function susunBaris(i: Indikator, k: KonteksBaris): BarisKpi {
           if (actual === null) alasan = "Realisasi beban operasional belum diisi untuk satu outlet pun.";
           break;
         case "keberhasilan_pasar":
-          // Menunggu sambungan penjualan menu ESB.
-          alasan = "Menunggu sambungan penjualan menu dari ESB.";
+          actual = k.pasar?.bagianTotal ?? null;
+          if (actual === null) {
+            alasan = "Pilih menu yang dinilai dan isi omset bulan ini lewat tombol Input.";
+          }
           break;
         case "management_fee":
           actual = k.fee ? k.fee.filter((f) => f.sesuai).length : null;

@@ -1,0 +1,117 @@
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
+import { describe, expect, it } from "vitest";
+import { INDIKATOR } from "./indikator";
+import { POSISI } from "./struktur";
+
+/**
+ * Pengisian angka KPI.
+ *
+ * Sebelumnya tidak ada sama sekali: halamannya menampilkan target dan capaian
+ * tapi tidak pernah menjelaskan di mana angkanya diisi. Yang membukanya melihat
+ * "Total Event / Program, target 30, actual 0" dan tidak punya satu pun tombol
+ * untuk menambah event.
+ *
+ * Yang dijaga di sini: setiap indikator punya jalan masuk, dan setiap penulisan
+ * dijaga di server — bukan cuma tombolnya disembunyikan di layar.
+ */
+
+const aksi = readFileSync(join(process.cwd(), "src/lib/actions/kpi.ts"), "utf8");
+const dialog = readFileSync(join(process.cwd(), "src/components/kpi/dialog-input.tsx"), "utf8");
+const papan = readFileSync(join(process.cwd(), "src/components/kpi/papan-kpi.tsx"), "utf8");
+
+describe("setiap indikator punya jalan masuk", () => {
+  it("tidak ada indikator yang tak bisa diisi maupun dihitung", () => {
+    // Indikator yang bukan otomatis dan tidak punya bentuk isian adalah kolom
+    // yang selamanya kosong — dan tidak ada yang bisa dilakukan pemakainya.
+    const dikenal = new Set(["manual", "manual_brand", "entri", "pengurang", "lulus", "otomatis"]);
+    for (const [posisi, daftar] of Object.entries(INDIKATOR)) {
+      for (const i of daftar) {
+        expect(dikenal.has(i.actual.sumber), `${posisi}/${i.key}: ${i.actual.sumber}`).toBe(true);
+      }
+    }
+  });
+
+  it("setiap bentuk isian punya formnya di layar", () => {
+    for (const bentuk of ["angka", "brand", "kegiatan", "temuan", "tenggat", "efisiensi", "fee", "pasar"]) {
+      expect(dialog, `bentuk ${bentuk} tanpa form`).toContain(`bentuk === "${bentuk}"`);
+    }
+  });
+
+  it("indikator otomatis tidak ditawarkan untuk diisi tangan", () => {
+    // Mengisi tangan angka yang dihitung otomatis akan menimpa hitungannya
+    // tanpa jejak — dan tidak akan ada yang tahu angkanya sudah dikarang.
+    expect(dialog).toContain('bentukIsian(i) !== "otomatis"');
+  });
+
+  it("tombol Input ada di halamannya, bukan di menu lain", () => {
+    expect(papan).toContain("<DialogInput");
+    expect(papan).toContain("<DialogPengaturan");
+  });
+
+  it("bulan dan tahun dipilih terpisah, bukan satu kotak '2026-09'", () => {
+    expect(papan).toContain("tahunPilihan()");
+    expect(papan).toContain("options={BULAN}");
+    expect(dialog).toContain('label="Tahun"');
+    expect(dialog).toContain('label="Bulan"');
+  });
+});
+
+describe("penulisan dijaga di server", () => {
+  it("tiga penjaga: hak akses, indikator milik posisi itu, dan bulan belum dikunci", () => {
+    expect(aksi).toContain("canReachMenu(user, menu as MenuKey)");
+    expect(aksi).toContain("punyaIndikator(");
+    expect(aksi).toContain("periodeDikunci(periode, posisi)");
+  });
+
+  it("setiap aksi tulis melewati gerbang yang sama", () => {
+    // Satu aksi yang lupa memanggilnya sudah cukup untuk membuka seluruh
+    // penjagaan — dan yang terlewat biasanya aksi yang ditambahkan paling akhir.
+    const nama = aksi.match(/export async function (\w+Action)/g) ?? [];
+    expect(nama.length).toBeGreaterThan(5);
+    for (const n of nama) {
+      const fn = n.replace("export async function ", "");
+      const blok = aksi.slice(aksi.indexOf(`export async function ${fn}`));
+      const badan = blok.slice(0, blok.indexOf("\nexport async function", 1));
+      // Pengaturan bobot punya gerbangnya sendiri (super admin), sisanya wajib
+      // lewat `gerbang`.
+      const lewat = fn === "simpanPengaturanAction" ? badan.includes("bolehAturKpi(user)") : badan.includes("await gerbang(");
+      expect(lewat, `${fn} tidak melewati penjagaan`).toBe(true);
+    }
+  });
+
+  it("tanggal di luar bulan yang diisi ditolak", () => {
+    // Salah ketik tahun akan diam-diam menambah angka ke bulan yang sudah
+    // ditutup, dan laporan yang sudah dibagikan berubah tanpa ada yang tahu.
+    expect(aksi).toContain('input.tanggal.slice(0, 7) !== input.periode');
+  });
+
+  it("bobot di luar 0–100 ditolak", () => {
+    expect(aksi).toContain("u.bobot < 0 || u.bobot > 100");
+  });
+
+  it("hanya super admin yang boleh mengubah bobot", () => {
+    // Kalau orang yang dinilai bisa mengubah bobotnya sendiri, angkanya
+    // berhenti berarti apa pun.
+    expect(aksi).toContain("Hanya super admin yang boleh mengubah bobot dan target.");
+  });
+});
+
+describe("angka yang tersimpan bisa ditelusuri dan dibatalkan", () => {
+  it("ada riwayat input yang bisa dibaca dan barisnya bisa dihapus", () => {
+    // Tanpa riwayat, satu salah ketik tidak punya jalan perbaikan selain
+    // menghubungi orang yang bisa membuka basis datanya.
+    expect(papan).toContain("function TabelRiwayat");
+    expect(papan).toContain("hapusEntriAction");
+  });
+
+  it("setiap posisi punya tenggat yang jelas untuk indikator penyampaian data", () => {
+    const perluTenggat = POSISI.filter((p) =>
+      INDIKATOR[p.kode].some((i) => (i.actual.sumber === "pengurang" || i.actual.sumber === "lulus") && i.actual.entri === "penyampaian"),
+    );
+    const indikatorTs = readFileSync(join(process.cwd(), "src/lib/kpi/indikator.ts"), "utf8");
+    for (const p of perluTenggat) {
+      expect(indikatorTs, `${p.nama} tanpa tenggat`).toContain(`${p.kode}: [`);
+    }
+  });
+});
