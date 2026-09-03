@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import { Area, Bar, CartesianGrid, ComposedChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
-import { Layers, Percent } from "lucide-react";
+import { ChartPie, Layers } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { BarisKpi } from "@/lib/kpi/hitung";
 
@@ -189,7 +189,7 @@ const CIRC = 2 * Math.PI * R;
 
 type Mode = "hasil" | "bobot";
 const MODES = [
-  { id: "hasil", label: "% Actual", icon: Percent },
+  { id: "hasil", label: "% Actual", icon: ChartPie },
   { id: "bobot", label: "Bobot", icon: Layers },
 ] as const;
 const MODE_TITLE: Record<Mode, string> = { hasil: "% Actual", bobot: "Bobot" };

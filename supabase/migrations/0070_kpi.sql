@@ -120,3 +120,9 @@ alter table public.kpi_efisiensi  enable row level security;
 alter table public.kpi_fee        enable row level security;
 alter table public.kpi_menu_pasar enable row level security;
 alter table public.kpi_periode    enable row level security;
+
+-- Penjualan menu Keberhasilan Pasar diisi manual dulu; kolomnya disiapkan
+-- sekarang supaya bentuk barisnya tidak berubah saat penarikan dari ESB
+-- dipasang — yang berganti cuma dari mana angkanya datang.
+alter table public.kpi_menu_pasar add column if not exists penjualan numeric;
+alter table public.kpi_menu_pasar add column if not exists omset numeric;

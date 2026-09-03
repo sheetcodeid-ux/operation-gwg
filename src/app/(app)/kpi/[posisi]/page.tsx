@@ -2,7 +2,9 @@ import type { Metadata } from "next";
 import { notFound, redirect } from "next/navigation";
 import { requireSessionUser } from "@/lib/auth";
 import { canReachMenu, type MenuKey } from "@/lib/nav";
-import { bulanSebelum, daftarPeriodeKpi, laporanKpi, periodeSekarang } from "@/lib/data/kpi";
+import { bulanSebelum, laporanKpi, periodeSekarang } from "@/lib/data/kpi";
+import { getOutlets } from "@/lib/data/store";
+import { TENGGAT, indikatorPosisi } from "@/lib/kpi/indikator";
 import { DEPARTEMEN, departemenDari, posisiDari, posisiDepartemen, type KodePosisi } from "@/lib/kpi/struktur";
 import { MENU_POSISI, bolehAturKpi } from "@/lib/kpi/akses";
 import { NAV_ICONS } from "@/components/layout/icons";
@@ -63,7 +65,12 @@ export default async function KpiPosisiPage({
         namaPosisi={posisi.nama}
         departemen={posisi.departemen}
         pic={posisi.pic}
-        periodeOpsi={daftarPeriodeKpi(sekarang)}
+        indikator={indikatorPosisi(posisi.kode)}
+        outlets={getOutlets()
+          .filter((o) => o.active)
+          .map((o) => ({ id: o.id, nama: o.name }))
+          .sort((a, b) => a.nama.localeCompare(b.nama, "id"))}
+        tenggatHari={TENGGAT[posisi.kode] ?? [15]}
         departemenOpsi={DEPARTEMEN.filter((d) => d.posisi.length > 0).map((d) => ({ value: d.kode, label: d.nama }))}
         posisiOpsi={posisiDepartemen(posisi.departemen).map((p) => ({ value: p.kode, label: p.nama }))}
         bolehAtur={bolehAturKpi(user)}

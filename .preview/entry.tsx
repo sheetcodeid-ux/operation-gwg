@@ -3,6 +3,7 @@ import { PapanKpi } from "@/components/kpi/papan-kpi";
 import { barisEfisiensi, barisKpi, ringkasEfisiensi, ringkasKpi } from "@/lib/kpi/hitung";
 import { indikatorPosisi } from "@/lib/kpi/indikator";
 import { DEPARTEMEN, posisiDari, posisiDepartemen, type KodePosisi } from "@/lib/kpi/struktur";
+import { TENGGAT, indikatorPosisi as daftarIndikator } from "@/lib/kpi/indikator";
 import type { LaporanKpi } from "@/lib/data/kpi";
 
 const ANGKA: Record<string, [number | null, number | null, number | null]> = {
@@ -34,6 +35,12 @@ function buat(kode: KodePosisi) {
   const lalu = Object.fromEntries(daftar.map((i) => [i.key, ANGKA[i.key]?.[2] ?? null]));
   const eff = OUTLET.map(([nama, avg, wh, non], i) => barisEfisiensi({ outletId: `o${i}`, outletNama: nama, average: avg, actualWh: wh, actualNonWh: non }));
   const has = (k: string) => daftar.some((i) => i.key === k);
+  const entri = [
+    { id: "e1", jenis: "event" as const, periode: "2026-09", posisi: kode, tanggal: "2026-09-03", picNama: "Amanda", outletId: null, judul: "Promo Ramadan Nordu", deskripsi: "Aktivasi 12 cabang", nominal: null, nominalSeharusnya: null, tenggat: null, gagal: false, lampiran: [], dibuatNama: "GWG Admin" },
+    { id: "e2", jenis: "quality_control" as const, periode: "2026-09", posisi: kode, tanggal: "2026-09-07", picNama: "Mustadi", outletId: "o0", judul: "Kunjungan Cattu A. Yani", deskripsi: "Suhu chiller di atas standar", nominal: null, nominalSeharusnya: null, tenggat: null, gagal: false, lampiran: [], dibuatNama: "GWG Admin" },
+    { id: "e3", jenis: "temuan" as const, periode: "2026-09", posisi: kode, tanggal: "2026-09-12", picNama: "Nisa", outletId: null, judul: "Invoice warehouse tidak masuk laporan", deskripsi: "", nominal: null, nominalSeharusnya: null, tenggat: null, gagal: true, lampiran: [], dibuatNama: "GWG Admin" },
+  ];
+
   const laporan: LaporanKpi = {
     posisi: kode, periode: "2026-09", baris, ringkas: ringkasKpi(baris), dikunci: false,
     efisiensi: has("efisiensi") ? { baris: eff, ringkas: ringkasEfisiensi(eff) } : null,
@@ -49,7 +56,7 @@ function buat(kode: KodePosisi) {
       { outletId: "o1", outletNama: "Nordu Bakes Tanjung Duren", netSales: 198400000, feeSeharusnya: 9920000, sesuai: true },
       { outletId: "o2", outletNama: "Ayam Busari Depok", netSales: 132050000, feeSeharusnya: 6602500, sesuai: false },
     ] : null,
-    entri: [],
+    entri,
   };
   return { laporan, lalu };
 }
@@ -65,7 +72,9 @@ createRoot(document.getElementById("root")!).render(
     namaPosisi={p.nama}
     departemen={p.departemen}
     pic={p.pic}
-    periodeOpsi={[{ value: "2026-09", label: "September 2026" }, { value: "2026-08", label: "Agustus 2026" }]}
+    indikator={daftarIndikator(kode)}
+    outlets={OUTLET.map(([nama], i) => ({ id: `o${i}`, nama }))}
+    tenggatHari={TENGGAT[kode] ?? [15]}
     departemenOpsi={DEPARTEMEN.filter((d) => d.posisi.length > 0).map((d) => ({ value: d.kode, label: d.nama }))}
     posisiOpsi={posisiDepartemen(p.departemen).map((x) => ({ value: x.kode, label: x.nama }))}
     bolehAtur

@@ -66,9 +66,12 @@ describe("panel disusun dari indikatornya, bukan dari daftar terpisah", () => {
     expect(data).toContain("let efisiensi: LaporanKpi[\"efisiensi\"] = null;");
     expect(data).toContain("let pasar: DetailPasar | null = null;");
     expect(data).toContain("let fee: DetailFee[] | null = null;");
-    expect(papan).toContain("{laporan.efisiensi && <PanelEfisiensi");
-    expect(papan).toContain("{laporan.fee && <PanelFee");
-    expect(papan).toContain("{laporan.pasar && <PanelPasar");
+    // Tabelnya juga hanya dirender saat panelnya memang ada — tombol pengalihnya
+    // pun dibangun dari panel yang tersedia, bukan dari daftar tetap.
+    expect(papan).toContain('tampilan === "efisiensi" && laporan.efisiensi');
+    expect(papan).toContain('tampilan === "fee" && laporan.fee');
+    expect(papan).toContain('tampilan === "pasar" && laporan.pasar');
+    expect(papan).toContain("if (laporan.efisiensi) out.push(");
   });
 });
 
@@ -82,6 +85,13 @@ describe("tampilannya mengikuti Work Tracker", () => {
     // halamannya berperilaku beda — dan orang yang sama memakai keduanya.
     expect(papan).toContain('from "@/components/ui/data-table"');
     expect(papan).not.toContain("<table");
+  });
+
+  it("satu tabel di layar, dipilih lewat tombol seperti Table/Kanban", () => {
+    // Tiga tabel ditumpuk ke bawah memaksa orang menggulir jauh hanya untuk
+    // tahu ada tabel apa saja di halaman itu.
+    expect(papan).toContain("function PilihTabel");
+    expect(papan).toContain('aria-pressed={on}');
   });
 
   it("kartu grafik memakai bingkai yang sama persis", () => {
