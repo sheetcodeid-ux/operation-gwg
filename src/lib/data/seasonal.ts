@@ -148,11 +148,15 @@ export async function syncSeasonalDays(from: string, to: string, branch = "", bu
       synced += 1;
       fails = 0;
     } catch (e) {
-      // ESB occasionally returns an unparseable response — skip that day and
-      // carry on; only give up after several failures in a row.
+      // ESB menolak sebentar setelah puluhan permintaan beruntun, dan bentuknya
+      // bukan pesan yang jelas melainkan balasan yang tidak bisa diuraikan.
+      // Menunggu sejenak sebelum mencoba lagi: tanpa jeda, lima kegagalan
+      // berturut-turut datang dalam dua detik dan sisa anggaran waktunya
+      // terbuang tanpa satu hari pun bertambah.
       error = e instanceof Error ? e.message : "Gagal memuat data ESB.";
       fails += 1;
       if (fails >= 5) break;
+      await new Promise((r) => setTimeout(r, fails * 1_500));
     }
   }
   return { synced, remaining: pending.length - synced, error };

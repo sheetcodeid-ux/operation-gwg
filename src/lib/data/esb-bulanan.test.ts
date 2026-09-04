@@ -71,3 +71,17 @@ describe("cara memanggilnya", () => {
     expect(sumber).toContain('.not("esb_branch_id", "is", null)');
   });
 });
+
+describe("ketika ESB menolak sebentar", () => {
+  const sumber = readFileSync(join(process.cwd(), "src/lib/data/esb-bulanan.ts"), "utf8");
+  const musiman = readFileSync(join(process.cwd(), "src/lib/data/seasonal.ts"), "utf8");
+
+  it("menunggu sejenak sebelum mencoba lagi, tidak langsung menyerah", () => {
+    // Terlihat di lapangan: setelah ~40 permintaan beruntun ESB membalas
+    // "respons tidak terbaca". Tanpa jeda, lima kegagalan berturut-turut datang
+    // dalam dua detik dan seluruh sisa anggaran waktu terbuang tanpa satu baris
+    // pun bertambah.
+    expect(sumber).toContain("gagal * 1_500");
+    expect(musiman).toContain("fails * 1_500");
+  });
+});
