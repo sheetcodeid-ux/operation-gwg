@@ -24,10 +24,32 @@ export type JenisTarget =
   /** Sebanyak outlet aktif. */
   | { jenis: "outlet" }
   /** Target berupa persentase, mis. 1,50% dari omset. */
-  | { jenis: "rasio"; nilai: number };
+  | { jenis: "rasio"; nilai: number }
+  /**
+   * Rata-rata TIGA BULAN sebelumnya + pertumbuhan.
+   *
+   * Berbeda dari `tumbuh` yang memakai satu bulan lalu: satu bulan sepi atau
+   * satu bulan Lebaran akan menggeser targetnya jauh, dan yang dinilai jadi
+   * beruntung atau celaka karena kalender. Tiga bulan meredam itu.
+   *
+   * Yang dipakai bulan-bulan yang SUDAH SELESAI, bukan termasuk bulan berjalan
+   * — kalau bulan berjalan ikut, targetnya bergerak tiap hari dan tidak pernah
+   * bisa dipakai sebagai patokan.
+   */
+  | { jenis: "avg3"; pertumbuhan: number }
+  /**
+   * Sekian persen dari capaian indikator lain pada bulan yang sama.
+   *
+   * Dipakai Net Profit: targetnya 30% dari Gross Sales yang BENAR-BENAR
+   * tercapai, bukan dari gross sales yang ditargetkan. Kalau penjualannya
+   * meleset, target labanya ikut turun — yang dinilai tidak dihukum dua kali
+   * untuk satu kejadian yang sama.
+   */
+  | { jenis: "porsi"; dari: string; rasio: number };
 
 /** Jenis entri form yang jumlah barisnya jadi angka KPI. */
 export type JenisEntri =
+  | "hygiene_cctv"
   | "quality_control"
   | "riset_menu"
   | "event"
@@ -43,7 +65,9 @@ export type KodeOtomatis =
   | "efisiensi_operasional"
   | "keberhasilan_pasar"
   | "management_fee"
-  | "average_transaction";
+  | "average_transaction"
+  | "gross_sales_area"
+  | "komplain_area";
 
 /** Dari mana actual-nya datang. */
 export type SumberActual =
@@ -74,6 +98,16 @@ export interface Indikator {
   actual: SumberActual;
   /** Satu kalimat: dari mana angkanya, dibaca orang yang dinilai. */
   penjelasan: string;
+  /**
+   * Cara membandingkan actual dengan target, bila BUKAN "makin besar makin baik".
+   *
+   * Tanpa ini, indikator yang targetnya BATAS ATAS akan dinilai terbalik: 30
+   * komplain dari batas 20 menghasilkan 150% lalu dipotong jadi 100%, dan yang
+   * paling banyak dikomplain justru mendapat nilai penuh.
+   */
+  penilaian?: "batas_maks" | "lulus_maks";
+  /** Satuan tampilan; ikut dipakai tabel dan grafik. */
+  satuan?: "angka" | "rupiah" | "persen";
 }
 
 const KUALITAS = "Kualitas Konten";
@@ -396,7 +430,63 @@ const headPdq: Indikator[] = [
   { ...stafPdq[3], bobot: 10, target: { jenis: "tetap", nilai: 10 } },
 ];
 
+/**
+ * Coordinator Area.
+ *
+ * Lima indikator yang seluruhnya bicara tentang SATU AREA, bukan satu orang —
+ * penjualan, laba, kebersihan, komplain, dan harga pokok area itu. Karena itu
+ * angkanya diambil dari outlet-outlet di area yang dipegang orangnya.
+ */
+const coordinatorArea: Indikator[] = [
+  {
+    key: "gross_sales",
+    label: "Gross Sales",
+    bobot: 35,
+    target: { jenis: "avg3", pertumbuhan: 15 },
+    actual: { sumber: "otomatis", kode: "gross_sales_area" },
+    satuan: "rupiah",
+    penjelasan: "Rata-rata 3 bulan terakhir + 15%. Actual otomatis dari ESB, dijumlah se-area.",
+  },
+  {
+    key: "net_profit",
+    label: "Net Profit",
+    bobot: 30,
+    target: { jenis: "porsi", dari: "gross_sales", rasio: 30 },
+    actual: { sumber: "manual" },
+    satuan: "rupiah",
+    penjelasan: "Target 30% dari Gross Sales yang tercapai. Angkanya diisi tangan.",
+  },
+  {
+    key: "hygiene_cctv",
+    label: "Hygiene Audit / CCTV Monitoring",
+    bobot: 5,
+    target: { jenis: "tetap", nilai: 40 },
+    actual: { sumber: "entri", entri: "hygiene_cctv" },
+    penjelasan: "10x per minggu, 40 per bulan. Tiap catatan wajib berbukti.",
+  },
+  {
+    key: "komplain_area",
+    label: "Complaint",
+    bobot: 10,
+    target: { jenis: "tetap", nilai: 20 },
+    actual: { sumber: "otomatis", kode: "komplain_area" },
+    penilaian: "batas_maks",
+    penjelasan: "Batas 20 per bulan, di luar kategori kualitas makanan. Lebih dari itu turun proporsional.",
+  },
+  {
+    key: "hpp",
+    label: "Harga Pokok Penjualan",
+    bobot: 20,
+    target: { jenis: "tetap", nilai: 40 },
+    actual: { sumber: "manual" },
+    penilaian: "lulus_maks",
+    satuan: "persen",
+    penjelasan: "Maksimal 40%. Lebih dari itu nilainya nol — tidak ada nilai separuh.",
+  },
+];
+
 export const INDIKATOR: Record<KodePosisi, Indikator[]> = {
+  operational_ca: coordinatorArea,
   creative_content: contentCreator,
   creative_sosmed: sosialMedia,
   finance_accounting: accounting,

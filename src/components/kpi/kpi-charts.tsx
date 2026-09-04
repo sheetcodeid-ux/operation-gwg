@@ -52,9 +52,14 @@ function kataPenting(label: string): string[] {
 
 /** Satu singkatan per label, dijamin tidak ada yang kembar. */
 export function singkatUnik(labels: string[]): string[] {
+  // Label berisi beberapa kata disingkat jadi HURUF AWAL tiap katanya —
+  // "Gross Sales" jadi GS, "Harga Pokok Penjualan" jadi HPP. Tiga huruf dari
+  // kata pertama menghasilkan "GRO" dan "HAR", yang tidak dikenali siapa pun
+  // sebagai nama indikatornya.
   const hasil = labels.map((l) => {
     const kata = kataPenting(l);
-    return { kata, kode: kata[0].slice(0, 3).toUpperCase() };
+    const inisial = kata.map((k) => k[0].toUpperCase()).join("").slice(0, 4);
+    return { kata, kode: kata.length > 1 ? inisial : kata[0].slice(0, 3).toUpperCase() };
   });
 
   // Selama masih ada yang kembar, yang kembar diperpanjang — satu huruf dari

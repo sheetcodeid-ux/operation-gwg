@@ -2,12 +2,14 @@
 
 import { revalidatePath } from "next/cache";
 import { getSessionUser } from "@/lib/auth";
-import { dbEnabled } from "@/lib/data/db";
+import { randomUUID } from "node:crypto";
+import { db, dbEnabled } from "@/lib/data/db";
 import { canReachMenu, type MenuKey } from "@/lib/nav";
 import {
   hapusEntri,
   hapusMenuPasar,
   periodeDikunci,
+  picDinamis,
   simpanActual,
   simpanEfisiensi,
   simpanEntri,
@@ -55,7 +57,11 @@ async function gerbang(posisi: string, periode: string, pic = ""): Promise<{ use
   // "orang" yang tidak pernah ada — dan capaiannya hilang tanpa jejak.
   if (p.perPic) {
     if (!pic) return { error: "Pilih dulu PIC-nya." };
-    if (!p.pic.includes(pic)) return { error: `${pic} bukan PIC posisi ini.` };
+    // Posisi yang daftarnya datang dari basis data diperiksa ke daftar itu,
+    // bukan ke daftar di berkas — kalau tidak, satu-satunya PIC yang diterima
+    // adalah daftar kosong dan tidak ada satu pun angka yang bisa disimpan.
+    const sah = p.picDinamis ? picDinamis(p.kode).some((o) => o.value === pic) : p.pic.includes(pic);
+    if (!sah) return { error: "Orang itu bukan PIC posisi ini." };
   } else if (pic) {
     return { error: "Posisi ini dinilai sebagai satu tim, bukan per orang." };
   }
@@ -99,6 +105,46 @@ export async function simpanActualAction(input: {
 }
 
 /** Satu baris kegiatan: kunjungan QC, riset menu, event, faktur, penyampaian, temuan. */
+/**
+ * Jenis entri yang WAJIB berbukti.
+ *
+ * Hygiene Audit / CCTV Monitoring dinilai dari jumlah barisnya, dan baris tanpa
+ * bukti adalah angka yang tidak bisa diperiksa siapa pun — cukup mengetik 40
+ * baris kosong untuk mendapat nilai penuh. Diminta tegas: "wajib menghasilkan
+ * bukti hasil submit".
+ */
+const WAJIB_BUKTI: JenisEntri[] = ["hygiene_cctv"];
+
+/** Batas satu berkas bukti — sama dengan janji modul lain. */
+const MAKS_BUKTI = 10 * 1024 * 1024;
+
+/**
+ * Jalur cadangan unggah bukti, dipakai hanya saat R2 tidak aktif.
+ *
+ * Jalur utamanya langsung dari peramban ke penyimpanan (`uploadMany`); yang ini
+ * menempuh fungsi serverless, jadi batasnya diperiksa lebih dulu — berkas yang
+ * terlalu besar ditolak SEBELUM platform memutusnya dengan pesan yang tidak
+ * menjelaskan apa pun.
+ */
+export async function uploadKpiBuktiAction(formData: FormData): Promise<{ path?: string; name?: string; error?: string }> {
+  const user = await getSessionUser();
+  if (!user || !dbEnabled) return { error: "Tidak punya akses." };
+  if (!canReachMenu(user, "kpi_op_ca" as MenuKey)) return { error: "Tidak punya akses." };
+
+  const file = formData.get("file");
+  if (!(file instanceof File)) return { error: "Tidak ada berkas." };
+  if (file.size > MAKS_BUKTI) return { error: `Berkas "${file.name}" melebihi 10 MB.` };
+  if (!["image/png", "image/jpeg", "application/pdf"].includes(file.type)) {
+    return { error: `"${file.name}" harus berupa gambar atau PDF.` };
+  }
+
+  const aman = file.name.replace(/[^a-zA-Z0-9._-]/g, "_").slice(-60);
+  const nama = `kpi/bukti/${user.id}/${Date.now()}-${randomUUID().slice(0, 8)}-${aman}`;
+  const { error } = await db().storage.from("system-attachments").upload(nama, file, { contentType: file.type });
+  if (error) return { error: `Unggah gagal: ${error.message}` };
+  return { path: nama, name: file.name };
+}
+
 export async function simpanEntriAction(input: {
   posisi: string;
   periode: string;
@@ -121,6 +167,10 @@ export async function simpanEntriAction(input: {
   // Tanggal di luar bulan yang sedang diisi hampir selalu salah ketik, dan
   // diam-diam menambah angka ke bulan yang sudah lewat.
   if (input.tanggal.slice(0, 7) !== input.periode) return { error: "Tanggalnya di luar bulan yang sedang diisi." };
+  // Dijaga DI SERVER, bukan cuma tombolnya disembunyikan di layar.
+  if (WAJIB_BUKTI.includes(input.jenis) && (input.lampiran ?? []).length === 0) {
+    return { error: "Lampirkan dulu buktinya — foto atau tangkapan layar hasil submit." };
+  }
 
   const res = await simpanEntri({
     jenis: input.jenis,
@@ -160,6 +210,12 @@ export async function simpanEntriMassalAction(input: {
 }): Promise<{ ok?: true; tersimpan?: number; error?: string }> {
   const g = await gerbang(input.posisi, input.periode, input.pic);
   if ("error" in g) return { error: g.error };
+  // Jalur tabel tidak membawa lampiran, jadi jenis yang wajib berbukti tidak
+  // boleh lewat sini — kalau boleh, penjagaan buktinya tinggal dihindari
+  // dengan memakai form yang lain.
+  if (WAJIB_BUKTI.includes(input.jenis)) {
+    return { error: "Jenis ini wajib berbukti — isi satu per satu lewat tombol Input." };
+  }
 
   let n = 0;
   for (const b of input.baris) {
