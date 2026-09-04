@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { brandOutlet, hitungKonten, jenisKonten, type PermintaanKonten } from "./konten";
+import { brandOutlet, brandPemohon, hitungKonten, jenisKonten, type PermintaanKonten } from "./konten";
 
 /**
  * Pembacaan Antrian Design menjadi angka Jumlah Konten.
@@ -89,5 +89,56 @@ describe("hanya permintaan SELESAI yang dihitung", () => {
     // padahal jawabannya memang nol.
     const h = hitungKonten([], "2026-09");
     expect(Object.keys(h.post).sort()).toEqual(["Busari", "Cattu", "Lesung Pipi", "Nordu"]);
+  });
+});
+
+
+describe("brand diambil dari cabang PEMOHON saat permintaannya tanpa cabang", () => {
+  it("permintaan tanpa cabang tetap terhitung lewat cabang pemohonnya", () => {
+    // Ini bukan kemungkinan teoretis: kolom outlet pada permintaan design
+    // KOSONG di seluruh 224 permintaan yang ada — formulirnya memang tidak
+    // menanyakannya. Tanpa cadangan ini setiap baris dibuang sebelum sempat
+    // dihitung, dan Jumlah Konten selalu nol padahal antriannya penuh.
+    const h = hitungKonten(
+      [
+        {
+          designType: "Instagram Post",
+          outletNama: null,
+          outletPemohon: ["Nordu Coffee Banjarbaru"],
+          status: "terlaksana",
+          periode: "2026-09",
+        },
+      ],
+      "2026-09",
+    );
+    expect(h.post.Nordu).toBe(1);
+  });
+
+  it("cabang pada permintaannya menang atas cabang pemohonnya", () => {
+    // Permintaan yang menyebut cabangnya sendiri lebih tahu tujuannya daripada
+    // tempat orang yang mengetikkannya.
+    const h = hitungKonten(
+      [
+        {
+          designType: "Instagram Post",
+          outletNama: "Cattu A. Yani",
+          outletPemohon: ["Nordu Coffee Banjarbaru"],
+          status: "terlaksana",
+          periode: "2026-09",
+        },
+      ],
+      "2026-09",
+    );
+    expect(h.post.Cattu).toBe(1);
+    expect(h.post.Nordu).toBe(0);
+  });
+
+  it("pemohon yang memegang beberapa brand tidak ditebak salah satunya", () => {
+    // Menebak berarti menambah angka ke brand yang tidak pernah memintanya —
+    // dan itu tidak akan pernah terlihat salah.
+    expect(brandPemohon(["Nordu Coffee Sambas", "Cattu A. Yani"])).toBeNull();
+    expect(brandPemohon(["Nordu Coffee Sambas", "Nordu Coffee Sampit"])).toBe("Nordu");
+    expect(brandPemohon([])).toBeNull();
+    expect(brandPemohon([null, undefined])).toBeNull();
   });
 });

@@ -58,9 +58,33 @@ export function brandOutlet(namaOutlet: string | null | undefined): string | nul
   return WORK_BRANDS.find((b) => n.includes(b.toLowerCase())) ?? null;
 }
 
+/**
+ * Brand dari cabang-cabang milik PEMOHON.
+ *
+ * Dipakai karena kolom outlet pada permintaan design ternyata kosong pada
+ * SELURUH 224 permintaan yang ada — formulirnya memang tidak menanyakannya.
+ * Yang menentukan brand karena itu cabang si pemohon, persis seperti yang
+ * diminta: "brand diambil dari outlet pemohonnya".
+ *
+ * Pemohon yang memegang beberapa cabang dari brand yang BERBEDA tidak ditebak
+ * salah satunya. Menebak berarti menambah angka ke brand yang tidak pernah
+ * memintanya, dan itu tidak akan pernah terlihat salah.
+ */
+export function brandPemohon(namaOutlet: (string | null | undefined)[]): string | null {
+  const brand = new Set<string>();
+  for (const n of namaOutlet) {
+    const b = brandOutlet(n);
+    if (b) brand.add(b);
+  }
+  return brand.size === 1 ? [...brand][0] : null;
+}
+
 export interface PermintaanKonten {
   designType: string | null;
+  /** Cabang yang tertulis pada permintaannya — pada praktiknya selalu kosong. */
   outletNama: string | null;
+  /** Cabang milik pemohon; dipakai saat permintaannya sendiri tanpa cabang. */
+  outletPemohon?: (string | null | undefined)[];
   status: string;
   periode: string;
 }
@@ -82,7 +106,10 @@ export function hitungKonten(
 
   for (const r of rows) {
     if (r.status !== "terlaksana" || r.periode !== periode) continue;
-    const brand = brandOutlet(r.outletNama);
+    // Cabang pada permintaannya lebih dulu — kalau ada. Kalau tidak, cabang
+    // pemohonnya. Urutan ini penting: permintaan yang menyebut cabangnya
+    // sendiri lebih tahu tujuannya daripada tempat orang yang mengetikkannya.
+    const brand = brandOutlet(r.outletNama) ?? brandPemohon(r.outletPemohon ?? []);
     if (!brand) continue; // permintaan kantor tanpa cabang tidak punya brand
     for (const j of jenisKonten(r.designType ?? "")) hasil[j][brand] += 1;
   }
