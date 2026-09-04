@@ -20,7 +20,6 @@ import {
   type RingkasKpi,
 } from "@/lib/kpi/hitung";
 import { indikatorPosisi, type Indikator, type JenisEntri } from "@/lib/kpi/indikator";
-import { INDIKATOR_KONTEN, hitungKonten, kontenTanpaBrand } from "@/lib/kpi/konten";
 import { posisiDari, type KodePosisi } from "@/lib/kpi/struktur";
 
 /**
@@ -55,14 +54,6 @@ export interface PengaturanIndikator {
   bobot: number | null;
   target: number | null;
   pertumbuhan: number | null;
-  /**
-   * Dari mana actual-nya diambil untuk indikator yang punya DUA jalan.
-   *
-   * Jumlah Konten bisa dihitung sendiri dari Antrian Design, atau diketik.
-   * Yang menentukan bukan kode, melainkan kesepakatan tim — dan itu berubah
-   * (bulan pertama biasanya manual sampai kategori designnya rapi).
-   */
-  sumber: "otomatis" | "manual" | null;
 }
 
 export interface DetailPasar {
@@ -135,7 +126,6 @@ export async function pengaturanPosisi(posisi: string): Promise<Map<string, Peng
       bobot: angka(r.bobot),
       target: angka(r.target),
       pertumbuhan: angka(r.pertumbuhan),
-      sumber: r.sumber === "otomatis" || r.sumber === "manual" ? r.sumber : null,
     });
   }
   return peta;
@@ -147,7 +137,6 @@ export async function simpanPengaturan(input: {
   bobot: number | null;
   target: number | null;
   pertumbuhan: number | null;
-  sumber: "otomatis" | "manual" | null;
   olehId: string;
   olehNama: string;
 }): Promise<{ error?: string }> {
@@ -158,7 +147,6 @@ export async function simpanPengaturan(input: {
     bobot: input.bobot,
     target: input.target,
     pertumbuhan: input.pertumbuhan,
-    sumber: input.sumber,
     diubah_oleh: input.olehId,
     diubah_nama: input.olehNama,
     diubah_pada: new Date().toISOString(),
@@ -347,32 +335,6 @@ async function designRequest(periode: string): Promise<{ masuk: number; selesai:
   const rows = await listHcRequests({ kind: "design", semua: true });
   const bulan = rows.filter((r) => r.createdAt.slice(0, 7) === periode);
   return { masuk: bulan.length, selesai: bulan.filter((r) => r.status === "terlaksana").length };
-}
-
-/**
- * Jumlah konten selesai per jenis dan brand, dari Antrian Design.
- *
- * Dipakai indikator Jumlah Konten Post/Reels/Story ketika sumbernya disetel
- * otomatis. Yang dihitung hanya permintaan berstatus terlaksana — permintaan
- * yang masih dikerjakan belum menghasilkan konten apa pun.
- */
-async function kontenDariDesign(periode: string) {
-  const rows = await listHcRequests({ kind: "design", semua: true });
-  // Nama cabang dicari sekali di awal. Mencarinya per permintaan berarti
-  // menelusuri 58 outlet sebanyak 224 kali untuk jawaban yang sama.
-  const namaOutlet = new Map(getOutlets().map((o) => [o.id, o.name]));
-  const baris = rows.map((r) => ({
-    designType: r.designType,
-    outletNama: r.outletName,
-    // Kolom outlet pada permintaan design KOSONG di seluruh 224 baris yang ada
-    // — formulirnya tidak menanyakannya. Tanpa cadangan ini setiap baris
-    // dibuang sebelum sempat dihitung, dan Jumlah Konten selalu nol padahal
-    // antriannya penuh.
-    outletPemohon: (getUser(r.requesterId)?.outletIds ?? []).map((id) => namaOutlet.get(id) ?? null),
-    status: r.status,
-    periode: r.createdAt.slice(0, 7),
-  }));
-  return { per: hitungKonten(baris, periode), tanpaBrand: kontenTanpaBrand(baris, periode) };
 }
 
 /** Komplain kategori Food Quality bulan itu — bahan indikator Review Customer. */
@@ -603,18 +565,11 @@ export async function laporanKpi(posisi: KodePosisi, periode: string, pic = ""):
   }
 
   const perluDesign = daftar.some((i) => i.actual.sumber === "otomatis" && i.actual.kode === "design_request");
-  // Jumlah Konten otomatis hanya bila memang disetel begitu. Bawaannya
-  // otomatis: kategori designnya sudah terisi rapi di 132 dari 192 permintaan,
-  // jadi menariknya sendiri lebih benar daripada meminta orang mengetik ulang.
-  const perluKonten = daftar.some(
-    (i) => INDIKATOR_KONTEN[i.key] && (pengaturan.get(i.key)?.sumber ?? "otomatis") === "otomatis",
-  );
   const perluKomplain = daftar.some((i) => i.actual.sumber === "otomatis" && i.actual.kode === "komplain_food_quality");
   const perluFee = daftar.some((i) => i.actual.sumber === "otomatis" && i.actual.kode === "management_fee");
 
-  const [design, konten, komplain, netBulan, average, netPerusahaan, omsetTigaBulan, averageTrx] = await Promise.all([
+  const [design, komplain, netBulan, average, netPerusahaan, omsetTigaBulan, averageTrx] = await Promise.all([
     perluDesign ? designRequest(periode) : Promise.resolve(null),
-    perluKonten ? kontenDariDesign(periode) : Promise.resolve(null),
     perluKomplain ? komplainFoodQuality(periode) : Promise.resolve(null),
     perluFee ? netSalesLengkap(periode) : Promise.resolve(null),
     PAKAI_EFISIENSI.includes(posisi) ? averageTigaBulan(periode) : Promise.resolve(null),
@@ -703,7 +658,6 @@ export async function laporanKpi(posisi: KodePosisi, periode: string, pic = ""):
     jumlahBrand: WORK_BRANDS.length,
     jumlahOutlet: outletAktif.length,
     design,
-    konten,
     komplain,
     efisiensi,
     fee,
@@ -735,7 +689,6 @@ interface KonteksBaris {
   jumlahBrand: number;
   jumlahOutlet: number;
   design: { masuk: number; selesai: number } | null;
-  konten: { per: Record<string, Record<string, number>>; tanpaBrand: number } | null;
   komplain: number | null;
   efisiensi: LaporanKpi["efisiensi"];
   fee: DetailFee[] | null;
@@ -781,12 +734,6 @@ function susunBaris(i: Indikator, k: KonteksBaris): BarisKpi {
   let actual: number | null = null;
   let alasan: string | undefined;
 
-  // Jumlah Konten punya dua jalan: dihitung dari Antrian Design, atau diketik.
-  // Yang otomatis diperiksa lebih dulu supaya angka yang pernah diketik tidak
-  // menutupi hitungan yang sebenarnya.
-  const jenisKonten = INDIKATOR_KONTEN[i.key];
-  const kontenOtomatis = !!jenisKonten && (k.pengaturan?.sumber ?? "otomatis") === "otomatis";
-
   // Net Sales Achievement diambil dari ESB, bukan diketik — angkanya sudah ada
   // dan mengetik ulang cuma menambah cara untuk salah.
   if (i.key === "net_sales" && k.netPerusahaan !== null && k.netPerusahaan !== undefined) {
@@ -802,27 +749,8 @@ function susunBaris(i: Indikator, k: KonteksBaris): BarisKpi {
   switch (i.actual.sumber) {
     case "manual":
     case "manual_brand":
-      if (kontenOtomatis) {
-        const per = k.konten?.per[jenisKonten];
-        actual = per ? Object.values(per).reduce((a, b) => a + b, 0) : null;
-        if (actual === null) alasan = "Menunggu data Antrian Design.";
-        else {
-          const rinci = Object.entries(per!)
-            .map(([b, n]) => `${b} ${n}`)
-            .join(" · ");
-          // Yang tidak bisa dipetakan ke brand DISEBUT, tidak didiamkan. Tanpa
-          // kalimat ini angkanya hanya tampil lebih kecil dari kenyataan, dan
-          // yang membacanya menyimpulkan timnya kurang produktif — padahal
-          // pekerjaannya ada dan memang tidak bisa dipetakan.
-          const sisa = k.konten?.tanpaBrand ?? 0;
-          alasan =
-            `Otomatis dari Antrian Design yang sudah selesai — ${rinci}.` +
-            (sisa > 0 ? ` ${sisa} permintaan tanpa brand belum ikut terhitung.` : "");
-        }
-      } else {
-        actual = k.manual;
-        if (actual === null) alasan = "Angkanya belum diisi untuk bulan ini.";
-      }
+      actual = k.manual;
+      if (actual === null) alasan = "Angkanya belum diisi untuk bulan ini.";
       break;
     case "entri":
       actual = k.jumlahEntri(i.actual.entri);
