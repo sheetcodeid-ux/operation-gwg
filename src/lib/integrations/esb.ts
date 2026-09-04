@@ -330,3 +330,60 @@ export function classifyMenuCategory(category: string, detail = ""): "makanan" |
   if (/(beverage|drink|minuman|coffee|kopi|\btea\b|\bteh\b|juice|jus|milk|susu|frappe|latte|espresso|non[- ]?coffee|mocktail|smoothie|boba)/.test(s)) return "minuman";
   return "makanan";
 }
+
+
+/* -------------------- Sales Dashboard highlight -------------------- */
+
+/**
+ * Satu kotak angka di Sales Dashboard ESB (`get-today-highlight`).
+ *
+ * Nama fieldnya dipastikan dari respons sungguhan, bukan ditebak:
+ * `{"currentSales":"148.530.679","currentDailyGrossSales":"161.776.400",
+ *   "paxTotal":"2.941","averageNetSalesPerPax":"50.504",
+ *   "numberOfBill":"2.777","averageNetSalesPerBill":"53.487"}`
+ */
+export interface EsbHighlight {
+  /** Net sales — angka di kotak NET SALES. */
+  net: number;
+  /** Gross sales harian. */
+  gross: number;
+  /** Jumlah tamu (PAX TOTAL). */
+  pax: number;
+  /** Jumlah struk (NUMBER OF BILL). */
+  bills: number;
+  /** Rata-rata net sales per struk — inilah Average Transaction. */
+  perBill: number;
+  /** Rata-rata net sales per tamu. */
+  perPax: number;
+}
+
+/**
+ * Membaca respons highlight menjadi angka.
+ *
+ * Seluruh nilainya datang sebagai TEKS berformat Indonesia ("148.530.679");
+ * `Number()` atas teks itu menghasilkan NaN, dan NaN yang lolos akan tampil
+ * sebagai capaian kosong tanpa satu pun pesan salah. Karena itu semuanya lewat
+ * `parseIdrNumber`.
+ *
+ * Field yang tidak ada dibaca nol — cabang yang tidak beraktivitas pada rentang
+ * itu memang datang tanpa fieldnya, dan itu nol yang sah, bukan kegagalan.
+ */
+export function bacaHighlight(j: Record<string, unknown>): EsbHighlight {
+  const num = (v: unknown) => (v === undefined || v === null || v === "" ? 0 : typeof v === "number" ? v : parseIdrNumber(String(v)));
+  const net = num(j.currentSales);
+  const gross = num(j.currentDailyGrossSales);
+  const bills = num(j.numberOfBill);
+  const pax = num(j.paxTotal);
+  return {
+    net,
+    // Gross yang tidak terbaca dijatuhkan ke net, bukan ke nol: nol akan
+    // terbaca sebagai "tidak ada penjualan sama sekali" di grafik musiman.
+    gross: gross > 0 ? gross : net,
+    pax,
+    bills,
+    // Angka rata-ratanya dipakai apa adanya bila ada; kalau tidak, dihitung
+    // sendiri dari net dan jumlah struk — hasilnya sama.
+    perBill: num(j.averageNetSalesPerBill) || (bills > 0 ? net / bills : 0),
+    perPax: num(j.averageNetSalesPerPax) || (pax > 0 ? net / pax : 0),
+  };
+}

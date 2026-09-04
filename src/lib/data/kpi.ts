@@ -411,6 +411,35 @@ async function netSalesPerusahaan(dariPeriode: string, sampaiPeriode = dariPerio
 }
 
 /**
+ * Average Transaction seluruh perusahaan untuk satu bulan.
+ *
+ * Total net sales dibagi TOTAL JUMLAH STRUK sebulan — bukan rata-rata dari
+ * angka rata-rata harian. Merata-ratakan yang sudah rata-rata memberi bobot
+ * sama kepada hari sepi dan hari ramai, dan hasilnya selalu meleset dari angka
+ * yang terbaca di Sales Dashboard ESB.
+ *
+ * Hari yang jumlah struknya belum pernah ditarik (`bills` NULL) dibuang
+ * beserta net sales hari itu. Ikut menghitung net sales-nya tanpa struknya
+ * akan menaikkan hasilnya tanpa batas — dan itu jenis kesalahan yang tidak
+ * pernah kelihatan salah.
+ */
+async function averageTransaksi(periode: string): Promise<number | null> {
+  if (!dbEnabled) return null;
+  const { data } = await db()
+    .from("seasonal_daily")
+    .select("net,bills")
+    .eq("branch", "")
+    .not("bills", "is", null)
+    .gte("day", `${periode}-01`)
+    .lt("day", `${bulanSetelah(periode)}-01`);
+  const rows = (data ?? []) as { net: number | string; bills: number | string }[];
+  const struk = rows.reduce((a, r) => a + (Number(r.bills) || 0), 0);
+  if (struk === 0) return null;
+  const net = rows.reduce((a, r) => a + (Number(r.net) || 0), 0);
+  return net / struk;
+}
+
+/**
  * Net sales per CABANG ESB untuk satu bulan, dari data harian yang disinkron.
  *
  * Kuncinya id cabang ESB ("18-fnb_nord"), bukan nama outlet. Sempat dicocokkan
@@ -493,8 +522,15 @@ export async function laporanKpi(posisi: KodePosisi, periode: string, pic = ""):
   // bulan sebelumnya, bukan dari targetnya. Target yang tidak tercapai tidak
   // boleh jadi dasar target berikutnya.
   const perluNetPerusahaan = daftar.some((i) => i.key === "net_sales") || PAKAI_PASAR.includes(posisi);
+  const perluAverage = daftar.some((i) => i.key === "average_transaction");
 
   const lalu = new Map<string, number>();
+  if (perluAverage) {
+    // Dasar targetnya average transaction bulan lalu yang SEBENARNYA — dari
+    // ESB, bukan dari angka yang pernah diketik.
+    const a = await averageTransaksi(bulanSebelum(periode));
+    if (a !== null) lalu.set("average_transaction", a);
+  }
   if (perluNetPerusahaan) {
     // Dasar target Net Sales adalah penjualan bulan lalu yang SEBENARNYA, bukan
     // yang pernah diketik — keduanya bisa berbeda, dan yang dari ESB tidak bisa
@@ -525,7 +561,7 @@ export async function laporanKpi(posisi: KodePosisi, periode: string, pic = ""):
   const perluKomplain = daftar.some((i) => i.actual.sumber === "otomatis" && i.actual.kode === "komplain_food_quality");
   const perluFee = daftar.some((i) => i.actual.sumber === "otomatis" && i.actual.kode === "management_fee");
 
-  const [design, konten, komplain, netBulan, average, netPerusahaan, omsetTigaBulan] = await Promise.all([
+  const [design, konten, komplain, netBulan, average, netPerusahaan, omsetTigaBulan, averageTrx] = await Promise.all([
     perluDesign ? designRequest(periode) : Promise.resolve(null),
     perluKonten ? kontenDariDesign(periode) : Promise.resolve(null),
     perluKomplain ? komplainFoodQuality(periode) : Promise.resolve(null),
@@ -538,6 +574,7 @@ export async function laporanKpi(posisi: KodePosisi, periode: string, pic = ""):
     PAKAI_PASAR.includes(posisi)
       ? netSalesPerusahaan(bulanSebelum(bulanSebelum(periode)), periode)
       : Promise.resolve(null),
+    perluAverage ? averageTransaksi(periode) : Promise.resolve(null),
   ]);
 
   /* --- panel efisiensi --- */
@@ -616,6 +653,7 @@ export async function laporanKpi(posisi: KodePosisi, periode: string, pic = ""):
     fee,
     pasar,
     netPerusahaan,
+    averageTrx,
   }));
 
   return {
@@ -647,6 +685,7 @@ interface KonteksBaris {
   fee: DetailFee[] | null;
   pasar: DetailPasar | null;
   netPerusahaan: number | null;
+  averageTrx: number | null;
 }
 
 /**
@@ -751,6 +790,10 @@ function susunBaris(i: Indikator, k: KonteksBaris): BarisKpi {
           break;
         case "management_fee":
           actual = k.fee ? k.fee.filter((f) => f.sesuai).length : null;
+          break;
+        case "average_transaction":
+          actual = k.averageTrx;
+          if (actual === null) alasan = "Jumlah struk bulan ini belum ditarik dari ESB.";
           break;
       }
       break;
