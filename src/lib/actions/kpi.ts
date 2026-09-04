@@ -392,7 +392,7 @@ export async function hapusMenuPasarAction(input: { posisi: string; periode: str
  */
 export async function simpanPengaturanAction(input: {
   posisi: string;
-  ubahan: { indikator: string; bobot: number | null; target: number | null; pertumbuhan: number | null; sumber?: "otomatis" | "manual" | null }[];
+  ubahan: { indikator: string; bobot: number | null; target: number | null; pertumbuhan: number | null }[];
 }): Promise<{ ok?: true; error?: string }> {
   const user = await getSessionUser();
   if (!user || !dbEnabled) return { error: "Tidak punya akses." };
@@ -408,7 +408,6 @@ export async function simpanPengaturanAction(input: {
       bobot: u.bobot,
       target: u.target,
       pertumbuhan: u.pertumbuhan,
-      sumber: u.sumber ?? null,
       olehId: user.id,
       olehNama: user.name,
     });
