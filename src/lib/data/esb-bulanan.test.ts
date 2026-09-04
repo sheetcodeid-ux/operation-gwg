@@ -82,6 +82,14 @@ describe("kapan satu baris ditarik ulang", () => {
     expect(sumber).toContain("if (akhir === null || r.sampai < akhir) return false;");
   });
 
+  it("bulan berjalan juga ditarik ulang di tengah hari, bukan sekali sehari", () => {
+    // Kalau hanya tanggalnya yang diperiksa, penjualan hari ini baru terhitung
+    // besok — dan yang membuka halamannya sore hari melihat angka pagi tanpa
+    // tahu itu angka pagi.
+    expect(sumber).toContain("UMUR_SEGAR_MS");
+    expect(sumber).toContain("Date.now() - Date.parse(syncedAt) < UMUR_SEGAR_MS");
+  });
+
   it("bulan yang baru berakhir ditarik sekali lagi untuk transaksi susulan", () => {
     // Tutup buku di lapangan tidak selesai pukul 23.59; baris yang ditarik
     // tepat di hari terakhir belum tentu memuat yang masuk belakangan.

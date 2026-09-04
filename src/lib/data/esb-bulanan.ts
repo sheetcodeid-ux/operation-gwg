@@ -70,6 +70,16 @@ export async function netBulananPerCabang(periode: string): Promise<Map<string, 
 const JEDA_FINAL_HARI = 2;
 
 /**
+ * Umur maksimal angka bulan BERJALAN sebelum ditarik ulang.
+ *
+ * Kalau hanya tanggalnya yang diperiksa, angka bulan berjalan cuma diperbarui
+ * sekali sehari — penjualan hari ini baru terhitung besok, dan yang membuka
+ * halamannya sore hari melihat angka pagi tanpa tahu itu angka pagi. Enam jam
+ * membuatnya terasa hidup tanpa menembakkan 57 panggilan tiap jam ke ESB.
+ */
+const UMUR_SEGAR_MS = 6 * 60 * 60 * 1000;
+
+/**
  * Seberapa lama satu baris boleh dipercaya.
  *
  * Bulan berjalan masih bertambah tiap hari, jadi ditarik ulang begitu tanggal
@@ -88,7 +98,9 @@ function masihSegar(r: NetBulanan, periode: string, syncedAt: string): boolean {
 
   const hariIni = hariIniWib();
   const bulanSudahLewat = hariIni > akhir;
-  if (!bulanSudahLewat) return true; // bulan berjalan: sudah sampai hari ini
+  // Bulan berjalan masih bertambah sepanjang hari, jadi tanggalnya saja tidak
+  // cukup: yang menentukan seberapa lama angkanya sudah tersimpan.
+  if (!bulanSudahLewat) return Date.now() - Date.parse(syncedAt) < UMUR_SEGAR_MS;
 
   const final = new Date(Date.parse(`${akhir}T00:00:00Z`) + JEDA_FINAL_HARI * 86_400_000)
     .toISOString()
