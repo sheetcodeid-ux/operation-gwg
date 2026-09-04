@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { brandOutlet, brandPemohon, hitungKonten, jenisKonten, type PermintaanKonten } from "./konten";
+import { brandOutlet, brandPemohon, hitungKonten, jenisKonten, kontenTanpaBrand, type PermintaanKonten } from "./konten";
 
 /**
  * Pembacaan Antrian Design menjadi angka Jumlah Konten.
@@ -140,5 +140,37 @@ describe("brand diambil dari cabang PEMOHON saat permintaannya tanpa cabang", ()
     expect(brandPemohon(["Nordu Coffee Sambas", "Nordu Coffee Sampit"])).toBe("Nordu");
     expect(brandPemohon([])).toBeNull();
     expect(brandPemohon([null, undefined])).toBeNull();
+  });
+});
+
+describe("yang tidak bisa dipetakan ke brand tetap kelihatan", () => {
+  const baris: PermintaanKonten[] = [
+    // Permintaan staf kantor: tidak memegang cabang, jadi tidak punya brand.
+    { designType: "Instagram Post", outletNama: null, outletPemohon: [], status: "terlaksana", periode: "2026-09" },
+    { designType: "Instagram Story", outletNama: null, outletPemohon: [null], status: "terlaksana", periode: "2026-09" },
+    // Ini punya brand, jadi tidak ikut terhitung sebagai "tanpa brand".
+    { designType: "Instagram Post", outletNama: "Cattu A. Yani", status: "terlaksana", periode: "2026-09" },
+    // Bukan konten media sosial — tidak dihitung sama sekali, termasuk di sini.
+    { designType: "Banner / Spanduk", outletNama: null, outletPemohon: [], status: "terlaksana", periode: "2026-09" },
+    // Belum selesai, dan bulan lain.
+    { designType: "Instagram Post", outletNama: null, outletPemohon: [], status: "menunggu_hc", periode: "2026-09" },
+    { designType: "Instagram Post", outletNama: null, outletPemohon: [], status: "terlaksana", periode: "2026-08" },
+  ];
+
+  it("dihitung terpisah, bukan didiamkan", () => {
+    // Tanpa angka ini, Jumlah Konten hanya tampil lebih kecil dari kenyataan
+    // tanpa satu pun tanda kenapa — dan yang membacanya akan menyimpulkan
+    // timnya kurang produktif.
+    expect(kontenTanpaBrand(baris, "2026-09")).toBe(2);
+  });
+
+  it("yang bukan konten tidak ikut dihitung sebagai kekurangan", () => {
+    // Spanduk memang bukan tugas yang diukur indikator ini; menyebutnya
+    // "belum terhitung" akan mengirim orang mencari masalah yang tidak ada.
+    expect(kontenTanpaBrand([baris[3]], "2026-09")).toBe(0);
+  });
+
+  it("bulan lain dan yang belum selesai tidak ikut", () => {
+    expect(kontenTanpaBrand(baris, "2026-08")).toBe(1);
   });
 });
