@@ -30,7 +30,16 @@ export async function ambilKunciEsb(ms: number): Promise<boolean> {
     .lt("lease_until", new Date().toISOString())
     .select("name");
   if (error) return false; // tidak bisa memastikan → jangan jalan
-  return (data ?? []).length > 0;
+  if ((data ?? []).length > 0) return true;
+
+  // Nol baris biasanya berarti "ada yang sedang jalan". Tapi bisa juga berarti
+  // barisnya tidak ada sama sekali — dan kalau itu terjadi, SELURUH penarikan
+  // berhenti selamanya tanpa satu pun pesan: tiap pemanggilan hanya menjawab
+  // "ada penarikan lain", padahal tidak ada. Dibuatkan sekali di sini supaya
+  // kegagalannya paling lama satu putaran, bukan selamanya.
+  const { data: ada } = await db().from("esb_lock").select("name").eq("name", NAMA).maybeSingle();
+  if (!ada) await db().from("esb_lock").insert({ name: NAMA, lease_until: new Date().toISOString() });
+  return false;
 }
 
 /**
