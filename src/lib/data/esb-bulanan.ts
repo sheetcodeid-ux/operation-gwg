@@ -133,11 +133,15 @@ export async function syncNetBulanan(
       ditarik += 1;
       gagal = 0;
     } catch (e) {
-      // Satu cabang yang gagal tidak boleh menghentikan sisanya; yang beruntun
-      // gagal berarti sesi ESB-nya bermasalah, dan meneruskannya sia-sia.
+      // ESB menolak sebentar setelah puluhan permintaan beruntun — terlihat
+      // sebagai "respons tidak terbaca", bukan sebagai pesan yang jelas. Yang
+      // benar bukan menyerah, melainkan menunggu sejenak: tanpa jeda, lima
+      // kegagalan berturut-turut datang dalam dua detik dan seluruh sisa
+      // anggaran waktu terbuang percuma.
       error = e instanceof Error ? e.message : "Gagal memuat data ESB.";
       gagal += 1;
       if (gagal >= 5) break;
+      await new Promise((r) => setTimeout(r, gagal * 1_500));
     }
   }
   return { ditarik, sisa: perlu.length - ditarik, error };
