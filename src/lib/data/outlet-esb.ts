@@ -28,8 +28,9 @@ export interface HasilPasang {
   sudah: number;
   /** Outlet yang namanya tidak ada di daftar cabang ESB. */
   tanpaPadanan: string[];
-  /** Cabang ESB yang tidak dipakai outlet mana pun. */
-  cabangTakTerpakai: string[];
+  /** Cabang ESB yang tidak dipakai outlet mana pun — beserta idnya, karena
+   *  sisanya memang harus dipasang dengan tangan dan idnya yang dibutuhkan. */
+  cabangTakTerpakai: { id: string; nama: string }[];
   error?: string;
 }
 
@@ -94,6 +95,9 @@ export async function pasangkanOutletEsb(): Promise<HasilPasang> {
     terpakai.add(id);
   }
 
-  hasil.cabangTakTerpakai = cabang.filter((b) => !terpakai.has(b.id)).map((b) => b.name).sort();
+  hasil.cabangTakTerpakai = cabang
+    .filter((b) => !terpakai.has(b.id))
+    .map((b) => ({ id: b.id, nama: b.name }))
+    .sort((a, b) => a.nama.localeCompare(b.nama, "id"));
   return hasil;
 }
