@@ -7,6 +7,7 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Combobox } from "@/components/ui/combobox";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
+import { DatePicker } from "@/components/ui/date-picker";
 import { Field, Input, Textarea } from "@/components/ui/input";
 import { WORK_BRANDS } from "@/lib/constants";
 import {
@@ -267,7 +268,10 @@ export function DialogInput({
               <>
                 <div className="grid grid-cols-2 gap-3">
                   <Field label="Tanggal">
-                    <Input type="date" value={tanggal} onChange={(e) => setTanggal(e.target.value)} />
+                    {/* Pemilih tanggal milik aplikasi, bukan bawaan peramban:
+                        bentuk bawaan berbeda-beda di tiap peramban dan tidak
+                        satu pun cocok dengan sisi layar ini. */}
+                    <DatePicker value={tanggal} onChange={setTanggal} />
                   </Field>
                   <Field label="PIC">
                     {pic.length > 0 ? (

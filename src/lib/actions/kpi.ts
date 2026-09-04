@@ -140,6 +140,78 @@ export async function hapusEntriAction(input: { posisi: string; periode: string;
   return { ok: true };
 }
 
+/**
+ * Realisasi beban operasional BANYAK outlet sekaligus.
+ *
+ * Diminta tegas: "form itu seperti tabel tinggal saya input, tidak perlu pilih
+ * outlet simpan — jadi itu membuat kerja berulang". Lima puluh delapan outlet
+ * dikali dua kolom berarti 116 kali buka-pilih-simpan, dan pekerjaan sebanyak
+ * itu tidak akan pernah selesai dikerjakan sampai habis.
+ *
+ * Yang dikirim hanya baris yang BERUBAH; sisanya tidak ikut ditulis ulang.
+ */
+export async function simpanEfisiensiMassalAction(input: {
+  posisi: string;
+  periode: string;
+  pic?: string;
+  baris: { outletId: string; actualWh: number | null; actualNonWh: number | null }[];
+}): Promise<{ ok?: true; tersimpan?: number; error?: string }> {
+  const g = await gerbang(input.posisi, input.periode);
+  if ("error" in g) return { error: g.error };
+  if (!punyaIndikator(input.posisi, "efisiensi")) return { error: "Posisi ini tidak dinilai efisiensi beban operasional." };
+
+  let n = 0;
+  for (const b of input.baris) {
+    if (!b.outletId) continue;
+    const res = await simpanEfisiensi({
+      periode: input.periode,
+      posisi: input.posisi,
+      pic: input.pic ?? "",
+      outletId: b.outletId,
+      actualWh: b.actualWh,
+      actualNonWh: b.actualNonWh,
+      olehId: g.user.id,
+    });
+    if (res.error) return { error: res.error };
+    n += 1;
+  }
+  revalidatePath(RUTE(input.posisi));
+  return { ok: true, tersimpan: n };
+}
+
+/**
+ * Ceklis management fee BANYAK outlet sekaligus.
+ *
+ * Bentuknya satu tabel berisi seluruh outlet dengan net sales dan fee 5%-nya
+ * sudah terisi; yang mengisinya tinggal mencentang yang sesuai dan menuliskan
+ * selisihnya pada yang tidak.
+ */
+export async function simpanFeeMassalAction(input: {
+  posisi: string;
+  periode: string;
+  baris: { outletId: string; sesuai: boolean; catatan?: string }[];
+}): Promise<{ ok?: true; tersimpan?: number; error?: string }> {
+  const g = await gerbang(input.posisi, input.periode);
+  if ("error" in g) return { error: g.error };
+  if (!punyaIndikator(input.posisi, "management_fee")) return { error: "Posisi ini tidak menilai management fee." };
+
+  let n = 0;
+  for (const b of input.baris) {
+    if (!b.outletId) continue;
+    const res = await simpanFee({
+      periode: input.periode,
+      outletId: b.outletId,
+      sesuai: b.sesuai,
+      catatan: b.catatan ?? "",
+      olehId: g.user.id,
+    });
+    if (res.error) return { error: res.error };
+    n += 1;
+  }
+  revalidatePath(RUTE(input.posisi));
+  return { ok: true, tersimpan: n };
+}
+
 /** Realisasi beban operasional satu outlet. */
 export async function simpanEfisiensiAction(input: {
   posisi: string;
@@ -215,7 +287,7 @@ export async function hapusMenuPasarAction(input: { posisi: string; periode: str
  */
 export async function simpanPengaturanAction(input: {
   posisi: string;
-  ubahan: { indikator: string; bobot: number | null; target: number | null; pertumbuhan: number | null }[];
+  ubahan: { indikator: string; bobot: number | null; target: number | null; pertumbuhan: number | null; sumber?: "otomatis" | "manual" | null }[];
 }): Promise<{ ok?: true; error?: string }> {
   const user = await getSessionUser();
   if (!user || !dbEnabled) return { error: "Tidak punya akses." };
@@ -231,6 +303,7 @@ export async function simpanPengaturanAction(input: {
       bobot: u.bobot,
       target: u.target,
       pertumbuhan: u.pertumbuhan,
+      sumber: u.sumber ?? null,
       olehId: user.id,
       olehNama: user.name,
     });

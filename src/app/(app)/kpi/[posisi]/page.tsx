@@ -5,7 +5,7 @@ import { canReachMenu, type MenuKey } from "@/lib/nav";
 import { bulanSebelum, laporanKpi, periodeSekarang } from "@/lib/data/kpi";
 import { getOutlets } from "@/lib/data/store";
 import { TENGGAT, indikatorPosisi } from "@/lib/kpi/indikator";
-import { DEPARTEMEN, departemenDari, posisiDari, posisiDepartemen, type KodePosisi } from "@/lib/kpi/struktur";
+import { departemenDari, posisiDari, posisiDepartemen, type KodePosisi } from "@/lib/kpi/struktur";
 import { MENU_POSISI, bolehAturKpi } from "@/lib/kpi/akses";
 import { NAV_ICONS } from "@/components/layout/icons";
 import { PageHeader } from "@/components/ui/page-header";
@@ -63,7 +63,6 @@ export default async function KpiPosisiPage({
         laporan={laporan}
         lalu={lalu}
         namaPosisi={posisi.nama}
-        departemen={posisi.departemen}
         pic={posisi.pic}
         indikator={indikatorPosisi(posisi.kode)}
         outlets={getOutlets()
@@ -71,7 +70,6 @@ export default async function KpiPosisiPage({
           .map((o) => ({ id: o.id, nama: o.name }))
           .sort((a, b) => a.nama.localeCompare(b.nama, "id"))}
         tenggatHari={TENGGAT[posisi.kode] ?? [15]}
-        departemenOpsi={DEPARTEMEN.filter((d) => d.posisi.length > 0).map((d) => ({ value: d.kode, label: d.nama }))}
         posisiOpsi={posisiDepartemen(posisi.departemen).map((p) => ({ value: p.kode, label: p.nama }))}
         bolehAtur={bolehAturKpi(user)}
       />
