@@ -122,3 +122,25 @@ export const INDIKATOR_KONTEN: Record<string, JenisKonten> = {
   konten_reels: "reels",
   konten_story: "story",
 };
+
+/**
+ * Permintaan SELESAI yang berisi konten tapi tidak bisa ditentukan brand-nya.
+ *
+ * Diminta tegas: brand tidak boleh ditebak dari judul. Konsekuensinya nyata —
+ * permintaan dari staf kantor yang tidak memegang cabang tidak terhitung ke
+ * brand mana pun. Angkanya dihitung terpisah supaya kekurangannya KELIHATAN.
+ *
+ * Tanpa ini, Jumlah Konten hanya tampil lebih kecil dari kenyataan dan tidak
+ * ada satu pun tanda kenapa: yang membacanya akan menyimpulkan timnya kurang
+ * produktif, padahal pekerjaannya ada dan memang tidak bisa dipetakan.
+ */
+export function kontenTanpaBrand(rows: PermintaanKonten[], periode: string): number {
+  let n = 0;
+  for (const r of rows) {
+    if (r.status !== "terlaksana" || r.periode !== periode) continue;
+    if (jenisKonten(r.designType ?? "").length === 0) continue;
+    if (brandOutlet(r.outletNama) ?? brandPemohon(r.outletPemohon ?? [])) continue;
+    n += 1;
+  }
+  return n;
+}

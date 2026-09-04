@@ -20,7 +20,7 @@ import {
   type RingkasKpi,
 } from "@/lib/kpi/hitung";
 import { indikatorPosisi, type Indikator, type JenisEntri } from "@/lib/kpi/indikator";
-import { INDIKATOR_KONTEN, hitungKonten } from "@/lib/kpi/konten";
+import { INDIKATOR_KONTEN, hitungKonten, kontenTanpaBrand } from "@/lib/kpi/konten";
 import { posisiDari, type KodePosisi } from "@/lib/kpi/struktur";
 
 /**
@@ -361,20 +361,18 @@ async function kontenDariDesign(periode: string) {
   // Nama cabang dicari sekali di awal. Mencarinya per permintaan berarti
   // menelusuri 58 outlet sebanyak 224 kali untuk jawaban yang sama.
   const namaOutlet = new Map(getOutlets().map((o) => [o.id, o.name]));
-  return hitungKonten(
-    rows.map((r) => ({
-      designType: r.designType,
-      outletNama: r.outletName,
-      // Kolom outlet pada permintaan design KOSONG di seluruh 224 baris yang
-      // ada — formulirnya tidak menanyakannya. Tanpa cadangan ini setiap baris
-      // dibuang sebelum sempat dihitung, dan Jumlah Konten selalu nol padahal
-      // antriannya penuh.
-      outletPemohon: (getUser(r.requesterId)?.outletIds ?? []).map((id) => namaOutlet.get(id) ?? null),
-      status: r.status,
-      periode: r.createdAt.slice(0, 7),
-    })),
-    periode,
-  );
+  const baris = rows.map((r) => ({
+    designType: r.designType,
+    outletNama: r.outletName,
+    // Kolom outlet pada permintaan design KOSONG di seluruh 224 baris yang ada
+    // — formulirnya tidak menanyakannya. Tanpa cadangan ini setiap baris
+    // dibuang sebelum sempat dihitung, dan Jumlah Konten selalu nol padahal
+    // antriannya penuh.
+    outletPemohon: (getUser(r.requesterId)?.outletIds ?? []).map((id) => namaOutlet.get(id) ?? null),
+    status: r.status,
+    periode: r.createdAt.slice(0, 7),
+  }));
+  return { per: hitungKonten(baris, periode), tanpaBrand: kontenTanpaBrand(baris, periode) };
 }
 
 /** Komplain kategori Food Quality bulan itu — bahan indikator Review Customer. */
@@ -737,7 +735,7 @@ interface KonteksBaris {
   jumlahBrand: number;
   jumlahOutlet: number;
   design: { masuk: number; selesai: number } | null;
-  konten: Record<string, Record<string, number>> | null;
+  konten: { per: Record<string, Record<string, number>>; tanpaBrand: number } | null;
   komplain: number | null;
   efisiensi: LaporanKpi["efisiensi"];
   fee: DetailFee[] | null;
@@ -805,14 +803,21 @@ function susunBaris(i: Indikator, k: KonteksBaris): BarisKpi {
     case "manual":
     case "manual_brand":
       if (kontenOtomatis) {
-        const per = k.konten?.[jenisKonten];
+        const per = k.konten?.per[jenisKonten];
         actual = per ? Object.values(per).reduce((a, b) => a + b, 0) : null;
         if (actual === null) alasan = "Menunggu data Antrian Design.";
         else {
           const rinci = Object.entries(per!)
             .map(([b, n]) => `${b} ${n}`)
             .join(" · ");
-          alasan = `Otomatis dari Antrian Design yang sudah selesai — ${rinci}.`;
+          // Yang tidak bisa dipetakan ke brand DISEBUT, tidak didiamkan. Tanpa
+          // kalimat ini angkanya hanya tampil lebih kecil dari kenyataan, dan
+          // yang membacanya menyimpulkan timnya kurang produktif — padahal
+          // pekerjaannya ada dan memang tidak bisa dipetakan.
+          const sisa = k.konten?.tanpaBrand ?? 0;
+          alasan =
+            `Otomatis dari Antrian Design yang sudah selesai — ${rinci}.` +
+            (sisa > 0 ? ` ${sisa} permintaan tanpa brand belum ikut terhitung.` : "");
         }
       } else {
         actual = k.manual;
