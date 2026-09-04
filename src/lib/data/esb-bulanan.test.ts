@@ -63,12 +63,36 @@ describe("cara memanggilnya", () => {
   it("bulan yang sudah lewat tidak ditarik ulang", () => {
     // Angkanya dijamin sama; menariknya tiap jam membuang panggilan ESB.
     expect(sumber).toContain("function masihSegar");
-    expect(sumber).toContain("r.sampai >= akhir");
+    expect(sumber).toContain("r.sampai < akhir");
   });
 
   it("hanya cabang yang benar-benar dipakai outlet yang ditarik", () => {
     expect(sumber).toContain("function cabangTerpasang");
     expect(sumber).toContain('.not("esb_branch_id", "is", null)');
+  });
+});
+
+describe("kapan satu baris ditarik ulang", () => {
+  const sumber = readFileSync(join(process.cwd(), "src/lib/data/esb-bulanan.ts"), "utf8");
+
+  it("bulan berjalan ditarik ulang begitu tanggalnya bertambah", () => {
+    // Inilah yang membuat angkanya ikut bergerak tiap hari. Tanpa ini,
+    // Management Fee dan budget Efisiensi membeku di tanggal penarikan terakhir
+    // tanpa satu pun tanda bahwa angkanya sudah basi.
+    expect(sumber).toContain("if (akhir === null || r.sampai < akhir) return false;");
+  });
+
+  it("bulan yang baru berakhir ditarik sekali lagi untuk transaksi susulan", () => {
+    // Tutup buku di lapangan tidak selesai pukul 23.59; baris yang ditarik
+    // tepat di hari terakhir belum tentu memuat yang masuk belakangan.
+    expect(sumber).toContain("JEDA_FINAL_HARI");
+    expect(sumber).toContain("syncedAt.slice(0, 10) >= final");
+  });
+
+  it("bulan lama yang sudah final tidak ditarik lagi selamanya", () => {
+    // Angkanya dijamin sama; menariknya ulang membuang panggilan ESB yang
+    // dibutuhkan bulan berjalan.
+    expect(sumber).toContain("bulanSudahLewat");
   });
 });
 

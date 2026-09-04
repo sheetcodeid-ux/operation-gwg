@@ -27,6 +27,8 @@ export interface NetBulanan {
   pax: number | null;
   /** Tanggal terakhir yang ikut terhitung — untuk bulan berjalan belum sebulan penuh. */
   sampai: string;
+  /** Kapan barisnya ditarik — dipakai menentukan apakah perlu ditarik ulang. */
+  syncedAt: string;
 }
 
 const pad = (n: number) => String(n).padStart(2, "0");
@@ -48,6 +50,7 @@ interface Row {
   bills: number | null;
   pax: number | null;
   sampai: string;
+  synced_at: string;
 }
 
 /** Angka bulanan seluruh cabang untuk satu bulan. Kosong = belum ditarik. */
@@ -58,22 +61,40 @@ export async function netBulananPerCabang(periode: string): Promise<Map<string, 
     db().from("esb_net_bulanan").select("*").eq("periode", periode).order("branch").range(a, b),
   ).catch(() => [] as Row[]);
   for (const r of rows) {
-    peta.set(r.branch, { net: Number(r.net) || 0, bills: r.bills, pax: r.pax, sampai: r.sampai });
+    peta.set(r.branch, { net: Number(r.net) || 0, bills: r.bills, pax: r.pax, sampai: r.sampai, syncedAt: r.synced_at });
   }
   return peta;
 }
 
+/** Jeda sebelum bulan yang baru berakhir dianggap benar-benar final. */
+const JEDA_FINAL_HARI = 2;
+
 /**
  * Seberapa lama satu baris boleh dipercaya.
  *
- * Bulan yang sudah lewat TIDAK PERNAH berubah lagi, jadi ditarik sekali dan
- * selesai — menariknya ulang tiap jam membuang panggilan ESB untuk angka yang
- * dijamin sama. Bulan berjalan masih bertambah tiap hari, jadi ditarik ulang
- * begitu tanggal terakhirnya tertinggal.
+ * Bulan berjalan masih bertambah tiap hari, jadi ditarik ulang begitu tanggal
+ * terakhirnya tertinggal — itu yang membuat angkanya ikut bergerak tiap hari.
+ *
+ * Bulan yang sudah lewat ditarik sekali lalu selesai; menariknya ulang tiap jam
+ * membuang panggilan ESB untuk angka yang dijamin sama. SATU KECUALI: baris
+ * yang ditarik tepat di hari terakhir bulan itu belum tentu memuat transaksi
+ * yang masuk belakangan — tutup buku di lapangan tidak selesai pada pukul
+ * 23.59. Karena itu baris seperti itu ditarik sekali lagi dua hari setelah
+ * bulannya berakhir, dan sesudah itu tidak pernah disentuh lagi.
  */
-function masihSegar(r: NetBulanan, periode: string): boolean {
+function masihSegar(r: NetBulanan, periode: string, syncedAt: string): boolean {
   const akhir = akhirTerpakai(periode);
-  return akhir !== null && r.sampai >= akhir;
+  if (akhir === null || r.sampai < akhir) return false;
+
+  const hariIni = hariIniWib();
+  const bulanSudahLewat = hariIni > akhir;
+  if (!bulanSudahLewat) return true; // bulan berjalan: sudah sampai hari ini
+
+  const final = new Date(Date.parse(`${akhir}T00:00:00Z`) + JEDA_FINAL_HARI * 86_400_000)
+    .toISOString()
+    .slice(0, 10);
+  // Ditarik sebelum tenggat itu berarti belum tentu memuat susulan; sekali lagi.
+  return syncedAt.slice(0, 10) >= final || hariIni < final;
 }
 
 export interface HasilBulanan {
@@ -103,7 +124,7 @@ export async function syncNetBulanan(
     const ada = await netBulananPerCabang(p);
     for (const c of cabang) {
       const r = ada.get(c);
-      if (!r || !masihSegar(r, p)) perlu.push({ cabang: c, periode: p });
+      if (!r || !masihSegar(r, p, r.syncedAt)) perlu.push({ cabang: c, periode: p });
     }
   }
   if (perlu.length === 0) return { ditarik: 0, sisa: 0 };
