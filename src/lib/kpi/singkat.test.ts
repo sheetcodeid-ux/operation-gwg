@@ -26,8 +26,15 @@ describe("singkatan sumbu X", () => {
     expect(new Set(kode).size).toBe(3);
   });
 
-  it("nama yang benar-benar berbeda tetap tiga huruf", () => {
-    expect(singkatUnik(["Views", "Follower Growth", "Profile Visit"])).toEqual(["VIE", "FOL", "PRO"]);
+  it("label berisi beberapa kata disingkat jadi huruf awalnya", () => {
+    // "Gross Sales" jadi GS dan "Harga Pokok Penjualan" jadi HPP. Tiga huruf
+    // dari kata pertama menghasilkan "GRO" dan "HAR" — tidak ada yang mengenali
+    // itu sebagai nama indikatornya.
+    expect(singkatUnik(["Gross Sales", "Net Profit", "Harga Pokok Penjualan"])).toEqual(["GS", "NP", "HPP"]);
+  });
+
+  it("label satu kata tetap tiga huruf", () => {
+    expect(singkatUnik(["Views", "Kecepatan", "Interaksi"])).toEqual(["VIE", "KEC", "INT"]);
   });
 
   it("label kosong tidak membuatnya berhenti", () => {

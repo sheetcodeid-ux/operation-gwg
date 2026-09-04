@@ -58,6 +58,7 @@ export type MenuKey =
   | "creative_design"
   | "creative_penilaian"
   | "kpi"
+  | "kpi_op_ca"
   | "kpi_creative_content"
   | "kpi_creative_sosmed"
   | "kpi_fin_accounting"
@@ -191,6 +192,7 @@ export const NAV_MENUS: Omit<NavItem, "section" | "group" | "groupIcon">[] = [
   // untuk satu posisi tertentu, dan menu yang menyembunyikan tujuannya di
   // balik tab membuat setiap kunjungan butuh dua klik yang sama berulang kali.
   { key: "kpi", label: "Ringkasan KPI", href: "/kpi", icon: "Target" },
+  { key: "kpi_op_ca", label: "Coordinator Area", href: "/kpi/operational_ca", icon: "Store" },
   { key: "kpi_creative_content", label: "Content Creator", href: "/kpi/creative_content", icon: "Clapperboard" },
   { key: "kpi_creative_sosmed", label: "Sosial Media", href: "/kpi/creative_sosmed", icon: "Share2" },
   { key: "kpi_fin_accounting", label: "Accounting", href: "/kpi/finance_accounting", icon: "Calculator" },
@@ -526,15 +528,16 @@ export const DIVISION_GROUPS: Partial<Record<Division, NavGroupDef[]>> = {
     },
   ],
   "Key Performance Indicator": [
-    { name: "Creative", icon: "Palette", urutan: 1, menus: ["kpi_creative_content", "kpi_creative_sosmed"] },
-    { name: "Finance", icon: "Wallet", urutan: 2, menus: ["kpi_fin_accounting", "kpi_fin_finance", "kpi_fin_tax"] },
+    { name: "Operational", icon: "Store", urutan: 1, menus: ["kpi_op_ca"] },
+    { name: "Creative", icon: "Palette", urutan: 2, menus: ["kpi_creative_content", "kpi_creative_sosmed"] },
+    { name: "Finance", icon: "Wallet", urutan: 3, menus: ["kpi_fin_accounting", "kpi_fin_finance", "kpi_fin_tax"] },
     {
       name: "Product Development & Quality",
       icon: "FlaskConical",
-      urutan: 3,
+      urutan: 4,
       menus: ["kpi_pdq_food", "kpi_pdq_beverage", "kpi_pdq_head_food", "kpi_pdq_head_pdq"],
     },
-    { name: "Marketing Communication", icon: "Megaphone", urutan: 4, menus: ["kpi_marcomm"] },
+    { name: "Marketing Communication", icon: "Megaphone", urutan: 5, menus: ["kpi_marcomm"] },
   ],
   Creative: [
     { name: "Permintaan Masuk", icon: "Palette", menus: ["creative_design"] },
@@ -568,6 +571,7 @@ export const DIVISION_MENUS: { division: Division; menus: MenuKey[] }[] = [
     division: "Key Performance Indicator",
     menus: [
       "kpi",
+      "kpi_op_ca",
       "kpi_creative_content",
       "kpi_creative_sosmed",
       "kpi_fin_accounting",

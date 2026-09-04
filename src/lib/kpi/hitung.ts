@@ -46,13 +46,34 @@ export interface BarisKpi {
 
 export const BATAS_PERSENTASE = 100;
 
-/** Capaian satu indikator. Target nol atau kosong = belum terukur. */
-export function persentaseCapaian(actual: number | null, target: number | null): number | null {
+/**
+ * Capaian satu indikator. Target nol atau kosong = belum terukur.
+ *
+ * `mode` menentukan arah penilaiannya:
+ *  • bawaan — makin besar makin baik (penjualan, jumlah audit);
+ *  • `batas_maks` — targetnya BATAS ATAS yang masih boleh (komplain). Tanpa
+ *    mode ini, 30 komplain dari batas 20 menghasilkan 150% lalu dipotong jadi
+ *    100%, dan yang paling banyak dikomplain justru bernilai penuh;
+ *  • `lulus_maks` — batas atas yang tidak boleh dilewati sama sekali (HPP).
+ *    Tidak ada nilai separuh: 40,1% sama nilainya dengan 80%.
+ */
+export function persentaseCapaian(
+  actual: number | null,
+  target: number | null,
+  mode?: "batas_maks" | "lulus_maks",
+): number | null {
   if (actual === null || target === null) return null;
   // Target nol bukan capaian sempurna, melainkan target yang belum ditetapkan.
   // Membaginya menghasilkan tak-hingga, dan menganggapnya 100% memberi nilai
   // penuh untuk sesuatu yang tidak pernah diminta.
   if (target <= 0) return null;
+
+  if (mode === "lulus_maks") return actual <= target ? BATAS_PERSENTASE : 0;
+  if (mode === "batas_maks") {
+    // Nol komplain bukan pembagian dengan nol — itu hasil terbaik yang mungkin.
+    if (actual <= target) return BATAS_PERSENTASE;
+    return (target / actual) * 100;
+  }
   return Math.min(BATAS_PERSENTASE, (actual / target) * 100);
 }
 
@@ -64,7 +85,7 @@ export function barisKpi(input: {
   alasan?: string;
   satuan?: BarisKpi["satuan"];
 }): BarisKpi {
-  const persentase = persentaseCapaian(input.actual, input.target);
+  const persentase = persentaseCapaian(input.actual, input.target, input.indikator.penilaian);
   return {
     key: input.indikator.key,
     label: input.indikator.label,
@@ -76,7 +97,7 @@ export function barisKpi(input: {
     persenActual: persentase === null ? null : (input.bobot * persentase) / 100,
     alasan: input.alasan,
     penjelasan: input.indikator.penjelasan,
-    satuan: input.satuan,
+    satuan: input.satuan ?? input.indikator.satuan,
   };
 }
 
@@ -124,6 +145,10 @@ export interface KonteksTarget {
   actualBulanLalu: number | null;
   /** Jumlah pekerjaan yang masuk bulan itu (mis. permintaan desain). */
   jumlahPekerjaan: number | null;
+  /** Rata-rata tiga bulan yang sudah selesai — dasar target `avg3`. */
+  rataTigaBulan: number | null;
+  /** Capaian indikator yang dirujuk target `porsi`. */
+  dasarPorsi: number | null;
 }
 
 /**
@@ -145,6 +170,10 @@ export function hitungTarget(t: JenisTarget, k: KonteksTarget): number | null {
       return k.jumlahOutlet;
     case "rasio":
       return t.nilai;
+    case "avg3":
+      return k.rataTigaBulan === null ? null : k.rataTigaBulan * (1 + t.pertumbuhan / 100);
+    case "porsi":
+      return k.dasarPorsi === null ? null : k.dasarPorsi * (t.rasio / 100);
   }
 }
 

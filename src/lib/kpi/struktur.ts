@@ -11,6 +11,7 @@
 export type KodeDepartemen = "operational" | "creative" | "finance" | "pdq" | "marcomm" | "hrd";
 
 export type KodePosisi =
+  | "operational_ca"
   | "creative_content"
   | "creative_sosmed"
   | "finance_accounting"
@@ -39,6 +40,15 @@ export interface Posisi {
   /** Nama PIC apa adanya — dipakai sebagai keterangan, bukan penentu akses. */
   pic: string[];
   /**
+   * Daftar PIC-nya datang dari basis data, bukan dari berkas ini.
+   *
+   * Coordinator Area berganti jauh lebih sering daripada posisi lain, dan tiap
+   * orang menilai AREA yang berbeda — menuliskan namanya di sini berarti setiap
+   * pergantian staf butuh deploy, dan sampai deploy itu terjadi orangnya tidak
+   * punya rapor sama sekali.
+   */
+  picDinamis?: "area_coordinator";
+  /**
    * Dinilai PER ORANG, bukan sebagai satu tim.
    *
    * Finance diisi tiga orang yang pekerjaannya terpisah — capaian Nisa bukan
@@ -57,8 +67,8 @@ export const DEPARTEMEN: Departemen[] = [
     kode: "operational",
     nama: "Operational",
     ikon: "Store",
-    posisi: [],
-    menyusul: ["Coordinator Area (Deo)", "System Support (Fikri)", "System Support POS (Evan, Adinda, Pricil)"],
+    posisi: ["operational_ca"],
+    menyusul: ["System Support (Fikri)", "System Support POS (Evan, Adinda, Pricil)"],
   },
   { kode: "creative", nama: "Creative", ikon: "Palette", posisi: ["creative_content", "creative_sosmed"] },
   { kode: "finance", nama: "Finance", ikon: "Wallet", posisi: ["finance_accounting", "finance_finance", "finance_tax"] },
@@ -74,6 +84,9 @@ export const DEPARTEMEN: Departemen[] = [
 ];
 
 export const POSISI: Posisi[] = [
+  // PIC-nya kosong di sini dengan sengaja — diisi dari daftar Coordinator Area
+  // di basis data, lihat `picDinamis`.
+  { kode: "operational_ca", departemen: "operational", nama: "Coordinator Area", pic: [], perPic: true, picDinamis: "area_coordinator" },
   { kode: "creative_content", departemen: "creative", nama: "Content Creator", pic: ["Ricky", "Seka"] },
   { kode: "creative_sosmed", departemen: "creative", nama: "Sosial Media", pic: ["Via", "Zia"] },
   { kode: "finance_accounting", departemen: "finance", nama: "Accounting", pic: ["Bella"] },

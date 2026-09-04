@@ -50,7 +50,7 @@ export async function presignHygieneUploadsAction(files: { name: string; type: s
  * "an unexpected response was received from the server", bukan pesan kita.
  * Pola ini sudah dipakai foto Hygiene; di sini disediakan untuk sisanya.
  */
-export type UploadScope = "hcdoc" | "marcomm" | "system" | "kontrak";
+export type UploadScope = "hcdoc" | "marcomm" | "system" | "kontrak" | "kpi";
 
 const SCOPE_MENUS: Record<UploadScope, MenuKey[]> = {
   hcdoc: ["hc_submit", "hc_review"],
@@ -59,12 +59,17 @@ const SCOPE_MENUS: Record<UploadScope, MenuKey[]> = {
   // hak menulis baris tertentu diperiksa lagi saat menyimpan.
   kontrak: ["hc_kontrak"],
   marcomm: ["mc_events", "events"],
+  // Bukti Hygiene Audit / CCTV Monitoring pada KPI Coordinator Area. Dibatasi
+  // ke menu itu saja: hak mengunggah tidak perlu lebih luas daripada halaman
+  // yang membutuhkannya.
+  kpi: ["kpi_op_ca"],
   system: ["sys_submit", "sys_review"],
 };
 
 const SCOPE_PREFIX: Record<UploadScope, string> = {
   hcdoc: "hc",
   kontrak: "hc/kontrak",
+  kpi: "kpi",
   marcomm: "marcomm",
   system: "system",
 };

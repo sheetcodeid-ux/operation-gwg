@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import { notFound, redirect } from "next/navigation";
 import { requireSessionUser } from "@/lib/auth";
 import { canReachMenu, type MenuKey } from "@/lib/nav";
-import { bulanSebelum, laporanKpi, periodeSekarang } from "@/lib/data/kpi";
+import { bulanSebelum, laporanKpi, periodeSekarang, picDinamis } from "@/lib/data/kpi";
 import { listEsbMenus } from "@/lib/data/esb-menu";
 import { getOutlets } from "@/lib/data/store";
 import { TENGGAT, indikatorPosisi } from "@/lib/kpi/indikator";
@@ -47,7 +47,16 @@ export default async function KpiPosisiPage({
   // Posisi yang dinilai per orang selalu membuka SESEORANG. Tanpa bawaan,
   // halamannya terbuka kosong dan terbaca seperti belum ada datanya sama
   // sekali — padahal cuma belum memilih siapa.
-  const picAktif = posisi.perPic ? (pic && posisi.pic.includes(pic) ? pic : (posisi.pic[0] ?? "")) : "";
+  // Posisi yang PIC-nya datang dari basis data memakai ID orangnya sebagai
+  // nilai, dan namanya hanya untuk dibaca. Nama berubah — menikah, salah ketik
+  // dibetulkan — dan seluruh riwayat angkanya akan terputus tanpa ada yang
+  // menyadarinya.
+  const picOpsi = posisi.picDinamis
+    ? picDinamis(posisi.kode)
+    : posisi.pic.map((n) => ({ value: n, label: n }));
+  const picAktif = posisi.perPic
+    ? (pic && picOpsi.some((o) => o.value === pic) ? pic : (picOpsi[0]?.value ?? ""))
+    : "";
 
   const daftar = indikatorPosisi(posisi.kode);
   // Katalog menu ESB hanya perlu dibaca oleh posisi yang menilai Keberhasilan
@@ -76,7 +85,8 @@ export default async function KpiPosisiPage({
         laporan={laporan}
         lalu={lalu}
         namaPosisi={posisi.nama}
-        pic={posisi.pic}
+        pic={picOpsi.map((o) => o.label)}
+        picOpsi={picOpsi}
         perPic={!!posisi.perPic}
         indikator={daftar}
         outlets={getOutlets()

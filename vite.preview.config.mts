@@ -22,6 +22,9 @@ export default defineConfig({
       // bundel peramban, termasuk modul yang membaca kredensial.
       { find: "@/lib/actions/kpi", replacement: fileURLToPath(new URL("./.preview/kpi-actions-stub.ts", import.meta.url)) },
       { find: "@/lib/data/kpi", replacement: fileURLToPath(new URL("./.preview/data-kpi-stub.ts", import.meta.url)) },
+      // Pengunggah menarik `node:crypto` lewat aksi presign. Tanpa tiruan ini
+      // seluruh halaman berhenti dirender — kosong, tanpa petunjuk apa pun.
+      { find: "@/lib/upload-client", replacement: fileURLToPath(new URL("./.preview/upload-client-stub.ts", import.meta.url)) },
       { find: "server-only", replacement: fileURLToPath(new URL("./src/test/noop.ts", import.meta.url)) },
       { find: /^@\//, replacement: `${fileURLToPath(new URL("./src", import.meta.url))}/` },
     ],

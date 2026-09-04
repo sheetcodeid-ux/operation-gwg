@@ -74,9 +74,16 @@ describe("penulisan dijaga di server", () => {
       const fn = n.replace("export async function ", "");
       const blok = aksi.slice(aksi.indexOf(`export async function ${fn}`));
       const badan = blok.slice(0, blok.indexOf("\nexport async function", 1));
-      // Pengaturan bobot punya gerbangnya sendiri (super admin), sisanya wajib
-      // lewat `gerbang`.
-      const lewat = fn === "simpanPengaturanAction" ? badan.includes("bolehAturKpi(user)") : badan.includes("await gerbang(");
+      // Dua aksi punya gerbangnya sendiri, dan keduanya disebut di sini supaya
+      // pengecualian tidak pernah diam-diam bertambah:
+      //  • pengaturan bobot — hanya super admin;
+      //  • unggah bukti — tidak menyentuh bulan atau posisi mana pun, jadi yang
+      //    diperiksa hak membuka menunya, bukan penguncian bulannya.
+      const sendiri: Record<string, string> = {
+        simpanPengaturanAction: "bolehAturKpi(user)",
+        uploadKpiBuktiAction: 'canReachMenu(user, "kpi_op_ca" as MenuKey)',
+      };
+      const lewat = sendiri[fn] ? badan.includes(sendiri[fn]) : badan.includes("await gerbang(");
       expect(lewat, `${fn} tidak melewati penjagaan`).toBe(true);
     }
   });
@@ -91,7 +98,11 @@ describe("penulisan dijaga di server", () => {
     // Tanpa ini, satu salah ketik menyimpan angka ke "orang" yang tidak pernah
     // ada — dan capaiannya hilang tanpa jejak.
     expect(aksi).toContain("if (!pic) return { error: \"Pilih dulu PIC-nya.\" }");
-    expect(aksi).toContain("!p.pic.includes(pic)");
+    expect(aksi).toContain("p.pic.includes(pic)");
+    // Posisi yang daftar PIC-nya datang dari basis data diperiksa ke daftar
+    // itu. Memeriksanya ke daftar di berkas berarti satu-satunya PIC yang
+    // diterima adalah daftar kosong, dan tidak ada angka yang bisa disimpan.
+    expect(aksi).toContain("picDinamis(p.kode).some((o) => o.value === pic)");
     // Sebaliknya juga dijaga: posisi satu tim tidak boleh dipecah per orang.
     expect(aksi).toContain("Posisi ini dinilai sebagai satu tim, bukan per orang.");
   });
@@ -159,5 +170,21 @@ describe("isian yang berulang dikerjakan sekali lewat tabel", () => {
       expect(i, `${form} tidak ada di halaman`).toBeGreaterThan(-1);
       expect(papan.slice(Math.max(0, i - 400), i), `${form} tanpa penjagaan bulan terkunci`).toContain("!laporan.dikunci");
     }
+  });
+});
+
+describe("bukti yang wajib tidak bisa dihindari", () => {
+  it("entri berbukti ditolak server bila lampirannya kosong", () => {
+    // Tanpa ini, cukup mengetik 40 baris kosong untuk mendapat nilai penuh
+    // Hygiene Audit — dan tidak ada satu pun cara memeriksanya kembali.
+    expect(aksi).toContain('const WAJIB_BUKTI: JenisEntri[] = ["hygiene_cctv"]');
+    expect(aksi).toContain("WAJIB_BUKTI.includes(input.jenis) && (input.lampiran ?? []).length === 0");
+  });
+
+  it("jalur tabel massal tidak bisa dipakai untuk menghindarinya", () => {
+    // Form tabel tidak membawa lampiran; kalau jenis berbukti boleh lewat sana,
+    // penjagaannya tinggal dihindari dengan memilih form yang lain.
+    const blok = aksi.slice(aksi.indexOf("export async function simpanEntriMassalAction"));
+    expect(blok.slice(0, blok.indexOf("\nexport async function", 1))).toContain("WAJIB_BUKTI.includes(input.jenis)");
   });
 });

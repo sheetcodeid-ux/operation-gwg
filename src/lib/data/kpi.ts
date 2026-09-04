@@ -2,7 +2,7 @@ import "server-only";
 
 import { randomUUID } from "node:crypto";
 import { db, dbEnabled } from "./db";
-import { getOutlets, getUser } from "./store";
+import { getOutlets, getUser, getUsers } from "./store";
 import { listHcRequests } from "./hc-requests";
 import { netBulananPerCabang } from "./esb-bulanan";
 import { WORK_BRANDS } from "@/lib/constants";
@@ -337,6 +337,75 @@ async function designRequest(periode: string): Promise<{ masuk: number; selesai:
   return { masuk: bulan.length, selesai: bulan.filter((r) => r.status === "terlaksana").length };
 }
 
+/**
+ * Cabang ESB milik satu area — jembatan tiap angka Coordinator Area.
+ *
+ * Areanya menempel pada OUTLET, sedangkan angka penjualannya menempel pada
+ * cabang ESB. Tanpa penerjemahan ini keduanya tidak pernah bertemu, dan
+ * seluruh indikator Coordinator Area akan kosong tanpa satu pun pesan galat.
+ */
+async function cabangArea(areaId: string): Promise<string[]> {
+  if (!dbEnabled || !areaId) return [];
+  const { data } = await db()
+    .from("outlets")
+    .select("esb_branch_id")
+    .eq("area_id", areaId)
+    .eq("active", true)
+    .not("esb_branch_id", "is", null);
+  return ((data ?? []) as { esb_branch_id: string | null }[]).map((r) => r.esb_branch_id!).filter(Boolean);
+}
+
+/** Gross Sales satu area pada satu bulan — jumlah net sales ESB outlet-outletnya. */
+async function grossSalesArea(periode: string, cabang: string[]): Promise<number | null> {
+  if (cabang.length === 0) return null;
+  const peta = await netBulananPerCabang(periode);
+  const ada = cabang.filter((c) => peta.has(c));
+  // Sebagian cabang yang belum tertarik berarti angkanya BELUM UTUH. Menjumlah
+  // yang ada saja menghasilkan gross sales yang kurang tanpa terlihat kurang —
+  // dan target bulan berikutnya ikut salah karena dihitung dari angka ini.
+  if (ada.length < cabang.length) return null;
+  return ada.reduce((a, c) => a + (peta.get(c)?.net ?? 0), 0);
+}
+
+/**
+ * Rata-rata Gross Sales tiga bulan YANG SUDAH SELESAI — dasar target.
+ *
+ * Bulan berjalan sengaja tidak ikut: kalau ikut, targetnya bergerak tiap hari
+ * dan tidak pernah bisa dipakai sebagai patokan oleh orang yang dikejar.
+ */
+async function rataTigaBulanArea(periode: string, cabang: string[]): Promise<number | null> {
+  if (cabang.length === 0) return null;
+  const bulan = [bulanSebelum(periode), bulanSebelum(bulanSebelum(periode)), bulanSebelum(bulanSebelum(bulanSebelum(periode)))];
+  const nilai: number[] = [];
+  for (const b of bulan) {
+    const n = await grossSalesArea(b, cabang);
+    if (n !== null) nilai.push(n);
+  }
+  // Dibagi jumlah bulan yang BENAR-BENAR ada datanya. Area yang baru berjalan
+  // dua bulan tidak boleh dibagi tiga — targetnya akan dua pertiga dari yang
+  // seharusnya, dan ia selalu terlihat melampaui target.
+  if (nilai.length === 0) return null;
+  return nilai.reduce((a, b) => a + b, 0) / nilai.length;
+}
+
+/**
+ * Komplain satu area pada satu bulan, DI LUAR kategori kualitas makanan.
+ *
+ * Kualitas makanan sudah dinilai di tempat lain (Review Customer milik PDQ);
+ * menghitungnya lagi di sini berarti satu kejadian menghukum dua departemen.
+ */
+async function komplainArea(periode: string, areaId: string): Promise<number | null> {
+  if (!dbEnabled || !areaId) return null;
+  const { data } = await db()
+    .from("complaints")
+    .select("id")
+    .eq("area_id", areaId)
+    .neq("category", "food_quality")
+    .gte("review_date", `${periode}-01`)
+    .lt("review_date", `${bulanSetelah(periode)}-01`);
+  return (data ?? []).length;
+}
+
 /** Komplain kategori Food Quality bulan itu — bahan indikator Review Customer. */
 async function komplainFoodQuality(periode: string): Promise<number> {
   if (!dbEnabled) return 0;
@@ -490,6 +559,19 @@ async function averageTigaBulan(periode: string): Promise<Map<string, number>> {
  * kalimat itu justru menyesatkan: yang kurang bukan pemasangannya, melainkan
  * penarikan hariannya yang memang berjalan bertahap.
  */
+/**
+ * Kenapa angka se-area kosong.
+ *
+ * Dua sebab yang berbeda jauh dan butuh tindakan yang berbeda pula: areanya
+ * memang belum ditentukan untuk orang itu, atau areanya ada tapi sebagian
+ * cabangnya belum ditarik dari ESB. Menuliskan satu kalimat untuk keduanya
+ * mengirim orang membetulkan hal yang tidak salah.
+ */
+const areaKosong = (ca: { grossSales: number | null } | null): string =>
+  ca === null
+    ? "Areanya belum ditentukan untuk orang ini."
+    : "Angka ESB sebagian outlet di area ini belum ditarik — angkanya ditahan supaya tidak tampil kurang.";
+
 const alasanKosong = (esbBranchId: string | null | undefined): string =>
   esbBranchId ? "angka ESB bulan ini belum ditarik" : "outlet belum dipasangkan ke cabang ESB";
 
@@ -534,6 +616,11 @@ export async function laporanKpi(posisi: KodePosisi, periode: string, pic = ""):
   // boleh jadi dasar target berikutnya.
   const perluNetPerusahaan = daftar.some((i) => i.key === "net_sales") || PAKAI_PASAR.includes(posisi);
   const perluAverage = daftar.some((i) => i.key === "average_transaction");
+  // Coordinator Area dinilai atas AREA yang dipegangnya, dan area itu menempel
+  // pada orangnya — bukan pada posisinya. Tanpa PIC terpilih tidak ada area,
+  // dan tanpa area tidak ada satu pun angka yang bisa dihitung.
+  const perluArea = daftar.some((i) => i.actual.sumber === "otomatis" && i.actual.kode === "gross_sales_area");
+  const areaId = perluArea ? (getUser(pic)?.areaId ?? "") : "";
 
   const lalu = new Map<string, number>();
   if (perluAverage) {
@@ -568,7 +655,7 @@ export async function laporanKpi(posisi: KodePosisi, periode: string, pic = ""):
   const perluKomplain = daftar.some((i) => i.actual.sumber === "otomatis" && i.actual.kode === "komplain_food_quality");
   const perluFee = daftar.some((i) => i.actual.sumber === "otomatis" && i.actual.kode === "management_fee");
 
-  const [design, komplain, netBulan, average, netPerusahaan, omsetTigaBulan, averageTrx] = await Promise.all([
+  const [design, komplain, netBulan, average, netPerusahaan, omsetTigaBulan, averageTrx, cabangCa] = await Promise.all([
     perluDesign ? designRequest(periode) : Promise.resolve(null),
     perluKomplain ? komplainFoodQuality(periode) : Promise.resolve(null),
     perluFee ? netSalesLengkap(periode) : Promise.resolve(null),
@@ -581,7 +668,19 @@ export async function laporanKpi(posisi: KodePosisi, periode: string, pic = ""):
       ? netSalesPerusahaan(bulanSebelum(bulanSebelum(periode)), periode)
       : Promise.resolve(null),
     perluAverage ? averageTransaksi(periode) : Promise.resolve(null),
+    perluArea ? cabangArea(areaId) : Promise.resolve<string[]>([]),
   ]);
+
+  /* --- angka se-area (Coordinator Area) --- */
+  let ca: KonteksBaris["ca"] = null;
+  if (perluArea) {
+    const [grossSales, rataTiga, komplain] = await Promise.all([
+      grossSalesArea(periode, cabangCa),
+      rataTigaBulanArea(periode, cabangCa),
+      komplainArea(periode, areaId),
+    ]);
+    ca = { grossSales, rataTiga, komplain };
+  }
 
   /* --- panel efisiensi --- */
   let efisiensi: LaporanKpi["efisiensi"] = null;
@@ -664,6 +763,7 @@ export async function laporanKpi(posisi: KodePosisi, periode: string, pic = ""):
     pasar,
     netPerusahaan,
     averageTrx,
+    ca,
   }));
 
   return {
@@ -695,6 +795,8 @@ interface KonteksBaris {
   pasar: DetailPasar | null;
   netPerusahaan: number | null;
   averageTrx: AverageTrx | null;
+  /** Angka se-area untuk Coordinator Area. Null untuk posisi lain. */
+  ca: { grossSales: number | null; rataTiga: number | null; komplain: number | null } | null;
 }
 
 /**
@@ -729,6 +831,9 @@ function susunBaris(i: Indikator, k: KonteksBaris): BarisKpi {
     jumlahOutlet: k.jumlahOutlet,
     actualBulanLalu: k.lalu,
     jumlahPekerjaan: i.actual.sumber === "otomatis" && i.actual.kode === "design_request" ? (k.design?.masuk ?? null) : null,
+    rataTigaBulan: k.ca?.rataTiga ?? null,
+    // Target Net Profit berdiri di atas Gross Sales yang BENAR-BENAR tercapai.
+    dasarPorsi: k.ca?.grossSales ?? null,
   });
 
   let actual: number | null = null;
@@ -782,6 +887,16 @@ function susunBaris(i: Indikator, k: KonteksBaris): BarisKpi {
         case "management_fee":
           actual = k.fee ? k.fee.filter((f) => f.sesuai).length : null;
           break;
+        case "gross_sales_area":
+          actual = k.ca?.grossSales ?? null;
+          if (actual === null) {
+            alasan = areaKosong(k.ca);
+          }
+          break;
+        case "komplain_area":
+          actual = k.ca?.komplain ?? null;
+          if (actual === null) alasan = "Areanya belum ditentukan untuk orang ini.";
+          break;
         case "average_transaction":
           // Bulan yang datanya belum lengkap TIDAK ditampilkan angkanya.
           // Rata-rata dari separuh bulan tetap terlihat seperti angka yang
@@ -815,6 +930,23 @@ export function daftarPeriodeKpi(sekarang: string, jumlah = 12): { value: string
     p = bulanSebelum(p);
   }
   return out;
+}
+
+/**
+ * Daftar PIC untuk posisi yang PIC-nya datang dari basis data.
+ *
+ * Coordinator Area berganti jauh lebih sering daripada posisi lain, dan yang
+ * disimpan pada tiap angka adalah ID orangnya — bukan namanya. Nama berubah
+ * (menikah, salah ketik dibetulkan) dan seluruh riwayat angkanya akan terputus
+ * tanpa ada yang menyadarinya; ID tidak pernah berubah.
+ */
+export function picDinamis(posisi: KodePosisi): { value: string; label: string }[] {
+  const p = posisiDari(posisi);
+  if (p?.picDinamis !== "area_coordinator") return [];
+  return getUsers()
+    .filter((u) => u.role === "area_coordinator" && u.active !== false)
+    .map((u) => ({ value: u.id, label: u.name }))
+    .sort((a, b) => a.label.localeCompare(b.label, "id"));
 }
 
 export const periodeSekarang = (): string => new Date().toISOString().slice(0, 7);

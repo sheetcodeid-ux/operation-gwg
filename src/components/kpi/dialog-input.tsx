@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import { useRouter } from "next/navigation";
-import { Loader2, Plus } from "lucide-react";
+import { Loader2, Paperclip, Plus } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Combobox } from "@/components/ui/combobox";
@@ -10,12 +10,14 @@ import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { DatePicker } from "@/components/ui/date-picker";
 import { Field, Input, Textarea } from "@/components/ui/input";
 import { WORK_BRANDS } from "@/lib/constants";
+import { uploadMany } from "@/lib/upload-client";
 import {
   simpanActualAction,
   simpanEfisiensiAction,
   simpanEntriAction,
   simpanFeeAction,
   simpanMenuPasarAction,
+  uploadKpiBuktiAction,
 } from "@/lib/actions/kpi";
 import type { Indikator } from "@/lib/kpi/indikator";
 import { BULAN, periodeDari, tahunPilihan } from "./periode";
@@ -105,6 +107,10 @@ export function DialogInput({
   const dipilih = bisaDiisi.find((i) => i.key === key) ?? bisaDiisi[0];
   const bentuk = dipilih ? bentukIsian(dipilih) : "otomatis";
   const periodeDipilih = periodeDari(tahun, bulan);
+  // Indikator yang barisnya dihitung sebagai capaian TANPA bukti hanya butuh
+  // 40 baris kosong untuk bernilai penuh. Servernya yang menolak; ini supaya
+  // penolakan itu tidak datang setelah semuanya terlanjur diisi.
+  const perluBukti = dipilih?.actual.sumber === "entri" && dipilih.actual.entri === "hygiene_cctv";
 
   // Isian — satu kumpulan untuk semua bentuk. Yang tidak dipakai bentuk ini
   // tidak ikut terkirim, jadi tidak perlu satu state per bentuk.
@@ -115,6 +121,11 @@ export function DialogInput({
   const [outletId, setOutletId] = React.useState("");
   const [judul, setJudul] = React.useState("");
   const [deskripsi, setDeskripsi] = React.useState("");
+  // Bukti Hygiene Audit / CCTV. Disimpan sebagai berkas mentah dulu; baru
+  // diunggah saat disimpan, supaya berkas yang batal tidak menumpuk di
+  // penyimpanan tanpa ada barisnya.
+  const [bukti, setBukti] = React.useState<File[]>([]);
+  const berkasRef = React.useRef<HTMLInputElement>(null);
   const [nominal, setNominal] = React.useState("");
   const [nominalSeharusnya, setNominalSeharusnya] = React.useState("");
   const [tenggat, setTenggat] = React.useState(String(tenggatHari[0] ?? 15));
@@ -160,7 +171,20 @@ export function DialogInput({
       }
     } else if (bentuk === "kegiatan") {
       const jenis = dipilih.actual.sumber === "entri" ? dipilih.actual.entri : "quality_control";
-      res = await simpanEntriAction({ ...dasar, jenis, tanggal, picNama, outletId: outletId || null, judul, deskripsi });
+      let lampiran: { path: string; name: string }[] = [];
+      if (perluBukti) {
+        if (bukti.length === 0) {
+          setSibuk(false);
+          return toast.error("Lampirkan dulu buktinya — foto atau tangkapan layar hasil submit.");
+        }
+        try {
+          lampiran = await uploadMany("kpi", bukti, uploadKpiBuktiAction);
+        } catch (e) {
+          setSibuk(false);
+          return toast.error(e instanceof Error ? e.message : "Unggah bukti gagal.");
+        }
+      }
+      res = await simpanEntriAction({ ...dasar, jenis, tanggal, picNama, outletId: outletId || null, judul, deskripsi, lampiran });
     } else if (bentuk === "temuan") {
       const jenis = dipilih.actual.sumber === "pengurang" ? dipilih.actual.entri : "temuan";
       res = await simpanEntriAction({
@@ -293,6 +317,41 @@ export function DialogInput({
                     {dipilih?.key === "quality_control" && (
                       <Field label="Outlet">
                         <Combobox searchPlaceholder="Cari outlet…" value={outletId} onChange={setOutletId} options={outletOpsi} matchTriggerWidth />
+                      </Field>
+                    )}
+                    {perluBukti && (
+                      <Field label="Bukti submit (wajib)">
+                        <div className="space-y-1.5">
+                          {/* Pemilih berkas bawaan peramban bertuliskan "Choose
+                              Files" dan tidak bisa diterjemahkan — satu-satunya
+                              tulisan berbahasa Inggris di layar berbahasa
+                              Indonesia. Yang asli disembunyikan, tombolnya
+                              milik aplikasi. */}
+                          <input
+                            ref={berkasRef}
+                            type="file"
+                            accept="image/png,image/jpeg,application/pdf"
+                            multiple
+                            hidden
+                            onChange={(e) => setBukti([...(e.target.files ?? [])])}
+                          />
+                          <Button type="button" size="sm" variant="outline" className="gap-1.5" onClick={() => berkasRef.current?.click()}>
+                            <Paperclip className="size-4" /> Pilih berkas
+                          </Button>
+                          {bukti.length > 0 ? (
+                            <ul className="space-y-0.5">
+                              {bukti.map((f) => (
+                                <li key={f.name} className="truncate text-[11.5px] text-foreground/80">
+                                  {f.name}
+                                </li>
+                              ))}
+                            </ul>
+                          ) : (
+                            <p className="text-[11px] text-muted-foreground">
+                              Foto atau tangkapan layar hasil submit — maksimal 10 MB per berkas.
+                            </p>
+                          )}
+                        </div>
                       </Field>
                     )}
                   </>

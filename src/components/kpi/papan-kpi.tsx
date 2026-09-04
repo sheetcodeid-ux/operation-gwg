@@ -45,6 +45,20 @@ const persen = (n: number | null, digit = 2) =>
 
 const angka = (n: number | null) => (n === null ? "—" : formatNumber(n, { maximumFractionDigits: 2 }));
 
+/**
+ * Angka dengan satuannya.
+ *
+ * Rp 13.244.543.327 dan "40%" dibaca berbeda dari "13244543327" dan "40" —
+ * dan indikator yang salah dibaca satuannya akan disangka meleset jauh padahal
+ * tepat. Yang tanpa satuan tetap angka biasa.
+ */
+const bersatuan = (n: number | null, satuan?: "angka" | "rupiah" | "persen") => {
+  if (n === null) return "—";
+  if (satuan === "rupiah") return formatIDR(n);
+  if (satuan === "persen") return persen(n, 0);
+  return angka(n);
+};
+
 export interface OpsiPosisi {
   value: string;
   label: string;
@@ -58,6 +72,7 @@ export function PapanKpi({
   indikator,
   namaPosisi,
   pic,
+  picOpsi,
   perPic,
   posisiOpsi,
   outlets,
@@ -70,6 +85,8 @@ export function PapanKpi({
   indikator: Indikator[];
   namaPosisi: string;
   pic: string[];
+  /** Pilihan PIC di bilah saringan — nilainya bisa berupa ID, bukan nama. */
+  picOpsi: OpsiPosisi[];
   /** Posisi ini dinilai per orang; PIC-nya dipilih di bilah saringan. */
   perPic: boolean;
   posisiOpsi: OpsiPosisi[];
@@ -108,6 +125,11 @@ export function PapanKpi({
     [indikator],
   );
 
+  // Kolom Kategori hanya berguna bagi posisi yang indikatornya berkelompok.
+  // Untuk yang tidak, isinya satu kolom penuh tanda pisah — bukan sekadar
+  // mubazir, melainkan memakan lebar yang dibutuhkan kolom yang berisi.
+  const adaKategori = baris.some((b) => b.kategori);
+
   const kolom = React.useMemo<ColumnDef<BarisKpi>[]>(
     () => [
       {
@@ -120,14 +142,18 @@ export function PapanKpi({
           </div>
         ),
       },
-      {
-        accessorKey: "kategori",
-        header: "Kategori",
-        cell: ({ getValue }) => {
-          const v = getValue<string | undefined>();
-          return v ? <Badge tone="brand">{v}</Badge> : <span className="text-muted-foreground">—</span>;
-        },
-      },
+      ...(adaKategori
+        ? [
+            {
+              accessorKey: "kategori",
+              header: "Kategori",
+              cell: ({ getValue }) => {
+                const v = getValue<string | undefined>();
+                return v ? <Badge tone="brand">{v}</Badge> : <span className="text-muted-foreground">—</span>;
+              },
+            } satisfies ColumnDef<BarisKpi>,
+          ]
+        : []),
       {
         accessorKey: "bobot",
         header: "Bobot",
@@ -136,12 +162,12 @@ export function PapanKpi({
       {
         accessorKey: "target",
         header: "Target",
-        cell: ({ getValue }) => <span className="tabular-nums text-foreground/80">{angka(getValue<number | null>())}</span>,
+        cell: ({ row }) => <span className="tabular-nums text-foreground/80">{bersatuan(row.original.target, row.original.satuan)}</span>,
       },
       {
         accessorKey: "actual",
         header: "Actual",
-        cell: ({ getValue }) => <span className="tabular-nums text-foreground/80">{angka(getValue<number | null>())}</span>,
+        cell: ({ row }) => <span className="tabular-nums text-foreground/80">{bersatuan(row.original.actual, row.original.satuan)}</span>,
       },
       {
         accessorKey: "persentase",
@@ -165,7 +191,7 @@ export function PapanKpi({
         ),
       },
     ],
-    [],
+    [adaKategori],
   );
 
   function pindah(url: string) {
@@ -214,10 +240,10 @@ export function PapanKpi({
           <Combobox
             portal
             searchable={false}
-            className="w-44 shrink-0"
+            className="w-52 shrink-0"
             value={laporan.pic}
             onChange={(v) => pindah(`/kpi/${laporan.posisi}?periode=${laporan.periode}&pic=${encodeURIComponent(v)}`)}
-            options={pic.map((p) => ({ value: p, label: p }))}
+            options={picOpsi}
           />
         )}
         <div className="ml-auto flex shrink-0 items-center gap-2">

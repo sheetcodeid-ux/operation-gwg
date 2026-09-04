@@ -7,6 +7,8 @@ import { TENGGAT, indikatorPosisi as daftarIndikator } from "@/lib/kpi/indikator
 import type { LaporanKpi } from "@/lib/data/kpi";
 
 const ANGKA: Record<string, [number | null, number | null, number | null]> = {
+  gross_sales: [4_186_500_000, 3_942_180_000, 88], net_profit: [1_182_654_000, 1_010_400_000, 74],
+  hygiene_cctv: [40, 31, 62], komplain_area: [20, 27, 80], hpp: [40, 37.4, 100],
   konten_post: [40, 31, 64], konten_reels: [40, 22, 71], konten_story: [20, 20, 88],
   design_request: [118, 104, 82], produksi_media: [66, 58, 74], interaksi: [24200, 19880, 91],
   views: [341000, 402500, 66], profile_visit: [null, null, null], kecepatan: [100, 85, 80],
@@ -73,7 +75,7 @@ function buat(kode: KodePosisi) {
   return { laporan, lalu };
 }
 
-const kode = (location.hash.replace("#", "") || "creative_content") as KodePosisi;
+const kode = (location.hash.replace("#", "") || "operational_ca") as KodePosisi;
 const p = posisiDari(kode)!;
 const { laporan, lalu } = buat(kode);
 
@@ -83,6 +85,7 @@ createRoot(document.getElementById("root")!).render(
     lalu={lalu}
     namaPosisi={p.nama}
     pic={p.pic}
+    picOpsi={(p.pic.length ? p.pic : ["Deo", "Roby", "Aldi", "Wika"]).map((n) => ({ value: n, label: n }))}
     perPic={!!p.perPic}
     indikator={daftarIndikator(kode)}
     outlets={OUTLET.map(([nama], i) => ({ id: `o${i}`, nama }))}
