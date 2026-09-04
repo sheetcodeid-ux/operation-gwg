@@ -343,9 +343,9 @@ export function classifyMenuCategory(category: string, detail = ""): "makanan" |
  *   "numberOfBill":"2.777","averageNetSalesPerBill":"53.487"}`
  */
 export interface EsbHighlight {
-  /** Net sales — angka di kotak NET SALES. */
+  /** Net sales — angka di kotak NET SALES. Inilah "gross sales" dalam istilah aplikasi ini. */
   net: number;
-  /** Gross sales harian. */
+  /** Gross sales harian menurut ESB — belum dipakai di mana pun. */
   gross: number;
   /** Jumlah tamu (PAX TOTAL). */
   pax: number;
@@ -376,9 +376,11 @@ export function bacaHighlight(j: Record<string, unknown>): EsbHighlight {
   const pax = num(j.paxTotal);
   return {
     net,
-    // Gross yang tidak terbaca dijatuhkan ke net, bukan ke nol: nol akan
-    // terbaca sebagai "tidak ada penjualan sama sekali" di grafik musiman.
-    gross: gross > 0 ? gross : net,
+    // Gross ESB dibaca apa adanya dan TIDAK dijatuhkan ke net: keduanya angka
+    // yang berbeda, dan menyamakannya diam-diam adalah kesalahan yang dulu
+    // terjadi di sini. Yang memakai angka ini bertanggung jawab memilih mana
+    // yang dimaksudnya.
+    gross,
     pax,
     bills,
     // Angka rata-ratanya dipakai apa adanya bila ada; kalau tidak, dihitung

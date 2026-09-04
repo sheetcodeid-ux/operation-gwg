@@ -1,3 +1,5 @@
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { bacaHighlight } from "./esb";
 
@@ -32,12 +34,17 @@ describe("respons sungguhan dari Sales Dashboard", () => {
     expect(h.perPax).toBe(50_504);
   });
 
-  it("gross tidak lagi tertukar dengan net", () => {
-    // Inilah kesalahan yang benar-benar terjadi: gross dibaca dari nama field
-    // yang tidak pernah ada, lalu jatuh ke net — dan kedua angkanya menjadi
-    // sama persis di grafik musiman.
+  it("gross ESB dibaca apa adanya, tidak dijatuhkan ke net", () => {
+    // Dulu gross dibaca dari daftar nama field tebakan yang tidak satu pun
+    // benar, lalu diam-diam jatuh ke net. Keduanya angka yang berbeda, dan
+    // pembacaannya tidak boleh menyamakannya sendiri.
+    //
+    // Catatan istilah: "gross sales" DI APLIKASI INI adalah net sales ESB —
+    // itu yang dipakai GWG sehari-hari. Penerjemahan itu dilakukan di
+    // `esbFetchSales`, bukan di sini; yang di sini membaca ESB apa adanya.
     const h = bacaHighlight(ASLI);
-    expect(h.gross).not.toBe(h.net);
+    expect(h.net).toBe(148_530_679);
+    expect(h.gross).toBe(161_776_400);
   });
 
   it("average transaction = net sales dibagi jumlah struk", () => {
@@ -66,8 +73,20 @@ describe("rentang tanpa aktivitas", () => {
     expect(Number.isFinite(h.perBill)).toBe(true);
   });
 
-  it("gross yang kosong dijatuhkan ke net, bukan ke nol", () => {
-    // Nol akan terbaca sebagai "tidak ada penjualan sama sekali".
-    expect(bacaHighlight({ currentSales: "1.000.000" }).gross).toBe(1_000_000);
+  it("gross yang tidak dikirim terbaca nol, tidak dikarang dari net", () => {
+    expect(bacaHighlight({ currentSales: "1.000.000" }).gross).toBe(0);
+  });
+});
+
+describe("istilah aplikasi vs istilah ESB", () => {
+  it("yang disimpan sebagai gross adalah NET SALES ESB", () => {
+    // Diluruskan langsung oleh pemiliknya: "gross sales dalam bahasa web ini
+    // adalah net sales di ESB". Seluruh angka omset di aplikasi — grafik
+    // Musiman, Data Analysis, ROI event Marcomm — memakai angka itu. Kalau
+    // penerjemahan ini hilang, semua angka omset berubah tanpa ada yang
+    // mengubah datanya.
+    const klien = readFileSync(join(process.cwd(), "src/lib/integrations/esb-client.ts"), "utf8");
+    const blok = klien.slice(klien.indexOf("export async function esbFetchSales"));
+    expect(blok.slice(0, blok.indexOf("\n}"))).toContain("gross: h.net");
   });
 });
