@@ -185,6 +185,9 @@ export interface BarisEfisiensi {
   outletNama: string;
   /** Rata-rata net sales 3 bulan terakhir. Null = belum ada datanya. */
   average: number | null;
+  /** Kenapa `average` kosong — dibedakan supaya yang membacanya tahu apa yang
+   *  harus dikerjakan: memasang outlet ke ESB, atau menunggu penarikan data. */
+  alasan?: string;
   targetWh: number | null;
   targetNonWh: number | null;
   actualWh: number | null;

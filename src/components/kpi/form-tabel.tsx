@@ -141,7 +141,9 @@ export function FormEfisiensi({
                     <tr key={b.outletId} className="border-b border-border/60 last:border-0">
                       <td className="px-3 py-1.5">
                         <p className="font-medium text-foreground">{b.outletNama}</p>
-                        {b.average === null && <p className="text-[11px] text-amber-600 dark:text-amber-400">belum tersambung ke ESB</p>}
+                        {b.average === null && (
+                          <p className="text-[11px] text-amber-600 dark:text-amber-400">{b.alasan ?? "belum ada data ESB"}</p>
+                        )}
                       </td>
                       <td className="px-3 py-1.5 text-right tabular-nums text-muted-foreground">
                         {b.average === null ? "—" : formatIDR(b.average)}
@@ -263,7 +265,7 @@ export function FormFee({ posisi, periode, pic, baris }: { posisi: string; perio
                         <td className="px-3 py-1.5">
                           <p className="font-medium text-foreground">{b.outletNama}</p>
                           {b.netSales === null && (
-                            <p className="text-[11px] text-amber-600 dark:text-amber-400">belum tersambung ke ESB</p>
+                            <p className="text-[11px] text-amber-600 dark:text-amber-400">{b.alasan ?? "belum ada data ESB"}</p>
                           )}
                         </td>
                         <td className="px-3 py-1.5 text-right tabular-nums text-muted-foreground">

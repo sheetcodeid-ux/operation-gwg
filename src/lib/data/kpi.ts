@@ -77,6 +77,9 @@ export interface DetailFee {
   netSales: number | null;
   feeSeharusnya: number | null;
   sesuai: boolean;
+  /** Kenapa net sales-nya kosong — supaya yang membacanya tahu apa yang harus
+   *  dikerjakan, bukan sekadar melihat tanda pisah. */
+  alasan?: string;
 }
 
 export interface LaporanKpi {
@@ -466,8 +469,14 @@ async function averageTransaksi(periode: string): Promise<AverageTrx | null> {
  * tanpa satu pun pesan galat, karena memang tidak ada yang gagal; yang
  * dicocokkan saja tidak pernah bisa bertemu.
  */
-async function netSalesPerOutlet(periode: string): Promise<Map<string, number>> {
-  const peta = new Map<string, number>();
+interface NetOutlet {
+  net: number;
+  /** Hari yang datanya sudah ada — dibanding hari yang seharusnya ada. */
+  hari: number;
+}
+
+async function netSalesPerOutlet(periode: string): Promise<Map<string, NetOutlet>> {
+  const peta = new Map<string, NetOutlet>();
   if (!dbEnabled) return peta;
   const { data } = await db()
     .from("seasonal_daily")
@@ -475,15 +484,40 @@ async function netSalesPerOutlet(periode: string): Promise<Map<string, number>> 
     .gte("day", `${periode}-01`)
     .lt("day", `${bulanSetelah(periode)}-01`);
   for (const r of ((data ?? []) as { branch: string; net: number | string }[])) {
-    peta.set(r.branch, (peta.get(r.branch) ?? 0) + (Number(r.net) || 0));
+    const t = peta.get(r.branch) ?? { net: 0, hari: 0 };
+    peta.set(r.branch, { net: t.net + (Number(r.net) || 0), hari: t.hari + 1 });
   }
   return peta;
 }
 
-/** Rata-rata net sales tiga bulan terakhir per cabang ESB — dasar budget efisiensi. */
+/**
+ * Net sales sebulan per cabang, HANYA untuk bulan yang datanya lengkap.
+ *
+ * Penarikan per cabang berjalan bertahap dan tertinggal jauh di belakang angka
+ * gabungan: pernah tercatat 56 cabang punya data Agustus, tapi rata-rata baru
+ * 14 dari 31 hari. Menjumlahkan apa adanya menghasilkan net sales yang kurang
+ * separuh — dan dari angka itulah Management Fee 5% dan budget Efisiensi
+ * dihitung. Keduanya akan terlihat wajar, keduanya salah, dan tidak ada satu
+ * pun pesan yang menandainya.
+ */
+async function netSalesLengkap(periode: string): Promise<Map<string, number>> {
+  const peta = await netSalesPerOutlet(periode);
+  const harus = hariBerjalan(periode);
+  const out = new Map<string, number>();
+  for (const [cabang, v] of peta) if (v.hari >= harus) out.set(cabang, v.net);
+  return out;
+}
+
+/**
+ * Rata-rata net sales tiga bulan terakhir per cabang ESB — dasar budget efisiensi.
+ *
+ * Hanya bulan yang datanya LENGKAP yang ikut. Bulan separuh akan menurunkan
+ * rata-ratanya, budgetnya ikut turun, dan outletnya selalu terlihat boros atas
+ * kesalahan yang bukan miliknya.
+ */
 async function averageTigaBulan(periode: string): Promise<Map<string, number>> {
   const bulan = [periode, bulanSebelum(periode), bulanSebelum(bulanSebelum(periode))];
-  const petaBulan = await Promise.all(bulan.map(netSalesPerOutlet));
+  const petaBulan = await Promise.all(bulan.map(netSalesLengkap));
   const total = new Map<string, { jumlah: number; bulan: number }>();
   for (const p of petaBulan) {
     for (const [nama, nilai] of p) {
@@ -498,6 +532,17 @@ async function averageTigaBulan(periode: string): Promise<Map<string, number>> {
   for (const [nama, t] of total) out.set(nama, t.jumlah / Math.max(1, t.bulan));
   return out;
 }
+
+/**
+ * Kenapa angka ESB satu outlet kosong.
+ *
+ * Dua sebab yang berbeda jauh, dan sebelumnya keduanya tampil sebagai kalimat
+ * yang sama ("belum tersambung ke ESB"). Setelah seluruh outlet dipasangkan,
+ * kalimat itu justru menyesatkan: yang kurang bukan pemasangannya, melainkan
+ * penarikan hariannya yang memang berjalan bertahap.
+ */
+const alasanKosong = (esbBranchId: string | null | undefined): string =>
+  esbBranchId ? "data ESB bulan ini belum lengkap" : "outlet belum dipasangkan ke cabang ESB";
 
 /* ──────────────────────────────── laporan ──────────────────────────────── */
 
@@ -584,7 +629,7 @@ export async function laporanKpi(posisi: KodePosisi, periode: string, pic = ""):
     perluDesign ? designRequest(periode) : Promise.resolve(null),
     perluKonten ? kontenDariDesign(periode) : Promise.resolve(null),
     perluKomplain ? komplainFoodQuality(periode) : Promise.resolve(null),
-    perluFee ? netSalesPerOutlet(periode) : Promise.resolve(null),
+    perluFee ? netSalesLengkap(periode) : Promise.resolve(null),
     PAKAI_EFISIENSI.includes(posisi) ? averageTigaBulan(periode) : Promise.resolve(null),
     perluNetPerusahaan ? netSalesPerusahaan(periode) : Promise.resolve(null),
     // Omset pembanding Keberhasilan Pasar memakai rentang yang SAMA dengan
@@ -606,15 +651,19 @@ export async function laporanKpi(posisi: KodePosisi, periode: string, pic = ""):
     for (const r of ((data ?? []) as Record<string, unknown>[])) {
       isian.set(String(r.outlet_id), { wh: angka(r.actual_wh), nonWh: angka(r.actual_non_wh) });
     }
-    const baris = outletAktif.map((o) =>
-      barisEfisiensi({
-        outletId: o.id,
-        outletNama: o.name,
-        average: (o.esbBranchId ? average.get(o.esbBranchId) : undefined) ?? null,
-        actualWh: isian.get(o.id)?.wh ?? null,
-        actualNonWh: isian.get(o.id)?.nonWh ?? null,
-      }),
-    );
+    const baris = outletAktif.map((o) => {
+      const avg = (o.esbBranchId ? average.get(o.esbBranchId) : undefined) ?? null;
+      return {
+        ...barisEfisiensi({
+          outletId: o.id,
+          outletNama: o.name,
+          average: avg,
+          actualWh: isian.get(o.id)?.wh ?? null,
+          actualNonWh: isian.get(o.id)?.nonWh ?? null,
+        }),
+        alasan: avg === null ? alasanKosong(o.esbBranchId) : undefined,
+      };
+    });
     efisiensi = { baris, ringkas: ringkasEfisiensi(baris) };
   }
 
@@ -652,6 +701,7 @@ export async function laporanKpi(posisi: KodePosisi, periode: string, pic = ""):
         netSales: net,
         feeSeharusnya: net === null ? null : net * 0.05,
         sesuai: ceklis.get(o.id) ?? false,
+        alasan: net === null ? alasanKosong(o.esbBranchId) : undefined,
       };
     });
   }
