@@ -13,7 +13,7 @@ import { Progress } from "@/components/ui/progress";
 import { KpiIndicatorDonut, KpiPerformanceChart } from "./kpi-charts";
 import { DialogInput, type OutletRingkas } from "./dialog-input";
 import { DialogPengaturan } from "./dialog-pengaturan";
-import { FormEfisiensi, FormFee } from "./form-tabel";
+import { FormEfisiensi, FormFee, FormKegiatan, FormMenuPasar, type MenuEsb, type OpsiKegiatan } from "./form-tabel";
 import { BULAN, labelPeriode, periodeDari, tahunPilihan } from "./periode";
 import { hapusEntriAction, hapusMenuPasarAction } from "@/lib/actions/kpi";
 import type { BarisKpi, BarisEfisiensi } from "@/lib/kpi/hitung";
@@ -58,20 +58,26 @@ export function PapanKpi({
   indikator,
   namaPosisi,
   pic,
+  perPic,
   posisiOpsi,
   outlets,
   tenggatHari,
   bolehAtur,
+  menuEsb,
 }: {
   laporan: LaporanKpi;
   lalu: Record<string, number | null>;
   indikator: Indikator[];
   namaPosisi: string;
   pic: string[];
+  /** Posisi ini dinilai per orang; PIC-nya dipilih di bilah saringan. */
+  perPic: boolean;
   posisiOpsi: OpsiPosisi[];
   outlets: OutletRingkas[];
   tenggatHari: number[];
   bolehAtur: boolean;
+  /** Katalog menu ESB — hanya terisi untuk posisi yang menilai Keberhasilan Pasar. */
+  menuEsb: MenuEsb[];
 }) {
   const router = useRouter();
   const { baris, ringkas } = laporan;
@@ -90,6 +96,17 @@ export function PapanKpi({
     out.push({ id: "riwayat", label: "Riwayat Input", icon: ClipboardList });
     return out;
   }, [laporan.efisiensi, laporan.fee, laporan.pasar]);
+
+  // Indikator yang dihitung dari jumlah kegiatan — itulah yang bisa diisi
+  // sekaligus lewat tabel. Yang lain (temuan, tenggat, angka) punya bentuk
+  // isiannya sendiri di dialog Input.
+  const opsiKegiatan = React.useMemo<OpsiKegiatan[]>(
+    () =>
+      indikator
+        .filter((i) => i.actual.sumber === "entri")
+        .map((i) => ({ jenis: (i.actual as { entri: OpsiKegiatan["jenis"] }).entri, label: i.label })),
+    [indikator],
+  );
 
   const kolom = React.useMemo<ColumnDef<BarisKpi>[]>(
     () => [
@@ -193,17 +210,30 @@ export function PapanKpi({
           onChange={(v) => pindah(`/kpi/${v}?periode=${laporan.periode}`)}
           options={posisiOpsi}
         />
+        {perPic && (
+          <Combobox
+            portal
+            searchable={false}
+            className="w-44 shrink-0"
+            value={laporan.pic}
+            onChange={(v) => pindah(`/kpi/${laporan.posisi}?periode=${laporan.periode}&pic=${encodeURIComponent(v)}`)}
+            options={pic.map((p) => ({ value: p, label: p }))}
+          />
+        )}
         <div className="ml-auto flex shrink-0 items-center gap-2">
           {laporan.dikunci && (
             <Badge tone="neutral">
               <Lock className="size-3" /> Bulan dikunci
             </Badge>
           )}
-          {pic.length > 0 && <span className="hidden text-[11.5px] text-muted-foreground lg:inline">{pic.join(" · ")}</span>}
+          {!perPic && pic.length > 0 && (
+            <span className="hidden text-[11.5px] text-muted-foreground lg:inline">{pic.join(" · ")}</span>
+          )}
           {!laporan.dikunci && (
             <DialogInput
               posisi={laporan.posisi}
               periode={laporan.periode}
+              picAktif={laporan.pic}
               indikator={indikator}
               outlets={outlets}
               pic={pic}
@@ -244,7 +274,7 @@ export function PapanKpi({
             <div className="flex flex-wrap items-center gap-2">
               {toolbar}
               {!laporan.dikunci && (
-                <FormEfisiensi posisi={laporan.posisi} periode={laporan.periode} pic="" baris={laporan.efisiensi.baris} />
+                <FormEfisiensi posisi={laporan.posisi} periode={laporan.periode} pic={laporan.pic} baris={laporan.efisiensi.baris} />
               )}
             </div>
           }
@@ -256,16 +286,54 @@ export function PapanKpi({
           toolbar={
             <div className="flex flex-wrap items-center gap-2">
               {toolbar}
-              {!laporan.dikunci && <FormFee posisi={laporan.posisi} periode={laporan.periode} baris={laporan.fee} />}
+              {!laporan.dikunci && <FormFee posisi={laporan.posisi} periode={laporan.periode} pic={laporan.pic} baris={laporan.fee} />}
             </div>
           }
         />
       )}
       {tampilan === "pasar" && laporan.pasar && (
-        <TabelPasar data={laporan.pasar} posisi={laporan.posisi} periode={laporan.periode} toolbar={toolbar} />
+        <TabelPasar
+          data={laporan.pasar}
+          posisi={laporan.posisi}
+          periode={laporan.periode}
+          pic={laporan.pic}
+          toolbar={
+            <div className="flex flex-wrap items-center gap-2">
+              {toolbar}
+              {!laporan.dikunci && (
+                <FormMenuPasar
+                  posisi={laporan.posisi}
+                  periode={laporan.periode}
+                  pic={laporan.pic}
+                  katalog={menuEsb}
+                  terpilih={laporan.pasar.baris}
+                />
+              )}
+            </div>
+          }
+        />
       )}
       {tampilan === "riwayat" && (
-        <TabelRiwayat entri={laporan.entri} posisi={laporan.posisi} periode={laporan.periode} toolbar={toolbar} />
+        <TabelRiwayat
+          entri={laporan.entri}
+          posisi={laporan.posisi}
+          periode={laporan.periode}
+          pic={laporan.pic}
+          toolbar={
+            <div className="flex flex-wrap items-center gap-2">
+              {toolbar}
+              {!laporan.dikunci && (
+                <FormKegiatan
+                  posisi={laporan.posisi}
+                  periode={laporan.periode}
+                  pic={laporan.pic}
+                  picOpsi={pic}
+                  opsi={opsiKegiatan}
+                />
+              )}
+            </div>
+          }
+        />
       )}
 
       <Ringkasan tampilan={tampilan} laporan={laporan} />
@@ -438,11 +506,13 @@ function TabelPasar({
   data,
   posisi,
   periode,
+  pic,
   toolbar,
 }: {
   data: DetailPasar;
   posisi: string;
   periode: string;
+  pic: string;
   toolbar: React.ReactNode;
 }) {
   const router = useRouter();
@@ -462,7 +532,7 @@ function TabelPasar({
         cell: ({ row }) => (
           <TombolHapus
             onHapus={async () => {
-              const res = await hapusMenuPasarAction({ posisi, periode, menu: row.original.menu });
+              const res = await hapusMenuPasarAction({ posisi, periode, pic, menu: row.original.menu });
               if (res.error) {
                 toast.error(res.error);
                 return;
@@ -474,7 +544,7 @@ function TabelPasar({
         ),
       },
     ],
-    [posisi, periode, router],
+    [posisi, periode, pic, router],
   );
   return <DataTable tableId="kpi-pasar" columns={kolom} data={data.baris} searchPlaceholder="Cari menu…" stickyHeader={false} showExport={false} toolbar={toolbar} />;
 }
@@ -493,11 +563,13 @@ function TabelRiwayat({
   entri,
   posisi,
   periode,
+  pic,
   toolbar,
 }: {
   entri: EntriKpi[];
   posisi: string;
   periode: string;
+  pic: string;
   toolbar: React.ReactNode;
 }) {
   const router = useRouter();
@@ -537,7 +609,7 @@ function TabelRiwayat({
         cell: ({ row }) => (
           <TombolHapus
             onHapus={async () => {
-              const res = await hapusEntriAction({ posisi, periode, id: row.original.id });
+              const res = await hapusEntriAction({ posisi, periode, pic, id: row.original.id });
               if (res.error) {
                 toast.error(res.error);
                 return;
@@ -549,7 +621,7 @@ function TabelRiwayat({
         ),
       },
     ],
-    [posisi, periode, router],
+    [posisi, periode, pic, router],
   );
 
   return (

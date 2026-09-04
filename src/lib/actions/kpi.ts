@@ -39,7 +39,7 @@ import type { UserProfile } from "@/lib/types";
 
 const RUTE = (posisi: string) => `/kpi/${posisi}`;
 
-async function gerbang(posisi: string, periode: string): Promise<{ user: UserProfile } | { error: string }> {
+async function gerbang(posisi: string, periode: string, pic = ""): Promise<{ user: UserProfile } | { error: string }> {
   const user = await getSessionUser();
   if (!user || !dbEnabled) return { error: "Tidak punya akses." };
 
@@ -48,7 +48,17 @@ async function gerbang(posisi: string, periode: string): Promise<{ user: UserPro
   if (!p || !menu) return { error: "Posisi tidak dikenali." };
   if (!canReachMenu(user, menu as MenuKey)) return { error: "Tidak punya akses ke KPI posisi ini." };
   if (!/^\d{4}-\d{2}$/.test(periode)) return { error: "Bulannya tidak dikenali." };
-  if (await periodeDikunci(periode, posisi)) return { error: "Bulan ini sudah dikunci — angkanya tidak bisa diubah lagi." };
+  if (await periodeDikunci(periode, posisi, pic)) return { error: "Bulan ini sudah dikunci — angkanya tidak bisa diubah lagi." };
+
+  // Posisi yang dinilai per orang WAJIB menyebut orangnya, dan namanya harus
+  // benar-benar terdaftar. Tanpa ini, satu salah ketik menyimpan angka ke
+  // "orang" yang tidak pernah ada — dan capaiannya hilang tanpa jejak.
+  if (p.perPic) {
+    if (!pic) return { error: "Pilih dulu PIC-nya." };
+    if (!p.pic.includes(pic)) return { error: `${pic} bukan PIC posisi ini.` };
+  } else if (pic) {
+    return { error: "Posisi ini dinilai sebagai satu tim, bukan per orang." };
+  }
 
   return { user };
 }
@@ -60,13 +70,14 @@ const punyaIndikator = (posisi: string, indikator: string) =>
 export async function simpanActualAction(input: {
   posisi: string;
   periode: string;
+  pic?: string;
   indikator: string;
   /** Kosong = bukan angka per brand. */
   brand?: string;
   nilai: number;
   catatan?: string;
 }): Promise<{ ok?: true; error?: string }> {
-  const g = await gerbang(input.posisi, input.periode);
+  const g = await gerbang(input.posisi, input.periode, input.pic);
   if ("error" in g) return { error: g.error };
   if (!punyaIndikator(input.posisi, input.indikator)) return { error: "Indikator itu bukan milik posisi ini." };
   if (!Number.isFinite(input.nilai) || input.nilai < 0) return { error: "Angkanya tidak masuk akal." };
@@ -74,6 +85,7 @@ export async function simpanActualAction(input: {
   const res = await simpanActual({
     periode: input.periode,
     posisi: input.posisi,
+    pic: input.pic ?? "",
     indikator: input.indikator,
     brand: (input.brand ?? "").slice(0, 40),
     nilai: input.nilai,
@@ -90,6 +102,7 @@ export async function simpanActualAction(input: {
 export async function simpanEntriAction(input: {
   posisi: string;
   periode: string;
+  pic?: string;
   jenis: JenisEntri;
   tanggal: string;
   picNama?: string;
@@ -102,7 +115,7 @@ export async function simpanEntriAction(input: {
   gagal?: boolean;
   lampiran?: { path: string; name: string }[];
 }): Promise<{ ok?: true; error?: string }> {
-  const g = await gerbang(input.posisi, input.periode);
+  const g = await gerbang(input.posisi, input.periode, input.pic);
   if ("error" in g) return { error: g.error };
   if (!/^\d{4}-\d{2}-\d{2}$/.test(input.tanggal)) return { error: "Tanggalnya belum diisi." };
   // Tanggal di luar bulan yang sedang diisi hampir selalu salah ketik, dan
@@ -113,6 +126,7 @@ export async function simpanEntriAction(input: {
     jenis: input.jenis,
     periode: input.periode,
     posisi: input.posisi,
+    pic: input.pic ?? "",
     tanggal: input.tanggal,
     picNama: (input.picNama ?? g.user.name).slice(0, 120),
     outletId: input.outletId ?? null,
@@ -131,8 +145,95 @@ export async function simpanEntriAction(input: {
   return { ok: true };
 }
 
-export async function hapusEntriAction(input: { posisi: string; periode: string; id: string }): Promise<{ ok?: true; error?: string }> {
-  const g = await gerbang(input.posisi, input.periode);
+/**
+ * Banyak baris kegiatan sekaligus — event, kunjungan QC, riset menu.
+ *
+ * Bentuk satu-per-satu memaksa buka-isi-simpan berulang untuk pekerjaan yang
+ * datang berombongan: tiga puluh event sebulan berarti tiga puluh putaran.
+ */
+export async function simpanEntriMassalAction(input: {
+  posisi: string;
+  periode: string;
+  pic?: string;
+  jenis: JenisEntri;
+  baris: { tanggal: string; picNama?: string; outletId?: string | null; judul?: string; deskripsi?: string }[];
+}): Promise<{ ok?: true; tersimpan?: number; error?: string }> {
+  const g = await gerbang(input.posisi, input.periode, input.pic);
+  if ("error" in g) return { error: g.error };
+
+  let n = 0;
+  for (const b of input.baris) {
+    if (!b.tanggal && !b.judul) continue; // baris kosong yang tidak jadi diisi
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(b.tanggal)) return { error: "Ada baris yang tanggalnya belum diisi." };
+    if (b.tanggal.slice(0, 7) !== input.periode) return { error: "Ada tanggal di luar bulan yang sedang diisi." };
+
+    const res = await simpanEntri({
+      jenis: input.jenis,
+      periode: input.periode,
+      posisi: input.posisi,
+      pic: input.pic ?? "",
+      tanggal: b.tanggal,
+      picNama: (b.picNama ?? g.user.name).slice(0, 120),
+      outletId: b.outletId ?? null,
+      judul: (b.judul ?? "").slice(0, 200),
+      deskripsi: (b.deskripsi ?? "").slice(0, 1000),
+      nominal: null,
+      nominalSeharusnya: null,
+      tenggat: null,
+      gagal: false,
+      lampiran: [],
+      olehId: g.user.id,
+      olehNama: g.user.name,
+    });
+    if (res.error) return { error: res.error };
+    n += 1;
+  }
+  if (n === 0) return { error: "Belum ada baris yang diisi." };
+  revalidatePath(RUTE(input.posisi));
+  return { ok: true, tersimpan: n };
+}
+
+/**
+ * Menu Keberhasilan Pasar sekaligus — dipilih dari katalog ESB.
+ *
+ * Nama menunya tidak diketik: salah ketik satu huruf membuat penjualannya tidak
+ * pernah bisa dicocokkan dengan ESB nanti, dan salah ketik itu baru ketahuan
+ * berbulan-bulan kemudian.
+ */
+export async function simpanMenuPasarMassalAction(input: {
+  posisi: string;
+  periode: string;
+  pic?: string;
+  baris: { menu: string; penjualan: number }[];
+}): Promise<{ ok?: true; tersimpan?: number; error?: string }> {
+  const g = await gerbang(input.posisi, input.periode, input.pic);
+  if ("error" in g) return { error: g.error };
+  if (!punyaIndikator(input.posisi, "keberhasilan_pasar")) return { error: "Posisi ini tidak menilai keberhasilan pasar." };
+
+  let n = 0;
+  for (const b of input.baris) {
+    if (!b.menu.trim()) continue;
+    const res = await simpanMenuPasar({
+      periode: input.periode,
+      posisi: input.posisi,
+      pic: input.pic ?? "",
+      menu: b.menu.trim(),
+      penjualan: b.penjualan,
+      // Omsetnya tidak lagi diketik: diambil dari net sales ESB pada rentang
+      // yang sama. Nol di sini berarti "pakai yang dari ESB".
+      omset: 0,
+      olehId: g.user.id,
+    });
+    if (res.error) return { error: res.error };
+    n += 1;
+  }
+  if (n === 0) return { error: "Belum ada menu yang dipilih." };
+  revalidatePath(RUTE(input.posisi));
+  return { ok: true, tersimpan: n };
+}
+
+export async function hapusEntriAction(input: { posisi: string; periode: string; pic?: string; id: string }): Promise<{ ok?: true; error?: string }> {
+  const g = await gerbang(input.posisi, input.periode, input.pic);
   if ("error" in g) return { error: g.error };
   const res = await hapusEntri(input.id);
   if (res.error) return { error: res.error };
@@ -156,7 +257,7 @@ export async function simpanEfisiensiMassalAction(input: {
   pic?: string;
   baris: { outletId: string; actualWh: number | null; actualNonWh: number | null }[];
 }): Promise<{ ok?: true; tersimpan?: number; error?: string }> {
-  const g = await gerbang(input.posisi, input.periode);
+  const g = await gerbang(input.posisi, input.periode, input.pic);
   if ("error" in g) return { error: g.error };
   if (!punyaIndikator(input.posisi, "efisiensi")) return { error: "Posisi ini tidak dinilai efisiensi beban operasional." };
 
@@ -189,9 +290,10 @@ export async function simpanEfisiensiMassalAction(input: {
 export async function simpanFeeMassalAction(input: {
   posisi: string;
   periode: string;
+  pic?: string;
   baris: { outletId: string; sesuai: boolean; catatan?: string }[];
 }): Promise<{ ok?: true; tersimpan?: number; error?: string }> {
-  const g = await gerbang(input.posisi, input.periode);
+  const g = await gerbang(input.posisi, input.periode, input.pic);
   if ("error" in g) return { error: g.error };
   if (!punyaIndikator(input.posisi, "management_fee")) return { error: "Posisi ini tidak menilai management fee." };
 
@@ -216,11 +318,12 @@ export async function simpanFeeMassalAction(input: {
 export async function simpanEfisiensiAction(input: {
   posisi: string;
   periode: string;
+  pic?: string;
   outletId: string;
   actualWh: number | null;
   actualNonWh: number | null;
 }): Promise<{ ok?: true; error?: string }> {
-  const g = await gerbang(input.posisi, input.periode);
+  const g = await gerbang(input.posisi, input.periode, input.pic);
   if ("error" in g) return { error: g.error };
   if (!punyaIndikator(input.posisi, "efisiensi")) return { error: "Posisi ini tidak dinilai efisiensi beban operasional." };
   if (!input.outletId) return { error: "Pilih dulu outletnya." };
@@ -235,11 +338,12 @@ export async function simpanEfisiensiAction(input: {
 export async function simpanFeeAction(input: {
   posisi: string;
   periode: string;
+  pic?: string;
   outletId: string;
   sesuai: boolean;
   catatan?: string;
 }): Promise<{ ok?: true; error?: string }> {
-  const g = await gerbang(input.posisi, input.periode);
+  const g = await gerbang(input.posisi, input.periode, input.pic);
   if ("error" in g) return { error: g.error };
   if (!punyaIndikator(input.posisi, "management_fee")) return { error: "Posisi ini tidak menilai management fee." };
   if (!input.outletId) return { error: "Pilih dulu outletnya." };
@@ -254,11 +358,12 @@ export async function simpanFeeAction(input: {
 export async function simpanMenuPasarAction(input: {
   posisi: string;
   periode: string;
+  pic?: string;
   menu: string;
   penjualan: number;
   omset: number;
 }): Promise<{ ok?: true; error?: string }> {
-  const g = await gerbang(input.posisi, input.periode);
+  const g = await gerbang(input.posisi, input.periode, input.pic);
   if ("error" in g) return { error: g.error };
   if (!punyaIndikator(input.posisi, "keberhasilan_pasar")) return { error: "Posisi ini tidak menilai keberhasilan pasar." };
   if (!input.menu.trim()) return { error: "Nama menunya belum diisi." };
@@ -269,10 +374,10 @@ export async function simpanMenuPasarAction(input: {
   return { ok: true };
 }
 
-export async function hapusMenuPasarAction(input: { posisi: string; periode: string; menu: string }): Promise<{ ok?: true; error?: string }> {
-  const g = await gerbang(input.posisi, input.periode);
+export async function hapusMenuPasarAction(input: { posisi: string; periode: string; pic?: string; menu: string }): Promise<{ ok?: true; error?: string }> {
+  const g = await gerbang(input.posisi, input.periode, input.pic);
   if ("error" in g) return { error: g.error };
-  const res = await hapusMenuPasar(input.periode, input.posisi, input.menu);
+  const res = await hapusMenuPasar(input.periode, input.posisi, input.menu, input.pic ?? "");
   if (res.error) return { error: res.error };
   revalidatePath(RUTE(input.posisi));
   return { ok: true };

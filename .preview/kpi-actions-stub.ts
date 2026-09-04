@@ -15,3 +15,7 @@ export const simpanFeeAction = tolak;
 export const simpanMenuPasarAction = tolak;
 export const hapusMenuPasarAction = tolak;
 export const simpanPengaturanAction = tolak;
+export const simpanEntriMassalAction = tolak;
+export const simpanEfisiensiMassalAction = tolak;
+export const simpanFeeMassalAction = tolak;
+export const simpanMenuPasarMassalAction = tolak;
