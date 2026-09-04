@@ -527,16 +527,21 @@ export type { EsbHighlight };
 export interface EsbSales { gross: number; net: number; pax: number; bills: number }
 
 /**
- * Gross + net + jumlah tamu + jumlah struk untuk satu rentang tanggal.
+ * Angka penjualan satu rentang tanggal, DALAM ISTILAH APLIKASI INI.
  *
- * Jumlah struknya ikut disimpan karena Average Transaction sebulan BUKAN
+ * "Gross sales" di aplikasi ini adalah NET SALES di ESB — itu istilah yang
+ * dipakai GWG sehari-hari, dan angka itulah yang dimaksud setiap kali ada yang
+ * menyebut omset. Gross sales versi ESB (`currentDailyGrossSales`, penjualan
+ * sebelum potongan) tidak dipakai di mana pun, jadi tidak ikut disimpan.
+ *
+ * Jumlah struknya ikut dibawa karena Average Transaction sebulan BUKAN
  * rata-rata dari rata-rata harian: yang benar adalah total net sales dibagi
  * total struk sebulan. Merata-ratakan angka harian memberi bobot sama kepada
  * hari sepi dan hari ramai, dan hasilnya selalu meleset.
  */
 export async function esbFetchSales(dateFromYmd: string, dateToYmd: string, branchId = ""): Promise<EsbSales> {
   const h = await esbFetchHighlight(dateFromYmd, dateToYmd, branchId);
-  return { gross: h.gross, net: h.net, pax: h.pax, bills: h.bills };
+  return { gross: h.net, net: h.net, pax: h.pax, bills: h.bills };
 }
 
 /* -------------------- Sales Menu Recapitulation (catalog) -------------------- */
