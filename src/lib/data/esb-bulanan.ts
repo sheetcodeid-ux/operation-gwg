@@ -19,6 +19,15 @@ import { esbConfigured, esbFetchHighlight, esbEnsureDeadline } from "@/lib/integ
  *
  * Data harian per cabang tetap ditarik seperti biasa untuk Data Analysis; yang
  * berubah cuma dari mana angka bulanan diambil.
+ *
+ * JUMLAH SELURUH OUTLET DI SINI MEMANG LEBIH KECIL dari net sales perusahaan —
+ * sekitar setengah persen. Itu BUKAN kesalahan hitung dan tidak perlu
+ * "diperbaiki": di ESB ada cabang yang bukan outlet berjalan, misalnya
+ * "Nordu Banjarbaru 2 -", dan penjualannya ikut angka perusahaan tapi tidak
+ * dimiliki outlet mana pun. Dikonfirmasi pemiliknya. Yang justru berbahaya
+ * adalah memaksa keduanya sama dengan memasangkan cabang yang tidak beroperasi
+ * ke outlet yang beroperasi — Management Fee outlet itu akan naik tanpa ada
+ * satu pun penjualan tambahan.
  */
 
 export interface NetBulanan {
