@@ -3,6 +3,7 @@ import { notFound, redirect } from "next/navigation";
 import { requireSessionUser } from "@/lib/auth";
 import { canReachMenu, type MenuKey } from "@/lib/nav";
 import { bulanSebelum, laporanKpi, periodeSekarang, picDinamis } from "@/lib/data/kpi";
+import { SEMUA_PIC } from "@/lib/kpi/semua-pic";
 import { listEsbMenus } from "@/lib/data/esb-menu";
 import { getOutlets } from "@/lib/data/store";
 import { TENGGAT, indikatorPosisi } from "@/lib/kpi/indikator";
@@ -54,6 +55,9 @@ export default async function KpiPosisiPage({
   const picOpsi = posisi.picDinamis
     ? picDinamis(posisi.kode)
     : posisi.pic.map((n) => ({ value: n, label: n }));
+  // "Semua" menggabungkan seluruh area — dihitung sekali per area, bukan per
+  // orang, supaya area yang dipegang tiga orang tidak terhitung tiga kali.
+  if (posisi.picDinamis && picOpsi.length > 1) picOpsi.unshift({ value: SEMUA_PIC, label: "Semua Coordinator Area" });
   const picAktif = posisi.perPic
     ? (pic && picOpsi.some((o) => o.value === pic) ? pic : (picOpsi[0]?.value ?? ""))
     : "";

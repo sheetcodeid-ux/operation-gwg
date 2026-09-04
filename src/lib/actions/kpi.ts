@@ -8,8 +8,11 @@ import { canReachMenu, type MenuKey } from "@/lib/nav";
 import {
   hapusEntri,
   hapusMenuPasar,
+  outletMilikPic,
   periodeDikunci,
   picDinamis,
+  simpanOutletBulanan,
+  SEMUA_PIC,
   simpanActual,
   simpanEfisiensi,
   simpanEntri,
@@ -57,6 +60,9 @@ async function gerbang(posisi: string, periode: string, pic = ""): Promise<{ use
   // "orang" yang tidak pernah ada — dan capaiannya hilang tanpa jejak.
   if (p.perPic) {
     if (!pic) return { error: "Pilih dulu PIC-nya." };
+    // "Semua" hanya untuk MEMBACA gabungan. Menyimpan atasnya berarti angkanya
+    // tidak menempel pada siapa pun, dan tidak akan pernah bisa ditelusuri.
+    if (pic === SEMUA_PIC) return { error: "Pilih dulu satu Coordinator Area — \"Semua\" hanya untuk melihat gabungannya." };
     // Posisi yang daftarnya datang dari basis data diperiksa ke daftar itu,
     // bukan ke daftar di berkas — kalau tidak, satu-satunya PIC yang diterima
     // adalah daftar kosong dan tidak ada satu pun angka yang bisa disimpan.
@@ -206,22 +212,27 @@ export async function simpanEntriMassalAction(input: {
   periode: string;
   pic?: string;
   jenis: JenisEntri;
-  baris: { tanggal: string; picNama?: string; outletId?: string | null; judul?: string; deskripsi?: string }[];
+  baris: {
+    tanggal: string;
+    picNama?: string;
+    outletId?: string | null;
+    judul?: string;
+    deskripsi?: string;
+    lampiran?: { path: string; name: string }[];
+  }[];
 }): Promise<{ ok?: true; tersimpan?: number; error?: string }> {
   const g = await gerbang(input.posisi, input.periode, input.pic);
   if ("error" in g) return { error: g.error };
-  // Jalur tabel tidak membawa lampiran, jadi jenis yang wajib berbukti tidak
-  // boleh lewat sini — kalau boleh, penjagaan buktinya tinggal dihindari
-  // dengan memakai form yang lain.
-  if (WAJIB_BUKTI.includes(input.jenis)) {
-    return { error: "Jenis ini wajib berbukti — isi satu per satu lewat tombol Input." };
-  }
-
   let n = 0;
   for (const b of input.baris) {
     if (!b.tanggal && !b.judul) continue; // baris kosong yang tidak jadi diisi
     if (!/^\d{4}-\d{2}-\d{2}$/.test(b.tanggal)) return { error: "Ada baris yang tanggalnya belum diisi." };
     if (b.tanggal.slice(0, 7) !== input.periode) return { error: "Ada tanggal di luar bulan yang sedang diisi." };
+    // Buktinya diperiksa PER BARIS. Memeriksanya sekali untuk seluruh tabel
+    // berarti satu lampiran cukup untuk empat puluh baris.
+    if (WAJIB_BUKTI.includes(input.jenis) && (b.lampiran ?? []).length === 0) {
+      return { error: "Ada baris tanpa bukti — tiap catatan wajib berlampiran." };
+    }
 
     const res = await simpanEntri({
       jenis: input.jenis,
@@ -237,7 +248,7 @@ export async function simpanEntriMassalAction(input: {
       nominalSeharusnya: null,
       tenggat: null,
       gagal: false,
-      lampiran: [],
+      lampiran: (b.lampiran ?? []).slice(0, 10),
       olehId: g.user.id,
       olehNama: g.user.name,
     });
@@ -284,6 +295,54 @@ export async function simpanMenuPasarMassalAction(input: {
     n += 1;
   }
   if (n === 0) return { error: "Belum ada menu yang dipilih." };
+  revalidatePath(RUTE(input.posisi));
+  return { ok: true, tersimpan: n };
+}
+
+/**
+ * Angka bulanan BANYAK OUTLET sekaligus — laba bersih, HPP, dan gross manual.
+ *
+ * Bentuknya tabel karena satu area berisi belasan outlet: memilih outlet lalu
+ * menyimpan satu per satu berarti belasan putaran tiap bulan, dan pekerjaan
+ * sebanyak itu tidak pernah selesai dikerjakan sampai habis.
+ *
+ * Gross manual hanya diterima untuk outlet yang ESB-nya memang tidak punya
+ * angkanya. Menerimanya untuk yang lain membuka jalan menimpa angka ESB dengan
+ * angka yang diketik — dan tidak akan ada yang tahu mana yang sedang dibaca.
+ */
+export async function simpanOutletBulananAction(input: {
+  posisi: string;
+  periode: string;
+  pic?: string;
+  baris: { outletId: string; gross?: number | null; netProfit?: number | null; hpp?: number | null }[];
+}): Promise<{ ok?: true; tersimpan?: number; error?: string }> {
+  const g = await gerbang(input.posisi, input.periode, input.pic);
+  if ("error" in g) return { error: g.error };
+
+  const boleh = outletMilikPic(input.pic ?? "");
+  let n = 0;
+  for (const b of input.baris) {
+    if (!boleh.has(b.outletId)) return { error: "Ada outlet yang bukan bagian dari area ini." };
+    const angka = [b.gross, b.netProfit, b.hpp];
+    if (angka.every((v) => v === undefined)) continue;
+    if (b.hpp !== undefined && b.hpp !== null && (b.hpp < 0 || b.hpp > 100)) {
+      return { error: "Harga pokok penjualan diisi dalam persen, 0 sampai 100." };
+    }
+    if ((b.gross ?? 0) < 0 || (b.netProfit ?? 0) < 0) return { error: "Angkanya tidak masuk akal." };
+
+    const res = await simpanOutletBulanan({
+      outletId: b.outletId,
+      periode: input.periode,
+      gross: b.gross ?? null,
+      netProfit: b.netProfit ?? null,
+      hpp: b.hpp ?? null,
+      olehId: g.user.id,
+      olehNama: g.user.name,
+    });
+    if (res.error) return { error: res.error };
+    n += 1;
+  }
+  if (n === 0) return { error: "Tidak ada yang berubah." };
   revalidatePath(RUTE(input.posisi));
   return { ok: true, tersimpan: n };
 }

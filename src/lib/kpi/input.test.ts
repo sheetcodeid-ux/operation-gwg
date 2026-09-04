@@ -181,10 +181,24 @@ describe("bukti yang wajib tidak bisa dihindari", () => {
     expect(aksi).toContain("WAJIB_BUKTI.includes(input.jenis) && (input.lampiran ?? []).length === 0");
   });
 
-  it("jalur tabel massal tidak bisa dipakai untuk menghindarinya", () => {
-    // Form tabel tidak membawa lampiran; kalau jenis berbukti boleh lewat sana,
-    // penjagaannya tinggal dihindari dengan memilih form yang lain.
+  it("di form tabel, buktinya diperiksa PER BARIS", () => {
+    // Memeriksanya sekali untuk seluruh tabel berarti satu lampiran cukup
+    // untuk empat puluh baris.
     const blok = aksi.slice(aksi.indexOf("export async function simpanEntriMassalAction"));
-    expect(blok.slice(0, blok.indexOf("\nexport async function", 1))).toContain("WAJIB_BUKTI.includes(input.jenis)");
+    const badan = blok.slice(0, blok.indexOf("\nexport async function", 1));
+    expect(badan).toContain("WAJIB_BUKTI.includes(input.jenis) && (b.lampiran ?? []).length === 0");
+  });
+
+  it("\"Semua\" hanya untuk membaca, tidak untuk menyimpan", () => {
+    // Angka yang disimpan atas nama "Semua" tidak menempel pada siapa pun dan
+    // tidak akan pernah bisa ditelusuri.
+    expect(aksi).toContain("if (pic === SEMUA_PIC)");
+  });
+
+  it("outlet yang diisi harus benar-benar milik area orang itu", () => {
+    // Yang dikirim peramban bisa diubah siapa saja; satu id outlet yang
+    // ditukar berarti angka area orang lain ikut tertimpa.
+    expect(aksi).toContain("outletMilikPic(input.pic ?? \"\")");
+    expect(aksi).toContain("Ada outlet yang bukan bagian dari area ini.");
   });
 });
