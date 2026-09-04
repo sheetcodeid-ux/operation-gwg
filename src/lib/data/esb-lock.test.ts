@@ -20,7 +20,7 @@ describe("pengambilan sewa", () => {
     // bersamaan.
     expect(kunci).toContain('.update({ lease_until: sampai })');
     expect(kunci).toContain('.lt("lease_until"');
-    expect(kunci).toContain("return (data ?? []).length > 0;");
+    expect(kunci).toContain("if ((data ?? []).length > 0) return true;");
   });
 
   it("gagal membaca berarti TIDAK jalan", () => {
@@ -31,6 +31,14 @@ describe("pengambilan sewa", () => {
 
   it("sewanya berbatas waktu, jadi tidak ada yang terkunci selamanya", () => {
     expect(kunci).toContain("Date.now() + ms");
+  });
+
+  it("barisnya yang hilang tidak menghentikan seluruh penarikan selamanya", () => {
+    // Nol baris biasanya berarti "ada yang sedang jalan". Kalau barisnya
+    // memang tidak ada, tiap pemanggilan akan menjawab hal yang sama padahal
+    // tidak ada siapa-siapa — dan penarikan berhenti tanpa satu pun pesan.
+    expect(kunci).toContain('.eq("name", NAMA).maybeSingle()');
+    expect(kunci).toContain('if (!ada) await db().from("esb_lock").insert(');
   });
 });
 
