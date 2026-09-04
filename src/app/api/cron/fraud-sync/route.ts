@@ -3,6 +3,7 @@ import { syncFraudRange, syncSalesDaily, syncSalesPeriod } from "@/lib/data/frau
 import { esbSetDeadline } from "@/lib/integrations/esb-client";
 import { syncSeasonalDays } from "@/lib/data/seasonal";
 import { cronAuthorized } from "@/lib/cron-auth";
+import { ambilKunciEsb, lepasKunciEsb } from "@/lib/data/esb-lock";
 
 /**
  * Server-side fraud sync — runs UNATTENDED so the data is always ready before
@@ -63,11 +64,39 @@ async function backfillHistory(
   return { synced, windows, error };
 }
 
+/**
+ * SATU penarikan ESB dalam satu waktu.
+ *
+ * ESB melayani satu sesi per akun, dan dua pekerjaan yang berjalan bersamaan
+ * saling merebut sesi itu — yang kalah tidak mendapat pesan yang jelas
+ * melainkan balasan yang tidak bisa diuraikan, lalu bagiannya dilewati
+ * diam-diam. Bentuknya sudah pernah terlihat: "ESB highlight: respons tidak
+ * terbaca" di tengah penarikan per cabang, saat pekerjaan lain kebetulan
+ * berangkat bersamaan.
+ *
+ * Yang datang belakangan TIDAK mengantre — ia pulang dan mencoba lagi nanti.
+ * Mengantre di dalam permintaan yang berumur 60 detik hanya membuat dua-duanya
+ * kehabisan waktu.
+ */
 export async function GET(req: Request) {
   if (!(await cronAuthorized(req, "fraud_sync_token", "fraud-sync"))) return new NextResponse("Unauthorized", { status: 401 });
 
+  if (!(await ambilKunciEsb(60_000))) {
+    return NextResponse.json({ ok: true, dilewati: "ada penarikan ESB lain yang sedang jalan" });
+  }
+  try {
+    return await jalankan(req);
+  } finally {
+    // Dilepas apa pun yang terjadi. Kalaupun ini gagal, sewanya habis sendiri
+    // dalam semenit — tidak ada yang terkunci selamanya.
+    await lepasKunciEsb();
+  }
+}
+
+async function jalankan(req: Request): Promise<NextResponse> {
   const started = Date.now();
   const left = () => 52_000 - (Date.now() - started);
+
   // Tenggat KERAS untuk seluruh panggilan ESB pada permintaan ini. Tanpa ini,
   // satu permintaan ESB yang menggantung — `fetch` Node tidak punya batas waktu —
   // atau loop tunggu ekspor (22 × 2 detik) menahan seluruh cron sampai Vercel
@@ -102,6 +131,21 @@ export async function GET(req: Request) {
       } catch (e) {
         results[`backfill:${kind}`] = { error: e instanceof Error ? e.message : "failed" };
       }
+    }
+    return NextResponse.json({ ok: true, tookMs: Date.now() - started, results });
+  }
+
+  // Dedicated job: monthly net sales per branch — ONE ESB call per branch per
+  // month instead of ~250 daily ones. This is what Management Fee and the
+  // Efisiensi budget actually need, and it is what makes them correct in
+  // minutes rather than days.
+  if (job === "net-bulanan") {
+    try {
+      const { cabangTerpasang, bulanTerakhir, syncNetBulanan } = await import("@/lib/data/esb-bulanan");
+      const mundur = Number(new URL(req.url).searchParams.get("mundur") ?? "3") || 3;
+      results["net-bulanan"] = await syncNetBulanan(await cabangTerpasang(), bulanTerakhir(mundur), left() - 4_000);
+    } catch (e) {
+      results["net-bulanan"] = { error: e instanceof Error ? e.message : "failed" };
     }
     return NextResponse.json({ ok: true, tookMs: Date.now() - started, results });
   }

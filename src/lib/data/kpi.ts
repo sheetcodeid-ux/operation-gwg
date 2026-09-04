@@ -4,6 +4,7 @@ import { randomUUID } from "node:crypto";
 import { db, dbEnabled } from "./db";
 import { getOutlets } from "./store";
 import { listHcRequests } from "./hc-requests";
+import { netBulananPerCabang } from "./esb-bulanan";
 import { WORK_BRANDS } from "@/lib/constants";
 import {
   actualLulus,
@@ -469,42 +470,22 @@ async function averageTransaksi(periode: string): Promise<AverageTrx | null> {
  * tanpa satu pun pesan galat, karena memang tidak ada yang gagal; yang
  * dicocokkan saja tidak pernah bisa bertemu.
  */
-interface NetOutlet {
-  net: number;
-  /** Hari yang datanya sudah ada — dibanding hari yang seharusnya ada. */
-  hari: number;
-}
-
-async function netSalesPerOutlet(periode: string): Promise<Map<string, NetOutlet>> {
-  const peta = new Map<string, NetOutlet>();
-  if (!dbEnabled) return peta;
-  const { data } = await db()
-    .from("seasonal_daily")
-    .select("branch,net")
-    .gte("day", `${periode}-01`)
-    .lt("day", `${bulanSetelah(periode)}-01`);
-  for (const r of ((data ?? []) as { branch: string; net: number | string }[])) {
-    const t = peta.get(r.branch) ?? { net: 0, hari: 0 };
-    peta.set(r.branch, { net: t.net + (Number(r.net) || 0), hari: t.hari + 1 });
-  }
-  return peta;
-}
-
 /**
- * Net sales sebulan per cabang, HANYA untuk bulan yang datanya lengkap.
+ * Net sales sebulan per cabang ESB — diambil UTUH dari ESB, bukan dijumlahkan.
  *
- * Penarikan per cabang berjalan bertahap dan tertinggal jauh di belakang angka
- * gabungan: pernah tercatat 56 cabang punya data Agustus, tapi rata-rata baru
- * 14 dari 31 hari. Menjumlahkan apa adanya menghasilkan net sales yang kurang
- * separuh — dan dari angka itulah Management Fee 5% dan budget Efisiensi
- * dihitung. Keduanya akan terlihat wajar, keduanya salah, dan tidak ada satu
- * pun pesan yang menandainya.
+ * Sempat dijumlahkan dari data harian per cabang, dan hasilnya kurang separuh:
+ * penarikan harian per cabang berjalan bertahap dan pernah baru terisi 14 dari
+ * 31 hari Agustus. Dari angka itulah Management Fee 5% dan budget Efisiensi
+ * dihitung — keduanya terlihat wajar, keduanya salah, dan tidak ada satu pun
+ * pesan yang menandainya.
+ *
+ * Sekarang satu panggilan ESB per cabang per bulan memberi angkanya utuh.
+ * Barisnya ada berarti bulannya utuh; tidak ada lagi keadaan "baru separuh".
  */
 async function netSalesLengkap(periode: string): Promise<Map<string, number>> {
-  const peta = await netSalesPerOutlet(periode);
-  const harus = hariBerjalan(periode);
+  const peta = await netBulananPerCabang(periode);
   const out = new Map<string, number>();
-  for (const [cabang, v] of peta) if (v.hari >= harus) out.set(cabang, v.net);
+  for (const [cabang, v] of peta) out.set(cabang, v.net);
   return out;
 }
 
@@ -542,7 +523,7 @@ async function averageTigaBulan(periode: string): Promise<Map<string, number>> {
  * penarikan hariannya yang memang berjalan bertahap.
  */
 const alasanKosong = (esbBranchId: string | null | undefined): string =>
-  esbBranchId ? "data ESB bulan ini belum lengkap" : "outlet belum dipasangkan ke cabang ESB";
+  esbBranchId ? "angka ESB bulan ini belum ditarik" : "outlet belum dipasangkan ke cabang ESB";
 
 /* ──────────────────────────────── laporan ──────────────────────────────── */
 

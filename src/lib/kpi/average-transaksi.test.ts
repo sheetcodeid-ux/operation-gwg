@@ -75,23 +75,24 @@ describe("pengisian data hariannya", () => {
   });
 });
 
-describe("angka per outlet tidak dihitung dari bulan yang separuh", () => {
-  it("Management Fee dan budget Efisiensi hanya memakai bulan yang lengkap", () => {
-    // Penarikan per cabang tertinggal jauh di belakang angka gabungan: pernah
-    // tercatat 56 cabang punya data Agustus, tapi rata-rata baru 14 dari 31
-    // hari. Menjumlahkan apa adanya menghasilkan net sales kurang separuh — dan
-    // dari angka itulah fee 5% dan budget efisiensi dihitung. Keduanya akan
-    // terlihat wajar dan keduanya salah.
+describe("angka per outlet tidak pernah dihitung dari bulan yang separuh", () => {
+  it("angka bulanan per outlet diambil UTUH dari ESB, bukan dijumlahkan dari harian", () => {
+    // Penjumlahan harian pernah menghasilkan net sales kurang separuh: 56
+    // cabang punya data Agustus, tapi rata-rata baru 14 dari 31 hari. Dari
+    // angka itulah fee 5% dan budget efisiensi dihitung — keduanya terlihat
+    // wajar dan keduanya salah. Sekarang barisnya ada berarti bulannya utuh.
     expect(data).toContain("async function netSalesLengkap");
-    expect(data).toContain("if (v.hari >= harus) out.set");
+    expect(data).toContain("await netBulananPerCabang(periode)");
     expect(data).toContain("bulan.map(netSalesLengkap)");
     expect(data).toContain("perluFee ? netSalesLengkap(periode)");
+    // Dan tidak boleh diam-diam kembali menjumlahkan harian per cabang.
+    expect(data).not.toContain('.select("branch,net")');
   });
 
   it("kosongnya menyebut sebabnya, bukan satu kalimat untuk dua hal berbeda", () => {
     // "Belum tersambung ke ESB" menyesatkan setelah seluruh outlet dipasangkan:
-    // yang kurang penarikan hariannya, bukan pemasangannya.
+    // yang kurang penarikan angkanya, bukan pemasangannya.
     expect(data).toContain("outlet belum dipasangkan ke cabang ESB");
-    expect(data).toContain("data ESB bulan ini belum lengkap");
+    expect(data).toContain("angka ESB bulan ini belum ditarik");
   });
 });
