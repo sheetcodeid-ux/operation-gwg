@@ -13,6 +13,7 @@ import { Progress } from "@/components/ui/progress";
 import { KpiIndicatorDonut, KpiPerformanceChart } from "./kpi-charts";
 import { DialogInput, type OutletRingkas } from "./dialog-input";
 import { DialogPengaturan } from "./dialog-pengaturan";
+import { FormEfisiensi, FormFee } from "./form-tabel";
 import { BULAN, labelPeriode, periodeDari, tahunPilihan } from "./periode";
 import { hapusEntriAction, hapusMenuPasarAction } from "@/lib/actions/kpi";
 import type { BarisKpi, BarisEfisiensi } from "@/lib/kpi/hitung";
@@ -56,9 +57,7 @@ export function PapanKpi({
   lalu,
   indikator,
   namaPosisi,
-  departemen,
   pic,
-  departemenOpsi,
   posisiOpsi,
   outlets,
   tenggatHari,
@@ -68,9 +67,7 @@ export function PapanKpi({
   lalu: Record<string, number | null>;
   indikator: Indikator[];
   namaPosisi: string;
-  departemen: string;
   pic: string[];
-  departemenOpsi: OpsiPosisi[];
   posisiOpsi: OpsiPosisi[];
   outlets: OutletRingkas[];
   tenggatHari: number[];
@@ -192,14 +189,6 @@ export function PapanKpi({
           portal
           searchable={false}
           className="w-56 shrink-0"
-          value={departemen}
-          onChange={(v) => pindah(`/kpi?dep=${v}`)}
-          options={departemenOpsi}
-        />
-        <Combobox
-          portal
-          searchable={false}
-          className="w-56 shrink-0"
           value={laporan.posisi}
           onChange={(v) => pindah(`/kpi/${v}?periode=${laporan.periode}`)}
           options={posisiOpsi}
@@ -248,8 +237,30 @@ export function PapanKpi({
           toolbar={toolbar}
         />
       )}
-      {tampilan === "efisiensi" && laporan.efisiensi && <TabelEfisiensi data={laporan.efisiensi} toolbar={toolbar} />}
-      {tampilan === "fee" && laporan.fee && <TabelFee data={laporan.fee} toolbar={toolbar} />}
+      {tampilan === "efisiensi" && laporan.efisiensi && (
+        <TabelEfisiensi
+          data={laporan.efisiensi}
+          toolbar={
+            <div className="flex flex-wrap items-center gap-2">
+              {toolbar}
+              {!laporan.dikunci && (
+                <FormEfisiensi posisi={laporan.posisi} periode={laporan.periode} pic="" baris={laporan.efisiensi.baris} />
+              )}
+            </div>
+          }
+        />
+      )}
+      {tampilan === "fee" && laporan.fee && (
+        <TabelFee
+          data={laporan.fee}
+          toolbar={
+            <div className="flex flex-wrap items-center gap-2">
+              {toolbar}
+              {!laporan.dikunci && <FormFee posisi={laporan.posisi} periode={laporan.periode} baris={laporan.fee} />}
+            </div>
+          }
+        />
+      )}
       {tampilan === "pasar" && laporan.pasar && (
         <TabelPasar data={laporan.pasar} posisi={laporan.posisi} periode={laporan.periode} toolbar={toolbar} />
       )}

@@ -19,6 +19,7 @@ import {
   type RingkasKpi,
 } from "@/lib/kpi/hitung";
 import { indikatorPosisi, type Indikator, type JenisEntri } from "@/lib/kpi/indikator";
+import { INDIKATOR_KONTEN, hitungKonten } from "@/lib/kpi/konten";
 import { posisiDari, type KodePosisi } from "@/lib/kpi/struktur";
 
 /**
@@ -53,6 +54,14 @@ export interface PengaturanIndikator {
   bobot: number | null;
   target: number | null;
   pertumbuhan: number | null;
+  /**
+   * Dari mana actual-nya diambil untuk indikator yang punya DUA jalan.
+   *
+   * Jumlah Konten bisa dihitung sendiri dari Antrian Design, atau diketik.
+   * Yang menentukan bukan kode, melainkan kesepakatan tim — dan itu berubah
+   * (bulan pertama biasanya manual sampai kategori designnya rapi).
+   */
+  sumber: "otomatis" | "manual" | null;
 }
 
 export interface DetailPasar {
@@ -120,6 +129,7 @@ export async function pengaturanPosisi(posisi: string): Promise<Map<string, Peng
       bobot: angka(r.bobot),
       target: angka(r.target),
       pertumbuhan: angka(r.pertumbuhan),
+      sumber: r.sumber === "otomatis" || r.sumber === "manual" ? r.sumber : null,
     });
   }
   return peta;
@@ -131,6 +141,7 @@ export async function simpanPengaturan(input: {
   bobot: number | null;
   target: number | null;
   pertumbuhan: number | null;
+  sumber: "otomatis" | "manual" | null;
   olehId: string;
   olehNama: string;
 }): Promise<{ error?: string }> {
@@ -141,6 +152,7 @@ export async function simpanPengaturan(input: {
     bobot: input.bobot,
     target: input.target,
     pertumbuhan: input.pertumbuhan,
+    sumber: input.sumber,
     diubah_oleh: input.olehId,
     diubah_nama: input.olehNama,
     diubah_pada: new Date().toISOString(),
@@ -193,6 +205,7 @@ export async function actualTersimpan(periode: string, posisi: string): Promise<
 export async function simpanEfisiensi(input: {
   periode: string;
   posisi: string;
+  pic?: string;
   outletId: string;
   actualWh: number | null;
   actualNonWh: number | null;
@@ -202,6 +215,7 @@ export async function simpanEfisiensi(input: {
   const { error } = await db().from("kpi_efisiensi").upsert({
     periode: input.periode,
     posisi: input.posisi,
+    pic: input.pic ?? "",
     outlet_id: input.outletId,
     actual_wh: input.actualWh,
     actual_non_wh: input.actualNonWh,
@@ -310,6 +324,26 @@ async function designRequest(periode: string): Promise<{ masuk: number; selesai:
   return { masuk: bulan.length, selesai: bulan.filter((r) => r.status === "terlaksana").length };
 }
 
+/**
+ * Jumlah konten selesai per jenis dan brand, dari Antrian Design.
+ *
+ * Dipakai indikator Jumlah Konten Post/Reels/Story ketika sumbernya disetel
+ * otomatis. Yang dihitung hanya permintaan berstatus terlaksana — permintaan
+ * yang masih dikerjakan belum menghasilkan konten apa pun.
+ */
+async function kontenDariDesign(periode: string) {
+  const rows = await listHcRequests({ kind: "design", semua: true });
+  return hitungKonten(
+    rows.map((r) => ({
+      designType: r.designType,
+      outletNama: r.outletName,
+      status: r.status,
+      periode: r.createdAt.slice(0, 7),
+    })),
+    periode,
+  );
+}
+
 /** Komplain kategori Food Quality bulan itu — bahan indikator Review Customer. */
 async function komplainFoodQuality(periode: string): Promise<number> {
   if (!dbEnabled) return 0;
@@ -332,7 +366,16 @@ const bulanSetelah = (periode: string): string => {
   return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}`;
 };
 
-/** Net sales per outlet untuk satu bulan, dari data harian yang sudah disinkron. */
+/**
+ * Net sales per CABANG ESB untuk satu bulan, dari data harian yang disinkron.
+ *
+ * Kuncinya id cabang ESB ("18-fnb_nord"), bukan nama outlet. Sempat dicocokkan
+ * dengan nama, dan hasilnya nol dari 58 outlet: `seasonal_daily.branch`
+ * menyimpan id ESB, sementara `outlets.name` menyimpan nama panjang cabangnya.
+ * Tabel Efisiensi dan Management Fee karena itu tampil kosong seluruhnya —
+ * tanpa satu pun pesan galat, karena memang tidak ada yang gagal; yang
+ * dicocokkan saja tidak pernah bisa bertemu.
+ */
 async function netSalesPerOutlet(periode: string): Promise<Map<string, number>> {
   const peta = new Map<string, number>();
   if (!dbEnabled) return peta;
@@ -347,7 +390,7 @@ async function netSalesPerOutlet(periode: string): Promise<Map<string, number>> 
   return peta;
 }
 
-/** Rata-rata net sales tiga bulan terakhir per outlet — dasar budget efisiensi. */
+/** Rata-rata net sales tiga bulan terakhir per cabang ESB — dasar budget efisiensi. */
 async function averageTigaBulan(periode: string): Promise<Map<string, number>> {
   const bulan = [periode, bulanSebelum(periode), bulanSebelum(bulanSebelum(periode))];
   const petaBulan = await Promise.all(bulan.map(netSalesPerOutlet));
@@ -409,11 +452,18 @@ export async function laporanKpi(posisi: KodePosisi, periode: string): Promise<L
   }
 
   const perluDesign = daftar.some((i) => i.actual.sumber === "otomatis" && i.actual.kode === "design_request");
+  // Jumlah Konten otomatis hanya bila memang disetel begitu. Bawaannya
+  // otomatis: kategori designnya sudah terisi rapi di 132 dari 192 permintaan,
+  // jadi menariknya sendiri lebih benar daripada meminta orang mengetik ulang.
+  const perluKonten = daftar.some(
+    (i) => INDIKATOR_KONTEN[i.key] && (pengaturan.get(i.key)?.sumber ?? "otomatis") === "otomatis",
+  );
   const perluKomplain = daftar.some((i) => i.actual.sumber === "otomatis" && i.actual.kode === "komplain_food_quality");
   const perluFee = daftar.some((i) => i.actual.sumber === "otomatis" && i.actual.kode === "management_fee");
 
-  const [design, komplain, netBulan, average] = await Promise.all([
+  const [design, konten, komplain, netBulan, average] = await Promise.all([
     perluDesign ? designRequest(periode) : Promise.resolve(null),
+    perluKonten ? kontenDariDesign(periode) : Promise.resolve(null),
     perluKomplain ? komplainFoodQuality(periode) : Promise.resolve(null),
     perluFee ? netSalesPerOutlet(periode) : Promise.resolve(null),
     PAKAI_EFISIENSI.includes(posisi) ? averageTigaBulan(periode) : Promise.resolve(null),
@@ -433,7 +483,7 @@ export async function laporanKpi(posisi: KodePosisi, periode: string): Promise<L
       barisEfisiensi({
         outletId: o.id,
         outletNama: o.name,
-        average: average.get(o.name) ?? null,
+        average: (o.esbBranchId ? average.get(o.esbBranchId) : undefined) ?? null,
         actualWh: isian.get(o.id)?.wh ?? null,
         actualNonWh: isian.get(o.id)?.nonWh ?? null,
       }),
@@ -466,7 +516,7 @@ export async function laporanKpi(posisi: KodePosisi, periode: string): Promise<L
     const ceklis = new Map<string, boolean>();
     for (const r of ((data ?? []) as Record<string, unknown>[])) ceklis.set(String(r.outlet_id), !!r.sesuai);
     fee = outletAktif.map((o) => {
-      const net = netBulan.get(o.name) ?? null;
+      const net = (o.esbBranchId ? netBulan.get(o.esbBranchId) : undefined) ?? null;
       return {
         outletId: o.id,
         outletNama: o.name,
@@ -487,6 +537,7 @@ export async function laporanKpi(posisi: KodePosisi, periode: string): Promise<L
     jumlahBrand: WORK_BRANDS.length,
     jumlahOutlet: outletAktif.length,
     design,
+    konten,
     komplain,
     efisiensi,
     fee,
@@ -515,6 +566,7 @@ interface KonteksBaris {
   jumlahBrand: number;
   jumlahOutlet: number;
   design: { masuk: number; selesai: number } | null;
+  konten: Record<string, Record<string, number>> | null;
   komplain: number | null;
   efisiensi: LaporanKpi["efisiensi"];
   fee: DetailFee[] | null;
@@ -558,11 +610,29 @@ function susunBaris(i: Indikator, k: KonteksBaris): BarisKpi {
   let actual: number | null = null;
   let alasan: string | undefined;
 
+  // Jumlah Konten punya dua jalan: dihitung dari Antrian Design, atau diketik.
+  // Yang otomatis diperiksa lebih dulu supaya angka yang pernah diketik tidak
+  // menutupi hitungan yang sebenarnya.
+  const jenisKonten = INDIKATOR_KONTEN[i.key];
+  const kontenOtomatis = !!jenisKonten && (k.pengaturan?.sumber ?? "otomatis") === "otomatis";
+
   switch (i.actual.sumber) {
     case "manual":
     case "manual_brand":
-      actual = k.manual;
-      if (actual === null) alasan = "Angkanya belum diisi untuk bulan ini.";
+      if (kontenOtomatis) {
+        const per = k.konten?.[jenisKonten];
+        actual = per ? Object.values(per).reduce((a, b) => a + b, 0) : null;
+        if (actual === null) alasan = "Menunggu data Antrian Design.";
+        else {
+          const rinci = Object.entries(per!)
+            .map(([b, n]) => `${b} ${n}`)
+            .join(" · ");
+          alasan = `Otomatis dari Antrian Design yang sudah selesai — ${rinci}.`;
+        }
+      } else {
+        actual = k.manual;
+        if (actual === null) alasan = "Angkanya belum diisi untuk bulan ini.";
+      }
       break;
     case "entri":
       actual = k.jumlahEntri(i.actual.entri);

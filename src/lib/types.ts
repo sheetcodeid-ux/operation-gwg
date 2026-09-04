@@ -71,7 +71,17 @@ export interface Area {
 export interface Outlet {
   id: string;
   name: string;
+  /** Kode POS. TIDAK sama dengan id cabang ESB — lihat `esbBranchId`. */
   code: string;
+  /**
+   * Id cabang di ESB, mis. "18-fnb_nord".
+   *
+   * Berdiri sendiri karena `code` menyimpan kode POS untuk 49 dari 58 outlet,
+   * dan hanya 9 yang kebetulan berisi id ESB. Menggabungkan keduanya membuat
+   * penjualan per outlet diam-diam kosong untuk sebagian besar cabang — persis
+   * yang terjadi pada tabel Efisiensi Beban Operasional.
+   */
+  esbBranchId?: string | null;
   city: string;
   areaId: string;
   supervisorId: string;

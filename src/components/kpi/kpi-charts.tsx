@@ -189,10 +189,10 @@ const CIRC = 2 * Math.PI * R;
 
 type Mode = "hasil" | "bobot";
 const MODES = [
-  { id: "hasil", label: "% Actual", icon: ChartPie },
+  { id: "hasil", label: "Actual", icon: ChartPie },
   { id: "bobot", label: "Bobot", icon: Layers },
 ] as const;
-const MODE_TITLE: Record<Mode, string> = { hasil: "% Actual", bobot: "Bobot" };
+const MODE_TITLE: Record<Mode, string> = { hasil: "Actual", bobot: "Bobot" };
 
 /**
  * Sebaran indikator dalam satu cincin.
