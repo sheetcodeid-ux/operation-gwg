@@ -99,14 +99,22 @@ export async function getSeasonal(year: number, branch = ""): Promise<SeasonalRe
  *  into the cache, newest first, stopping near the budget. */
 export async function syncSeasonalDays(from: string, to: string, branch = "", budgetMs = 42_000, force = false): Promise<{ synced: number; remaining: number; error?: string }> {
   if (!dbEnabled || !esbConfigured()) return { synced: 0, remaining: 0 };
-  const cached = await selectAll<{ day: string; synced_at: string }>("seasonal_daily", (a, b) =>
-    db().from("seasonal_daily").select("day,synced_at").eq("branch", branch).gte("day", from).lte("day", to).order("day").range(a, b),
+  const cached = await selectAll<{ day: string; synced_at: string; bills: number | null }>("seasonal_daily", (a, b) =>
+    db().from("seasonal_daily").select("day,synced_at,bills").eq("branch", branch).gte("day", from).lte("day", to).order("day").range(a, b),
   );
   const have = new Map(cached.map((r) => [r.day, r.synced_at]));
+  // Hari yang jumlah struknya belum pernah ditarik dianggap belum lengkap —
+  // hanya untuk cabang gabungan, karena dari situlah Average Transaction
+  // dihitung. Tanpa ini, hari yang sudah tersimpan sebelum kolomnya ada tidak
+  // akan pernah ditarik ulang: hari yang sudah lewat memang dianggap FINAL,
+  // dan bulan-bulan lama akan selamanya kosong tanpa satu pun tanda.
+  const perluStruk = new Set(branch === "" ? cached.filter((r) => r.bills === null).map((r) => r.day) : []);
   const today = todayWib();
   // `force` re-pulls every past day (used once to overwrite data synced from an
   // old source); otherwise only missing/stale days are fetched.
-  const pending = eachDay(from, to).filter((d) => d <= today && (force || !have.get(d) || !fresh(have.get(d)!, d)));
+  const pending = eachDay(from, to).filter(
+    (d) => d <= today && (force || !have.get(d) || !fresh(have.get(d)!, d) || perluStruk.has(d)),
+  );
   if (force) {
     // Re-pull the LEAST-recently-synced days first so a repeated loop advances
     // through the whole year instead of redoing the newest days every call.
@@ -124,7 +132,18 @@ export async function syncSeasonalDays(from: string, to: string, branch = "", bu
     if (synced > 0 && Date.now() - started > budgetMs) break;
     try {
       const sales = await esbFetchSales(day, day, branch);
-      const up = await db().from("seasonal_daily").upsert({ day, branch, gross: sales.gross, net: sales.net, synced_at: new Date().toISOString() });
+      // Jumlah tamu dan struk ikut disimpan: Average Transaction sebulan
+      // dihitung dari total struk sebulan, dan angka itu tidak bisa direka
+      // ulang dari gross/net yang sudah tersimpan.
+      const up = await db().from("seasonal_daily").upsert({
+        day,
+        branch,
+        gross: sales.gross,
+        net: sales.net,
+        pax: sales.pax,
+        bills: sales.bills,
+        synced_at: new Date().toISOString(),
+      });
       if (up.error) throw new Error(up.error.message);
       synced += 1;
       fails = 0;

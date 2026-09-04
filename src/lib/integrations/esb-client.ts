@@ -1,6 +1,6 @@
 import "server-only";
 
-import { bacaJsonEsb, extractReportData, parseCancelDetailReport, parseIdrNumber, type CancelDetailReport, type CancelDetailRow } from "./esb";
+import { bacaHighlight, bacaJsonEsb, extractReportData, parseCancelDetailReport, type CancelDetailReport, type CancelDetailRow, type EsbHighlight } from "./esb";
 
 /**
  * Authenticated ESB (erp.esb.co.id) client — runs SERVER-SIDE only, logging in
@@ -496,40 +496,8 @@ export async function esbListBranches(): Promise<EsbBranch[]> {
   return list.map((b) => ({ id: b.branchID, name: b.branchName }));
 }
 
-/** Net sales (omset) for a date range, optionally for ONE branch — the number
- *  behind the dashboard's NET SALES tile (get-today-highlight). */
-export async function esbFetchNetSales(dateFromYmd: string, dateToYmd: string, branchId = ""): Promise<number> {
-  const s = await ensureSession();
-  const body = new URLSearchParams();
-  body.append("branchID", branchId);
-  body.append("brandID", "");
-  body.append("reportDateStart", toEsbDate(dateFromYmd));
-  body.append("reportDateEnd", toEsbDate(dateToYmd));
-  for (const c of await getCompanyIds()) body.append("companyID[]", c);
-  const res = await esbFetch(`${BASE}/sales-dashboard/get-today-highlight`, {
-    method: "POST",
-    headers: { "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8", "X-Requested-With": "XMLHttpRequest", "X-Csrf-Token": s.csrf, Cookie: s.cookie, Referer: `${BASE}/sales-dashboard` },
-    body,
-    cache: "no-store",
-  });
-  if (!res.ok) throw new Error(`ESB highlight failed (${res.status})`);
-  const j = decodeAjax<{ currentSales?: string | number | null }>(await res.text());
-  if (!j || typeof j !== "object") throw new Error("ESB highlight: respons tidak terbaca");
-  // A branch with zero activity in the range comes back WITHOUT currentSales —
-  // that is a legitimate 0, not an error.
-  const cs = j.currentSales;
-  if (cs === undefined || cs === null || cs === "") return 0;
-  return typeof cs === "number" ? cs : parseIdrNumber(String(cs));
-}
-
-export interface EsbSales { gross: number; net: number }
-
-let esbHighlightProbed = false;
-
-/** Gross + net sales for a date range from the same sales-dashboard highlight
- *  endpoint. Net = currentSales; gross is read from whichever gross field the
- *  response carries (falls back to net if none). */
-export async function esbFetchSales(dateFromYmd: string, dateToYmd: string, branchId = ""): Promise<EsbSales> {
+/** Seluruh kotak Sales Dashboard untuk satu rentang tanggal, satu cabang atau semua. */
+export async function esbFetchHighlight(dateFromYmd: string, dateToYmd: string, branchId = ""): Promise<EsbHighlight> {
   const s = await ensureSession();
   const body = new URLSearchParams();
   body.append("branchID", branchId);
@@ -546,16 +514,29 @@ export async function esbFetchSales(dateFromYmd: string, dateToYmd: string, bran
   if (!res.ok) throw new Error(`ESB highlight failed (${res.status})`);
   const j = decodeAjax<Record<string, unknown>>(await res.text());
   if (!j || typeof j !== "object") throw new Error("ESB highlight: respons tidak terbaca");
-  // One-time probe so we can confirm the real gross-sales field name from logs.
-  if (!esbHighlightProbed) { esbHighlightProbed = true; console.log("[esb-highlight-keys]", JSON.stringify(j)); }
-  const num = (v: unknown) => (v === undefined || v === null || v === "" ? 0 : typeof v === "number" ? v : parseIdrNumber(String(v)));
-  const net = num(j.currentSales);
-  const grossKeys = ["grossSales", "currentGrossSales", "grossSalesAmount", "totalGrossSales", "grossAmount", "currentSalesGross", "penjualanKotor", "grandTotal"];
-  let gross = 0;
-  for (const k of grossKeys) {
-    if (j[k] !== undefined && j[k] !== null && j[k] !== "") { gross = num(j[k]); break; }
-  }
-  return { gross: gross > 0 ? gross : net, net };
+  return bacaHighlight(j);
+}
+
+/** Net sales (omset) untuk satu rentang tanggal, satu cabang atau semua. */
+export async function esbFetchNetSales(dateFromYmd: string, dateToYmd: string, branchId = ""): Promise<number> {
+  return (await esbFetchHighlight(dateFromYmd, dateToYmd, branchId)).net;
+}
+
+export type { EsbHighlight };
+
+export interface EsbSales { gross: number; net: number; pax: number; bills: number }
+
+/**
+ * Gross + net + jumlah tamu + jumlah struk untuk satu rentang tanggal.
+ *
+ * Jumlah struknya ikut disimpan karena Average Transaction sebulan BUKAN
+ * rata-rata dari rata-rata harian: yang benar adalah total net sales dibagi
+ * total struk sebulan. Merata-ratakan angka harian memberi bobot sama kepada
+ * hari sepi dan hari ramai, dan hasilnya selalu meleset.
+ */
+export async function esbFetchSales(dateFromYmd: string, dateToYmd: string, branchId = ""): Promise<EsbSales> {
+  const h = await esbFetchHighlight(dateFromYmd, dateToYmd, branchId);
+  return { gross: h.gross, net: h.net, pax: h.pax, bills: h.bills };
 }
 
 /* -------------------- Sales Menu Recapitulation (catalog) -------------------- */

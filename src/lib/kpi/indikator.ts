@@ -42,7 +42,8 @@ export type KodeOtomatis =
   | "komplain_food_quality"
   | "efisiensi_operasional"
   | "keberhasilan_pasar"
-  | "management_fee";
+  | "management_fee"
+  | "average_transaction";
 
 /** Dari mana actual-nya datang. */
 export type SumberActual =
@@ -321,8 +322,8 @@ const marcomm: Indikator[] = [
     label: "Average Transaction",
     bobot: 10,
     target: { jenis: "tumbuh", pertumbuhan: TUMBUH_MARCOMM },
-    actual: { sumber: "manual" },
-    penjelasan: `Target = capaian bulan lalu + ${TUMBUH_MARCOMM}%. Diisi manual sampai sambungan ESB siap.`,
+    actual: { sumber: "otomatis", kode: "average_transaction" },
+    penjelasan: `Net sales dibagi jumlah struk sebulan, otomatis dari ESB. Target = capaian bulan lalu + ${TUMBUH_MARCOMM}%.`,
   },
   {
     key: "new_member",
