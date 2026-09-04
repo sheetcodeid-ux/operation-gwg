@@ -42,6 +42,22 @@ describe("sumber angkanya", () => {
     const blok = data.slice(data.indexOf("async function averageTransaksi"));
     expect(blok.slice(0, blok.indexOf("\n}\n"))).toContain("if (struk === 0) return null;");
   });
+
+  it("bulan yang datanya baru separuh tidak menampilkan angka", () => {
+    // Penarikan ulang berjalan bertahap: pernah tercatat 19 dari 247 hari
+    // terisi, dan 15 hari pertama Agustus belum ada. Rata-rata dari separuh
+    // bulan tetap terlihat seperti angka yang sah — tidak ada yang
+    // mencurigainya, dan tidak ada yang memeriksanya lagi setelah sisanya
+    // masuk.
+    expect(data).toContain("hariAda < k.averageTrx.hariHarus");
+    expect(data).toContain("angkanya menunggu lengkap");
+  });
+
+  it("bulan lalu yang belum lengkap tidak dipakai sebagai dasar target", () => {
+    // Target tumbuh 15% di atas angka separuh bulan akan terlihat wajar dan
+    // salah selamanya.
+    expect(data).toContain("a.hariAda >= a.hariHarus");
+  });
 });
 
 describe("pengisian data hariannya", () => {

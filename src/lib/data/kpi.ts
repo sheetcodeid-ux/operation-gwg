@@ -423,7 +423,24 @@ async function netSalesPerusahaan(dariPeriode: string, sampaiPeriode = dariPerio
  * akan menaikkan hasilnya tanpa batas — dan itu jenis kesalahan yang tidak
  * pernah kelihatan salah.
  */
-async function averageTransaksi(periode: string): Promise<number | null> {
+interface AverageTrx {
+  nilai: number;
+  /** Hari yang jumlah struknya sudah ada, dan hari yang seharusnya ada. */
+  hariAda: number;
+  hariHarus: number;
+}
+
+/** Hari terakhir bulan itu yang sudah lewat menurut waktu Indonesia Barat. */
+function hariBerjalan(periode: string): number {
+  const hariIni = new Date(Date.now() + 7 * 3_600_000).toISOString().slice(0, 10);
+  const [th, bl] = periode.split("-").map(Number);
+  const akhir = new Date(Date.UTC(th, bl, 0)).getUTCDate();
+  if (hariIni.slice(0, 7) > periode) return akhir; // bulan sudah lewat seluruhnya
+  if (hariIni.slice(0, 7) < periode) return 0; // bulan yang belum datang
+  return Number(hariIni.slice(8, 10));
+}
+
+async function averageTransaksi(periode: string): Promise<AverageTrx | null> {
   if (!dbEnabled) return null;
   const { data } = await db()
     .from("seasonal_daily")
@@ -436,7 +453,7 @@ async function averageTransaksi(periode: string): Promise<number | null> {
   const struk = rows.reduce((a, r) => a + (Number(r.bills) || 0), 0);
   if (struk === 0) return null;
   const net = rows.reduce((a, r) => a + (Number(r.net) || 0), 0);
-  return net / struk;
+  return { nilai: net / struk, hariAda: rows.length, hariHarus: hariBerjalan(periode) };
 }
 
 /**
@@ -527,9 +544,11 @@ export async function laporanKpi(posisi: KodePosisi, periode: string, pic = ""):
   const lalu = new Map<string, number>();
   if (perluAverage) {
     // Dasar targetnya average transaction bulan lalu yang SEBENARNYA — dari
-    // ESB, bukan dari angka yang pernah diketik.
+    // ESB, bukan dari angka yang pernah diketik. Bulan lalu yang datanya belum
+    // lengkap TIDAK dipakai: targetnya akan berdiri di atas angka separuh
+    // bulan, dan tidak ada yang akan menyadarinya setelah datanya lengkap.
     const a = await averageTransaksi(bulanSebelum(periode));
-    if (a !== null) lalu.set("average_transaction", a);
+    if (a !== null && a.hariAda >= a.hariHarus) lalu.set("average_transaction", a.nilai);
   }
   if (perluNetPerusahaan) {
     // Dasar target Net Sales adalah penjualan bulan lalu yang SEBENARNYA, bukan
@@ -685,7 +704,7 @@ interface KonteksBaris {
   fee: DetailFee[] | null;
   pasar: DetailPasar | null;
   netPerusahaan: number | null;
-  averageTrx: number | null;
+  averageTrx: AverageTrx | null;
 }
 
 /**
@@ -792,8 +811,17 @@ function susunBaris(i: Indikator, k: KonteksBaris): BarisKpi {
           actual = k.fee ? k.fee.filter((f) => f.sesuai).length : null;
           break;
         case "average_transaction":
-          actual = k.averageTrx;
-          if (actual === null) alasan = "Jumlah struk bulan ini belum ditarik dari ESB.";
+          // Bulan yang datanya belum lengkap TIDAK ditampilkan angkanya.
+          // Rata-rata dari separuh bulan tetap terlihat seperti angka yang
+          // sah — tidak ada yang mencurigainya, dan tidak ada yang akan
+          // memeriksanya lagi setelah sisanya masuk.
+          if (k.averageTrx === null) {
+            alasan = "Jumlah struk bulan ini belum ditarik dari ESB.";
+          } else if (k.averageTrx.hariAda < k.averageTrx.hariHarus) {
+            alasan = `Baru ${k.averageTrx.hariAda} dari ${k.averageTrx.hariHarus} hari yang tertarik dari ESB — angkanya menunggu lengkap.`;
+          } else {
+            actual = k.averageTrx.nilai;
+          }
           break;
       }
       break;
