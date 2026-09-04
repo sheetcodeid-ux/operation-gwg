@@ -74,3 +74,24 @@ describe("pengisian data hariannya", () => {
     expect(seasonal).toContain("r.bills === null");
   });
 });
+
+describe("angka per outlet tidak dihitung dari bulan yang separuh", () => {
+  it("Management Fee dan budget Efisiensi hanya memakai bulan yang lengkap", () => {
+    // Penarikan per cabang tertinggal jauh di belakang angka gabungan: pernah
+    // tercatat 56 cabang punya data Agustus, tapi rata-rata baru 14 dari 31
+    // hari. Menjumlahkan apa adanya menghasilkan net sales kurang separuh — dan
+    // dari angka itulah fee 5% dan budget efisiensi dihitung. Keduanya akan
+    // terlihat wajar dan keduanya salah.
+    expect(data).toContain("async function netSalesLengkap");
+    expect(data).toContain("if (v.hari >= harus) out.set");
+    expect(data).toContain("bulan.map(netSalesLengkap)");
+    expect(data).toContain("perluFee ? netSalesLengkap(periode)");
+  });
+
+  it("kosongnya menyebut sebabnya, bukan satu kalimat untuk dua hal berbeda", () => {
+    // "Belum tersambung ke ESB" menyesatkan setelah seluruh outlet dipasangkan:
+    // yang kurang penarikan hariannya, bukan pemasangannya.
+    expect(data).toContain("outlet belum dipasangkan ke cabang ESB");
+    expect(data).toContain("data ESB bulan ini belum lengkap");
+  });
+});
