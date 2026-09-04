@@ -106,6 +106,19 @@ export async function GET(req: Request) {
     return NextResponse.json({ ok: true, tookMs: Date.now() - started, results });
   }
 
+  // Dedicated job: pair outlets with their ESB branch id. Runs on demand
+  // (?job=pair-outlets) — the mapping only changes when a branch opens or is
+  // renamed, so scheduling it would spend an ESB call an hour on nothing.
+  if (job === "pair-outlets") {
+    try {
+      const { pasangkanOutletEsb } = await import("@/lib/data/outlet-esb");
+      results["pair-outlets"] = await pasangkanOutletEsb();
+    } catch (e) {
+      results["pair-outlets"] = { error: e instanceof Error ? e.message : "failed" };
+    }
+    return NextResponse.json({ ok: true, tookMs: Date.now() - started, results });
+  }
+
   // Dedicated job: prime the seasonal (Musiman) daily gross+net cache for the
   // current year fast. Hit ?job=seasonal to fill it in one go.
   if (job === "seasonal") {
