@@ -71,6 +71,17 @@ function buat(kode: KodePosisi) {
       { outletId: "o2", outletNama: "Ayam Busari Depok", netSales: 132050000, feeSeharusnya: 6602500, sesuai: false },
     ] : null,
     entri,
+    ca: kode === "operational_ca" ? {
+      outlet: [], belumTigaBulan: [], grossSales: 4_186_500_000, rataTiga: 3_640_000_000,
+      komplain: 27, netProfit: 1_010_400_000, hpp: 37.4, jumlahPic: 1,
+      detail: [
+        { outletId: "o0", outletNama: "Nordu Coffee Sambas", gross: 412_500_000, dariEsb: true, netProfit: 110_000_000, hpp: 36.2, ikut: true },
+        { outletId: "o1", outletNama: "Nordu Coffee Siantan", gross: null, dariEsb: false, netProfit: null, hpp: null, ikut: false },
+        { outletId: "o2", outletNama: "Ayam Goreng Busari Siantan", gross: null, dariEsb: false, netProfit: null, hpp: null, ikut: false },
+        { outletId: "o3", outletNama: "Ayam Goreng Busari Serdam", gross: null, dariEsb: false, netProfit: null, hpp: null, ikut: false },
+        { outletId: "o4", outletNama: "Cattu M. Sohor", gross: 288_140_000, dariEsb: true, netProfit: 74_500_000, hpp: 38.9, ikut: true },
+      ],
+    } : null,
   };
   return { laporan, lalu };
 }
@@ -78,6 +89,8 @@ function buat(kode: KodePosisi) {
 const kode = (location.hash.replace("#", "") || "operational_ca") as KodePosisi;
 const p = posisiDari(kode)!;
 const { laporan, lalu } = buat(kode);
+// PIC terpilih supaya form isiannya terlihat (di aplikasi ini datang dari basis data).
+if (laporan.ca) laporan.pic = "Deo";
 
 createRoot(document.getElementById("root")!).render(
   <PapanKpi

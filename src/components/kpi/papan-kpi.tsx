@@ -11,11 +11,13 @@ import { Combobox } from "@/components/ui/combobox";
 import { DataTable } from "@/components/ui/data-table";
 import { Progress } from "@/components/ui/progress";
 import { KpiIndicatorDonut, KpiPerformanceChart } from "./kpi-charts";
-import { DialogInput, type OutletRingkas } from "./dialog-input";
+import { DialogInput, bentukIsian, type OutletRingkas } from "./dialog-input";
 import { DialogPengaturan } from "./dialog-pengaturan";
 import { FormEfisiensi, FormFee, FormKegiatan, FormMenuPasar, type MenuEsb, type OpsiKegiatan } from "./form-tabel";
+import type { JenisEntri } from "@/lib/kpi/indikator";
 import { BULAN, labelPeriode, periodeDari, tahunPilihan } from "./periode";
 import { hapusEntriAction, hapusMenuPasarAction } from "@/lib/actions/kpi";
+import { SEMUA_PIC } from "@/lib/kpi/semua-pic";
 import type { BarisKpi, BarisEfisiensi } from "@/lib/kpi/hitung";
 import type { DetailFee, DetailPasar, EntriKpi, LaporanKpi } from "@/lib/data/kpi";
 import type { Indikator } from "@/lib/kpi/indikator";
@@ -103,6 +105,10 @@ export function PapanKpi({
 
   const [tampilan, setTampilan] = React.useState<Tampilan>("indikator");
 
+  // "Semua" hanya untuk membaca gabungannya; angka yang disimpan atasnya tidak
+  // menempel pada siapa pun dan tidak akan pernah bisa ditelusuri.
+  const bolehSimpan = !perPic || (laporan.pic !== "" && laporan.pic !== SEMUA_PIC);
+
   // Pilihan tabel dibangun dari panel yang benar-benar ada. Menuliskannya
   // sebagai daftar tetap berarti suatu saat ada tombol menuju tabel kosong.
   const pilihanTabel = React.useMemo(() => {
@@ -117,18 +123,36 @@ export function PapanKpi({
   // Indikator yang dihitung dari jumlah kegiatan — itulah yang bisa diisi
   // sekaligus lewat tabel. Yang lain (temuan, tenggat, angka) punya bentuk
   // isiannya sendiri di dialog Input.
-  const opsiKegiatan = React.useMemo<OpsiKegiatan[]>(
-    () =>
-      indikator
-        .filter((i) => i.actual.sumber === "entri")
-        .map((i) => ({ jenis: (i.actual as { entri: OpsiKegiatan["jenis"] }).entri, label: i.label })),
-    [indikator],
-  );
+  const opsiKegiatan = React.useMemo<OpsiKegiatan[]>(() => {
+    const out: OpsiKegiatan[] = indikator
+      .filter((i) => i.actual.sumber === "entri")
+      .map((i) => ({
+        jenis: (i.actual as { entri: JenisEntri }).entri,
+        label: i.label,
+        bukti: (i.actual as { entri: JenisEntri }).entri === "hygiene_cctv",
+      }));
+    // Angka bulanan per outlet ikut di sini supaya tidak ada dua pintu masuk
+    // ke tujuan yang sama.
+    const punya = (k: string) => indikator.some((i) => i.key === k);
+    if (punya("net_profit")) out.push({ jenis: "net_profit", label: "Net Profit (per outlet)" });
+    if (punya("hpp")) out.push({ jenis: "hpp", label: "Harga Pokok Penjualan (per outlet)" });
+    if (laporan.ca && laporan.ca.detail.some((o) => !o.dariEsb)) {
+      out.push({ jenis: "gross_manual", label: "Gross Sales manual (outlet tanpa ESB)" });
+    }
+    return out;
+  }, [indikator, laporan.ca]);
 
   // Kolom Kategori hanya berguna bagi posisi yang indikatornya berkelompok.
   // Untuk yang tidak, isinya satu kolom penuh tanda pisah — bukan sekadar
   // mubazir, melainkan memakan lebar yang dibutuhkan kolom yang berisi.
   const adaKategori = baris.some((b) => b.kategori);
+
+  // Indikator yang masih perlu tombol Input: yang bisa diisi tapi bentuknya
+  // bukan kegiatan, jadi tidak tercakup form tabel.
+  const perluDialogInput = React.useMemo(
+    () => indikator.some((i) => bentukIsian(i) !== "otomatis" && bentukIsian(i) !== "kegiatan"),
+    [indikator],
+  );
 
   const kolom = React.useMemo<ColumnDef<BarisKpi>[]>(
     () => [
@@ -255,7 +279,24 @@ export function PapanKpi({
           {!perPic && pic.length > 0 && (
             <span className="hidden text-[11.5px] text-muted-foreground lg:inline">{pic.join(" · ")}</span>
           )}
-          {!laporan.dikunci && (
+          {!laporan.dikunci && !bolehSimpan && (
+            <span className="text-[11.5px] text-muted-foreground">Pilih satu PIC untuk mengisi</span>
+          )}
+          {!laporan.dikunci && bolehSimpan && (
+            <FormKegiatan
+              posisi={laporan.posisi}
+              periode={laporan.periode}
+              pic={laporan.pic}
+              picOpsi={pic}
+              opsi={opsiKegiatan}
+              outlet={laporan.ca?.detail ?? []}
+            />
+          )}
+          {/* Tombol Input hanya muncul bila masih ADA yang belum tercakup form
+              tabel. Dua pintu ke tujuan yang sama membuat orang bertanya-tanya
+              mana yang benar, dan angka yang sama bisa masuk dua kali lewat
+              jalan yang berbeda. */}
+          {!laporan.dikunci && bolehSimpan && perluDialogInput && (
             <DialogInput
               posisi={laporan.posisi}
               periode={laporan.periode}
@@ -340,26 +381,7 @@ export function PapanKpi({
         />
       )}
       {tampilan === "riwayat" && (
-        <TabelRiwayat
-          entri={laporan.entri}
-          posisi={laporan.posisi}
-          periode={laporan.periode}
-          pic={laporan.pic}
-          toolbar={
-            <div className="flex flex-wrap items-center gap-2">
-              {toolbar}
-              {!laporan.dikunci && (
-                <FormKegiatan
-                  posisi={laporan.posisi}
-                  periode={laporan.periode}
-                  pic={laporan.pic}
-                  picOpsi={pic}
-                  opsi={opsiKegiatan}
-                />
-              )}
-            </div>
-          }
-        />
+        <TabelRiwayat entri={laporan.entri} posisi={laporan.posisi} periode={laporan.periode} pic={laporan.pic} toolbar={toolbar} />
       )}
 
       <Ringkasan tampilan={tampilan} laporan={laporan} />

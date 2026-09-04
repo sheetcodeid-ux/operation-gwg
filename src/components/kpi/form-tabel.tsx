@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import { useRouter } from "next/navigation";
-import { Loader2, Plus, Save, Table2 } from "lucide-react";
+import { Loader2, Paperclip, Plus, Save, Table2 } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Combobox } from "@/components/ui/combobox";
@@ -12,12 +12,15 @@ import { Input } from "@/components/ui/input";
 import {
   simpanEfisiensiMassalAction,
   simpanEntriMassalAction,
+  simpanOutletBulananAction,
   simpanFeeMassalAction,
   simpanMenuPasarMassalAction,
+  uploadKpiBuktiAction,
 } from "@/lib/actions/kpi";
 import type { BarisEfisiensi } from "@/lib/kpi/hitung";
 import type { JenisEntri } from "@/lib/kpi/indikator";
 import type { DetailFee } from "@/lib/data/kpi";
+import { uploadMany } from "@/lib/upload-client";
 import { labelPeriode } from "./periode";
 import { formatIDR } from "@/lib/utils";
 
@@ -318,35 +321,46 @@ export function FormFee({ posisi, periode, pic, baris }: { posisi: string; perio
   );
 }
 
-/* ───────────────── kegiatan (event / quality control / riset) ───────────────── */
+/* ─────────── catat kegiatan & angka bulanan (satu pintu masuk) ─────────── */
 
 export interface OpsiKegiatan {
-  /** Jenis entri yang ditulis, mis. `event`. */
-  jenis: JenisEntri;
+  /** Jenis entri yang ditulis, mis. `event`; atau angka bulanan per outlet. */
+  jenis: JenisEntri | "net_profit" | "hpp" | "gross_manual";
   /** Nama indikatornya di layar, mis. "Total Event / Program". */
   label: string;
+  /** Tiap barisnya wajib berlampiran. */
+  bukti?: boolean;
+}
+
+export interface OutletBaris {
+  outletId: string;
+  outletNama: string;
+  gross: number | null;
+  dariEsb: boolean;
+  netProfit: number | null;
+  hpp: number | null;
+  ikut: boolean;
 }
 
 interface BarisKegiatan {
   tanggal: string;
   picNama: string;
+  outletId: string;
   judul: string;
   deskripsi: string;
+  bukti: File[];
 }
 
 const BARIS_AWAL = 5;
 
 /**
- * Form kegiatan berbentuk TABEL — banyak baris, satu kali simpan.
+ * SATU pintu masuk untuk seluruh isian bulanan.
  *
- * Diminta: "total event program ini dibuatkan seperti tabel input tanggal event
- * apa gitu agar tidak simpan input lagi". Bentuk sebelumnya menyimpan satu
- * kegiatan per buka-dialog; untuk 30 event sebulan itu 30 putaran, dan yang
- * terjadi bukan 30 baris tercatat melainkan sepuluh baris lalu berhenti.
- *
- * Tanggalnya memakai pemilih tanggal aplikasi — bukan kotak ketik — supaya
- * bentuk tanggalnya tidak pernah salah dan tidak ada baris yang ditolak server
- * setelah semuanya terlanjur diketik.
+ * Sebelumnya ada dua: tombol Input untuk angka satuan, dan tabel ini untuk
+ * kegiatan. Dua pintu ke tujuan yang sama membuat orang bertanya-tanya yang
+ * mana yang benar, dan angka yang sama bisa masuk dua kali lewat jalan yang
+ * berbeda. Sekarang indikatornya dipilih di sini, dan tabelnya berganti
+ * mengikuti — kegiatan berbaris tanggal, angka bulanan berbaris outlet.
  */
 export function FormKegiatan({
   posisi,
@@ -354,52 +368,121 @@ export function FormKegiatan({
   pic,
   picOpsi,
   opsi,
+  outlet,
 }: {
   posisi: string;
   periode: string;
   pic: string;
   picOpsi: string[];
   opsi: OpsiKegiatan[];
+  outlet: OutletBaris[];
 }) {
   const router = useRouter();
   const [buka, setBuka] = React.useState(false);
   const [sibuk, setSibuk] = React.useState(false);
-  const [jenis, setJenis] = React.useState<JenisEntri>(opsi[0]?.jenis ?? "event");
+  const [jenis, setJenis] = React.useState<OpsiKegiatan["jenis"]>(opsi[0]?.jenis ?? "event");
   const [baris, setBaris] = React.useState<BarisKegiatan[]>([]);
+  const [isiOutlet, setIsiOutlet] = React.useState<Record<string, { gross: string; netProfit: string; hpp: string }>>({});
+
+  const dipilih = opsi.find((o) => o.jenis === jenis) ?? opsi[0];
+  const perOutlet = jenis === "net_profit" || jenis === "hpp" || jenis === "gross_manual";
+  const perluBukti = !!dipilih?.bukti;
 
   const kosong = React.useCallback(
-    (): BarisKegiatan => ({ tanggal: `${periode}-01`, picNama: pic || picOpsi[0] || "", judul: "", deskripsi: "" }),
+    (): BarisKegiatan => ({ tanggal: `${periode}-01`, picNama: pic || picOpsi[0] || "", outletId: "", judul: "", deskripsi: "", bukti: [] }),
     [periode, pic, picOpsi],
   );
 
   function bukaForm() {
     setJenis(opsi[0]?.jenis ?? "event");
     setBaris(Array.from({ length: BARIS_AWAL }, kosong));
+    setIsiOutlet(
+      Object.fromEntries(
+        outlet.map((o) => [
+          o.outletId,
+          {
+            gross: o.dariEsb || o.gross === null ? "" : String(o.gross),
+            netProfit: o.netProfit === null ? "" : String(o.netProfit),
+            hpp: o.hpp === null ? "" : String(o.hpp),
+          },
+        ]),
+      ),
+    );
     setBuka(true);
   }
 
-  const ubah = (i: number, kolom: keyof BarisKegiatan, v: string) =>
+  const ubah = (i: number, kolom: keyof BarisKegiatan, v: string | File[]) =>
     setBaris((s) => s.map((b, n) => (n === i ? { ...b, [kolom]: v } : b)));
 
-  async function simpan() {
-    // Baris yang tidak ditulis apa-apa memang sengaja dibiarkan: tabelnya
-    // dibuka dengan lima baris kosong, dan menolak simpan karena ada yang
-    // kosong akan membuat form ini mustahil dipakai.
-    const isi = baris
-      .filter((b) => b.judul.trim() !== "")
-      .map((b) => ({ tanggal: b.tanggal, picNama: b.picNama, judul: b.judul.trim(), deskripsi: b.deskripsi.trim() }));
+  const ubahOutlet = (id: string, kolom: "gross" | "netProfit" | "hpp", v: string) =>
+    setIsiOutlet((s) => ({ ...s, [id]: { ...(s[id] ?? { gross: "", netProfit: "", hpp: "" }), [kolom]: v } }));
 
+  async function simpanOutlet() {
+    const kirim = outlet
+      .map((o) => {
+        const isi = isiOutlet[o.outletId];
+        if (!isi) return null;
+        const nilai = num(jenis === "gross_manual" ? isi.gross : jenis === "net_profit" ? isi.netProfit : isi.hpp);
+        if (nilai === null) return null;
+        const lama = jenis === "gross_manual" ? (o.dariEsb ? null : o.gross) : jenis === "net_profit" ? o.netProfit : o.hpp;
+        if (nilai === lama) return null; // tidak berubah — tidak perlu ditulis ulang
+        return {
+          outletId: o.outletId,
+          ...(jenis === "gross_manual" ? { gross: nilai } : jenis === "net_profit" ? { netProfit: nilai } : { hpp: nilai }),
+        };
+      })
+      .filter(Boolean) as { outletId: string; gross?: number; netProfit?: number; hpp?: number }[];
+
+    if (kirim.length === 0) {
+      toast.info("Tidak ada yang berubah.");
+      return;
+    }
+    setSibuk(true);
+    const res = await simpanOutletBulananAction({ posisi, periode, pic, baris: kirim });
+    setSibuk(false);
+    if (res.error) return toast.error(res.error);
+    toast.success(`${res.tersimpan} outlet tersimpan`);
+    setBuka(false);
+    router.refresh();
+  }
+
+  async function simpanKegiatan() {
+    const isi = baris.filter((b) => b.judul.trim() !== "" || b.bukti.length > 0);
     if (isi.length === 0) {
       toast.info("Belum ada baris yang diisi.");
       return;
     }
+    if (perluBukti && isi.some((b) => b.bukti.length === 0)) {
+      toast.error("Ada baris tanpa bukti — tiap catatan wajib berlampiran.");
+      return;
+    }
+
     setSibuk(true);
-    const res = await simpanEntriMassalAction({ posisi, periode, pic, jenis, baris: isi });
-    setSibuk(false);
-    if (res.error) return toast.error(res.error);
-    toast.success(`${res.tersimpan} baris tersimpan`);
-    setBuka(false);
-    router.refresh();
+    try {
+      // Diunggah baris demi baris supaya berkas milik satu baris tidak pernah
+      // tertukar ke baris lain saat sebagiannya gagal.
+      const kirim = [];
+      for (const b of isi) {
+        const lampiran = b.bukti.length > 0 ? await uploadMany("kpi", b.bukti, uploadKpiBuktiAction) : [];
+        kirim.push({
+          tanggal: b.tanggal,
+          picNama: b.picNama,
+          outletId: b.outletId || null,
+          judul: b.judul.trim(),
+          deskripsi: b.deskripsi.trim(),
+          lampiran,
+        });
+      }
+      const res = await simpanEntriMassalAction({ posisi, periode, pic, jenis: jenis as JenisEntri, baris: kirim });
+      if (res.error) return toast.error(res.error);
+      toast.success(`${res.tersimpan} baris tersimpan`);
+      setBuka(false);
+      router.refresh();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Unggah bukti gagal.");
+    } finally {
+      setSibuk(false);
+    }
   }
 
   if (opsi.length === 0) return null;
@@ -407,101 +490,66 @@ export function FormKegiatan({
   return (
     <>
       <Button size="sm" variant="outline" className="gap-1.5" onClick={bukaForm}>
-        <Table2 className="size-4" /> Isi Kegiatan
+        <Table2 className="size-4" /> Catat Kegiatan
       </Button>
 
       <Dialog open={buka} onOpenChange={setBuka}>
         <DialogContent
           title="Catat Kegiatan"
-          description="Satu tabel untuk sebulan — isi barisnya, lalu simpan sekali"
+          description="Satu tabel untuk sebulan — pilih indikatornya, isi barisnya, lalu simpan sekali"
           align="center"
-          className="max-w-4xl"
+          className="max-w-5xl"
         >
-          <div className="flex max-h-[75vh] flex-col p-5">
+          <div className="flex max-h-[78vh] flex-col p-5">
             <div className="mb-3 flex shrink-0 flex-wrap items-center gap-2">
               <span className="text-[12px] font-medium text-muted-foreground">Indikator</span>
               <Combobox
                 portal
                 searchable={false}
-                className="w-64"
+                className="w-72"
                 value={jenis}
-                onChange={(v) => setJenis(v as JenisEntri)}
+                onChange={(v) => setJenis(v as OpsiKegiatan["jenis"])}
                 options={opsi.map((o) => ({ value: o.jenis, label: o.label }))}
               />
               <span className="text-[12px] text-muted-foreground">
-                Satu baris terisi bernilai satu poin pada {labelPeriode(periode)}.
+                {perOutlet
+                  ? `Angka ${labelPeriode(periode)} per outlet.`
+                  : `Satu baris terisi bernilai satu poin pada ${labelPeriode(periode)}.`}
               </span>
             </div>
 
-            <div className="min-h-0 flex-1 overflow-auto rounded-xl border border-border">
-              <table className="w-full min-w-[760px] border-collapse text-sm">
-                <thead className="sticky top-0 z-10">
-                  <tr className="border-b border-border text-left">
-                    <Kepala className="w-10 text-center">#</Kepala>
-                    <Kepala className="w-44">Tanggal</Kepala>
-                    <Kepala className="w-44">PIC</Kepala>
-                    <Kepala>Nama Kegiatan</Kepala>
-                    <Kepala>Keterangan</Kepala>
-                  </tr>
-                </thead>
-                <tbody>
-                  {baris.map((b, i) => (
-                    <tr key={i} className="border-b border-border/60 last:border-0">
-                      <td className="px-3 py-1.5 text-center text-[12px] tabular-nums text-muted-foreground">{i + 1}</td>
-                      <td className="px-3 py-1.5">
-                        <DatePicker value={b.tanggal} onChange={(v) => ubah(i, "tanggal", v)} />
-                      </td>
-                      <td className="px-3 py-1.5">
-                        {picOpsi.length > 0 ? (
-                          <Combobox
-                            portal
-                            searchable={false}
-                            className="w-full"
-                            value={b.picNama}
-                            onChange={(v) => ubah(i, "picNama", v)}
-                            options={picOpsi.map((p) => ({ value: p, label: p }))}
-                          />
-                        ) : (
-                          <Input className="h-8" value={b.picNama} onChange={(e) => ubah(i, "picNama", e.target.value)} />
-                        )}
-                      </td>
-                      <td className="px-3 py-1.5">
-                        <Input
-                          className="h-8"
-                          placeholder="Nama event / program"
-                          value={b.judul}
-                          onChange={(e) => ubah(i, "judul", e.target.value)}
-                        />
-                      </td>
-                      <td className="px-3 py-1.5">
-                        <Input
-                          className="h-8"
-                          placeholder="opsional"
-                          value={b.deskripsi}
-                          onChange={(e) => ubah(i, "deskripsi", e.target.value)}
-                        />
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+            {perOutlet ? (
+              <TabelOutlet
+                jenis={jenis}
+                outlet={outlet}
+                isi={isiOutlet}
+                ubah={ubahOutlet}
+              />
+            ) : (
+              <TabelKegiatan
+                baris={baris}
+                picOpsi={picOpsi}
+                outlet={outlet}
+                perluBukti={perluBukti}
+                ubah={ubah}
+              />
+            )}
 
             <div className="mt-3 flex shrink-0 items-center justify-between gap-2">
-              <Button
-                size="sm"
-                variant="ghost"
-                className="gap-1.5"
-                onClick={() => setBaris((s) => [...s, kosong()])}
-                disabled={sibuk}
-              >
-                <Plus className="size-4" /> Tambah baris
-              </Button>
+              {perOutlet ? (
+                <span className="text-[12px] text-muted-foreground">
+                  Kosongkan yang tidak diubah — yang kosong tidak ditulis ulang.
+                </span>
+              ) : (
+                <Button size="sm" variant="ghost" className="gap-1.5" onClick={() => setBaris((s) => [...s, kosong()])} disabled={sibuk}>
+                  <Plus className="size-4" /> Tambah baris
+                </Button>
+              )}
               <div className="flex gap-2">
                 <Button variant="ghost" onClick={() => setBuka(false)} disabled={sibuk}>
                   Batal
                 </Button>
-                <Button onClick={simpan} disabled={sibuk}>
+                <Button onClick={perOutlet ? simpanOutlet : simpanKegiatan} disabled={sibuk}>
                   {sibuk ? <Loader2 className="size-4 animate-spin" /> : <Save className="size-4" />} Simpan semua
                 </Button>
               </div>
@@ -510,6 +558,173 @@ export function FormKegiatan({
         </DialogContent>
       </Dialog>
     </>
+  );
+}
+
+/** Tabel kegiatan: satu baris satu kejadian. */
+function TabelKegiatan({
+  baris,
+  picOpsi,
+  outlet,
+  perluBukti,
+  ubah,
+}: {
+  baris: BarisKegiatan[];
+  picOpsi: string[];
+  outlet: OutletBaris[];
+  perluBukti: boolean;
+  ubah: (i: number, kolom: keyof BarisKegiatan, v: string | File[]) => void;
+}) {
+  return (
+    <div className="min-h-0 flex-1 overflow-auto rounded-xl border border-border">
+      <table className="w-full min-w-[900px] border-collapse text-sm">
+        <thead className="sticky top-0 z-10">
+          <tr className="border-b border-border text-left">
+            <Kepala className="w-10 text-center">#</Kepala>
+            <Kepala className="w-44">Tanggal</Kepala>
+            <Kepala className="w-40">PIC</Kepala>
+            <Kepala className="w-52">Outlet</Kepala>
+            <Kepala>Nama Kegiatan</Kepala>
+            {perluBukti && <Kepala className="w-44">Bukti submit</Kepala>}
+            <Kepala>Keterangan</Kepala>
+          </tr>
+        </thead>
+        <tbody>
+          {baris.map((b, i) => (
+            <tr key={i} className="border-b border-border/60 last:border-0">
+              <td className="px-3 py-1.5 text-center text-[12px] tabular-nums text-muted-foreground">{i + 1}</td>
+              <td className="px-3 py-1.5">
+                <DatePicker value={b.tanggal} onChange={(v) => ubah(i, "tanggal", v)} />
+              </td>
+              <td className="px-3 py-1.5">
+                {picOpsi.length > 0 ? (
+                  <Combobox
+                    portal
+                    searchable={false}
+                    className="w-full"
+                    value={b.picNama}
+                    onChange={(v) => ubah(i, "picNama", v)}
+                    options={picOpsi.map((p) => ({ value: p, label: p }))}
+                  />
+                ) : (
+                  <Input className="h-8" value={b.picNama} onChange={(e) => ubah(i, "picNama", e.target.value)} />
+                )}
+              </td>
+              <td className="px-3 py-1.5">
+                <Combobox
+                  portal
+                  searchPlaceholder="Cari outlet…"
+                  className="w-full"
+                  value={b.outletId}
+                  onChange={(v) => ubah(i, "outletId", v)}
+                  options={[{ value: "", label: "— tanpa outlet —" }, ...outlet.map((o) => ({ value: o.outletId, label: o.outletNama }))]}
+                />
+              </td>
+              <td className="px-3 py-1.5">
+                <Input className="h-8" placeholder="…" value={b.judul} onChange={(e) => ubah(i, "judul", e.target.value)} />
+              </td>
+              {perluBukti && (
+                <td className="px-3 py-1.5">
+                  <BuktiBaris berkas={b.bukti} onPilih={(f) => ubah(i, "bukti", f)} />
+                </td>
+              )}
+              <td className="px-3 py-1.5">
+                <Input className="h-8" placeholder="opsional" value={b.deskripsi} onChange={(e) => ubah(i, "deskripsi", e.target.value)} />
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+/** Pemilih berkas satu baris — tombolnya milik aplikasi, bukan bawaan peramban. */
+function BuktiBaris({ berkas, onPilih }: { berkas: File[]; onPilih: (f: File[]) => void }) {
+  const ref = React.useRef<HTMLInputElement>(null);
+  return (
+    <div className="space-y-1">
+      <input
+        ref={ref}
+        type="file"
+        accept="image/png,image/jpeg,application/pdf"
+        multiple
+        hidden
+        onChange={(e) => onPilih([...(e.target.files ?? [])])}
+      />
+      <Button type="button" size="sm" variant="outline" className="h-8 w-full gap-1.5" onClick={() => ref.current?.click()}>
+        <Paperclip className="size-3.5" /> {berkas.length > 0 ? `${berkas.length} berkas` : "Pilih"}
+      </Button>
+      {berkas.length > 0 && <p className="truncate text-[10.5px] text-muted-foreground">{berkas.map((f) => f.name).join(", ")}</p>}
+    </div>
+  );
+}
+
+/** Tabel angka bulanan: satu baris satu outlet. */
+function TabelOutlet({
+  jenis,
+  outlet,
+  isi,
+  ubah,
+}: {
+  jenis: OpsiKegiatan["jenis"];
+  outlet: OutletBaris[];
+  isi: Record<string, { gross: string; netProfit: string; hpp: string }>;
+  ubah: (id: string, kolom: "gross" | "netProfit" | "hpp", v: string) => void;
+}) {
+  // Gross manual HANYA untuk outlet yang ESB-nya tidak punya angkanya. Yang
+  // lain ditampilkan apa adanya dan tidak bisa diketik — angka yang bisa
+  // diperdebatkan tidak boleh mengalahkan angka yang tidak bisa.
+  const daftar = jenis === "gross_manual" ? outlet.filter((o) => !o.dariEsb) : outlet;
+  const kolom = jenis === "gross_manual" ? "gross" : jenis === "net_profit" ? "netProfit" : "hpp";
+  const judul = jenis === "gross_manual" ? "Gross Sales (Rp)" : jenis === "net_profit" ? "Net Profit (Rp)" : "HPP (%)";
+
+  if (daftar.length === 0) {
+    return (
+      <div className="flex min-h-0 flex-1 items-center justify-center rounded-xl border border-border px-6 py-10 text-center text-[13px] text-muted-foreground">
+        Seluruh outlet di area ini sudah punya angka dari ESB — tidak ada yang perlu diisi tangan.
+      </div>
+    );
+  }
+
+  return (
+    <div className="min-h-0 flex-1 overflow-auto rounded-xl border border-border">
+      <table className="w-full min-w-[640px] border-collapse text-sm">
+        <thead className="sticky top-0 z-10">
+          <tr className="border-b border-border text-left">
+            <Kepala>Outlet</Kepala>
+            {jenis !== "gross_manual" && <Kepala className="text-right">Gross Sales</Kepala>}
+            <Kepala className="w-52">{judul}</Kepala>
+          </tr>
+        </thead>
+        <tbody>
+          {daftar.map((o) => (
+            <tr key={o.outletId} className="border-b border-border/60 last:border-0">
+              <td className="px-3 py-1.5">
+                <p className="font-medium text-foreground">{o.outletNama}</p>
+                {!o.ikut && (
+                  <p className="text-[11px] text-amber-600 dark:text-amber-400">belum genap 3 bulan — belum ikut dinilai</p>
+                )}
+              </td>
+              {jenis !== "gross_manual" && (
+                <td className="px-3 py-1.5 text-right tabular-nums text-muted-foreground">
+                  {o.gross === null ? "—" : formatIDR(o.gross)}
+                </td>
+              )}
+              <td className="px-3 py-1.5">
+                <Input
+                  inputMode="numeric"
+                  className="h-8"
+                  placeholder={jenis === "hpp" ? "mis. 37.5" : "0"}
+                  value={isi[o.outletId]?.[kolom] ?? ""}
+                  onChange={(e) => ubah(o.outletId, kolom, e.target.value)}
+                />
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
   );
 }
 

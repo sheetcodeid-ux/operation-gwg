@@ -67,7 +67,9 @@ export type KodeOtomatis =
   | "management_fee"
   | "average_transaction"
   | "gross_sales_area"
-  | "komplain_area";
+  | "komplain_area"
+  | "net_profit_area"
+  | "hpp_area";
 
 /** Dari mana actual-nya datang. */
 export type SumberActual =
@@ -452,9 +454,9 @@ const coordinatorArea: Indikator[] = [
     label: "Net Profit",
     bobot: 30,
     target: { jenis: "porsi", dari: "gross_sales", rasio: 30 },
-    actual: { sumber: "manual" },
+    actual: { sumber: "otomatis", kode: "net_profit_area" },
     satuan: "rupiah",
-    penjelasan: "Target 30% dari Gross Sales yang tercapai. Angkanya diisi tangan.",
+    penjelasan: "Target 30% dari Gross Sales yang tercapai. Dijumlah dari laba bersih tiap outlet.",
   },
   {
     key: "hygiene_cctv",
@@ -478,10 +480,10 @@ const coordinatorArea: Indikator[] = [
     label: "Harga Pokok Penjualan",
     bobot: 20,
     target: { jenis: "tetap", nilai: 40 },
-    actual: { sumber: "manual" },
+    actual: { sumber: "otomatis", kode: "hpp_area" },
     penilaian: "lulus_maks",
     satuan: "persen",
-    penjelasan: "Maksimal 40%. Lebih dari itu nilainya nol — tidak ada nilai separuh.",
+    penjelasan: "Maksimal 40%. Ditimbang penjualan tiap outlet, bukan dirata-rata begitu saja.",
   },
 ];
 

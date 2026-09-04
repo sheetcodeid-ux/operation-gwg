@@ -20,3 +20,4 @@ export const simpanEfisiensiMassalAction = tolak;
 export const simpanFeeMassalAction = tolak;
 export const simpanMenuPasarMassalAction = tolak;
 export const uploadKpiBuktiAction = tolak;
+export const simpanOutletBulananAction = tolak;

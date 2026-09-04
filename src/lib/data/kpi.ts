@@ -21,6 +21,7 @@ import {
 } from "@/lib/kpi/hitung";
 import { indikatorPosisi, type Indikator, type JenisEntri } from "@/lib/kpi/indikator";
 import { posisiDari, type KodePosisi } from "@/lib/kpi/struktur";
+import { SEMUA_PIC } from "@/lib/kpi/semua-pic";
 
 /**
  * Penyusun angka KPI satu posisi pada satu bulan.
@@ -87,6 +88,8 @@ export interface LaporanKpi {
   pasar: DetailPasar | null;
   fee: DetailFee[] | null;
   entri: EntriKpi[];
+  /** Angka dan daftar outlet Coordinator Area. Null untuk posisi lain. */
+  ca: AngkaCa | null;
 }
 
 const bulanSebelum = (periode: string): string => {
@@ -337,69 +340,213 @@ async function designRequest(periode: string): Promise<{ masuk: number; selesai:
   return { masuk: bulan.length, selesai: bulan.filter((r) => r.status === "terlaksana").length };
 }
 
-/**
- * Cabang ESB milik satu area — jembatan tiap angka Coordinator Area.
- *
- * Areanya menempel pada OUTLET, sedangkan angka penjualannya menempel pada
- * cabang ESB. Tanpa penerjemahan ini keduanya tidak pernah bertemu, dan
- * seluruh indikator Coordinator Area akan kosong tanpa satu pun pesan galat.
- */
-async function cabangArea(areaId: string): Promise<string[]> {
-  if (!dbEnabled || !areaId) return [];
-  const { data } = await db()
-    .from("outlets")
-    .select("esb_branch_id")
-    .eq("area_id", areaId)
-    .eq("active", true)
-    .not("esb_branch_id", "is", null);
-  return ((data ?? []) as { esb_branch_id: string | null }[]).map((r) => r.esb_branch_id!).filter(Boolean);
+/* ─────────────── angka bulanan per outlet yang diisi tangan ─────────────── */
+
+export interface OutletBulanan {
+  outletId: string;
+  gross: number | null;
+  netProfit: number | null;
+  hpp: number | null;
 }
 
-/** Gross Sales satu area pada satu bulan — jumlah net sales ESB outlet-outletnya. */
-async function grossSalesArea(periode: string, cabang: string[]): Promise<number | null> {
-  if (cabang.length === 0) return null;
-  const peta = await netBulananPerCabang(periode);
-  const ada = cabang.filter((c) => peta.has(c));
-  // Sebagian cabang yang belum tertarik berarti angkanya BELUM UTUH. Menjumlah
-  // yang ada saja menghasilkan gross sales yang kurang tanpa terlihat kurang —
-  // dan target bulan berikutnya ikut salah karena dihitung dari angka ini.
-  if (ada.length < cabang.length) return null;
-  return ada.reduce((a, c) => a + (peta.get(c)?.net ?? 0), 0);
-}
-
-/**
- * Rata-rata Gross Sales tiga bulan YANG SUDAH SELESAI — dasar target.
- *
- * Bulan berjalan sengaja tidak ikut: kalau ikut, targetnya bergerak tiap hari
- * dan tidak pernah bisa dipakai sebagai patokan oleh orang yang dikejar.
- */
-async function rataTigaBulanArea(periode: string, cabang: string[]): Promise<number | null> {
-  if (cabang.length === 0) return null;
-  const bulan = [bulanSebelum(periode), bulanSebelum(bulanSebelum(periode)), bulanSebelum(bulanSebelum(bulanSebelum(periode)))];
-  const nilai: number[] = [];
-  for (const b of bulan) {
-    const n = await grossSalesArea(b, cabang);
-    if (n !== null) nilai.push(n);
+/** Isian tangan seluruh outlet pada satu bulan. */
+async function outletBulanan(periode: string): Promise<Map<string, OutletBulanan>> {
+  const peta = new Map<string, OutletBulanan>();
+  if (!dbEnabled) return peta;
+  const { data } = await db().from("kpi_outlet_bulanan").select("outlet_id,gross,net_profit,hpp").eq("periode", periode);
+  for (const r of ((data ?? []) as Record<string, unknown>[])) {
+    peta.set(String(r.outlet_id), {
+      outletId: String(r.outlet_id),
+      gross: angka(r.gross),
+      netProfit: angka(r.net_profit),
+      hpp: angka(r.hpp),
+    });
   }
-  // Dibagi jumlah bulan yang BENAR-BENAR ada datanya. Area yang baru berjalan
-  // dua bulan tidak boleh dibagi tiga — targetnya akan dua pertiga dari yang
-  // seharusnya, dan ia selalu terlihat melampaui target.
-  if (nilai.length === 0) return null;
-  return nilai.reduce((a, b) => a + b, 0) / nilai.length;
+  return peta;
+}
+
+export async function simpanOutletBulanan(input: {
+  outletId: string;
+  periode: string;
+  gross: number | null;
+  netProfit: number | null;
+  hpp: number | null;
+  olehId: string;
+  olehNama: string;
+}): Promise<{ error?: string }> {
+  if (!dbEnabled) return { error: "Penyimpanan belum aktif." };
+  const { error } = await db().from("kpi_outlet_bulanan").upsert({
+    outlet_id: input.outletId,
+    periode: input.periode,
+    gross: input.gross,
+    net_profit: input.netProfit,
+    hpp: input.hpp,
+    diubah_oleh: input.olehId,
+    diubah_nama: input.olehNama,
+    diubah_pada: new Date().toISOString(),
+  });
+  return error ? { error: error.message } : {};
+}
+
+/* ─────────────────────── angka se-area Coordinator Area ─────────────────────── */
+
+/** Outlet yang dinilai, beserta cabang ESB-nya. */
+interface OutletCa {
+  id: string;
+  nama: string;
+  branch: string | null;
 }
 
 /**
- * Komplain satu area pada satu bulan, DI LUAR kategori kualitas makanan.
+ * SATU nilai gross sales outlet pada satu bulan.
+ *
+ * ESB lebih dulu, isian tangan hanya sebagai cadangan — angka yang bisa
+ * diperdebatkan tidak boleh mengalahkan angka yang tidak bisa. Cadangannya ada
+ * karena tiga outlet (Nordu Siantan dan dua Ayam Goreng Busari) pindah dari POS
+ * Majoo dan riwayatnya tidak ikut terbawa; tanpa isian itu ketiganya terbaca
+ * seperti outlet yang baru buka.
+ */
+function grossOutlet(o: OutletCa, esb: Map<string, { net: number }>, tangan: Map<string, OutletBulanan>): number | null {
+  const dariEsb = o.branch ? esb.get(o.branch)?.net : undefined;
+  if (dariEsb !== undefined) return dariEsb;
+  return tangan.get(o.id)?.gross ?? null;
+}
+
+/** Tiga bulan sebelum `periode`, terbaru dulu. */
+function tigaBulanSebelum(periode: string): string[] {
+  const a = bulanSebelum(periode);
+  const b = bulanSebelum(a);
+  return [a, b, bulanSebelum(b)];
+}
+
+export interface DetailOutletCa {
+  outletId: string;
+  outletNama: string;
+  /** Gross sales bulan ini; null = belum ada dari mana pun. */
+  gross: number | null;
+  /** Angkanya dari ESB — kalau ya, isian tangan tidak dipakai dan tidak perlu. */
+  dariEsb: boolean;
+  netProfit: number | null;
+  hpp: number | null;
+  /** Sudah berjalan tiga bulan penuh; yang belum tidak ikut dinilai. */
+  ikut: boolean;
+}
+
+export interface AngkaCa {
+  /** Outlet yang IKUT dinilai — sudah berjalan tiga bulan penuh. */
+  outlet: OutletCa[];
+  /** Seluruh outlet di area itu beserta angkanya — bahan tabel isian. */
+  detail: DetailOutletCa[];
+  /** Outlet yang belum genap tiga bulan datanya, jadi tidak ikut dihitung. */
+  belumTigaBulan: OutletCa[];
+  grossSales: number | null;
+  rataTiga: number | null;
+  komplain: number | null;
+  netProfit: number | null;
+  hpp: number | null;
+  /** Berapa Coordinator Area yang tercakup — pengali target per orang. */
+  jumlahPic: number;
+}
+
+/**
+ * Seluruh angka Coordinator Area untuk satu bulan.
+ *
+ * ATURAN TIGA BULAN. Outlet yang belum genap tiga bulan berjalan tidak ikut
+ * dinilai sama sekali — bukan hanya pada Gross Sales, melainkan pada seluruh
+ * indikator. Outlet baru selalu menyeret rata-rata ke bawah dan komplain awal
+ * yang wajar terhitung sebagai kegagalan; menilainya berarti menghukum orang
+ * atas outlet yang memang belum jalan.
+ *
+ * Yang menentukan "sudah tiga bulan" adalah ADA-TIDAKNYA angka penjualan tiga
+ * bulan sebelumnya, bukan tanggal buka yang diketik seseorang — tanggal buka
+ * tidak pernah ada di basis data ini, dan yang diketik belakangan hampir selalu
+ * tanggal yang diingat, bukan tanggal yang benar.
+ */
+async function angkaCa(periode: string, areaIds: string[], jumlahPic: number): Promise<AngkaCa> {
+  const semua: OutletCa[] = getOutlets()
+    .filter((o) => o.active && areaIds.includes(o.areaId ?? ""))
+    .map((o) => ({ id: o.id, nama: o.name, branch: o.esbBranchId ?? null }));
+
+  const bulanLalu = tigaBulanSebelum(periode);
+  const [esbIni, tanganIni, ...riwayat] = await Promise.all([
+    netBulananPerCabang(periode),
+    outletBulanan(periode),
+    ...bulanLalu.map((b) => Promise.all([netBulananPerCabang(b), outletBulanan(b)])),
+  ]);
+
+  const nilaiBulan = (o: OutletCa, n: number): number | null =>
+    grossOutlet(o, riwayat[n][0], riwayat[n][1]);
+
+  const lolos: OutletCa[] = [];
+  const belum: OutletCa[] = [];
+  const rata = new Map<string, number>();
+  for (const o of semua) {
+    const tiga = [0, 1, 2].map((n) => nilaiBulan(o, n));
+    if (tiga.some((v) => v === null)) {
+      belum.push(o);
+      continue;
+    }
+    lolos.push(o);
+    rata.set(o.id, (tiga as number[]).reduce((a, b) => a + b, 0) / 3);
+  }
+
+  // Gross sales bulan ini. Satu outlet yang lolos tapi angkanya belum ada
+  // membuat totalnya BELUM UTUH — ditahan, bukan ditampilkan kurang.
+  const grossPerOutlet = lolos.map((o) => grossOutlet(o, esbIni, tanganIni));
+  const grossSales = grossPerOutlet.some((v) => v === null)
+    ? null
+    : grossPerOutlet.reduce((a: number, b) => a + (b ?? 0), 0);
+
+  const rataTiga = lolos.length === 0 ? null : lolos.reduce((a, o) => a + (rata.get(o.id) ?? 0), 0);
+
+  const netProfitPer = lolos.map((o) => tanganIni.get(o.id)?.netProfit ?? null);
+  const netProfit = netProfitPer.every((v) => v === null) ? null : netProfitPer.reduce((a: number, b) => a + (b ?? 0), 0);
+
+  // HPP se-area adalah RASIO, jadi ditimbang penjualannya — merata-ratakan
+  // persen begitu saja membuat outlet kecil sama beratnya dengan outlet
+  // terbesar, dan angkanya tidak pernah cocok dengan laporan keuangan.
+  let bobotHpp = 0;
+  let jumlahHpp = 0;
+  lolos.forEach((o, n) => {
+    const h = tanganIni.get(o.id)?.hpp;
+    const g = grossPerOutlet[n];
+    if (h === null || h === undefined || g === null) return;
+    bobotHpp += g;
+    jumlahHpp += h * g;
+  });
+  const hpp = bobotHpp > 0 ? jumlahHpp / bobotHpp : null;
+
+  const komplain = await komplainOutlet(periode, lolos.map((o) => o.id));
+
+  const detail: DetailOutletCa[] = semua.map((o) => {
+    const dariEsb = !!(o.branch && esbIni.has(o.branch));
+    return {
+      outletId: o.id,
+      outletNama: o.nama,
+      gross: grossOutlet(o, esbIni, tanganIni),
+      dariEsb,
+      netProfit: tanganIni.get(o.id)?.netProfit ?? null,
+      hpp: tanganIni.get(o.id)?.hpp ?? null,
+      ikut: lolos.some((l) => l.id === o.id),
+    };
+  });
+
+  return { outlet: lolos, detail, belumTigaBulan: belum, grossSales, rataTiga, komplain, netProfit, hpp, jumlahPic };
+}
+
+/**
+ * Komplain outlet-outlet itu pada satu bulan, DI LUAR kategori kualitas makanan.
  *
  * Kualitas makanan sudah dinilai di tempat lain (Review Customer milik PDQ);
  * menghitungnya lagi di sini berarti satu kejadian menghukum dua departemen.
  */
-async function komplainArea(periode: string, areaId: string): Promise<number | null> {
-  if (!dbEnabled || !areaId) return null;
+async function komplainOutlet(periode: string, outletIds: string[]): Promise<number | null> {
+  if (!dbEnabled) return null;
+  if (outletIds.length === 0) return 0;
   const { data } = await db()
     .from("complaints")
     .select("id")
-    .eq("area_id", areaId)
+    .in("outlet_id", outletIds)
     .neq("category", "food_quality")
     .gte("review_date", `${periode}-01`)
     .lt("review_date", `${bulanSetelah(periode)}-01`);
@@ -620,7 +767,18 @@ export async function laporanKpi(posisi: KodePosisi, periode: string, pic = ""):
   // pada orangnya — bukan pada posisinya. Tanpa PIC terpilih tidak ada area,
   // dan tanpa area tidak ada satu pun angka yang bisa dihitung.
   const perluArea = daftar.some((i) => i.actual.sumber === "otomatis" && i.actual.kode === "gross_sales_area");
-  const areaId = perluArea ? (getUser(pic)?.areaId ?? "") : "";
+  // "Semua" mencakup SELURUH area yang dipegang Coordinator Area — dihitung
+  // sekali per area, bukan per orang. Tiga orang yang memegang satu area yang
+  // sama akan menjumlahkan penjualan area itu tiga kali kalau dihitung per
+  // orang, dan totalnya tidak pernah cocok dengan angka perusahaan.
+  const semuaPic = picDinamis(posisi);
+  const capAllArea = pic === SEMUA_PIC;
+  const areaIds = !perluArea
+    ? []
+    : capAllArea
+      ? [...new Set(semuaPic.map((o) => getUser(o.value)?.areaId ?? "").filter(Boolean))]
+      : [getUser(pic)?.areaId ?? ""].filter(Boolean);
+  const jumlahPic = capAllArea ? Math.max(1, semuaPic.length) : 1;
 
   const lalu = new Map<string, number>();
   if (perluAverage) {
@@ -655,7 +813,7 @@ export async function laporanKpi(posisi: KodePosisi, periode: string, pic = ""):
   const perluKomplain = daftar.some((i) => i.actual.sumber === "otomatis" && i.actual.kode === "komplain_food_quality");
   const perluFee = daftar.some((i) => i.actual.sumber === "otomatis" && i.actual.kode === "management_fee");
 
-  const [design, komplain, netBulan, average, netPerusahaan, omsetTigaBulan, averageTrx, cabangCa] = await Promise.all([
+  const [design, komplain, netBulan, average, netPerusahaan, omsetTigaBulan, averageTrx] = await Promise.all([
     perluDesign ? designRequest(periode) : Promise.resolve(null),
     perluKomplain ? komplainFoodQuality(periode) : Promise.resolve(null),
     perluFee ? netSalesLengkap(periode) : Promise.resolve(null),
@@ -668,19 +826,10 @@ export async function laporanKpi(posisi: KodePosisi, periode: string, pic = ""):
       ? netSalesPerusahaan(bulanSebelum(bulanSebelum(periode)), periode)
       : Promise.resolve(null),
     perluAverage ? averageTransaksi(periode) : Promise.resolve(null),
-    perluArea ? cabangArea(areaId) : Promise.resolve<string[]>([]),
   ]);
 
   /* --- angka se-area (Coordinator Area) --- */
-  let ca: KonteksBaris["ca"] = null;
-  if (perluArea) {
-    const [grossSales, rataTiga, komplain] = await Promise.all([
-      grossSalesArea(periode, cabangCa),
-      rataTigaBulanArea(periode, cabangCa),
-      komplainArea(periode, areaId),
-    ]);
-    ca = { grossSales, rataTiga, komplain };
-  }
+  const ca = perluArea ? await angkaCa(periode, areaIds, jumlahPic) : null;
 
   /* --- panel efisiensi --- */
   let efisiensi: LaporanKpi["efisiensi"] = null;
@@ -777,6 +926,7 @@ export async function laporanKpi(posisi: KodePosisi, periode: string, pic = ""):
     pasar,
     fee,
     entri,
+    ca,
   };
 }
 
@@ -796,7 +946,7 @@ interface KonteksBaris {
   netPerusahaan: number | null;
   averageTrx: AverageTrx | null;
   /** Angka se-area untuk Coordinator Area. Null untuk posisi lain. */
-  ca: { grossSales: number | null; rataTiga: number | null; komplain: number | null } | null;
+  ca: AngkaCa | null;
 }
 
 /**
@@ -826,6 +976,13 @@ function susunBaris(i: Indikator, k: KonteksBaris): BarisKpi {
   // ditetapkan (1,50%), persis seperti hitungan di spreadsheet.
   const sudahCapaian = i.actual.sumber === "otomatis" && i.actual.kode === "efisiensi_operasional";
 
+  // Target yang berlaku PER ORANG (40 audit, batas 20 komplain) dikalikan
+  // jumlah orang yang tercakup saat "Semua" dipilih. Tanpa ini, gabungan
+  // delapan Coordinator Area dibandingkan dengan target satu orang — dan
+  // hasilnya selalu terlihat jauh melampaui atau jauh gagal.
+  const perOrang = i.key === "hygiene_cctv" || i.key === "komplain_area";
+  const pengali = perOrang ? (k.ca?.jumlahPic ?? 1) : 1;
+
   const target = sudahCapaian ? 100 : hitungTarget(jenis, {
     jumlahBrand: k.jumlahBrand,
     jumlahOutlet: k.jumlahOutlet,
@@ -835,6 +992,7 @@ function susunBaris(i: Indikator, k: KonteksBaris): BarisKpi {
     // Target Net Profit berdiri di atas Gross Sales yang BENAR-BENAR tercapai.
     dasarPorsi: k.ca?.grossSales ?? null,
   });
+  const targetAkhir = target === null ? null : target * pengali;
 
   let actual: number | null = null;
   let alasan: string | undefined;
@@ -897,6 +1055,14 @@ function susunBaris(i: Indikator, k: KonteksBaris): BarisKpi {
           actual = k.ca?.komplain ?? null;
           if (actual === null) alasan = "Areanya belum ditentukan untuk orang ini.";
           break;
+        case "net_profit_area":
+          actual = k.ca?.netProfit ?? null;
+          if (actual === null) alasan = "Laba bersih outlet belum diisi lewat Catat Kegiatan.";
+          break;
+        case "hpp_area":
+          actual = k.ca?.hpp ?? null;
+          if (actual === null) alasan = "Harga pokok penjualan belum diisi lewat Catat Kegiatan.";
+          break;
         case "average_transaction":
           // Bulan yang datanya belum lengkap TIDAK ditampilkan angkanya.
           // Rata-rata dari separuh bulan tetap terlihat seperti angka yang
@@ -918,7 +1084,7 @@ function susunBaris(i: Indikator, k: KonteksBaris): BarisKpi {
     alasan = i.target.jenis === "tumbuh" ? "Belum ada capaian bulan lalu sebagai dasar target." : "Targetnya belum ditetapkan.";
   }
 
-  return barisKpi({ indikator: i, bobot, target, actual, alasan });
+  return barisKpi({ indikator: i, bobot, target: targetAkhir, actual, alasan });
 }
 
 /** Bulan-bulan yang sudah punya jejak, terbaru dulu — pengisi pemilih periode. */
@@ -940,6 +1106,21 @@ export function daftarPeriodeKpi(sekarang: string, jumlah = 12): { value: string
  * (menikah, salah ketik dibetulkan) dan seluruh riwayat angkanya akan terputus
  * tanpa ada yang menyadarinya; ID tidak pernah berubah.
  */
+export { SEMUA_PIC } from "@/lib/kpi/semua-pic";
+
+/**
+ * Outlet yang boleh diisi angkanya oleh satu Coordinator Area.
+ *
+ * Diperiksa DI SERVER saat menyimpan, bukan hanya dibatasi daftarnya di layar:
+ * yang dikirim peramban bisa diubah siapa saja, dan satu id outlet yang
+ * ditukar berarti laba bersih area orang lain ikut tertimpa.
+ */
+export function outletMilikPic(pic: string): Set<string> {
+  const areaId = getUser(pic)?.areaId ?? "";
+  if (!areaId) return new Set();
+  return new Set(getOutlets().filter((o) => o.active && o.areaId === areaId).map((o) => o.id));
+}
+
 export function picDinamis(posisi: KodePosisi): { value: string; label: string }[] {
   const p = posisiDari(posisi);
   if (p?.picDinamis !== "area_coordinator") return [];
