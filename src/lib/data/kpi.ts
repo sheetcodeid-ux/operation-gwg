@@ -2,7 +2,7 @@ import "server-only";
 
 import { randomUUID } from "node:crypto";
 import { db, dbEnabled } from "./db";
-import { getOutlets } from "./store";
+import { getOutlets, getUser } from "./store";
 import { listHcRequests } from "./hc-requests";
 import { netBulananPerCabang } from "./esb-bulanan";
 import { WORK_BRANDS } from "@/lib/constants";
@@ -358,10 +358,18 @@ async function designRequest(periode: string): Promise<{ masuk: number; selesai:
  */
 async function kontenDariDesign(periode: string) {
   const rows = await listHcRequests({ kind: "design", semua: true });
+  // Nama cabang dicari sekali di awal. Mencarinya per permintaan berarti
+  // menelusuri 58 outlet sebanyak 224 kali untuk jawaban yang sama.
+  const namaOutlet = new Map(getOutlets().map((o) => [o.id, o.name]));
   return hitungKonten(
     rows.map((r) => ({
       designType: r.designType,
       outletNama: r.outletName,
+      // Kolom outlet pada permintaan design KOSONG di seluruh 224 baris yang
+      // ada — formulirnya tidak menanyakannya. Tanpa cadangan ini setiap baris
+      // dibuang sebelum sempat dihitung, dan Jumlah Konten selalu nol padahal
+      // antriannya penuh.
+      outletPemohon: (getUser(r.requesterId)?.outletIds ?? []).map((id) => namaOutlet.get(id) ?? null),
       status: r.status,
       periode: r.createdAt.slice(0, 7),
     })),
