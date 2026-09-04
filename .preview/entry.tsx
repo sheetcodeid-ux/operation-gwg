@@ -2,7 +2,7 @@ import { createRoot } from "react-dom/client";
 import { PapanKpi } from "@/components/kpi/papan-kpi";
 import { barisEfisiensi, barisKpi, ringkasEfisiensi, ringkasKpi } from "@/lib/kpi/hitung";
 import { indikatorPosisi } from "@/lib/kpi/indikator";
-import { DEPARTEMEN, posisiDari, posisiDepartemen, type KodePosisi } from "@/lib/kpi/struktur";
+import { posisiDari, posisiDepartemen, type KodePosisi } from "@/lib/kpi/struktur";
 import { TENGGAT, indikatorPosisi as daftarIndikator } from "@/lib/kpi/indikator";
 import type { LaporanKpi } from "@/lib/data/kpi";
 
@@ -22,6 +22,18 @@ const OUTLET: [string, number, number | null, number | null][] = [
   ["Lesung Pipi Bogor", 96700000, 33900000, 1900000],
   ["Nordu Kemang", 174320000, null, null],
 ];
+
+/** Katalog menu ESB tiruan — nama dan harga yang bentuknya seperti aslinya. */
+const MENU_ESB = [
+  ["WIM", "Coffee Based", 5_034_909],
+  ["Leopard", "Coffee Based", 20_436_363],
+  ["Bubur Ayam", "Main Course", 20_000],
+  ["Butter Croissant", "Pastry", 8_412_500],
+  ["Ayam Goreng Busari Paha", "Main Course", 14_900_000],
+  ["Es Teh Manis", "Non Coffee", 3_240_000],
+  ["Nasi Goreng Kampung", "Main Course", 6_180_000],
+  ["Matcha Latte", "Non Coffee", 11_720_000],
+].map(([menu, kategori, estimasi]) => ({ menu: menu as string, kategori: kategori as string, estimasi: estimasi as number }));
 
 function buat(kode: KodePosisi) {
   const daftar = indikatorPosisi(kode);
@@ -70,13 +82,13 @@ createRoot(document.getElementById("root")!).render(
     laporan={laporan}
     lalu={lalu}
     namaPosisi={p.nama}
-    departemen={p.departemen}
     pic={p.pic}
+    perPic={!!p.perPic}
     indikator={daftarIndikator(kode)}
     outlets={OUTLET.map(([nama], i) => ({ id: `o${i}`, nama }))}
     tenggatHari={TENGGAT[kode] ?? [15]}
-    departemenOpsi={DEPARTEMEN.filter((d) => d.posisi.length > 0).map((d) => ({ value: d.kode, label: d.nama }))}
     posisiOpsi={posisiDepartemen(p.departemen).map((x) => ({ value: x.kode, label: x.nama }))}
     bolehAtur
+    menuEsb={MENU_ESB}
   />,
 );

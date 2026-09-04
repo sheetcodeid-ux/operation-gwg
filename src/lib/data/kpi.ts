@@ -82,6 +82,8 @@ export interface DetailFee {
 export interface LaporanKpi {
   posisi: KodePosisi;
   periode: string;
+  /** Kosong = dinilai sebagai satu tim. */
+  pic: string;
   baris: BarisKpi[];
   ringkas: RingkasKpi;
   dikunci: boolean;
@@ -165,6 +167,7 @@ export async function simpanPengaturan(input: {
 export async function simpanActual(input: {
   periode: string;
   posisi: string;
+  pic?: string;
   indikator: string;
   brand: string;
   nilai: number;
@@ -176,6 +179,7 @@ export async function simpanActual(input: {
   const { error } = await db().from("kpi_actual").upsert({
     periode: input.periode,
     posisi: input.posisi,
+    pic: input.pic ?? "",
     indikator: input.indikator,
     brand: input.brand,
     nilai: input.nilai,
@@ -247,6 +251,7 @@ export async function simpanFee(input: {
 export async function simpanMenuPasar(input: {
   periode: string;
   posisi: string;
+  pic?: string;
   menu: string;
   penjualan: number;
   omset: number;
@@ -256,6 +261,7 @@ export async function simpanMenuPasar(input: {
   const { error } = await db().from("kpi_menu_pasar").upsert({
     periode: input.periode,
     posisi: input.posisi,
+    pic: input.pic ?? "",
     menu: input.menu.slice(0, 160),
     penjualan: input.penjualan,
     omset: input.omset,
@@ -265,22 +271,36 @@ export async function simpanMenuPasar(input: {
   return error ? { error: error.message } : {};
 }
 
-export async function hapusMenuPasar(periode: string, posisi: string, menu: string): Promise<{ error?: string }> {
+export async function hapusMenuPasar(periode: string, posisi: string, menu: string, pic = ""): Promise<{ error?: string }> {
   if (!dbEnabled) return { error: "Penyimpanan belum aktif." };
-  const { error } = await db().from("kpi_menu_pasar").delete().eq("periode", periode).eq("posisi", posisi).eq("menu", menu);
+  const { error } = await db()
+    .from("kpi_menu_pasar")
+    .delete()
+    .eq("periode", periode)
+    .eq("posisi", posisi)
+    .eq("pic", pic)
+    .eq("menu", menu);
   return error ? { error: error.message } : {};
 }
 
 /** Apakah bulan itu sudah dikunci untuk posisi ini. */
-export async function periodeDikunci(periode: string, posisi: string): Promise<boolean> {
+export async function periodeDikunci(periode: string, posisi: string, pic = ""): Promise<boolean> {
   if (!dbEnabled) return false;
-  const { data } = await db().from("kpi_periode").select("dikunci").eq("periode", periode).eq("posisi", posisi).maybeSingle();
+  const { data } = await db()
+    .from("kpi_periode")
+    .select("dikunci")
+    .eq("periode", periode)
+    .eq("posisi", posisi)
+    .eq("pic", pic)
+    .maybeSingle();
   return !!(data as { dikunci?: boolean } | null)?.dikunci;
 }
 
 /* ───────────────────────────────── entri ───────────────────────────────── */
 
-export async function simpanEntri(input: Omit<EntriKpi, "id" | "dibuatNama"> & { id?: string; olehId: string; olehNama: string }): Promise<{ id?: string; error?: string }> {
+export async function simpanEntri(
+  input: Omit<EntriKpi, "id" | "dibuatNama"> & { id?: string; pic?: string; olehId: string; olehNama: string },
+): Promise<{ id?: string; error?: string }> {
   if (!dbEnabled) return { error: "Penyimpanan belum aktif." };
   const id = input.id ?? `kpe_${randomUUID()}`;
   const { error } = await db().from("kpi_entri").upsert({
@@ -288,6 +308,7 @@ export async function simpanEntri(input: Omit<EntriKpi, "id" | "dibuatNama"> & {
     jenis: input.jenis,
     periode: input.periode,
     posisi: input.posisi,
+    pic: input.pic ?? "",
     tanggal: input.tanggal,
     pic_nama: input.picNama,
     outlet_id: input.outletId,
@@ -367,6 +388,29 @@ const bulanSetelah = (periode: string): string => {
 };
 
 /**
+ * Net sales SELURUH perusahaan untuk satu rentang bulan.
+ *
+ * Barisnya bercabang KOSONG — itu cara `seasonal_daily` menyimpan angka
+ * gabungan seluruh outlet, langsung dari ESB. Dipakai Marketing Communication
+ * (Net Sales Achievement) dan sebagai omset pembanding Keberhasilan Pasar.
+ */
+async function netSalesPerusahaan(dariPeriode: string, sampaiPeriode = dariPeriode): Promise<number | null> {
+  if (!dbEnabled) return null;
+  const { data } = await db()
+    .from("seasonal_daily")
+    .select("net")
+    .eq("branch", "")
+    .gte("day", `${dariPeriode}-01`)
+    .lt("day", `${bulanSetelah(sampaiPeriode)}-01`);
+  const rows = (data ?? []) as { net: number | string }[];
+  // Tidak ada barisnya sama sekali berarti bulannya belum disinkron — itu BEDA
+  // dengan penjualan nol, dan menyamakannya akan menuduh tim gagal total atas
+  // bulan yang bahkan belum ditarik datanya.
+  if (rows.length === 0) return null;
+  return rows.reduce((a, r) => a + (Number(r.net) || 0), 0);
+}
+
+/**
  * Net sales per CABANG ESB untuk satu bulan, dari data harian yang disinkron.
  *
  * Kuncinya id cabang ESB ("18-fnb_nord"), bukan nama outlet. Sempat dicocokkan
@@ -414,16 +458,22 @@ async function averageTigaBulan(periode: string): Promise<Map<string, number>> {
 const PAKAI_EFISIENSI: KodePosisi[] = ["pdq_food", "pdq_beverage"];
 const PAKAI_PASAR: KodePosisi[] = ["pdq_food", "pdq_beverage", "pdq_head_food", "pdq_head_pdq"];
 
-export async function laporanKpi(posisi: KodePosisi, periode: string): Promise<LaporanKpi> {
+/**
+ * `pic` kosong berarti posisi itu dinilai sebagai satu tim. Untuk posisi yang
+ * dinilai per orang, seluruh isian tersimpan di bawah nama orangnya — dan
+ * membaca tanpa menyebut namanya akan menampilkan laporan kosong, bukan
+ * gabungan. Itu disengaja: gabungan capaian tiga orang bukan capaian siapa pun.
+ */
+export async function laporanKpi(posisi: KodePosisi, periode: string, pic = ""): Promise<LaporanKpi> {
   const daftar = indikatorPosisi(posisi);
   const outletAktif = getOutlets().filter((o) => o.active);
 
   const [pengaturan, entriRows, actualRows, kunciRow] = await Promise.all([
     pengaturanPosisi(posisi),
-    dbEnabled ? db().from("kpi_entri").select("*").eq("posisi", posisi).eq("periode", periode) : Promise.resolve({ data: [] }),
-    dbEnabled ? db().from("kpi_actual").select("*").eq("posisi", posisi).eq("periode", periode) : Promise.resolve({ data: [] }),
+    dbEnabled ? db().from("kpi_entri").select("*").eq("posisi", posisi).eq("periode", periode).eq("pic", pic) : Promise.resolve({ data: [] }),
+    dbEnabled ? db().from("kpi_actual").select("*").eq("posisi", posisi).eq("periode", periode).eq("pic", pic) : Promise.resolve({ data: [] }),
     dbEnabled
-      ? db().from("kpi_periode").select("dikunci").eq("posisi", posisi).eq("periode", periode).maybeSingle()
+      ? db().from("kpi_periode").select("dikunci").eq("posisi", posisi).eq("periode", periode).eq("pic", pic).maybeSingle()
       : Promise.resolve({ data: null }),
   ]);
 
@@ -442,9 +492,23 @@ export async function laporanKpi(posisi: KodePosisi, periode: string): Promise<L
   // Capaian bulan lalu untuk indikator pertumbuhan — dibaca dari angka manual
   // bulan sebelumnya, bukan dari targetnya. Target yang tidak tercapai tidak
   // boleh jadi dasar target berikutnya.
+  const perluNetPerusahaan = daftar.some((i) => i.key === "net_sales") || PAKAI_PASAR.includes(posisi);
+
   const lalu = new Map<string, number>();
+  if (perluNetPerusahaan) {
+    // Dasar target Net Sales adalah penjualan bulan lalu yang SEBENARNYA, bukan
+    // yang pernah diketik — keduanya bisa berbeda, dan yang dari ESB tidak bisa
+    // diperdebatkan.
+    const n = await netSalesPerusahaan(bulanSebelum(periode));
+    if (n !== null) lalu.set("net_sales", n);
+  }
   if (dbEnabled) {
-    const { data } = await db().from("kpi_actual").select("indikator,nilai").eq("posisi", posisi).eq("periode", bulanSebelum(periode));
+    const { data } = await db()
+      .from("kpi_actual")
+      .select("indikator,nilai")
+      .eq("posisi", posisi)
+      .eq("periode", bulanSebelum(periode))
+      .eq("pic", pic);
     for (const r of ((data ?? []) as Record<string, unknown>[])) {
       const key = String(r.indikator);
       lalu.set(key, (lalu.get(key) ?? 0) + (Number(r.nilai) || 0));
@@ -461,19 +525,26 @@ export async function laporanKpi(posisi: KodePosisi, periode: string): Promise<L
   const perluKomplain = daftar.some((i) => i.actual.sumber === "otomatis" && i.actual.kode === "komplain_food_quality");
   const perluFee = daftar.some((i) => i.actual.sumber === "otomatis" && i.actual.kode === "management_fee");
 
-  const [design, konten, komplain, netBulan, average] = await Promise.all([
+  const [design, konten, komplain, netBulan, average, netPerusahaan, omsetTigaBulan] = await Promise.all([
     perluDesign ? designRequest(periode) : Promise.resolve(null),
     perluKonten ? kontenDariDesign(periode) : Promise.resolve(null),
     perluKomplain ? komplainFoodQuality(periode) : Promise.resolve(null),
     perluFee ? netSalesPerOutlet(periode) : Promise.resolve(null),
     PAKAI_EFISIENSI.includes(posisi) ? averageTigaBulan(periode) : Promise.resolve(null),
+    perluNetPerusahaan ? netSalesPerusahaan(periode) : Promise.resolve(null),
+    // Omset pembanding Keberhasilan Pasar memakai rentang yang SAMA dengan
+    // penjualan menunya: tiga bulan. Membandingkan penjualan tiga bulan dengan
+    // omset satu bulan melipatgandakan hasilnya tiga kali tanpa ada yang tahu.
+    PAKAI_PASAR.includes(posisi)
+      ? netSalesPerusahaan(bulanSebelum(bulanSebelum(periode)), periode)
+      : Promise.resolve(null),
   ]);
 
   /* --- panel efisiensi --- */
   let efisiensi: LaporanKpi["efisiensi"] = null;
   if (average) {
     const { data } = dbEnabled
-      ? await db().from("kpi_efisiensi").select("*").eq("posisi", posisi).eq("periode", periode)
+      ? await db().from("kpi_efisiensi").select("*").eq("posisi", posisi).eq("periode", periode).eq("pic", pic)
       : { data: [] };
     const isian = new Map<string, { wh: number | null; nonWh: number | null }>();
     for (const r of ((data ?? []) as Record<string, unknown>[])) {
@@ -498,13 +569,15 @@ export async function laporanKpi(posisi: KodePosisi, periode: string): Promise<L
     // dipasang. Sampai saat itu daftarnya tetap tampil dengan nilai nol,
     // supaya pilihannya sudah bisa disiapkan lebih dulu.
     const { data } = dbEnabled
-      ? await db().from("kpi_menu_pasar").select("menu,penjualan,omset").eq("posisi", posisi).eq("periode", periode)
+      ? await db().from("kpi_menu_pasar").select("menu,penjualan,omset").eq("posisi", posisi).eq("periode", periode).eq("pic", pic)
       : { data: [] };
     const rows = (data ?? []) as Record<string, unknown>[];
     const menu = rows.map((m) => ({ menu: String(m.menu), penjualan: Number(m.penjualan) || 0 }));
     // Omsetnya dicatat sekali per bulan; baris mana pun membawanya, jadi yang
     // dipakai baris pertama yang benar-benar terisi.
-    const omset = rows.map((m) => Number(m.omset) || 0).find((v) => v > 0) ?? 0;
+    // Omset diambil otomatis dari ESB; yang tersimpan di baris menu hanya
+    // dipakai bila ESB-nya memang belum punya angkanya.
+    const omset = omsetTigaBulan ?? rows.map((m) => Number(m.omset) || 0).find((v) => v > 0) ?? 0;
     const hasil = keberhasilanPasar(menu, omset, 1.5);
     pasar = { baris: hasil.baris, omset: hasil.omset, total: hasil.total, bagianTotal: hasil.bagianTotal };
   }
@@ -542,11 +615,13 @@ export async function laporanKpi(posisi: KodePosisi, periode: string): Promise<L
     efisiensi,
     fee,
     pasar,
+    netPerusahaan,
   }));
 
   return {
     posisi,
     periode,
+    pic,
     baris,
     ringkas: ringkasKpi(baris),
     dikunci: !!(kunciRow.data as { dikunci?: boolean } | null)?.dikunci,
@@ -571,6 +646,7 @@ interface KonteksBaris {
   efisiensi: LaporanKpi["efisiensi"];
   fee: DetailFee[] | null;
   pasar: DetailPasar | null;
+  netPerusahaan: number | null;
 }
 
 /**
@@ -615,6 +691,18 @@ function susunBaris(i: Indikator, k: KonteksBaris): BarisKpi {
   // menutupi hitungan yang sebenarnya.
   const jenisKonten = INDIKATOR_KONTEN[i.key];
   const kontenOtomatis = !!jenisKonten && (k.pengaturan?.sumber ?? "otomatis") === "otomatis";
+
+  // Net Sales Achievement diambil dari ESB, bukan diketik — angkanya sudah ada
+  // dan mengetik ulang cuma menambah cara untuk salah.
+  if (i.key === "net_sales" && k.netPerusahaan !== null && k.netPerusahaan !== undefined) {
+    return barisKpi({
+      indikator: i,
+      bobot,
+      target,
+      actual: k.netPerusahaan,
+      alasan: target === null ? "Belum ada net sales bulan lalu sebagai dasar target." : undefined,
+    });
+  }
 
   switch (i.actual.sumber) {
     case "manual":

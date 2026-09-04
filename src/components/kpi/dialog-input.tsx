@@ -77,6 +77,7 @@ const KETERANGAN: Record<Bentuk, string> = {
 export function DialogInput({
   posisi,
   periode,
+  picAktif,
   indikator,
   outlets,
   pic,
@@ -84,6 +85,8 @@ export function DialogInput({
 }: {
   posisi: string;
   periode: string;
+  /** PIC yang sedang dibuka; kosong untuk posisi yang dinilai satu tim. */
+  picAktif: string;
   indikator: Indikator[];
   outlets: OutletRingkas[];
   pic: string[];
@@ -108,7 +111,7 @@ export function DialogInput({
   const [nilai, setNilai] = React.useState("");
   const [perBrand, setPerBrand] = React.useState<Record<string, string>>({});
   const [tanggal, setTanggal] = React.useState(`${periodeDipilih}-01`);
-  const [picNama, setPicNama] = React.useState(pic[0] ?? "");
+  const [picNama, setPicNama] = React.useState(picAktif || pic[0] || "");
   const [outletId, setOutletId] = React.useState("");
   const [judul, setJudul] = React.useState("");
   const [deskripsi, setDeskripsi] = React.useState("");
@@ -143,7 +146,7 @@ export function DialogInput({
   async function simpan() {
     if (!dipilih) return;
     setSibuk(true);
-    const dasar = { posisi, periode: periodeDipilih };
+    const dasar = { posisi, periode: periodeDipilih, pic: picAktif };
     let res: { ok?: true; error?: string } = { error: "Bentuk isian tidak dikenali." };
 
     if (bentuk === "angka") {

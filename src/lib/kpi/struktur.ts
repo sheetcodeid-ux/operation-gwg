@@ -38,6 +38,18 @@ export interface Posisi {
   nama: string;
   /** Nama PIC apa adanya — dipakai sebagai keterangan, bukan penentu akses. */
   pic: string[];
+  /**
+   * Dinilai PER ORANG, bukan sebagai satu tim.
+   *
+   * Finance diisi tiga orang yang pekerjaannya terpisah — capaian Nisa bukan
+   * capaian Fatin, dan menggabungkannya membuat yang rajin menutupi yang
+   * tertinggal. Marketing Communication justru sebaliknya: bertiga mengerjakan
+   * satu daftar event yang sama, jadi memisahkannya akan membagi satu pekerjaan
+   * jadi tiga rapor yang tidak ada artinya sendiri-sendiri.
+   *
+   * Posisi yang hanya diisi satu orang tidak perlu penanda ini.
+   */
+  perPic?: boolean;
 }
 
 export const DEPARTEMEN: Departemen[] = [
@@ -65,11 +77,11 @@ export const POSISI: Posisi[] = [
   { kode: "creative_content", departemen: "creative", nama: "Content Creator", pic: ["Ricky", "Seka"] },
   { kode: "creative_sosmed", departemen: "creative", nama: "Sosial Media", pic: ["Via", "Zia"] },
   { kode: "finance_accounting", departemen: "finance", nama: "Accounting", pic: ["Bella"] },
-  { kode: "finance_finance", departemen: "finance", nama: "Finance", pic: ["Nisa", "Fatin", "Fetty"] },
+  { kode: "finance_finance", departemen: "finance", nama: "Finance", pic: ["Nisa", "Fatin", "Fetty"], perPic: true },
   { kode: "finance_tax", departemen: "finance", nama: "Tax", pic: ["Samsul"] },
   { kode: "marcomm", departemen: "marcomm", nama: "Marketing Communication", pic: ["Amanda", "Dita", "Marta"] },
-  { kode: "pdq_food", departemen: "pdq", nama: "Food Staff", pic: ["Mustadi", "Nanda", "Bagas"] },
-  { kode: "pdq_beverage", departemen: "pdq", nama: "Beverage Staff", pic: ["Adam", "Abil"] },
+  { kode: "pdq_food", departemen: "pdq", nama: "Food Staff", pic: ["Mustadi", "Nanda", "Bagas"], perPic: true },
+  { kode: "pdq_beverage", departemen: "pdq", nama: "Beverage Staff", pic: ["Adam", "Abil"], perPic: true },
   { kode: "pdq_head_food", departemen: "pdq", nama: "Head Food Development", pic: ["Nanda"] },
   { kode: "pdq_head_pdq", departemen: "pdq", nama: "Head Product Development & Quality", pic: [] },
 ];

@@ -306,7 +306,7 @@ const marcomm: Indikator[] = [
     bobot: 40,
     target: { jenis: "tumbuh", pertumbuhan: TUMBUH_MARCOMM },
     actual: { sumber: "manual" },
-    penjelasan: `Target = net sales bulan lalu + ${TUMBUH_MARCOMM}%. Angkanya akan ditarik otomatis dari ESB setelah sambungannya siap.`,
+    penjelasan: `Otomatis dari ESB. Target = net sales bulan lalu + ${TUMBUH_MARCOMM}%.`,
   },
   {
     key: "event",

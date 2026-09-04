@@ -19,6 +19,7 @@ import { POSISI } from "./struktur";
 const aksi = readFileSync(join(process.cwd(), "src/lib/actions/kpi.ts"), "utf8");
 const dialog = readFileSync(join(process.cwd(), "src/components/kpi/dialog-input.tsx"), "utf8");
 const papan = readFileSync(join(process.cwd(), "src/components/kpi/papan-kpi.tsx"), "utf8");
+const tabel = readFileSync(join(process.cwd(), "src/components/kpi/form-tabel.tsx"), "utf8");
 
 describe("setiap indikator punya jalan masuk", () => {
   it("tidak ada indikator yang tak bisa diisi maupun dihitung", () => {
@@ -61,7 +62,7 @@ describe("penulisan dijaga di server", () => {
   it("tiga penjaga: hak akses, indikator milik posisi itu, dan bulan belum dikunci", () => {
     expect(aksi).toContain("canReachMenu(user, menu as MenuKey)");
     expect(aksi).toContain("punyaIndikator(");
-    expect(aksi).toContain("periodeDikunci(periode, posisi)");
+    expect(aksi).toContain("periodeDikunci(periode, posisi, pic)");
   });
 
   it("setiap aksi tulis melewati gerbang yang sama", () => {
@@ -84,6 +85,15 @@ describe("penulisan dijaga di server", () => {
     // Salah ketik tahun akan diam-diam menambah angka ke bulan yang sudah
     // ditutup, dan laporan yang sudah dibagikan berubah tanpa ada yang tahu.
     expect(aksi).toContain('input.tanggal.slice(0, 7) !== input.periode');
+  });
+
+  it("posisi yang dinilai per orang wajib menyebut orangnya, dan namanya harus terdaftar", () => {
+    // Tanpa ini, satu salah ketik menyimpan angka ke "orang" yang tidak pernah
+    // ada — dan capaiannya hilang tanpa jejak.
+    expect(aksi).toContain("if (!pic) return { error: \"Pilih dulu PIC-nya.\" }");
+    expect(aksi).toContain("!p.pic.includes(pic)");
+    // Sebaliknya juga dijaga: posisi satu tim tidak boleh dipecah per orang.
+    expect(aksi).toContain("Posisi ini dinilai sebagai satu tim, bukan per orang.");
   });
 
   it("bobot di luar 0–100 ditolak", () => {
@@ -112,6 +122,42 @@ describe("angka yang tersimpan bisa ditelusuri dan dibatalkan", () => {
     const indikatorTs = readFileSync(join(process.cwd(), "src/lib/kpi/indikator.ts"), "utf8");
     for (const p of perluTenggat) {
       expect(indikatorTs, `${p.nama} tanpa tenggat`).toContain(`${p.kode}: [`);
+    }
+  });
+});
+
+describe("isian yang berulang dikerjakan sekali lewat tabel", () => {
+  it("kegiatan diisi banyak baris sekaligus, bukan satu per satu", () => {
+    // Tiga puluh event sebulan lewat dialog satuan berarti tiga puluh kali
+    // buka-isi-simpan — dan yang benar-benar terjadi bukan tiga puluh baris
+    // tercatat, melainkan sepuluh baris lalu ditinggalkan.
+    expect(tabel).toContain("export function FormKegiatan");
+    expect(tabel).toContain("simpanEntriMassalAction");
+    expect(papan).toContain("<FormKegiatan");
+  });
+
+  it("tanggalnya dipilih lewat pemilih tanggal aplikasi, bukan diketik", () => {
+    // Bentuk tanggal yang salah ketik baru ditolak server setelah seluruh
+    // tabelnya terlanjur diisi.
+    expect(tabel).toContain("<DatePicker");
+  });
+
+  it("menu keberhasilan pasar dicentang dari katalog ESB, bukan diketik", () => {
+    // Nama menu yang diketik sendiri tidak akan pernah cocok dengan nama di
+    // ESB, dan penjualannya berhenti terbaca tanpa satu pun pesan salah.
+    expect(tabel).toContain("export function FormMenuPasar");
+    expect(tabel).toContain("simpanMenuPasarMassalAction");
+    expect(papan).toContain("<FormMenuPasar");
+    expect(papan).toContain("katalog={menuEsb}");
+  });
+
+  it("form tabel tidak muncul saat bulannya sudah dikunci", () => {
+    // Bulan yang dikunci berarti laporannya sudah dibagikan; satu baris yang
+    // masuk sesudahnya mengubah angka yang sudah dibaca orang.
+    for (const form of ["<FormKegiatan", "<FormMenuPasar", "<FormEfisiensi", "<FormFee"]) {
+      const i = papan.indexOf(form);
+      expect(i, `${form} tidak ada di halaman`).toBeGreaterThan(-1);
+      expect(papan.slice(Math.max(0, i - 400), i), `${form} tanpa penjagaan bulan terkunci`).toContain("!laporan.dikunci");
     }
   });
 });

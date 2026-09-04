@@ -3,6 +3,7 @@ import { notFound, redirect } from "next/navigation";
 import { requireSessionUser } from "@/lib/auth";
 import { canReachMenu, type MenuKey } from "@/lib/nav";
 import { bulanSebelum, laporanKpi, periodeSekarang } from "@/lib/data/kpi";
+import { listEsbMenus } from "@/lib/data/esb-menu";
 import { getOutlets } from "@/lib/data/store";
 import { TENGGAT, indikatorPosisi } from "@/lib/kpi/indikator";
 import { departemenDari, posisiDari, posisiDepartemen, type KodePosisi } from "@/lib/kpi/struktur";
@@ -25,10 +26,10 @@ export default async function KpiPosisiPage({
   searchParams,
 }: {
   params: Promise<{ posisi: string }>;
-  searchParams: Promise<{ periode?: string }>;
+  searchParams: Promise<{ periode?: string; pic?: string }>;
 }) {
   const { posisi: kode } = await params;
-  const { periode } = await searchParams;
+  const { periode, pic } = await searchParams;
 
   const posisi = posisiDari(kode);
   const menu = MENU_POSISI[kode as KodePosisi];
@@ -43,11 +44,23 @@ export default async function KpiPosisiPage({
   // dan halaman kosong yang tidak bisa dijelaskan.
   const dipakai = periode && /^\d{4}-\d{2}$/.test(periode) ? periode : sekarang;
 
+  // Posisi yang dinilai per orang selalu membuka SESEORANG. Tanpa bawaan,
+  // halamannya terbuka kosong dan terbaca seperti belum ada datanya sama
+  // sekali — padahal cuma belum memilih siapa.
+  const picAktif = posisi.perPic ? (pic && posisi.pic.includes(pic) ? pic : (posisi.pic[0] ?? "")) : "";
+
+  const daftar = indikatorPosisi(posisi.kode);
+  // Katalog menu ESB hanya perlu dibaca oleh posisi yang menilai Keberhasilan
+  // Pasar. Membacanya untuk sepuluh posisi berarti sembilan kueri katalog yang
+  // hasilnya tidak pernah dipakai.
+  const pakaiPasar = daftar.some((i) => i.key === "keberhasilan_pasar");
+
   // Capaian bulan lalu dibaca sekalian: grafiknya membandingkan dua bulan,
   // dan menghitungnya di peramban berarti mengirim seluruh data mentah ke sana.
-  const [laporan, sebelum] = await Promise.all([
-    laporanKpi(posisi.kode, dipakai),
-    laporanKpi(posisi.kode, bulanSebelum(dipakai)),
+  const [laporan, sebelum, menuEsb] = await Promise.all([
+    laporanKpi(posisi.kode, dipakai, picAktif),
+    laporanKpi(posisi.kode, bulanSebelum(dipakai), picAktif),
+    pakaiPasar ? listEsbMenus() : Promise.resolve([]),
   ]);
   const lalu = Object.fromEntries(sebelum.baris.map((b) => [b.key, b.persentase]));
   const dep = departemenDari(posisi.departemen);
@@ -64,7 +77,8 @@ export default async function KpiPosisiPage({
         lalu={lalu}
         namaPosisi={posisi.nama}
         pic={posisi.pic}
-        indikator={indikatorPosisi(posisi.kode)}
+        perPic={!!posisi.perPic}
+        indikator={daftar}
         outlets={getOutlets()
           .filter((o) => o.active)
           .map((o) => ({ id: o.id, nama: o.name }))
@@ -72,6 +86,11 @@ export default async function KpiPosisiPage({
         tenggatHari={TENGGAT[posisi.kode] ?? [15]}
         posisiOpsi={posisiDepartemen(posisi.departemen).map((p) => ({ value: p.kode, label: p.nama }))}
         bolehAtur={bolehAturKpi(user)}
+        menuEsb={menuEsb.map((m) => ({
+          menu: m.menu,
+          kategori: m.categoryDetail || m.category,
+          estimasi: m.qty30d * m.unitPrice,
+        }))}
       />
     </div>
   );
