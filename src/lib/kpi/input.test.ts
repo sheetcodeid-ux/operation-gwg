@@ -88,6 +88,17 @@ describe("penulisan dijaga di server", () => {
     }
   });
 
+  it("angka bulanan per outlet dijaga di SERVER, bukan cuma disembunyikan tombolnya", () => {
+    // Pilihan yang tidak tampil tetap bisa dipanggil langsung dari peramban.
+    // Ketiganya disebut di satu pemeriksaan yang sama supaya tidak ada yang
+    // diam-diam dikecualikan — Net Profit sempat dibiarkan terbuka, dan
+    // celahnya sama persis dengan membuka ketiganya.
+    expect(aksi).toContain("!bolehAngkaOutlet(g.user)");
+    for (const kolom of ["b.gross !== undefined", "b.netProfit !== undefined", "b.hppNominal !== undefined"]) {
+      expect(aksi, `${kolom} tidak ikut dijaga`).toContain(kolom);
+    }
+  });
+
   it("tanggal di luar bulan yang diisi ditolak", () => {
     // Salah ketik tahun akan diam-diam menambah angka ke bulan yang sudah
     // ditutup, dan laporan yang sudah dibagikan berubah tanpa ada yang tahu.

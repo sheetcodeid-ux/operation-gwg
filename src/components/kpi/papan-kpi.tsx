@@ -104,7 +104,7 @@ export function PapanKpi({
   outlets,
   tenggatHari,
   bolehAtur,
-  bolehAngkaPenjualan,
+  bolehAngkaOutlet,
   menuEsb,
 }: {
   laporan: LaporanKpi;
@@ -122,7 +122,7 @@ export function PapanKpi({
   tenggatHari: number[];
   bolehAtur: boolean;
   /** Gross Sales & Harga Pokok Penjualan hanya boleh diubah super admin. */
-  bolehAngkaPenjualan: boolean;
+  bolehAngkaOutlet: boolean;
   /** Katalog menu ESB — hanya terisi untuk posisi yang menilai Keberhasilan Pasar. */
   menuEsb: MenuEsb[];
 }) {
@@ -198,19 +198,19 @@ export function PapanKpi({
       }));
     // Angka bulanan per outlet ikut di sini supaya tidak ada dua pintu masuk
     // ke tujuan yang sama.
+    // Penjualan, laba, dan harga pokok adalah angka yang MENILAI Coordinator
+    // Area. Pilihannya tidak ditampilkan kepada yang tidak berhak supaya tidak
+    // ada yang mengisi sampai penuh lalu ditolak di ujung.
     const punya = (k: string) => indikator.some((i) => i.key === k);
-    if (punya("net_profit")) out.push({ jenis: "net_profit", label: "Net Profit (per outlet)" });
-    // Penjualan dan harga pokok adalah angka yang MENILAI Coordinator Area.
-    // Pilihannya tidak ditampilkan kepada yang tidak berhak supaya tidak ada
-    // yang mengisi sampai penuh lalu ditolak di ujung.
-    if (bolehAngkaPenjualan) {
+    if (bolehAngkaOutlet) {
+      if (punya("net_profit")) out.push({ jenis: "net_profit", label: "Net Profit (per outlet)" });
       if (punya("hpp")) out.push({ jenis: "hpp", label: "Harga Pokok Penjualan (per outlet)" });
       if (laporan.ca && laporan.ca.detail.some((o) => !o.dariEsb)) {
         out.push({ jenis: "gross_manual", label: "Gross Sales manual (outlet tanpa ESB)" });
       }
     }
     return out;
-  }, [indikator, laporan.ca, bolehAngkaPenjualan]);
+  }, [indikator, laporan.ca, bolehAngkaOutlet]);
 
   // Kolom Kategori hanya berguna bagi posisi yang indikatornya berkelompok.
   // Untuk yang tidak, isinya satu kolom penuh tanda pisah — bukan sekadar
@@ -368,7 +368,10 @@ export function PapanKpi({
               Area. Yang tidak bisa hanya catatan kegiatan — itu memang milik
               seseorang. */}
           <DialogPanduan indikator={indikator} perOutlet={!!laporan.ca} />
-          {!laporan.dikunci && (
+          {/* Tanpa satu pun indikator yang boleh diisi orang ini, tombolnya
+              tidak ditampilkan sama sekali — dialog berisi dropdown kosong
+              lebih membingungkan daripada tombol yang memang tidak ada. */}
+          {!laporan.dikunci && opsiKegiatan.length > 0 && (
             <FormKegiatan
               posisi={laporan.posisi}
               periode={laporan.periode}
