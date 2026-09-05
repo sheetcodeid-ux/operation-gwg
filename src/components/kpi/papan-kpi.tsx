@@ -290,6 +290,7 @@ export function PapanKpi({
               picOpsi={pic}
               opsi={opsiKegiatan}
               outlet={laporan.ca?.detail ?? []}
+              bulanKosong={laporan.ca?.bulanKosong ?? []}
             />
           )}
           {/* Tombol Input hanya muncul bila masih ADA yang belum tercakup form

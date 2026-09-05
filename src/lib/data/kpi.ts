@@ -439,6 +439,8 @@ export interface AngkaCa {
   detail: DetailOutletCa[];
   /** Outlet yang belum genap tiga bulan datanya, jadi tidak ikut dihitung. */
   belumTigaBulan: OutletCa[];
+  /** Bulan pembanding yang angkanya belum ditarik dari ESB sama sekali. */
+  bulanKosong: string[];
   grossSales: number | null;
   rataTiga: number | null;
   komplain: number | null;
@@ -476,6 +478,11 @@ async function angkaCa(periode: string, areaIds: string[], jumlahPic: number): P
 
   const nilaiBulan = (o: OutletCa, n: number): number | null =>
     grossOutlet(o, riwayat[n][0], riwayat[n][1]);
+
+  // Bulan yang TIDAK PUNYA SATU BARIS PUN berarti angkanya belum ditarik dari
+  // ESB — bukan berarti seluruh outlet baru buka. Dibedakan supaya pesannya
+  // tidak mengirim orang mencari masalah yang tidak ada.
+  const bulanKosong = bulanLalu.filter((_, n) => riwayat[n][0].size === 0 && riwayat[n][1].size === 0);
 
   const lolos: OutletCa[] = [];
   const belum: OutletCa[] = [];
@@ -531,7 +538,7 @@ async function angkaCa(periode: string, areaIds: string[], jumlahPic: number): P
     };
   });
 
-  return { outlet: lolos, detail, belumTigaBulan: belum, grossSales, rataTiga, komplain, netProfit, hpp, jumlahPic };
+  return { outlet: lolos, detail, belumTigaBulan: belum, bulanKosong, grossSales, rataTiga, komplain, netProfit, hpp, jumlahPic };
 }
 
 /**
@@ -714,10 +721,19 @@ async function averageTigaBulan(periode: string): Promise<Map<string, number>> {
  * cabangnya belum ditarik dari ESB. Menuliskan satu kalimat untuk keduanya
  * mengirim orang membetulkan hal yang tidak salah.
  */
-const areaKosong = (ca: { grossSales: number | null } | null): string =>
-  ca === null
-    ? "Areanya belum ditentukan untuk orang ini."
-    : "Angka ESB sebagian outlet di area ini belum ditarik — angkanya ditahan supaya tidak tampil kurang.";
+const areaKosong = (ca: AngkaCa | null): string => {
+  if (ca === null) return "Areanya belum ditentukan untuk orang ini.";
+  if (ca.bulanKosong.length > 0) {
+    return `Angka ESB ${ca.bulanKosong.map(labelBulanSingkat).join(", ")} belum ditarik — pembanding tiga bulannya belum lengkap.`;
+  }
+  return "Angka ESB sebagian outlet di area ini belum ditarik — angkanya ditahan supaya tidak tampil kurang.";
+};
+
+const NAMA_BULAN_SINGKAT = ["Jan", "Feb", "Mar", "Apr", "Mei", "Jun", "Jul", "Agu", "Sep", "Okt", "Nov", "Des"];
+const labelBulanSingkat = (periode: string): string => {
+  const [th, bl] = periode.split("-");
+  return `${NAMA_BULAN_SINGKAT[Number(bl) - 1] ?? bl} ${th}`;
+};
 
 const alasanKosong = (esbBranchId: string | null | undefined): string =>
   esbBranchId ? "angka ESB bulan ini belum ditarik" : "outlet belum dipasangkan ke cabang ESB";

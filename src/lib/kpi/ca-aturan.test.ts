@@ -101,3 +101,22 @@ describe("satu pintu masuk", () => {
     expect(papan).toContain('jenis: "gross_manual"');
   });
 });
+
+describe("bulan pembanding yang belum ditarik", () => {
+  it("dibedakan dari outlet yang memang baru", () => {
+    // Kejadian nyata: menilai Agustus membutuhkan Mei, dan penarikan bulanan
+    // hanya menjangkau tiga bulan — jadi SELURUH outlet terbaca "belum genap 3
+    // bulan" pada bulan mana pun selain yang terbaru. Pesannya menyalahkan
+    // outletnya, padahal yang kurang datanya.
+    expect(data).toContain("const bulanKosong = bulanLalu.filter(");
+    expect(data).toContain("ca.bulanKosong.length > 0");
+    const form = readFileSync(join(process.cwd(), "src/components/kpi/form-tabel.tsx"), "utf8");
+    expect(form).toContain("angka ESB bulan pembanding belum ditarik");
+  });
+
+  it("penarikan bulanan menjangkau dua belas bulan, bukan tiga", () => {
+    // Tiga bulan hanya cukup untuk menilai bulan berjalan.
+    const rute = readFileSync(join(process.cwd(), "src/app/api/cron/fraud-sync/route.ts"), "utf8");
+    expect(rute).toContain('searchParams.get("mundur") ?? "12"');
+  });
+});

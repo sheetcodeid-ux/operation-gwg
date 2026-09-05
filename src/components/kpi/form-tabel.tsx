@@ -342,6 +342,13 @@ export interface OutletBaris {
   ikut: boolean;
 }
 
+/** Kenapa outlet ini belum ikut dinilai — dibedakan supaya tidak menyesatkan. */
+function alasanBelumIkut(bulanKosong: string[]): string {
+  return bulanKosong.length > 0
+    ? "angka ESB bulan pembanding belum ditarik"
+    : "belum genap 3 bulan — belum ikut dinilai";
+}
+
 interface BarisKegiatan {
   tanggal: string;
   picNama: string;
@@ -369,6 +376,7 @@ export function FormKegiatan({
   picOpsi,
   opsi,
   outlet,
+  bulanKosong,
 }: {
   posisi: string;
   periode: string;
@@ -376,6 +384,7 @@ export function FormKegiatan({
   picOpsi: string[];
   opsi: OpsiKegiatan[];
   outlet: OutletBaris[];
+  bulanKosong: string[];
 }) {
   const router = useRouter();
   const [buka, setBuka] = React.useState(false);
@@ -519,12 +528,7 @@ export function FormKegiatan({
             </div>
 
             {perOutlet ? (
-              <TabelOutlet
-                jenis={jenis}
-                outlet={outlet}
-                isi={isiOutlet}
-                ubah={ubahOutlet}
-              />
+              <TabelOutlet jenis={jenis} outlet={outlet} isi={isiOutlet} ubah={ubahOutlet} bulanKosong={bulanKosong} />
             ) : (
               <TabelKegiatan
                 baris={baris}
@@ -666,11 +670,13 @@ function TabelOutlet({
   outlet,
   isi,
   ubah,
+  bulanKosong,
 }: {
   jenis: OpsiKegiatan["jenis"];
   outlet: OutletBaris[];
   isi: Record<string, { gross: string; netProfit: string; hpp: string }>;
   ubah: (id: string, kolom: "gross" | "netProfit" | "hpp", v: string) => void;
+  bulanKosong: string[];
 }) {
   // Gross manual HANYA untuk outlet yang ESB-nya tidak punya angkanya. Yang
   // lain ditampilkan apa adanya dan tidak bisa diketik — angka yang bisa
@@ -703,7 +709,7 @@ function TabelOutlet({
               <td className="px-3 py-1.5">
                 <p className="font-medium text-foreground">{o.outletNama}</p>
                 {!o.ikut && (
-                  <p className="text-[11px] text-amber-600 dark:text-amber-400">belum genap 3 bulan — belum ikut dinilai</p>
+                  <p className="text-[11px] text-amber-600 dark:text-amber-400">{alasanBelumIkut(bulanKosong)}</p>
                 )}
               </td>
               {jenis !== "gross_manual" && (
