@@ -8,7 +8,7 @@ import { listEsbMenus } from "@/lib/data/esb-menu";
 import { getOutlets } from "@/lib/data/store";
 import { TENGGAT, indikatorPosisi } from "@/lib/kpi/indikator";
 import { departemenDari, posisiDari, posisiDepartemen, type KodePosisi } from "@/lib/kpi/struktur";
-import { MENU_POSISI, bolehAturKpi } from "@/lib/kpi/akses";
+import { MENU_POSISI, bolehAturKpi, picTerkunci } from "@/lib/kpi/akses";
 import { NAV_ICONS } from "@/components/layout/icons";
 import { PageHeader } from "@/components/ui/page-header";
 import { PapanKpi } from "@/components/kpi/papan-kpi";
@@ -52,12 +52,20 @@ export default async function KpiPosisiPage({
   // nilai, dan namanya hanya untuk dibaca. Nama berubah — menikah, salah ketik
   // dibetulkan — dan seluruh riwayat angkanya akan terputus tanpa ada yang
   // menyadarinya.
-  const picOpsi = posisi.picDinamis
-    ? picDinamis(posisi.kode)
-    : posisi.pic.map((n) => ({ value: n, label: n }));
+  // Coordinator Area hanya boleh membaca areanya sendiri. Daftarnya dipangkas
+  // di sini DAN penulisannya dijaga di server — memangkas daftarnya saja cuma
+  // menyembunyikan tombol, bukan menutup jalannya.
+  const kunci = picTerkunci(user);
+  const picOpsi = kunci
+    ? picDinamis(posisi.kode).filter((o) => o.value === kunci)
+    : posisi.picDinamis
+      ? picDinamis(posisi.kode)
+      : posisi.pic.map((n) => ({ value: n, label: n }));
   // "Semua" menggabungkan seluruh area — dihitung sekali per area, bukan per
   // orang, supaya area yang dipegang tiga orang tidak terhitung tiga kali.
-  if (posisi.picDinamis && picOpsi.length > 1) picOpsi.unshift({ value: SEMUA_PIC, label: "Semua Coordinator Area" });
+  if (!kunci && posisi.picDinamis && picOpsi.length > 1) {
+    picOpsi.unshift({ value: SEMUA_PIC, label: "Semua Coordinator Area" });
+  }
   const picAktif = posisi.perPic
     ? (pic && picOpsi.some((o) => o.value === pic) ? pic : (picOpsi[0]?.value ?? ""))
     : "";

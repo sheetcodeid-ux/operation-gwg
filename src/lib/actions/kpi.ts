@@ -21,7 +21,7 @@ import {
   simpanMenuPasar,
   simpanPengaturan,
 } from "@/lib/data/kpi";
-import { MENU_POSISI, bolehAturKpi } from "@/lib/kpi/akses";
+import { MENU_POSISI, bolehAturKpi, picTerkunci } from "@/lib/kpi/akses";
 import { indikatorPosisi } from "@/lib/kpi/indikator";
 import type { JenisEntri } from "@/lib/kpi/indikator";
 import { posisiDari, type KodePosisi } from "@/lib/kpi/struktur";
@@ -64,6 +64,12 @@ async function gerbang(
   // Posisi yang dinilai per orang WAJIB menyebut orangnya, dan namanya harus
   // benar-benar terdaftar. Tanpa ini, satu salah ketik menyimpan angka ke
   // "orang" yang tidak pernah ada — dan capaiannya hilang tanpa jejak.
+  // Yang terkunci ke dirinya sendiri tidak bisa menulis atas nama orang lain,
+  // apa pun yang dikirim peramban. Memangkas daftarnya di layar hanya
+  // menyembunyikan tombol.
+  const kunci = picTerkunci(user);
+  if (kunci && pic !== kunci) return { error: "Anda hanya bisa mengisi KPI area Anda sendiri." };
+
   if (p.perPic && !opsi.izinkanGabungan) {
     if (!pic) return { error: "Pilih dulu PIC-nya." };
     // "Semua" hanya untuk MEMBACA gabungan. Menyimpan atasnya berarti angkanya
