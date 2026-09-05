@@ -73,28 +73,32 @@ function langkahCa(): Langkah[] {
           Actual-nya ditarik sendiri dari ESB tiap hari, dijumlah dari seluruh outlet area Anda. Targetnya ={" "}
           <b>rata-rata 3 bulan sebelumnya + 15%</b>. Tiga outlet yang belum tersambung ESB (Ayam Goreng Busari Serdam,
           Ayam Goreng Busari Siantan, Nordu Coffee Siantan) diisi tangan oleh master admin.
-          <Awas>Coordinator Area tidak punya hak mengubah Gross Sales maupun Harga Pokok Penjualan — keduanya angka yang menilai Anda sendiri. Kalau ada yang keliru, laporkan ke master admin.</Awas>
+          <Awas>
+            Gross Sales, Net Profit, dan Harga Pokok Penjualan TIDAK bisa diubah Coordinator Area — ketiganya angka yang
+            menilai Anda sendiri. Satu-satunya yang Anda isi adalah Hygiene Audit/CCTV. Kalau ada angka yang keliru,
+            laporkan ke master admin.
+          </Awas>
         </>
       ),
     },
     {
-      judul: "Net Profit — diisi per outlet",
+      judul: "Net Profit — dibaca, bukan diisi",
       isi: (
         <>
-          Tekan <b>Catat Kegiatan</b> → pilih <b>Net Profit (per outlet)</b>. Isi <b>nominal rupiah</b> laba bersih tiap
-          outlet; persentasenya terhadap gross sales dihitung sendiri di kolom sebelahnya. Targetnya 30% dari gross
-          sales outlet itu. Angka boleh <b>minus</b> — outlet yang rugi memang ada, dan justru itu yang perlu terbaca.
-          Bisa juga lewat <b>Export</b> lalu <b>Import</b> berkas Excel bila outletnya banyak.
+          Diinput master admin dari laporan keuangan. Targetnya <b>30% dari gross sales</b> outlet itu. Buka{" "}
+          <b>Detail Net Profit</b> untuk melihat angkanya per outlet beserta persentasenya terhadap gross sales — di
+          situ juga terlihat outlet mana yang belum disetor. Angkanya boleh <b>minus</b>; outlet yang rugi memang ada,
+          dan justru itu yang perlu terbaca.
         </>
       ),
     },
     {
-      judul: "Harga Pokok Penjualan — nominal, bukan persen",
+      judul: "Harga Pokok Penjualan — dibaca, bukan diisi",
       isi: (
         <>
-          Yang diisi <b>nominal rupiah</b> harga pokok, bukan persentasenya. Persentase terhadap gross sales dihitung
-          otomatis. Batasnya 40%: di bawah atau tepat 40% bernilai penuh, lewat sedikit pun bernilai nol — tidak ada
-          nilai separuh.
+          Juga diinput master admin, dalam <b>nominal rupiah</b>; persentasenya terhadap gross sales dihitung otomatis.
+          Batasnya 40%: di bawah atau tepat 40% bernilai penuh, lewat sedikit pun bernilai nol — tidak ada nilai
+          separuh. Lihat rinciannya di <b>Detail Harga Pokok Penjualan</b>.
         </>
       ),
     },
@@ -140,7 +144,7 @@ function langkahCa(): Langkah[] {
       ),
     },
     {
-      judul: "Simpan dan cetak laporannya",
+      judul: "Cetak laporannya",
       isi: (
         <>
           Ikon <b>unduh</b> di samping kolom cari mengeluarkan <b>laporan KPI dalam PDF</b> lengkap dengan grafiknya —

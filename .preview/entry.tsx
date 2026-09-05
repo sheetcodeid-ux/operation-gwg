@@ -106,7 +106,7 @@ createRoot(document.getElementById("root")!).render(
     tenggatHari={TENGGAT[kode] ?? [15]}
     posisiOpsi={posisiDepartemen(p.departemen).map((x) => ({ value: x.kode, label: x.nama }))}
     bolehAtur
-    bolehAngkaPenjualan
+    bolehAngkaOutlet
     menuEsb={MENU_ESB}
   />,
 );

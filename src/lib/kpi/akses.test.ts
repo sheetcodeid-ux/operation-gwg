@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { canReachMenu, kepalaDepartemen, menuKpi, navOpenPredicate, type MenuKey } from "@/lib/nav";
-import { MENU_POSISI, bolehAngkaPenjualan, picTerkunci } from "./akses";
+import { MENU_POSISI, bolehAngkaOutlet, picTerkunci } from "./akses";
 import { POSISI } from "./struktur";
 import type { UserProfile } from "@/lib/types";
 
@@ -65,15 +65,20 @@ describe("Coordinator Area terkunci ke areanya sendiri", () => {
   });
 });
 
-describe("Gross Sales dan Harga Pokok Penjualan", () => {
+describe("angka bulanan per outlet", () => {
   it("hanya super admin yang boleh mengubahnya", () => {
-    expect(bolehAngkaPenjualan(orang({ role: "super_admin" }))).toBe(true);
+    expect(bolehAngkaOutlet(orang({ role: "super_admin" }))).toBe(true);
   });
 
-  it("Coordinator Area tidak boleh — itu angka yang menilai dirinya sendiri", () => {
-    expect(bolehAngkaPenjualan(orang({ role: "area_coordinator", department: "Operational" }))).toBe(false);
-    expect(bolehAngkaPenjualan(orang({ department: "Operational" }))).toBe(false);
-    expect(bolehAngkaPenjualan(null)).toBe(false);
+  it("Coordinator Area tidak boleh — KETIGANYA angka yang menilai dirinya sendiri", () => {
+    // Gross Sales, Net Profit, dan Harga Pokok Penjualan sama-sama bergerak
+    // searah dengan skornya. Mengecualikan salah satunya — Net Profit sempat
+    // dibiarkan terbuka — membuka celah yang persis sama dengan membuka
+    // ketiganya.
+    expect(bolehAngkaOutlet(orang({ role: "area_coordinator", department: "Operational" }))).toBe(false);
+    expect(bolehAngkaOutlet(orang({ department: "Operational" }))).toBe(false);
+    expect(bolehAngkaOutlet(orang({ role: "head_operation" }))).toBe(false);
+    expect(bolehAngkaOutlet(null)).toBe(false);
   });
 });
 

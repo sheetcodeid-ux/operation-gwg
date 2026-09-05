@@ -21,7 +21,7 @@ import {
   simpanMenuPasar,
   simpanPengaturan,
 } from "@/lib/data/kpi";
-import { MENU_POSISI, bolehAngkaPenjualan, bolehAturKpi, picTerkunci } from "@/lib/kpi/akses";
+import { MENU_POSISI, bolehAngkaOutlet, bolehAturKpi, picTerkunci } from "@/lib/kpi/akses";
 import { indikatorPosisi } from "@/lib/kpi/indikator";
 import type { JenisEntri } from "@/lib/kpi/indikator";
 import { posisiDari, type KodePosisi } from "@/lib/kpi/struktur";
@@ -339,9 +339,15 @@ export async function simpanOutletBulananAction(input: {
   // Dijaga DI SINI, bukan cuma dengan menyembunyikan pilihannya di layar.
   // Pilihan yang tidak tampil tetap bisa dipanggil langsung, dan penjagaan
   // yang hanya ada di tampilan bukan penjagaan.
-  const bolehJual = bolehAngkaPenjualan(g.user);
-  if (!bolehJual && input.baris.some((b) => b.gross !== undefined || b.hppNominal !== undefined)) {
-    return { error: "Gross Sales dan Harga Pokok Penjualan hanya bisa diubah super admin." };
+  //
+  // KETIGA angkanya sekaligus — penjualan, laba, dan harga pokok. Ketiganya
+  // menilai orang yang sama; mengecualikan salah satunya membuka celah yang
+  // persis sama dengan membuka ketiganya.
+  if (
+    !bolehAngkaOutlet(g.user) &&
+    input.baris.some((b) => b.gross !== undefined || b.netProfit !== undefined || b.hppNominal !== undefined)
+  ) {
+    return { error: "Gross Sales, Net Profit, dan Harga Pokok Penjualan hanya bisa diubah super admin." };
   }
 
   const boleh = gabungan ? outletSeluruhPic(input.posisi) : outletMilikPic(input.pic ?? "");
