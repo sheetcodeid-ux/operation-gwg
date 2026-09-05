@@ -58,11 +58,16 @@ describe("gross sales manual", () => {
 });
 
 describe('pilihan "Semua"', () => {
-  it("dihitung per AREA, bukan per orang", () => {
-    // Tiga orang memegang Area Poetri; menghitung per orang menjumlahkan
-    // penjualan area itu tiga kali, dan totalnya tidak pernah cocok dengan
-    // angka perusahaan.
-    expect(data).toContain("[...new Set(semuaPic.map((o) => getUser(o.value)?.areaId ?? \"\").filter(Boolean))]");
+  it("menggabungkan penugasan seluruh CA tanpa terhitung dua kali", () => {
+    // Penugasan outlet tidak pernah bertumpuk — User Management menyembunyikan
+    // outlet yang sudah dipegang koordinator lain.
+    expect(data).toContain("gabungan ? semuaPic.map((o) => o.value) : [pic]");
+  });
+
+  it("hanya menghitung CA yang benar-benar memegang outlet", () => {
+    // Menyertakan yang belum ditugaskan menaikkan target per orang tanpa
+    // menambah satu pun outlet yang dinilai.
+    expect(data).toContain("(getUser(o.value)?.outletIds ?? []).length > 0");
   });
 
   it("target per orang dikalikan jumlah orang yang tercakup", () => {
@@ -156,5 +161,29 @@ describe("rentang tiga bulan sama di seluruh modul", () => {
     const form = readFileSync(join(process.cwd(), "src/components/kpi/form-tabel.tsx"), "utf8");
     expect(form).toContain("Average 3 Bln");
     expect(data).toContain("average: rata.get(o.id) ?? null");
+  });
+});
+
+
+describe("dari mana outlet Coordinator Area diambil", () => {
+  it("dari PENUGASANNYA, bukan dari area outlet", () => {
+    // Kejadian nyata: diambil dari `outlets.area_id`, dan hasilnya salah untuk
+    // hampir semua orang — Wika mendapat sepuluh outlet "Belum Ditentukan"
+    // alih-alih sebelas outlet yang dipegangnya, Reynaldi mendapat sebelas
+    // outlet Area Poetri padahal ditugaskan dua.
+    //
+    // Yang membuatnya berbahaya: daftarnya tetap masuk akal di layar — nama
+    // outlet sungguhan, angka penjualan sungguhan. Tidak ada satu pun tanda
+    // bahwa yang dinilai bukan outlet orang itu.
+    const blok = data.slice(data.indexOf("function outletCa("));
+    const badan = blok.slice(0, blok.indexOf("\n}"));
+    expect(badan).toContain("getUser(p)?.outletIds ?? []");
+    expect(badan).not.toContain("areaId");
+  });
+
+  it("penjagaan simpannya memakai sumber yang sama", () => {
+    // Dua sumber untuk satu pertanyaan berarti suatu saat yang boleh dibaca
+    // dan yang boleh ditulis berbeda isinya.
+    expect(data).toContain("export function outletMilikPic(pic: string): Set<string> {\n  return new Set(outletCa([pic]).map((o) => o.id));");
   });
 });
