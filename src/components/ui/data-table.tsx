@@ -34,6 +34,12 @@ interface DataTableProps<TData, TValue> {
   showSearch?: boolean;
   /** Show the CSV export (download) button (default true). */
   showExport?: boolean;
+  /** Replace what the download button DOES, keeping it where it already is.
+   *  Set for tables whose natural export is not a spreadsheet — the KPI board
+   *  exports a printed report, and moving that button elsewhere would leave two
+   *  download icons meaning two different things. */
+  onExport?: () => void;
+  exportTitle?: string;
 }
 
 export function DataTable<TData, TValue>({
@@ -47,6 +53,8 @@ export function DataTable<TData, TValue>({
   maxHeight = "62vh",
   showSearch = true,
   showExport = true,
+  onExport,
+  exportTitle,
 }: DataTableProps<TData, TValue>) {
   const [sorting, setSorting] = React.useState<SortingState>([]);
   const [globalFilter, setGlobalFilter] = React.useState("");
@@ -138,8 +146,8 @@ export function DataTable<TData, TValue>({
         <div className={cn("flex shrink-0 items-center gap-2", !toolbar && "ml-auto")}>
           {showExport && (
             <button
-              onClick={exportCsv}
-              title="Export to Excel (CSV)"
+              onClick={onExport ?? exportCsv}
+              title={exportTitle ?? "Export to Excel (CSV)"}
               className="grid size-9 shrink-0 place-items-center rounded-lg border border-border text-muted-foreground hover:bg-muted hover:text-foreground"
             >
               <Download className="size-4" />
@@ -273,6 +281,11 @@ export function DataTable<TData, TValue>({
         </table>
       </div>
 
+      {/* Baris navigasi HANYA muncul kalau isinya memang lebih dari satu
+          halaman. Tabel lima baris yang di bawahnya tertulis "Showing 1 to 5 of
+          5 results" beserta tombol Previous/Next yang dua-duanya mati hanya
+          menambah benda yang harus dibaca tanpa memberi satu pun pilihan. */}
+      {pageCount > 1 && (
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <p className="text-sm text-muted-foreground">
           Showing {from} to {to} of {total} results
@@ -314,6 +327,7 @@ export function DataTable<TData, TValue>({
           </button>
         </div>
       </div>
+      )}
     </div>
   );
 }

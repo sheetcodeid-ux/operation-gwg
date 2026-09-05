@@ -97,6 +97,7 @@ createRoot(document.getElementById("root")!).render(
     laporan={laporan}
     lalu={lalu}
     namaPosisi={p.nama}
+    namaDepartemen={p.departemen}
     pic={p.pic}
     picOpsi={(p.pic.length ? p.pic : ["Deo", "Roby", "Aldi", "Wika"]).map((n) => ({ value: n, label: n }))}
     perPic={!!p.perPic}
@@ -105,6 +106,7 @@ createRoot(document.getElementById("root")!).render(
     tenggatHari={TENGGAT[kode] ?? [15]}
     posisiOpsi={posisiDepartemen(p.departemen).map((x) => ({ value: x.kode, label: x.nama }))}
     bolehAtur
+    bolehAngkaPenjualan
     menuEsb={MENU_ESB}
   />,
 );

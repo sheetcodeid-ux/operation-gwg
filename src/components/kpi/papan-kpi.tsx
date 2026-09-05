@@ -3,7 +3,7 @@
 import * as React from "react";
 import { useRouter } from "next/navigation";
 import { type ColumnDef } from "@tanstack/react-table";
-import { ClipboardList, ListChecks, Lock, ReceiptText, Store, Trash2, UtensilsCrossed } from "lucide-react";
+import { ClipboardList, ClipboardCheck, Coins, ListChecks, Lock, PiggyBank, ReceiptText, Store, Trash2, UtensilsCrossed } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
@@ -14,6 +14,8 @@ import { KpiIndicatorDonut, KpiPerformanceChart } from "./kpi-charts";
 import { DialogInput, bentukIsian, type OutletRingkas } from "./dialog-input";
 import { DialogPengaturan } from "./dialog-pengaturan";
 import { FormEfisiensi, FormFee, FormKegiatan, FormMenuPasar, type MenuEsb, type OpsiKegiatan } from "./form-tabel";
+import { TabelHpp, TabelHygiene, TabelNetProfit, bagianDari } from "./tabel-monitor";
+import { DialogLaporanKpi } from "./laporan-pdf";
 import type { JenisEntri } from "@/lib/kpi/indikator";
 import { BULAN, labelPeriode, periodeDari, tahunPilihan } from "./periode";
 import { hapusEntriAction, hapusMenuPasarAction } from "@/lib/actions/kpi";
@@ -66,13 +68,14 @@ export interface OpsiPosisi {
   label: string;
 }
 
-type Tampilan = "indikator" | "efisiensi" | "fee" | "pasar" | "riwayat";
+type Tampilan = "indikator" | "efisiensi" | "fee" | "pasar" | "hygiene" | "netprofit" | "hpp" | "riwayat";
 
 export function PapanKpi({
   laporan,
   lalu,
   indikator,
   namaPosisi,
+  namaDepartemen,
   pic,
   picOpsi,
   perPic,
@@ -80,12 +83,14 @@ export function PapanKpi({
   outlets,
   tenggatHari,
   bolehAtur,
+  bolehAngkaPenjualan,
   menuEsb,
 }: {
   laporan: LaporanKpi;
   lalu: Record<string, number | null>;
   indikator: Indikator[];
   namaPosisi: string;
+  namaDepartemen: string;
   pic: string[];
   /** Pilihan PIC di bilah saringan — nilainya bisa berupa ID, bukan nama. */
   picOpsi: OpsiPosisi[];
@@ -95,6 +100,8 @@ export function PapanKpi({
   outlets: OutletRingkas[];
   tenggatHari: number[];
   bolehAtur: boolean;
+  /** Gross Sales & Harga Pokok Penjualan hanya boleh diubah super admin. */
+  bolehAngkaPenjualan: boolean;
   /** Katalog menu ESB — hanya terisi untuk posisi yang menilai Keberhasilan Pasar. */
   menuEsb: MenuEsb[];
 }) {
@@ -116,9 +123,28 @@ export function PapanKpi({
     if (laporan.efisiensi) out.push({ id: "efisiensi", label: "Efisiensi Beban", icon: Store });
     if (laporan.fee) out.push({ id: "fee", label: "Management Fee", icon: ReceiptText });
     if (laporan.pasar) out.push({ id: "pasar", label: "Keberhasilan Pasar", icon: UtensilsCrossed });
+    // Tiga tabel pemantauan: apa yang SUDAH masuk, bukan berapa skornya.
+    // Muncul hanya bila posisinya memang dinilai atas angka itu — pilihan yang
+    // menuju tabel kosong lebih buruk daripada tidak ada pilihannya.
+    if (indikator.some((i) => i.actual.sumber === "entri" && (i.actual as { entri: JenisEntri }).entri === "hygiene_cctv")) {
+      out.push({ id: "hygiene", label: "Detail Hygiene Audit/CCTV", icon: ClipboardCheck });
+    }
+    if (laporan.ca && indikator.some((i) => i.key === "net_profit")) {
+      out.push({ id: "netprofit", label: "Detail Net Profit", icon: PiggyBank });
+    }
+    if (laporan.ca && indikator.some((i) => i.key === "hpp")) {
+      out.push({ id: "hpp", label: "Detail Harga Pokok Penjualan", icon: Coins });
+    }
     out.push({ id: "riwayat", label: "Riwayat Input", icon: ClipboardList });
     return out;
-  }, [laporan.efisiensi, laporan.fee, laporan.pasar]);
+  }, [laporan.efisiensi, laporan.fee, laporan.pasar, laporan.ca, indikator]);
+
+  // Nama outlet untuk tabel yang isinya hanya menyimpan id-nya.
+  const namaOutlet = React.useMemo(() => new Map(outlets.map((o) => [o.id, o.nama])), [outlets]);
+
+  const entriHygiene = React.useMemo(() => laporan.entri.filter((e) => e.jenis === "hygiene_cctv"), [laporan.entri]);
+
+  const [laporanTerbuka, setLaporanTerbuka] = React.useState(false);
 
   // Indikator yang dihitung dari jumlah kegiatan — itulah yang bisa diisi
   // sekaligus lewat tabel. Yang lain (temuan, tenggat, angka) punya bentuk
@@ -135,12 +161,17 @@ export function PapanKpi({
     // ke tujuan yang sama.
     const punya = (k: string) => indikator.some((i) => i.key === k);
     if (punya("net_profit")) out.push({ jenis: "net_profit", label: "Net Profit (per outlet)" });
-    if (punya("hpp")) out.push({ jenis: "hpp", label: "Harga Pokok Penjualan (per outlet)" });
-    if (laporan.ca && laporan.ca.detail.some((o) => !o.dariEsb)) {
-      out.push({ jenis: "gross_manual", label: "Gross Sales manual (outlet tanpa ESB)" });
+    // Penjualan dan harga pokok adalah angka yang MENILAI Coordinator Area.
+    // Pilihannya tidak ditampilkan kepada yang tidak berhak supaya tidak ada
+    // yang mengisi sampai penuh lalu ditolak di ujung.
+    if (bolehAngkaPenjualan) {
+      if (punya("hpp")) out.push({ jenis: "hpp", label: "Harga Pokok Penjualan (per outlet)" });
+      if (laporan.ca && laporan.ca.detail.some((o) => !o.dariEsb)) {
+        out.push({ jenis: "gross_manual", label: "Gross Sales manual (outlet tanpa ESB)" });
+      }
     }
     return out;
-  }, [indikator, laporan.ca]);
+  }, [indikator, laporan.ca, bolehAngkaPenjualan]);
 
   // Kolom Kategori hanya berguna bagi posisi yang indikatornya berkelompok.
   // Untuk yang tidak, isinya satu kolom penuh tanda pisah — bukan sekadar
@@ -336,6 +367,11 @@ export function PapanKpi({
           searchPlaceholder="Cari indikator…"
           stickyHeader={false}
           toolbar={toolbar}
+          // Tombol unduh di tabel ini mengeluarkan LAPORAN, bukan spreadsheet —
+          // alasannya ada di `laporan-pdf.tsx`. Letaknya sengaja tidak digeser:
+          // orang sudah tahu ikon unduh ada di sebelah kolom cari.
+          onExport={() => setLaporanTerbuka(true)}
+          exportTitle="Unduh laporan KPI (PDF)"
         />
       )}
       {tampilan === "efisiensi" && laporan.efisiensi && (
@@ -384,11 +420,25 @@ export function PapanKpi({
           }
         />
       )}
+      {tampilan === "hygiene" && (
+        <TabelHygiene entri={entriHygiene} namaOutlet={namaOutlet} periode={laporan.periode} toolbar={toolbar} />
+      )}
+      {tampilan === "netprofit" && laporan.ca && <TabelNetProfit detail={laporan.ca.detail} toolbar={toolbar} />}
+      {tampilan === "hpp" && laporan.ca && <TabelHpp detail={laporan.ca.detail} toolbar={toolbar} />}
       {tampilan === "riwayat" && (
         <TabelRiwayat entri={laporan.entri} posisi={laporan.posisi} periode={laporan.periode} pic={laporan.pic} toolbar={toolbar} />
       )}
 
       <Ringkasan tampilan={tampilan} laporan={laporan} />
+
+      <DialogLaporanKpi
+        open={laporanTerbuka}
+        onOpenChange={setLaporanTerbuka}
+        laporan={laporan}
+        lalu={lalu}
+        namaPosisi={namaPosisi}
+        namaDepartemen={namaDepartemen}
+      />
     </div>
   );
 }
@@ -432,18 +482,13 @@ function PilihTabel({
 
 /** Keterangan di bawah tabel — menjelaskan angka tabel yang sedang tampil. */
 function Ringkasan({ tampilan, laporan }: { tampilan: Tampilan; laporan: LaporanKpi }) {
-  const { ringkas } = laporan;
   let teks: React.ReactNode = null;
 
-  if (tampilan === "indikator") {
-    teks = (
-      <>
-        Skor bulan ini <b className="text-foreground">{persen(ringkas.skor)}</b> dari bobot {persen(ringkas.bobotTotal, 0)}
-        {ringkas.jumlahBelumTerukur > 0 && ` · ${ringkas.jumlahBelumTerukur} indikator belum terukur`}. Persentase = actual ÷
-        target, dibatasi 100%; % actual = bobot × persentase.
-      </>
-    );
-  } else if (tampilan === "efisiensi" && laporan.efisiensi) {
+  // Tabel indikator TIDAK diberi keterangan di bawahnya. Skor bulan ini sudah
+  // tertulis besar-besar di kartu ringkasan, dan rumus "actual ÷ target" sudah
+  // terbaca dari kolom-kolomnya sendiri — mengulanginya sebagai paragraf hanya
+  // menambah teks yang tidak dibaca siapa pun.
+  if (tampilan === "efisiensi" && laporan.efisiensi) {
     const r = laporan.efisiensi.ringkas;
     teks = (
       <>
@@ -480,6 +525,33 @@ function Ringkasan({ tampilan, laporan }: { tampilan: Tampilan; laporan: Laporan
           <b className="text-foreground">{persen(p.bagianTotal)}</b>
         </>
       );
+  } else if (tampilan === "hygiene") {
+    const b = laporan.baris.find((x) => x.key === "hygiene_cctv");
+    const lampir = laporan.entri.filter((e) => e.jenis === "hygiene_cctv").reduce((a, e) => a + e.lampiran.length, 0);
+    teks = (
+      <>
+        {angka(b?.actual ?? 0)} submit dari target {angka(b?.target ?? null)} ={" "}
+        <b className="text-foreground">{persen(b?.persentase ?? null)}</b> · {lampir} berkas bukti terlampir.
+      </>
+    );
+  } else if ((tampilan === "netprofit" || tampilan === "hpp") && laporan.ca) {
+    // Persentasenya dihitung dari JUMLAH kedua kolomnya, bukan dari rata-rata
+    // persentase tiap outlet. Rata-rata persentase memberi bobot yang sama
+    // kepada outlet sepuluh juta dan outlet dua ratus juta — dan hasilnya
+    // tidak akan pernah cocok dengan angka indikator di tabel sebelah.
+    const ikut = laporan.ca.detail.filter((o) => o.ikut);
+    const ambil = (o: (typeof ikut)[number]) => (tampilan === "netprofit" ? o.netProfit : o.hppNominal);
+    const berisi = ikut.filter((o) => ambil(o) !== null && o.gross !== null);
+    const totalNilai = berisi.reduce((a, o) => a + (ambil(o) ?? 0), 0);
+    const totalGross = berisi.reduce((a, o) => a + (o.gross ?? 0), 0);
+    const nama = tampilan === "netprofit" ? "Net profit" : "Harga pokok penjualan";
+    teks = (
+      <>
+        {nama} {formatIDR(totalNilai)} dari gross sales {formatIDR(totalGross)} ={" "}
+        <b className="text-foreground">{persen(bagianDari(totalNilai, totalGross || null))}</b> · {berisi.length} dari{" "}
+        {ikut.length} outlet yang dinilai sudah terisi.
+      </>
+    );
   } else if (tampilan === "riwayat") {
     teks = (
       <>

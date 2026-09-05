@@ -320,6 +320,27 @@ export async function simpanEntri(
   return error ? { error: error.message } : { id };
 }
 
+/**
+ * Satu catatan KPI beserta lampirannya — dipakai rute pembuka berkas.
+ *
+ * Yang diambil hanya sebatas yang dibutuhkan untuk memeriksa hak akses:
+ * posisinya, PIC-nya, dan daftar lampirannya. Rute itu tidak boleh percaya
+ * pada jalur berkas yang dikirim peramban; ia harus mencocokkannya dengan
+ * lampiran yang benar-benar tercatat pada catatan ini.
+ */
+export async function entriBerkas(
+  id: string,
+): Promise<{ posisi: string; pic: string; lampiran: { path: string; name: string }[] } | null> {
+  if (!dbEnabled) return null;
+  const { data } = await db().from("kpi_entri").select("posisi,pic,lampiran").eq("id", id).maybeSingle();
+  if (!data) return null;
+  return {
+    posisi: data.posisi as string,
+    pic: (data.pic as string) ?? "",
+    lampiran: (data.lampiran as { path: string; name: string }[]) ?? [],
+  };
+}
+
 export async function hapusEntri(id: string): Promise<{ error?: string }> {
   if (!dbEnabled) return { error: "Penyimpanan belum aktif." };
   const { error } = await db().from("kpi_entri").delete().eq("id", id);

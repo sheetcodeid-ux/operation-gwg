@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { Area, Bar, CartesianGrid, ComposedChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
+import { Area, CartesianGrid, ComposedChart, Line, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { ChartPie, Layers } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { BarisKpi } from "@/lib/kpi/hitung";
@@ -17,6 +17,8 @@ import type { BarisKpi } from "@/lib/kpi/hitung";
  */
 
 const BLUE = "#3b82f6";
+const ABU = "#94a3b8";
+const TARGET = "#f59e0b";
 const COLORS = ["#3b82f6", "#f59e0b", "#06b6d4", "#8b5cf6", "#10b981", "#f43f5e", "#64748b", "#eab308"];
 
 function Kartu({ title, subtitle, children }: { title: string; subtitle: string; children: React.ReactNode }) {
@@ -80,7 +82,7 @@ export function singkatUnik(labels: string[]): string[] {
   return hasil.map((h) => h.kode);
 }
 
-type Titik = { name: string; full: string; ini: number; lalu: number };
+type Titik = { name: string; full: string; ini: number; lalu: number; target: number };
 
 function Tip({ active, payload }: { active?: boolean; payload?: { payload: Titik }[] }) {
   if (!active || !payload?.length) return null;
@@ -93,20 +95,46 @@ function Tip({ active, payload }: { active?: boolean; payload?: { payload: Titik
         <span className="ml-auto font-semibold text-foreground">{d.ini}%</span>
       </p>
       <p className="flex items-center gap-2 text-muted-foreground">
-        <span className="size-2 rounded-full bg-slate-400" /> Bulan lalu
+        <span className="size-2 rounded-full" style={{ background: ABU }} /> Bulan lalu
         <span className="ml-auto font-semibold text-foreground">{d.lalu}%</span>
+      </p>
+      <p className="flex items-center gap-2 text-muted-foreground">
+        <span className="size-2 rounded-full" style={{ background: TARGET }} /> Target
+        <span className="ml-auto font-semibold text-foreground">{d.target}%</span>
       </p>
     </div>
   );
 }
 
+/** Satu keterangan garis — bentuknya mengikuti garisnya sendiri. */
+function Keterangan({ warna, label, putus }: { warna: string; label: string; putus?: boolean }) {
+  return (
+    <span className="inline-flex items-center gap-1.5 text-[11px] text-muted-foreground">
+      <svg width="18" height="6" viewBox="0 0 18 6" aria-hidden>
+        <line x1="0" y1="3" x2="18" y2="3" stroke={warna} strokeWidth="2.5" strokeLinecap="round" strokeDasharray={putus ? "5 4" : undefined} />
+      </svg>
+      {label}
+    </span>
+  );
+}
+
 /**
- * Capaian tiap indikator, bulan ini dibanding bulan lalu.
+ * Capaian tiap indikator: bulan lalu, target, dan bulan ini.
  *
  * Sumbunya persen, bukan angka mentah — indikator yang satu dihitung dalam
  * lembar konten dan yang lain dalam puluhan ribu tayangan, jadi menaruh
  * keduanya pada satu sumbu angka akan membuat yang kecil tidak terlihat sama
  * sekali. Persen membuat keduanya bisa berdiri berdampingan.
+ *
+ * TIGA GARIS, TANPA BATANG. Batang dan garis dalam satu bidang membuat mata
+ * membandingkan dua benda yang bentuknya berbeda — tinggi batang lawan
+ * ketinggian titik. Tiga garis sejenis dibaca sekali jalan: yang mana di atas
+ * garis target, yang mana turun dari bulan lalu.
+ *
+ * Garis target ADA di 100% pada setiap indikator, bukan karena semua targetnya
+ * sama, melainkan karena sumbunya sudah persen — 100% berarti target indikator
+ * itu tepat tercapai. Dibuat putus-putus supaya tidak tertukar dengan capaian
+ * yang sesungguhnya.
  */
 export function KpiPerformanceChart({
   baris,
@@ -125,23 +153,25 @@ export function KpiPerformanceChart({
       full: b.label,
       ini: b.persentase === null ? 0 : Math.round(b.persentase),
       lalu: lalu[b.key] == null ? 0 : Math.round(lalu[b.key]!),
+      target: 100,
     }));
   }, [baris, lalu]);
   const adaIsi = data.some((d) => d.ini > 0 || d.lalu > 0);
 
   return (
     <Kartu title="Capaian per Indikator" subtitle={subtitle}>
+      <div className="mb-2 flex flex-wrap items-center gap-x-4 gap-y-1">
+        <Keterangan warna={ABU} label="Bulan lalu" />
+        <Keterangan warna={TARGET} label="Target" putus />
+        <Keterangan warna={BLUE} label="Bulan ini" />
+      </div>
       <div className="min-h-[17rem] flex-1" style={{ outline: "none" }}>
         <ResponsiveContainer width="100%" height="100%">
-          <ComposedChart data={data} margin={{ top: 8, right: 8, left: 0, bottom: 0 }} accessibilityLayer={false}>
+          <ComposedChart data={data} margin={{ top: 10, right: 14, left: 0, bottom: 0 }} accessibilityLayer={false}>
             <defs>
               <linearGradient id="kpiBlue" x1="0" y1="0" x2="0" y2="1">
                 <stop offset="0%" stopColor={BLUE} stopOpacity={0.35} />
                 <stop offset="100%" stopColor={BLUE} stopOpacity={0} />
-              </linearGradient>
-              <linearGradient id="kpiGrey" x1="0" y1="0" x2="0" y2="1">
-                <stop offset="0%" stopColor="#94a3b8" stopOpacity={0.9} />
-                <stop offset="100%" stopColor="#94a3b8" stopOpacity={0.35} />
               </linearGradient>
             </defs>
             <CartesianGrid strokeDasharray="3 3" stroke="rgba(148,163,184,0.16)" vertical={false} />
@@ -152,27 +182,50 @@ export function KpiPerformanceChart({
               axisLine={false}
               interval={0}
               height={22}
+              padding={{ left: 10, right: 10 }}
             />
             <YAxis
-              domain={[0, 100]}
+              domain={[0, 110]}
+              ticks={[0, 25, 50, 75, 100]}
               tick={{ fill: "var(--foreground)", fontSize: 11, fontWeight: 600 }}
               tickLine={false}
               axisLine={false}
               width={44}
               tickFormatter={(v: number) => `${v}%`}
             />
-            <Tooltip cursor={{ fill: "rgba(148,163,184,0.08)" }} content={<Tip />} />
-            <Bar dataKey="lalu" name="Bulan Lalu" fill="url(#kpiGrey)" radius={[3, 3, 0, 0]} maxBarSize={34} />
+            <Tooltip cursor={{ stroke: "rgba(148,163,184,0.35)", strokeWidth: 1 }} content={<Tip />} />
+            <Line
+              type="monotone"
+              dataKey="lalu"
+              name="Bulan Lalu"
+              stroke={ABU}
+              strokeWidth={2}
+              dot={{ r: 2.5, fill: ABU, strokeWidth: 0 }}
+              activeDot={{ r: 4.5 }}
+              isAnimationActive={false}
+            />
+            <Line
+              type="monotone"
+              dataKey="target"
+              name="Target"
+              stroke={TARGET}
+              strokeWidth={2}
+              strokeDasharray="6 5"
+              dot={false}
+              activeDot={false}
+              isAnimationActive={false}
+            />
             <Area
               type="monotone"
               dataKey="ini"
               name="Bulan Ini"
               stroke={BLUE}
-              strokeWidth={2.5}
+              strokeWidth={2.75}
               fill="url(#kpiBlue)"
-              dot={{ r: 3, fill: BLUE }}
+              dot={{ r: 3, fill: BLUE, strokeWidth: 0 }}
               activeDot={{ r: 5 }}
               className="chart-glow-blue"
+              isAnimationActive={false}
             />
           </ComposedChart>
         </ResponsiveContainer>

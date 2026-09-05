@@ -8,7 +8,7 @@ import { listEsbMenus } from "@/lib/data/esb-menu";
 import { getOutlets } from "@/lib/data/store";
 import { TENGGAT, indikatorPosisi } from "@/lib/kpi/indikator";
 import { departemenDari, posisiDari, posisiDepartemen, type KodePosisi } from "@/lib/kpi/struktur";
-import { MENU_POSISI, bolehAturKpi, picTerkunci } from "@/lib/kpi/akses";
+import { MENU_POSISI, bolehAngkaPenjualan, bolehAturKpi, picTerkunci } from "@/lib/kpi/akses";
 import { NAV_ICONS } from "@/components/layout/icons";
 import { PageHeader } from "@/components/ui/page-header";
 import { PapanKpi } from "@/components/kpi/papan-kpi";
@@ -97,6 +97,7 @@ export default async function KpiPosisiPage({
         laporan={laporan}
         lalu={lalu}
         namaPosisi={posisi.nama}
+        namaDepartemen={dep?.nama ?? "—"}
         pic={picOpsi.map((o) => o.label)}
         picOpsi={picOpsi}
         perPic={!!posisi.perPic}
@@ -108,6 +109,7 @@ export default async function KpiPosisiPage({
         tenggatHari={TENGGAT[posisi.kode] ?? [15]}
         posisiOpsi={posisiDepartemen(posisi.departemen).map((p) => ({ value: p.kode, label: p.nama }))}
         bolehAtur={bolehAturKpi(user)}
+        bolehAngkaPenjualan={bolehAngkaPenjualan(user)}
         menuEsb={menuEsb.map((m) => ({
           menu: m.menu,
           kategori: m.categoryDetail || m.category,

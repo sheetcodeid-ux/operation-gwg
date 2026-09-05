@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { canReachMenu, type MenuKey } from "@/lib/nav";
-import { MENU_POSISI, picTerkunci } from "./akses";
+import { MENU_POSISI, bolehAngkaPenjualan, picTerkunci } from "./akses";
 import { POSISI } from "./struktur";
 import type { UserProfile } from "@/lib/types";
 
@@ -62,5 +62,17 @@ describe("Coordinator Area terkunci ke areanya sendiri", () => {
     expect(picTerkunci(orang({ role: "super_admin" }))).toBeNull();
     expect(picTerkunci(orang({ department: "Creative" }))).toBeNull();
     expect(picTerkunci(null)).toBeNull();
+  });
+});
+
+describe("Gross Sales dan Harga Pokok Penjualan", () => {
+  it("hanya super admin yang boleh mengubahnya", () => {
+    expect(bolehAngkaPenjualan(orang({ role: "super_admin" }))).toBe(true);
+  });
+
+  it("Coordinator Area tidak boleh — itu angka yang menilai dirinya sendiri", () => {
+    expect(bolehAngkaPenjualan(orang({ role: "area_coordinator", department: "Operational" }))).toBe(false);
+    expect(bolehAngkaPenjualan(orang({ department: "Operational" }))).toBe(false);
+    expect(bolehAngkaPenjualan(null)).toBe(false);
   });
 });

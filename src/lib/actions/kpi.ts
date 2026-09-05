@@ -21,7 +21,7 @@ import {
   simpanMenuPasar,
   simpanPengaturan,
 } from "@/lib/data/kpi";
-import { MENU_POSISI, bolehAturKpi, picTerkunci } from "@/lib/kpi/akses";
+import { MENU_POSISI, bolehAngkaPenjualan, bolehAturKpi, picTerkunci } from "@/lib/kpi/akses";
 import { indikatorPosisi } from "@/lib/kpi/indikator";
 import type { JenisEntri } from "@/lib/kpi/indikator";
 import { posisiDari, type KodePosisi } from "@/lib/kpi/struktur";
@@ -335,6 +335,14 @@ export async function simpanOutletBulananAction(input: {
   const gabungan = (input.pic ?? "") === SEMUA_PIC;
   const g = await gerbang(input.posisi, input.periode, gabungan ? "" : input.pic, { izinkanGabungan: gabungan });
   if ("error" in g) return { error: g.error };
+
+  // Dijaga DI SINI, bukan cuma dengan menyembunyikan pilihannya di layar.
+  // Pilihan yang tidak tampil tetap bisa dipanggil langsung, dan penjagaan
+  // yang hanya ada di tampilan bukan penjagaan.
+  const bolehJual = bolehAngkaPenjualan(g.user);
+  if (!bolehJual && input.baris.some((b) => b.gross !== undefined || b.hppNominal !== undefined)) {
+    return { error: "Gross Sales dan Harga Pokok Penjualan hanya bisa diubah super admin." };
+  }
 
   const boleh = gabungan ? outletSeluruhPic(input.posisi) : outletMilikPic(input.pic ?? "");
   let n = 0;
