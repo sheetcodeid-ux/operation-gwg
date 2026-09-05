@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
 import type { LaluIndikator } from "./kpi-charts";
 import { labelPeriode } from "./periode";
+import { statusCapaian } from "./papan-kpi";
 import type { BarisKpi } from "@/lib/kpi/hitung";
 import type { LaporanKpi } from "@/lib/data/kpi";
 import { formatIDR, formatNumber } from "@/lib/utils";
@@ -60,6 +61,19 @@ const bersatuan = (n: number | null, satuan?: "angka" | "rupiah" | "persen") => 
  *  diketik orang, dan satu tanda "<" cukup untuk merusak seluruh halamannya. */
 function aman(s: string): string {
   return String(s).replace(/[<>&"]/g, (c) => ({ "<": "&lt;", ">": "&gt;", "&": "&amp;", '"': "&quot;" })[c]!);
+}
+
+/** Warna lencana status — sama artinya dengan yang di layar. */
+const WARNA_STATUS: Record<string, string> = {
+  success: "#16a34a",
+  warning: "#f59e0b",
+  danger: "#ef4444",
+  neutral: "#6b7280",
+};
+
+function lencana(st: { label: string; tone: string }, t: (typeof THEME)[Mode]): string {
+  const warna = WARNA_STATUS[st.tone] ?? t.sub;
+  return `<span style="display:inline-block;padding:2px 8px;border-radius:999px;font-size:10px;font-weight:700;color:#fff;background:${warna};white-space:nowrap">${aman(st.label)}</span>`;
 }
 
 const tanggalHariIni = () => new Date().toLocaleDateString("id-ID", { day: "numeric", month: "long", year: "numeric" });
@@ -215,6 +229,7 @@ export function buatLaporanHtml({
       ${sel(bersatuan(b.actual, b.satuan), "text-align:right")}
       ${sel(persen(b.persentase), "text-align:right")}
       ${sel(`<b style="color:${t.text}">${persen(b.persenActual)}</b>`, "text-align:right")}
+      ${sel(lencana(statusCapaian(b.persentase), t))}
     </tr>`,
     )
     .join("");
@@ -222,7 +237,7 @@ export function buatLaporanHtml({
   const tabelIndikator = `<table style="width:100%;border-collapse:collapse">
     <thead><tr>
       ${kepala("Indikator")}${adaKategori ? kepala("Kategori") : ""}${kepala("Bobot", "text-align:right")}
-      ${kepala("Target", "text-align:right")}${kepala("Actual", "text-align:right")}${kepala("Persentase", "text-align:right")}${kepala("% Actual", "text-align:right")}
+      ${kepala("Target", "text-align:right")}${kepala("Actual", "text-align:right")}${kepala("Persentase", "text-align:right")}${kepala("% Actual", "text-align:right")}${kepala("Status")}
     </tr></thead>
     <tbody>${barisIndikator}</tbody>
   </table>`;

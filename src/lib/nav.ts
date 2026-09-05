@@ -866,6 +866,32 @@ export function divisiDari(department: string | null | undefined): string {
 }
 
 /** Does the division named `division` (built-in or admin-defined) include `key`? */
+/**
+ * Divisi tempat capaian dibaca — bukan tempat orang bekerja sehari-hari.
+ *
+ * Dipisah sebagai konstanta karena tiga tempat membandingkannya: sidebar, menu
+ * ponsel, dan penjaga rute. Namanya yang diketik ulang di salah satunya berarti
+ * menu tampil terbuka di satu tempat dan terkunci di tempat lain.
+ */
+export const DIVISI_KPI = "Key Performance Indicator";
+
+/** Seluruh menu di dalam divisi itu. */
+const MENU_KPI = new Set<MenuKey>(DIVISION_MENUS.find((d) => d.division === DIVISI_KPI)?.menus ?? []);
+
+export const menuKpi = (): MenuKey[] => [...MENU_KPI];
+
+/**
+ * Kepala departemen — dikenali dari perannya maupun dari jabatan yang diketik.
+ *
+ * Dua-duanya diperiksa karena keduanya dipakai: sebagian kepala punya peran
+ * tersendiri (`head_operation`), sebagian lagi berperan `member` dengan jabatan
+ * "Head of Finance". Memeriksa salah satu saja membuat separuh kepala
+ * departemen kehilangan akses tanpa ada yang tahu sebabnya.
+ */
+export function kepalaDepartemen(user: { role: Role; jabatan?: string | null }): boolean {
+  return user.role.startsWith("head_") || /^\s*head\b/i.test(user.jabatan ?? "");
+}
+
 export function divisionHasMenu(division: string, key: MenuKey): boolean {
   if (UNIVERSAL_MENUS.includes(key) && !NO_UNIVERSAL.includes(division)) return true;
   if (DIVISION_MENUS.some((d) => d.division === division && d.menus.includes(key))) return true;
@@ -877,11 +903,16 @@ export function divisionHasMenu(division: string, key: MenuKey): boolean {
  *  division containing the menu (department-aligned members). Use this in page
  *  guards so a menu the sidebar shows as open never bounces to /dashboard. */
 export function canReachMenu(
-  user: { role: Role; grants?: string[] | null; department?: string | null },
+  user: { role: Role; grants?: string[] | null; department?: string | null; jabatan?: string | null },
   key: MenuKey,
 ): boolean {
   if (UNIVERSAL_MENUS.includes(key)) return true;
   if (canOpenMenu(user.role, key, user.grants ?? undefined)) return true;
+  // Kepala departemen membaca capaian SELURUH posisi. Ia yang diminta
+  // menjelaskan angka lintas departemen di rapat bulanan, dan rapor yang
+  // harus diminta satu per satu ke masing-masing orang tidak akan pernah
+  // sampai tepat waktu.
+  if (MENU_KPI.has(key) && kepalaDepartemen(user)) return true;
   if (MENU_DIGERBANGI_JABATAN.includes(key)) return false;
   const divisi = divisiDari(user.department);
   return !!divisi && divisionHasMenu(divisi, key);
@@ -924,6 +955,13 @@ export function navOpenPredicate(a: NavAccess): (item: { section: string; key: M
     // Keanggotaan departemen membuka seluruh menu divisinya — kecuali kotak
     // masuk yang digerbangi jabatan, yang tetap hanya lewat grant.
     (item.section === a.department && !MENU_DIGERBANGI_JABATAN.includes(item.key)) ||
+    // Divisi Key Performance Indicator TIDAK punya anggota: ia berisi rapor
+    // milik seluruh departemen. Karena itu haknya diperiksa per BARIS, bukan
+    // per divisi — kalau tidak, seluruh isinya terkunci bagi semua orang
+    // kecuali admin, dan Coordinator Area yang perannya sudah memuat
+    // "kpi_op_ca" tetap disambut "Anda tidak dapat membuka divisi ini".
+    (item.section === DIVISI_KPI &&
+      (allowed.has(item.key) || divisionHasMenu(a.department as Division, item.key))) ||
     grants.has(`${item.section}:${item.key}`);
 }
 

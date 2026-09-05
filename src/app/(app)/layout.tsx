@@ -1,7 +1,7 @@
 import { cookies } from "next/headers";
 import { requireSessionUser } from "@/lib/auth";
 import { areaName, listNotifications, visibleOutlets } from "@/lib/data/store";
-import { accessibleMenuKeys, canReachMenu, divisiDari, homeDivision, navAll, navOpenPredicate, navSectionOpen, setNavExtras } from "@/lib/nav";
+import { DIVISI_KPI, accessibleMenuKeys, canReachMenu, divisiDari, homeDivision, kepalaDepartemen, menuKpi, navAll, navOpenPredicate, navSectionOpen, setNavExtras } from "@/lib/nav";
 import { isHelpdeskOwner, isSystemSupport } from "@/lib/system-shared";
 import { getNavExtra } from "@/lib/data/nav";
 import { assessmentMenuOpen } from "@/lib/data/assessment-menu";
@@ -51,6 +51,12 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   if (!isAdmin) {
     if (isSystemSupport(user)) grants.push("Operation:sys_review");
     if (isHelpdeskOwner(user)) grants.push("Operation:it_review");
+    // Kepala departemen membaca capaian SELURUH posisi. Diberikan sebagai
+    // grant, bukan lewat peran, supaya sidebar, menu ponsel, dan command
+    // palette memakai jalur yang sama dengan penjaga rutenya.
+    if (kepalaDepartemen(user)) {
+      for (const k of menuKpi()) grants.push(`${DIVISI_KPI}:${k}`);
+    }
   }
   // Diselaraskan dulu ke nama divisi. Departemen "Operational" tidak akan
   // pernah cocok dengan divisi "Operation" kalau dibandingkan mentah-mentah,
