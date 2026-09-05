@@ -46,9 +46,32 @@ export interface HasilBaca {
   asing: string[];
 }
 
+/**
+ * Membaca angka dari sel yang bisa berisi apa saja.
+ *
+ * Excel di Indonesia menulis ribuan dengan TITIK: "1.234.567". `Number()` atas
+ * teks itu menghasilkan NaN, dan barisnya lolos begitu saja tanpa tersimpan —
+ * yang mengisinya baru sadar setelah membuka formnya lagi dan angkanya kosong.
+ * Sel yang benar-benar bertipe angka tidak lewat sini sama sekali.
+ */
 const angka = (v: unknown): number | null => {
   if (v === null || v === undefined || v === "") return null;
-  const n = Number(String(v).replace(/[^\d.-]/g, ""));
+  if (typeof v === "number") return Number.isFinite(v) ? v : null;
+
+  let t = String(v).replace(/[^\d.,-]/g, "").trim();
+  if (!t) return null;
+  const koma = t.lastIndexOf(",");
+  const titik = t.lastIndexOf(".");
+  if (koma >= 0 && titik >= 0) {
+    // Yang di belakang adalah pemisah desimal; yang di depan pemisah ribuan.
+    t = koma > titik ? t.replace(/\./g, "").replace(",", ".") : t.replace(/,/g, "");
+  } else if (koma >= 0) {
+    // Satu koma: desimal bila menyisakan 1–2 angka, selain itu pemisah ribuan.
+    t = t.length - koma - 1 <= 2 ? t.replace(",", ".") : t.replace(/,/g, "");
+  } else if (titik >= 0) {
+    t = t.length - titik - 1 === 3 ? t.replace(/\./g, "") : t;
+  }
+  const n = Number(t);
   return Number.isFinite(n) ? n : null;
 };
 
