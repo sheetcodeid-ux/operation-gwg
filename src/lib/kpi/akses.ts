@@ -1,5 +1,6 @@
 import type { KodePosisi } from "./struktur";
 import type { UserProfile } from "@/lib/types";
+import { canReachMenu, type MenuKey } from "@/lib/nav";
 
 /**
  * Menu sidebar untuk tiap posisi.
@@ -31,3 +32,18 @@ export const MENU_POSISI: Record<KodePosisi, string> = {
  * berhenti berarti apa pun.
  */
 export const bolehAturKpi = (user: UserProfile | null): boolean => user?.role === "super_admin";
+
+/**
+ * PIC yang WAJIB dipakai orang ini — atau null bila ia boleh melihat semuanya.
+ *
+ * Coordinator Area boleh membuka KPI-nya sendiri untuk memantau, tapi hanya
+ * areanya: capaian rekannya bukan urusannya, dan membiarkannya terbuka membuat
+ * rapor orang lain beredar tanpa sepengetahuan yang dinilai.
+ *
+ * Yang memegang menu Ringkasan KPI dikecualikan — menu itu memang diberikan
+ * kepada orang yang tugasnya membaca capaian seluruh departemen.
+ */
+export function picTerkunci(user: UserProfile | null): string | null {
+  if (!user || user.role !== "area_coordinator") return null;
+  return canReachMenu(user, "kpi" as MenuKey) ? null : user.id;
+}

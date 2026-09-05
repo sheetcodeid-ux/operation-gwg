@@ -294,7 +294,8 @@ export const ROLE_MENUS: Record<Role, MenuKey[]> = {
   // menitipkannya ke orang lain, dan pengajuan itu tercatat atas nama yang
   // salah. Cakupan cabangnya sudah dibatasi `visibleOutlets`, jadi ia tetap
   // hanya bisa mengajukan untuk cabang yang memang dipegangnya.
-  area_coordinator: [...OPERATION_FULL, "elearning", "assessment", "hc_submit", "creative_penilaian"], // learner (E-Learning), menus scoped to their area
+  // KPI-nya sendiri ikut dibuka, TAPI hanya areanya — lihat `picTerkunci`.
+  area_coordinator: [...OPERATION_FULL, "elearning", "assessment", "hc_submit", "creative_penilaian", "kpi_op_ca"], // learner (E-Learning), menus scoped to their area
   data_operation: ["work", "op_analysis", "assessment"],
   pos_operation: ["work", "op_analysis", "assessment"],
   admin_operation: ["work", "complaints", "op_analysis", "assessment"],
@@ -554,16 +555,19 @@ export const DIVISION_GROUPS: Partial<Record<Division, NavGroupDef[]>> = {
 export const DIVISION_MENUS: { division: Division; menus: MenuKey[] }[] = [
   // sys_review sits under Operation for placement, but access is jabatan-gated
   // (System Support) via an injected grant — it is NOT a general Operation menu.
-  { division: "Operation", menus: [...OPERATION_FULL, "sys_review", "it_review", "elearning", "elearning_admin"] },
+  // KPI departemennya sendiri ikut di sini: yang dinilai harus bisa membaca
+  // capaiannya tanpa menunggu dikirimi. Rapor yang hanya bisa dibuka atasannya
+  // berhenti jadi alat kerja dan berubah jadi alat vonis.
+  { division: "Operation", menus: [...OPERATION_FULL, "sys_review", "it_review", "elearning", "elearning_admin", "kpi_op_ca"] },
   { division: "Supervisor", menus: ["events", "hospitality", "hygiene", "complaints", "hc_kontrak", "hc_submit", "sys_submit"] },
   // Complaints ikut di sini, tapi PDQ hanya melihat kategori Food Quality —
   // penyaringnya di `complaintCategoryScope`, dan memasukkan komplain tetap
   // milik Marketing Communication.
-  { division: "Product Development & Quality", menus: ["hpp_dash", "work", "hpp", "hpp_db", "hpp_bahan", "hpp_price", "hpp_comp", "complaints"] },
+  { division: "Product Development & Quality", menus: ["hpp_dash", "work", "hpp", "hpp_db", "hpp_bahan", "hpp_price", "hpp_comp", "complaints", "kpi_pdq_food", "kpi_pdq_beverage", "kpi_pdq_head_food", "kpi_pdq_head_pdq"] },
   { division: "Human Capital", menus: ["work", "hcmos", "hcmos_raci", "hc_bagan", "hc_struktur", "hc_karyawan", "hc_culture", "hc_sop", "hc_rekrutmen", "hc_kompetensi", "hc_modul", "hc_faststart", "hc_pretest", "hc_selflearning", "hc_kinerja", "hc_appraisal", "hc_intervensi", "hc_career", "hc_kompensasi", "hc_relasi", "hc_compliance", "hc_kebijakan", "hc_monitoring", "hc_kpi", "hc_kontrak", "hc_review", "hc_reqreview", "hc_training", "assessment", "elearning"] },
   // New department-aligned divisions — Work Tracker only for now.
-  { division: "Finance", menus: ["work", "fin_training"] },
-  { division: "Creative", menus: ["work", "creative_design", "creative_penilaian"] },
+  { division: "Finance", menus: ["work", "fin_training", "kpi_fin_accounting", "kpi_fin_finance", "kpi_fin_tax"] },
+  { division: "Creative", menus: ["work", "creative_design", "creative_penilaian", "kpi_creative_content", "kpi_creative_sosmed"] },
   // Divisi ini bukan tempat orang bekerja sehari-hari, melainkan tempat
   // capaian seluruh departemen dibaca. Aksesnya karena itu lewat izin
   // per-pengguna, bukan lewat departemen siapa pun.
@@ -596,7 +600,7 @@ export const DIVISION_MENUS: { division: Division; menus: MenuKey[] }[] = [
   // Marketing Communication: Work Tracker + the Event/Promo ACC & impact tracker.
   // MarComm adalah pintu masuk keluhan dari kanal publik (Google Review,
   // Instagram, TikTok), jadi Complaints ikut di divisinya.
-  { division: "Marketing Communication", menus: ["work", "mc_events", "complaints"] },
+  { division: "Marketing Communication", menus: ["work", "mc_events", "complaints", "kpi_marcomm"] },
   { division: "Administrator", menus: ["users", "audit"] },
 ];
 

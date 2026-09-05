@@ -322,3 +322,28 @@ describe("menyimpan angka per outlet", () => {
     expect(form).toContain("setIsiOutlet(dariProps());");
   });
 });
+
+
+describe("penjagaan kunci PIC di server", () => {
+  it("yang terkunci tidak bisa menulis atas nama orang lain", () => {
+    // Memangkas daftar di layar hanya menyembunyikan tombol; yang dikirim
+    // peramban bisa diubah siapa saja.
+    expect(aksiKpi).toContain("const kunci = picTerkunci(user);");
+    expect(aksiKpi).toContain('if (kunci && pic !== kunci) return { error: "Anda hanya bisa mengisi KPI area Anda sendiri." };');
+  });
+
+  it('yang terkunci juga tidak bisa lewat jalur "Semua"', () => {
+    // Jalur gabungan memanggil gerbang dengan pic kosong — dan kosong bukan
+    // miliknya, jadi tetap ditolak penjagaan yang sama.
+    const blok = aksiKpi.slice(aksiKpi.indexOf("async function gerbang("));
+    const badan = blok.slice(0, blok.indexOf("\n}"));
+    expect(badan.indexOf("const kunci = picTerkunci(user);")).toBeGreaterThan(-1);
+    expect(badan.indexOf("const kunci")).toBeLessThan(badan.indexOf("opsi.izinkanGabungan"));
+  });
+
+  it("daftar PIC di halaman ikut dipangkas", () => {
+    expect(halaman).toContain("const kunci = picTerkunci(user);");
+    expect(halaman).toContain("picDinamis(posisi.kode).filter((o) => o.value === kunci)");
+    expect(halaman).toContain("if (!kunci && posisi.picDinamis");
+  });
+});
