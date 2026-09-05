@@ -9,6 +9,7 @@ import { getOutlets } from "@/lib/data/store";
 import { TENGGAT, indikatorPosisi } from "@/lib/kpi/indikator";
 import { departemenDari, posisiDari, posisiDepartemen, type KodePosisi } from "@/lib/kpi/struktur";
 import { MENU_POSISI, bolehAngkaPenjualan, bolehAturKpi, picTerkunci } from "@/lib/kpi/akses";
+import { PageHeader } from "@/components/ui/page-header";
 import { PapanKpi } from "@/components/kpi/papan-kpi";
 
 export const metadata: Metadata = { title: "KPI" };
@@ -89,10 +90,9 @@ export default async function KpiPosisiPage({
 
   return (
     <div className="w-full">
-      {/* Tanpa kepala halaman. Remah roti tepat di atasnya sudah berbunyi
-          "KPI › Operational Coordinator Area" — judul besar di bawahnya
-          mengulang hal yang sama sambil memakan sepertiga layar pertama, dan
-          yang terdorong turun justru grafik dan tabelnya. */}
+      {/* Hanya judul tak terlihat — lihat `page-header.tsx`. Remah roti di
+          bilah atas sudah menyebut nama halaman yang sama. */}
+      <PageHeader title={posisi.nama} />
       <PapanKpi
         laporan={laporan}
         lalu={lalu}

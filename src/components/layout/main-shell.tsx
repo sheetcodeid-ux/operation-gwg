@@ -1,7 +1,6 @@
 "use client";
 
 import { usePathname } from "next/navigation";
-import { Breadcrumbs } from "./breadcrumbs";
 import { Footer } from "./footer";
 
 /**
@@ -17,7 +16,7 @@ import { Footer } from "./footer";
  */
 const FULL_BLEED = ["/pesan", "/hc-mos/bagan", "/hc-mos/raci"];
 
-export function MainShell({ children, showHome }: { children: React.ReactNode; showHome: boolean }) {
+export function MainShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const full = FULL_BLEED.some((p) => pathname === p || pathname.startsWith(`${p}/`));
 
@@ -29,11 +28,10 @@ export function MainShell({ children, showHome }: { children: React.ReactNode; s
 
   return (
     <>
-      <main className="px-4 py-6 sm:px-6 lg:px-8">
-        {/* Home menunjuk /dashboard — hanya untuk yang memang bisa membukanya. */}
-        <Breadcrumbs showHome={showHome} />
-        {children}
-      </main>
+      {/* Remah roti sudah pindah ke bilah atas — lihat `topbar.tsx`. Di sini
+          ia memakan satu baris penuh pada SETIAP halaman, padahal bilah atas
+          punya ruang kosong yang lebarnya berkali-kali lipat. */}
+      <main className="px-4 py-5 sm:px-6 lg:px-8">{children}</main>
       <Footer />
     </>
   );

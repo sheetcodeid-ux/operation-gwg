@@ -1,10 +1,22 @@
 import * as React from "react";
 import { cn } from "@/lib/utils";
 
+/**
+ * Kepala halaman — sekarang HANYA memuat tombol aksinya.
+ *
+ * Judul besar beserta ikon dan keterangannya sudah dicabut dari SELURUH
+ * halaman. Alasannya satu: remah roti di bilah atas sudah menyebut nama
+ * halaman yang sama persis, dan judul yang mengulanginya memakan sekitar
+ * sepertiga layar pertama — yang terdorong turun justru grafik, tabel, dan
+ * isian yang jadi alasan halaman itu dibuka.
+ *
+ * Propertinya TIDAK dihapus meski tidak lagi tercetak. Empat puluh tujuh
+ * halaman memanggilnya, dan `title` masih dipakai: ia dirender sebagai
+ * judul tingkat satu yang tak terlihat, supaya susunan heading halaman tetap
+ * utuh bagi pembaca layar dan mesin telusur. Yang hilang hanya ruangnya.
+ */
 export function PageHeader({
   title,
-  description,
-  icon: Icon,
   actions,
   className,
 }: {
@@ -14,22 +26,13 @@ export function PageHeader({
   actions?: React.ReactNode;
   className?: string;
 }) {
+  // Tanpa tombol, tidak ada yang perlu digambar sama sekali — sebuah kotak
+  // kosong ber-margin tetap mendorong isinya turun tanpa alasan.
+  if (!actions) return <h1 className="sr-only">{title}</h1>;
   return (
-    // One row at every width: the title block shrinks/truncates while the
-    // action buttons (New Task, New Event, …) stay fully visible beside it.
-    <div className={cn("mb-6 flex items-center justify-between gap-3", className)}>
-      <div className="flex min-w-0 items-center gap-3">
-        {Icon && (
-          <div className="grid size-10 shrink-0 place-items-center rounded-xl bg-muted ring-1 ring-border">
-            <Icon className="size-5 text-foreground/70" />
-          </div>
-        )}
-        <div className="min-w-0">
-          <h1 className="truncate text-xl font-semibold tracking-tight text-foreground sm:text-2xl">{title}</h1>
-          {description && <p className="mt-0.5 truncate text-sm text-muted-foreground">{description}</p>}
-        </div>
-      </div>
-      {actions && <div className="flex shrink-0 items-center gap-2">{actions}</div>}
+    <div className={cn("mb-4 flex items-center justify-end gap-3", className)}>
+      <h1 className="sr-only">{title}</h1>
+      <div className="flex shrink-0 items-center gap-2">{actions}</div>
     </div>
   );
 }
