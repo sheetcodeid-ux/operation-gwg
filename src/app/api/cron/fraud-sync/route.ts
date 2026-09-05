@@ -142,7 +142,12 @@ async function jalankan(req: Request): Promise<NextResponse> {
   if (job === "net-bulanan") {
     try {
       const { cabangTerpasang, bulanTerakhir, syncNetBulanan } = await import("@/lib/data/esb-bulanan");
-      const mundur = Number(new URL(req.url).searchParams.get("mundur") ?? "3") || 3;
+      // Dua belas bulan, bukan tiga. Menilai bulan Agustus membutuhkan Mei —
+      // tiga bulan SEBELUM Agustus — dan dengan jangkauan tiga bulan, Mei tidak
+      // pernah ditarik. Akibatnya seluruh outlet terbaca "belum genap 3 bulan"
+      // pada bulan mana pun selain yang terbaru, dan tidak ada satu pun pesan
+      // yang menjelaskan kenapa.
+      const mundur = Number(new URL(req.url).searchParams.get("mundur") ?? "12") || 12;
       results["net-bulanan"] = await syncNetBulanan(await cabangTerpasang(), bulanTerakhir(mundur), left() - 4_000);
     } catch (e) {
       results["net-bulanan"] = { error: e instanceof Error ? e.message : "failed" };
