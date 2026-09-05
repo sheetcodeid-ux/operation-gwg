@@ -9,6 +9,7 @@ import {
   hapusEntri,
   hapusMenuPasar,
   outletMilikPic,
+  outletSeluruhPic,
   periodeDikunci,
   picDinamis,
   simpanOutletBulanan,
@@ -44,7 +45,12 @@ import type { UserProfile } from "@/lib/types";
 
 const RUTE = (posisi: string) => `/kpi/${posisi}`;
 
-async function gerbang(posisi: string, periode: string, pic = ""): Promise<{ user: UserProfile } | { error: string }> {
+async function gerbang(
+  posisi: string,
+  periode: string,
+  pic = "",
+  opsi: { izinkanGabungan?: boolean } = {},
+): Promise<{ user: UserProfile } | { error: string }> {
   const user = await getSessionUser();
   if (!user || !dbEnabled) return { error: "Tidak punya akses." };
 
@@ -58,7 +64,7 @@ async function gerbang(posisi: string, periode: string, pic = ""): Promise<{ use
   // Posisi yang dinilai per orang WAJIB menyebut orangnya, dan namanya harus
   // benar-benar terdaftar. Tanpa ini, satu salah ketik menyimpan angka ke
   // "orang" yang tidak pernah ada — dan capaiannya hilang tanpa jejak.
-  if (p.perPic) {
+  if (p.perPic && !opsi.izinkanGabungan) {
     if (!pic) return { error: "Pilih dulu PIC-nya." };
     // "Semua" hanya untuk MEMBACA gabungan. Menyimpan atasnya berarti angkanya
     // tidak menempel pada siapa pun, dan tidak akan pernah bisa ditelusuri.
@@ -314,28 +320,31 @@ export async function simpanOutletBulananAction(input: {
   posisi: string;
   periode: string;
   pic?: string;
-  baris: { outletId: string; gross?: number | null; netProfit?: number | null; hpp?: number | null }[];
+  baris: { outletId: string; gross?: number | null; netProfit?: number | null; hppNominal?: number | null }[];
 }): Promise<{ ok?: true; tersimpan?: number; error?: string }> {
-  const g = await gerbang(input.posisi, input.periode, input.pic);
+  // Angka per outlet menempel pada OUTLET dan BULAN, bukan pada orangnya — jadi
+  // menyimpannya sambil melihat gabungan seluruh Coordinator Area tidak
+  // menimbulkan angka yang tak bisa ditelusuri. Yang tetap dijaga: outletnya
+  // harus benar-benar dipegang seseorang.
+  const gabungan = (input.pic ?? "") === SEMUA_PIC;
+  const g = await gerbang(input.posisi, input.periode, gabungan ? "" : input.pic, { izinkanGabungan: gabungan });
   if ("error" in g) return { error: g.error };
 
-  const boleh = outletMilikPic(input.pic ?? "");
+  const boleh = gabungan ? outletSeluruhPic(input.posisi) : outletMilikPic(input.pic ?? "");
   let n = 0;
   for (const b of input.baris) {
     if (!boleh.has(b.outletId)) return { error: "Ada outlet yang bukan bagian dari area ini." };
-    const angka = [b.gross, b.netProfit, b.hpp];
+    const angka = [b.gross, b.netProfit, b.hppNominal];
     if (angka.every((v) => v === undefined)) continue;
-    if (b.hpp !== undefined && b.hpp !== null && (b.hpp < 0 || b.hpp > 100)) {
-      return { error: "Harga pokok penjualan diisi dalam persen, 0 sampai 100." };
-    }
-    if ((b.gross ?? 0) < 0 || (b.netProfit ?? 0) < 0) return { error: "Angkanya tidak masuk akal." };
+    // Nominal, bukan persen — nilai negatif tidak punya arti pada ketiganya.
+    if (angka.some((v) => v !== undefined && v !== null && v < 0)) return { error: "Angkanya tidak masuk akal." };
 
     const res = await simpanOutletBulanan({
       outletId: b.outletId,
       periode: input.periode,
       gross: b.gross ?? null,
       netProfit: b.netProfit ?? null,
-      hpp: b.hpp ?? null,
+      hppNominal: b.hppNominal ?? null,
       olehId: g.user.id,
       olehNama: g.user.name,
     });
