@@ -440,7 +440,8 @@ export interface DetailOutletCa {
   dariEsb: boolean;
   netProfit: number | null;
   hpp: number | null;
-  /** Sudah berjalan tiga bulan penuh; yang belum tidak ikut dinilai. */
+  /** Rata-rata gross sales tiga bulan SEBELUM bulan ini — dasar targetnya. */
+  average: number | null;
   ikut: boolean;
 }
 
@@ -550,6 +551,7 @@ async function angkaCa(periode: string, areaIds: string[], jumlahPic: number): P
       dariEsb,
       netProfit: tanganIni.get(o.id)?.netProfit ?? null,
       hpp: tanganIni.get(o.id)?.hpp ?? null,
+      average: rata.get(o.id) ?? null,
       ikut: lolos.some((l) => l.id === o.id),
     };
   });
@@ -704,7 +706,12 @@ async function netSalesLengkap(periode: string): Promise<Map<string, number>> {
  * kesalahan yang bukan miliknya.
  */
 async function averageTigaBulan(periode: string): Promise<Map<string, number>> {
-  const bulan = [periode, bulanSebelum(periode), bulanSebelum(bulanSebelum(periode))];
+  // TIGA BULAN SEBELUMNYA, bukan termasuk bulan yang sedang dinilai. Ikut
+  // menghitung bulan berjalan membuat patokannya bergerak tiap hari — dan yang
+  // dinilai mengejar angka yang berubah karena capaiannya sendiri. Aturannya
+  // sama dengan Gross Sales Coordinator Area: untuk Juli, yang dipakai April,
+  // Mei, Juni.
+  const bulan = tigaBulanSebelum(periode);
   const petaBulan = await Promise.all(bulan.map(netSalesLengkap));
   const total = new Map<string, { jumlah: number; bulan: number }>();
   for (const p of petaBulan) {

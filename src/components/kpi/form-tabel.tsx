@@ -339,6 +339,7 @@ export interface OutletBaris {
   dariEsb: boolean;
   netProfit: number | null;
   hpp: number | null;
+  average: number | null;
   ikut: boolean;
 }
 
@@ -699,7 +700,15 @@ function TabelOutlet({
         <thead className="sticky top-0 z-10">
           <tr className="border-b border-border text-left">
             <Kepala>Outlet</Kepala>
-            {jenis !== "gross_manual" && <Kepala className="text-right">Gross Sales</Kepala>}
+            {jenis !== "gross_manual" && (
+              <>
+                {/* Rata-rata tiga bulan SEBELUM bulan ini — dasar targetnya.
+                    Ditampilkan supaya angkanya bisa diperiksa sendiri, bukan
+                    dipercaya begitu saja. */}
+                <Kepala className="text-right">Average 3 Bln</Kepala>
+                <Kepala className="text-right">Gross Sales</Kepala>
+              </>
+            )}
             <Kepala className="w-52">{judul}</Kepala>
           </tr>
         </thead>
@@ -713,9 +722,14 @@ function TabelOutlet({
                 )}
               </td>
               {jenis !== "gross_manual" && (
-                <td className="px-3 py-1.5 text-right tabular-nums text-muted-foreground">
-                  {o.gross === null ? "—" : formatIDR(o.gross)}
-                </td>
+                <>
+                  <td className="px-3 py-1.5 text-right tabular-nums text-muted-foreground">
+                    {o.average === null ? "—" : formatIDR(o.average)}
+                  </td>
+                  <td className="px-3 py-1.5 text-right tabular-nums text-muted-foreground">
+                    {o.gross === null ? "—" : formatIDR(o.gross)}
+                  </td>
+                </>
               )}
               <td className="px-3 py-1.5">
                 <Input
