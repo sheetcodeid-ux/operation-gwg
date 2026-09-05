@@ -46,11 +46,22 @@ describe("gross sales manual", () => {
     expect(badan).toContain("tangan.get(o.id)?.gross");
   });
 
-  it("yang perlu diisi tangan: outlet yang belum lolos tiga bulan, atau yang bulan ini tak ada di ESB", () => {
-    // Tiga outlet pindahan Majoo masuk lewat syarat pertama meski sebagian
-    // bulannya sudah punya angka ESB — riwayat yang hilang tetap harus diisi.
+  it("yang muncul HANYA outlet yang ditandai diisi tangan", () => {
+    // Sempat ditebak dari keadaan datanya ("belum lolos tiga bulan"), dan
+    // tebakan itu ikut menyeret outlet lain yang kebetulan juga belum genap
+    // tiga bulan — daftarnya berubah-ubah tiap kali bulannya diganti, dan yang
+    // mengisinya tidak pernah tahu mana yang benar-benar perlu diisi.
     const form = readFileSync(join(process.cwd(), "src/components/kpi/form-tabel.tsx"), "utf8");
-    expect(form).toContain('outlet.filter((o) => !o.ikut || !o.dariEsb)');
+    expect(form).toContain('outlet.filter((o) => o.grossManual)');
+    expect(data).toContain("grossManual: o.grossManual");
+  });
+
+  it("penandanya data, bukan daftar nama di dalam kode", () => {
+    // Outlet pindahan berikutnya cukup ditandai barisnya — tanpa deploy.
+    const rows = readFileSync(join(process.cwd(), "src/lib/data/rows.ts"), "utf8");
+    expect(rows).toContain("grossManual: !!r.gross_manual");
+    const form = readFileSync(join(process.cwd(), "src/components/kpi/form-tabel.tsx"), "utf8");
+    expect(form).not.toContain("Ayam Goreng Busari");
   });
 
   it("outlet yang bulan ini sudah punya angka ESB tidak bisa diketik", () => {

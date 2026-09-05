@@ -396,6 +396,8 @@ interface OutletCa {
   id: string;
   nama: string;
   branch: string | null;
+  /** Penjualannya diisi tangan — pindahan dari POS lain. */
+  grossManual: boolean;
 }
 
 /**
@@ -442,6 +444,8 @@ export interface DetailOutletCa {
   netProfit: number | null;
   /** Harga pokok penjualan dalam rupiah. */
   hppNominal: number | null;
+  /** Penjualannya diisi tangan — hanya outlet inilah yang muncul di form gross manual. */
+  grossManual: boolean;
   /** Rata-rata gross sales tiga bulan SEBELUM bulan ini — dasar targetnya. */
   average: number | null;
   ikut: boolean;
@@ -554,6 +558,7 @@ async function angkaCa(periode: string, picIds: string[], jumlahPic: number): Pr
       dariEsb,
       netProfit: tanganIni.get(o.id)?.netProfit ?? null,
       hppNominal: tanganIni.get(o.id)?.hppNominal ?? null,
+      grossManual: o.grossManual,
       average: rata.get(o.id) ?? null,
       ikut: lolos.some((l) => l.id === o.id),
     };
@@ -1192,7 +1197,7 @@ function outletCa(picIds: string[]): OutletCa[] {
   for (const p of picIds) for (const id of getUser(p)?.outletIds ?? []) ditugaskan.add(id);
   return getOutlets()
     .filter((o) => o.active && ditugaskan.has(o.id))
-    .map((o) => ({ id: o.id, nama: o.name, branch: o.esbBranchId ?? null }));
+    .map((o) => ({ id: o.id, nama: o.name, branch: o.esbBranchId ?? null, grossManual: !!o.grossManual }));
 }
 
 export function picDinamis(posisi: KodePosisi): { value: string; label: string }[] {

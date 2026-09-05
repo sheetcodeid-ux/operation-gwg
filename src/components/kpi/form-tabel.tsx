@@ -340,6 +340,7 @@ export interface OutletBaris {
   dariEsb: boolean;
   netProfit: number | null;
   hppNominal: number | null;
+  grossManual: boolean;
   average: number | null;
   ikut: boolean;
 }
@@ -848,12 +849,13 @@ function TabelOutlet({
 }) {
   const [urut, setUrut] = React.useState<Urut>({ kolom: "outlet", naik: true });
 
-  // Gross manual untuk outlet yang BELUM lolos aturan tiga bulan — di situlah
-  // riwayat yang hilang perlu diisi — atau yang bulan ini memang tidak ada di
-  // ESB. Tiga outlet pindahan Majoo masuk lewat syarat pertama meski sebagian
-  // bulannya sudah punya angka ESB.
+  // Gross manual HANYA untuk outlet yang memang ditandai begitu — tiga outlet
+  // pindahan POS Majoo. Sempat ditebak dari keadaan datanya ("belum lolos tiga
+  // bulan"), dan tebakan itu ikut menyeret outlet lain yang kebetulan juga
+  // belum genap tiga bulan: daftarnya berubah-ubah tiap kali bulannya diganti,
+  // dan yang mengisinya tidak pernah tahu mana yang benar-benar perlu diisi.
   const daftar = React.useMemo(() => {
-    const dasar = jenis === "gross_manual" ? outlet.filter((o) => !o.ikut || !o.dariEsb) : outlet;
+    const dasar = jenis === "gross_manual" ? outlet.filter((o) => o.grossManual) : outlet;
     const arah = urut.naik ? 1 : -1;
     const nilai = (o: OutletBaris): number | string => {
       switch (urut.kolom) {
@@ -881,7 +883,7 @@ function TabelOutlet({
   if (daftar.length === 0) {
     return (
       <div className="flex min-h-0 flex-1 items-center justify-center rounded-xl border border-border px-6 py-10 text-center text-[13px] text-muted-foreground">
-        Seluruh outlet di sini sudah punya angka dari ESB — tidak ada yang perlu diisi tangan.
+        Tidak ada outlet yang penjualannya perlu diisi tangan di sini — seluruhnya sudah terbaca dari ESB.
       </div>
     );
   }
