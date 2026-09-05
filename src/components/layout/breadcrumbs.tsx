@@ -28,6 +28,8 @@ const LABELS: Record<string, string> = {
   karyawan: "Database Karyawan",
   area: "Region",
   outlet: "Outlet",
+  kpi: "KPI",
+  operational_ca: "Operational Coordinator Area",
 };
 
 function label(seg: string) {

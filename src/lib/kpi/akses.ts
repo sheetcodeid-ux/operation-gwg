@@ -34,6 +34,20 @@ export const MENU_POSISI: Record<KodePosisi, string> = {
 export const bolehAturKpi = (user: UserProfile | null): boolean => user?.role === "super_admin";
 
 /**
+ * Siapa boleh mengubah Gross Sales dan Harga Pokok Penjualan.
+ *
+ * Keduanya adalah angka yang MENILAI Coordinator Area, dan dua-duanya bergerak
+ * searah dengan skornya: penjualan yang lebih besar menaikkan capaian, harga
+ * pokok yang lebih kecil menaikkan capaian. Membiarkan yang dinilai mengetik
+ * sendiri angka penilainya sama dengan meniadakan penilaiannya.
+ *
+ * Net Profit sengaja TIDAK ikut dikunci — angkanya datang dari laporan
+ * keuangan outlet yang memang dikumpulkan Coordinator Area, dan ia satu-satunya
+ * yang punya berkasnya.
+ */
+export const bolehAngkaPenjualan = (user: UserProfile | null): boolean => user?.role === "super_admin";
+
+/**
  * PIC yang WAJIB dipakai orang ini — atau null bila ia boleh melihat semuanya.
  *
  * Coordinator Area boleh membuka KPI-nya sendiri untuk memantau, tapi hanya
