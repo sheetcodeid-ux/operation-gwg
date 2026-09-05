@@ -107,7 +107,7 @@ export interface Indikator {
    * komplain dari batas 20 menghasilkan 150% lalu dipotong jadi 100%, dan yang
    * paling banyak dikomplain justru mendapat nilai penuh.
    */
-  penilaian?: "batas_maks" | "lulus_maks";
+  penilaian?: "batas_maks" | "lulus_maks" | "kurang_linear";
   /** Satuan tampilan; ikut dipakai tabel dan grafik. */
   satuan?: "angka" | "rupiah" | "persen";
 }
@@ -472,8 +472,9 @@ const coordinatorArea: Indikator[] = [
     bobot: 10,
     target: { jenis: "tetap", nilai: 20 },
     actual: { sumber: "otomatis", kode: "komplain_area" },
-    penilaian: "batas_maks",
-    penjelasan: "Batas 20 per bulan, di luar kategori kualitas makanan. Lebih dari itu turun proporsional.",
+    penilaian: "kurang_linear",
+    penjelasan:
+      "Batas 20 per bulan, di luar kategori kualitas makanan. Tiap komplain memotong 5% capaian indikator ini (0,5% dari skor total); 20 komplain membuatnya nol.",
   },
   {
     key: "hpp",

@@ -10,14 +10,15 @@ import { Badge } from "@/components/ui/badge";
 import { Combobox } from "@/components/ui/combobox";
 import { DataTable } from "@/components/ui/data-table";
 import { Progress } from "@/components/ui/progress";
-import { KpiIndicatorDonut, KpiPerformanceChart } from "./kpi-charts";
+import { KpiIndicatorDonut, KpiPerformanceChart, type LaluIndikator } from "./kpi-charts";
 import { DialogInput, bentukIsian, type OutletRingkas } from "./dialog-input";
 import { DialogPengaturan } from "./dialog-pengaturan";
 import { FormEfisiensi, FormFee, FormKegiatan, FormMenuPasar, type MenuEsb, type OpsiKegiatan } from "./form-tabel";
 import { TabelHpp, TabelHygiene, TabelNetProfit, bagianDari } from "./tabel-monitor";
 import { DialogLaporanKpi } from "./laporan-pdf";
+import { DialogPanduan } from "./panduan";
 import type { JenisEntri } from "@/lib/kpi/indikator";
-import { BULAN, labelPeriode, periodeDari, tahunPilihan } from "./periode";
+import { BULAN, periodeDari, tahunPilihan } from "./periode";
 import { hapusEntriAction, hapusMenuPasarAction } from "@/lib/actions/kpi";
 import { SEMUA_PIC } from "@/lib/kpi/semua-pic";
 import type { BarisKpi, BarisEfisiensi } from "@/lib/kpi/hitung";
@@ -87,7 +88,7 @@ export function PapanKpi({
   menuEsb,
 }: {
   laporan: LaporanKpi;
-  lalu: Record<string, number | null>;
+  lalu: Record<string, LaluIndikator>;
   indikator: Indikator[];
   namaPosisi: string;
   namaDepartemen: string;
@@ -107,7 +108,6 @@ export function PapanKpi({
 }) {
   const router = useRouter();
   const { baris, ringkas } = laporan;
-  const subtitle = `${labelPeriode(laporan.periode)} · ${namaPosisi}`;
   const bobotTimpang = Math.abs(ringkas.bobotTotal - 100) > 0.001;
 
   const [tampilan, setTampilan] = React.useState<Tampilan>("indikator");
@@ -126,16 +126,23 @@ export function PapanKpi({
     // Tiga tabel pemantauan: apa yang SUDAH masuk, bukan berapa skornya.
     // Muncul hanya bila posisinya memang dinilai atas angka itu — pilihan yang
     // menuju tabel kosong lebih buruk daripada tidak ada pilihannya.
-    if (indikator.some((i) => i.actual.sumber === "entri" && (i.actual as { entri: JenisEntri }).entri === "hygiene_cctv")) {
-      out.push({ id: "hygiene", label: "Detail Hygiene Audit/CCTV", icon: ClipboardCheck });
-    }
+    const dariEntri = indikator.filter((i) => i.actual.sumber === "entri" || i.actual.sumber === "pengurang");
+    const adaHygiene = dariEntri.some((i) => (i.actual as { entri: JenisEntri }).entri === "hygiene_cctv");
+    if (adaHygiene) out.push({ id: "hygiene", label: "Detail Hygiene Audit/CCTV", icon: ClipboardCheck });
     if (laporan.ca && indikator.some((i) => i.key === "net_profit")) {
       out.push({ id: "netprofit", label: "Detail Net Profit", icon: PiggyBank });
     }
     if (laporan.ca && indikator.some((i) => i.key === "hpp")) {
       out.push({ id: "hpp", label: "Detail Harga Pokok Penjualan", icon: Coins });
     }
-    out.push({ id: "riwayat", label: "Riwayat Input", icon: ClipboardList });
+    // Riwayat Input hanya untuk posisi yang catatannya BELUM punya tabel
+    // sendiri. Pada Coordinator Area satu-satunya catatan adalah Hygiene
+    // Audit/CCTV, dan tabel detailnya sudah memuat baris yang sama persis —
+    // dua tombol menuju isi yang sama membuat orang mengira ada dua daftar.
+    // Posisi lain tetap memerlukannya: di sanalah satu-satunya tempat catatan
+    // bisa dilihat dan dihapus.
+    const semuaTercakup = adaHygiene && dariEntri.every((i) => (i.actual as { entri: JenisEntri }).entri === "hygiene_cctv");
+    if (!semuaTercakup) out.push({ id: "riwayat", label: "Riwayat Input", icon: ClipboardList });
     return out;
   }, [laporan.efisiensi, laporan.fee, laporan.pasar, laporan.ca, indikator]);
 
@@ -143,6 +150,18 @@ export function PapanKpi({
   const namaOutlet = React.useMemo(() => new Map(outlets.map((o) => [o.id, o.nama])), [outlets]);
 
   const entriHygiene = React.useMemo(() => laporan.entri.filter((e) => e.jenis === "hygiene_cctv"), [laporan.entri]);
+
+  // Rasio target per outlet dibaca dari indikatornya sendiri, bukan ditulis
+  // ulang sebagai angka di sini. Kalau suatu saat target Net Profit berubah
+  // dari 30%, satu-satunya tempat yang perlu diubah tetap satu.
+  const rasioNetProfit = React.useMemo(() => {
+    const t = indikator.find((i) => i.key === "net_profit")?.target;
+    return t && t.jenis === "porsi" ? t.rasio : 30;
+  }, [indikator]);
+  const rasioHpp = React.useMemo(() => {
+    const t = indikator.find((i) => i.key === "hpp")?.target;
+    return t && t.jenis === "tetap" ? t.nilai : 40;
+  }, [indikator]);
 
   const [laporanTerbuka, setLaporanTerbuka] = React.useState(false);
 
@@ -314,6 +333,7 @@ export function PapanKpi({
               jadi tetap bisa diisi sambil melihat gabungan seluruh Coordinator
               Area. Yang tidak bisa hanya catatan kegiatan — itu memang milik
               seseorang. */}
+          <DialogPanduan indikator={indikator} perOutlet={!!laporan.ca} />
           {!laporan.dikunci && (
             <FormKegiatan
               posisi={laporan.posisi}
@@ -348,8 +368,8 @@ export function PapanKpi({
 
       {/* Grafik + donat — grid yang sama dengan Work Tracker. */}
       <div className="mb-4 grid items-stretch gap-4 lg:grid-cols-[minmax(0,1fr)_23rem]">
-        <KpiPerformanceChart baris={baris} lalu={lalu} subtitle={subtitle} />
-        <KpiIndicatorDonut baris={baris} subtitle={subtitle} />
+        <KpiPerformanceChart baris={baris} lalu={lalu} />
+        <KpiIndicatorDonut baris={baris} />
       </div>
 
       {bobotTimpang && (
@@ -421,15 +441,23 @@ export function PapanKpi({
         />
       )}
       {tampilan === "hygiene" && (
-        <TabelHygiene entri={entriHygiene} namaOutlet={namaOutlet} periode={laporan.periode} toolbar={toolbar} />
+        <TabelHygiene
+          entri={entriHygiene}
+          namaOutlet={namaOutlet}
+          posisi={laporan.posisi}
+          periode={laporan.periode}
+          pic={laporan.pic}
+          bolehHapus={!laporan.dikunci && bolehSimpan}
+          toolbar={toolbar}
+        />
       )}
-      {tampilan === "netprofit" && laporan.ca && <TabelNetProfit detail={laporan.ca.detail} toolbar={toolbar} />}
-      {tampilan === "hpp" && laporan.ca && <TabelHpp detail={laporan.ca.detail} toolbar={toolbar} />}
+      {tampilan === "netprofit" && laporan.ca && <TabelNetProfit detail={laporan.ca.detail} rasio={rasioNetProfit} toolbar={toolbar} />}
+      {tampilan === "hpp" && laporan.ca && <TabelHpp detail={laporan.ca.detail} rasio={rasioHpp} toolbar={toolbar} />}
       {tampilan === "riwayat" && (
         <TabelRiwayat entri={laporan.entri} posisi={laporan.posisi} periode={laporan.periode} pic={laporan.pic} toolbar={toolbar} />
       )}
 
-      <Ringkasan tampilan={tampilan} laporan={laporan} />
+      <Ringkasan tampilan={tampilan} laporan={laporan} rasioNetProfit={rasioNetProfit} rasioHpp={rasioHpp} />
 
       <DialogLaporanKpi
         open={laporanTerbuka}
@@ -445,7 +473,16 @@ export function PapanKpi({
 
 /* ─────────────────────────── pengalih tabel ─────────────────────────── */
 
-/** Bentuknya persis pengalih Table/Kanban di Work Tracker. */
+/**
+ * Pengalih tabel — bentuknya persis pengalih Table/Kanban di Work Tracker.
+ *
+ * MENGGULIR MENDATAR, TIDAK DIBAGI RATA. Sebelumnya tiap tombol memakai lebar
+ * yang sama besar, jadi begitu pilihannya bertambah jadi tujuh, "Detail Harga
+ * Pokok Penjualan" diperas sampai tulisannya menabrak ikon tetangganya — dan
+ * seluruh bilahnya jadi selebar barisnya, mendorong tombol unduh turun ke baris
+ * berikutnya. Sekarang tiap tombol selebar tulisannya sendiri dan bilahnya
+ * digeser bila tidak muat.
+ */
 function PilihTabel({
   pilihan,
   nilai,
@@ -456,7 +493,7 @@ function PilihTabel({
   onNilai: (v: Tampilan) => void;
 }) {
   return (
-    <div className="inline-grid gap-1 rounded-xl border border-border bg-muted/50 p-1" style={{ gridTemplateColumns: `repeat(${pilihan.length}, minmax(0, 1fr))` }}>
+    <div className="scroll-fade-x flex max-w-full items-center gap-1 rounded-xl border border-border bg-muted/50 p-1">
       {pilihan.map((p) => {
         const on = p.id === nilai;
         const Icon = p.icon;
@@ -467,7 +504,7 @@ function PilihTabel({
             onClick={() => onNilai(p.id)}
             aria-pressed={on}
             className={cn(
-              "inline-flex items-center justify-center gap-1.5 whitespace-nowrap rounded-lg px-2.5 py-1.5 text-xs font-medium transition-colors",
+              "inline-flex shrink-0 items-center justify-center gap-1.5 whitespace-nowrap rounded-lg px-2.5 py-1.5 text-xs font-medium transition-colors",
               on ? "bg-background text-foreground shadow-sm ring-1 ring-border" : "text-muted-foreground hover:text-foreground",
             )}
           >
@@ -481,7 +518,7 @@ function PilihTabel({
 }
 
 /** Keterangan di bawah tabel — menjelaskan angka tabel yang sedang tampil. */
-function Ringkasan({ tampilan, laporan }: { tampilan: Tampilan; laporan: LaporanKpi }) {
+function Ringkasan({ tampilan, laporan, rasioNetProfit, rasioHpp }: { tampilan: Tampilan; laporan: LaporanKpi; rasioNetProfit: number; rasioHpp: number }) {
   let teks: React.ReactNode = null;
 
   // Tabel indikator TIDAK diberi keterangan di bawahnya. Skor bulan ini sudah
@@ -545,11 +582,14 @@ function Ringkasan({ tampilan, laporan }: { tampilan: Tampilan; laporan: Laporan
     const totalNilai = berisi.reduce((a, o) => a + (ambil(o) ?? 0), 0);
     const totalGross = berisi.reduce((a, o) => a + (o.gross ?? 0), 0);
     const nama = tampilan === "netprofit" ? "Net profit" : "Harga pokok penjualan";
+    const rasio = tampilan === "netprofit" ? rasioNetProfit : rasioHpp;
+    const totalTarget = (totalGross * rasio) / 100;
     teks = (
       <>
         {nama} {formatIDR(totalNilai)} dari gross sales {formatIDR(totalGross)} ={" "}
-        <b className="text-foreground">{persen(bagianDari(totalNilai, totalGross || null))}</b> · {berisi.length} dari{" "}
-        {ikut.length} outlet yang dinilai sudah terisi.
+        <b className="text-foreground">{persen(bagianDari(totalNilai, totalGross || null))}</b> ·{" "}
+        {tampilan === "netprofit" ? "target" : "batas"} {rasio}% = {formatIDR(totalTarget)} · {berisi.length} dari {ikut.length}{" "}
+        outlet yang dinilai sudah terisi.
       </>
     );
   } else if (tampilan === "riwayat") {

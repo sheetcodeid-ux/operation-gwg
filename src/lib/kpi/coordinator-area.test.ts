@@ -84,25 +84,33 @@ describe("Net Profit — 30% dari Gross Sales yang tercapai", () => {
   });
 });
 
-describe("Complaint — 20 adalah BATAS, bukan sasaran", () => {
-  it("20 atau kurang bernilai penuh", () => {
-    expect(persentaseCapaian(20, 20, "batas_maks")).toBe(100);
-    expect(persentaseCapaian(3, 20, "batas_maks")).toBe(100);
-    expect(persentaseCapaian(0, 20, "batas_maks")).toBe(100);
+describe("Complaint — tiap komplain berbiaya, 20 membuatnya habis", () => {
+  it("nol komplain bernilai penuh, dan capaiannya turun tiap satu komplain", () => {
+    expect(persentaseCapaian(0, 20, "kurang_linear")).toBe(100);
+    expect(persentaseCapaian(1, 20, "kurang_linear")).toBe(95);
+    expect(persentaseCapaian(2, 20, "kurang_linear")).toBe(90);
+    expect(persentaseCapaian(10, 20, "kurang_linear")).toBe(50);
   });
 
-  it("lebih dari 20 turun proporsional — 40 komplain bernilai separuh", () => {
-    expect(persentaseCapaian(40, 20, "batas_maks")).toBe(50);
-    const b = barisKpi({ indikator: ind("komplain_area"), bobot: 10, target: 20, actual: 40 });
-    expect(b.persenActual).toBe(5);
+  it("habis TEPAT di batasnya dan tidak pernah minus", () => {
+    expect(persentaseCapaian(20, 20, "kurang_linear")).toBe(0);
+    expect(persentaseCapaian(40, 20, "kurang_linear")).toBe(0);
   });
 
-  it("TIDAK dinilai dengan rumus biasa", () => {
-    // Inilah kesalahan yang dijaga: rumus biasa memberi 40 komplain nilai
-    // 200% lalu dipotong jadi penuh — yang paling banyak dikomplain justru
-    // bernilai sempurna.
+  it("dua komplain memotong skor total 1% dari bobot 10%", () => {
+    // Inilah yang dilaporkan janggal sebelumnya: dua komplain sama sekali
+    // tidak mengubah angka mana pun.
+    const b = barisKpi({ indikator: ind("komplain_area"), bobot: 10, target: 20, actual: 2 });
+    expect(b.persentase).toBe(90);
+    expect(b.persenActual).toBe(9);
+  });
+
+  it("TIDAK dinilai dengan rumus biasa maupun sekadar batas atas", () => {
+    // Rumus biasa memberi 40 komplain nilai 200% lalu dipotong jadi penuh.
+    // Batas atas saja membuat sembilan belas komplain pertama gratis.
     expect(persentaseCapaian(40, 20)).toBe(100);
-    expect(persentaseCapaian(40, 20, "batas_maks")).toBe(50);
+    expect(persentaseCapaian(19, 20, "batas_maks")).toBe(100);
+    expect(persentaseCapaian(19, 20, "kurang_linear")).toBe(5);
   });
 });
 

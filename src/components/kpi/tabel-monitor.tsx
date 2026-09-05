@@ -1,13 +1,15 @@
 "use client";
 
 import * as React from "react";
+import { useRouter } from "next/navigation";
 import { type ColumnDef } from "@tanstack/react-table";
-import { Download, FileText, Loader2 } from "lucide-react";
+import { Download, FileText, Loader2, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { DataTable } from "@/components/ui/data-table";
 import { Progress } from "@/components/ui/progress";
 import { buatZip } from "@/lib/zip";
+import { hapusEntriAction } from "@/lib/actions/kpi";
 import type { DetailOutletCa, EntriKpi } from "@/lib/data/kpi";
 import { formatDate, formatIDR, formatNumber } from "@/lib/utils";
 
@@ -132,14 +134,22 @@ function UnduhMassal({ bukti, periode }: { bukti: Bukti[]; periode: string }) {
 export function TabelHygiene({
   entri,
   namaOutlet,
+  posisi,
   periode,
+  pic,
+  bolehHapus,
   toolbar,
 }: {
   entri: EntriKpi[];
   namaOutlet: Map<string, string>;
+  posisi: string;
   periode: string;
+  pic: string;
+  /** Baris bisa dihapus dari sini — inilah satu-satunya daftarnya. */
+  bolehHapus: boolean;
   toolbar: React.ReactNode;
 }) {
+  const router = useRouter();
   const bukti = React.useMemo(() => buktiDari(entri), [entri]);
   const kolom = React.useMemo<ColumnDef<EntriKpi>[]>(
     () => [
@@ -188,8 +198,33 @@ export function TabelHygiene({
           <span className="block max-w-[20rem] truncate text-foreground/80">{getValue<string>() || "—"}</span>
         ),
       },
+      // Tabel ini menggantikan Riwayat Input bagi Coordinator Area, jadi jalan
+      // untuk MENGHAPUS baris harus ikut pindah ke sini — kalau tidak, catatan
+      // yang salah tanggal atau salah outlet tidak bisa dibetulkan sama sekali.
+      ...(bolehHapus
+        ? [
+            {
+              id: "aksi",
+              header: "Aksi",
+              enableSorting: false,
+              cell: ({ row }) => (
+                <TombolHapus
+                  onHapus={async () => {
+                    const res = await hapusEntriAction({ posisi, periode, pic, id: row.original.id });
+                    if (res.error) {
+                      toast.error(res.error);
+                      return;
+                    }
+                    toast.success("Baris dihapus");
+                    router.refresh();
+                  }}
+                />
+              ),
+            } satisfies ColumnDef<EntriKpi>,
+          ]
+        : []),
     ],
-    [namaOutlet],
+    [namaOutlet, bolehHapus, posisi, periode, pic, router],
   );
 
   return (
@@ -210,6 +245,24 @@ export function TabelHygiene({
   );
 }
 
+function TombolHapus({ onHapus }: { onHapus: () => Promise<void> }) {
+  const [sibuk, setSibuk] = React.useState(false);
+  return (
+    <button
+      type="button"
+      disabled={sibuk}
+      onClick={async () => {
+        setSibuk(true);
+        await onHapus();
+        setSibuk(false);
+      }}
+      className="inline-flex items-center gap-1.5 rounded-lg px-2 py-1 text-xs font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-red-600 disabled:opacity-50 dark:hover:text-red-400"
+    >
+      <Trash2 className="size-3.5" /> Hapus
+    </button>
+  );
+}
+
 /* ───────────────────────── net profit & harga pokok ───────────────────────── */
 
 /**
@@ -222,18 +275,30 @@ export function TabelHygiene({
 function TabelAngkaOutlet({
   detail,
   tableId,
+  judulTarget,
   judulNominal,
   judulPersen,
+  rasioTarget,
   toolbar,
   nilai,
 }: {
   detail: DetailOutletCa[];
   tableId: string;
+  judulTarget: string;
   judulNominal: string;
   judulPersen: string;
+  /** Berapa persen dari gross sales yang menjadi target outlet itu. */
+  rasioTarget: number;
   toolbar: React.ReactNode;
   nilai: (o: DetailOutletCa) => number | null;
 }) {
+  // Target per outlet dihitung dari gross sales OUTLET ITU, bukan dibagi rata
+  // dari target se-area: outlet dua ratus juta dan outlet dua puluh juta tidak
+  // bisa diminta menyetor laba yang sama besar.
+  const target = React.useCallback(
+    (o: DetailOutletCa) => (o.gross === null ? null : (o.gross * rasioTarget) / 100),
+    [rasioTarget],
+  );
   const kolom = React.useMemo<ColumnDef<DetailOutletCa>[]>(
     () => [
       {
@@ -250,7 +315,25 @@ function TabelAngkaOutlet({
         ),
       },
       { accessorKey: "gross", header: "Gross Sales", cell: ({ getValue }) => <Rp v={getValue<number | null>()} muted /> },
-      { id: "nominal", header: judulNominal, accessorFn: nilai, cell: ({ getValue }) => <Rp v={getValue<number | null>()} /> },
+      { id: "target", header: judulTarget, accessorFn: target, cell: ({ getValue }) => <Rp v={getValue<number | null>()} muted /> },
+      {
+        id: "nominal",
+        header: judulNominal,
+        accessorFn: nilai,
+        cell: ({ row }) => {
+          const v = nilai(row.original);
+          const t = target(row.original);
+          // Yang sudah memenuhi targetnya ditandai hijau, yang belum merah.
+          // Angka telanjang berjajar puluhan baris tidak memberi tahu siapa pun
+          // baris mana yang perlu ditanyakan.
+          const capai = v === null || t === null ? null : tercapai(tableId, v, t);
+          return (
+            <span className={capai === null ? "" : capai ? "text-emerald-600 dark:text-emerald-400" : "text-red-600 dark:text-red-400"}>
+              <Rp v={v} />
+            </span>
+          );
+        },
+      },
       {
         id: "bagian",
         header: judulPersen,
@@ -261,7 +344,7 @@ function TabelAngkaOutlet({
         },
       },
     ],
-    [judulNominal, judulPersen, nilai],
+    [judulTarget, judulNominal, judulPersen, nilai, target, tableId],
   );
 
   return (
@@ -276,26 +359,55 @@ function TabelAngkaOutlet({
   );
 }
 
-export function TabelNetProfit({ detail, toolbar }: { detail: DetailOutletCa[]; toolbar: React.ReactNode }) {
+/**
+ * Arah baiknya berbeda: laba MELEBIHI target itu bagus, harga pokok melebihi
+ * target itu buruk. Satu tanda warna untuk keduanya tanpa membedakan arah akan
+ * memuji outlet yang harga pokoknya paling boros.
+ */
+function tercapai(tableId: string, nilai: number, target: number): boolean {
+  return tableId === "kpi-hpp" ? nilai <= target : nilai >= target;
+}
+
+export function TabelNetProfit({
+  detail,
+  rasio,
+  toolbar,
+}: {
+  detail: DetailOutletCa[];
+  rasio: number;
+  toolbar: React.ReactNode;
+}) {
   return (
     <TabelAngkaOutlet
       detail={detail}
       tableId="kpi-net-profit"
+      judulTarget={`Target Net Profit (${rasio}%)`}
       judulNominal="Net Profit"
       judulPersen="% terhadap Gross Sales"
+      rasioTarget={rasio}
       toolbar={toolbar}
       nilai={(o) => o.netProfit}
     />
   );
 }
 
-export function TabelHpp({ detail, toolbar }: { detail: DetailOutletCa[]; toolbar: React.ReactNode }) {
+export function TabelHpp({
+  detail,
+  rasio,
+  toolbar,
+}: {
+  detail: DetailOutletCa[];
+  rasio: number;
+  toolbar: React.ReactNode;
+}) {
   return (
     <TabelAngkaOutlet
       detail={detail}
       tableId="kpi-hpp"
+      judulTarget={`Batas HPP (${rasio}%)`}
       judulNominal="Harga Pokok Penjualan"
       judulPersen="% terhadap Gross Sales"
+      rasioTarget={rasio}
       toolbar={toolbar}
       nilai={(o) => o.hppNominal}
     />

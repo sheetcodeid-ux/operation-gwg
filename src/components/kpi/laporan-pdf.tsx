@@ -4,7 +4,7 @@ import * as React from "react";
 import { Moon, Printer, Sun } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
-import { singkatUnik } from "./kpi-charts";
+import type { LaluIndikator } from "./kpi-charts";
 import { labelPeriode } from "./periode";
 import type { BarisKpi } from "@/lib/kpi/hitung";
 import type { LaporanKpi } from "@/lib/data/kpi";
@@ -67,38 +67,30 @@ const tanggalHariIni = () => new Date().toLocaleDateString("id-ID", { day: "nume
 /* ─────────────────────────────── grafik svg ─────────────────────────────── */
 
 /**
- * Garis melengkung lewat sederet titik (Catmull-Rom diubah jadi kurva Bézier).
+ * Garis lurus lewat sederet titik.
  *
- * Garis lurus antar-titik membuat grafiknya patah-patah dan berbeda dari yang
- * dilihat di layar; lengkungannya di sini dibuat sedekat mungkin dengan itu.
+ * TAJAM, bukan melengkung — sama dengan grafik di layar. Lengkungan menyisipkan
+ * nilai yang tidak pernah ada di antara dua indikator yang bersebelahan, dan
+ * sumbu mendatarnya di sini bukan waktu melainkan daftar: tidak ada "antara
+ * Gross Sales dan Net Profit" yang bisa dilewati.
  */
-function kurva(titik: { x: number; y: number }[]): string {
-  if (titik.length === 0) return "";
-  if (titik.length < 3) return titik.map((p, i) => `${i ? "L" : "M"}${p.x},${p.y}`).join(" ");
-  let d = `M${titik[0].x},${titik[0].y}`;
-  for (let i = 0; i < titik.length - 1; i += 1) {
-    const p0 = titik[i - 1] ?? titik[i];
-    const p1 = titik[i];
-    const p2 = titik[i + 1];
-    const p3 = titik[i + 2] ?? p2;
-    const c1x = p1.x + (p2.x - p0.x) / 6;
-    const c1y = p1.y + (p2.y - p0.y) / 6;
-    const c2x = p2.x - (p3.x - p1.x) / 6;
-    const c2y = p2.y - (p3.y - p1.y) / 6;
-    d += ` C${c1x.toFixed(1)},${c1y.toFixed(1)} ${c2x.toFixed(1)},${c2y.toFixed(1)} ${p2.x.toFixed(1)},${p2.y.toFixed(1)}`;
-  }
-  return d;
+function garis(titik: { x: number; y: number }[]): string {
+  return titik.map((p, i) => `${i ? "L" : "M"}${p.x.toFixed(1)},${p.y.toFixed(1)}`).join(" ");
+}
+
+/** Nama penuh, dipotong dengan elipsis bila tidak muat pada jatahnya. */
+function potong(teks: string, muat: number): string {
+  return teks.length > muat ? `${teks.slice(0, Math.max(1, muat - 1)).trimEnd()}…` : teks;
 }
 
 /** Grafik capaian — tiga garis yang sama dengan yang di layar. */
-function grafikCapaian(baris: BarisKpi[], lalu: Record<string, number | null>, t: (typeof THEME)[Mode]): string {
+function grafikCapaian(baris: BarisKpi[], lalu: Record<string, LaluIndikator>, t: (typeof THEME)[Mode]): string {
   const L = 46;
   const R = 12;
   const A = 14;
-  const B = 26;
+  const B = 24;
   const W = 720;
   const H = 260;
-  const kode = singkatUnik(baris.map((b) => b.label));
   const n = baris.length;
   const lebar = W - L - R;
   const tinggi = H - A - B;
@@ -106,7 +98,7 @@ function grafikCapaian(baris: BarisKpi[], lalu: Record<string, number | null>, t
   const py = (v: number) => A + tinggi - (Math.max(0, Math.min(110, v)) / 110) * tinggi;
 
   const ini = baris.map((b, i) => ({ x: px(i), y: py(b.persentase ?? 0) }));
-  const sblm = baris.map((b, i) => ({ x: px(i), y: py(lalu[b.key] ?? 0) }));
+  const sblm = baris.map((b, i) => ({ x: px(i), y: py(lalu[b.key]?.persen ?? 0) }));
   const tgt = baris.map((_, i) => ({ x: px(i), y: py(100) }));
 
   const garisSumbu = [0, 25, 50, 75, 100]
@@ -117,11 +109,18 @@ function grafikCapaian(baris: BarisKpi[], lalu: Record<string, number | null>, t
     )
     .join("");
 
+  // Nama indikator ditulis PENUH, sama seperti di layar; yang tidak muat pada
+  // jatah lebarnya dipotong dengan elipsis. Titik paling pinggir dirapatkan ke
+  // dalam supaya tidak menjorok keluar kartunya.
+  const muat = Math.max(6, Math.floor((lebar / Math.max(1, n) - 10) / 4.9));
   const label = baris
-    .map((_, i) => `<text x="${px(i)}" y="${H - 8}" text-anchor="middle" fill="${t.text}" font-size="10" font-weight="700">${aman(kode[i])}</text>`)
+    .map((b, i) => {
+      const anchor = i === 0 ? "start" : i === n - 1 ? "end" : "middle";
+      return `<text x="${px(i)}" y="${H - 8}" text-anchor="${anchor}" fill="${t.text}" font-size="9" font-weight="700">${aman(potong(b.label, muat))}</text>`;
+    })
     .join("");
 
-  const area = `${kurva(ini)} L${ini[ini.length - 1]?.x ?? L},${py(0)} L${ini[0]?.x ?? L},${py(0)} Z`;
+  const area = `${garis(ini)} L${(ini[ini.length - 1]?.x ?? L).toFixed(1)},${py(0)} L${(ini[0]?.x ?? L).toFixed(1)},${py(0)} Z`;
   const titik = (p: { x: number; y: number }[], w: string, r: number) =>
     p.map((q) => `<circle cx="${q.x.toFixed(1)}" cy="${q.y.toFixed(1)}" r="${r}" fill="${w}"/>`).join("");
 
@@ -131,9 +130,9 @@ function grafikCapaian(baris: BarisKpi[], lalu: Record<string, number | null>, t
     </linearGradient></defs>
     ${garisSumbu}
     <path d="${area}" fill="url(#isiBiru)" stroke="none"/>
-    <path d="${kurva(sblm)}" fill="none" stroke="${ABU}" stroke-width="2"/>
-    <path d="${kurva(tgt)}" fill="none" stroke="${TARGET}" stroke-width="2" stroke-dasharray="6 5"/>
-    <path d="${kurva(ini)}" fill="none" stroke="${BIRU}" stroke-width="2.75"/>
+    <path d="${garis(sblm)}" fill="none" stroke="${ABU}" stroke-width="2"/>
+    <path d="${garis(tgt)}" fill="none" stroke="${TARGET}" stroke-width="2" stroke-dasharray="6 5"/>
+    <path d="${garis(ini)}" fill="none" stroke="${BIRU}" stroke-width="2.75"/>
     ${titik(sblm, ABU, 2.5)}${titik(ini, BIRU, 3)}
     ${label}
   </svg>`;
@@ -193,7 +192,7 @@ export function buatLaporanHtml({
   mode,
 }: {
   laporan: LaporanKpi;
-  lalu: Record<string, number | null>;
+  lalu: Record<string, LaluIndikator>;
   namaPosisi: string;
   namaDepartemen: string;
   mode: Mode;
@@ -374,7 +373,7 @@ export function DialogLaporanKpi({
   open: boolean;
   onOpenChange: (v: boolean) => void;
   laporan: LaporanKpi;
-  lalu: Record<string, number | null>;
+  lalu: Record<string, LaluIndikator>;
   namaPosisi: string;
   namaDepartemen: string;
 }) {
