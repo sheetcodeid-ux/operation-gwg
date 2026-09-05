@@ -2,9 +2,10 @@
 
 import * as React from "react";
 import { Area, CartesianGrid, ComposedChart, Line, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
-import { ChartPie, Layers } from "lucide-react";
+import { ChartPie, Hash, Layers, Percent } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { BarisKpi } from "@/lib/kpi/hitung";
+import { formatIDR, formatNumber } from "@/lib/utils";
 
 /**
  * Dua kartu grafik KPI — dibangun mengikuti Work Tracker.
@@ -21,153 +22,249 @@ const ABU = "#94a3b8";
 const TARGET = "#f59e0b";
 const COLORS = ["#3b82f6", "#f59e0b", "#06b6d4", "#8b5cf6", "#10b981", "#f43f5e", "#64748b", "#eab308"];
 
-function Kartu({ title, subtitle, children }: { title: string; subtitle: string; children: React.ReactNode }) {
+/**
+ * Kartu grafik.
+ *
+ * TANPA SUBJUDUL. Bulan dan posisinya sudah tertulis di bilah saringan tepat di
+ * atas kedua kartu ini; mengulanginya dua kali lagi hanya memakan tinggi yang
+ * seharusnya jadi bidang grafiknya.
+ */
+function Kartu({ title, aksi, children }: { title: string; aksi?: React.ReactNode; children: React.ReactNode }) {
   return (
     <div className="flex flex-col rounded-2xl border border-border bg-card/40 p-5">
-      <div className="mb-3">
+      <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
         <h3 className="text-sm font-semibold tracking-tight text-foreground">{title}</h3>
-        <p className="text-[11px] text-muted-foreground">{subtitle}</p>
+        {aksi}
       </div>
       {children}
     </div>
   );
 }
 
+/** Capaian bulan lalu — persen untuk grafiknya, nominal untuk keterangannya. */
+export interface LaluIndikator {
+  persen: number | null;
+  actual: number | null;
+}
+
+type Satuan = "angka" | "rupiah" | "persen" | undefined;
+
+type Titik = {
+  name: string;
+  full: string;
+  ini: number;
+  lalu: number;
+  target: number;
+  satuan: Satuan;
+  nIni: number | null;
+  nLalu: number | null;
+  nTarget: number | null;
+};
+
+type Sumbu = "persen" | "angka";
+
+const SUMBU = [
+  { id: "persen", label: "Persen", icon: Percent },
+  { id: "angka", label: "Angka", icon: Hash },
+] as const;
+
+/** Nominal seperti di tabel — rupiah tetap rupiah, persen tetap persen. */
+function nominal(v: number | null, satuan: Satuan): string {
+  if (v === null) return "—";
+  if (satuan === "rupiah") return formatIDR(v);
+  if (satuan === "persen") return `${formatNumber(v, { maximumFractionDigits: 2 })}%`;
+  return formatNumber(v, { maximumFractionDigits: 2 });
+}
+
 /**
- * Singkatan untuk sumbu X — cara yang sama dipakai Work Tracker untuk nama
- * karyawan, tapi WAJIB unik di sini.
+ * Nominal yang dipendekkan untuk ditempel di atas titik grafik.
  *
- * Tiga huruf dari kata pertama menghasilkan "KON, KON, KON" untuk Jumlah Konten
- * Post, Reels, dan Story — sumbu yang tiga batangnya bernama sama tidak bisa
- * dibaca sama sekali. Maka kata pembuka yang dipakai bersama-sama dilewati
- * lebih dulu, dan kalau masih kembar, huruf berikutnya ditambahkan sampai
- * masing-masing berdiri sendiri.
+ * "Rp 4.186.500.000" selebar seperlima grafiknya dan akan menabrak label
+ * tetangganya; "4,19 M" terbaca sekilas dan tetap cukup untuk membandingkan.
+ * Angka penuhnya tetap ada di keterangan yang muncul saat titiknya disentuh.
  */
-const LEWATI = new Set(["jumlah", "total", "input", "pemeriksaan", "penyampaian", "invoice", "kualitas", "kelengkapan"]);
-
-function kataPenting(label: string): string[] {
-  const kata = (label || "")
-    .split(/[^\p{L}\p{N}]+/u)
-    .filter((w) => w.length > 1 && !LEWATI.has(w.toLowerCase()));
-  return kata.length > 0 ? kata : [(label || "?").trim() || "?"];
+function ringkas(v: number | null, satuan: Satuan): string {
+  if (v === null) return "";
+  if (satuan === "persen") return `${formatNumber(v, { maximumFractionDigits: 1 })}%`;
+  const abs = Math.abs(v);
+  const [bagi, akhiran] = abs >= 1e9 ? [1e9, " M"] : abs >= 1e6 ? [1e6, " jt"] : abs >= 1e4 ? [1e3, " rb"] : [1, ""];
+  const angka = formatNumber(v / bagi, { maximumFractionDigits: bagi === 1 ? 0 : 2 });
+  return `${satuan === "rupiah" ? "Rp " : ""}${angka}${akhiran}`;
 }
 
-/** Satu singkatan per label, dijamin tidak ada yang kembar. */
-export function singkatUnik(labels: string[]): string[] {
-  // Label berisi beberapa kata disingkat jadi HURUF AWAL tiap katanya —
-  // "Gross Sales" jadi GS, "Harga Pokok Penjualan" jadi HPP. Tiga huruf dari
-  // kata pertama menghasilkan "GRO" dan "HAR", yang tidak dikenali siapa pun
-  // sebagai nama indikatornya.
-  const hasil = labels.map((l) => {
-    const kata = kataPenting(l);
-    const inisial = kata.map((k) => k[0].toUpperCase()).join("").slice(0, 4);
-    return { kata, kode: kata.length > 1 ? inisial : kata[0].slice(0, 3).toUpperCase() };
-  });
-
-  // Selama masih ada yang kembar, yang kembar diperpanjang — satu huruf dari
-  // katanya sendiri, lalu huruf pertama kata berikutnya.
-  for (let putaran = 0; putaran < 6; putaran += 1) {
-    const hitung = new Map<string, number>();
-    for (const h of hasil) hitung.set(h.kode, (hitung.get(h.kode) ?? 0) + 1);
-    if ([...hitung.values()].every((n) => n === 1)) break;
-    for (const h of hasil) {
-      if ((hitung.get(h.kode) ?? 0) < 2) continue;
-      const utama = h.kata[0].toUpperCase();
-      const panjang = Math.min(utama.length, h.kode.replace(/[^A-Z0-9]/g, "").length + 1);
-      h.kode = panjang <= utama.length && panjang > h.kode.length
-        ? utama.slice(0, panjang)
-        : `${utama.slice(0, 3)}·${h.kata.slice(1).map((k) => k[0].toUpperCase()).join("").slice(0, 2) || "X"}`;
-    }
-  }
-  return hasil.map((h) => h.kode);
-}
-
-type Titik = { name: string; full: string; ini: number; lalu: number; target: number };
-
-function Tip({ active, payload }: { active?: boolean; payload?: { payload: Titik }[] }) {
+function Tip({ active, payload, sumbu }: { active?: boolean; payload?: { payload: Titik }[]; sumbu?: Sumbu }) {
   if (!active || !payload?.length) return null;
   const d = payload[0].payload;
+  const baris: [string, string, number, string][] = [
+    ["Bulan ini", BLUE, d.ini, nominal(d.nIni, d.satuan)],
+    ["Bulan lalu", ABU, d.lalu, nominal(d.nLalu, d.satuan)],
+    ["Target", TARGET, d.target, nominal(d.nTarget, d.satuan)],
+  ];
   return (
     <div className="rounded-xl border border-border bg-popover px-3 py-2 text-xs shadow-lg">
       <p className="mb-1 font-medium text-foreground">{d.full}</p>
-      <p className="flex items-center gap-2 text-muted-foreground">
-        <span className="size-2 rounded-full" style={{ background: BLUE }} /> Bulan ini
-        <span className="ml-auto font-semibold text-foreground">{d.ini}%</span>
-      </p>
-      <p className="flex items-center gap-2 text-muted-foreground">
-        <span className="size-2 rounded-full" style={{ background: ABU }} /> Bulan lalu
-        <span className="ml-auto font-semibold text-foreground">{d.lalu}%</span>
-      </p>
-      <p className="flex items-center gap-2 text-muted-foreground">
-        <span className="size-2 rounded-full" style={{ background: TARGET }} /> Target
-        <span className="ml-auto font-semibold text-foreground">{d.target}%</span>
-      </p>
+      {baris.map(([nama, warna, persen, nom]) => (
+        <p key={nama} className="flex items-center gap-2 text-muted-foreground">
+          <span className="size-2 shrink-0 rounded-full" style={{ background: warna }} />
+          {nama}
+          {/* Keduanya selalu tampil — yang sedang dipilih ditebalkan. Angka
+              tanpa persennya tidak bisa dibandingkan antar-indikator, dan
+              persen tanpa angkanya tidak bisa dicocokkan dengan laporan. */}
+          <span className="ml-auto whitespace-nowrap">
+            <b className={sumbu === "angka" ? "text-foreground" : "font-normal"}>{nom}</b>
+            <span className="mx-1 opacity-40">·</span>
+            <b className={sumbu === "persen" ? "text-foreground" : "font-normal"}>{persen}%</b>
+          </span>
+        </p>
+      ))}
     </div>
   );
 }
 
-/** Satu keterangan garis — bentuknya mengikuti garisnya sendiri. */
-function Keterangan({ warna, label, putus }: { warna: string; label: string; putus?: boolean }) {
+/**
+ * Label sumbu X — NAMA PENUH, dipotong dengan elipsis bila tidak muat.
+ *
+ * Singkatan "GS" dan "HACM" hemat tempat tapi harus dihafal; nama yang
+ * terpotong "Harga Pokok Pen…" masih bisa ditebak siapa pun tanpa dijelaskan.
+ * Berapa huruf yang muat dihitung dari lebar yang benar-benar tersedia untuk
+ * satu label, bukan dari angka tetap yang akan meleset di layar sempit maupun
+ * lebar.
+ */
+function LabelSumbu({
+  x,
+  y,
+  payload,
+  index,
+  muat,
+  jumlah,
+}: {
+  x?: number;
+  y?: number;
+  payload?: { value: string };
+  index?: number;
+  muat: number;
+  jumlah: number;
+}) {
+  const teks = payload?.value ?? "";
+  const potong = teks.length > muat ? `${teks.slice(0, Math.max(1, muat - 1)).trimEnd()}…` : teks;
   return (
-    <span className="inline-flex items-center gap-1.5 text-[11px] text-muted-foreground">
-      <svg width="18" height="6" viewBox="0 0 18 6" aria-hidden>
-        <line x1="0" y1="3" x2="18" y2="3" stroke={warna} strokeWidth="2.5" strokeLinecap="round" strokeDasharray={putus ? "5 4" : undefined} />
-      </svg>
-      {label}
-    </span>
+    <text x={x} y={(y ?? 0) + 12} textAnchor={tepi(index, jumlah)} fill="var(--foreground)" fontSize={10.5} fontWeight={600}>
+      <title>{teks}</title>
+      {potong}
+    </text>
   );
+}
+
+/**
+ * Ke mana teks di titik paling pinggir merapat.
+ *
+ * Label yang selalu ditaruh di tengah titiknya akan menjorok separuh keluar
+ * kartu pada titik pertama dan terakhir — dan yang terbaca bukan "Gross Sales"
+ * melainkan "oss Sales". Yang di ujung dirapatkan ke dalam; yang di tengah
+ * tetap di tengah titiknya.
+ */
+function tepi(index: number | undefined, jumlah: number): "start" | "middle" | "end" {
+  if (index === 0) return "start";
+  if (index !== undefined && index === jumlah - 1) return "end";
+  return "middle";
 }
 
 /**
  * Capaian tiap indikator: bulan lalu, target, dan bulan ini.
  *
- * Sumbunya persen, bukan angka mentah — indikator yang satu dihitung dalam
- * lembar konten dan yang lain dalam puluhan ribu tayangan, jadi menaruh
- * keduanya pada satu sumbu angka akan membuat yang kecil tidak terlihat sama
- * sekali. Persen membuat keduanya bisa berdiri berdampingan.
- *
  * TIGA GARIS, TANPA BATANG. Batang dan garis dalam satu bidang membuat mata
  * membandingkan dua benda yang bentuknya berbeda — tinggi batang lawan
- * ketinggian titik. Tiga garis sejenis dibaca sekali jalan: yang mana di atas
- * garis target, yang mana turun dari bulan lalu.
+ * ketinggian titik. Tiga garis sejenis dibaca sekali jalan.
+ *
+ * GARISNYA TAJAM, bukan melengkung. Lengkungan menyisipkan nilai yang tidak
+ * pernah ada di antara dua indikator yang bersebelahan — dan di sini sumbu
+ * mendatarnya bukan waktu, melainkan daftar; tidak ada "antara Gross Sales dan
+ * Net Profit" yang bisa dilewati.
  *
  * Garis target ADA di 100% pada setiap indikator, bukan karena semua targetnya
- * sama, melainkan karena sumbunya sudah persen — 100% berarti target indikator
- * itu tepat tercapai. Dibuat putus-putus supaya tidak tertukar dengan capaian
- * yang sesungguhnya.
+ * sama, melainkan karena sumbunya persen — 100% berarti target indikator itu
+ * tepat tercapai. Dibuat putus-putus supaya tidak tertukar dengan capaian yang
+ * sesungguhnya.
+ *
+ * DUA SATUAN, SATU GRAFIK. Bentuk garisnya SELALU ditentukan persentase —
+ * indikator yang satu dihitung dalam lembar konten dan yang lain dalam miliar
+ * rupiah, jadi menaruh keduanya pada satu sumbu angka membuat yang kecil rata
+ * dengan garis dasar. Yang ditukar tombol Angka/Persen adalah apa yang
+ * TERTULIS: persen di sumbu, atau nominalnya di atas tiap titik.
  */
 export function KpiPerformanceChart({
   baris,
   lalu,
-  subtitle,
 }: {
   baris: BarisKpi[];
   /** Capaian bulan lalu per kunci indikator. */
-  lalu: Record<string, number | null>;
-  subtitle: string;
+  lalu: Record<string, LaluIndikator>;
 }) {
-  const data = React.useMemo<Titik[]>(() => {
-    const kode = singkatUnik(baris.map((b) => b.label));
-    return baris.map((b, i) => ({
-      name: kode[i],
-      full: b.label,
-      ini: b.persentase === null ? 0 : Math.round(b.persentase),
-      lalu: lalu[b.key] == null ? 0 : Math.round(lalu[b.key]!),
-      target: 100,
-    }));
-  }, [baris, lalu]);
+  const [sumbu, setSumbu] = React.useState<Sumbu>("persen");
+  const kotak = React.useRef<HTMLDivElement>(null);
+  const [lebar, setLebar] = React.useState(0);
+
+  // Lebar diukur, tidak ditebak: berapa huruf yang muat pada satu label
+  // bergantung pada lebar yang tersisa, dan kartunya melar mengikuti layar.
+  React.useEffect(() => {
+    const el = kotak.current;
+    if (!el || typeof ResizeObserver === "undefined") return;
+    const ro = new ResizeObserver(([e]) => setLebar(e.contentRect.width));
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+
+  const data = React.useMemo<Titik[]>(
+    () =>
+      baris.map((b) => ({
+        name: b.label,
+        full: b.label,
+        ini: b.persentase === null ? 0 : Math.round(b.persentase),
+        lalu: lalu[b.key]?.persen == null ? 0 : Math.round(lalu[b.key].persen!),
+        target: 100,
+        satuan: b.satuan,
+        nIni: b.actual,
+        nLalu: lalu[b.key]?.actual ?? null,
+        nTarget: b.target,
+      })),
+    [baris, lalu],
+  );
   const adaIsi = data.some((d) => d.ini > 0 || d.lalu > 0);
 
+  // ~5,6 px per huruf pada 10,5px tebal, dikurangi jarak antar-label. Lebar
+  // sumbu Y (44) dan sisipan kiri-kanan (20) dikeluarkan lebih dulu.
+  const muat = Math.max(6, Math.floor(((lebar - 64) / Math.max(1, data.length) - 12) / 5.6));
+
   return (
-    <Kartu title="Capaian per Indikator" subtitle={subtitle}>
-      <div className="mb-2 flex flex-wrap items-center gap-x-4 gap-y-1">
-        <Keterangan warna={ABU} label="Bulan lalu" />
-        <Keterangan warna={TARGET} label="Target" putus />
-        <Keterangan warna={BLUE} label="Bulan ini" />
-      </div>
-      <div className="min-h-[17rem] flex-1" style={{ outline: "none" }}>
+    <Kartu
+      title="Capaian per Indikator"
+      aksi={
+        <div className="inline-flex gap-1 rounded-lg border border-border bg-muted/50 p-1">
+          {SUMBU.map((m) => {
+            const on = sumbu === m.id;
+            const Icon = m.icon;
+            return (
+              <button
+                key={m.id}
+                type="button"
+                onClick={() => setSumbu(m.id)}
+                aria-pressed={on}
+                className={cn(
+                  "inline-flex items-center gap-1.5 rounded-md px-2.5 py-1 text-[11px] font-medium transition-colors",
+                  on ? "bg-background text-foreground shadow-sm ring-1 ring-border" : "text-muted-foreground hover:text-foreground",
+                )}
+              >
+                <Icon className="size-3.5 shrink-0" />
+                {m.label}
+              </button>
+            );
+          })}
+        </div>
+      }
+    >
+      <div ref={kotak} className="min-h-[17rem] flex-1" style={{ outline: "none" }}>
         <ResponsiveContainer width="100%" height="100%">
-          <ComposedChart data={data} margin={{ top: 10, right: 14, left: 0, bottom: 0 }} accessibilityLayer={false}>
+          <ComposedChart data={data} margin={{ top: sumbu === "angka" ? 22 : 10, right: 14, left: 0, bottom: 0 }} accessibilityLayer={false}>
             <defs>
               <linearGradient id="kpiBlue" x1="0" y1="0" x2="0" y2="1">
                 <stop offset="0%" stopColor={BLUE} stopOpacity={0.35} />
@@ -177,11 +274,11 @@ export function KpiPerformanceChart({
             <CartesianGrid strokeDasharray="3 3" stroke="rgba(148,163,184,0.16)" vertical={false} />
             <XAxis
               dataKey="name"
-              tick={{ fill: "var(--foreground)", fontSize: 10, fontWeight: 600 }}
+              tick={<LabelSumbu muat={muat} jumlah={data.length} />}
               tickLine={false}
               axisLine={false}
               interval={0}
-              height={22}
+              height={26}
               padding={{ left: 10, right: 10 }}
             />
             <YAxis
@@ -193,9 +290,9 @@ export function KpiPerformanceChart({
               width={44}
               tickFormatter={(v: number) => `${v}%`}
             />
-            <Tooltip cursor={{ stroke: "rgba(148,163,184,0.35)", strokeWidth: 1 }} content={<Tip />} />
+            <Tooltip cursor={{ stroke: "rgba(148,163,184,0.35)", strokeWidth: 1 }} content={<Tip sumbu={sumbu} />} />
             <Line
-              type="monotone"
+              type="linear"
               dataKey="lalu"
               name="Bulan Lalu"
               stroke={ABU}
@@ -205,7 +302,7 @@ export function KpiPerformanceChart({
               isAnimationActive={false}
             />
             <Line
-              type="monotone"
+              type="linear"
               dataKey="target"
               name="Target"
               stroke={TARGET}
@@ -216,7 +313,7 @@ export function KpiPerformanceChart({
               isAnimationActive={false}
             />
             <Area
-              type="monotone"
+              type="linear"
               dataKey="ini"
               name="Bulan Ini"
               stroke={BLUE}
@@ -226,6 +323,26 @@ export function KpiPerformanceChart({
               activeDot={{ r: 5 }}
               className="chart-glow-blue"
               isAnimationActive={false}
+              label={
+                sumbu === "angka"
+                  ? (props: unknown) => {
+                      const { x, y, index } = props as { x: number; y: number; index: number };
+                      const d = data[index];
+                      if (!d) return <g />;
+                      // Titik yang mendekati 100% tidak punya ruang di atasnya:
+                      // labelnya akan menindih garis target yang juga ada di
+                      // situ. Diperiksa dari NILAINYA, bukan dari koordinat —
+                      // tinggi kartunya berubah mengikuti layar, koordinatnya
+                      // ikut bergeser, sementara "dekat target" tidak.
+                      const mepet = d.ini >= 82;
+                      return (
+                        <text x={x} y={mepet ? y + 17 : y - 9} textAnchor={tepi(index, data.length)} fill="var(--foreground)" fontSize={10} fontWeight={700}>
+                          {ringkas(d.nIni, d.satuan)}
+                        </text>
+                      );
+                    }
+                  : undefined
+              }
             />
           </ComposedChart>
         </ResponsiveContainer>
@@ -265,7 +382,7 @@ const MODE_TITLE: Record<Mode, string> = { hasil: "Actual", bobot: "Bobot" };
  * akan mendorong seluruh kartunya melar dan merusak sejajarannya dengan kartu
  * grafik di sebelahnya.
  */
-export function KpiIndicatorDonut({ baris, subtitle }: { baris: BarisKpi[]; subtitle: string }) {
+export function KpiIndicatorDonut({ baris }: { baris: BarisKpi[] }) {
   const [mode, setMode] = React.useState<Mode>("hasil");
   const [aktif, setAktif] = React.useState<string | null>(null);
 
@@ -308,7 +425,6 @@ export function KpiIndicatorDonut({ baris, subtitle }: { baris: BarisKpi[]; subt
       <div className="mb-3 flex flex-col gap-3">
         <div>
           <h3 className="text-sm font-semibold tracking-tight text-foreground">Sebaran {MODE_TITLE[mode]} per Indikator</h3>
-          <p className="text-[11px] text-muted-foreground">{subtitle}</p>
         </div>
         <div className="grid w-full grid-cols-2 gap-1 rounded-xl border border-border bg-muted/50 p-1">
           {MODES.map((m) => {

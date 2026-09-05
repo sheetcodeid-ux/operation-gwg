@@ -83,7 +83,10 @@ export default async function KpiPosisiPage({
     laporanKpi(posisi.kode, bulanSebelum(dipakai), picAktif),
     pakaiPasar ? listEsbMenus() : Promise.resolve([]),
   ]);
-  const lalu = Object.fromEntries(sebelum.baris.map((b) => [b.key, b.persentase]));
+  // Persen DAN nominalnya dikirim: grafiknya bisa ditukar antara dua satuan,
+  // dan tanpa nominal bulan lalu perbandingannya jadi timpang — dua dari tiga
+  // garis berangka, satu tidak.
+  const lalu = Object.fromEntries(sebelum.baris.map((b) => [b.key, { persen: b.persentase, actual: b.actual }]));
   const dep = departemenDari(posisi.departemen);
 
   return (

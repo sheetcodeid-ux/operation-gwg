@@ -56,11 +56,16 @@ export const BATAS_PERSENTASE = 100;
  *    100%, dan yang paling banyak dikomplain justru bernilai penuh;
  *  • `lulus_maks` — batas atas yang tidak boleh dilewati sama sekali (HPP).
  *    Tidak ada nilai separuh: 40,1% sama nilainya dengan 80%.
+ *  • `kurang_linear` — SETIAP kejadian mengurangi capaian, dan targetnya adalah
+ *    titik nol. Dipakai Complaint: dengan `batas_maks`, dua komplain dari batas
+ *    dua puluh bernilai sama dengan nol komplain — yang membuat sepuluh
+ *    komplain pertama tidak berbiaya apa pun dan indikatornya berhenti
+ *    mengukur apa-apa sampai batasnya nyaris terlampaui.
  */
 export function persentaseCapaian(
   actual: number | null,
   target: number | null,
-  mode?: "batas_maks" | "lulus_maks",
+  mode?: "batas_maks" | "lulus_maks" | "kurang_linear",
 ): number | null {
   if (actual === null || target === null) return null;
   // Target nol bukan capaian sempurna, melainkan target yang belum ditetapkan.
@@ -69,6 +74,13 @@ export function persentaseCapaian(
   if (target <= 0) return null;
 
   if (mode === "lulus_maks") return actual <= target ? BATAS_PERSENTASE : 0;
+  // Nol kejadian bernilai penuh, dan capaiannya habis TEPAT di batasnya —
+  // satu komplain berharga 1/target dari indikator itu, jadi batas 20 berarti
+  // tiap komplain memotong 5% capaian indikatornya.
+  // Ditulis sebagai (target − actual) × 100 ÷ target, bukan (1 − actual/target)
+  // × 100: bentuk kedua menghasilkan 5,000000000000004 untuk 19 dari 20, dan
+  // angka seperti itu bocor ke layar sebagai persentase yang tampak keliru.
+  if (mode === "kurang_linear") return Math.max(0, ((target - actual) * BATAS_PERSENTASE) / target);
   if (mode === "batas_maks") {
     // Nol komplain bukan pembagian dengan nol — itu hasil terbaik yang mungkin.
     if (actual <= target) return BATAS_PERSENTASE;
