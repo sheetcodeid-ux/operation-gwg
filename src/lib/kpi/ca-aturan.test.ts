@@ -14,6 +14,7 @@ import { describe, expect, it } from "vitest";
 const data = readFileSync(join(process.cwd(), "src/lib/data/kpi.ts"), "utf8");
 const papan = readFileSync(join(process.cwd(), "src/components/kpi/papan-kpi.tsx"), "utf8");
 const halaman = readFileSync(join(process.cwd(), "src/app/(app)/kpi/[posisi]/page.tsx"), "utf8");
+const aksiKpi = readFileSync(join(process.cwd(), "src/lib/actions/kpi.ts"), "utf8");
 
 describe("aturan tiga bulan", () => {
   it("outlet yang belum genap tiga bulan tidak ikut dinilai SAMA SEKALI", () => {
@@ -45,9 +46,17 @@ describe("gross sales manual", () => {
     expect(badan).toContain("tangan.get(o.id)?.gross");
   });
 
-  it("di layar, outlet yang sudah punya angka ESB tidak bisa diketik", () => {
+  it("yang perlu diisi tangan: outlet yang belum lolos tiga bulan, atau yang bulan ini tak ada di ESB", () => {
+    // Tiga outlet pindahan Majoo masuk lewat syarat pertama meski sebagian
+    // bulannya sudah punya angka ESB — riwayat yang hilang tetap harus diisi.
     const form = readFileSync(join(process.cwd(), "src/components/kpi/form-tabel.tsx"), "utf8");
-    expect(form).toContain('jenis === "gross_manual" ? outlet.filter((o) => !o.dariEsb) : outlet');
+    expect(form).toContain('outlet.filter((o) => !o.ikut || !o.dariEsb)');
+  });
+
+  it("outlet yang bulan ini sudah punya angka ESB tidak bisa diketik", () => {
+    const form = readFileSync(join(process.cwd(), "src/components/kpi/form-tabel.tsx"), "utf8");
+    expect(form).toContain('jenis === "gross_manual" && o.dariEsb ?');
+    expect(form).toContain("dari ESB");
   });
 
   it("satu outlet yang angkanya belum ada menahan totalnya, bukan tampil kurang", () => {
@@ -84,11 +93,19 @@ describe('pilihan "Semua"', () => {
 });
 
 describe("HPP se-area", () => {
-  it("ditimbang penjualan tiap outlet, bukan dirata-rata begitu saja", () => {
+  it("total harga pokok dibagi total penjualan, bukan rata-rata persen", () => {
     // Merata-ratakan persen membuat outlet terkecil sama beratnya dengan
     // outlet terbesar, dan angkanya tidak pernah cocok dengan laporan keuangan.
-    expect(data).toContain("jumlahHpp += h * g");
-    expect(data).toContain("bobotHpp > 0 ? jumlahHpp / bobotHpp : null");
+    expect(data).toContain("(totalHpp / totalGrossHpp) * 100");
+  });
+
+  it("yang diisi NOMINAL, persennya dihitung", () => {
+    // Persen yang diketik tidak bisa diperiksa ulang terhadap apa pun: 37,5
+    // yang sebenarnya 41 tidak akan pernah dibantah data mana pun.
+    expect(data).toContain("hppNominal");
+    const form = readFileSync(join(process.cwd(), "src/components/kpi/form-tabel.tsx"), "utf8");
+    expect(form).toContain("function persenTerhadap");
+    expect(form).toContain("% thd Gross");
   });
 });
 
@@ -185,5 +202,50 @@ describe("dari mana outlet Coordinator Area diambil", () => {
     // Dua sumber untuk satu pertanyaan berarti suatu saat yang boleh dibaca
     // dan yang boleh ditulis berbeda isinya.
     expect(data).toContain("export function outletMilikPic(pic: string): Set<string> {\n  return new Set(outletCa([pic]).map((o) => o.id));");
+  });
+});
+
+
+describe("lembar Excel angka per outlet", () => {
+  const lembar = readFileSync(join(process.cwd(), "src/components/kpi/lembar-outlet.ts"), "utf8");
+  const form = readFileSync(join(process.cwd(), "src/components/kpi/form-tabel.tsx"), "utf8");
+
+  it("satu format untuk Net Profit dan Harga Pokok sekaligus", () => {
+    // Dua format terpisah berarti dua kali unduh-unggah dan dua kesempatan
+    // tertukar berkas — padahal keduanya diisi orang yang sama, untuk outlet
+    // yang sama, pada bulan yang sama.
+    expect(lembar).toContain('"Net Profit (Rp)", "Harga Pokok Penjualan (Rp)"');
+  });
+
+  it("dicocokkan lewat ID outlet, bukan namanya", () => {
+    // Mencocokkan lewat nama gagal diam-diam begitu ada outlet berganti nama
+    // atau dua nama yang mirip — dan yang gagal tidak mengeluh, ia hanya tidak
+    // tersimpan.
+    expect(lembar).toContain('"ID Outlet"');
+    expect(lembar).toContain("dikenal.has(id)");
+  });
+
+  it("baris yang tidak dikenal disebut, tidak dibuang diam-diam", () => {
+    expect(lembar).toContain("asing.push(nama || id)");
+    expect(form).toContain("tidak dikenali dan dilewati");
+  });
+
+  it("sekali simpan menulis kedua angka, bukan hanya yang sedang dilihat", () => {
+    // Sekali unggah mengisi keduanya; menyimpan salah satunya saja membuang
+    // separuh pekerjaan tanpa memberi tahu.
+    expect(form).toContain("ubahan.netProfit = npBaru");
+    expect(form).toContain("ubahan.hppNominal = hppBaru");
+  });
+});
+
+describe('mengisi sambil melihat "Semua"', () => {
+  const form = readFileSync(join(process.cwd(), "src/components/kpi/form-tabel.tsx"), "utf8");
+
+  it("angka per outlet boleh disimpan, catatan kegiatan tidak", () => {
+    // Angka per outlet menempel pada outlet dan bulan; catatan kegiatan
+    // menempel pada orang, dan saat "Semua" dipilih tidak ada orangnya.
+    expect(aksiKpi).toContain("izinkanGabungan: gabungan");
+    expect(aksiKpi).toContain("outletSeluruhPic(input.posisi)");
+    expect(form).toContain("bolehKegiatan ? opsi : opsi.filter(");
   });
 });

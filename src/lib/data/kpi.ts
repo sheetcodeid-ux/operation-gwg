@@ -346,20 +346,21 @@ export interface OutletBulanan {
   outletId: string;
   gross: number | null;
   netProfit: number | null;
-  hpp: number | null;
+  /** Harga pokok penjualan dalam RUPIAH; persentasenya dihitung, bukan diketik. */
+  hppNominal: number | null;
 }
 
 /** Isian tangan seluruh outlet pada satu bulan. */
 async function outletBulanan(periode: string): Promise<Map<string, OutletBulanan>> {
   const peta = new Map<string, OutletBulanan>();
   if (!dbEnabled) return peta;
-  const { data } = await db().from("kpi_outlet_bulanan").select("outlet_id,gross,net_profit,hpp").eq("periode", periode);
+  const { data } = await db().from("kpi_outlet_bulanan").select("outlet_id,gross,net_profit,hpp_nominal").eq("periode", periode);
   for (const r of ((data ?? []) as Record<string, unknown>[])) {
     peta.set(String(r.outlet_id), {
       outletId: String(r.outlet_id),
       gross: angka(r.gross),
       netProfit: angka(r.net_profit),
-      hpp: angka(r.hpp),
+      hppNominal: angka(r.hpp_nominal),
     });
   }
   return peta;
@@ -370,7 +371,7 @@ export async function simpanOutletBulanan(input: {
   periode: string;
   gross: number | null;
   netProfit: number | null;
-  hpp: number | null;
+  hppNominal: number | null;
   olehId: string;
   olehNama: string;
 }): Promise<{ error?: string }> {
@@ -380,7 +381,7 @@ export async function simpanOutletBulanan(input: {
     periode: input.periode,
     gross: input.gross,
     net_profit: input.netProfit,
-    hpp: input.hpp,
+    hpp_nominal: input.hppNominal,
     diubah_oleh: input.olehId,
     diubah_nama: input.olehNama,
     diubah_pada: new Date().toISOString(),
@@ -439,7 +440,8 @@ export interface DetailOutletCa {
   /** Angkanya dari ESB — kalau ya, isian tangan tidak dipakai dan tidak perlu. */
   dariEsb: boolean;
   netProfit: number | null;
-  hpp: number | null;
+  /** Harga pokok penjualan dalam rupiah. */
+  hppNominal: number | null;
   /** Rata-rata gross sales tiga bulan SEBELUM bulan ini — dasar targetnya. */
   average: number | null;
   ikut: boolean;
@@ -522,19 +524,22 @@ async function angkaCa(periode: string, picIds: string[], jumlahPic: number): Pr
   const netProfitPer = lolos.map((o) => tanganIni.get(o.id)?.netProfit ?? null);
   const netProfit = netProfitPer.every((v) => v === null) ? null : netProfitPer.reduce((a: number, b) => a + (b ?? 0), 0);
 
-  // HPP se-area adalah RASIO, jadi ditimbang penjualannya — merata-ratakan
-  // persen begitu saja membuat outlet kecil sama beratnya dengan outlet
-  // terbesar, dan angkanya tidak pernah cocok dengan laporan keuangan.
-  let bobotHpp = 0;
-  let jumlahHpp = 0;
+  // HPP se-area = TOTAL harga pokok dibagi TOTAL penjualan. Karena yang
+  // disimpan nominal, ini rasio yang sebenarnya — bukan rata-rata persen, yang
+  // membuat outlet terkecil sama beratnya dengan outlet terbesar dan tidak
+  // pernah cocok dengan laporan keuangan.
+  let totalHpp = 0;
+  let totalGrossHpp = 0;
+  let adaHpp = false;
   lolos.forEach((o, n) => {
-    const h = tanganIni.get(o.id)?.hpp;
+    const h = tanganIni.get(o.id)?.hppNominal;
     const g = grossPerOutlet[n];
-    if (h === null || h === undefined || g === null) return;
-    bobotHpp += g;
-    jumlahHpp += h * g;
+    if (h === null || h === undefined || g === null || g <= 0) return;
+    adaHpp = true;
+    totalHpp += h;
+    totalGrossHpp += g;
   });
-  const hpp = bobotHpp > 0 ? jumlahHpp / bobotHpp : null;
+  const hpp = adaHpp && totalGrossHpp > 0 ? (totalHpp / totalGrossHpp) * 100 : null;
 
   const komplain = await komplainOutlet(periode, lolos.map((o) => o.id));
 
@@ -548,7 +553,7 @@ async function angkaCa(periode: string, picIds: string[], jumlahPic: number): Pr
       gross: grossOutlet(o, esbIni, tanganIni),
       dariEsb,
       netProfit: tanganIni.get(o.id)?.netProfit ?? null,
-      hpp: tanganIni.get(o.id)?.hpp ?? null,
+      hppNominal: tanganIni.get(o.id)?.hppNominal ?? null,
       average: rata.get(o.id) ?? null,
       ikut: lolos.some((l) => l.id === o.id),
     };
@@ -1159,6 +1164,11 @@ export { SEMUA_PIC } from "@/lib/kpi/semua-pic";
  */
 export function outletMilikPic(pic: string): Set<string> {
   return new Set(outletCa([pic]).map((o) => o.id));
+}
+
+/** Seluruh outlet yang dipegang Coordinator Area mana pun — untuk pilihan "Semua". */
+export function outletSeluruhPic(posisi: string): Set<string> {
+  return new Set(outletCa(picDinamis(posisi as KodePosisi).map((o) => o.value)).map((o) => o.id));
 }
 
 /**

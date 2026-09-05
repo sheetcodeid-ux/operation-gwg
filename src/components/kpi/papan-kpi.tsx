@@ -279,10 +279,11 @@ export function PapanKpi({
           {!perPic && pic.length > 0 && (
             <span className="hidden text-[11.5px] text-muted-foreground lg:inline">{pic.join(" · ")}</span>
           )}
-          {!laporan.dikunci && !bolehSimpan && (
-            <span className="text-[11.5px] text-muted-foreground">Pilih satu PIC untuk mengisi</span>
-          )}
-          {!laporan.dikunci && bolehSimpan && (
+          {/* Angka per outlet menempel pada outlet dan bulan, bukan pada orangnya,
+              jadi tetap bisa diisi sambil melihat gabungan seluruh Coordinator
+              Area. Yang tidak bisa hanya catatan kegiatan — itu memang milik
+              seseorang. */}
+          {!laporan.dikunci && (
             <FormKegiatan
               posisi={laporan.posisi}
               periode={laporan.periode}
@@ -291,6 +292,7 @@ export function PapanKpi({
               opsi={opsiKegiatan}
               outlet={laporan.ca?.detail ?? []}
               bulanKosong={laporan.ca?.bulanKosong ?? []}
+              bolehKegiatan={bolehSimpan}
             />
           )}
           {/* Tombol Input hanya muncul bila masih ADA yang belum tercakup form

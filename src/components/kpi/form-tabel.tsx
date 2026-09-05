@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import { useRouter } from "next/navigation";
-import { Loader2, Paperclip, Plus, Save, Table2 } from "lucide-react";
+import { ArrowUpDown, Download, Loader2, Paperclip, Plus, Save, Table2, Upload } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Combobox } from "@/components/ui/combobox";
@@ -22,7 +22,8 @@ import type { JenisEntri } from "@/lib/kpi/indikator";
 import type { DetailFee } from "@/lib/data/kpi";
 import { uploadMany } from "@/lib/upload-client";
 import { labelPeriode } from "./periode";
-import { formatIDR } from "@/lib/utils";
+import { bacaLembar, unduhLembar } from "./lembar-outlet";
+import { formatIDR, formatNumber } from "@/lib/utils";
 
 /**
  * Form berbentuk TABEL — seluruh outlet sekaligus, satu kali simpan.
@@ -338,7 +339,7 @@ export interface OutletBaris {
   gross: number | null;
   dariEsb: boolean;
   netProfit: number | null;
-  hpp: number | null;
+  hppNominal: number | null;
   average: number | null;
   ikut: boolean;
 }
@@ -361,6 +362,54 @@ interface BarisKegiatan {
 
 const BARIS_AWAL = 5;
 
+type KolomOutlet = "gross" | "netProfit" | "hppNominal";
+
+/** Indikator angka bulanan → kolom yang diisinya. */
+const KOLOM: Partial<Record<OpsiKegiatan["jenis"], KolomOutlet>> = {
+  gross_manual: "gross",
+  net_profit: "netProfit",
+  hpp: "hppNominal",
+};
+
+/**
+ * Kotak isian nominal rupiah.
+ *
+ * Angka sebesar ratusan juta tanpa pemisah ribuan tidak bisa dibaca ulang
+ * untuk diperiksa — "100000000" dan "10000000" berbeda satu nol dan terlihat
+ * sama sekilas. Yang tersimpan tetap angkanya; yang berubah cuma cara
+ * menampilkannya saat diketik.
+ */
+function InputRupiah({
+  nilai,
+  onUbah,
+  disabled,
+}: {
+  nilai: string;
+  onUbah: (v: string) => void;
+  disabled?: boolean;
+}) {
+  const angka = num(nilai);
+  return (
+    <div className="relative">
+      <span className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-[12px] text-muted-foreground">Rp</span>
+      <Input
+        inputMode="numeric"
+        className="h-8 pl-8 text-right tabular-nums"
+        placeholder="0"
+        disabled={disabled}
+        value={angka === null ? "" : formatNumber(angka)}
+        onChange={(e) => onUbah(e.target.value.replace(/[^\d]/g, ""))}
+      />
+    </div>
+  );
+}
+
+/** Persentase satu angka terhadap gross sales; kosong bila salah satunya belum ada. */
+function persenTerhadap(nilai: number | null, gross: number | null): string {
+  if (nilai === null || gross === null || gross <= 0) return "—";
+  return `${formatNumber((nilai / gross) * 100, { minimumFractionDigits: 1, maximumFractionDigits: 1 })}%`;
+}
+
 /**
  * SATU pintu masuk untuk seluruh isian bulanan.
  *
@@ -378,6 +427,7 @@ export function FormKegiatan({
   opsi,
   outlet,
   bulanKosong,
+  bolehKegiatan = true,
 }: {
   posisi: string;
   periode: string;
@@ -386,15 +436,22 @@ export function FormKegiatan({
   opsi: OpsiKegiatan[];
   outlet: OutletBaris[];
   bulanKosong: string[];
+  /** Catatan kegiatan menempel pada orang; saat "Semua" dipilih tidak ada orangnya. */
+  bolehKegiatan?: boolean;
 }) {
   const router = useRouter();
   const [buka, setBuka] = React.useState(false);
   const [sibuk, setSibuk] = React.useState(false);
   const [jenis, setJenis] = React.useState<OpsiKegiatan["jenis"]>(opsi[0]?.jenis ?? "event");
   const [baris, setBaris] = React.useState<BarisKegiatan[]>([]);
-  const [isiOutlet, setIsiOutlet] = React.useState<Record<string, { gross: string; netProfit: string; hpp: string }>>({});
+  const [isiOutlet, setIsiOutlet] = React.useState<Record<string, { gross: string; netProfit: string; hppNominal: string }>>({});
 
-  const dipilih = opsi.find((o) => o.jenis === jenis) ?? opsi[0];
+  // Saat "Semua" dipilih, hanya angka per outlet yang bisa diisi.
+  const opsiTampil = React.useMemo(
+    () => (bolehKegiatan ? opsi : opsi.filter((o) => o.jenis === "net_profit" || o.jenis === "hpp" || o.jenis === "gross_manual")),
+    [opsi, bolehKegiatan],
+  );
+  const dipilih = opsiTampil.find((o) => o.jenis === jenis) ?? opsiTampil[0];
   const perOutlet = jenis === "net_profit" || jenis === "hpp" || jenis === "gross_manual";
   const perluBukti = !!dipilih?.bukti;
 
@@ -404,7 +461,7 @@ export function FormKegiatan({
   );
 
   function bukaForm() {
-    setJenis(opsi[0]?.jenis ?? "event");
+    setJenis(opsiTampil[0]?.jenis ?? "event");
     setBaris(Array.from({ length: BARIS_AWAL }, kosong));
     setIsiOutlet(
       Object.fromEntries(
@@ -413,7 +470,7 @@ export function FormKegiatan({
           {
             gross: o.dariEsb || o.gross === null ? "" : String(o.gross),
             netProfit: o.netProfit === null ? "" : String(o.netProfit),
-            hpp: o.hpp === null ? "" : String(o.hpp),
+            hppNominal: o.hppNominal === null ? "" : String(o.hppNominal),
           },
         ]),
       ),
@@ -424,24 +481,70 @@ export function FormKegiatan({
   const ubah = (i: number, kolom: keyof BarisKegiatan, v: string | File[]) =>
     setBaris((s) => s.map((b, n) => (n === i ? { ...b, [kolom]: v } : b)));
 
-  const ubahOutlet = (id: string, kolom: "gross" | "netProfit" | "hpp", v: string) =>
-    setIsiOutlet((s) => ({ ...s, [id]: { ...(s[id] ?? { gross: "", netProfit: "", hpp: "" }), [kolom]: v } }));
+  const ubahOutlet = (id: string, kolom: KolomOutlet, v: string) =>
+    setIsiOutlet((s) => ({ ...s, [id]: { ...(s[id] ?? { gross: "", netProfit: "", hppNominal: "" }), [kolom]: v } }));
+
+  const lembarRef = React.useRef<HTMLInputElement>(null);
+
+  function ekspor() {
+    unduhLembar(
+      `KPI ${labelPeriode(periode)} — angka per outlet`,
+      outlet.map((o) => ({
+        outletId: o.outletId,
+        outletNama: o.outletNama,
+        netProfit: num(isiOutlet[o.outletId]?.netProfit ?? "") ?? o.netProfit,
+        hppNominal: num(isiOutlet[o.outletId]?.hppNominal ?? "") ?? o.hppNominal,
+      })),
+    );
+  }
+
+  async function impor(file: File) {
+    try {
+      const { baris, asing } = await bacaLembar(file, new Set(outlet.map((o) => o.outletId)));
+      if (asing.length > 0) {
+        // Disebut, tidak didiamkan: berkas bulan lain atau area orang lain akan
+        // terbaca seperti berhasil, dan yang mengisinya baru sadar
+        // berbulan-bulan kemudian bahwa angkanya tidak pernah masuk.
+        toast.error(`${asing.length} baris tidak dikenali dan dilewati: ${asing.slice(0, 3).join(", ")}${asing.length > 3 ? "…" : ""}`);
+      }
+      if (baris.length === 0) return toast.info("Tidak ada angka yang terbaca dari berkas itu.");
+      setIsiOutlet((s) => {
+        const out = { ...s };
+        for (const b of baris) {
+          const lama = out[b.outletId] ?? { gross: "", netProfit: "", hppNominal: "" };
+          out[b.outletId] = {
+            ...lama,
+            netProfit: b.netProfit === null ? lama.netProfit : String(b.netProfit),
+            hppNominal: b.hppNominal === null ? lama.hppNominal : String(b.hppNominal),
+          };
+        }
+        return out;
+      });
+      toast.success(`${baris.length} outlet terbaca — periksa dulu, lalu Simpan semua.`);
+    } catch {
+      toast.error("Berkasnya tidak bisa dibaca. Pakai format yang diunduh dari sini.");
+    }
+  }
 
   async function simpanOutlet() {
     const kirim = outlet
       .map((o) => {
         const isi = isiOutlet[o.outletId];
         if (!isi) return null;
-        const nilai = num(jenis === "gross_manual" ? isi.gross : jenis === "net_profit" ? isi.netProfit : isi.hpp);
-        if (nilai === null) return null;
-        const lama = jenis === "gross_manual" ? (o.dariEsb ? null : o.gross) : jenis === "net_profit" ? o.netProfit : o.hpp;
-        if (nilai === lama) return null; // tidak berubah — tidak perlu ditulis ulang
-        return {
-          outletId: o.outletId,
-          ...(jenis === "gross_manual" ? { gross: nilai } : jenis === "net_profit" ? { netProfit: nilai } : { hpp: nilai }),
-        };
+        // Yang dikirim SELURUH kolom yang berubah, bukan hanya kolom indikator
+        // yang sedang dilihat. Sekali unggah lembar mengisi Net Profit dan Harga
+        // Pokok sekaligus; menyimpan salah satunya saja membuang separuh
+        // pekerjaan tanpa memberi tahu.
+        const ubahan: { outletId: string; gross?: number; netProfit?: number; hppNominal?: number } = { outletId: o.outletId };
+        const grossBaru = num(isi.gross);
+        if (!o.dariEsb && grossBaru !== null && grossBaru !== o.gross) ubahan.gross = grossBaru;
+        const npBaru = num(isi.netProfit);
+        if (npBaru !== null && npBaru !== o.netProfit) ubahan.netProfit = npBaru;
+        const hppBaru = num(isi.hppNominal);
+        if (hppBaru !== null && hppBaru !== o.hppNominal) ubahan.hppNominal = hppBaru;
+        return Object.keys(ubahan).length > 1 ? ubahan : null;
       })
-      .filter(Boolean) as { outletId: string; gross?: number; netProfit?: number; hpp?: number }[];
+      .filter(Boolean) as { outletId: string; gross?: number; netProfit?: number; hppNominal?: number }[];
 
     if (kirim.length === 0) {
       toast.info("Tidak ada yang berubah.");
@@ -495,7 +598,7 @@ export function FormKegiatan({
     }
   }
 
-  if (opsi.length === 0) return null;
+  if (opsiTampil.length === 0) return null;
 
   return (
     <>
@@ -519,7 +622,7 @@ export function FormKegiatan({
                 className="w-72"
                 value={jenis}
                 onChange={(v) => setJenis(v as OpsiKegiatan["jenis"])}
-                options={opsi.map((o) => ({ value: o.jenis, label: o.label }))}
+                options={opsiTampil.map((o) => ({ value: o.jenis, label: o.label }))}
               />
               <span className="text-[12px] text-muted-foreground">
                 {perOutlet
@@ -542,9 +645,29 @@ export function FormKegiatan({
 
             <div className="mt-3 flex shrink-0 items-center justify-between gap-2">
               {perOutlet ? (
-                <span className="text-[12px] text-muted-foreground">
-                  Kosongkan yang tidak diubah — yang kosong tidak ditulis ulang.
-                </span>
+                <div className="flex flex-wrap items-center gap-2">
+                  {/* Satu format untuk dua indikator: nama outletnya sudah ada,
+                      tinggal menambahkan angkanya. Dua format terpisah berarti
+                      dua kali unduh-unggah dan dua kesempatan tertukar berkas. */}
+                  <Button size="sm" variant="outline" className="gap-1.5" onClick={ekspor} disabled={sibuk}>
+                    <Download className="size-4" /> Unduh format
+                  </Button>
+                  <Button size="sm" variant="outline" className="gap-1.5" onClick={() => lembarRef.current?.click()} disabled={sibuk}>
+                    <Upload className="size-4" /> Unggah isian
+                  </Button>
+                  <input
+                    ref={lembarRef}
+                    type="file"
+                    accept=".xlsx,.xls,.csv"
+                    hidden
+                    onChange={(e) => {
+                      const f = e.target.files?.[0];
+                      e.target.value = "";
+                      if (f) void impor(f);
+                    }}
+                  />
+                  <span className="text-[12px] text-muted-foreground">Kosongkan yang tidak diubah.</span>
+                </div>
               ) : (
                 <Button size="sm" variant="ghost" className="gap-1.5" onClick={() => setBaris((s) => [...s, kosong()])} disabled={sibuk}>
                   <Plus className="size-4" /> Tambah baris
@@ -588,9 +711,12 @@ function TabelKegiatan({
             <Kepala className="w-10 text-center">#</Kepala>
             <Kepala className="w-44">Tanggal</Kepala>
             <Kepala className="w-40">PIC</Kepala>
-            <Kepala className="w-52">Outlet</Kepala>
-            <Kepala>Nama Kegiatan</Kepala>
-            {perluBukti && <Kepala className="w-44">Bukti submit</Kepala>}
+            <Kepala className="w-56">Outlet</Kepala>
+            {/* Hygiene Audit tidak punya "nama kegiatan": yang dicatat kunjungan
+                ke satu outlet pada satu tanggal, dan buktinya yang bercerita.
+                Indikator lain (event, riset menu) tetap butuh namanya. */}
+            {!perluBukti && <Kepala>Nama Kegiatan</Kepala>}
+            {perluBukti && <Kepala className="w-48">Bukti submit</Kepala>}
             <Kepala>Keterangan</Kepala>
           </tr>
         </thead>
@@ -625,9 +751,11 @@ function TabelKegiatan({
                   options={[{ value: "", label: "— tanpa outlet —" }, ...outlet.map((o) => ({ value: o.outletId, label: o.outletNama }))]}
                 />
               </td>
-              <td className="px-3 py-1.5">
-                <Input className="h-8" placeholder="…" value={b.judul} onChange={(e) => ubah(i, "judul", e.target.value)} />
-              </td>
+              {!perluBukti && (
+                <td className="px-3 py-1.5">
+                  <Input className="h-8" placeholder="…" value={b.judul} onChange={(e) => ubah(i, "judul", e.target.value)} />
+                </td>
+              )}
               {perluBukti && (
                 <td className="px-3 py-1.5">
                   <BuktiBaris berkas={b.bukti} onPilih={(f) => ubah(i, "bukti", f)} />
@@ -665,7 +793,46 @@ function BuktiBaris({ berkas, onPilih }: { berkas: File[]; onPilih: (f: File[]) 
   );
 }
 
-/** Tabel angka bulanan: satu baris satu outlet. */
+/** Arah urutan satu kolom. */
+type Urut = { kolom: string; naik: boolean };
+
+/** Kepala kolom yang bisa diklik untuk mengurutkan — sama seperti Work Tracker. */
+function KepalaUrut({
+  id,
+  urut,
+  onUrut,
+  className = "",
+  children,
+}: {
+  id: string;
+  urut: Urut;
+  onUrut: (u: Urut) => void;
+  className?: string;
+  children: React.ReactNode;
+}) {
+  const aktif = urut.kolom === id;
+  return (
+    <th className={`whitespace-nowrap bg-muted px-3 py-2 text-[10.5px] font-semibold uppercase tracking-wide text-muted-foreground ${className}`}>
+      <button
+        type="button"
+        className="inline-flex items-center gap-1 hover:text-foreground"
+        onClick={() => onUrut({ kolom: id, naik: aktif ? !urut.naik : true })}
+      >
+        {children}
+        <ArrowUpDown className={`size-3 ${aktif ? "text-foreground" : "opacity-40"}`} />
+      </button>
+    </th>
+  );
+}
+
+/**
+ * Tabel angka bulanan: satu baris satu outlet.
+ *
+ * Gross sales dan rata-ratanya DISEMBUNYIKAN untuk outlet yang belum genap tiga
+ * bulan. Angkanya ada, tapi menampilkannya di sebelah kolom yang bertuliskan
+ * "belum ikut dinilai" hanya membuat orang bertanya-tanya mana yang berlaku —
+ * dan sebagian akan menghitungnya sendiri ke dalam laporan.
+ */
 function TabelOutlet({
   jenis,
   outlet,
@@ -675,73 +842,107 @@ function TabelOutlet({
 }: {
   jenis: OpsiKegiatan["jenis"];
   outlet: OutletBaris[];
-  isi: Record<string, { gross: string; netProfit: string; hpp: string }>;
-  ubah: (id: string, kolom: "gross" | "netProfit" | "hpp", v: string) => void;
+  isi: Record<string, { gross: string; netProfit: string; hppNominal: string }>;
+  ubah: (id: string, kolom: KolomOutlet, v: string) => void;
   bulanKosong: string[];
 }) {
-  // Gross manual HANYA untuk outlet yang ESB-nya tidak punya angkanya. Yang
-  // lain ditampilkan apa adanya dan tidak bisa diketik — angka yang bisa
-  // diperdebatkan tidak boleh mengalahkan angka yang tidak bisa.
-  const daftar = jenis === "gross_manual" ? outlet.filter((o) => !o.dariEsb) : outlet;
-  const kolom = jenis === "gross_manual" ? "gross" : jenis === "net_profit" ? "netProfit" : "hpp";
-  const judul = jenis === "gross_manual" ? "Gross Sales (Rp)" : jenis === "net_profit" ? "Net Profit (Rp)" : "HPP (%)";
+  const [urut, setUrut] = React.useState<Urut>({ kolom: "outlet", naik: true });
+
+  // Gross manual untuk outlet yang BELUM lolos aturan tiga bulan — di situlah
+  // riwayat yang hilang perlu diisi — atau yang bulan ini memang tidak ada di
+  // ESB. Tiga outlet pindahan Majoo masuk lewat syarat pertama meski sebagian
+  // bulannya sudah punya angka ESB.
+  const daftar = React.useMemo(() => {
+    const dasar = jenis === "gross_manual" ? outlet.filter((o) => !o.ikut || !o.dariEsb) : outlet;
+    const arah = urut.naik ? 1 : -1;
+    const nilai = (o: OutletBaris): number | string => {
+      switch (urut.kolom) {
+        case "average":
+          return o.ikut ? (o.average ?? -1) : -1;
+        case "gross":
+          return o.ikut || jenis === "gross_manual" ? (o.gross ?? -1) : -1;
+        case "isian":
+          return num(isi[o.outletId]?.[KOLOM[jenis] ?? "gross"] ?? "") ?? -1;
+        default:
+          return o.outletNama.toLowerCase();
+      }
+    };
+    return [...dasar].sort((a, b) => {
+      const x = nilai(a);
+      const y = nilai(b);
+      if (typeof x === "string" || typeof y === "string") return String(x).localeCompare(String(y), "id") * arah;
+      return (x - y) * arah;
+    });
+  }, [jenis, outlet, urut, isi]);
+
+  const kolom = KOLOM[jenis] ?? "gross";
+  const judul = jenis === "gross_manual" ? "Gross Sales" : jenis === "net_profit" ? "Net Profit" : "Harga Pokok Penjualan";
 
   if (daftar.length === 0) {
     return (
       <div className="flex min-h-0 flex-1 items-center justify-center rounded-xl border border-border px-6 py-10 text-center text-[13px] text-muted-foreground">
-        Seluruh outlet di area ini sudah punya angka dari ESB — tidak ada yang perlu diisi tangan.
+        Seluruh outlet di sini sudah punya angka dari ESB — tidak ada yang perlu diisi tangan.
       </div>
     );
   }
 
   return (
     <div className="min-h-0 flex-1 overflow-auto rounded-xl border border-border">
-      <table className="w-full min-w-[640px] border-collapse text-sm">
+      <table className="w-full min-w-[760px] border-collapse text-sm">
         <thead className="sticky top-0 z-10">
           <tr className="border-b border-border text-left">
-            <Kepala>Outlet</Kepala>
+            <KepalaUrut id="outlet" urut={urut} onUrut={setUrut}>Outlet</KepalaUrut>
             {jenis !== "gross_manual" && (
               <>
-                {/* Rata-rata tiga bulan SEBELUM bulan ini — dasar targetnya.
-                    Ditampilkan supaya angkanya bisa diperiksa sendiri, bukan
-                    dipercaya begitu saja. */}
-                <Kepala className="text-right">Average 3 Bln</Kepala>
-                <Kepala className="text-right">Gross Sales</Kepala>
+                <KepalaUrut id="average" urut={urut} onUrut={setUrut} className="text-right">Average 3 Bln</KepalaUrut>
+                <KepalaUrut id="gross" urut={urut} onUrut={setUrut} className="text-right">Gross Sales</KepalaUrut>
               </>
             )}
-            <Kepala className="w-52">{judul}</Kepala>
+            <KepalaUrut id="isian" urut={urut} onUrut={setUrut} className="w-56">{judul}</KepalaUrut>
+            {jenis !== "gross_manual" && <Kepala className="w-32 text-right">% thd Gross</Kepala>}
           </tr>
         </thead>
         <tbody>
-          {daftar.map((o) => (
-            <tr key={o.outletId} className="border-b border-border/60 last:border-0">
-              <td className="px-3 py-1.5">
-                <p className="font-medium text-foreground">{o.outletNama}</p>
-                {!o.ikut && (
-                  <p className="text-[11px] text-amber-600 dark:text-amber-400">{alasanBelumIkut(bulanKosong)}</p>
+          {daftar.map((o) => {
+            const nilai = num(isi[o.outletId]?.[kolom] ?? "");
+            // Angka ESB bulan ini dipakai sebagai pembagi persentase, tapi hanya
+            // bila outletnya memang sudah dinilai.
+            const grossTampil = o.ikut ? o.gross : null;
+            return (
+              <tr key={o.outletId} className="border-b border-border/60 last:border-0">
+                <td className="px-3 py-1.5">
+                  <p className="font-medium text-foreground">{o.outletNama}</p>
+                  {!o.ikut && (
+                    <p className="text-[11px] text-amber-600 dark:text-amber-400">{alasanBelumIkut(bulanKosong)}</p>
+                  )}
+                </td>
+                {jenis !== "gross_manual" && (
+                  <>
+                    <td className="px-3 py-1.5 text-right tabular-nums text-muted-foreground">
+                      {o.ikut && o.average !== null ? formatIDR(o.average) : "—"}
+                    </td>
+                    <td className="px-3 py-1.5 text-right tabular-nums text-muted-foreground">
+                      {grossTampil === null ? "—" : formatIDR(grossTampil)}
+                    </td>
+                  </>
                 )}
-              </td>
-              {jenis !== "gross_manual" && (
-                <>
-                  <td className="px-3 py-1.5 text-right tabular-nums text-muted-foreground">
-                    {o.average === null ? "—" : formatIDR(o.average)}
+                <td className="px-3 py-1.5">
+                  {jenis === "gross_manual" && o.dariEsb ? (
+                    <p className="text-right text-[12px] tabular-nums text-muted-foreground">
+                      {o.gross === null ? "—" : formatIDR(o.gross)} <span className="text-[10.5px]">dari ESB</span>
+                    </p>
+                  ) : (
+                    <InputRupiah nilai={isi[o.outletId]?.[kolom] ?? ""} onUbah={(v) => ubah(o.outletId, kolom, v)} />
+                  )}
+                </td>
+                {jenis !== "gross_manual" && (
+                  <td className="px-3 py-1.5 text-right tabular-nums text-foreground/80">
+                    {persenTerhadap(nilai, grossTampil)}
                   </td>
-                  <td className="px-3 py-1.5 text-right tabular-nums text-muted-foreground">
-                    {o.gross === null ? "—" : formatIDR(o.gross)}
-                  </td>
-                </>
-              )}
-              <td className="px-3 py-1.5">
-                <Input
-                  inputMode="numeric"
-                  className="h-8"
-                  placeholder={jenis === "hpp" ? "mis. 37.5" : "0"}
-                  value={isi[o.outletId]?.[kolom] ?? ""}
-                  onChange={(e) => ubah(o.outletId, kolom, e.target.value)}
-                />
-              </td>
-            </tr>
-          ))}
+                )}
+              </tr>
+            );
+          })}
         </tbody>
       </table>
     </div>
