@@ -477,10 +477,8 @@ export interface AngkaCa {
  * tidak pernah ada di basis data ini, dan yang diketik belakangan hampir selalu
  * tanggal yang diingat, bukan tanggal yang benar.
  */
-async function angkaCa(periode: string, areaIds: string[], jumlahPic: number): Promise<AngkaCa> {
-  const semua: OutletCa[] = getOutlets()
-    .filter((o) => o.active && areaIds.includes(o.areaId ?? ""))
-    .map((o) => ({ id: o.id, nama: o.name, branch: o.esbBranchId ?? null }));
+async function angkaCa(periode: string, picIds: string[], jumlahPic: number): Promise<AngkaCa> {
+  const semua = outletCa(picIds);
 
   const bulanLalu = tigaBulanSebelum(periode);
   const [esbIni, tanganIni, ...riwayat] = await Promise.all([
@@ -745,7 +743,8 @@ async function averageTigaBulan(periode: string): Promise<Map<string, number>> {
  * mengirim orang membetulkan hal yang tidak salah.
  */
 const areaKosong = (ca: AngkaCa | null): string => {
-  if (ca === null) return "Areanya belum ditentukan untuk orang ini.";
+  if (ca === null) return "Belum ada outlet yang ditugaskan ke orang ini.";
+  if (ca.detail.length === 0) return "Belum ada outlet yang ditugaskan — atur di User Management.";
   if (ca.bulanKosong.length > 0) {
     return `Angka ESB ${ca.bulanKosong.map(labelBulanSingkat).join(", ")} belum ditarik — pembanding tiga bulannya belum lengkap.`;
   }
@@ -811,13 +810,17 @@ export async function laporanKpi(posisi: KodePosisi, periode: string, pic = ""):
   // sama akan menjumlahkan penjualan area itu tiga kali kalau dihitung per
   // orang, dan totalnya tidak pernah cocok dengan angka perusahaan.
   const semuaPic = picDinamis(posisi);
-  const capAllArea = pic === SEMUA_PIC;
-  const areaIds = !perluArea
-    ? []
-    : capAllArea
-      ? [...new Set(semuaPic.map((o) => getUser(o.value)?.areaId ?? "").filter(Boolean))]
-      : [getUser(pic)?.areaId ?? ""].filter(Boolean);
-  const jumlahPic = capAllArea ? Math.max(1, semuaPic.length) : 1;
+  const gabungan = pic === SEMUA_PIC;
+  // Penugasan outlet tidak pernah bertumpuk — halaman User Management menyembunyikan
+  // outlet yang sudah dipegang koordinator lain — jadi gabungannya cukup
+  // disatukan tanpa takut terhitung dua kali.
+  const picIds = !perluArea ? [] : gabungan ? semuaPic.map((o) => o.value) : [pic];
+  // Yang dihitung hanya Coordinator Area yang benar-benar memegang outlet.
+  // Menyertakan yang belum ditugaskan menaikkan target per orang tanpa
+  // menambah satu pun outlet yang dinilai.
+  const jumlahPic = gabungan
+    ? Math.max(1, semuaPic.filter((o) => (getUser(o.value)?.outletIds ?? []).length > 0).length)
+    : 1;
 
   const lalu = new Map<string, number>();
   if (perluAverage) {
@@ -868,7 +871,7 @@ export async function laporanKpi(posisi: KodePosisi, periode: string, pic = ""):
   ]);
 
   /* --- angka se-area (Coordinator Area) --- */
-  const ca = perluArea ? await angkaCa(periode, areaIds, jumlahPic) : null;
+  const ca = perluArea ? await angkaCa(periode, picIds, jumlahPic) : null;
 
   /* --- panel efisiensi --- */
   let efisiensi: LaporanKpi["efisiensi"] = null;
@@ -1092,7 +1095,7 @@ function susunBaris(i: Indikator, k: KonteksBaris): BarisKpi {
           break;
         case "komplain_area":
           actual = k.ca?.komplain ?? null;
-          if (actual === null) alasan = "Areanya belum ditentukan untuk orang ini.";
+          if (actual === null) alasan = "Belum ada outlet yang ditugaskan ke orang ini.";
           break;
         case "net_profit_area":
           actual = k.ca?.netProfit ?? null;
@@ -1155,9 +1158,31 @@ export { SEMUA_PIC } from "@/lib/kpi/semua-pic";
  * ditukar berarti laba bersih area orang lain ikut tertimpa.
  */
 export function outletMilikPic(pic: string): Set<string> {
-  const areaId = getUser(pic)?.areaId ?? "";
-  if (!areaId) return new Set();
-  return new Set(getOutlets().filter((o) => o.active && o.areaId === areaId).map((o) => o.id));
+  return new Set(outletCa([pic]).map((o) => o.id));
+}
+
+/**
+ * Outlet yang dipegang Coordinator Area — dari PENUGASANNYA, bukan dari area.
+ *
+ * SUMBERNYA `users.outlet_ids`, yang diisi di halaman User Management
+ * ("Wilayah / Outlet Ditugaskan"). Sempat diambil dari `outlets.area_id`, dan
+ * hasilnya salah untuk hampir semua orang: Wika mendapat sepuluh outlet
+ * "Belum Ditentukan" alih-alih sebelas outlet yang benar-benar dipegangnya,
+ * dan Reynaldi mendapat sebelas outlet Area Poetri padahal ditugaskan dua.
+ *
+ * Yang membuatnya berbahaya: daftarnya tetap masuk akal di layar — berisi nama
+ * outlet sungguhan, dengan angka penjualan sungguhan. Tidak ada satu pun tanda
+ * bahwa yang dinilai bukan outlet orang itu.
+ *
+ * `outlets.area_id` dibiarkan untuk modul lain yang memakainya; yang berubah
+ * hanya dari mana KPI mengambilnya.
+ */
+function outletCa(picIds: string[]): OutletCa[] {
+  const ditugaskan = new Set<string>();
+  for (const p of picIds) for (const id of getUser(p)?.outletIds ?? []) ditugaskan.add(id);
+  return getOutlets()
+    .filter((o) => o.active && ditugaskan.has(o.id))
+    .map((o) => ({ id: o.id, nama: o.name, branch: o.esbBranchId ?? null }));
 }
 
 export function picDinamis(posisi: KodePosisi): { value: string; label: string }[] {
