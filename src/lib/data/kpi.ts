@@ -407,10 +407,22 @@ interface OutletCa {
  * seperti outlet yang baru buka.
  */
 function grossOutlet(o: OutletCa, esb: Map<string, { net: number }>, tangan: Map<string, OutletBulanan>): number | null {
+  // NOL DARI ESB BUKAN "penjualannya nol", melainkan "cabang ini belum ada di
+  // bulan itu". ESB tetap membalas untuk cabang yang belum buka, dan balasannya
+  // nol — jadi barisnya selalu tersimpan. Kalau nol dianggap angka yang sah,
+  // outlet yang belum buka lolos aturan tiga bulan dengan penjualan nol dan
+  // menyeret rata-rata seluruh area ke bawah; sekaligus menutup jalan isian
+  // tangan untuk tiga outlet pindahan Majoo, yang justru nol karena riwayatnya
+  // tidak ikut terbawa.
   const dariEsb = o.branch ? esb.get(o.branch)?.net : undefined;
-  if (dariEsb !== undefined) return dariEsb;
-  return tangan.get(o.id)?.gross ?? null;
+  if (dariEsb !== undefined && dariEsb > 0) return dariEsb;
+  const manual = tangan.get(o.id)?.gross ?? null;
+  if (manual !== null && manual > 0) return manual;
+  return dariEsb !== undefined ? 0 : null;
 }
+
+/** Bulan itu benar-benar berjalan bagi outlet ini — bukan sekadar ada barisnya. */
+const berjalan = (nilai: number | null): boolean => nilai !== null && nilai > 0;
 
 /** Tiga bulan sebelum `periode`, terbaru dulu. */
 function tigaBulanSebelum(periode: string): string[] {
@@ -482,14 +494,16 @@ async function angkaCa(periode: string, areaIds: string[], jumlahPic: number): P
   // Bulan yang TIDAK PUNYA SATU BARIS PUN berarti angkanya belum ditarik dari
   // ESB — bukan berarti seluruh outlet baru buka. Dibedakan supaya pesannya
   // tidak mengirim orang mencari masalah yang tidak ada.
-  const bulanKosong = bulanLalu.filter((_, n) => riwayat[n][0].size === 0 && riwayat[n][1].size === 0);
+  const bulanKosong = bulanLalu.filter(
+    (_, n) => [...riwayat[n][0].values()].every((v) => v.net <= 0) && riwayat[n][1].size === 0,
+  );
 
   const lolos: OutletCa[] = [];
   const belum: OutletCa[] = [];
   const rata = new Map<string, number>();
   for (const o of semua) {
     const tiga = [0, 1, 2].map((n) => nilaiBulan(o, n));
-    if (tiga.some((v) => v === null)) {
+    if (!tiga.every(berjalan)) {
       belum.push(o);
       continue;
     }
@@ -526,7 +540,9 @@ async function angkaCa(periode: string, areaIds: string[], jumlahPic: number): P
   const komplain = await komplainOutlet(periode, lolos.map((o) => o.id));
 
   const detail: DetailOutletCa[] = semua.map((o) => {
-    const dariEsb = !!(o.branch && esbIni.has(o.branch));
+    // "Dari ESB" berarti ESB punya angka yang BUKAN nol. Nol berarti cabangnya
+    // belum ada di sana, dan justru itulah yang perlu diisi tangan.
+    const dariEsb = !!(o.branch && (esbIni.get(o.branch)?.net ?? 0) > 0);
     return {
       outletId: o.id,
       outletNama: o.nama,

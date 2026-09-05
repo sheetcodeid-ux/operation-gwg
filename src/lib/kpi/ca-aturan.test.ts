@@ -31,7 +31,7 @@ describe("aturan tiga bulan", () => {
     // belakangan hampir selalu tanggal yang diingat, bukan yang benar.
     const blok = data.slice(data.indexOf("function tigaBulanSebelum"));
     expect(blok.slice(0, 400)).toContain("bulanSebelum");
-    expect(data).toContain("if (tiga.some((v) => v === null))");
+    expect(data).toContain("if (!tiga.every(berjalan))");
   });
 });
 
@@ -41,7 +41,7 @@ describe("gross sales manual", () => {
     // bisa — kalau kalah, tidak akan ada yang tahu mana yang sedang dibaca.
     const blok = data.slice(data.indexOf("function grossOutlet"));
     const badan = blok.slice(0, blok.indexOf("\n}"));
-    expect(badan).toContain("if (dariEsb !== undefined) return dariEsb;");
+    expect(badan).toContain("if (dariEsb !== undefined && dariEsb > 0) return dariEsb;");
     expect(badan).toContain("tangan.get(o.id)?.gross");
   });
 
@@ -118,5 +118,25 @@ describe("bulan pembanding yang belum ditarik", () => {
     // Tiga bulan hanya cukup untuk menilai bulan berjalan.
     const rute = readFileSync(join(process.cwd(), "src/app/api/cron/fraud-sync/route.ts"), "utf8");
     expect(rute).toContain('searchParams.get("mundur") ?? "12"');
+  });
+});
+
+describe("nol dari ESB", () => {
+  it("dibaca sebagai 'belum ada di bulan itu', bukan penjualan nol", () => {
+    // ESB tetap membalas untuk cabang yang belum buka, dan balasannya nol —
+    // barisnya selalu tersimpan. Kalau nol dianggap angka yang sah: outlet yang
+    // belum buka LOLOS aturan tiga bulan dengan penjualan nol dan menyeret
+    // rata-rata seluruh area ke bawah. Empat sampai tiga belas cabang bernilai
+    // nol pada tiap bulan yang sudah ditarik — ini bukan kemungkinan teoretis.
+    expect(data).toContain("if (dariEsb !== undefined && dariEsb > 0) return dariEsb;");
+    expect(data).toContain("const berjalan = (nilai: number | null): boolean => nilai !== null && nilai > 0;");
+    expect(data).toContain("if (!tiga.every(berjalan))");
+  });
+
+  it("nol dari ESB tidak menutup jalan isian tangan", () => {
+    // Justru tiga outlet pindahan Majoo yang bernilai nol — riwayatnya tidak
+    // ikut terbawa. Kalau nol dianggap "sudah ada di ESB", kolom isiannya
+    // hilang dan tidak ada cara memperbaikinya sama sekali.
+    expect(data).toContain("const dariEsb = !!(o.branch && (esbIni.get(o.branch)?.net ?? 0) > 0);");
   });
 });
