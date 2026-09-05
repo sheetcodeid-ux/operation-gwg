@@ -336,8 +336,17 @@ export async function simpanOutletBulananAction(input: {
     if (!boleh.has(b.outletId)) return { error: "Ada outlet yang bukan bagian dari area ini." };
     const angka = [b.gross, b.netProfit, b.hppNominal];
     if (angka.every((v) => v === undefined)) continue;
-    // Nominal, bukan persen — nilai negatif tidak punya arti pada ketiganya.
-    if (angka.some((v) => v !== undefined && v !== null && v < 0)) return { error: "Angkanya tidak masuk akal." };
+    // NET PROFIT BOLEH MINUS — itu rugi, dan outlet yang rugi justru yang paling
+    // perlu terbaca. Menolaknya membuat bulan yang buruk mustahil dilaporkan
+    // apa adanya; yang mengisinya akan memasukkan nol atau membiarkannya kosong,
+    // dan laporannya jadi lebih baik daripada kenyataannya.
+    //
+    // Penjualan dan harga pokok tidak bisa minus: yang minus di situ pasti
+    // salah ketik.
+    const takBolehMinus = [b.gross, b.hppNominal];
+    if (takBolehMinus.some((v) => v !== undefined && v !== null && v < 0)) {
+      return { error: "Penjualan dan harga pokok tidak bisa minus." };
+    }
 
     // Diteruskan APA ADANYA: `undefined` berarti jangan disentuh, `null`
     // berarti kosongkan. Mengubah `undefined` jadi `null` di sini akan

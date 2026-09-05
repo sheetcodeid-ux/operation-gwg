@@ -74,7 +74,12 @@ export function persentaseCapaian(
     if (actual <= target) return BATAS_PERSENTASE;
     return (target / actual) * 100;
   }
-  return Math.min(BATAS_PERSENTASE, (actual / target) * 100);
+  // Tidak pernah negatif. Net Profit boleh minus — outlet yang rugi memang ada
+  // — tapi capaian minus akan MENARIK TURUN skor indikator lain lewat
+  // penjumlahan, dan hukuman untuk satu indikator tidak boleh merembet ke
+  // indikator yang tidak ada hubungannya. Rugi bernilai nol pada indikator itu,
+  // dan angka ruginya tetap terbaca apa adanya di kolom Actual.
+  return Math.max(0, Math.min(BATAS_PERSENTASE, (actual / target) * 100));
 }
 
 export function barisKpi(input: {
