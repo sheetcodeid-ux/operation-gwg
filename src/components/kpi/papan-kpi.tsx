@@ -64,6 +64,26 @@ const bersatuan = (n: number | null, satuan?: "angka" | "rupiah" | "persen") => 
   return angka(n);
 };
 
+/**
+ * Status satu indikator dalam satu kata yang bisa dibaca sekilas.
+ *
+ * Kolom Persentase sudah memuat angkanya, tapi angka menuntut pembacanya
+ * menetapkan sendiri di mana batas "cukup" — dan tiap orang menetapkannya
+ * berbeda. Batasnya dipasang di sini supaya satu-satunya jawabannya sama untuk
+ * semua yang membaca.
+ *
+ * "Belum terukur" SENGAJA dibedakan dari "Belum tercapai": yang pertama berarti
+ * datanya belum ada, yang kedua berarti sudah diukur dan hasilnya kurang. Dua
+ * hal itu menuntut tindakan yang berbeda — yang satu mengisi data, yang lain
+ * memperbaiki kerja.
+ */
+export function statusCapaian(persentase: number | null): { label: string; tone: "success" | "warning" | "danger" | "neutral" } {
+  if (persentase === null) return { label: "Belum terukur", tone: "neutral" };
+  if (persentase >= 100) return { label: "Tercapai", tone: "success" };
+  if (persentase >= 80) return { label: "Hampir tercapai", tone: "warning" };
+  return { label: "Belum tercapai", tone: "danger" };
+}
+
 export interface OpsiPosisi {
   value: string;
   label: string;
@@ -209,10 +229,15 @@ export function PapanKpi({
       {
         accessorKey: "label",
         header: "Indikator",
+        // Penjelasan rumus TIDAK ikut di sini. Ia sama tiap bulan dan sama
+        // untuk semua orang, jadi mengulanginya di tiap baris hanya memakan
+        // lebar yang dibutuhkan angkanya — tempatnya sekarang di tombol
+        // Panduan. Yang tetap ditulis hanya `alasan`: itu berubah-ubah dan
+        // menjelaskan kenapa baris INI belum punya angka.
         cell: ({ row }) => (
           <div className="min-w-0 max-w-[20rem]">
             <p className="truncate font-medium text-foreground">{row.original.label}</p>
-            <p className="truncate text-[11px] text-muted-foreground">{row.original.alasan ?? row.original.penjelasan}</p>
+            {row.original.alasan && <p className="truncate text-[11px] text-muted-foreground">{row.original.alasan}</p>}
           </div>
         ),
       },
@@ -263,6 +288,15 @@ export function PapanKpi({
         cell: ({ getValue }) => (
           <span className="font-semibold tabular-nums text-foreground">{persen(getValue<number | null>())}</span>
         ),
+      },
+      {
+        id: "status",
+        header: "Status",
+        accessorFn: (b) => statusCapaian(b.persentase).label,
+        cell: ({ row }) => {
+          const st = statusCapaian(row.original.persentase);
+          return <Badge tone={st.tone}>{st.label}</Badge>;
+        },
       },
     ],
     [adaKategori],

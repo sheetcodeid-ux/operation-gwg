@@ -9,8 +9,6 @@ import { getOutlets } from "@/lib/data/store";
 import { TENGGAT, indikatorPosisi } from "@/lib/kpi/indikator";
 import { departemenDari, posisiDari, posisiDepartemen, type KodePosisi } from "@/lib/kpi/struktur";
 import { MENU_POSISI, bolehAngkaPenjualan, bolehAturKpi, picTerkunci } from "@/lib/kpi/akses";
-import { NAV_ICONS } from "@/components/layout/icons";
-import { PageHeader } from "@/components/ui/page-header";
 import { PapanKpi } from "@/components/kpi/papan-kpi";
 
 export const metadata: Metadata = { title: "KPI" };
@@ -91,11 +89,10 @@ export default async function KpiPosisiPage({
 
   return (
     <div className="w-full">
-      <PageHeader
-        icon={NAV_ICONS.Target}
-        title={posisi.nama}
-        description={`Key Performance Indicator · ${dep?.nama ?? "—"}`}
-      />
+      {/* Tanpa kepala halaman. Remah roti tepat di atasnya sudah berbunyi
+          "KPI › Operational Coordinator Area" — judul besar di bawahnya
+          mengulang hal yang sama sambil memakan sepertiga layar pertama, dan
+          yang terdorong turun justru grafik dan tabelnya. */}
       <PapanKpi
         laporan={laporan}
         lalu={lalu}

@@ -8,6 +8,7 @@ import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { DataTable } from "@/components/ui/data-table";
 import { Progress } from "@/components/ui/progress";
+import type { Tone } from "@/lib/constants";
 import { buatZip } from "@/lib/zip";
 import { hapusEntriAction } from "@/lib/actions/kpi";
 import type { DetailOutletCa, EntriKpi } from "@/lib/data/kpi";
@@ -33,6 +34,27 @@ const persen = (n: number | null, digit = 2) =>
 function Rp({ v, muted }: { v: number | null; muted?: boolean }) {
   if (v === null) return <span className="text-[11px] text-muted-foreground">belum diisi</span>;
   return <span className={muted ? "tabular-nums text-muted-foreground" : "tabular-nums text-foreground/80"}>{formatIDR(v)}</span>;
+}
+
+/**
+ * Kolom nomor urut.
+ *
+ * Nomornya mengikuti URUTAN YANG SEDANG TAMPIL, bukan nomor tetap milik tiap
+ * baris — kalau tabelnya diurutkan ulang atau disaring, "#3" harus tetap
+ * berarti baris ketiga dari atas. Itulah gunanya nomor di sini: menyebut baris
+ * lewat telepon tanpa harus mengeja nama outletnya.
+ */
+function kolomNomor<T>(): ColumnDef<T> {
+  return {
+    id: "no",
+    header: "#",
+    enableSorting: false,
+    cell: ({ row, table }) => (
+      <span className="tabular-nums text-muted-foreground">
+        {table.getSortedRowModel().rows.findIndex((r) => r.id === row.id) + 1}
+      </span>
+    ),
+  };
 }
 
 /** Bagian satu angka terhadap gross sales — dasar keduanya sama, jadi satu fungsi. */
@@ -153,6 +175,7 @@ export function TabelHygiene({
   const bukti = React.useMemo(() => buktiDari(entri), [entri]);
   const kolom = React.useMemo<ColumnDef<EntriKpi>[]>(
     () => [
+      kolomNomor<EntriKpi>(),
       {
         accessorKey: "tanggal",
         header: "Tanggal",
@@ -301,6 +324,7 @@ function TabelAngkaOutlet({
   );
   const kolom = React.useMemo<ColumnDef<DetailOutletCa>[]>(
     () => [
+      kolomNomor<DetailOutletCa>(),
       {
         accessorKey: "outletNama",
         header: "Outlet",
@@ -338,9 +362,28 @@ function TabelAngkaOutlet({
         id: "bagian",
         header: judulPersen,
         accessorFn: (o) => bagianDari(nilai(o), o.gross),
-        cell: ({ getValue }) => {
+        cell: ({ row, getValue }) => {
           const v = getValue<number | null>();
-          return <span className={v === null ? "text-[11px] text-muted-foreground" : "font-medium tabular-nums text-foreground"}>{persen(v)}</span>;
+          if (v === null) return <span className="text-[11px] text-muted-foreground">belum diisi</span>;
+          // Batang diisi persentasenya SENDIRI, bukan capaiannya terhadap
+          // target. Batang dan angka di sebelahnya yang menyatakan dua hal
+          // berbeda adalah cara tercepat membuat tabel salah dibaca.
+          const capai = tercapai(tableId, nilai(row.original) ?? 0, target(row.original) ?? Infinity);
+          return (
+            <div className="flex w-28 items-center gap-2">
+              <Progress value={Math.min(100, Math.round(v))} tone={capai ? "success" : "danger"} />
+              <span className="w-12 text-right text-[11px] tabular-nums text-muted-foreground">{persen(v, 1)}</span>
+            </div>
+          );
+        },
+      },
+      {
+        id: "status",
+        header: "Status",
+        accessorFn: (o) => statusOutlet(tableId, nilai(o), target(o)).label,
+        cell: ({ row }) => {
+          const st = statusOutlet(tableId, nilai(row.original), target(row.original));
+          return <Badge tone={st.tone}>{st.label}</Badge>;
         },
       },
     ],
@@ -366,6 +409,25 @@ function TabelAngkaOutlet({
  */
 function tercapai(tableId: string, nilai: number, target: number): boolean {
   return tableId === "kpi-hpp" ? nilai <= target : nilai >= target;
+}
+
+/**
+ * Status satu outlet, dengan kata yang sesuai arah indikatornya.
+ *
+ * Harga pokok yang di bawah batas bukan "tercapai" — tidak ada yang dikejar di
+ * sana, yang ada batas yang tidak boleh dilewati. Memakai satu kata untuk
+ * keduanya membuat kalimatnya terasa keliru pada salah satunya, dan yang
+ * terasa keliru berhenti dibaca.
+ */
+function statusOutlet(
+  tableId: string,
+  nilai: number | null,
+  target: number | null,
+): { label: string; tone: Tone } {
+  if (nilai === null || target === null) return { label: "Belum diisi", tone: "neutral" };
+  const lulus = tercapai(tableId, nilai, target);
+  if (tableId === "kpi-hpp") return lulus ? { label: "Aman", tone: "success" } : { label: "Melebihi batas", tone: "danger" };
+  return lulus ? { label: "Tercapai", tone: "success" } : { label: "Belum tercapai", tone: "danger" };
 }
 
 export function TabelNetProfit({
