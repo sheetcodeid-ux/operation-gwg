@@ -366,26 +366,39 @@ async function outletBulanan(periode: string): Promise<Map<string, OutletBulanan
   return peta;
 }
 
+/**
+ * Menyimpan angka bulanan satu outlet — HANYA kolom yang benar-benar dikirim.
+ *
+ * Sebelumnya ketiga kolom selalu ditulis, dan yang tidak dikirim ikut ditulis
+ * NULL. Akibatnya menyimpan Net Profit MENGHAPUS Harga Pokok dan Gross manual
+ * yang sudah diisi sebelumnya — tanpa satu pun peringatan, dan baru ketahuan
+ * saat formnya dibuka lagi dan isinya sudah berbeda.
+ *
+ * `undefined` berarti "jangan disentuh"; `null` berarti "kosongkan". Keduanya
+ * harus bisa dibedakan, kalau tidak, mengosongkan satu angka menjadi mustahil.
+ */
 export async function simpanOutletBulanan(input: {
   outletId: string;
   periode: string;
-  gross: number | null;
-  netProfit: number | null;
-  hppNominal: number | null;
+  gross?: number | null;
+  netProfit?: number | null;
+  hppNominal?: number | null;
   olehId: string;
   olehNama: string;
 }): Promise<{ error?: string }> {
   if (!dbEnabled) return { error: "Penyimpanan belum aktif." };
-  const { error } = await db().from("kpi_outlet_bulanan").upsert({
+  const baris: Record<string, unknown> = {
     outlet_id: input.outletId,
     periode: input.periode,
-    gross: input.gross,
-    net_profit: input.netProfit,
-    hpp_nominal: input.hppNominal,
     diubah_oleh: input.olehId,
     diubah_nama: input.olehNama,
     diubah_pada: new Date().toISOString(),
-  });
+  };
+  if (input.gross !== undefined) baris.gross = input.gross;
+  if (input.netProfit !== undefined) baris.net_profit = input.netProfit;
+  if (input.hppNominal !== undefined) baris.hpp_nominal = input.hppNominal;
+
+  const { error } = await db().from("kpi_outlet_bulanan").upsert(baris);
   return error ? { error: error.message } : {};
 }
 

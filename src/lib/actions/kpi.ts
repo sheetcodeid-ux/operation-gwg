@@ -339,12 +339,15 @@ export async function simpanOutletBulananAction(input: {
     // Nominal, bukan persen — nilai negatif tidak punya arti pada ketiganya.
     if (angka.some((v) => v !== undefined && v !== null && v < 0)) return { error: "Angkanya tidak masuk akal." };
 
+    // Diteruskan APA ADANYA: `undefined` berarti jangan disentuh, `null`
+    // berarti kosongkan. Mengubah `undefined` jadi `null` di sini akan
+    // menghapus kolom lain yang tidak sedang diisi.
     const res = await simpanOutletBulanan({
       outletId: b.outletId,
       periode: input.periode,
-      gross: b.gross ?? null,
-      netProfit: b.netProfit ?? null,
-      hppNominal: b.hppNominal ?? null,
+      gross: b.gross,
+      netProfit: b.netProfit,
+      hppNominal: b.hppNominal,
       olehId: g.user.id,
       olehNama: g.user.name,
     });

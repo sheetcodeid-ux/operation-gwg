@@ -21,7 +21,7 @@ import type { BarisEfisiensi } from "@/lib/kpi/hitung";
 import type { JenisEntri } from "@/lib/kpi/indikator";
 import type { DetailFee } from "@/lib/data/kpi";
 import { uploadMany } from "@/lib/upload-client";
-import { labelPeriode } from "./periode";
+import { BULAN, labelPeriode, periodeDari, tahunPilihan } from "./periode";
 import { bacaLembar, unduhLembar } from "./lembar-outlet";
 import { formatIDR, formatNumber } from "@/lib/utils";
 
@@ -429,6 +429,7 @@ export function FormKegiatan({
   outlet,
   bulanKosong,
   bolehKegiatan = true,
+  onPeriode,
 }: {
   posisi: string;
   periode: string;
@@ -439,6 +440,8 @@ export function FormKegiatan({
   bulanKosong: string[];
   /** Catatan kegiatan menempel pada orang; saat "Semua" dipilih tidak ada orangnya. */
   bolehKegiatan?: boolean;
+  /** Mengganti bulan dari dalam form — halaman KPI di belakangnya ikut berganti. */
+  onPeriode?: (periode: string) => void;
 }) {
   const router = useRouter();
   const [buka, setBuka] = React.useState(false);
@@ -446,6 +449,10 @@ export function FormKegiatan({
   const [jenis, setJenis] = React.useState<OpsiKegiatan["jenis"]>(opsi[0]?.jenis ?? "event");
   const [baris, setBaris] = React.useState<BarisKegiatan[]>([]);
   const [isiOutlet, setIsiOutlet] = React.useState<Record<string, { gross: string; netProfit: string; hppNominal: string }>>({});
+  // Bulan bisa diganti dari dalam form. Saat berganti, isian yang tampil harus
+  // ikut berganti — kalau tidak, angka bulan lalu tetap terlihat di layar dan
+  // ikut tersimpan ke bulan yang baru.
+  const [periodeIsi, setPeriodeIsi] = React.useState(periode);
 
   // Saat "Semua" dipilih, hanya angka per outlet yang bisa diisi.
   const opsiTampil = React.useMemo(
@@ -461,10 +468,8 @@ export function FormKegiatan({
     [periode, pic, picOpsi],
   );
 
-  function bukaForm() {
-    setJenis(opsiTampil[0]?.jenis ?? "event");
-    setBaris(Array.from({ length: BARIS_AWAL }, kosong));
-    setIsiOutlet(
+  const dariProps = React.useCallback(
+    () =>
       Object.fromEntries(
         outlet.map((o) => [
           o.outletId,
@@ -475,7 +480,20 @@ export function FormKegiatan({
           },
         ]),
       ),
-    );
+    [outlet],
+  );
+
+  // Menyesuaikan state saat bulannya berganti — pola resmi React untuk itu.
+  if (periode !== periodeIsi) {
+    setPeriodeIsi(periode);
+    setIsiOutlet(dariProps());
+    setBaris((b) => b.map((r) => ({ ...r, tanggal: `${periode}-01` })));
+  }
+
+  function bukaForm() {
+    setJenis(opsiTampil[0]?.jenis ?? "event");
+    setBaris(Array.from({ length: BARIS_AWAL }, kosong));
+    setIsiOutlet(dariProps());
     setBuka(true);
   }
 
@@ -536,16 +554,21 @@ export function FormKegiatan({
         // yang sedang dilihat. Sekali unggah lembar mengisi Net Profit dan Harga
         // Pokok sekaligus; menyimpan salah satunya saja membuang separuh
         // pekerjaan tanpa memberi tahu.
-        const ubahan: { outletId: string; gross?: number; netProfit?: number; hppNominal?: number } = { outletId: o.outletId };
+        const ubahan: { outletId: string; gross?: number | null; netProfit?: number | null; hppNominal?: number | null } = {
+          outletId: o.outletId,
+        };
+        // Kotak yang DIKOSONGKAN mengirim null — artinya "hapus angkanya".
+        // Tanpa ini, satu angka yang salah ketik tidak punya jalan dihapus:
+        // dikosongkan lalu disimpan hanya menjawab "tidak ada yang berubah".
         const grossBaru = num(isi.gross);
-        if (!o.dariEsb && grossBaru !== null && grossBaru !== o.gross) ubahan.gross = grossBaru;
+        if (!o.dariEsb && grossBaru !== o.gross) ubahan.gross = grossBaru;
         const npBaru = num(isi.netProfit);
-        if (npBaru !== null && npBaru !== o.netProfit) ubahan.netProfit = npBaru;
+        if (npBaru !== o.netProfit) ubahan.netProfit = npBaru;
         const hppBaru = num(isi.hppNominal);
-        if (hppBaru !== null && hppBaru !== o.hppNominal) ubahan.hppNominal = hppBaru;
+        if (hppBaru !== o.hppNominal) ubahan.hppNominal = hppBaru;
         return Object.keys(ubahan).length > 1 ? ubahan : null;
       })
-      .filter(Boolean) as { outletId: string; gross?: number; netProfit?: number; hppNominal?: number }[];
+      .filter(Boolean) as { outletId: string; gross?: number | null; netProfit?: number | null; hppNominal?: number | null }[];
 
     if (kirim.length === 0) {
       toast.info("Tidak ada yang berubah.");
@@ -625,11 +648,25 @@ export function FormKegiatan({
                 onChange={(v) => setJenis(v as OpsiKegiatan["jenis"])}
                 options={opsiTampil.map((o) => ({ value: o.jenis, label: o.label }))}
               />
-              <span className="text-[12px] text-muted-foreground">
-                {perOutlet
-                  ? `Angka ${labelPeriode(periode)} per outlet.`
-                  : `Satu baris terisi bernilai satu poin pada ${labelPeriode(periode)}.`}
-              </span>
+              {/* Bulannya bisa diganti dari sini, dan halaman KPI di belakangnya
+                  ikut berganti — mengisi Januari sampai Mei tanpa harus menutup
+                  form, membuka saringan, lalu membukanya lagi lima kali. */}
+              <Combobox
+                portal
+                searchable={false}
+                className="w-28"
+                value={periode.slice(0, 4)}
+                onChange={(v) => onPeriode?.(periodeDari(v, periode.slice(5, 7)))}
+                options={tahunPilihan()}
+              />
+              <Combobox
+                portal
+                searchable={false}
+                className="w-36"
+                value={periode.slice(5, 7)}
+                onChange={(v) => onPeriode?.(periodeDari(periode.slice(0, 4), v))}
+                options={BULAN}
+              />
             </div>
 
             {perOutlet ? (
@@ -863,6 +900,8 @@ function TabelOutlet({
           return o.ikut ? (o.average ?? -1) : -1;
         case "gross":
           return o.ikut || jenis === "gross_manual" ? (o.gross ?? -1) : -1;
+        case "tumbuh":
+          return o.ikut && o.average && o.gross ? o.gross / o.average : -1;
         case "isian":
           return num(isi[o.outletId]?.[KOLOM[jenis] ?? "gross"] ?? "") ?? -1;
         default:
@@ -900,6 +939,9 @@ function TabelOutlet({
                 <KepalaUrut id="gross" urut={urut} onUrut={setUrut} className="text-right">Gross Sales</KepalaUrut>
               </>
             )}
+            {jenis !== "gross_manual" && (
+              <KepalaUrut id="tumbuh" urut={urut} onUrut={setUrut} className="text-right">% thd Average</KepalaUrut>
+            )}
             <KepalaUrut id="isian" urut={urut} onUrut={setUrut} className="w-56">{judul}</KepalaUrut>
             {jenis !== "gross_manual" && <Kepala className="w-32 text-right">% thd Gross</Kepala>}
           </tr>
@@ -925,6 +967,9 @@ function TabelOutlet({
                     </td>
                     <td className="px-3 py-1.5 text-right tabular-nums text-muted-foreground">
                       {grossTampil === null ? "—" : formatIDR(grossTampil)}
+                    </td>
+                    <td className="px-3 py-1.5 text-right tabular-nums text-foreground/80">
+                      {persenTerhadap(grossTampil, o.ikut ? o.average : null)}
                     </td>
                   </>
                 )}

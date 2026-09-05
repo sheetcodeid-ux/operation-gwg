@@ -293,6 +293,7 @@ export function PapanKpi({
               outlet={laporan.ca?.detail ?? []}
               bulanKosong={laporan.ca?.bulanKosong ?? []}
               bolehKegiatan={bolehSimpan}
+              onPeriode={(p) => pindah(`/kpi/${laporan.posisi}?periode=${p}${laporan.pic ? `&pic=${encodeURIComponent(laporan.pic)}` : ""}`)}
             />
           )}
           {/* Tombol Input hanya muncul bila masih ADA yang belum tercakup form

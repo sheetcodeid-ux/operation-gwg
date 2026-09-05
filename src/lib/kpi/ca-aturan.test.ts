@@ -285,3 +285,40 @@ describe("angka ESB sebelum outletnya pindah ke ESB", () => {
     expect(data).not.toContain("2026-08");
   });
 });
+
+
+describe("menyimpan angka per outlet", () => {
+  const form = readFileSync(join(process.cwd(), "src/components/kpi/form-tabel.tsx"), "utf8");
+
+  it("hanya menulis kolom yang benar-benar dikirim", () => {
+    // Kejadian nyata: ketiga kolom selalu ditulis, dan yang tidak dikirim ikut
+    // ditulis NULL — menyimpan Net Profit MENGHAPUS Harga Pokok dan Gross
+    // manual yang sudah diisi. Tanpa peringatan, dan baru ketahuan saat
+    // formnya dibuka lagi dan isinya sudah berbeda.
+    expect(data).toContain("if (input.gross !== undefined) baris.gross = input.gross;");
+    expect(data).toContain("if (input.netProfit !== undefined) baris.net_profit = input.netProfit;");
+    expect(data).toContain("if (input.hppNominal !== undefined) baris.hpp_nominal = input.hppNominal;");
+  });
+
+  it("undefined dan null dibedakan sampai ke server", () => {
+    // `undefined` = jangan disentuh, `null` = kosongkan. Menyamakannya membuat
+    // salah satu dari dua hal itu mustahil dilakukan.
+    expect(aksiKpi).toContain("gross: b.gross,");
+    expect(aksiKpi).toContain("netProfit: b.netProfit,");
+    expect(aksiKpi).toContain("hppNominal: b.hppNominal,");
+  });
+
+  it("kotak yang dikosongkan benar-benar menghapus angkanya", () => {
+    // Sebelumnya dikosongkan lalu disimpan hanya menjawab "tidak ada yang
+    // berubah" — satu angka yang salah ketik tidak punya jalan dihapus.
+    expect(form).toContain("if (npBaru !== o.netProfit) ubahan.netProfit = npBaru;");
+    expect(form).toContain("if (hppBaru !== o.hppNominal) ubahan.hppNominal = hppBaru;");
+  });
+
+  it("isian ikut berganti saat bulannya diganti", () => {
+    // Kalau tidak, angka bulan lalu tetap terlihat di layar dan ikut tersimpan
+    // ke bulan yang baru.
+    expect(form).toContain("if (periode !== periodeIsi) {");
+    expect(form).toContain("setIsiOutlet(dariProps());");
+  });
+});
