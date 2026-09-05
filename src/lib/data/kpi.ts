@@ -398,6 +398,8 @@ interface OutletCa {
   branch: string | null;
   /** Penjualannya diisi tangan — pindahan dari POS lain. */
   grossManual: boolean;
+  /** Bulan pertama angka ESB-nya boleh dipercaya; sebelum itu diabaikan. */
+  esbMulai: string | null;
 }
 
 /**
@@ -409,7 +411,20 @@ interface OutletCa {
  * Majoo dan riwayatnya tidak ikut terbawa; tanpa isian itu ketiganya terbaca
  * seperti outlet yang baru buka.
  */
-function grossOutlet(o: OutletCa, esb: Map<string, { net: number }>, tangan: Map<string, OutletBulanan>): number | null {
+function grossOutlet(
+  o: OutletCa,
+  periode: string,
+  esb: Map<string, { net: number }>,
+  tangan: Map<string, OutletBulanan>,
+): number | null {
+  // ANGKA ESB SEBELUM OUTLETNYA PINDAH KE SANA BUKAN PENJUALANNYA. Untuk tiga
+  // outlet pindahan POS Majoo, ESB memuat ratusan juta pada bulan-bulan sebelum
+  // migrasi — bukan nol, bukan kosong, jadi tidak ada satu pun tanda bahwa
+  // angka itu salah. Kalau dipercaya, ia lolos aturan tiga bulan, menjadi dasar
+  // target bulan berikutnya, dan terhitung sebagai capaian untuk penjualan yang
+  // tidak pernah ada.
+  if (o.esbMulai && periode < o.esbMulai) return tangan.get(o.id)?.gross ?? null;
+
   // NOL DARI ESB BUKAN "penjualannya nol", melainkan "cabang ini belum ada di
   // bulan itu". ESB tetap membalas untuk cabang yang belum buka, dan balasannya
   // nol — jadi barisnya selalu tersimpan. Kalau nol dianggap angka yang sah,
@@ -494,7 +509,7 @@ async function angkaCa(periode: string, picIds: string[], jumlahPic: number): Pr
   ]);
 
   const nilaiBulan = (o: OutletCa, n: number): number | null =>
-    grossOutlet(o, riwayat[n][0], riwayat[n][1]);
+    grossOutlet(o, bulanLalu[n], riwayat[n][0], riwayat[n][1]);
 
   // Bulan yang TIDAK PUNYA SATU BARIS PUN berarti angkanya belum ditarik dari
   // ESB — bukan berarti seluruh outlet baru buka. Dibedakan supaya pesannya
@@ -518,7 +533,7 @@ async function angkaCa(periode: string, picIds: string[], jumlahPic: number): Pr
 
   // Gross sales bulan ini. Satu outlet yang lolos tapi angkanya belum ada
   // membuat totalnya BELUM UTUH — ditahan, bukan ditampilkan kurang.
-  const grossPerOutlet = lolos.map((o) => grossOutlet(o, esbIni, tanganIni));
+  const grossPerOutlet = lolos.map((o) => grossOutlet(o, periode, esbIni, tanganIni));
   const grossSales = grossPerOutlet.some((v) => v === null)
     ? null
     : grossPerOutlet.reduce((a: number, b) => a + (b ?? 0), 0);
@@ -550,11 +565,15 @@ async function angkaCa(periode: string, picIds: string[], jumlahPic: number): Pr
   const detail: DetailOutletCa[] = semua.map((o) => {
     // "Dari ESB" berarti ESB punya angka yang BUKAN nol. Nol berarti cabangnya
     // belum ada di sana, dan justru itulah yang perlu diisi tangan.
-    const dariEsb = !!(o.branch && (esbIni.get(o.branch)?.net ?? 0) > 0);
+    const dariEsb = !!(
+      o.branch &&
+      !(o.esbMulai && periode < o.esbMulai) &&
+      (esbIni.get(o.branch)?.net ?? 0) > 0
+    );
     return {
       outletId: o.id,
       outletNama: o.nama,
-      gross: grossOutlet(o, esbIni, tanganIni),
+      gross: grossOutlet(o, periode, esbIni, tanganIni),
       dariEsb,
       netProfit: tanganIni.get(o.id)?.netProfit ?? null,
       hppNominal: tanganIni.get(o.id)?.hppNominal ?? null,
@@ -1197,7 +1216,13 @@ function outletCa(picIds: string[]): OutletCa[] {
   for (const p of picIds) for (const id of getUser(p)?.outletIds ?? []) ditugaskan.add(id);
   return getOutlets()
     .filter((o) => o.active && ditugaskan.has(o.id))
-    .map((o) => ({ id: o.id, nama: o.name, branch: o.esbBranchId ?? null, grossManual: !!o.grossManual }));
+    .map((o) => ({
+      id: o.id,
+      nama: o.name,
+      branch: o.esbBranchId ?? null,
+      grossManual: !!o.grossManual,
+      esbMulai: o.esbMulai ?? null,
+    }));
 }
 
 export function picDinamis(posisi: KodePosisi): { value: string; label: string }[] {
