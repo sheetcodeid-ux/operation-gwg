@@ -82,6 +82,15 @@ export interface Outlet {
    * yang terjadi pada tabel Efisiensi Beban Operasional.
    */
   esbBranchId?: string | null;
+  /**
+   * Penjualannya diisi tangan karena riwayatnya tidak ada di ESB.
+   *
+   * Tiga outlet pindah dari POS Majoo dan riwayatnya tidak ikut terbawa.
+   * Ditandai apa adanya, bukan ditebak dari keadaan datanya — tebakan ikut
+   * menyeret outlet lain yang kebetulan juga belum genap tiga bulan, dan
+   * daftarnya berubah-ubah tiap kali bulannya diganti.
+   */
+  grossManual?: boolean;
   city: string;
   areaId: string;
   supervisorId: string;
