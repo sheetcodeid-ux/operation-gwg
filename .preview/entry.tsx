@@ -73,13 +73,13 @@ function buat(kode: KodePosisi) {
     entri,
     ca: kode === "operational_ca" ? {
       outlet: [], belumTigaBulan: [], grossSales: 4_186_500_000, rataTiga: 3_640_000_000,
-      komplain: 27, netProfit: 1_010_400_000, hpp: 37.4, jumlahPic: 1,
+      komplain: 27, netProfit: 1_010_400_000, hpp: 37.4, jumlahPic: 1, bulanKosong: [],
       detail: [
-        { outletId: "o0", outletNama: "Nordu Coffee Sambas", gross: 412_500_000, dariEsb: true, netProfit: 110_000_000, hpp: 36.2, ikut: true },
-        { outletId: "o1", outletNama: "Nordu Coffee Siantan", gross: null, dariEsb: false, netProfit: null, hpp: null, ikut: false },
-        { outletId: "o2", outletNama: "Ayam Goreng Busari Siantan", gross: null, dariEsb: false, netProfit: null, hpp: null, ikut: false },
-        { outletId: "o3", outletNama: "Ayam Goreng Busari Serdam", gross: null, dariEsb: false, netProfit: null, hpp: null, ikut: false },
-        { outletId: "o4", outletNama: "Cattu M. Sohor", gross: 288_140_000, dariEsb: true, netProfit: 74_500_000, hpp: 38.9, ikut: true },
+        { outletId: "o0", outletNama: "Nordu Coffee Sambas", gross: 412_500_000, dariEsb: true, netProfit: 110_000_000, hpp: 36.2, average: 398_200_000, ikut: true },
+        { outletId: "o1", outletNama: "Nordu Coffee Siantan", gross: null, dariEsb: false, netProfit: null, hpp: null, average: null, ikut: false },
+        { outletId: "o2", outletNama: "Ayam Goreng Busari Siantan", gross: null, dariEsb: false, netProfit: null, hpp: null, average: null, ikut: false },
+        { outletId: "o3", outletNama: "Ayam Goreng Busari Serdam", gross: null, dariEsb: false, netProfit: null, hpp: null, average: null, ikut: false },
+        { outletId: "o4", outletNama: "Cattu M. Sohor", gross: 288_140_000, dariEsb: true, netProfit: 74_500_000, hpp: 38.9, average: 275_400_000, ikut: true },
       ],
     } : null,
   };

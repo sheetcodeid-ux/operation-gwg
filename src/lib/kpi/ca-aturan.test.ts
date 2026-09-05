@@ -140,3 +140,21 @@ describe("nol dari ESB", () => {
     expect(data).toContain("const dariEsb = !!(o.branch && (esbIni.get(o.branch)?.net ?? 0) > 0);");
   });
 });
+
+describe("rentang tiga bulan sama di seluruh modul", () => {
+  it("Efisiensi Beban juga memakai tiga bulan SEBELUMNYA, bukan termasuk bulan berjalan", () => {
+    // Dua rumus untuk satu istilah yang sama membuat dua halaman menampilkan
+    // "rata-rata 3 bulan" yang berbeda, dan yang membacanya menyimpulkan salah
+    // satunya rusak. Untuk Juli yang dipakai April, Mei, Juni.
+    const blok = data.slice(data.indexOf("async function averageTigaBulan"));
+    expect(blok.slice(0, blok.indexOf("\n}"))).toContain("const bulan = tigaBulanSebelum(periode);");
+  });
+
+  it("rata-ratanya bisa diperiksa sendiri per outlet di layar", () => {
+    // Angka yang tidak bisa ditelusuri hanya bisa dipercaya atau ditolak
+    // seluruhnya — tidak ada jalan tengah untuk memeriksanya.
+    const form = readFileSync(join(process.cwd(), "src/components/kpi/form-tabel.tsx"), "utf8");
+    expect(form).toContain("Average 3 Bln");
+    expect(data).toContain("average: rata.get(o.id) ?? null");
+  });
+});
