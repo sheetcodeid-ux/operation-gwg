@@ -93,14 +93,14 @@ export default async function AppLayout({ children }: { children: React.ReactNod
             {/* Di ponsel, Pesan mengambil alih seluruh layar — topbar disembunyikan
                 supaya tidak ada dua baris kepala bertumpuk. */}
             <ChromeSlot>
-              <Topbar user={user} notifications={notifications} navItems={navItems} allowedKeys={allowedKeys} homeDivision={home} isAdmin={isAdmin} grants={grants} department={department} />
+              <Topbar user={user} notifications={notifications} navItems={navItems} allowedKeys={allowedKeys} homeDivision={home} isAdmin={isAdmin} grants={grants} department={department} showHome={canReachMenu(user, "dashboard")} />
             </ChromeSlot>
             <div className="flex min-h-0 flex-1">
               <Sidebar items={navItems} allowedKeys={allowedKeys} homeDivision={home} isAdmin={isAdmin} grants={grants} department={department} />
               {/* overflow-x-clip: no child may widen the page — wide content must
                   scroll inside its own overflow-x-auto wrapper (tables, kanban). */}
               <div data-scroll-root className="flex min-h-0 min-w-0 flex-1 flex-col clip-x overflow-y-auto">
-                <MainShell showHome={canReachMenu(user, "dashboard")}>{children}</MainShell>
+                <MainShell>{children}</MainShell>
               </div>
             </div>
             <CommandPalette

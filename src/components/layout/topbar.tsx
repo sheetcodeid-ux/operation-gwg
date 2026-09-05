@@ -10,6 +10,7 @@ import { NotificationCenter } from "./notifications";
 import { UserMenu } from "./user-menu";
 import { ThemeToggle } from "./theme-toggle";
 import { LanguageToggle } from "./language-toggle";
+import { Breadcrumbs } from "./breadcrumbs";
 
 export function Topbar({
   user,
@@ -20,6 +21,7 @@ export function Topbar({
   isAdmin,
   grants,
   department = "",
+  showHome = true,
 }: {
   user: UserProfile;
   notifications: AppNotification[];
@@ -29,6 +31,8 @@ export function Topbar({
   isAdmin: boolean;
   grants: string[];
   department?: string;
+  /** Beranda menunjuk /dashboard — hanya untuk yang memang bisa membukanya. */
+  showHome?: boolean;
 }) {
   // Latar padat: topbar menempel di atas isi yang bergulir, dan di sebagian
   // ponsel Android lapisan backdrop-filter gagal dikomposisi sehingga
@@ -37,6 +41,15 @@ export function Topbar({
     <header className="no-print sticky top-0 z-50 flex h-16 items-center border-b border-border bg-background">
       {/* Left: desktop brand column (aligns with sidebar) */}
       <TopbarBrand />
+
+      {/* Remah roti dipindah ke sini dari isi halaman. Di sana ia memakan satu
+          baris penuh pada setiap halaman; di sini ia mengisi ruang yang memang
+          sudah kosong. Disembunyikan di layar sempit: di bawah `lg` ruang itu
+          habis dipakai merek dan deretan tombol, dan remah roti yang terhimpit
+          akan mendorong menu pengguna keluar tepi layar. */}
+      <div className="hidden min-w-0 flex-1 items-center px-6 lg:flex">
+        <Breadcrumbs showHome={showHome} />
+      </div>
 
       {/* Mobile brand */}
       <div className="flex items-center gap-2 px-4 lg:hidden">
