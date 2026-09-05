@@ -1,3 +1,5 @@
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { barisKpi, hitungTarget, persentaseCapaian } from "./hitung";
 import { INDIKATOR } from "./indikator";
@@ -142,5 +144,26 @@ describe("skor tertinggi seluruh indikator", () => {
       barisKpi({ indikator: ind("hpp"), bobot: 20, target: 40, actual: 35 }),
     ];
     expect(baris.reduce((a, b) => a + (b.persenActual ?? 0), 0)).toBe(100);
+  });
+});
+
+describe("Net Profit yang minus", () => {
+  it("boleh minus — outlet yang rugi memang ada", () => {
+    // Menolaknya membuat bulan yang buruk mustahil dilaporkan apa adanya; yang
+    // mengisinya akan memasukkan nol atau membiarkannya kosong, dan laporannya
+    // jadi lebih baik daripada kenyataannya.
+    const aksi = readFileSync(join(process.cwd(), "src/lib/actions/kpi.ts"), "utf8");
+    expect(aksi).toContain("const takBolehMinus = [b.gross, b.hppNominal];");
+    expect(aksi).toContain("Penjualan dan harga pokok tidak bisa minus.");
+  });
+
+  it("capaiannya nol, bukan minus", () => {
+    // Capaian minus akan MENARIK TURUN skor indikator lain lewat penjumlahan —
+    // hukuman untuk satu indikator merembet ke yang tidak ada hubungannya.
+    expect(persentaseCapaian(-6_860_286, 240_000_000)).toBe(0);
+    const b = barisKpi({ indikator: ind("net_profit"), bobot: 30, target: 240_000_000, actual: -6_860_286 });
+    expect(b.persenActual).toBe(0);
+    // Angka ruginya tetap terbaca apa adanya.
+    expect(b.actual).toBe(-6_860_286);
   });
 });

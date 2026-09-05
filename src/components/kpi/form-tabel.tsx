@@ -384,22 +384,30 @@ function InputRupiah({
   nilai,
   onUbah,
   disabled,
+  izinkanMinus,
 }: {
   nilai: string;
   onUbah: (v: string) => void;
   disabled?: boolean;
+  /** Net profit boleh minus — itu rugi, dan harus bisa diketik apa adanya. */
+  izinkanMinus?: boolean;
 }) {
   const angka = num(nilai);
+  const minus = izinkanMinus && nilai.trim().startsWith("-");
   return (
     <div className="relative">
       <span className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-[12px] text-muted-foreground">Rp</span>
       <Input
         inputMode="numeric"
-        className="h-8 pl-8 text-right tabular-nums"
+        className={`h-8 pl-8 text-right tabular-nums ${angka !== null && angka < 0 ? "text-rose-600 dark:text-rose-400" : ""}`}
         placeholder="0"
         disabled={disabled}
-        value={angka === null ? "" : formatNumber(angka)}
-        onChange={(e) => onUbah(e.target.value.replace(/[^\d]/g, ""))}
+        value={angka === null ? (minus ? "-" : "") : formatNumber(angka)}
+        onChange={(e) => {
+          const bersih = e.target.value.replace(/[^\d-]/g, "");
+          // Minus hanya berarti di depan, dan hanya satu.
+          onUbah(izinkanMinus && bersih.startsWith("-") ? `-${bersih.replace(/-/g, "")}` : bersih.replace(/-/g, ""));
+        }}
       />
     </div>
   );
@@ -979,7 +987,11 @@ function TabelOutlet({
                       {o.gross === null ? "—" : formatIDR(o.gross)} <span className="text-[10.5px]">dari ESB</span>
                     </p>
                   ) : (
-                    <InputRupiah nilai={isi[o.outletId]?.[kolom] ?? ""} onUbah={(v) => ubah(o.outletId, kolom, v)} />
+                    <InputRupiah
+                      nilai={isi[o.outletId]?.[kolom] ?? ""}
+                      onUbah={(v) => ubah(o.outletId, kolom, v)}
+                      izinkanMinus={jenis === "net_profit"}
+                    />
                   )}
                 </td>
                 {jenis !== "gross_manual" && (
