@@ -170,7 +170,7 @@ describe("nol dari ESB", () => {
     // Justru tiga outlet pindahan Majoo yang bernilai nol — riwayatnya tidak
     // ikut terbawa. Kalau nol dianggap "sudah ada di ESB", kolom isiannya
     // hilang dan tidak ada cara memperbaikinya sama sekali.
-    expect(data).toContain("const dariEsb = !!(o.branch && (esbIni.get(o.branch)?.net ?? 0) > 0);");
+    expect(data).toContain("(esbIni.get(o.branch)?.net ?? 0) > 0");
   });
 });
 
@@ -258,5 +258,30 @@ describe('mengisi sambil melihat "Semua"', () => {
     expect(aksiKpi).toContain("izinkanGabungan: gabungan");
     expect(aksiKpi).toContain("outletSeluruhPic(input.posisi)");
     expect(form).toContain("bolehKegiatan ? opsi : opsi.filter(");
+  });
+});
+
+
+describe("angka ESB sebelum outletnya pindah ke ESB", () => {
+  it("diabaikan sepenuhnya, bukan dipakai", () => {
+    // Ini yang paling berbahaya dari seluruh modul: angkanya BUKAN nol dan
+    // BUKAN kosong. Ayam Goreng Busari Siantan tercatat Rp 186 juta pada
+    // Januari, Rp 225 juta pada Maret — padahal outletnya baru masuk ESB
+    // Agustus. Tidak ada satu pun tanda bahwa angka itu salah: ia lolos aturan
+    // tiga bulan, jadi dasar target bulan berikutnya, dan terhitung sebagai
+    // capaian untuk penjualan yang tidak pernah ada.
+    expect(data).toContain("if (o.esbMulai && periode < o.esbMulai) return tangan.get(o.id)?.gross ?? null;");
+  });
+
+  it("bulan sebelum itu tetap bisa diisi tangan", () => {
+    // Kalau ESB palsu dianggap "sudah ada", kolom isiannya terkunci dan angka
+    // yang benar tidak punya jalan masuk sama sekali.
+    expect(data).toContain("!(o.esbMulai && periode < o.esbMulai) &&");
+  });
+
+  it("batasnya per outlet dan berupa data, bukan tanggal di dalam kode", () => {
+    const rows = readFileSync(join(process.cwd(), "src/lib/data/rows.ts"), "utf8");
+    expect(rows).toContain("esbMulai: r.esb_mulai ?? null");
+    expect(data).not.toContain("2026-08");
   });
 });

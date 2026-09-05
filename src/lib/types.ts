@@ -91,6 +91,15 @@ export interface Outlet {
    * daftarnya berubah-ubah tiap kali bulannya diganti.
    */
   grossManual?: boolean;
+  /**
+   * Bulan pertama angka ESB outlet ini boleh dipercaya, mis. "2026-08".
+   *
+   * Outlet pindahan POS punya angka di ESB untuk bulan sebelum migrasinya, dan
+   * angka itu bukan penjualan mereka — bukan nol, bukan kosong, melainkan
+   * ratusan juta yang terlihat meyakinkan. Sebelum bulan ini, ESB diabaikan
+   * sepenuhnya.
+   */
+  esbMulai?: string | null;
   city: string;
   areaId: string;
   supervisorId: string;
