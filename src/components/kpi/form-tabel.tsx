@@ -342,20 +342,21 @@ export interface OutletBaris {
   netProfit: number | null;
   hppNominal: number | null;
   grossManual: boolean;
+  grossTangan: boolean;
   average: number | null;
   ikut: boolean;
 }
 
 /**
- * Penjualan outlet ini boleh diketik untuk bulan yang sedang dibuka?
+ * Penjualan outlet ini diketik untuk bulan yang sedang dibuka?
  *
- * Outlet biasa: tidak, selama ESB punya angkanya — angka yang bisa
- * diperdebatkan tidak boleh menimpa angka yang tidak bisa. Outlet BERTANDA:
- * selalu boleh, karena justru ESB outlet itulah yang tidak bisa dipercaya, dan
- * ketidakpercayaannya kadang hanya pada sebagian bulan. Bulan yang dikosongkan
- * tetap memakai ESB.
+ * Ditentukan PER BULAN, bukan per outlet. Nordu Landak hanya perlu diketik
+ * pada Juni dan Juli; pada Agustus angkanya sudah benar dan harus tetap
+ * otomatis. Menandai outletnya secara keseluruhan membuat sebelas bulan yang
+ * tidak bermasalah ikut menunggu diketik — dan yang tidak diketik jadi kosong,
+ * bukan otomatis.
  */
-const bolehKetikGross = (o: OutletBaris): boolean => o.grossManual || !o.dariEsb;
+const bolehKetikGross = (o: OutletBaris): boolean => o.grossTangan;
 
 /** Kenapa outlet ini belum ikut dinilai — dibedakan supaya tidak menyesatkan. */
 function alasanBelumIkut(bulanKosong: string[]): string {
@@ -998,26 +999,21 @@ function TabelOutlet({
                   </>
                 )}
                 <td className="px-3 py-1.5">
+                  {/* Bulan yang tidak ditandai TIDAK bisa diketik dan tidak
+                      perlu: angkanya sudah benar dan datang sendiri dari ESB.
+                      Barisnya tetap ditampilkan supaya terlihat bahwa bulan itu
+                      memang tidak menunggu apa-apa. */}
                   {jenis === "gross_manual" && !bolehKetikGross(o) ? (
                     <p className="text-right text-[12px] tabular-nums text-muted-foreground">
-                      {o.gross === null ? "—" : formatIDR(o.gross)} <span className="text-[10.5px]">dari ESB</span>
+                      {o.gross === null ? "—" : formatIDR(o.gross)}{" "}
+                      <span className="text-[10.5px]">{o.dariEsb ? "dari ESB — otomatis" : "otomatis"}</span>
                     </p>
                   ) : (
-                    <div>
-                      <InputRupiah
-                        nilai={isi[o.outletId]?.[kolom] ?? ""}
-                        onUbah={(v) => ubah(o.outletId, kolom, v)}
-                        izinkanMinus={jenis === "net_profit"}
-                      />
-                      {/* Angka ESB tetap diperlihatkan sebagai pembanding selama
-                          belum ada yang diketik — yang mengisinya perlu tahu
-                          angka mana yang sedang dianggap salah. */}
-                      {jenis === "gross_manual" && o.dariEsb && !isi[o.outletId]?.gross && (
-                        <p className="mt-1 text-right text-[10.5px] tabular-nums text-muted-foreground">
-                          kosong = pakai ESB {o.gross === null ? "—" : formatIDR(o.gross)}
-                        </p>
-                      )}
-                    </div>
+                    <InputRupiah
+                      nilai={isi[o.outletId]?.[kolom] ?? ""}
+                      onUbah={(v) => ubah(o.outletId, kolom, v)}
+                      izinkanMinus={jenis === "net_profit"}
+                    />
                   )}
                 </td>
                 {jenis !== "gross_manual" && (

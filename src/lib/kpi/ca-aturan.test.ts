@@ -42,33 +42,29 @@ describe("aturan tiga bulan", () => {
 });
 
 describe("gross sales manual", () => {
-  it("ESB menang atas angka yang diketik — kecuali outlet yang ditandai", () => {
-    // Untuk outlet biasa, angka yang bisa diperdebatkan tidak boleh
-    // mengalahkan angka yang tidak bisa. Tapi tanda `grossManual` justru
-    // berarti ESB outlet itulah yang tidak bisa dipercaya — dan
-    // ketidakpercayaannya kadang hanya pada SEBAGIAN bulan, yang tidak bisa
-    // dinyatakan oleh `esbMulai` karena ia satu garis batas, bukan daftar
-    // bulan.
-    const blok = data.slice(data.indexOf("function grossOutlet"));
+  it("bulan yang ditandai memakai angka ketikan; bulan lain memakai ESB", () => {
+    // Penandanya PER BULAN, bukan per outlet. Nordu Landak angkanya wajar pada
+    // Mei dan Agustus tapi belasan juta pada Juni dan Juli — menandai
+    // outletnya secara keseluruhan membuat sebelas bulan yang tidak bermasalah
+    // ikut menunggu diketik, dan yang tidak diketik jadi kosong bukan otomatis.
+    const blok = data.slice(data.indexOf("function grossOutlet("));
     const badan = blok.slice(0, blok.indexOf("\n}"));
+    expect(badan).toContain("if (grossDiketik(o, periode)) return manual;");
     expect(badan).toContain("if (dariEsb !== undefined && dariEsb > 0) return dariEsb;");
-    expect(badan).toContain("tangan.get(o.id)?.gross");
-    // Pengecualiannya diperiksa SEBELUM ESB dibaca, dan hanya untuk yang
-    // ditandai — kalau tidak, seluruh outlet bisa ditimpa angka ketikan.
-    expect(badan).toContain("if (o.grossManual && manual !== null && manual > 0) return manual;");
-    expect(badan.indexOf("o.grossManual &&")).toBeLessThan(badan.indexOf("const dariEsb ="));
+    // Bulan yang ditandai diperiksa SEBELUM ESB dibaca — kalau tidak, angka
+    // ESB yang sedang dinyatakan salah justru yang menang.
+    expect(badan.indexOf("grossDiketik(o, periode)")).toBeLessThan(badan.indexOf("const dariEsb ="));
   });
 
-  it("bulan yang TIDAK diketik tetap memakai ESB", () => {
-    // Tanda `gross_manual` bukan berarti seluruh riwayat outletnya diketik.
-    // Nordu Landak punya angka wajar pada Mei dan Agustus tapi belasan juta
-    // pada Juni dan Juli; yang perlu diisi hanya dua bulan itu, dan sisanya
-    // harus tetap datang dari ESB tanpa perlu diketik ulang satu per satu.
-    const blok = data.slice(data.indexOf("function grossOutlet"));
+  it("dua bentuk penanda: garis batas dan celah di tengah", () => {
+    // `esbMulai` menyatakan "sebelum bulan ini ESB diabaikan" — pas untuk
+    // outlet pindahan POS yang riwayatnya memang tidak ada. `esbAbaikan`
+    // menyebut bulannya satu per satu — satu-satunya bentuk yang bisa
+    // menyatakan celah di tengah tanpa ikut membuang bulan yang benar.
+    const blok = data.slice(data.indexOf("export function grossDiketik("));
     const badan = blok.slice(0, blok.indexOf("\n}"));
-    expect(badan).toContain("if (o.grossManual && manual !== null && manual > 0) return manual;");
-    // Syarat `manual > 0` itulah yang membuat bulan kosong jatuh ke ESB.
-    expect(badan).toContain("if (dariEsb !== undefined && dariEsb > 0) return dariEsb;");
+    expect(badan).toContain("if (o.esbMulai && periode < o.esbMulai) return true;");
+    expect(badan).toContain("return o.esbAbaikan.includes(periode);");
   });
 
   it("yang muncul HANYA outlet yang ditandai diisi tangan", () => {
@@ -89,16 +85,14 @@ describe("gross sales manual", () => {
     expect(form).not.toContain("Ayam Goreng Busari");
   });
 
-  it("outlet yang bulan ini sudah punya angka ESB tidak bisa diketik — kecuali yang ditandai", () => {
-    // Untuk outlet biasa kotaknya tetap dikunci: angka ESB tidak boleh ditimpa
-    // ketikan. Outlet BERTANDA tetap bisa diketik, karena ESB-nya justru yang
-    // sedang tidak dipercaya — dan angka ESB-nya tetap diperlihatkan sebagai
-    // pembanding supaya yang mengisi tahu angka mana yang sedang diganti.
+  it("kotak isian hanya terbuka pada bulan yang ditandai", () => {
+    // Bulan yang tidak ditandai tidak bisa diketik dan tidak perlu: angkanya
+    // sudah benar dan datang sendiri dari ESB.
     const form = readFileSync(join(process.cwd(), "src/components/kpi/form-tabel.tsx"), "utf8");
-    expect(form).toContain("const bolehKetikGross = (o: OutletBaris): boolean => o.grossManual || !o.dariEsb;");
+    expect(form).toContain("const bolehKetikGross = (o: OutletBaris): boolean => o.grossTangan;");
     expect(form).toContain('jenis === "gross_manual" && !bolehKetikGross(o) ?');
-    expect(form).toContain("dari ESB");
-    expect(form).toContain("kosong = pakai ESB");
+    expect(form).toContain("otomatis");
+    expect(data).toContain("grossTangan: grossDiketik(o, periode),");
   });
 
   it("kotak isian memakai angka YANG DIKETIK, bukan angka yang akhirnya dipakai", () => {
@@ -311,13 +305,14 @@ describe("angka ESB sebelum outletnya pindah ke ESB", () => {
     // Agustus. Tidak ada satu pun tanda bahwa angka itu salah: ia lolos aturan
     // tiga bulan, jadi dasar target bulan berikutnya, dan terhitung sebagai
     // capaian untuk penjualan yang tidak pernah ada.
-    expect(data).toContain("if (o.esbMulai && periode < o.esbMulai) return manual;");
+    expect(data).toContain("if (o.esbMulai && periode < o.esbMulai) return true;");
+    expect(data).toContain("if (grossDiketik(o, periode)) return manual;");
   });
 
   it("bulan sebelum itu tetap bisa diisi tangan", () => {
     // Kalau ESB palsu dianggap "sudah ada", kolom isiannya terkunci dan angka
     // yang benar tidak punya jalan masuk sama sekali.
-    expect(data).toContain("!(o.esbMulai && periode < o.esbMulai) &&");
+    expect(data).toContain("!grossDiketik(o, periode) &&");
   });
 
   it("batasnya per outlet dan berupa data, bukan tanggal di dalam kode", () => {

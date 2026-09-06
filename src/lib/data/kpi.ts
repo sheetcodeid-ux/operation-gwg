@@ -436,6 +436,8 @@ interface OutletCa {
   esbMulai: string | null;
   /** Tanggal outlet mulai berjalan, mis. "2026-05-31". Kosong = belum diketahui. */
   bukaTanggal: string | null;
+  /** Bulan-bulan yang angka ESB-nya diabaikan; penjualannya diisi tangan. */
+  esbAbaikan: string[];
 }
 
 /**
@@ -447,44 +449,49 @@ interface OutletCa {
  * Majoo dan riwayatnya tidak ikut terbawa; tanpa isian itu ketiganya terbaca
  * seperti outlet yang baru buka.
  */
+/**
+ * Bulan ini penjualannya HARUS diketik, bukan diambil dari ESB.
+ *
+ * Dua bentuk, karena dua keadaan yang berbeda:
+ *
+ *  • `esbMulai` — satu GARIS BATAS. Outlet pindahan POS Majoo tidak punya
+ *    riwayat di ESB sebelum migrasinya, tapi ESB tetap memuat ratusan juta di
+ *    bulan-bulan itu: bukan nol, bukan kosong, jadi tidak ada satu pun tanda
+ *    bahwa angkanya salah. Seluruh bulan sebelum batas itu diketik.
+ *
+ *  • `esbAbaikan` — CELAH DI TENGAH. Nordu Landak angkanya wajar pada Mei dan
+ *    Agustus tapi belasan juta pada Juni dan Juli. Menandainya dengan garis
+ *    batas akan ikut membuang Mei beserta seluruh bulan sebelumnya yang benar,
+ *    dan memaksa mengetik ulang bulan yang tidak pernah bermasalah.
+ *
+ * Bulan yang tidak disebut keduanya tetap otomatis.
+ */
+export function grossDiketik(o: { esbMulai: string | null; esbAbaikan: string[] }, periode: string): boolean {
+  if (o.esbMulai && periode < o.esbMulai) return true;
+  return o.esbAbaikan.includes(periode);
+}
+
 function grossOutlet(
   o: OutletCa,
   periode: string,
   esb: Map<string, { net: number }>,
   tangan: Map<string, OutletBulanan>,
 ): number | null {
-  // ANGKA ESB SEBELUM OUTLETNYA PINDAH KE SANA BUKAN PENJUALANNYA. Untuk tiga
-  // outlet pindahan POS Majoo, ESB memuat ratusan juta pada bulan-bulan sebelum
-  // migrasi — bukan nol, bukan kosong, jadi tidak ada satu pun tanda bahwa
-  // angka itu salah. Kalau dipercaya, ia lolos aturan tiga bulan, menjadi dasar
-  // target bulan berikutnya, dan terhitung sebagai capaian untuk penjualan yang
-  // tidak pernah ada.
   const manual = tangan.get(o.id)?.gross ?? null;
-  if (o.esbMulai && periode < o.esbMulai) return manual;
 
-  // OUTLET YANG DITANDAI DIISI TANGAN: angka yang diketik MENANG atas ESB.
-  //
-  // Untuk outlet biasa aturannya kebalikan — ESB selalu menang, karena angka
-  // yang bisa diperdebatkan tidak boleh mengalahkan angka yang tidak bisa.
-  // Tapi tanda `grossManual` justru berarti ESB outlet inilah yang tidak bisa
-  // dipercaya, dan ketidakpercayaannya kadang hanya pada SEBAGIAN bulan: Nordu
-  // Landak punya angka wajar pada Mei dan Agustus, tapi Juni dan Juli terisi
-  // belasan juta yang bukan omsetnya. `esbMulai` tidak bisa menyatakan itu —
-  // ia satu garis batas, bukan daftar bulan.
-  //
-  // Bulan yang tidak diketik tetap memakai ESB, jadi yang perlu diisi hanya
-  // bulan yang memang salah.
-  if (o.grossManual && manual !== null && manual > 0) return manual;
+  // Bulan yang ditandai: HANYA angka ketikan yang dipakai. Kalau belum diisi,
+  // hasilnya kosong — bukan angka ESB, karena angka itulah yang sedang
+  // dinyatakan salah.
+  if (grossDiketik(o, periode)) return manual;
 
   // NOL DARI ESB BUKAN "penjualannya nol", melainkan "cabang ini belum ada di
   // bulan itu". ESB tetap membalas untuk cabang yang belum buka, dan balasannya
   // nol — jadi barisnya selalu tersimpan. Kalau nol dianggap angka yang sah,
   // outlet yang belum buka lolos aturan tiga bulan dengan penjualan nol dan
-  // menyeret rata-rata seluruh area ke bawah; sekaligus menutup jalan isian
-  // tangan untuk tiga outlet pindahan Majoo, yang justru nol karena riwayatnya
-  // tidak ikut terbawa.
+  // menyeret rata-rata seluruh area ke bawah.
   const dariEsb = o.branch ? esb.get(o.branch)?.net : undefined;
   if (dariEsb !== undefined && dariEsb > 0) return dariEsb;
+  // Angka ketikan tetap dipakai bila ESB tidak punya apa-apa untuk bulan itu.
   if (manual !== null && manual > 0) return manual;
   return dariEsb !== undefined ? 0 : null;
 }
@@ -566,6 +573,14 @@ export interface DetailOutletCa {
   hppNominal: number | null;
   /** Penjualannya diisi tangan — hanya outlet inilah yang muncul di form gross manual. */
   grossManual: boolean;
+  /**
+   * Bulan INI penjualannya harus diketik.
+   *
+   * Berbeda dari `grossManual`, yang berlaku untuk outletnya secara
+   * keseluruhan. Nordu Landak hanya perlu diketik pada Juni dan Juli; pada
+   * Agustus angkanya sudah benar dan harus tetap otomatis.
+   */
+  grossTangan: boolean;
   /** Rata-rata gross sales tiga bulan SEBELUM bulan ini — dasar targetnya. */
   average: number | null;
   ikut: boolean;
@@ -693,11 +708,7 @@ async function angkaCa(periode: string, picIds: string[], jumlahPic: number): Pr
   const detail: DetailOutletCa[] = semua.map((o) => {
     // "Dari ESB" berarti ESB punya angka yang BUKAN nol. Nol berarti cabangnya
     // belum ada di sana, dan justru itulah yang perlu diisi tangan.
-    const dariEsb = !!(
-      o.branch &&
-      !(o.esbMulai && periode < o.esbMulai) &&
-      (esbIni.get(o.branch)?.net ?? 0) > 0
-    );
+    const dariEsb = !!(o.branch && !grossDiketik(o, periode) && (esbIni.get(o.branch)?.net ?? 0) > 0);
     return {
       outletId: o.id,
       outletNama: o.nama,
@@ -707,6 +718,7 @@ async function angkaCa(periode: string, picIds: string[], jumlahPic: number): Pr
       netProfit: tanganIni.get(o.id)?.netProfit ?? null,
       hppNominal: tanganIni.get(o.id)?.hppNominal ?? null,
       grossManual: o.grossManual,
+      grossTangan: grossDiketik(o, periode),
       average: rata.get(o.id) ?? null,
       ikut: lolos.some((l) => l.id === o.id),
     };
@@ -1386,6 +1398,7 @@ function outletCa(picIds: string[]): OutletCa[] {
       grossManual: !!o.grossManual,
       esbMulai: o.esbMulai ?? null,
       bukaTanggal: o.bukaTanggal ?? null,
+      esbAbaikan: o.esbAbaikan ?? [],
     }));
 }
 

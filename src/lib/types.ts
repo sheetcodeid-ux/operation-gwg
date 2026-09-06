@@ -101,6 +101,17 @@ export interface Outlet {
    */
   esbMulai?: string | null;
   /**
+   * Bulan-bulan "YYYY-MM" yang angka ESB-nya diabaikan untuk outlet ini.
+   *
+   * `esbMulai` hanya bisa menyatakan satu GARIS BATAS. Nordu Landak angkanya
+   * wajar pada Mei dan Agustus tapi belasan juta pada Juni dan Juli — yang
+   * salah celah di tengah, bukan awalan, dan menandainya dengan `esbMulai`
+   * akan ikut membuang Mei beserta seluruh bulan sebelumnya yang benar.
+   *
+   * Bulan yang tidak disebut di sini tetap otomatis dari ESB.
+   */
+  esbAbaikan?: string[] | null;
+  /**
    * Tanggal outlet ini mulai berjalan, mis. "2026-05-31".
    *
    * Penentu aturan tiga bulan. Bulan bukanya hanya terhitung sebagai bulan
