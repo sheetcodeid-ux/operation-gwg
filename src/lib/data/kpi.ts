@@ -459,7 +459,22 @@ function grossOutlet(
   // angka itu salah. Kalau dipercaya, ia lolos aturan tiga bulan, menjadi dasar
   // target bulan berikutnya, dan terhitung sebagai capaian untuk penjualan yang
   // tidak pernah ada.
-  if (o.esbMulai && periode < o.esbMulai) return tangan.get(o.id)?.gross ?? null;
+  const manual = tangan.get(o.id)?.gross ?? null;
+  if (o.esbMulai && periode < o.esbMulai) return manual;
+
+  // OUTLET YANG DITANDAI DIISI TANGAN: angka yang diketik MENANG atas ESB.
+  //
+  // Untuk outlet biasa aturannya kebalikan — ESB selalu menang, karena angka
+  // yang bisa diperdebatkan tidak boleh mengalahkan angka yang tidak bisa.
+  // Tapi tanda `grossManual` justru berarti ESB outlet inilah yang tidak bisa
+  // dipercaya, dan ketidakpercayaannya kadang hanya pada SEBAGIAN bulan: Nordu
+  // Landak punya angka wajar pada Mei dan Agustus, tapi Juni dan Juli terisi
+  // belasan juta yang bukan omsetnya. `esbMulai` tidak bisa menyatakan itu —
+  // ia satu garis batas, bukan daftar bulan.
+  //
+  // Bulan yang tidak diketik tetap memakai ESB, jadi yang perlu diisi hanya
+  // bulan yang memang salah.
+  if (o.grossManual && manual !== null && manual > 0) return manual;
 
   // NOL DARI ESB BUKAN "penjualannya nol", melainkan "cabang ini belum ada di
   // bulan itu". ESB tetap membalas untuk cabang yang belum buka, dan balasannya
@@ -470,7 +485,6 @@ function grossOutlet(
   // tidak ikut terbawa.
   const dariEsb = o.branch ? esb.get(o.branch)?.net : undefined;
   if (dariEsb !== undefined && dariEsb > 0) return dariEsb;
-  const manual = tangan.get(o.id)?.gross ?? null;
   if (manual !== null && manual > 0) return manual;
   return dariEsb !== undefined ? 0 : null;
 }
