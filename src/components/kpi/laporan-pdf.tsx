@@ -127,12 +127,20 @@ function grafikCapaian(baris: BarisKpi[], lalu: Record<string, LaluIndikator>, t
     )
     .join("");
 
+  // Bidang grafiknya diberi ALAS dan KISI, sama seperti di layar. Grafik yang
+  // melayang di atas kertas kosong membuat tinggi tiap titik hanya bisa
+  // ditebak; kisi mendatarlah yang membuatnya bisa dibaca sebagai angka.
+  const alas =
+    `<rect x="${L}" y="${A}" width="${W - L - R}" height="${tinggi}" rx="6" fill="${t.card}" stroke="${t.grid}" stroke-width="1"/>` +
+    [0, 25, 50, 75, 100]
+      .map((v) => `<line x1="${L}" y1="${py(v)}" x2="${W - R}" y2="${py(v)}" stroke="${t.grid}" stroke-width="1" stroke-dasharray="3 3"/>`)
+      .join("") +
+    baris
+      .map((_, i) => `<line x1="${px(i)}" y1="${A}" x2="${px(i)}" y2="${A + tinggi}" stroke="${t.grid}" stroke-width="1" stroke-dasharray="2 4" stroke-opacity="0.6"/>`)
+      .join("");
+
   const garisSumbu = [0, 25, 50, 75, 100]
-    .map(
-      (v) =>
-        `<line x1="${L}" y1="${py(v)}" x2="${W - R}" y2="${py(v)}" stroke="${t.grid}" stroke-width="1" stroke-dasharray="3 3"/>` +
-        `<text x="${L - 8}" y="${py(v) + 4}" text-anchor="end" fill="${t.sub}" font-size="10" font-weight="600">${v}%</text>`,
-    )
+    .map((v) => `<text x="${L - 8}" y="${py(v) + 4}" text-anchor="end" fill="${t.sub}" font-size="10" font-weight="600">${v}%</text>`)
     .join("");
 
   // Nama indikator ditulis PENUH, sama seperti di layar; yang tidak muat pada
@@ -154,6 +162,7 @@ function grafikCapaian(baris: BarisKpi[], lalu: Record<string, LaluIndikator>, t
     <defs><linearGradient id="isiBiru" x1="0" y1="0" x2="0" y2="1">
       <stop offset="0%" stop-color="${BIRU}" stop-opacity="0.35"/><stop offset="100%" stop-color="${BIRU}" stop-opacity="0.02"/>
     </linearGradient></defs>
+    ${alas}
     ${garisSumbu}
     ${batang}
     <path d="${area}" fill="url(#isiBiru)" stroke="none"/>
@@ -202,8 +211,7 @@ function donatSebaran(baris: BarisKpi[], skor: number, t: (typeof THEME)[Mode]):
     <div style="display:flex;align-items:center;gap:14px">
       <svg viewBox="0 0 176 176" width="126" height="126" style="flex:none" role="img" aria-label="Sebaran capaian">
         ${busur}
-        <text x="88" y="92" text-anchor="middle" fill="${t.text}" font-size="22" font-weight="800">${persen(skor)}</text>
-        <text x="88" y="107" text-anchor="middle" fill="${t.sub}" font-size="9">Total Skor</text>
+        <text x="88" y="97" text-anchor="middle" fill="${t.text}" font-size="26" font-weight="800">${Math.round(skor)}%</text>
       </svg>
       <ul style="list-style:none;flex:1;min-width:0">${legenda}</ul>
     </div>
@@ -322,7 +330,19 @@ export function buatLaporanHtml({
   .scorebox { display:flex; align-items:center; justify-content:space-between; gap:16px; background:${t.box}; border:1px solid ${t.border}; border-radius:12px; padding:18px 20px; }
   .score { font-size:40px; font-weight:800; color:${t.text}; line-height:1; }
   .charts { display:grid; grid-template-columns:1fr 330px; gap:14px; align-items:stretch; }
-  .chartbox { background:${t.box}; border:1px solid ${t.border}; border-radius:12px; padding:14px 16px; }
+  .chartbox {
+    background:${t.box};
+    /* Kisi tipis di latar kartunya — bentuk yang sama dipakai seluruh kartu
+       grafik di aplikasi, dan dokumen yang latarnya polos terlihat seperti
+       tangkapan layar yang gagal dimuat. */
+    background-image:
+      linear-gradient(${t.grid} 1px, transparent 1px),
+      linear-gradient(90deg, ${t.grid} 1px, transparent 1px);
+    background-size:22px 22px;
+    border:1px solid ${t.border};
+    border-radius:12px;
+    padding:14px 16px;
+  }
   .chartbox h3 { font-size:12px; font-weight:700; color:${t.text}; margin-bottom:2px; }
   .chartbox .sub { font-size:10.5px; color:${t.sub}; margin-bottom:8px; }
   .legend { display:flex; gap:14px; flex-wrap:wrap; margin-bottom:6px; font-size:10.5px; color:${t.sub}; align-items:center; }

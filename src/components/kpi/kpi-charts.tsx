@@ -270,7 +270,7 @@ export function KpiPerformanceChart({
     >
       <div ref={kotak} className="min-h-[17rem] flex-1" style={{ outline: "none" }}>
         <ResponsiveContainer width="100%" height="100%">
-          <ComposedChart data={data} margin={{ top: sumbu === "angka" ? 22 : 10, right: 14, left: 0, bottom: 0 }} accessibilityLayer={false}>
+          <ComposedChart data={data} margin={{ top: sumbu === "angka" ? 22 : 10, right: 4, left: 0, bottom: 0 }} accessibilityLayer={false}>
             <defs>
               <linearGradient id="kpiBlue" x1="0" y1="0" x2="0" y2="1">
                 <stop offset="0%" stopColor={BLUE} stopOpacity={0.35} />
@@ -289,7 +289,14 @@ export function KpiPerformanceChart({
               axisLine={false}
               interval={0}
               height={26}
-              padding={{ left: 10, right: 10 }}
+              // Skala TITIK, bukan pita. Dengan skala pita, tiap indikator
+              // memegang satu petak selebar seperlima grafik dan titiknya
+              // berdiri di tengah petak — separuh petak di ujung kiri dan kanan
+              // tinggal kosong, dan grafiknya berhenti jauh sebelum tepi kartu.
+              // Sisipan seukuran setengah batang menjaga batang paling pinggir
+              // tetap utuh.
+              scale="point"
+              padding={{ left: 26, right: 22 }}
             />
             <YAxis
               domain={[0, 110]}
@@ -297,7 +304,7 @@ export function KpiPerformanceChart({
               tick={{ fill: "var(--foreground)", fontSize: 11, fontWeight: 600 }}
               tickLine={false}
               axisLine={false}
-              width={44}
+              width={42}
               tickFormatter={(v: number) => `${v}%`}
             />
             <Tooltip cursor={{ stroke: "rgba(148,163,184,0.35)", strokeWidth: 1 }} content={<Tip sumbu={sumbu} />} />
@@ -491,18 +498,17 @@ export function KpiIndicatorDonut({ baris }: { baris: BarisKpi[] }) {
                   />
                 ))}
               </svg>
-              <div className="pointer-events-none absolute inset-0 grid place-items-center px-6 text-center">
-                <div>
-                  <p
-                    className="text-[1.9rem] font-extrabold leading-none tracking-tight"
-                    style={{ color: terpilih ? warna(terpilih.key) : "var(--foreground)" }}
-                  >
-                    {formatNumber(persenAktif, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}%
-                  </p>
-                  <p className="mt-1 line-clamp-2 text-[10px] leading-tight text-muted-foreground">
-                    {terpilih ? terpilih.label : mode === "bobot" ? "Total Bobot" : "Total Skor"}
-                  </p>
-                </div>
+              {/* Angkanya DIBULATKAN. Di dalam lingkaran selebar 44px, "28,50%"
+                  harus diperkecil sampai hampir tidak terbaca demi dua digit di
+                  belakang koma yang tidak mengubah satu keputusan pun — angka
+                  penuhnya tetap ada di baris Total Skor di bawah kartunya. */}
+              <div className="pointer-events-none absolute inset-0 grid place-items-center text-center">
+                <p
+                  className="text-[2.1rem] font-extrabold leading-none tracking-tight"
+                  style={{ color: terpilih ? warna(terpilih.key) : "var(--foreground)" }}
+                >
+                  {Math.round(persenAktif)}%
+                </p>
               </div>
             </div>
 
