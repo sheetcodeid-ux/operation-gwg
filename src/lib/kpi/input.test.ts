@@ -188,7 +188,7 @@ describe("bukti yang wajib tidak bisa dihindari", () => {
   it("entri berbukti ditolak server bila lampirannya kosong", () => {
     // Tanpa ini, cukup mengetik 40 baris kosong untuk mendapat nilai penuh
     // Hygiene Audit — dan tidak ada satu pun cara memeriksanya kembali.
-    expect(aksi).toContain('const WAJIB_BUKTI: JenisEntri[] = ["hygiene_cctv"]');
+    expect(aksi).toContain('const WAJIB_BUKTI: JenisEntri[] = ["hygiene_cctv", "cctv_qc"]');
     expect(aksi).toContain("WAJIB_BUKTI.includes(input.jenis) && (input.lampiran ?? []).length === 0");
   });
 

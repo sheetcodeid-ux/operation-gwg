@@ -66,6 +66,7 @@ export type MenuKey =
   | "kpi_fin_finance"
   | "kpi_fin_tax"
   | "kpi_marcomm"
+  | "kpi_pdq_qc"
   | "kpi_pdq_food"
   | "kpi_pdq_beverage"
   | "kpi_pdq_head_food"
@@ -201,6 +202,7 @@ export const NAV_MENUS: Omit<NavItem, "section" | "group" | "groupIcon">[] = [
   { key: "kpi_fin_finance", label: "Finance", href: "/kpi/finance_finance", icon: "Wallet" },
   { key: "kpi_fin_tax", label: "Tax", href: "/kpi/finance_tax", icon: "ReceiptText" },
   { key: "kpi_marcomm", label: "Marketing Communication", href: "/kpi/marcomm", icon: "Megaphone" },
+  { key: "kpi_pdq_qc", label: "Quality Assurance & Control", href: "/kpi/pdq_qc", icon: "ShieldCheck" },
   { key: "kpi_pdq_food", label: "Food Staff", href: "/kpi/pdq_food", icon: "UtensilsCrossed" },
   { key: "kpi_pdq_beverage", label: "Beverage Staff", href: "/kpi/pdq_beverage", icon: "CupSoda" },
   { key: "kpi_pdq_head_food", label: "Head Food Development", href: "/kpi/pdq_head_food", icon: "ChefHat" },
@@ -542,7 +544,7 @@ export const DIVISION_GROUPS: Partial<Record<Division, NavGroupDef[]>> = {
       name: "Product Development & Quality",
       icon: "FlaskConical",
       urutan: 4,
-      menus: ["kpi_pdq_food", "kpi_pdq_beverage", "kpi_pdq_head_food", "kpi_pdq_head_pdq"],
+      menus: ["kpi_pdq_qc", "kpi_pdq_food", "kpi_pdq_beverage", "kpi_pdq_head_food", "kpi_pdq_head_pdq"],
     },
     { name: "Marketing Communication", icon: "Megaphone", urutan: 5, menus: ["kpi_marcomm"] },
   ],
@@ -569,7 +571,7 @@ export const DIVISION_MENUS: { division: Division; menus: MenuKey[] }[] = [
   // Complaints ikut di sini, tapi PDQ hanya melihat kategori Food Quality —
   // penyaringnya di `complaintCategoryScope`, dan memasukkan komplain tetap
   // milik Marketing Communication.
-  { division: "Product Development & Quality", menus: ["hpp_dash", "work", "hpp", "hpp_db", "hpp_bahan", "hpp_price", "hpp_comp", "complaints", "kpi_pdq_food", "kpi_pdq_beverage", "kpi_pdq_head_food", "kpi_pdq_head_pdq"] },
+  { division: "Product Development & Quality", menus: ["hpp_dash", "work", "hpp", "hpp_db", "hpp_bahan", "hpp_price", "hpp_comp", "complaints", "kpi_pdq_qc", "kpi_pdq_food", "kpi_pdq_beverage", "kpi_pdq_head_food", "kpi_pdq_head_pdq"] },
   { division: "Human Capital", menus: ["work", "hcmos", "hcmos_raci", "hc_bagan", "hc_struktur", "hc_karyawan", "hc_culture", "hc_sop", "hc_rekrutmen", "hc_kompetensi", "hc_modul", "hc_faststart", "hc_pretest", "hc_selflearning", "hc_kinerja", "hc_appraisal", "hc_intervensi", "hc_career", "hc_kompensasi", "hc_relasi", "hc_compliance", "hc_kebijakan", "hc_monitoring", "hc_kpi", "hc_kontrak", "hc_review", "hc_reqreview", "hc_training", "assessment", "elearning"] },
   // New department-aligned divisions — Work Tracker only for now.
   { division: "Finance", menus: ["work", "fin_training", "kpi_fin_accounting", "kpi_fin_finance", "kpi_fin_tax"] },
@@ -588,6 +590,7 @@ export const DIVISION_MENUS: { division: Division; menus: MenuKey[] }[] = [
       "kpi_fin_accounting",
       "kpi_fin_finance",
       "kpi_fin_tax",
+      "kpi_pdq_qc",
       "kpi_pdq_food",
       "kpi_pdq_beverage",
       "kpi_pdq_head_food",

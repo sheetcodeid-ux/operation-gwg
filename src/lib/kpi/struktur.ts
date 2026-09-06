@@ -18,6 +18,7 @@ export type KodePosisi =
   | "finance_finance"
   | "finance_tax"
   | "marcomm"
+  | "pdq_qc"
   | "pdq_food"
   | "pdq_beverage"
   | "pdq_head_food"
@@ -76,7 +77,7 @@ export const DEPARTEMEN: Departemen[] = [
     kode: "pdq",
     nama: "Product Development & Quality",
     ikon: "FlaskConical",
-    posisi: ["pdq_food", "pdq_beverage", "pdq_head_food", "pdq_head_pdq"],
+    posisi: ["pdq_qc", "pdq_food", "pdq_beverage", "pdq_head_food", "pdq_head_pdq"],
     menyusul: ["Quality Assurance & Control (Radika)"],
   },
   { kode: "marcomm", nama: "Marketing Communication", ikon: "Megaphone", posisi: ["marcomm"] },
@@ -93,6 +94,7 @@ export const POSISI: Posisi[] = [
   { kode: "finance_finance", departemen: "finance", nama: "Finance", pic: ["Nisa", "Fatin", "Fetty"], perPic: true },
   { kode: "finance_tax", departemen: "finance", nama: "Tax", pic: ["Samsul"] },
   { kode: "marcomm", departemen: "marcomm", nama: "Marketing Communication", pic: ["Amanda", "Dita", "Marta"] },
+  { kode: "pdq_qc", departemen: "pdq", nama: "Quality Assurance & Control", pic: ["Radika"] },
   { kode: "pdq_food", departemen: "pdq", nama: "Food Staff", pic: ["Mustadi", "Nanda", "Bagas"], perPic: true },
   { kode: "pdq_beverage", departemen: "pdq", nama: "Beverage Staff", pic: ["Adam", "Abil"], perPic: true },
   { kode: "pdq_head_food", departemen: "pdq", nama: "Head Food Development", pic: ["Nanda"] },

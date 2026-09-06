@@ -18,6 +18,7 @@ export const MENU_POSISI: Record<KodePosisi, string> = {
   finance_finance: "kpi_fin_finance",
   finance_tax: "kpi_fin_tax",
   marcomm: "kpi_marcomm",
+  pdq_qc: "kpi_pdq_qc",
   pdq_food: "kpi_pdq_food",
   pdq_beverage: "kpi_pdq_beverage",
   pdq_head_food: "kpi_pdq_head_food",
