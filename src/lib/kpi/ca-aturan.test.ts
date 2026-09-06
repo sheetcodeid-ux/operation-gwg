@@ -27,12 +27,17 @@ describe("aturan tiga bulan", () => {
     expect(badan).toContain("komplainOutlet(periode, lolos.map((o) => o.id))");
   });
 
-  it("yang menentukan adalah ada-tidaknya data, bukan tanggal yang diketik", () => {
-    // Tanggal buka tidak pernah ada di basis data ini, dan yang diketik
-    // belakangan hampir selalu tanggal yang diingat, bukan yang benar.
+  it("tanggal buka yang menentukan; ada-tidaknya data hanya cadangan", () => {
+    // Dulu sebaliknya, dan itulah yang meloloskan outlet yang buka di akhir
+    // bulan: penjualan SATU HARI membuat bulan itu terhitung penuh. Tanggal
+    // buka adalah jawaban yang sebenarnya; ada-tidaknya penjualan dipakai
+    // hanya selama tanggalnya belum diisi.
     const blok = data.slice(data.indexOf("function tigaBulanSebelum"));
     expect(blok.slice(0, 400)).toContain("bulanSebelum");
-    expect(data).toContain("if (!tiga.every(berjalan))");
+    expect(data).toContain("function sudahTigaBulan(");
+    expect(data).toContain("const mulai = bulanMulaiBerjalan(o.bukaTanggal);");
+    expect(data).toContain("return nilaiTigaBulan.every(berjalan);");
+    expect(data).toContain("if (!sudahTigaBulan(o, periode, tiga))");
   });
 });
 
@@ -163,7 +168,7 @@ describe("nol dari ESB", () => {
     // nol pada tiap bulan yang sudah ditarik — ini bukan kemungkinan teoretis.
     expect(data).toContain("if (dariEsb !== undefined && dariEsb > 0) return dariEsb;");
     expect(data).toContain("const berjalan = (nilai: number | null): boolean => nilai !== null && nilai > 0;");
-    expect(data).toContain("if (!tiga.every(berjalan))");
+    expect(data).toContain("return nilaiTigaBulan.every(berjalan);");
   });
 
   it("nol dari ESB tidak menutup jalan isian tangan", () => {

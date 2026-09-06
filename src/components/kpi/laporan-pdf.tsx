@@ -115,6 +115,18 @@ function grafikCapaian(baris: BarisKpi[], lalu: Record<string, LaluIndikator>, t
   const sblm = baris.map((b, i) => ({ x: px(i), y: py(lalu[b.key]?.persen ?? 0) }));
   const tgt = baris.map((_, i) => ({ x: px(i), y: py(100) }));
 
+  // Bulan lalu berbentuk BATANG, sama dengan grafik di layar. Lebarnya
+  // mengikuti jarak antar-titik supaya tidak pernah saling tindih berapa pun
+  // jumlah indikatornya.
+  const jarak = n > 1 ? px(1) - px(0) : lebar;
+  const lebarBatang = Math.min(34, Math.max(10, jarak * 0.42));
+  const batang = sblm
+    .map(
+      (p) =>
+        `<rect x="${(p.x - lebarBatang / 2).toFixed(1)}" y="${p.y.toFixed(1)}" width="${lebarBatang.toFixed(1)}" height="${Math.max(0, py(0) - p.y).toFixed(1)}" rx="3" fill="${ABU}" fill-opacity="0.45"/>`,
+    )
+    .join("");
+
   const garisSumbu = [0, 25, 50, 75, 100]
     .map(
       (v) =>
@@ -143,17 +155,17 @@ function grafikCapaian(baris: BarisKpi[], lalu: Record<string, LaluIndikator>, t
       <stop offset="0%" stop-color="${BIRU}" stop-opacity="0.35"/><stop offset="100%" stop-color="${BIRU}" stop-opacity="0.02"/>
     </linearGradient></defs>
     ${garisSumbu}
+    ${batang}
     <path d="${area}" fill="url(#isiBiru)" stroke="none"/>
-    <path d="${garis(sblm)}" fill="none" stroke="${ABU}" stroke-width="2"/>
     <path d="${garis(tgt)}" fill="none" stroke="${TARGET}" stroke-width="2" stroke-dasharray="6 5"/>
     <path d="${garis(ini)}" fill="none" stroke="${BIRU}" stroke-width="2.75"/>
-    ${titik(sblm, ABU, 2.5)}${titik(ini, BIRU, 3)}
+    ${titik(ini, BIRU, 3)}
     ${label}
   </svg>`;
 }
 
 /** Donat sebaran % actual — busur yang sama dengan kartu di layar. */
-function donatSebaran(baris: BarisKpi[], t: (typeof THEME)[Mode]): string {
+function donatSebaran(baris: BarisKpi[], skor: number, t: (typeof THEME)[Mode]): string {
   const RAD = 66;
   const TEBAL = 22;
   const KEL = 2 * Math.PI * RAD;
@@ -182,12 +194,23 @@ function donatSebaran(baris: BarisKpi[], t: (typeof THEME)[Mode]): string {
     )
     .join("");
 
-  return `<div style="display:flex;align-items:center;gap:14px">
-    <svg viewBox="0 0 176 176" width="126" height="126" style="flex:none" role="img" aria-label="Sebaran capaian">
-      ${busur}
-      <text x="88" y="97" text-anchor="middle" fill="${t.text}" font-size="24" font-weight="800">${Math.round(total)}%</text>
-    </svg>
-    <ul style="list-style:none;flex:1;min-width:0">${legenda}</ul>
+  // Bentuknya SAMA dengan kartu di layar: cincin berangka total di tengahnya,
+  // legenda di sampingnya, lalu satu baris Total Skor di bawah garis pemisah.
+  // Dua gambar yang sama isinya tapi berbeda susunannya membuat orang memeriksa
+  // ulang mana yang benar — padahal keduanya benar.
+  return `<div>
+    <div style="display:flex;align-items:center;gap:14px">
+      <svg viewBox="0 0 176 176" width="126" height="126" style="flex:none" role="img" aria-label="Sebaran capaian">
+        ${busur}
+        <text x="88" y="92" text-anchor="middle" fill="${t.text}" font-size="22" font-weight="800">${persen(skor)}</text>
+        <text x="88" y="107" text-anchor="middle" fill="${t.sub}" font-size="9">Total Skor</text>
+      </svg>
+      <ul style="list-style:none;flex:1;min-width:0">${legenda}</ul>
+    </div>
+    <div style="display:flex;align-items:center;justify-content:space-between;border-top:1px solid ${t.border};margin-top:12px;padding-top:10px">
+      <span style="color:${t.sub};font-size:11px">Total Skor</span>
+      <span style="color:${t.text};font-size:13px;font-weight:700">${persen(total)}</span>
+    </div>
   </div>`;
 }
 
@@ -203,12 +226,15 @@ export function buatLaporanHtml({
   lalu,
   namaPosisi,
   namaDepartemen,
+  namaPic,
   mode,
 }: {
   laporan: LaporanKpi;
   lalu: Record<string, LaluIndikator>;
   namaPosisi: string;
   namaDepartemen: string;
+  /** Nama PIC yang terbaca manusia — bukan id barisnya di basis data. */
+  namaPic: string;
   mode: Mode;
 }): string {
   const t = THEME[mode];
@@ -281,7 +307,7 @@ export function buatLaporanHtml({
 
   return `<!doctype html><html lang="id"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Laporan KPI — ${aman(namaPosisi)} — ${aman(labelPeriode(laporan.periode))}</title>
+<title>Laporan KPI — ${aman(namaPosisi)}${namaPic ? ` — ${aman(namaPic)}` : ""} — ${aman(labelPeriode(laporan.periode))}</title>
 <style>
   * { box-sizing:border-box; margin:0; padding:0; -webkit-print-color-adjust:exact; print-color-adjust:exact; }
   body { font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif; background:${t.bg}; color:${t.text}; padding:24px; }
@@ -315,7 +341,7 @@ export function buatLaporanHtml({
       <div class="sec-title">Identitas Penilaian</div>
       <div class="grid2">
         <div>${identitas("Posisi", namaPosisi)}${identitas("Departemen", namaDepartemen)}${identitas("Periode", labelPeriode(laporan.periode))}</div>
-        <div>${identitas("PIC", laporan.pic || "Dinilai sebagai satu tim")}${identitas("Indikator Terukur", `${ringkas.jumlahTerukur} dari ${baris.length}`)}${identitas("Status Bulan", laporan.dikunci ? "Dikunci" : "Masih bisa diubah")}</div>
+        <div>${identitas("PIC", namaPic || "Dinilai sebagai satu tim")}${identitas("Indikator Terukur", `${ringkas.jumlahTerukur} dari ${baris.length}`)}${identitas("Skor Setara 100%", persen(ringkas.skorSetara))}</div>
       </div>
 
       <div class="sec-title">Skor Bulan Ini</div>
@@ -334,18 +360,16 @@ export function buatLaporanHtml({
       <div class="charts">
         <div class="chartbox">
           <h3>Capaian per Indikator</h3>
-          <div class="sub">${aman(labelPeriode(laporan.periode))} · ${aman(namaPosisi)}</div>
           <div class="legend">
-            <span><svg width="18" height="6" style="vertical-align:middle"><line x1="0" y1="3" x2="18" y2="3" stroke="${ABU}" stroke-width="2.5" stroke-linecap="round"/></svg> Bulan lalu</span>
+            <span><svg width="14" height="9" style="vertical-align:middle"><rect x="0" y="0" width="14" height="9" rx="2" fill="${ABU}" fill-opacity="0.45"/></svg> Bulan lalu</span>
             <span><svg width="18" height="6" style="vertical-align:middle"><line x1="0" y1="3" x2="18" y2="3" stroke="${TARGET}" stroke-width="2.5" stroke-linecap="round" stroke-dasharray="5 4"/></svg> Target</span>
             <span><svg width="18" height="6" style="vertical-align:middle"><line x1="0" y1="3" x2="18" y2="3" stroke="${BIRU}" stroke-width="2.5" stroke-linecap="round"/></svg> Bulan ini</span>
           </div>
           ${grafikCapaian(baris, lalu, t)}
         </div>
         <div class="chartbox">
-          <h3>Sebaran % Actual</h3>
-          <div class="sub">Dari mana skornya datang</div>
-          ${donatSebaran(baris, t)}
+          <h3>Sebaran Actual per Indikator</h3>
+          ${donatSebaran(baris, ringkas.skor, t)}
         </div>
       </div>
 
@@ -384,6 +408,7 @@ export function DialogLaporanKpi({
   lalu,
   namaPosisi,
   namaDepartemen,
+  namaPic,
 }: {
   open: boolean;
   onOpenChange: (v: boolean) => void;
@@ -391,6 +416,7 @@ export function DialogLaporanKpi({
   lalu: Record<string, LaluIndikator>;
   namaPosisi: string;
   namaDepartemen: string;
+  namaPic: string;
 }) {
   const [mode, setMode] = React.useState<Mode | null>(null);
 
@@ -402,7 +428,7 @@ export function DialogLaporanKpi({
     onOpenChange(v);
   };
 
-  const html = mode ? buatLaporanHtml({ laporan, lalu, namaPosisi, namaDepartemen, mode }) : "";
+  const html = mode ? buatLaporanHtml({ laporan, lalu, namaPosisi, namaDepartemen, namaPic, mode }) : "";
 
   function cetak() {
     if (!html) return;
@@ -417,7 +443,11 @@ export function DialogLaporanKpi({
 
   return (
     <Dialog open={open} onOpenChange={ubahBuka}>
-      <DialogContent title="Laporan KPI" description={`${namaPosisi} · ${labelPeriode(laporan.periode)}`} className="max-w-3xl">
+      <DialogContent
+        title="Laporan KPI"
+        description={`${namaPosisi}${namaPic ? ` · ${namaPic}` : ""} · ${labelPeriode(laporan.periode)}`}
+        className="max-w-3xl"
+      >
         {!mode ? (
           <div className="p-6">
             <p className="mb-4 text-sm text-muted-foreground">Pilih mode tampilan laporan:</p>

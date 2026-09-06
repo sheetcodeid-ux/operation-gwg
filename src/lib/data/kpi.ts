@@ -434,6 +434,8 @@ interface OutletCa {
   grossManual: boolean;
   /** Bulan pertama angka ESB-nya boleh dipercaya; sebelum itu diabaikan. */
   esbMulai: string | null;
+  /** Tanggal outlet mulai berjalan, mis. "2026-05-31". Kosong = belum diketahui. */
+  bukaTanggal: string | null;
 }
 
 /**
@@ -483,6 +485,52 @@ function tigaBulanSebelum(periode: string): string[] {
   return [a, b, bulanSebelum(b)];
 }
 
+/**
+ * Tanggal paling akhir dalam sebulan yang masih membuat bulan itu terhitung
+ * sebagai bulan berjalan.
+ *
+ * Outlet yang buka tanggal 31 berjalan SATU HARI di bulan itu. Menghitungnya
+ * sebagai satu bulan penuh membuatnya dinilai sebulan lebih awal daripada
+ * seharusnya — dan bulan pertama outlet baru adalah bulan yang paling tidak
+ * mewakili apa pun. Batas di tengah bulan dipilih karena satu-satunya yang
+ * bisa dijelaskan tanpa kalender: bulan itu terhitung kalau outletnya buka
+ * setidaknya separuh bulan.
+ */
+const TANGGAL_BATAS_BUKA = 15;
+
+/**
+ * Bulan pertama yang terhitung sebagai bulan berjalan bagi satu outlet.
+ *
+ * Buka 12 Mei → Mei terhitung. Buka 31 Mei → Mei TIDAK terhitung, hitungannya
+ * mulai Juni. Null bila tanggal bukanya belum diketahui.
+ */
+export function bulanMulaiBerjalan(bukaTanggal: string | null): string | null {
+  if (!bukaTanggal) return null;
+  const cocok = /^(\d{4})-(\d{2})-(\d{2})/.exec(bukaTanggal);
+  if (!cocok) return null;
+  const [, th, bl, tg] = cocok;
+  const bulan = `${th}-${bl}`;
+  return Number(tg) <= TANGGAL_BATAS_BUKA ? bulan : bulanSetelah(bulan);
+}
+
+/**
+ * Outlet ini sudah genap tiga bulan berjalan sebelum `periode`?
+ *
+ * DUA CARA, dan yang pertama menang bila datanya ada. Tanggal buka adalah
+ * jawaban yang sebenarnya; ada-tidaknya penjualan hanyalah tebakan yang
+ * dipakai selama tanggalnya belum diisi — dan tebakan itulah yang meloloskan
+ * outlet yang buka di akhir bulan.
+ */
+function sudahTigaBulan(o: OutletCa, periode: string, nilaiTigaBulan: (number | null)[]): boolean {
+  const mulai = bulanMulaiBerjalan(o.bukaTanggal);
+  if (mulai) {
+    // Tiga bulan penuh SEBELUM bulan yang dinilai: bulan mulainya harus sudah
+    // lewat atau sama dengan bulan paling awal di antara ketiganya.
+    return mulai <= tigaBulanSebelum(periode)[2];
+  }
+  return nilaiTigaBulan.every(berjalan);
+}
+
 export interface DetailOutletCa {
   outletId: string;
   outletNama: string;
@@ -514,6 +562,10 @@ export interface AngkaCa {
   komplain: number | null;
   netProfit: number | null;
   hpp: number | null;
+  /** Harga pokok dalam RUPIAH, dan penjualan yang jadi pembaginya. Dipakai
+   *  grafik mode Angka: "37,4%" tidak bisa dibandingkan dengan rupiah. */
+  hppNominal: number | null;
+  hppDasar: number | null;
   /** Berapa Coordinator Area yang tercakup — pengali target per orang. */
   jumlahPic: number;
 }
@@ -557,25 +609,38 @@ async function angkaCa(periode: string, picIds: string[], jumlahPic: number): Pr
   const rata = new Map<string, number>();
   for (const o of semua) {
     const tiga = [0, 1, 2].map((n) => nilaiBulan(o, n));
-    if (!tiga.every(berjalan)) {
+    if (!sudahTigaBulan(o, periode, tiga)) {
       belum.push(o);
       continue;
     }
     lolos.push(o);
-    rata.set(o.id, (tiga as number[]).reduce((a, b) => a + b, 0) / 3);
+    // Rata-ratanya tetap dari angka yang benar-benar ada. Outlet yang lolos
+    // lewat tanggal buka tapi satu bulannya belum tertarik dari ESB dihitung
+    // dari bulan yang ada saja — nol untuk bulan yang kosong akan menyeret
+    // dasar targetnya turun sepertiga.
+    const ada = tiga.filter((v): v is number => v !== null && v > 0);
+    if (ada.length > 0) rata.set(o.id, ada.reduce((a, b) => a + b, 0) / ada.length);
   }
 
   // Gross sales bulan ini. Satu outlet yang lolos tapi angkanya belum ada
   // membuat totalnya BELUM UTUH — ditahan, bukan ditampilkan kurang.
   const grossPerOutlet = lolos.map((o) => grossOutlet(o, periode, esbIni, tanganIni));
-  const grossSales = grossPerOutlet.some((v) => v === null)
-    ? null
-    : grossPerOutlet.reduce((a: number, b) => a + (b ?? 0), 0);
+  // Tanpa satu pun outlet yang lolos, hasilnya BUKAN nol melainkan belum ada.
+  // Nol berarti "sudah dihitung, hasilnya nihil" — tuduhan yang berbeda dari
+  // "belum ada outlet yang bisa dinilai", dan keduanya pernah tampil berbeda:
+  // Gross Sales menulis Rp 0 sementara Net Profit menulis tanda pisah.
+  const grossSales =
+    lolos.length === 0 || grossPerOutlet.some((v) => v === null)
+      ? null
+      : grossPerOutlet.reduce((a: number, b) => a + (b ?? 0), 0);
 
   const rataTiga = lolos.length === 0 ? null : lolos.reduce((a, o) => a + (rata.get(o.id) ?? 0), 0);
 
   const netProfitPer = lolos.map((o) => tanganIni.get(o.id)?.netProfit ?? null);
-  const netProfit = netProfitPer.every((v) => v === null) ? null : netProfitPer.reduce((a: number, b) => a + (b ?? 0), 0);
+  const netProfit =
+    lolos.length === 0 || netProfitPer.every((v) => v === null)
+      ? null
+      : netProfitPer.reduce((a: number, b) => a + (b ?? 0), 0);
 
   // HPP se-area = TOTAL harga pokok dibagi TOTAL penjualan. Karena yang
   // disimpan nominal, ini rasio yang sebenarnya — bukan rata-rata persen, yang
@@ -593,6 +658,8 @@ async function angkaCa(periode: string, picIds: string[], jumlahPic: number): Pr
     totalGrossHpp += g;
   });
   const hpp = adaHpp && totalGrossHpp > 0 ? (totalHpp / totalGrossHpp) * 100 : null;
+  const hppNominal = adaHpp ? totalHpp : null;
+  const hppDasar = adaHpp && totalGrossHpp > 0 ? totalGrossHpp : null;
 
   const komplain = await komplainOutlet(periode, lolos.map((o) => o.id));
 
@@ -617,7 +684,7 @@ async function angkaCa(periode: string, picIds: string[], jumlahPic: number): Pr
     };
   });
 
-  return { outlet: lolos, detail, belumTigaBulan: belum, bulanKosong, grossSales, rataTiga, komplain, netProfit, hpp, jumlahPic };
+  return { outlet: lolos, detail, belumTigaBulan: belum, bulanKosong, grossSales, rataTiga, komplain, netProfit, hpp, hppNominal, hppDasar, jumlahPic };
 }
 
 /**
@@ -811,8 +878,22 @@ const areaKosong = (ca: AngkaCa | null): string => {
   if (ca.bulanKosong.length > 0) {
     return `Angka ESB ${ca.bulanKosong.map(labelBulanSingkat).join(", ")} belum ditarik — pembanding tiga bulannya belum lengkap.`;
   }
+  if (ca.outlet.length === 0) {
+    return `Belum ada outlet yang genap tiga bulan berjalan — ${ca.detail.length} outlet di area ini semuanya masih baru.`;
+  }
   return "Angka ESB sebagian outlet di area ini belum ditarik — angkanya ditahan supaya tidak tampil kurang.";
 };
+
+/**
+ * Kenapa satu angka bulanan per outlet belum ada.
+ *
+ * Dibedakan tegas: TIDAK ADA outlet yang dinilai bukan hal yang sama dengan
+ * angkanya belum diisi. Yang pertama tidak bisa diperbaiki dengan mengisi apa
+ * pun, dan menyuruh orang mengisi sesuatu yang tidak akan mengubah apa-apa
+ * adalah cara tercepat membuat pesan di layar berhenti dipercaya.
+ */
+const alasanAngkaOutlet = (ca: AngkaCa | null, apa: string): string =>
+  ca === null || ca.outlet.length === 0 ? areaKosong(ca) : `${apa} belum diisi untuk satu outlet pun bulan ini.`;
 
 const NAMA_BULAN_SINGKAT = ["Jan", "Feb", "Mar", "Apr", "Mei", "Jun", "Jul", "Agu", "Sep", "Okt", "Nov", "Des"];
 const labelBulanSingkat = (periode: string): string => {
@@ -1162,11 +1243,11 @@ function susunBaris(i: Indikator, k: KonteksBaris): BarisKpi {
           break;
         case "net_profit_area":
           actual = k.ca?.netProfit ?? null;
-          if (actual === null) alasan = "Laba bersih outlet belum diisi lewat Catat Kegiatan.";
+          if (actual === null) alasan = alasanAngkaOutlet(k.ca, "Laba bersih");
           break;
         case "hpp_area":
           actual = k.ca?.hpp ?? null;
-          if (actual === null) alasan = "Harga pokok penjualan belum diisi lewat Catat Kegiatan.";
+          if (actual === null) alasan = alasanAngkaOutlet(k.ca, "Harga pokok penjualan");
           break;
         case "average_transaction":
           // Bulan yang datanya belum lengkap TIDAK ditampilkan angkanya.
@@ -1189,7 +1270,19 @@ function susunBaris(i: Indikator, k: KonteksBaris): BarisKpi {
     alasan = i.target.jenis === "tumbuh" ? "Belum ada capaian bulan lalu sebagai dasar target." : "Targetnya belum ditetapkan.";
   }
 
-  return barisKpi({ indikator: i, bobot, target: targetAkhir, actual, alasan });
+  // Harga Pokok Penjualan dinilai dalam persen, tapi yang diisi orang dan yang
+  // tertulis di laporan keuangan adalah rupiahnya — dibawa serta supaya grafik
+  // mode Angka punya angka yang benar-benar angka.
+  const nominal =
+    i.key === "hpp" && k.ca
+      ? {
+          actualNominal: k.ca.hppNominal,
+          targetNominal:
+            k.ca.hppDasar === null || targetAkhir === null ? null : (k.ca.hppDasar * targetAkhir) / 100,
+        }
+      : {};
+
+  return barisKpi({ indikator: i, bobot, target: targetAkhir, actual, alasan, ...nominal });
 }
 
 /** Bulan-bulan yang sudah punya jejak, terbaru dulu — pengisi pemilih periode. */
@@ -1256,6 +1349,7 @@ function outletCa(picIds: string[]): OutletCa[] {
       branch: o.esbBranchId ?? null,
       grossManual: !!o.grossManual,
       esbMulai: o.esbMulai ?? null,
+      bukaTanggal: o.bukaTanggal ?? null,
     }));
 }
 

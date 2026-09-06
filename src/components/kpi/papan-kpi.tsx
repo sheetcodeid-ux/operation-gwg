@@ -185,6 +185,16 @@ export function PapanKpi({
 
   const [laporanTerbuka, setLaporanTerbuka] = React.useState(false);
 
+  // Nama PIC untuk laporan cetak. `laporan.pic` menyimpan ID barisnya di basis
+  // data — "usr_1b4f1440-05e6…" pada dokumen resmi tidak berarti apa pun bagi
+  // yang membacanya, dan tidak bisa dicocokkan dengan siapa pun tanpa membuka
+  // basis data.
+  const namaPic = React.useMemo(() => {
+    if (!perPic || !laporan.pic) return "";
+    if (laporan.pic === SEMUA_PIC) return "Semua";
+    return picOpsi.find((o) => o.value === laporan.pic)?.label ?? laporan.pic;
+  }, [perPic, laporan.pic, picOpsi]);
+
   // Indikator yang dihitung dari jumlah kegiatan — itulah yang bisa diisi
   // sekaligus lewat tabel. Yang lain (temuan, tenggat, angka) punya bentuk
   // isiannya sendiri di dialog Input.
@@ -503,6 +513,7 @@ export function PapanKpi({
         lalu={lalu}
         namaPosisi={namaPosisi}
         namaDepartemen={namaDepartemen}
+        namaPic={namaPic}
       />
     </div>
   );

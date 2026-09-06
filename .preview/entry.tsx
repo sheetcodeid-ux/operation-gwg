@@ -43,6 +43,7 @@ function buat(kode: KodePosisi) {
     const [t, a] = ANGKA[i.key] ?? [null, null, null];
     return barisKpi({
       indikator: i, bobot: i.bobot, target: t, actual: a,
+      ...(i.key === "hpp" ? { actualNominal: 261_900_000, targetNominal: 280_256_000 } : {}),
       alasan: a === null ? (i.key === "keberhasilan_pasar" ? "Menunggu sambungan penjualan menu dari ESB." : "Belum ada capaian bulan lalu sebagai dasar target.") : undefined,
     });
   });
@@ -73,7 +74,7 @@ function buat(kode: KodePosisi) {
     entri,
     ca: kode === "operational_ca" ? {
       outlet: [], belumTigaBulan: [], grossSales: 4_186_500_000, rataTiga: 3_640_000_000,
-      komplain: 27, netProfit: 1_010_400_000, hpp: 37.4, jumlahPic: 1, bulanKosong: [],
+      komplain: 6, netProfit: 1_010_400_000, hpp: 37.4, hppNominal: 261_900_000, hppDasar: 700_640_000, jumlahPic: 1, bulanKosong: [],
       detail: [
         { outletId: "o0", outletNama: "Nordu Coffee Sambas", gross: 412_500_000, dariEsb: true, netProfit: 110_000_000, hppNominal: 149_800_000, grossManual: false, average: 398_200_000, ikut: true },
         { outletId: "o1", outletNama: "Nordu Coffee Siantan", gross: null, dariEsb: false, netProfit: null, hppNominal: null, grossManual: true, average: null, ikut: false },
