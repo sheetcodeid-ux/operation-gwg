@@ -557,6 +557,9 @@ export interface AngkaCa {
   belumTigaBulan: OutletCa[];
   /** Bulan pembanding yang angkanya belum ditarik dari ESB sama sekali. */
   bulanKosong: string[];
+  /** Outlet yang IKUT dinilai tapi penjualan bulan ini belum ada — merekalah
+   *  yang menahan total se-area. Disebut namanya supaya bisa langsung diisi. */
+  tanpaGross: string[];
   grossSales: number | null;
   rataTiga: number | null;
   komplain: number | null;
@@ -625,6 +628,7 @@ async function angkaCa(periode: string, picIds: string[], jumlahPic: number): Pr
   // Gross sales bulan ini. Satu outlet yang lolos tapi angkanya belum ada
   // membuat totalnya BELUM UTUH — ditahan, bukan ditampilkan kurang.
   const grossPerOutlet = lolos.map((o) => grossOutlet(o, periode, esbIni, tanganIni));
+  const tanpaGross = lolos.filter((_, n) => grossPerOutlet[n] === null).map((o) => o.nama);
   // Tanpa satu pun outlet yang lolos, hasilnya BUKAN nol melainkan belum ada.
   // Nol berarti "sudah dihitung, hasilnya nihil" — tuduhan yang berbeda dari
   // "belum ada outlet yang bisa dinilai", dan keduanya pernah tampil berbeda:
@@ -684,7 +688,7 @@ async function angkaCa(periode: string, picIds: string[], jumlahPic: number): Pr
     };
   });
 
-  return { outlet: lolos, detail, belumTigaBulan: belum, bulanKosong, grossSales, rataTiga, komplain, netProfit, hpp, hppNominal, hppDasar, jumlahPic };
+  return { outlet: lolos, detail, belumTigaBulan: belum, bulanKosong, tanpaGross, grossSales, rataTiga, komplain, netProfit, hpp, hppNominal, hppDasar, jumlahPic };
 }
 
 /**
@@ -880,6 +884,14 @@ const areaKosong = (ca: AngkaCa | null): string => {
   }
   if (ca.outlet.length === 0) {
     return `Belum ada outlet yang genap tiga bulan berjalan — ${ca.detail.length} outlet di area ini semuanya masih baru.`;
+  }
+  // OUTLETNYA DISEBUT NAMANYA. "Sebagian outlet belum ditarik" benar tapi tidak
+  // bisa ditindaklanjuti: yang membacanya tidak punya cara tahu outlet mana,
+  // dan total se-area berhenti muncul tanpa ada yang tahu apa yang harus diisi.
+  if (ca.tanpaGross.length > 0) {
+    const daftar = ca.tanpaGross.slice(0, 3).join(", ");
+    const sisa = ca.tanpaGross.length > 3 ? ` dan ${ca.tanpaGross.length - 3} outlet lain` : "";
+    return `Penjualan ${daftar}${sisa} bulan ini belum ada — totalnya ditahan supaya tidak tampil kurang.`;
   }
   return "Angka ESB sebagian outlet di area ini belum ditarik — angkanya ditahan supaya tidak tampil kurang.";
 };

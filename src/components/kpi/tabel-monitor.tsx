@@ -132,14 +132,20 @@ function UnduhMassal({ bukti, periode }: { bukti: Bukti[]; periode: string }) {
 
   return (
     <div className="flex min-w-0 items-center gap-2">
+      {/* IKON SAJA. Tulisan "Unduh semua bukti" berdiri di baris yang sama
+          dengan pengalih tabel; begitu pilihannya bertambah, barisnya melebihi
+          lebar layar dan tombolnya jatuh ke baris bawah — tumpang tindih
+          dengan kepala tabel. Maksudnya tetap terbaca lewat judul yang muncul
+          saat disentuh. */}
       <button
         type="button"
         onClick={unduh}
         disabled={sibuk || bukti.length === 0}
-        className="inline-flex shrink-0 items-center gap-1.5 rounded-lg border border-border px-2.5 py-1.5 text-xs font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground disabled:pointer-events-none disabled:opacity-50"
+        title={bukti.length === 0 ? "Belum ada bukti untuk diunduh" : `Unduh semua bukti (${bukti.length} berkas)`}
+        aria-label={`Unduh semua bukti (${bukti.length} berkas)`}
+        className="grid size-9 shrink-0 place-items-center rounded-lg border border-border text-muted-foreground transition-colors hover:bg-muted hover:text-foreground disabled:pointer-events-none disabled:opacity-50"
       >
-        {sibuk ? <Loader2 className="size-3.5 animate-spin" /> : <Download className="size-3.5" />}
-        Unduh semua bukti{bukti.length > 0 && !sibuk ? ` (${bukti.length})` : ""}
+        {sibuk ? <Loader2 className="size-4 animate-spin" /> : <Download className="size-4" />}
       </button>
       {sibuk && (
         <div className="flex min-w-[9rem] flex-1 items-center gap-2">
