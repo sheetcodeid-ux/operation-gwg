@@ -50,6 +50,7 @@ export type JenisTarget =
 /** Jenis entri form yang jumlah barisnya jadi angka KPI. */
 export type JenisEntri =
   | "hygiene_cctv"
+  | "cctv_qc"
   | "quality_control"
   | "riset_menu"
   | "event"
@@ -433,6 +434,75 @@ const headPdq: Indikator[] = [
 ];
 
 /**
+ * Quality Assurance & Control.
+ *
+ * Enam indikator dari Juknis KPI QC/AC 2026. Empat di antaranya berupa
+ * PERSENTASE KEPATUHAN — quality, hygiene, SOP, dan reporting — yang datang
+ * dari hasil review submission web dan CCTV, bukan dari jumlah kegiatan.
+ * Angkanya diketik satu per bulan karena penilaiannya memang hasil
+ * pertimbangan atas banyak pemeriksaan, bukan hitungan baris.
+ *
+ * Dua sisanya punya sumbernya sendiri: komplain dihitung dari modul Complaints,
+ * dan monitoring CCTV dari catatan log yang wajib berbukti — juknisnya tegas
+ * bahwa monitoring harus punya log dan hasil, "bukan sekadar membuka kamera".
+ */
+const qualityControl: Indikator[] = [
+  {
+    key: "qc_quality",
+    label: "Quality & Product Standard",
+    bobot: 30,
+    target: { jenis: "tetap", nilai: 95 },
+    actual: { sumber: "manual" },
+    satuan: "persen",
+    penjelasan: "Compliance hasil review product standard: recipe, porsi, tampilan, handling, suhu. Target 95%.",
+  },
+  {
+    key: "qc_hygiene",
+    label: "Hygiene & Food Safety Audit",
+    bobot: 25,
+    target: { jenis: "tetap", nilai: 95 },
+    actual: { sumber: "manual" },
+    satuan: "persen",
+    penjelasan: "Compliance kebersihan dan food safety dari submission web, CCTV, dan bukti audit. Target 95%.",
+  },
+  {
+    key: "qc_sop",
+    label: "SOP & Operational Compliance",
+    bobot: 15,
+    target: { jenis: "tetap", nilai: 95 },
+    actual: { sumber: "manual" },
+    satuan: "persen",
+    penjelasan: "Compliance checklist opening, preparation, cooking, closing, dan SOP operasional. Target 95%.",
+  },
+  {
+    key: "qc_complaint",
+    label: "Complaint & Customer Quality",
+    bobot: 15,
+    target: { jenis: "tetap", nilai: 20 },
+    actual: { sumber: "otomatis", kode: "komplain_food_quality" },
+    penilaian: "batas_maks",
+    penjelasan: "Komplain kategori kualitas dari modul Complaints. Batas 20 per bulan; lebih dari itu turun proporsional.",
+  },
+  {
+    key: "qc_cctv",
+    label: "CCTV / Monitoring Control",
+    bobot: 10,
+    target: { jenis: "tetap", nilai: 40 },
+    actual: { sumber: "entri", entri: "cctv_qc" },
+    penjelasan: "40 monitoring per bulan, rata-rata 10 per minggu. Tiap log wajib berbukti — bukan sekadar membuka kamera.",
+  },
+  {
+    key: "qc_reporting",
+    label: "Reporting & Follow Up",
+    bobot: 5,
+    target: { jenis: "tetap", nilai: 100 },
+    actual: { sumber: "manual" },
+    satuan: "persen",
+    penjelasan: "Ketepatan waktu daily report dan tindak lanjut temuan. Target 100%.",
+  },
+];
+
+/**
  * Coordinator Area.
  *
  * Lima indikator yang seluruhnya bicara tentang SATU AREA, bukan satu orang —
@@ -496,6 +566,7 @@ export const INDIKATOR: Record<KodePosisi, Indikator[]> = {
   finance_finance: finance,
   finance_tax: tax,
   marcomm,
+  pdq_qc: qualityControl,
   pdq_food: stafPdq,
   pdq_beverage: stafPdq,
   pdq_head_food: headPdq,

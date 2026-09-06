@@ -136,17 +136,24 @@ function LabelSumbu({
   payload,
   index,
   muat,
+  muatTepi,
   jumlah,
 }: {
   x?: number;
   y?: number;
   payload?: { value: string };
   index?: number;
+  /** Berapa huruf yang muat pada label di tengah. */
   muat: number;
+  /** Label paling pinggir hanya punya SEPARUH jatah, karena ia dirapatkan ke
+   *  dalam dan melebar ke satu arah saja. */
+  muatTepi: number;
   jumlah: number;
 }) {
   const teks = payload?.value ?? "";
-  const potong = teks.length > muat ? `${teks.slice(0, Math.max(1, muat - 1)).trimEnd()}…` : teks;
+  const diTepi = index === 0 || index === jumlah - 1;
+  const batas = diTepi ? muatTepi : muat;
+  const potong = teks.length > batas ? `${teks.slice(0, Math.max(1, batas - 1)).trimEnd()}…` : teks;
   return (
     <text x={x} y={(y ?? 0) + 12} textAnchor={tepi(index, jumlah)} fill="var(--foreground)" fontSize={10.5} fontWeight={600}>
       <title>{teks}</title>
@@ -237,9 +244,17 @@ export function KpiPerformanceChart({
   );
   const adaIsi = data.some((d) => d.ini > 0 || d.lalu > 0);
 
-  // ~5,6 px per huruf pada 10,5px tebal, dikurangi jarak antar-label. Lebar
-  // sumbu Y (44) dan sisipan kiri-kanan (20) dikeluarkan lebih dulu.
-  const muat = Math.max(6, Math.floor(((lebar - 64) / Math.max(1, data.length) - 12) / 5.6));
+  // ~6,2 px per huruf pada 10,5px tebal. Lebar sumbu Y dan sisipan kiri-kanan
+  // dikeluarkan lebih dulu, lalu sisanya dibagi rata jadi jatah tiap label.
+  //
+  // Label PALING PINGGIR dihitung terpisah: ia dirapatkan ke dalam supaya tidak
+  // menjorok keluar kartu, jadi ia melebar ke satu arah saja dan hanya punya
+  // separuh jatah ditambah sisipan tepinya. Menyamakan keduanya membuat nama
+  // panjang di ujung menabrak tetangganya — persis yang terjadi pada posisi
+  // yang indikatornya enam dan namanya panjang-panjang.
+  const jatah = (lebar - 64) / Math.max(1, data.length);
+  const muat = Math.max(6, Math.floor((jatah - 12) / 6.2));
+  const muatTepi = Math.max(6, Math.floor((jatah / 2 + 18) / 6.2));
 
   return (
     <Kartu
@@ -284,7 +299,7 @@ export function KpiPerformanceChart({
             <CartesianGrid strokeDasharray="3 3" stroke="rgba(148,163,184,0.16)" vertical={false} />
             <XAxis
               dataKey="name"
-              tick={<LabelSumbu muat={muat} jumlah={data.length} />}
+              tick={<LabelSumbu muat={muat} muatTepi={muatTepi} jumlah={data.length} />}
               tickLine={false}
               axisLine={false}
               interval={0}

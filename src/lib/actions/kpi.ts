@@ -131,7 +131,7 @@ export async function simpanActualAction(input: {
  * baris kosong untuk mendapat nilai penuh. Diminta tegas: "wajib menghasilkan
  * bukti hasil submit".
  */
-const WAJIB_BUKTI: JenisEntri[] = ["hygiene_cctv"];
+const WAJIB_BUKTI: JenisEntri[] = ["hygiene_cctv", "cctv_qc"];
 
 /** Batas satu berkas bukti — sama dengan janji modul lain. */
 const MAKS_BUKTI = 10 * 1024 * 1024;

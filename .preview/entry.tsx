@@ -17,6 +17,8 @@ const ANGKA: Record<string, [number | null, number | null, number | null]> = {
   views: [341000, 402500, 66], profile_visit: [null, null, null], kecepatan: [100, 85, 80],
   follower_growth: [1200, 940, 77],
   quality_control: [5, 4, 60], efisiensi: [100, 96, 88], keberhasilan_pasar: [1.5, null, 11],
+  qc_quality: [95, 91, 88], qc_hygiene: [95, 96, 90], qc_sop: [95, 89, 84],
+  qc_complaint: [20, 14, 92], qc_cctv: [40, 33, 78], qc_reporting: [100, 100, 96],
   review_customer: [15, 2, 40], riset_menu: [4, 3, 50],
   pelunasan: [5, 4, 100], management_fee: [58, 55, 96],
 };

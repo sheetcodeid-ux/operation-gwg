@@ -45,6 +45,9 @@ import { cn } from "@/lib/utils";
  * datang sebagai `null` dan tidak punya jalan untuk tampil.
  */
 
+/** Jenis catatan yang tiap barisnya wajib berlampiran — sama dengan server. */
+const WAJIB_BUKTI_ENTRI: JenisEntri[] = ["hygiene_cctv", "cctv_qc"];
+
 const persen = (n: number | null, digit = 2) =>
   n === null ? "—" : `${formatNumber(n, { minimumFractionDigits: digit, maximumFractionDigits: digit })}%`;
 
@@ -147,8 +150,17 @@ export function PapanKpi({
     // Muncul hanya bila posisinya memang dinilai atas angka itu — pilihan yang
     // menuju tabel kosong lebih buruk daripada tidak ada pilihannya.
     const dariEntri = indikator.filter((i) => i.actual.sumber === "entri" || i.actual.sumber === "pengurang");
-    const adaHygiene = dariEntri.some((i) => (i.actual as { entri: JenisEntri }).entri === "hygiene_cctv");
-    if (adaHygiene) out.push({ id: "hygiene", label: "Detail Hygiene Audit/CCTV", icon: ClipboardCheck });
+    const jenisBukti = dariEntri
+      .map((i) => (i.actual as { entri: JenisEntri }).entri)
+      .filter((j) => WAJIB_BUKTI_ENTRI.includes(j));
+    const adaHygiene = jenisBukti.length > 0;
+    if (adaHygiene) {
+      out.push({
+        id: "hygiene",
+        label: jenisBukti.includes("hygiene_cctv") ? "Detail Hygiene Audit/CCTV" : "Detail Monitoring CCTV",
+        icon: ClipboardCheck,
+      });
+    }
     if (laporan.ca && indikator.some((i) => i.key === "net_profit")) {
       out.push({ id: "netprofit", label: "Detail Net Profit", icon: PiggyBank });
     }
@@ -161,7 +173,7 @@ export function PapanKpi({
     // dua tombol menuju isi yang sama membuat orang mengira ada dua daftar.
     // Posisi lain tetap memerlukannya: di sanalah satu-satunya tempat catatan
     // bisa dilihat dan dihapus.
-    const semuaTercakup = adaHygiene && dariEntri.every((i) => (i.actual as { entri: JenisEntri }).entri === "hygiene_cctv");
+    const semuaTercakup = adaHygiene && dariEntri.every((i) => WAJIB_BUKTI_ENTRI.includes((i.actual as { entri: JenisEntri }).entri));
     if (!semuaTercakup) out.push({ id: "riwayat", label: "Riwayat Input", icon: ClipboardList });
     return out;
   }, [laporan.efisiensi, laporan.fee, laporan.pasar, laporan.ca, indikator]);
@@ -169,7 +181,10 @@ export function PapanKpi({
   // Nama outlet untuk tabel yang isinya hanya menyimpan id-nya.
   const namaOutlet = React.useMemo(() => new Map(outlets.map((o) => [o.id, o.nama])), [outlets]);
 
-  const entriHygiene = React.useMemo(() => laporan.entri.filter((e) => e.jenis === "hygiene_cctv"), [laporan.entri]);
+  const entriHygiene = React.useMemo(
+    () => laporan.entri.filter((e) => WAJIB_BUKTI_ENTRI.includes(e.jenis)),
+    [laporan.entri],
+  );
 
   // Rasio target per outlet dibaca dari indikatornya sendiri, bukan ditulis
   // ulang sebagai angka di sini. Kalau suatu saat target Net Profit berubah
@@ -204,7 +219,10 @@ export function PapanKpi({
       .map((i) => ({
         jenis: (i.actual as { entri: JenisEntri }).entri,
         label: i.label,
-        bukti: (i.actual as { entri: JenisEntri }).entri === "hygiene_cctv",
+        // Dua jenis catatan ini WAJIB berbukti: keduanya menyatakan bahwa
+        // sebuah pemeriksaan benar-benar dilakukan, dan pernyataan tanpa bukti
+        // tidak bisa dibedakan dari yang tidak dilakukan sama sekali.
+        bukti: WAJIB_BUKTI_ENTRI.includes((i.actual as { entri: JenisEntri }).entri),
       }));
     // Angka bulanan per outlet ikut di sini supaya tidak ada dua pintu masuk
     // ke tujuan yang sama.
@@ -611,8 +629,12 @@ function Ringkasan({ tampilan, laporan, rasioNetProfit, rasioHpp }: { tampilan: 
         </>
       );
   } else if (tampilan === "hygiene") {
-    const b = laporan.baris.find((x) => x.key === "hygiene_cctv");
-    const lampir = laporan.entri.filter((e) => e.jenis === "hygiene_cctv").reduce((a, e) => a + e.lampiran.length, 0);
+    // Indikatornya dicari lewat kuncinya masing-masing: Coordinator Area
+    // memakai "hygiene_cctv", Quality Assurance & Control memakai "qc_cctv".
+    const b = laporan.baris.find((x) => x.key === "hygiene_cctv" || x.key === "qc_cctv");
+    const lampir = laporan.entri
+      .filter((e) => WAJIB_BUKTI_ENTRI.includes(e.jenis))
+      .reduce((a, e) => a + e.lampiran.length, 0);
     teks = (
       <>
         {angka(b?.actual ?? 0)} submit dari target {angka(b?.target ?? null)} ={" "}
@@ -762,6 +784,7 @@ function TabelPasar({
 }
 
 const LABEL_ENTRI: Record<string, string> = {
+  cctv_qc: "Monitoring CCTV",
   quality_control: "Quality Control",
   riset_menu: "Riset Menu Baru",
   event: "Event / Program",
