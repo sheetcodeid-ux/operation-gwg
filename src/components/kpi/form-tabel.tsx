@@ -338,12 +338,24 @@ export interface OutletBaris {
   outletNama: string;
   gross: number | null;
   dariEsb: boolean;
+  grossKetik: number | null;
   netProfit: number | null;
   hppNominal: number | null;
   grossManual: boolean;
   average: number | null;
   ikut: boolean;
 }
+
+/**
+ * Penjualan outlet ini boleh diketik untuk bulan yang sedang dibuka?
+ *
+ * Outlet biasa: tidak, selama ESB punya angkanya — angka yang bisa
+ * diperdebatkan tidak boleh menimpa angka yang tidak bisa. Outlet BERTANDA:
+ * selalu boleh, karena justru ESB outlet itulah yang tidak bisa dipercaya, dan
+ * ketidakpercayaannya kadang hanya pada sebagian bulan. Bulan yang dikosongkan
+ * tetap memakai ESB.
+ */
+const bolehKetikGross = (o: OutletBaris): boolean => o.grossManual || !o.dariEsb;
 
 /** Kenapa outlet ini belum ikut dinilai — dibedakan supaya tidak menyesatkan. */
 function alasanBelumIkut(bulanKosong: string[]): string {
@@ -482,7 +494,11 @@ export function FormKegiatan({
         outlet.map((o) => [
           o.outletId,
           {
-            gross: o.dariEsb || o.gross === null ? "" : String(o.gross),
+            // Yang ditampilkan di kotak isian adalah angka YANG DIKETIK, bukan
+            // angka yang akhirnya dipakai. Untuk outlet bertanda, angka yang
+            // dipakai bisa datang dari ESB — menaruhnya di kotak membuatnya
+            // ikut tersimpan sebagai isian tangan tanpa ada yang mengetiknya.
+            gross: o.grossKetik === null ? "" : String(o.grossKetik),
             netProfit: o.netProfit === null ? "" : String(o.netProfit),
             hppNominal: o.hppNominal === null ? "" : String(o.hppNominal),
           },
@@ -569,7 +585,7 @@ export function FormKegiatan({
         // Tanpa ini, satu angka yang salah ketik tidak punya jalan dihapus:
         // dikosongkan lalu disimpan hanya menjawab "tidak ada yang berubah".
         const grossBaru = num(isi.gross);
-        if (!o.dariEsb && grossBaru !== o.gross) ubahan.gross = grossBaru;
+        if (bolehKetikGross(o) && grossBaru !== o.grossKetik) ubahan.gross = grossBaru;
         const npBaru = num(isi.netProfit);
         if (npBaru !== o.netProfit) ubahan.netProfit = npBaru;
         const hppBaru = num(isi.hppNominal);
@@ -982,16 +998,26 @@ function TabelOutlet({
                   </>
                 )}
                 <td className="px-3 py-1.5">
-                  {jenis === "gross_manual" && o.dariEsb ? (
+                  {jenis === "gross_manual" && !bolehKetikGross(o) ? (
                     <p className="text-right text-[12px] tabular-nums text-muted-foreground">
                       {o.gross === null ? "—" : formatIDR(o.gross)} <span className="text-[10.5px]">dari ESB</span>
                     </p>
                   ) : (
-                    <InputRupiah
-                      nilai={isi[o.outletId]?.[kolom] ?? ""}
-                      onUbah={(v) => ubah(o.outletId, kolom, v)}
-                      izinkanMinus={jenis === "net_profit"}
-                    />
+                    <div>
+                      <InputRupiah
+                        nilai={isi[o.outletId]?.[kolom] ?? ""}
+                        onUbah={(v) => ubah(o.outletId, kolom, v)}
+                        izinkanMinus={jenis === "net_profit"}
+                      />
+                      {/* Angka ESB tetap diperlihatkan sebagai pembanding selama
+                          belum ada yang diketik — yang mengisinya perlu tahu
+                          angka mana yang sedang dianggap salah. */}
+                      {jenis === "gross_manual" && o.dariEsb && !isi[o.outletId]?.gross && (
+                        <p className="mt-1 text-right text-[10.5px] tabular-nums text-muted-foreground">
+                          kosong = pakai ESB {o.gross === null ? "—" : formatIDR(o.gross)}
+                        </p>
+                      )}
+                    </div>
                   )}
                 </td>
                 {jenis !== "gross_manual" && (
