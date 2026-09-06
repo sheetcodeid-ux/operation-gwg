@@ -552,6 +552,15 @@ export interface DetailOutletCa {
   gross: number | null;
   /** Angkanya dari ESB — kalau ya, isian tangan tidak dipakai dan tidak perlu. */
   dariEsb: boolean;
+  /**
+   * Penjualan yang BENAR-BENAR diketik untuk bulan ini, tanpa cadangan ESB.
+   *
+   * `gross` di atas adalah angka yang akhirnya dipakai — bisa datang dari ESB.
+   * Kotak isian harus memakai yang ini: mengisinya dengan angka ESB membuat
+   * angka yang tidak pernah diketik siapa pun ikut tersimpan sebagai isian
+   * tangan pada penyimpanan pertama.
+   */
+  grossKetik: number | null;
   netProfit: number | null;
   /** Harga pokok penjualan dalam rupiah. */
   hppNominal: number | null;
@@ -694,6 +703,7 @@ async function angkaCa(periode: string, picIds: string[], jumlahPic: number): Pr
       outletNama: o.nama,
       gross: grossOutlet(o, periode, esbIni, tanganIni),
       dariEsb,
+      grossKetik: tanganIni.get(o.id)?.gross ?? null,
       netProfit: tanganIni.get(o.id)?.netProfit ?? null,
       hppNominal: tanganIni.get(o.id)?.hppNominal ?? null,
       grossManual: o.grossManual,

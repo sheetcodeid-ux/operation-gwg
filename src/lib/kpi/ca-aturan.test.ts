@@ -89,10 +89,26 @@ describe("gross sales manual", () => {
     expect(form).not.toContain("Ayam Goreng Busari");
   });
 
-  it("outlet yang bulan ini sudah punya angka ESB tidak bisa diketik", () => {
+  it("outlet yang bulan ini sudah punya angka ESB tidak bisa diketik — kecuali yang ditandai", () => {
+    // Untuk outlet biasa kotaknya tetap dikunci: angka ESB tidak boleh ditimpa
+    // ketikan. Outlet BERTANDA tetap bisa diketik, karena ESB-nya justru yang
+    // sedang tidak dipercaya — dan angka ESB-nya tetap diperlihatkan sebagai
+    // pembanding supaya yang mengisi tahu angka mana yang sedang diganti.
     const form = readFileSync(join(process.cwd(), "src/components/kpi/form-tabel.tsx"), "utf8");
-    expect(form).toContain('jenis === "gross_manual" && o.dariEsb ?');
+    expect(form).toContain("const bolehKetikGross = (o: OutletBaris): boolean => o.grossManual || !o.dariEsb;");
+    expect(form).toContain('jenis === "gross_manual" && !bolehKetikGross(o) ?');
     expect(form).toContain("dari ESB");
+    expect(form).toContain("kosong = pakai ESB");
+  });
+
+  it("kotak isian memakai angka YANG DIKETIK, bukan angka yang akhirnya dipakai", () => {
+    // Untuk outlet bertanda, angka yang dipakai bisa datang dari ESB. Menaruh
+    // angka itu di kotak isian membuatnya ikut tersimpan sebagai isian tangan
+    // pada penyimpanan pertama — tanpa ada yang pernah mengetiknya.
+    const form = readFileSync(join(process.cwd(), "src/components/kpi/form-tabel.tsx"), "utf8");
+    expect(form).toContain("gross: o.grossKetik === null ? \"\" : String(o.grossKetik),");
+    expect(form).toContain("if (bolehKetikGross(o) && grossBaru !== o.grossKetik) ubahan.gross = grossBaru;");
+    expect(data).toContain("grossKetik: tanganIni.get(o.id)?.gross ?? null,");
   });
 
   it("satu outlet yang angkanya belum ada menahan totalnya, bukan tampil kurang", () => {
