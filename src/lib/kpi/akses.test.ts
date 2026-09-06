@@ -137,3 +137,31 @@ describe("kepala departemen membaca capaian seluruh posisi", () => {
     expect(canReachMenu(sainal, "kpi" as MenuKey)).toBe(false);
   });
 });
+
+/**
+ * Menu Manajemen hanya untuk kepala departemen dan super admin.
+ *
+ * Isinya skor PERUSAHAAN, bukan skor satu posisi — dan tidak ada departemen
+ * yang "memilikinya". Kalau ia ikut aturan divisi seperti menu KPI lainnya,
+ * seluruh staf Operational bisa membukanya hanya karena departemennya sama
+ * dengan salah satu komponen di dalamnya.
+ */
+describe("KPI Manajemen", () => {
+  const KEY = "kpi_manajemen" as MenuKey;
+
+  it("super admin dan kepala departemen boleh membuka", () => {
+    expect(canReachMenu(orang({ role: "super_admin" }), KEY)).toBe(true);
+    expect(canReachMenu(orang({ role: "head_operation", department: "Operational" }), KEY)).toBe(true);
+    expect(canReachMenu(orang({ jabatan: "Head of Finance", department: "Finance" }), KEY)).toBe(true);
+  });
+
+  it("staf biasa TIDAK boleh, sekalipun departemennya Operational", () => {
+    expect(canReachMenu(orang({ department: "Operational" }), KEY)).toBe(false);
+    expect(canReachMenu(orang({ department: "Finance" }), KEY)).toBe(false);
+    expect(canReachMenu(orang({ role: "area_coordinator", department: "Operational" }), KEY)).toBe(false);
+  });
+
+  it("ikut terdaftar sebagai menu KPI, jadi kepala departemen mendapatkannya sekaligus", () => {
+    expect(menuKpi()).toContain(KEY);
+  });
+});
