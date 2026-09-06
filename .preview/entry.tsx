@@ -1,5 +1,8 @@
 import { createRoot } from "react-dom/client";
 import { PapanKpi } from "@/components/kpi/papan-kpi";
+import { PapanManajemen } from "@/components/kpi/papan-manajemen";
+import { hitungManajemen } from "@/lib/kpi/manajemen";
+import type { DetailManajemen } from "@/lib/data/kpi-manajemen";
 import { barisEfisiensi, barisKpi, ringkasEfisiensi, ringkasKpi } from "@/lib/kpi/hitung";
 import { indikatorPosisi } from "@/lib/kpi/indikator";
 import { posisiDari, posisiDepartemen, type KodePosisi } from "@/lib/kpi/struktur";
@@ -88,7 +91,44 @@ function buat(kode: KodePosisi) {
   return { laporan, lalu };
 }
 
+/** Contoh KPI Manajemen — angkanya sekadar bentuk, bukan data sungguhan. */
+const OUTLET_MJ = [
+  { id: "1", nama: "Nordu Coffee Sambas", umur: 26, bulanLalu: [412_000_000, 398_000_000, 405_000_000] as [number, number, number], actual: 421_500_000 },
+  { id: "2", nama: "Cattu A. Yani", umur: 18, bulanLalu: [245_000_000, 251_000_000, 238_000_000] as [number, number, number], actual: 233_000_000 },
+  { id: "3", nama: "Nordu Bakes Samarinda", umur: 3, bulanLalu: [1_317_875_818, 982_548_182, 946_260_364] as [number, number, number], actual: 1_010_000_000 },
+  { id: "4", nama: "Nordu Coffee Canggu", umur: 2, bulanLalu: [108_000, 10_449_727, 36_002_909] as [number, number, number], actual: 44_000_000 },
+];
+const DIVISI_MJ = [
+  { nama: "Coordinator Area", nilai: 89.46 },
+  { nama: "Content Creator", nilai: 82.1 },
+  { nama: "Accounting", nilai: 91 },
+  { nama: "HR", nilai: 92 },
+  { nama: "Warehouse", nilai: 88 },
+];
+const DETAIL_MJ: DetailManajemen = {
+  periode: "2026-09",
+  omzetLalu: [13_788_689_135, 13_552_933_420, 12_824_068_510],
+  bulanA: ["2026-06", "2026-07", "2026-08"],
+  divisiOtomatis: ["Coordinator Area", "Content Creator", "Accounting"],
+  labaBersih: 168_000_000,
+  salesManual: null,
+  catatan: "",
+  tanpaUmur: ["Nordu Coffee Landak", "Nordu Tebas"],
+  skor: hitungManajemen({
+    a: { bulanLalu: [13_788_689_135, 13_552_933_420, 12_824_068_510], actual: 12_100_000_000 },
+    outlet: OUTLET_MJ,
+    labaBersih: 168_000_000,
+    salesManual: null,
+    divisi: DIVISI_MJ,
+  }),
+};
+
 const kode = (location.hash.replace("#", "") || "operational_ca") as KodePosisi;
+if (kode === "manajemen") {
+  createRoot(document.getElementById("root")!).render(<PapanManajemen detail={DETAIL_MJ} />);
+  throw new Error("__stop__");
+}
+
 const p = posisiDari(kode)!;
 const { laporan, lalu } = buat(kode);
 // PIC terpilih supaya form isiannya terlihat (di aplikasi ini datang dari basis data).

@@ -58,6 +58,7 @@ export type MenuKey =
   | "creative_design"
   | "creative_penilaian"
   | "kpi"
+  | "kpi_manajemen"
   | "kpi_op_ca"
   | "kpi_creative_content"
   | "kpi_creative_sosmed"
@@ -192,6 +193,7 @@ export const NAV_MENUS: Omit<NavItem, "section" | "group" | "groupIcon">[] = [
   // untuk satu posisi tertentu, dan menu yang menyembunyikan tujuannya di
   // balik tab membuat setiap kunjungan butuh dua klik yang sama berulang kali.
   { key: "kpi", label: "Ringkasan KPI", href: "/kpi", icon: "Target" },
+  { key: "kpi_manajemen", label: "Manajemen", href: "/kpi/manajemen", icon: "Briefcase" },
   { key: "kpi_op_ca", label: "Coordinator Area", href: "/kpi/operational_ca", icon: "Store" },
   { key: "kpi_creative_content", label: "Content Creator", href: "/kpi/creative_content", icon: "Clapperboard" },
   { key: "kpi_creative_sosmed", label: "Sosial Media", href: "/kpi/creative_sosmed", icon: "Share2" },
@@ -529,6 +531,10 @@ export const DIVISION_GROUPS: Partial<Record<Division, NavGroupDef[]>> = {
     },
   ],
   "Key Performance Indicator": [
+    // Manajemen berdiri sendiri di paling atas: yang dinilai di situ bukan
+    // satu posisi melainkan PERUSAHAAN, dan menaruhnya di dalam salah satu
+    // departemen membuatnya terbaca seolah milik departemen itu.
+    { name: "Korporat", icon: "Briefcase", urutan: 0, menus: ["kpi_manajemen"] },
     { name: "Operational", icon: "Store", urutan: 1, menus: ["kpi_op_ca"] },
     { name: "Creative", icon: "Palette", urutan: 2, menus: ["kpi_creative_content", "kpi_creative_sosmed"] },
     { name: "Finance", icon: "Wallet", urutan: 3, menus: ["kpi_fin_accounting", "kpi_fin_finance", "kpi_fin_tax"] },
@@ -575,6 +581,7 @@ export const DIVISION_MENUS: { division: Division; menus: MenuKey[] }[] = [
     division: "Key Performance Indicator",
     menus: [
       "kpi",
+      "kpi_manajemen",
       "kpi_op_ca",
       "kpi_creative_content",
       "kpi_creative_sosmed",

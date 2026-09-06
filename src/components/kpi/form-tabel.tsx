@@ -393,17 +393,28 @@ const KOLOM: Partial<Record<OpsiKegiatan["jenis"], KolomOutlet>> = {
  * sama sekilas. Yang tersimpan tetap angkanya; yang berubah cuma cara
  * menampilkannya saat diketik.
  */
-function InputRupiah({
+/**
+ * Kotak rupiah — dipakai bersama form tabel dan Kalkulator KPI Manajemen.
+ *
+ * Diekspor supaya dua tempat yang meminta angka rupiah memakai kotak yang
+ * sama: satu-satunya cara memastikan "168000000" dan "Rp 168.000.000" tidak
+ * pernah tampil berdampingan di aplikasi yang sama.
+ */
+export function InputRupiah({
   nilai,
   onUbah,
   disabled,
   izinkanMinus,
+  className,
+  placeholder,
 }: {
   nilai: string;
   onUbah: (v: string) => void;
   disabled?: boolean;
   /** Net profit boleh minus — itu rugi, dan harus bisa diketik apa adanya. */
   izinkanMinus?: boolean;
+  className?: string;
+  placeholder?: string;
 }) {
   const angka = num(nilai);
   const minus = izinkanMinus && nilai.trim().startsWith("-");
@@ -412,8 +423,8 @@ function InputRupiah({
       <span className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-[12px] text-muted-foreground">Rp</span>
       <Input
         inputMode="numeric"
-        className={`h-8 pl-8 text-right tabular-nums ${angka !== null && angka < 0 ? "text-rose-600 dark:text-rose-400" : ""}`}
-        placeholder="0"
+        className={`h-8 pl-8 text-right tabular-nums ${angka !== null && angka < 0 ? "text-rose-600 dark:text-rose-400" : ""} ${className ?? ""}`}
+        placeholder={placeholder ?? "0"}
         disabled={disabled}
         value={angka === null ? (minus ? "-" : "") : formatNumber(angka)}
         onChange={(e) => {

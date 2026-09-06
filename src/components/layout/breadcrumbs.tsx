@@ -26,6 +26,7 @@ const LABELS: Record<string, string> = {
   raci: "Matriks RACI",
   kontrak: "Kontrak Tracker",
   karyawan: "Database Karyawan",
+  manajemen: "Manajemen",
   area: "Region",
   outlet: "Outlet",
   kpi: "KPI",
