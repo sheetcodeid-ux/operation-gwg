@@ -7,6 +7,7 @@ import { bulanMulaiBerjalan, bulanSebelum, grossDiketik, laporanKpi } from "./kp
 import { POSISI } from "@/lib/kpi/struktur";
 import { SEMUA_PIC } from "@/lib/kpi/semua-pic";
 import { hitungManajemen, type DivisiKpi, type OutletManajemen, type SkorManajemen } from "@/lib/kpi/manajemen";
+import type { LaluIndikator } from "@/components/kpi/kpi-charts";
 
 /**
  * Bahan Kalkulator KPI Manajemen untuk satu bulan.
@@ -37,6 +38,8 @@ export interface DetailManajemen {
   catatan: string;
   /** Outlet yang umurnya belum diketahui — tidak bisa dinilai same store. */
   tanpaUmur: string[];
+  /** Capaian bulan lalu per komponen — bahan grafik pembanding. */
+  lalu: Record<string, LaluIndikator>;
 }
 
 const angka = (v: unknown): number => (v === null || v === undefined || v === "" ? 0 : Number(v) || 0);
@@ -126,7 +129,30 @@ async function skorPosisi(periode: string): Promise<Map<string, number>> {
   return hasil;
 }
 
-export async function detailManajemen(periode: string): Promise<DetailManajemen> {
+/**
+ * Capaian bulan lalu, untuk grafik pembanding.
+ *
+ * Dihitung TANPA memanggil ulang KPI tiap posisi — komponen D bulan lalu
+ * diambil dari isian yang tersimpan saja. Menghitung ulang sebelas laporan
+ * posisi hanya demi satu garis pembanding membuat halaman ini menunggu dua
+ * kali lebih lama setiap dibuka.
+ */
+async function capaianLalu(periode: string): Promise<Record<string, LaluIndikator>> {
+  const d = await detailManajemen(bulanSebelum(periode), { ringan: true }).catch(() => null);
+  if (!d) return {};
+  const { skor } = d;
+  return {
+    a: { persen: skor.a.capaian * 100, actual: skor.a.actual },
+    b: { persen: skor.b.capaian * 100, actual: skor.b.actual },
+    c: { persen: skor.c.capaian * 100, actual: skor.c.margin },
+    d: { persen: skor.d.rata, actual: skor.d.rata },
+  };
+}
+
+export async function detailManajemen(
+  periode: string,
+  opsi: { ringan?: boolean } = {},
+): Promise<DetailManajemen> {
   const bulanA = tigaBulan(periode);
   const [esbIni, ...esbLalu] = await Promise.all([
     netBulananPerCabang(periode),
@@ -169,7 +195,10 @@ export async function detailManajemen(periode: string): Promise<DetailManajemen>
   });
   const idIkut = sementara.b.baris.filter((b) => b.ikut).map((b) => b.id);
 
-  const [labaOtomatis, skorModul] = await Promise.all([labaBersihOutlet(periode, idIkut), skorPosisi(periode)]);
+  const [labaOtomatis, skorModul] = await Promise.all([
+    labaBersihOutlet(periode, idIkut),
+    opsi.ringan ? Promise.resolve(new Map<string, number>()) : skorPosisi(periode),
+  ]);
   const labaBersih = isian.labaBersih ?? labaOtomatis ?? 0;
 
   // Divisi yang modulnya sudah ada dipakai nilainya; sisanya dari isian tangan.
@@ -182,8 +211,10 @@ export async function detailManajemen(periode: string): Promise<DetailManajemen>
   ];
 
   const omzetLalu: [number, number, number] = [korporat(esbLalu[0]), korporat(esbLalu[1]), korporat(esbLalu[2])];
+  const lalu = opsi.ringan ? {} : await capaianLalu(periode);
 
   return {
+    lalu,
     periode,
     omzetLalu,
     skor: hitungManajemen({

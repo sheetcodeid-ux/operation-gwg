@@ -531,14 +531,14 @@ export function PapanKpi({
  * berikutnya. Sekarang tiap tombol selebar tulisannya sendiri dan bilahnya
  * digeser bila tidak muat.
  */
-function PilihTabel({
+export function PilihTabel<T extends string>({
   pilihan,
   nilai,
   onNilai,
 }: {
-  pilihan: { id: Tampilan; label: string; icon: LucideIcon }[];
-  nilai: Tampilan;
-  onNilai: (v: Tampilan) => void;
+  pilihan: { id: T; label: string; icon: LucideIcon }[];
+  nilai: T;
+  onNilai: (v: T) => void;
 }) {
   return (
     <div className="scroll-fade-x flex max-w-full items-center gap-1 rounded-xl border border-border bg-muted/50 p-1">

@@ -114,6 +114,12 @@ const DETAIL_MJ: DetailManajemen = {
   salesManual: null,
   catatan: "",
   tanpaUmur: ["Nordu Coffee Landak", "Nordu Tebas"],
+  lalu: {
+    a: { persen: 96.2, actual: 12_824_068_510 },
+    b: { persen: 94.1, actual: 631_000_000 },
+    c: { persen: 78.5, actual: 23.5 },
+    d: { persen: 86.2, actual: 86.2 },
+  },
   skor: hitungManajemen({
     a: { bulanLalu: [13_788_689_135, 13_552_933_420, 12_824_068_510], actual: 12_100_000_000 },
     outlet: OUTLET_MJ,

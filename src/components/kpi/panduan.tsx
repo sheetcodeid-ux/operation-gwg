@@ -4,6 +4,7 @@ import * as React from "react";
 import { BookOpen, TriangleAlert } from "lucide-react";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
 import type { Indikator } from "@/lib/kpi/indikator";
+import { TARGET_MARGIN, UMUR_SAME_STORE } from "@/lib/kpi/manajemen";
 
 /**
  * Panduan pengisian KPI — dibaca sebelum menyentuh satu pun angka.
@@ -231,10 +232,9 @@ function langkahUmum(indikator: Indikator[]): Langkah[] {
   ];
 }
 
-export function DialogPanduan({ indikator, perOutlet }: { indikator: Indikator[]; perOutlet: boolean }) {
+/** Kerangka dialognya — dipakai panduan posisi maupun panduan manajemen. */
+function Panduan({ langkah, deskripsi }: { langkah: Langkah[]; deskripsi: string }) {
   const [buka, setBuka] = React.useState(false);
-  const langkah = React.useMemo(() => (perOutlet ? langkahCa() : langkahUmum(indikator)), [perOutlet, indikator]);
-
   return (
     <>
       <button
@@ -245,11 +245,7 @@ export function DialogPanduan({ indikator, perOutlet }: { indikator: Indikator[]
         <BookOpen className="size-3.5" /> Panduan
       </button>
       <Dialog open={buka} onOpenChange={setBuka}>
-        <DialogContent
-          title="Panduan Pengisian KPI"
-          description="Dibaca sekali, dipakai tiap bulan — urut dari langkah pertama sampai selesai."
-          className="max-w-2xl"
-        >
+        <DialogContent title="Panduan Pengisian KPI" description={deskripsi} className="max-w-2xl">
           <div className="max-h-[70vh] overflow-y-auto p-5">
             <ol className="space-y-4">
               {langkah.map((l, i) => (
@@ -267,4 +263,82 @@ export function DialogPanduan({ indikator, perOutlet }: { indikator: Indikator[]
       </Dialog>
     </>
   );
+}
+
+export function DialogPanduan({ indikator, perOutlet }: { indikator: Indikator[]; perOutlet: boolean }) {
+  const langkah = React.useMemo(() => (perOutlet ? langkahCa() : langkahUmum(indikator)), [perOutlet, indikator]);
+  return <Panduan langkah={langkah} deskripsi="Dibaca sekali, dipakai tiap bulan — urut dari langkah pertama sampai selesai." />;
+}
+
+/**
+ * Panduan Kalkulator KPI Manajemen.
+ *
+ * Yang paling perlu dijelaskan di sini bukan cara mengisinya — hampir semuanya
+ * otomatis — melainkan DARI MANA tiap angka datang. Skor manajemen dibaca di
+ * rapat korporat, dan angka yang tidak bisa ditelusuri asalnya akan
+ * diperdebatkan setiap bulan tanpa pernah selesai.
+ */
+export function DialogPanduanManajemen() {
+  const langkah = React.useMemo<Langkah[]>(
+    () => [
+      {
+        judul: "Pilih bulannya lebih dulu",
+        isi: <>Seluruh angka di halaman ini mengikuti bulan yang dipilih di bilah paling atas.</>,
+      },
+      {
+        judul: "A — Gross Sales Corporate (bobot 40%)",
+        isi: (
+          <>
+            Otomatis dari ESB. Target = <b>rata-rata omzet tiga bulan sebelumnya</b>, actual = omzet bulan berjalan.
+            SELURUH outlet ikut, termasuk yang baru buka — pertumbuhan korporat tidak boleh menghukum pembukaan outlet
+            baru.
+          </>
+        ),
+      },
+      {
+        judul: "B — Same Store Sales (bobot 30%)",
+        isi: (
+          <>
+            Otomatis dari ESB, tapi <b>hanya outlet berumur di atas {UMUR_SAME_STORE} bulan</b>. Umur dihitung dari
+            tanggal buka outlet dengan aturan tanggal 15 yang sama dengan KPI Coordinator Area.
+            <Awas>
+              Outlet yang tanggal bukanya belum diisi TIDAK ditebak — ia dikeluarkan dari perhitungan dan namanya
+              disebut di bawah tabel Detail Same Store. Isi tanggal bukanya supaya ikut terhitung.
+            </Awas>
+          </>
+        ),
+      },
+      {
+        judul: "C — EBITDA Same Store (bobot 20%)",
+        isi: (
+          <>
+            Margin = laba bersih ÷ sales same store, target <b>{TARGET_MARGIN}%</b>. Laba bersihnya terisi otomatis dari
+            isian bulanan Coordinator Area; kalau laporan keuangan berbeda, ketik ulang lewat tombol{" "}
+            <b>Isi Angka</b>. Sales same store dikosongkan berarti memakai total actual komponen B.
+          </>
+        ),
+      },
+      {
+        judul: "D — KPI All Division (bobot 10%)",
+        isi: (
+          <>
+            Rata-rata nilai KPI seluruh divisi, semuanya berbobot sama. Divisi yang sudah punya modul KPI-nya sendiri
+            terisi otomatis dan ditandai <b>Modul KPI</b>; divisi lain (HR, Warehouse, dan seterusnya) diketik lewat
+            tombol <b>Isi Angka</b>. Nilai yang diketik menang atas angka otomatis.
+          </>
+        ),
+      },
+      {
+        judul: "Membaca skornya",
+        isi: (
+          <>
+            Skor akhir = A + B + C + D, skala 0–100. Pencapaian di atas 100% <b>tidak</b> menambah skor melebihi
+            bobotnya. Ambangnya: Sangat Baik ≥ 85, Baik ≥ 70, Perlu Perhatian ≥ 50, di bawah itu Kritis.
+          </>
+        ),
+      },
+    ],
+    [],
+  );
+  return <Panduan langkah={langkah} deskripsi="Empat komponen berbobot — dari mana angkanya datang dan mana yang perlu diisi." />;
 }
