@@ -100,6 +100,19 @@ export interface Outlet {
    * sepenuhnya.
    */
   esbMulai?: string | null;
+  /**
+   * Tanggal outlet ini mulai berjalan, mis. "2026-05-31".
+   *
+   * Penentu aturan tiga bulan. Bulan bukanya hanya terhitung sebagai bulan
+   * berjalan bila tanggalnya 15 atau sebelumnya — outlet yang buka tanggal 31
+   * berjalan satu hari di bulan itu, dan menghitungnya sebagai satu bulan penuh
+   * membuatnya dinilai sebulan lebih awal daripada seharusnya.
+   *
+   * Kosong berarti tanggalnya belum diketahui; untuk outlet itu dipakai aturan
+   * lama, yaitu ada-tidaknya penjualan tiga bulan sebelumnya. Menebak tanggal
+   * buka lebih buruk daripada tidak tahu.
+   */
+  bukaTanggal?: string | null;
   city: string;
   areaId: string;
   supervisorId: string;

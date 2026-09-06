@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { Area, CartesianGrid, ComposedChart, Line, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
+import { Area, Bar, CartesianGrid, ComposedChart, Line, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { ChartPie, Hash, Layers, Percent } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { BarisKpi } from "@/lib/kpi/hitung";
@@ -216,17 +216,23 @@ export function KpiPerformanceChart({
 
   const data = React.useMemo<Titik[]>(
     () =>
-      baris.map((b) => ({
-        name: b.label,
-        full: b.label,
-        ini: b.persentase === null ? 0 : Math.round(b.persentase),
-        lalu: lalu[b.key]?.persen == null ? 0 : Math.round(lalu[b.key].persen!),
-        target: 100,
-        satuan: b.satuan,
-        nIni: b.actual,
-        nLalu: lalu[b.key]?.actual ?? null,
-        nTarget: b.target,
-      })),
+      baris.map((b) => {
+        // Indikator yang actual-nya rasio membawa nominal rupiahnya sendiri —
+        // itulah yang dipakai kolom Angka. "37,4%" di bawah tombol bernama
+        // Angka adalah jawaban untuk pertanyaan yang tidak ditanyakan.
+        const pakaiNominal = b.actualNominal !== undefined && b.actualNominal !== null;
+        return {
+          name: b.label,
+          full: b.label,
+          ini: b.persentase === null ? 0 : Math.round(b.persentase),
+          lalu: lalu[b.key]?.persen == null ? 0 : Math.round(lalu[b.key].persen!),
+          target: 100,
+          satuan: pakaiNominal ? ("rupiah" as const) : b.satuan,
+          nIni: pakaiNominal ? b.actualNominal! : b.actual,
+          nLalu: pakaiNominal ? null : (lalu[b.key]?.actual ?? null),
+          nTarget: pakaiNominal ? (b.targetNominal ?? null) : b.target,
+        };
+      }),
     [baris, lalu],
   );
   const adaIsi = data.some((d) => d.ini > 0 || d.lalu > 0);
@@ -270,6 +276,10 @@ export function KpiPerformanceChart({
                 <stop offset="0%" stopColor={BLUE} stopOpacity={0.35} />
                 <stop offset="100%" stopColor={BLUE} stopOpacity={0} />
               </linearGradient>
+              <linearGradient id="kpiGrey" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0%" stopColor="#94a3b8" stopOpacity={0.85} />
+                <stop offset="100%" stopColor="#94a3b8" stopOpacity={0.3} />
+              </linearGradient>
             </defs>
             <CartesianGrid strokeDasharray="3 3" stroke="rgba(148,163,184,0.16)" vertical={false} />
             <XAxis
@@ -291,16 +301,12 @@ export function KpiPerformanceChart({
               tickFormatter={(v: number) => `${v}%`}
             />
             <Tooltip cursor={{ stroke: "rgba(148,163,184,0.35)", strokeWidth: 1 }} content={<Tip sumbu={sumbu} />} />
-            <Line
-              type="linear"
-              dataKey="lalu"
-              name="Bulan Lalu"
-              stroke={ABU}
-              strokeWidth={2}
-              dot={{ r: 2.5, fill: ABU, strokeWidth: 0 }}
-              activeDot={{ r: 4.5 }}
-              isAnimationActive={false}
-            />
+            {/* BULAN LALU BERBENTUK BATANG, bulan ini berbentuk garis. Dua
+                garis sejenis yang berdekatan harus dibedakan lewat warna saja;
+                dua bentuk yang berbeda langsung terbaca mana yang lampau dan
+                mana yang berjalan — dan batang yang berdiri di belakang tidak
+                pernah menutupi garis di depannya. */}
+            <Bar dataKey="lalu" name="Bulan Lalu" fill="url(#kpiGrey)" radius={[4, 4, 0, 0]} maxBarSize={38} isAnimationActive={false} />
             <Line
               type="linear"
               dataKey="target"
@@ -403,8 +409,12 @@ export function KpiIndicatorDonut({ baris }: { baris: BarisKpi[] }) {
   const total = irisan.reduce((a, s) => a + s.value, 0);
   const warna = React.useCallback((key: string) => semua.find((s) => s.key === key)?.color ?? "#94a3b8", [semua]);
 
-  const terpilih = semua.find((s) => s.key === aktif) ?? irisan[0] ?? semua[0];
-  const persenAktif = total && terpilih ? Math.round((terpilih.value / total) * 100) : 0;
+  // TANPA kursor, yang tampil di tengah adalah TOTALNYA — itulah angka yang
+  // dicari orang pertama kali. Sebelumnya irisan pertama dipilih diam-diam,
+  // jadi yang terbaca di tengah lingkaran adalah bagian satu indikator sambil
+  // terlihat seperti angka keseluruhan.
+  const terpilih = semua.find((s) => s.key === aktif) ?? null;
+  const persenAktif = terpilih ? terpilih.value : total;
 
   const busur = React.useMemo(() => {
     // Panjang tiap busur dihitung dulu, lalu posisinya dari jumlah busur
@@ -474,17 +484,25 @@ export function KpiIndicatorDonut({ baris }: { baris: BarisKpi[] }) {
                     strokeDasharray={`${a.len} ${CIRC - a.len}`}
                     transform={`rotate(${a.rot} 88 88)`}
                     className="cursor-pointer transition-opacity"
-                    style={{ opacity: terpilih && a.key === terpilih.key ? 1 : 0.9 }}
+                    style={{ opacity: !terpilih || a.key === terpilih.key ? 1 : 0.55 }}
                     onMouseEnter={() => setAktif(a.key)}
                     onMouseLeave={() => setAktif(null)}
                     onClick={() => setAktif(a.key)}
                   />
                 ))}
               </svg>
-              <div className="pointer-events-none absolute inset-0 grid place-items-center text-center">
-                <p className="text-[2rem] font-extrabold leading-none tracking-tight" style={{ color: warna(terpilih.key) }}>
-                  {persenAktif}%
-                </p>
+              <div className="pointer-events-none absolute inset-0 grid place-items-center px-6 text-center">
+                <div>
+                  <p
+                    className="text-[1.9rem] font-extrabold leading-none tracking-tight"
+                    style={{ color: terpilih ? warna(terpilih.key) : "var(--foreground)" }}
+                  >
+                    {formatNumber(persenAktif, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}%
+                  </p>
+                  <p className="mt-1 line-clamp-2 text-[10px] leading-tight text-muted-foreground">
+                    {terpilih ? terpilih.label : mode === "bobot" ? "Total Bobot" : "Total Skor"}
+                  </p>
+                </div>
               </div>
             </div>
 

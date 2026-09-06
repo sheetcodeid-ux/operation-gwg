@@ -42,6 +42,16 @@ export interface BarisKpi {
   penjelasan: string;
   /** Satuan tampilan: angka biasa, rupiah, atau persen. */
   satuan?: "angka" | "rupiah" | "persen";
+  /**
+   * Nominal rupiah PENDAMPING untuk indikator yang actual-nya sebuah rasio.
+   *
+   * Harga Pokok Penjualan dinilai dalam persen, tapi yang diisi orang dan yang
+   * tertulis di laporan keuangan adalah rupiahnya. Grafik mode Angka yang
+   * menampilkan "37,4%" untuk indikator bernama Angka jelas keliru — di situ
+   * yang dicari justru rupiahnya.
+   */
+  actualNominal?: number | null;
+  targetNominal?: number | null;
 }
 
 export const BATAS_PERSENTASE = 100;
@@ -101,6 +111,8 @@ export function barisKpi(input: {
   actual: number | null;
   alasan?: string;
   satuan?: BarisKpi["satuan"];
+  actualNominal?: number | null;
+  targetNominal?: number | null;
 }): BarisKpi {
   const persentase = persentaseCapaian(input.actual, input.target, input.indikator.penilaian);
   return {
@@ -115,6 +127,8 @@ export function barisKpi(input: {
     alasan: input.alasan,
     penjelasan: input.indikator.penjelasan,
     satuan: input.satuan ?? input.indikator.satuan,
+    actualNominal: input.actualNominal,
+    targetNominal: input.targetNominal,
   };
 }
 
