@@ -1,0 +1,13 @@
+-- Nordu Landak: penjualannya diketik untuk bulan yang angka ESB-nya bukan omset.
+--
+-- Cabang 44-fnb_nord memuat 8.485.785 pada Juni 2026 dan 12.105.351 pada Juli
+-- 2026 — belasan juta di antara Mei (221 juta) dan Agustus (300 juta). Angka
+-- sebesar itu bukan nol dan bukan kosong, jadi tidak ada satu pun tanda bahwa
+-- ia salah; kalau dipercaya, ia menyeret rata-rata tiga bulan dan target bulan
+-- berikutnya ikut salah tanpa ada yang tahu.
+--
+-- `esb_mulai` TIDAK dipakai di sini: ia satu garis batas, sementara yang salah
+-- hanya dua bulan di tengah. Tandanya `gross_manual`, yang membuat angka
+-- ketikan menang atas ESB untuk bulan yang diisi saja — bulan lain tetap dari
+-- ESB.
+update outlets set gross_manual = true where name = 'Nordu Landak';
