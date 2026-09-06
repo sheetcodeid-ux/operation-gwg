@@ -76,12 +76,12 @@ function buat(kode: KodePosisi) {
       outlet: [], belumTigaBulan: [], grossSales: 4_186_500_000, rataTiga: 3_640_000_000,
       komplain: 6, netProfit: 1_010_400_000, hpp: 37.4, hppNominal: 261_900_000, hppDasar: 700_640_000, jumlahPic: 1, bulanKosong: [], tanpaGross: [],
       detail: [
-        { outletId: "o0", outletNama: "Nordu Coffee Sambas", gross: 412_500_000, dariEsb: true, grossKetik: null, netProfit: 110_000_000, hppNominal: 149_800_000, grossManual: false, average: 398_200_000, ikut: true },
-        { outletId: "o1", outletNama: "Nordu Coffee Siantan", gross: null, dariEsb: false, grossKetik: null, netProfit: null, hppNominal: null, grossManual: true, average: null, ikut: false },
-        { outletId: "o2", outletNama: "Ayam Goreng Busari Siantan", gross: null, dariEsb: false, grossKetik: null, netProfit: null, hppNominal: null, grossManual: true, average: null, ikut: false },
-        { outletId: "o3", outletNama: "Ayam Goreng Busari Serdam", gross: null, dariEsb: false, grossKetik: null, netProfit: null, hppNominal: null, grossManual: true, average: null, ikut: false },
-        { outletId: "o5", outletNama: "Nordu Landak", gross: 12_105_351, dariEsb: true, grossKetik: null, netProfit: null, hppNominal: null, grossManual: true, average: null, ikut: false },
-        { outletId: "o4", outletNama: "Cattu M. Sohor", gross: 288_140_000, dariEsb: true, grossKetik: null, netProfit: 74_500_000, hppNominal: 112_100_000, grossManual: false, average: 275_400_000, ikut: true },
+        { outletId: "o0", outletNama: "Nordu Coffee Sambas", gross: 412_500_000, dariEsb: true, grossKetik: null, netProfit: 110_000_000, hppNominal: 149_800_000, grossManual: false, grossTangan: false, average: 398_200_000, ikut: true },
+        { outletId: "o1", outletNama: "Nordu Coffee Siantan", gross: null, dariEsb: false, grossKetik: null, netProfit: null, hppNominal: null, grossManual: true, grossTangan: true, average: null, ikut: false },
+        { outletId: "o2", outletNama: "Ayam Goreng Busari Siantan", gross: null, dariEsb: false, grossKetik: null, netProfit: null, hppNominal: null, grossManual: true, grossTangan: true, average: null, ikut: false },
+        { outletId: "o3", outletNama: "Ayam Goreng Busari Serdam", gross: null, dariEsb: false, grossKetik: null, netProfit: null, hppNominal: null, grossManual: true, grossTangan: true, average: null, ikut: false },
+        { outletId: "o5", outletNama: "Nordu Landak", gross: 300_896_908, dariEsb: true, grossKetik: null, netProfit: null, hppNominal: null, grossManual: true, grossTangan: false, average: null, ikut: false },
+        { outletId: "o4", outletNama: "Cattu M. Sohor", gross: 288_140_000, dariEsb: true, grossKetik: null, netProfit: 74_500_000, hppNominal: 112_100_000, grossManual: false, grossTangan: false, average: 275_400_000, ikut: true },
       ],
     } : null,
   };
