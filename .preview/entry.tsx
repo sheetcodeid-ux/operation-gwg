@@ -1,4 +1,9 @@
 import { createRoot } from "react-dom/client";
+import { Sidebar } from "@/components/layout/sidebar";
+import { SidebarProvider } from "@/components/layout/sidebar-context";
+import { NavLockProvider } from "@/components/layout/nav-lock";
+import { I18nProvider } from "@/lib/i18n/provider";
+import { navAll, accessibleMenuKeys } from "@/lib/nav";
 import { PapanKpi } from "@/components/kpi/papan-kpi";
 import { PapanManajemen } from "@/components/kpi/papan-manajemen";
 import { hitungManajemen } from "@/lib/kpi/manajemen";
@@ -132,6 +137,22 @@ const DETAIL_MJ: DetailManajemen = {
 };
 
 const kode = (location.hash.replace("#", "") || "operational_ca") as KodePosisi;
+if (kode === "sidebar") {
+  // Sidebar seperti yang dilihat super admin: seluruh divisi tampil, urutannya
+  // persis urutan tulis `DIVISION_MENUS`.
+  createRoot(document.getElementById("root")!).render(
+    <I18nProvider initialLang="id">
+      <SidebarProvider>
+        <NavLockProvider>
+          <div className="h-screen w-64 border-r border-border bg-card">
+            <Sidebar items={navAll()} allowedKeys={accessibleMenuKeys("super_admin")} homeDivision="Operation" isAdmin />
+          </div>
+        </NavLockProvider>
+      </SidebarProvider>
+    </I18nProvider>,
+  );
+  throw new Error("__stop__");
+}
 if (kode === "manajemen") {
   createRoot(document.getElementById("root")!).render(<PapanManajemen detail={DETAIL_MJ} />);
   throw new Error("__stop__");
