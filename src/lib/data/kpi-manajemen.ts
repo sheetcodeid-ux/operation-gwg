@@ -36,8 +36,6 @@ export interface DetailManajemen {
   labaBersih: number;
   salesManual: number | null;
   catatan: string;
-  /** Outlet yang umurnya belum diketahui — tidak bisa dinilai same store. */
-  tanpaUmur: string[];
   /** Capaian bulan lalu per komponen — bahan grafik pembanding. */
   lalu: Record<string, LaluIndikator>;
 }
@@ -229,7 +227,6 @@ export async function detailManajemen(
     labaBersih,
     salesManual: isian.salesManual,
     catatan: isian.catatan,
-    tanpaUmur: outlet.filter((o) => o.umur === null).map((o) => o.nama),
   };
 }
 

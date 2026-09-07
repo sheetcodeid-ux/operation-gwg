@@ -96,12 +96,19 @@ export interface HasilB extends HasilKomponen {
  * Outlet yang baru buka selalu menyeret pertumbuhan same-store ke bawah karena
  * ia tidak punya pembanding — memasukkannya berarti menghukum manajemen atas
  * keputusan membuka outlet baru.
+ *
+ * Umur yang belum diketahui TIDAK dianggap outlet baru. Tanggal buka adalah
+ * catatan administratif yang banyak kosong, dan mengecualikan outlet karena
+ * catatannya belum diisi membuat seluruh tabel berstatus dikecualikan padahal
+ * outletnya sudah bertahun-tahun jalan. Penggantinya bukti dari penjualannya
+ * sendiri: outlet yang punya omzet di KETIGA bulan pembanding sudah pasti
+ * berjalan lebih dari tiga bulan. Aturan yang sama dipakai Coordinator Area.
  */
 export function hitungB(outlet: OutletManajemen[]): HasilB {
   const baris: BarisOutletB[] = outlet.map((o) => ({
     ...o,
     target: (o.bulanLalu[0] + o.bulanLalu[1] + o.bulanLalu[2]) / 3,
-    ikut: o.umur !== null && o.umur > UMUR_SAME_STORE,
+    ikut: o.umur === null ? o.bulanLalu.every((n) => n > 0) : o.umur > UMUR_SAME_STORE,
   }));
   const ikut = baris.filter((b) => b.ikut);
   const target = ikut.reduce((s, b) => s + b.target, 0);
