@@ -3,7 +3,7 @@ import "server-only";
 import { db, dbEnabled } from "./db";
 import { getOutlets } from "./store";
 import { netBulananPerCabang } from "./esb-bulanan";
-import { bulanMulaiBerjalan, bulanSebelum, grossDiketik, laporanKpi } from "./kpi";
+import { bulanMulaiBerjalan, bulanSebelum, grossDiketik, grossKetikBulan, laporanKpi } from "./kpi";
 import { POSISI } from "@/lib/kpi/struktur";
 import { SEMUA_PIC } from "@/lib/kpi/semua-pic";
 import { hitungManajemen, type DivisiKpi, type OutletManajemen, type SkorManajemen } from "@/lib/kpi/manajemen";
@@ -156,32 +156,52 @@ export async function detailManajemen(
     netBulananPerCabang(periode),
     ...bulanA.map((b) => netBulananPerCabang(b)),
   ]);
+  const [ketikIni, ...ketikLalu] = await Promise.all([
+    grossKetikBulan(periode),
+    ...bulanA.map((b) => grossKetikBulan(b)),
+  ]);
 
   const outletAktif = getOutlets().filter((o) => o.active);
   const jual = (peta: Map<string, { net: number }>, branch: string | null | undefined) =>
     branch ? (peta.get(branch)?.net ?? 0) : 0;
 
+  /**
+   * Omzet satu outlet pada satu bulan.
+   *
+   * Bulan yang dinyatakan manual memakai ANGKA KETIKAN, bukan ESB dan bukan
+   * nol. Angka ESB-nya sudah dinyatakan salah — itu sebabnya bulannya ditandai
+   * — sementara nol berarti outletnya seolah tidak berjualan sama sekali, yang
+   * sama-sama tidak benar dan diam-diam menurunkan omzet korporat serta
+   * mencoret outletnya dari same store. Aturan yang sama dipakai Coordinator
+   * Area, jadi satu bulan bernilai sama di kedua halaman.
+   */
+  const omzet = (
+    o: (typeof outletAktif)[number],
+    esb: Map<string, { net: number }>,
+    ketik: Map<string, number>,
+    bulan: string,
+  ) =>
+    grossDiketik({ esbMulai: o.esbMulai ?? null, esbAbaikan: o.esbAbaikan ?? [] }, bulan)
+      ? (ketik.get(o.id) ?? 0)
+      : jual(esb, o.esbBranchId);
+
   // Omzet korporat = jumlah SELURUH cabang, termasuk outlet baru. Same store
   // punya aturannya sendiri di komponen B; mencampurnya di sini membuat
   // pertumbuhan korporat ikut menghukum pembukaan outlet baru.
-  const korporat = (peta: Map<string, { net: number }>) =>
-    outletAktif.reduce((s, o) => s + jual(peta, o.esbBranchId), 0);
+  const korporat = (esb: Map<string, { net: number }>, ketik: Map<string, number>, bulan: string) =>
+    outletAktif.reduce((s, o) => s + omzet(o, esb, ketik, bulan), 0);
 
-  const outlet: OutletManajemen[] = outletAktif.map((o) => {
-    const dasar = { esbMulai: o.esbMulai ?? null, esbAbaikan: o.esbAbaikan ?? [] };
-    // Bulan yang angka ESB-nya sedang dinyatakan salah tidak dipakai apa
-    // adanya di sini juga — kalau tidak, angka yang sudah ditolak di satu
-    // halaman masuk lewat pintu belakang di halaman lain.
-    const nilai = (peta: Map<string, { net: number }>, bulan: string) =>
-      grossDiketik(dasar, bulan) ? 0 : jual(peta, o.esbBranchId);
-    return {
-      id: o.id,
-      nama: o.name,
-      umur: umurBulan(o.bukaTanggal ?? null, periode),
-      bulanLalu: [nilai(esbLalu[0], bulanA[0]), nilai(esbLalu[1], bulanA[1]), nilai(esbLalu[2], bulanA[2])],
-      actual: nilai(esbIni, periode),
-    };
-  });
+  const outlet: OutletManajemen[] = outletAktif.map((o) => ({
+    id: o.id,
+    nama: o.name,
+    umur: umurBulan(o.bukaTanggal ?? null, periode),
+    bulanLalu: [
+      omzet(o, esbLalu[0], ketikLalu[0], bulanA[0]),
+      omzet(o, esbLalu[1], ketikLalu[1], bulanA[1]),
+      omzet(o, esbLalu[2], ketikLalu[2], bulanA[2]),
+    ],
+    actual: omzet(o, esbIni, ketikIni, periode),
+  }));
 
   const isian = await isianManajemen(periode);
   const sementara = hitungManajemen({
@@ -208,7 +228,11 @@ export async function detailManajemen(
     ...isian.divisi.filter((d) => !skorModul.has(d.nama)),
   ];
 
-  const omzetLalu: [number, number, number] = [korporat(esbLalu[0]), korporat(esbLalu[1]), korporat(esbLalu[2])];
+  const omzetLalu: [number, number, number] = [
+    korporat(esbLalu[0], ketikLalu[0], bulanA[0]),
+    korporat(esbLalu[1], ketikLalu[1], bulanA[1]),
+    korporat(esbLalu[2], ketikLalu[2], bulanA[2]),
+  ];
   const lalu = opsi.ringan ? {} : await capaianLalu(periode);
 
   return {
@@ -216,7 +240,7 @@ export async function detailManajemen(
     periode,
     omzetLalu,
     skor: hitungManajemen({
-      a: { bulanLalu: omzetLalu, actual: korporat(esbIni) },
+      a: { bulanLalu: omzetLalu, actual: korporat(esbIni, ketikIni, periode) },
       outlet,
       labaBersih,
       salesManual: isian.salesManual,

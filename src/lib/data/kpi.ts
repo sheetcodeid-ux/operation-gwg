@@ -388,6 +388,21 @@ async function outletBulanan(periode: string): Promise<Map<string, OutletBulanan
 }
 
 /**
+ * Gross yang DIKETIK per outlet pada satu bulan.
+ *
+ * Dipakai halaman lain yang harus memakai angka yang sama begitu sebuah bulan
+ * dinyatakan manual. Tanpa ini, satu bulan yang sama bisa bernilai lain di dua
+ * halaman — dan yang membacanya tidak punya cara tahu mana yang benar.
+ */
+export async function grossKetikBulan(periode: string): Promise<Map<string, number>> {
+  const peta = new Map<string, number>();
+  for (const [id, r] of await outletBulanan(periode)) {
+    if (r.gross !== null) peta.set(id, r.gross);
+  }
+  return peta;
+}
+
+/**
  * Menyimpan angka bulanan satu outlet — HANYA kolom yang benar-benar dikirim.
  *
  * Sebelumnya ketiga kolom selalu ditulis, dan yang tidak dikirim ikut ditulis
