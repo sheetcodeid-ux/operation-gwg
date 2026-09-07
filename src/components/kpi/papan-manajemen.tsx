@@ -3,7 +3,8 @@
 import * as React from "react";
 import { useRouter } from "next/navigation";
 import { type ColumnDef } from "@tanstack/react-table";
-import { Building2, ChevronRight, Hash, Info, ListChecks, Percent, Store, TrendingUp, Wallet } from "lucide-react";
+import { createPortal } from "react-dom";
+import { Building2, ChevronRight, Hash, Info, ListChecks, Minus, Percent, Store, TrendingDown, TrendingUp, Wallet } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Combobox } from "@/components/ui/combobox";
@@ -59,6 +60,26 @@ interface BarisDivisi {
   lalu: number | null;
   ini: number | null;
 }
+
+/**
+ * Merek dikenali dari NAMA OUTLET, bukan kolom tersendiri.
+ *
+ * Tidak ada kolom merek di basis data, dan menambahkannya berarti 58 baris
+ * yang harus diisi tangan lalu dijaga selamanya. Namanya sudah memuat
+ * mereknya di depan; yang tidak dikenali dibiarkan kosong, bukan ditebak —
+ * merek salah lebih buruk daripada merek yang tidak ditulis.
+ */
+const MEREK: { uji: RegExp; label: string; tone: "danger" | "brand" | "amber" | "success" }[] = [
+  { uji: /busari/i, label: "Busari", tone: "amber" },
+  { uji: /lesung\s*pipi/i, label: "Lesung Pipi", tone: "success" },
+  { uji: /cattu/i, label: "Cattu", tone: "brand" },
+  { uji: /nordu/i, label: "Nordu", tone: "danger" },
+];
+
+const merekDari = (nama: string) => MEREK.find((m) => m.uji.test(nama)) ?? null;
+
+/** Ambang batas warna persentase: di atas ini hijau, di bawahnya merah. */
+const AMBANG_HIJAU = 80;
 
 /** Ambang status EBITDA: persen dari target margin yang sudah dianggap tercapai. */
 const AMBANG_EBITDA = 85;
@@ -277,16 +298,7 @@ export function PapanManajemen({ detail }: { detail: DetailManajemen }) {
         {
           accessorKey: "persentase",
           header: "Persentase",
-          cell: ({ row }) => {
-            const p = row.original.persentase;
-            if (p === null) return <span className="text-[11px] text-muted-foreground">belum ada data</span>;
-            return (
-              <div className="flex w-28 items-center gap-2">
-                <Progress value={Math.round(p)} tone={p >= 100 ? "success" : "brand"} />
-                <span className="w-11 text-right text-[11px] tabular-nums text-muted-foreground">{persen(p, 0)}</span>
-              </div>
-            );
-          },
+          cell: ({ row }) => <BarPersen nilai={row.original.persentase} />,
         },
         {
           accessorKey: "persenActual",
@@ -294,9 +306,24 @@ export function PapanManajemen({ detail }: { detail: DetailManajemen }) {
           // Bobot keempat komponen berjumlah 100, jadi skornya MEMANG persentase
           // — "33,23 / 40" menuntut pembacanya membagi sendiri untuk tahu
           // sumbangannya ke skor perusahaan, padahal angkanya sudah itu.
-          cell: ({ row }) => (
-            <span className="font-semibold tabular-nums text-foreground">{persen(row.original.persenActual)}</span>
-          ),
+          cell: ({ row }) => {
+            const b = row.original;
+            const baik = (b.persentase ?? 0) >= AMBANG_HIJAU;
+            return (
+              <span
+                className={cn(
+                  "tabular-nums",
+                  b.persenActual === null
+                    ? "text-muted-foreground"
+                    : baik
+                      ? "text-emerald-600 dark:text-emerald-400"
+                      : "text-rose-600 dark:text-rose-400",
+                )}
+              >
+                {persen(b.persenActual)}
+              </span>
+            );
+          },
         },
         {
           id: "status",
@@ -325,11 +352,18 @@ export function PapanManajemen({ detail }: { detail: DetailManajemen }) {
       lalu: (b: T) => number | null;
       ini: (b: T) => number | null;
       satuanNilai: "rupiah" | "persen";
-      utama: (b: T) => number | null;
-      penuh: number;
       status: (b: T) => { label: string; tone: "success" | "warning" | "danger" | "neutral" | "brand" };
     }): ColumnDef<T>[] => [
       kolomNo(),
+      {
+        id: "merek",
+        header: "Brand",
+        accessorFn: (b: T) => merekDari((b as { nama: string }).nama)?.label ?? "—",
+        cell: ({ row }) => {
+          const m = merekDari((row.original as { nama: string }).nama);
+          return m ? <Badge tone={m.tone}>{m.label}</Badge> : <span className="text-[11px] text-muted-foreground">—</span>;
+        },
+      },
       {
         id: "nama",
         header: "Outlet",
@@ -354,7 +388,6 @@ export function PapanManajemen({ detail }: { detail: DetailManajemen }) {
         accessorFn: (b: T) => bandingPersen(opsi.lalu(b), opsi.ini(b)),
         cell: ({ getValue }) => <Selisih nilai={getValue<number | null>()} />,
       },
-      barisPersen("utama", "%", opsi.utama, opsi.penuh),
       {
         id: "status",
         header: "Status",
@@ -369,16 +402,13 @@ export function PapanManajemen({ detail }: { detail: DetailManajemen }) {
   );
 
   const kolomGross = React.useMemo<ColumnDef<BarisOutlet>[]>(() => {
-    const total = skor.a.actual;
     return kolomDetail<BarisOutlet>({
       lalu: (o) => o.bulanLalu[2],
       ini: (o) => o.actual,
       satuanNilai: "rupiah",
-      utama: (o) => (total > 0 ? (o.actual / total) * 100 : null),
-      penuh: 100,
       status: (o) => arahStatus(bandingPersen(o.bulanLalu[2], o.actual)),
     });
-  }, [kolomDetail, skor.a.actual]);
+  }, [kolomDetail]);
 
   const kolomOutlet = React.useMemo<ColumnDef<BarisOutlet>[]>(
     () =>
@@ -386,9 +416,7 @@ export function PapanManajemen({ detail }: { detail: DetailManajemen }) {
         lalu: (o) => o.bulanLalu[2],
         ini: (o) => o.actual,
         satuanNilai: "rupiah",
-          utama: (o) => (o.target > 0 ? (o.actual / o.target) * 100 : null),
-        penuh: 100,
-        status: (o) => (o.ikut ? { label: "Dihitung", tone: "success" } : { label: "Dikecualikan", tone: "neutral" }),
+          status: (o) => (o.ikut ? { label: "Dihitung", tone: "success" } : { label: "Dikecualikan", tone: "neutral" }),
       }),
     [kolomDetail],
   );
@@ -399,8 +427,6 @@ export function PapanManajemen({ detail }: { detail: DetailManajemen }) {
         lalu: (e) => e.labaLalu,
         ini: (e) => e.labaBersih,
         satuanNilai: "rupiah",
-        utama: (e) => e.margin,
-        penuh: TARGET_MARGIN,
         // Ambangnya 85% DARI TARGET, bukan target penuh. Margin adalah hasil
         // puluhan keputusan kecil sepanjang bulan; menuntut 30% persis membuat
         // outlet yang meleset setengah persen dinilai sama dengan yang meleset
@@ -595,11 +621,21 @@ function Selisih({ nilai, satuan = "%" }: { nilai: number | null; satuan?: strin
   if (nilai === null) return <span className="text-[11px] text-muted-foreground">—</span>;
   const naik = nilai > 0.005;
   const turun = nilai < -0.005;
+  // Ikon tren, bukan segitiga: segitiga hanya menyatakan arah, sedangkan garis
+  // yang mendaki atau menukik menyatakan arah SEKALIGUS memberi bentuk yang
+  // terbaca sekilas dari seberang meja.
+  const Ikon = naik ? TrendingUp : turun ? TrendingDown : Minus;
   return (
-    <Badge tone={naik ? "success" : turun ? "danger" : "neutral"}>
-      {naik ? "▲" : turun ? "▼" : "—"} {angka(Math.abs(nilai))}
+    <span
+      className={cn(
+        "inline-flex items-center gap-1.5 text-[12px] font-medium tabular-nums",
+        naik ? "text-emerald-600 dark:text-emerald-400" : turun ? "text-rose-600 dark:text-rose-400" : "text-muted-foreground",
+      )}
+    >
+      <Ikon className="size-3.5 shrink-0" />
+      {angka(Math.abs(nilai))}
       {satuan === "%" ? "%" : ` ${satuan}`}
-    </Badge>
+    </span>
   );
 }
 
@@ -625,24 +661,51 @@ function Nilai({ n, tebal }: { n: number | null; tebal: boolean }) {
  *
  * Kalimat penjelas di bawah tiap nama komponen memakan setengah tinggi baris
  * dan tetap terpotong di tengah kata. Yang membacanya sudah tahu isinya
- * setelah sekali baca; yang belum tahu tinggal mengarahkan kursor. Dibuat
- * dengan CSS saja — tanpa pustaka, tanpa state, dan tetap bisa dibuka dengan
- * papan tik lewat fokus.
+ * setelah sekali baca; yang belum tahu tinggal mengarahkan kursor.
+ *
+ * DIGAMBAR DI LUAR TABEL lewat portal, dengan posisi tetap dari layar. Tabel
+ * punya kotak bergulir sendiri, dan apa pun yang digambar di dalamnya akan
+ * terpotong tepi kotak itu — keterangan yang terpotong separuh justru lebih
+ * membingungkan daripada tidak ada keterangan sama sekali.
  */
 function Keterangan({ teks }: { teks: string }) {
+  const [posisi, setPosisi] = React.useState<{ atas: number; kiri: number } | null>(null);
+  const acuan = React.useRef<HTMLButtonElement>(null);
+
+  const buka = React.useCallback(() => {
+    const k = acuan.current?.getBoundingClientRect();
+    if (k) setPosisi({ atas: k.bottom + 8, kiri: k.left + k.width / 2 });
+  }, []);
+  const tutup = React.useCallback(() => setPosisi(null), []);
+
   if (!teks) return null;
   return (
-    <span className="group/ket relative inline-flex shrink-0">
-      <button type="button" aria-label={teks} className="text-muted-foreground/70 transition-colors hover:text-foreground focus-visible:text-foreground">
+    <>
+      <button
+        ref={acuan}
+        type="button"
+        aria-label={teks}
+        onMouseEnter={buka}
+        onMouseLeave={tutup}
+        onFocus={buka}
+        onBlur={tutup}
+        className="shrink-0 text-muted-foreground/70 transition-colors hover:text-foreground focus-visible:text-foreground"
+      >
         <Info className="size-3.5" />
       </button>
-      <span
-        role="tooltip"
-        className="pointer-events-none absolute left-1/2 top-full z-30 mt-1.5 w-72 -translate-x-1/2 rounded-lg border border-border bg-card px-3 py-2 text-[11.5px] leading-relaxed text-muted-foreground opacity-0 shadow-lg transition-opacity group-hover/ket:opacity-100 group-focus-within/ket:opacity-100"
-      >
-        {teks}
-      </span>
-    </span>
+      {posisi !== null &&
+        typeof document !== "undefined" &&
+        createPortal(
+          <span
+            role="tooltip"
+            style={{ top: posisi.atas, left: posisi.kiri }}
+            className="pointer-events-none fixed z-[100] w-72 -translate-x-1/2 rounded-lg border border-border bg-card px-3 py-2 text-[11.5px] leading-relaxed text-muted-foreground shadow-lg"
+          >
+            {teks}
+          </span>,
+          document.body,
+        )}
+    </>
   );
 }
 
@@ -660,24 +723,24 @@ function kolomNo<T>(): ColumnDef<T> {
   };
 }
 
-/** Kolom persentase berbentuk bilah — dipakai berulang di tiga tabel. */
-function barisPersen<T>(id: string, header: string, nilai: (b: T) => number | null, penuh = 100): ColumnDef<T> {
-  return {
-    id,
-    header,
-    accessorFn: (b) => nilai(b),
-    cell: ({ getValue }) => {
-      const v = getValue<number | null>();
-      if (v === null) return <span className="text-[11px] text-muted-foreground">—</span>;
-      const rasio = (v / penuh) * 100;
-      return (
-        <div className="flex w-28 items-center gap-2">
-          <Progress value={Math.min(100, Math.round(rasio))} tone={rasio >= 100 ? "success" : "brand"} />
-          <span className="w-12 text-right text-[11px] tabular-nums text-muted-foreground">{persen(v, 1)}</span>
-        </div>
-      );
-    },
-  };
+/**
+ * Persentase berbentuk bilah, warnanya menyusul angkanya.
+ *
+ * Hijau begitu mendekati target, merah selama masih jauh. Angkanya diberi
+ * warna yang sama dan TIDAK ditebalkan: tebal membuat seluruh kolom berteriak
+ * sama keras, sedangkan yang perlu menonjol hanya yang merah.
+ */
+function BarPersen({ nilai }: { nilai: number | null }) {
+  if (nilai === null) return <span className="text-[11px] text-muted-foreground">—</span>;
+  const baik = nilai >= AMBANG_HIJAU;
+  return (
+    <div className="flex w-32 items-center gap-2">
+      <Progress value={Math.min(100, Math.round(nilai))} tone={baik ? "success" : "danger"} className="h-2" />
+      <span className={cn("w-12 text-right text-[11.5px] font-medium tabular-nums", baik ? "text-emerald-600 dark:text-emerald-400" : "text-rose-600 dark:text-rose-400")}>
+        {persen(nilai, 0)}
+      </span>
+    </div>
+  );
 }
 
 const urutTurun = <T extends { actual: number }>(baris: T[]): T[] => [...baris].sort((a, b) => b.actual - a.actual);

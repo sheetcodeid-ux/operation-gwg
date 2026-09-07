@@ -227,7 +227,14 @@ export function DataTable<TData, TValue>({
         </div>
       </div>
 
-      <div className="overflow-auto rounded-xl border border-border" style={stickyHeader ? { maxHeight } : undefined}>
+      {/* Tanpa kepala menempel, tabelnya TIDAK bergulir sendiri: yang bergulir
+          halamannya. Kotak yang bergulir di dalam halaman yang juga bergulir
+          membuat baris kepala tertutup isi tabelnya sendiri, dan yang
+          menggulirnya tidak pernah tahu sedang menggulir yang mana. */}
+      <div
+        className={cn("rounded-xl border border-border", stickyHeader ? "overflow-auto" : "overflow-x-auto")}
+        style={stickyHeader ? { maxHeight } : undefined}
+      >
         {/* min-w: on phones the table overflows and swipes horizontally instead
             of crushing every column to fit. */}
         <table className="w-full min-w-[44rem] text-sm">
