@@ -7,7 +7,7 @@ import {
   hitungC,
   hitungD,
   hitungManajemen,
-  PERTUMBUHAN_A,
+  PERTUMBUHAN,
   peringkat,
   rasio,
 } from "./manajemen";
@@ -57,7 +57,7 @@ describe("A — Gross Sales Corporate", () => {
   it("lajunya sama dengan Gross Sales Coordinator Area", () => {
     // Satu perusahaan tidak boleh menuntut dua laju pertumbuhan berbeda untuk
     // penjualan yang sama.
-    expect(PERTUMBUHAN_A).toBe(15);
+    expect(PERTUMBUHAN).toBe(15);
   });
 
   it("kurang dari target menghasilkan skor proporsional", () => {
@@ -85,7 +85,8 @@ describe("B — Same Store Sales", () => {
     expect(b.jumlahBaru).toBe(1);
     // Outlet D punya actual 9999 — kalau ikut, capaiannya melompat jauh.
     expect(b.actual).toBe(120 + 100 + 50);
-    expect(b.target).toBe(100 + 200 + 50);
+    // Targetnya rata-rata masing-masing outlet, DITAMBAH pertumbuhan.
+    expect(b.target).toBeCloseTo((100 + 200 + 50) * 1.15, 5);
   });
 
   it("tepat 3 bulan masih terhitung baru; 4 bulan sudah ikut", () => {
@@ -178,12 +179,13 @@ describe("skor akhir", () => {
       divisi: [{ nama: "HR", nilai: 90 }],
     });
     expect(s.a.skor).toBe(40);
-    expect(s.b.skor).toBeCloseTo(27, 5);
+    // Outlet rata-rata 1000 → target 1150; actual 900 → 78,26% → 23,48.
+    expect(s.b.skor).toBeCloseTo(23.478261, 5);
     // Sales same store diambil dari total actual B (900) → margin 30% → penuh.
     expect(s.c.sales).toBe(900);
     expect(s.c.skor).toBe(20);
     expect(s.d.skor).toBeCloseTo(9, 5);
-    expect(s.akhir).toBe(96);
+    expect(s.akhir).toBe(92.48);
   });
 
   it("sales same store bisa ditulis tangan menggantikan total B", () => {

@@ -28,14 +28,17 @@ export const TARGET_MARGIN = 30;
 export const UMUR_SAME_STORE = 3;
 
 /**
- * Pertumbuhan yang dituntut dari omzet korporat, dalam persen.
+ * Pertumbuhan yang dituntut dari penjualan, dalam persen.
  *
  * Rata-rata tiga bulan adalah keadaan SEKARANG, bukan sasaran — memakainya
  * apa adanya berarti perusahaan dinilai penuh hanya karena tidak menurun.
- * Angkanya sama dengan target Gross Sales Coordinator Area supaya satu
- * perusahaan tidak menuntut dua laju pertumbuhan yang berbeda.
+ *
+ * SATU angka untuk Gross Sales Corporate dan Same Store Sales sekaligus, dan
+ * sama pula dengan Gross Sales Coordinator Area. Dua laju berbeda untuk
+ * penjualan yang sama akan tampil sebagai dua target berbeda di dua halaman,
+ * dan yang membacanya akan mengira salah satunya salah hitung.
  */
-export const PERTUMBUHAN_A = 15;
+export const PERTUMBUHAN = 15;
 
 /**
  * Pencapaian dibatasi 1 (100%).
@@ -72,7 +75,7 @@ export interface HasilKomponen {
 
 export function hitungA(a: KomponenA): HasilKomponen {
   const rata = (a.bulanLalu[0] + a.bulanLalu[1] + a.bulanLalu[2]) / 3;
-  const target = rata * (1 + PERTUMBUHAN_A / 100);
+  const target = rata * (1 + PERTUMBUHAN / 100);
   const capaian = rasio(a.actual, target);
   return { target, actual: a.actual, capaian, skor: batas1(capaian) * BOBOT.a };
 }
@@ -90,6 +93,7 @@ export interface OutletManajemen {
 }
 
 export interface BarisOutletB extends OutletManajemen {
+  /** Rata-rata tiga bulan outlet itu sendiri + pertumbuhan. */
   target: number;
   /** Ikut dihitung? Outlet berumur ≤ 3 bulan dikecualikan. */
   ikut: boolean;
@@ -118,7 +122,7 @@ export interface HasilB extends HasilKomponen {
 export function hitungB(outlet: OutletManajemen[]): HasilB {
   const baris: BarisOutletB[] = outlet.map((o) => ({
     ...o,
-    target: (o.bulanLalu[0] + o.bulanLalu[1] + o.bulanLalu[2]) / 3,
+    target: ((o.bulanLalu[0] + o.bulanLalu[1] + o.bulanLalu[2]) / 3) * (1 + PERTUMBUHAN / 100),
     ikut: o.umur === null ? o.bulanLalu.every((n) => n > 0) : o.umur > UMUR_SAME_STORE,
   }));
   const ikut = baris.filter((b) => b.ikut);
