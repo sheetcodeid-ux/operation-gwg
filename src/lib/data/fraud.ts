@@ -438,10 +438,23 @@ export async function syncFraudRange(from: string, to: string, kind: FraudKind, 
 const SALES_TTL_MS = 60 * 60 * 1000;
 /** A sales figure is FINAL once synced after its range ended (WIB); a live
  *  range stays fresh for an hour. */
+/**
+ * Jeda sebelum omset satu hari dianggap final.
+ *
+ * Bill yang dibatalkan atau baru diposting keesokan harinya mengubah angka
+ * hari yang sudah lewat. Dulu satu hari dianggap final begitu lewat tengah
+ * malam, jadi koreksi seperti itu TIDAK PERNAH ikut — total harian sebulan
+ * meleset puluhan juta dari angka bulanan yang ditarik ulang, dan tidak ada
+ * satu pun tanda bahwa keduanya berbeda.
+ */
+const SALES_FINAL_HARI = 3;
+
 function salesFresh(syncedAt: string, toDay: string): boolean {
   const syncedMs = Date.parse(syncedAt);
-  const endMs = Date.parse(`${toDay}T17:00:00Z`); // next 00:00 WIB
-  if (syncedMs >= endMs) return true;
+  // Final hanya setelah lewat jeda; sebelum itu hari yang sudah tersimpan
+  // tetap ditarik ulang supaya koreksinya ikut masuk.
+  const finalMs = Date.parse(`${toDay}T17:00:00Z`) + SALES_FINAL_HARI * 86_400_000;
+  if (syncedMs >= finalMs) return true;
   return Date.now() - syncedMs < SALES_TTL_MS;
 }
 

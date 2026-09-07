@@ -437,9 +437,20 @@ export interface HariOmzet {
   lalu: number | null;
 }
 
-function TipHarian({ active, payload, label }: { active?: boolean; payload?: { payload: HariOmzet & { target: number } }[]; label?: number }) {
+function TipHarian({
+  active,
+  payload,
+  label,
+  akhirPekan,
+}: {
+  active?: boolean;
+  payload?: { payload: HariOmzet & { target: number } }[];
+  label?: number;
+  akhirPekan?: (t: number) => boolean;
+}) {
   if (!active || !payload?.length) return null;
   const d = payload[0].payload;
+  const tembus = d.ini !== null && d.target > 0 && d.ini >= d.target;
   const baris: [string, string, number | null][] = [
     ["Bulan ini", BLUE, d.ini],
     ["Bulan lalu", "#94a3b8", d.lalu],
@@ -447,14 +458,35 @@ function TipHarian({ active, payload, label }: { active?: boolean; payload?: { p
   ];
   return (
     <div className="rounded-lg border border-border bg-card px-3 py-2 text-[11.5px] shadow-lg">
-      <p className="mb-1 font-medium text-foreground">Tanggal {label}</p>
+      <p className="mb-1 font-medium text-foreground">
+        Tanggal {label}
+        {akhirPekan?.(Number(label)) ? <span className="ml-1 text-rose-500">· akhir pekan</span> : null}
+      </p>
       {baris.map(([nama, warna, nilai]) => (
         <p key={nama} className="flex items-center gap-1.5 text-muted-foreground">
           <span className="size-2 shrink-0 rounded-full" style={{ background: warna }} />
           {nama}: <span className="font-medium text-foreground">{nilai === null ? "—" : formatIDR(nilai)}</span>
         </p>
       ))}
+      {d.ini !== null && d.target > 0 && (
+        <p className={cn("mt-1 font-medium", tembus ? "text-emerald-600 dark:text-emerald-400" : "text-muted-foreground")}>
+          {tembus ? "Tembus target harian" : `Kurang ${formatIDR(d.target - d.ini)} dari target`}
+        </p>
+      )}
     </div>
+  );
+}
+
+/** Titik hijau untuk hari yang tembus target; titik biasa untuk sisanya. */
+function TitikHarian({ cx, cy, payload }: { cx?: number; cy?: number; payload?: HariOmzet & { target: number } }) {
+  if (cx === undefined || cy === undefined || !payload || payload.ini === null) return null;
+  const tembus = payload.target > 0 && payload.ini >= payload.target;
+  if (!tembus) return <circle cx={cx} cy={cy} r={1.8} fill={BLUE} />;
+  return (
+    <g>
+      <circle cx={cx} cy={cy} r={5} fill="#10b981" fillOpacity={0.18} />
+      <circle cx={cx} cy={cy} r={3} fill="#10b981" stroke="var(--card, #fff)" strokeWidth={1.2} />
+    </g>
   );
 }
 
@@ -466,13 +498,24 @@ function TipHarian({ active, payload, label }: { active?: boolean; payload?: { p
  * dan justru keratanya yang berguna: hari-hari di bawah garis terlihat
  * langsung, dan jarak yang harus dikejar sisa bulan bisa dikira-kira dengan
  * mata.
+ *
+ * Hari yang tembus target ditandai TITIK HIJAU, bukan tulisan. Tiga puluh
+ * keterangan di atas satu grafik menutupi grafiknya sendiri; satu titik yang
+ * berbeda warna terbaca sekali lihat dan tetap terbaca saat dicetak.
+ *
+ * Sabtu dan Minggu ditulis merah dan diberi latar tipis. Penjualan F&B punya
+ * irama mingguan yang kuat — tanpa penanda itu, jatuhnya hari Senin terbaca
+ * sebagai masalah padahal memang begitu bentuk minggunya.
  */
 export function GrafikHarian({
   judul,
+  periode,
   hari,
   targetBulan,
 }: {
   judul: string;
+  /** "YYYY-MM" — dipakai menentukan hari apa tiap tanggalnya. */
+  periode: string;
   hari: HariOmzet[];
   /** Target sebulan; dibagi rata jadi garis target harian. */
   targetBulan: number | null;
@@ -481,8 +524,22 @@ export function GrafikHarian({
   const data = React.useMemo(() => hari.map((h) => ({ ...h, target })), [hari, target]);
   const adaIsi = data.some((d) => d.ini !== null || d.lalu !== null);
 
-  const totalIni = data.reduce((s, d) => s + (d.ini ?? 0), 0);
+  const [th, bl] = periode.split("-").map(Number);
+  const akhirPekan = React.useCallback(
+    (tanggal: number) => {
+      const h = new Date(Date.UTC(th, bl - 1, tanggal)).getUTCDay();
+      return h === 0 || h === 6;
+    },
+    [th, bl],
+  );
+
+  const terisi = data.filter((d) => d.ini !== null);
+  const totalIni = terisi.reduce((s, d) => s + (d.ini ?? 0), 0);
   const totalLalu = data.reduce((s, d) => s + (d.lalu ?? 0), 0);
+  const tembus = terisi.filter((d) => target > 0 && (d.ini ?? 0) >= target).length;
+  const sisaHari = data.length - terisi.length;
+  const kurang = targetBulan === null ? 0 : Math.max(0, targetBulan - totalIni);
+  const perluHarian = sisaHari > 0 ? kurang / sisaHari : 0;
 
   return (
     <Kartu
@@ -495,12 +552,15 @@ export function GrafikHarian({
           <span className="inline-flex items-center gap-1.5">
             <span className="size-2 rounded-full bg-slate-400" /> Bulan lalu {ringkas(totalLalu, "rupiah")}
           </span>
+          <span className="inline-flex items-center gap-1.5">
+            <span className="size-2 rounded-full bg-emerald-500" /> Tembus {tembus}/{terisi.length} hari
+          </span>
         </div>
       }
     >
-      <div className="min-h-[17rem] flex-1" style={{ outline: "none" }}>
+      <div className="min-h-[16rem] flex-1" style={{ outline: "none" }}>
         {!adaIsi ? (
-          <div className="grid h-full min-h-[17rem] place-items-center text-[12px] text-muted-foreground">
+          <div className="grid h-full min-h-[16rem] place-items-center text-[12px] text-muted-foreground">
             Belum ada penjualan harian pada bulan ini.
           </div>
         ) : (
@@ -520,8 +580,22 @@ export function GrafikHarian({
                 tickLine={false}
                 axisLine={false}
                 interval={0}
-                tick={{ fontSize: 10, fill: "rgb(100,116,139)" }}
-                tickFormatter={(v: number) => (hari.length > 20 && v % 2 === 0 ? "" : String(v))}
+                tick={(props: { x?: string | number; y?: string | number; payload?: { value?: number } }) => {
+                  const { x, y, payload } = props;
+                  const t = Number(payload?.value ?? 0);
+                  return (
+                    <text
+                      x={Number(x ?? 0)}
+                      y={Number(y ?? 0) + 12}
+                      textAnchor="middle"
+                      fontSize={9.5}
+                      fontWeight={akhirPekan(t) ? 700 : 400}
+                      fill={akhirPekan(t) ? "#e11d48" : "rgb(100,116,139)"}
+                    >
+                      {t}
+                    </text>
+                  );
+                }}
               />
               <YAxis
                 width={54}
@@ -530,15 +604,26 @@ export function GrafikHarian({
                 tick={{ fontSize: 10.5, fill: "rgb(100,116,139)" }}
                 tickFormatter={(v: number) => ringkas(v, "rupiah")}
               />
-              <Tooltip content={<TipHarian />} cursor={{ stroke: "rgba(148,163,184,0.35)" }} />
+              <Tooltip content={<TipHarian akhirPekan={akhirPekan} />} cursor={{ stroke: "rgba(148,163,184,0.35)" }} />
               <Line type="linear" dataKey="target" stroke="#f59e0b" strokeWidth={1.5} strokeDasharray="6 5" dot={false} isAnimationActive={false} />
               <Line type="linear" dataKey="lalu" stroke="#94a3b8" strokeWidth={1.5} dot={false} connectNulls isAnimationActive={false} />
               <Area type="linear" dataKey="ini" stroke="none" fill="url(#hariBlue)" isAnimationActive={false} />
-              <Line type="linear" dataKey="ini" stroke={BLUE} strokeWidth={2} dot={{ r: 1.8, fill: BLUE }} connectNulls isAnimationActive={false} />
+              <Line type="linear" dataKey="ini" stroke={BLUE} strokeWidth={2} dot={<TitikHarian />} connectNulls isAnimationActive={false} />
             </ComposedChart>
           </ResponsiveContainer>
         )}
       </div>
+      {adaIsi && targetBulan !== null && (
+        <p className="mt-2 shrink-0 text-[11.5px] leading-relaxed text-muted-foreground">
+          Rata-rata {ringkas(terisi.length ? totalIni / terisi.length : 0, "rupiah")}/hari dari target{" "}
+          {ringkas(target, "rupiah")}/hari
+          {sisaHari > 0
+            ? ` · sisa ${sisaHari} hari perlu ${ringkas(perluHarian, "rupiah")}/hari untuk menutup ${ringkas(kurang, "rupiah")}`
+            : kurang > 0
+              ? ` · bulan berakhir kurang ${ringkas(kurang, "rupiah")}`
+              : " · target sebulan tercapai"}
+        </p>
+      )}
     </Kartu>
   );
 }

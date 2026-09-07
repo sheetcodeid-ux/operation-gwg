@@ -559,12 +559,16 @@ export function PilihTabel<T extends string>({
   onNilai: (v: T) => void;
 }) {
   return (
-    // Bingkai dan bantalannya di LUAR kotak yang digulir. Kalau keduanya jadi
-    // satu, bantalan kiri ikut tergulir dan tombol pertama menempel persis pada
-    // garis bingkai — cincin tombol terpilih terpotong garis itu, dan yang
-    // terlihat bukan "sedang digeser" melainkan kotaknya rusak.
-    <div className="max-w-full rounded-xl border border-border bg-muted/50 p-1">
-      <div className="scroll-fade-x flex items-center gap-1">
+    // Bingkainya DI LUAR kotak yang digulir, dan bentuk lengkungnya ikut
+    // memotong isinya. Kalau bingkai dan gulirannya jadi satu kotak, bantalan
+    // kiri ikut tergeser sampai tombol pertama menempel pada garis bingkai,
+    // cincin tombol terpilih terpotong garis itu, dan sudut lengkungnya hilang
+    // — yang terlihat bukan "sedang digeser" melainkan kotaknya rusak.
+    //
+    // Bantalan tegaknya dipindah ke dalam: cincin tombol terpilih digambar di
+    // tepi tombol, dan kotak guliran setinggi tombol akan memangkasnya.
+    <div className="max-w-full overflow-hidden rounded-xl border border-border bg-muted/50 px-1">
+      <div className="scroll-fade-x flex items-center gap-1 py-1">
         {pilihan.map((p) => {
           const on = p.id === nilai;
           const Icon = p.icon;
