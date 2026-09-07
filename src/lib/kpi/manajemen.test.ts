@@ -7,6 +7,7 @@ import {
   hitungC,
   hitungD,
   hitungManajemen,
+  PERTUMBUHAN_A,
   peringkat,
   rasio,
 } from "./manajemen";
@@ -43,16 +44,24 @@ describe("pembatas dan pembagi", () => {
 });
 
 describe("A — Gross Sales Corporate", () => {
-  it("target = rata-rata tiga bulan, skor sesuai contoh PRD", () => {
-    // 4M, 5M, 6M → target 5M; actual 5,5M → 110% → dibatasi 100% → 40.
-    const a = hitungA({ bulanLalu: [4e9, 5e9, 6e9], actual: 5.5e9 });
-    expect(a.target).toBe(5e9);
-    expect(a.capaian).toBeCloseTo(1.1, 5);
+  it("target = rata-rata tiga bulan DITAMBAH pertumbuhan", () => {
+    // Rata-rata tiga bulan adalah keadaan sekarang, bukan sasaran. Tanpa
+    // pertumbuhan, perusahaan mendapat skor penuh hanya karena tidak menurun.
+    // 4M, 5M, 6M → rata-rata 5M → target 5,75M.
+    const a = hitungA({ bulanLalu: [4e9, 5e9, 6e9], actual: 5.75e9 });
+    expect(a.target).toBe(5.75e9);
+    expect(a.capaian).toBeCloseTo(1, 5);
     expect(a.skor).toBe(BOBOT.a);
   });
 
+  it("lajunya sama dengan Gross Sales Coordinator Area", () => {
+    // Satu perusahaan tidak boleh menuntut dua laju pertumbuhan berbeda untuk
+    // penjualan yang sama.
+    expect(PERTUMBUHAN_A).toBe(15);
+  });
+
   it("kurang dari target menghasilkan skor proporsional", () => {
-    const a = hitungA({ bulanLalu: [4e9, 5e9, 6e9], actual: 2.5e9 });
+    const a = hitungA({ bulanLalu: [4e9, 5e9, 6e9], actual: 2.875e9 });
     expect(a.capaian).toBeCloseTo(0.5, 5);
     expect(a.skor).toBeCloseTo(20, 5);
   });
@@ -162,7 +171,7 @@ describe("D — KPI All Division", () => {
 describe("skor akhir", () => {
   it("empat komponen dijumlah dan dibulatkan dua desimal", () => {
     const s = hitungManajemen({
-      a: { bulanLalu: [4e9, 5e9, 6e9], actual: 5.5e9 },
+      a: { bulanLalu: [4e9, 5e9, 6e9], actual: 5.75e9 },
       outlet: [{ id: "1", nama: "A", umur: 24, bulanLalu: [1000, 1000, 1000], actual: 900 }],
       labaBersih: 270,
       salesManual: null,
