@@ -17,6 +17,8 @@ export default defineConfig({
     // ditaruh duluan, ia menang atas seluruh alias yang lebih khusus di
     // bawahnya — dan modul server yang mau dihindari tetap ikut terbawa.
     alias: [
+      { find: "next/link", replacement: fileURLToPath(new URL("./.preview/next-link-stub.tsx", import.meta.url)) },
+      { find: "@/lib/actions/auth", replacement: fileURLToPath(new URL("./.preview/auth-actions-stub.ts", import.meta.url)) },
       { find: "next/navigation", replacement: fileURLToPath(new URL("./.preview/next-navigation-stub.ts", import.meta.url)) },
       // Aksi server ditiru: tanpa ini seluruh lapisan server ikut terbawa ke
       // bundel peramban, termasuk modul yang membaca kredensial.
