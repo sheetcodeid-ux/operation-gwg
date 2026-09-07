@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import { Area, Bar, CartesianGrid, ComposedChart, Line, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
-import { ChartPie, Hash, Layers, Percent } from "lucide-react";
+import { ChartPie, Check, Hash, Layers, Percent, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { BarisKpi } from "@/lib/kpi/hitung";
 import { formatIDR, formatNumber } from "@/lib/utils";
@@ -437,40 +437,75 @@ export interface HariOmzet {
   lalu: number | null;
 }
 
+const HARI_ID = ["Minggu", "Senin", "Selasa", "Rabu", "Kamis", "Jumat", "Sabtu"];
+const BULAN_ID = ["Jan", "Feb", "Mar", "Apr", "Mei", "Jun", "Jul", "Agu", "Sep", "Okt", "Nov", "Des"];
+
+/** "Senin, 08 Jun 2026" — tanggal utuh, bukan nomor tanpa konteks. */
+function tanggalPanjang(periode: string, tanggal: number): string {
+  const [th, bl] = periode.split("-").map(Number);
+  const d = new Date(Date.UTC(th, bl - 1, tanggal));
+  return `${HARI_ID[d.getUTCDay()]}, ${String(tanggal).padStart(2, "0")} ${BULAN_ID[bl - 1]} ${th}`;
+}
+
 function TipHarian({
   active,
   payload,
   label,
+  periode,
   akhirPekan,
 }: {
   active?: boolean;
   payload?: { payload: HariOmzet & { target: number } }[];
   label?: number;
+  periode?: string;
   akhirPekan?: (t: number) => boolean;
 }) {
   if (!active || !payload?.length) return null;
   const d = payload[0].payload;
+  const tgl = Number(label);
+  const merah = akhirPekan?.(tgl) ?? false;
   const tembus = d.ini !== null && d.target > 0 && d.ini >= d.target;
+  const selisih = d.ini === null ? 0 : d.ini - d.target;
   const baris: [string, string, number | null][] = [
     ["Bulan ini", BLUE, d.ini],
     ["Bulan lalu", "#94a3b8", d.lalu],
     ["Target/hari", "#f59e0b", d.target],
   ];
   return (
-    <div className="rounded-lg border border-border bg-card px-3 py-2 text-[11.5px] shadow-lg">
-      <p className="mb-1 font-medium text-foreground">
-        Tanggal {label}
-        {akhirPekan?.(Number(label)) ? <span className="ml-1 text-rose-500">· akhir pekan</span> : null}
+    <div className="min-w-[13.5rem] rounded-xl border border-border bg-card px-3 py-2.5 text-[11.5px] shadow-lg">
+      {/* Tanggal ditulis utuh dengan nama harinya. "Tanggal 5" menuntut
+          pembacanya menghitung sendiri hari apa itu, padahal justru hari apa
+          yang menjelaskan kenapa angkanya tinggi atau rendah. Akhir pekan
+          cukup ditandai dengan warna — menuliskannya lagi mengulang hal yang
+          sudah terbaca dari nama harinya. */}
+      <p className={cn("mb-1.5 font-semibold", merah ? "text-rose-500" : "text-foreground")}>
+        {periode ? tanggalPanjang(periode, tgl) : `Tanggal ${tgl}`}
       </p>
       {baris.map(([nama, warna, nilai]) => (
         <p key={nama} className="flex items-center gap-1.5 text-muted-foreground">
           <span className="size-2 shrink-0 rounded-full" style={{ background: warna }} />
-          {nama}: <span className="font-medium text-foreground">{nilai === null ? "—" : formatIDR(nilai)}</span>
+          {nama}: <span className="ml-auto font-medium tabular-nums text-foreground">{nilai === null ? "—" : formatIDR(nilai)}</span>
         </p>
       ))}
       {d.ini !== null && d.target > 0 && (
-        <p className={cn("mt-1 font-medium", tembus ? "text-emerald-600 dark:text-emerald-400" : "text-muted-foreground")}>
-          {tembus ? "Tembus target harian" : `Kurang ${formatIDR(d.target - d.ini)} dari target`}
+        // Statusnya berbentuk lencana, bukan kalimat: kalimat di ujung tooltip
+        // terbaca sebagai catatan tambahan, sedangkan inilah kesimpulannya.
+        <p
+          className={cn(
+            "mt-2 flex items-center justify-between gap-2 rounded-lg px-2 py-1 font-medium",
+            tembus
+              ? "bg-emerald-500/12 text-emerald-600 dark:text-emerald-400"
+              : "bg-rose-500/12 text-rose-600 dark:text-rose-400",
+          )}
+        >
+          <span className="inline-flex items-center gap-1.5">
+            {tembus ? <Check className="size-3.5" /> : <X className="size-3.5" />}
+            {tembus ? "Tembus target" : "Di bawah target"}
+          </span>
+          <span className="tabular-nums">
+            {tembus ? "+" : "−"}
+            {formatIDR(Math.abs(selisih)).replace("Rp ", "")}
+          </span>
         </p>
       )}
     </div>
@@ -616,7 +651,7 @@ export function GrafikHarian({
                 tick={{ fontSize: 10.5, fill: "rgb(100,116,139)" }}
                 tickFormatter={(v: number) => ringkas(v, "rupiah")}
               />
-              <Tooltip content={<TipHarian akhirPekan={akhirPekan} />} cursor={{ stroke: "rgba(148,163,184,0.35)" }} />
+              <Tooltip content={<TipHarian periode={periode} akhirPekan={akhirPekan} />} cursor={{ stroke: "rgba(148,163,184,0.35)" }} />
               <Line type="linear" dataKey="target" stroke="#f59e0b" strokeWidth={1.5} strokeDasharray="6 5" dot={false} isAnimationActive={false} />
               <Line type="linear" dataKey="lalu" stroke="#94a3b8" strokeWidth={1.5} dot={false} connectNulls isAnimationActive={false} />
               <Area type="linear" dataKey="ini" stroke="none" fill="url(#hariBlue)" isAnimationActive={false} />

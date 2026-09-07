@@ -6,7 +6,7 @@ import { I18nProvider } from "@/lib/i18n/provider";
 import { navAll, accessibleMenuKeys } from "@/lib/nav";
 import { PapanKpi } from "@/components/kpi/papan-kpi";
 import { PapanManajemen } from "@/components/kpi/papan-manajemen";
-import { departemenKpi, hitungManajemen } from "@/lib/kpi/manajemen";
+import { SETELAN_BAWAAN, departemenKpi, hitungManajemen } from "@/lib/kpi/manajemen";
 import type { DetailManajemen } from "@/lib/data/kpi-manajemen";
 import { barisEfisiensi, barisKpi, ringkasEfisiensi, ringkasKpi } from "@/lib/kpi/hitung";
 import { indikatorPosisi } from "@/lib/kpi/indikator";
@@ -164,6 +164,7 @@ const DETAIL_MJ: DetailManajemen = {
     c: { persen: 78.5, actual: 23.5 },
     d: { persen: 84.4, actual: 84.4 },
   },
+  setelan: SETELAN_BAWAAN,
   skor: SKOR_MJ,
 };
 
@@ -185,7 +186,7 @@ if (kode === "sidebar") {
   throw new Error("__stop__");
 }
 if (kode === "manajemen") {
-  createRoot(document.getElementById("root")!).render(<PapanManajemen detail={DETAIL_MJ} />);
+  createRoot(document.getElementById("root")!).render(<PapanManajemen detail={DETAIL_MJ} bolehAtur />);
   throw new Error("__stop__");
 }
 

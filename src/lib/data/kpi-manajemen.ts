@@ -7,11 +7,13 @@ import { bulanMulaiBerjalan, bulanSebelum, grossDiketik, grossKetikBulan, lapora
 import { DEPARTEMEN, POSISI, posisiDari } from "@/lib/kpi/struktur";
 import { SEMUA_PIC } from "@/lib/kpi/semua-pic";
 import {
+  SETELAN_BAWAAN,
   departemenKpi,
   hitungManajemen,
   type DepartemenKpi,
   type OutletManajemen,
   type PosisiKpi,
+  type SetelanManajemen,
   type SkorManajemen,
 } from "@/lib/kpi/manajemen";
 import type { LaluIndikator } from "@/components/kpi/kpi-charts";
@@ -66,6 +68,8 @@ export interface DetailManajemen {
   ebitda: BarisEbitda[];
   /** Omzet per tanggal, bulan ini dan bulan lalu — bahan grafik harian. */
   harian: HariOmzet[];
+  /** Bobot dan target yang sedang berlaku. */
+  setelan: SetelanManajemen;
   /** Capaian bulan lalu per komponen — bahan grafik pembanding. */
   lalu: Record<string, LaluIndikator>;
 }
@@ -95,6 +99,61 @@ export function umurBulan(bukaTanggal: string | null, periode: string): number |
   const [tm, bm] = mulai.split("-").map(Number);
   const [tp, bp] = periode.split("-").map(Number);
   return (tp - tm) * 12 + (bp - bm);
+}
+
+/**
+ * Bobot dan target yang sedang berlaku.
+ *
+ * Gagal membaca berarti memakai NILAI BAWAAN, bukan menggagalkan halamannya:
+ * setelan adalah pelengkap, dan halaman yang menolak tampil karena satu baris
+ * pengaturan tidak terbaca jauh lebih merugikan daripada bobot yang sesaat
+ * kembali ke bawaannya.
+ */
+export async function setelanManajemen(): Promise<SetelanManajemen> {
+  if (!dbEnabled) return SETELAN_BAWAAN;
+  const { data } = await db()
+    .from("kpi_manajemen_setelan")
+    .select("bobot_a,bobot_b,bobot_c,bobot_d,pertumbuhan,target_margin,ambang_ebitda,umur_same_store")
+    .eq("id", "global")
+    .maybeSingle();
+  if (!data) return SETELAN_BAWAAN;
+  return {
+    bobot: {
+      a: angka(data.bobot_a) || SETELAN_BAWAAN.bobot.a,
+      b: angka(data.bobot_b) || SETELAN_BAWAAN.bobot.b,
+      c: angka(data.bobot_c) || SETELAN_BAWAAN.bobot.c,
+      d: angka(data.bobot_d) || SETELAN_BAWAAN.bobot.d,
+    },
+    pertumbuhan: angka(data.pertumbuhan),
+    targetMargin: angka(data.target_margin) || SETELAN_BAWAAN.targetMargin,
+    ambangEbitda: angka(data.ambang_ebitda) || SETELAN_BAWAAN.ambangEbitda,
+    umurSameStore: angka(data.umur_same_store),
+  };
+}
+
+/** Menyimpan setelan — hanya dipanggil aksi yang sudah memeriksa izinnya. */
+export async function simpanSetelanManajemen(input: {
+  setelan: SetelanManajemen;
+  olehId: string;
+  olehNama: string;
+}): Promise<{ error?: string }> {
+  if (!dbEnabled) return { error: "Penyimpanan belum aktif." };
+  const { setelan: st } = input;
+  const { error } = await db().from("kpi_manajemen_setelan").upsert({
+    id: "global",
+    bobot_a: st.bobot.a,
+    bobot_b: st.bobot.b,
+    bobot_c: st.bobot.c,
+    bobot_d: st.bobot.d,
+    pertumbuhan: st.pertumbuhan,
+    target_margin: st.targetMargin,
+    ambang_ebitda: st.ambangEbitda,
+    umur_same_store: st.umurSameStore,
+    diubah_oleh: input.olehId,
+    diubah_nama: input.olehNama,
+    diubah_pada: new Date().toISOString(),
+  });
+  return error ? { error: error.message } : {};
 }
 
 /** Jumlah hari dalam satu periode "YYYY-MM". */
@@ -230,6 +289,7 @@ export async function detailManajemen(
     ...bulanA.map((b) => grossKetikBulan(b)),
   ]);
 
+  const setelan = await setelanManajemen();
   const outletAktif = getOutlets().filter((o) => o.active);
   const jual = (peta: Map<string, { net: number }>, branch: string | null | undefined) =>
     branch ? (peta.get(branch)?.net ?? 0) : 0;
@@ -278,6 +338,7 @@ export async function detailManajemen(
     outlet,
     labaBersih: 0,
     departemen: [],
+    setelan,
   });
   const ikut = sementara.b.baris.filter((b) => b.ikut);
   const idIkut = ikut.map((b) => b.id);
@@ -332,10 +393,12 @@ export async function detailManajemen(
       outlet,
       labaBersih,
       departemen,
+      setelan,
     }),
     bulanA,
     labaBersih,
     ebitda,
     harian,
+    setelan,
   };
 }

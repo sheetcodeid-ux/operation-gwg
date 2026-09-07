@@ -8,6 +8,8 @@ import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { DataTable } from "@/components/ui/data-table";
 import { Progress } from "@/components/ui/progress";
+import { labelMerek, merekOutlet } from "@/lib/kpi/merek";
+import { cn } from "@/lib/utils";
 import type { Tone } from "@/lib/constants";
 import { buatZip } from "@/lib/zip";
 import { hapusEntriAction } from "@/lib/actions/kpi";
@@ -44,6 +46,26 @@ function Rp({ v, muted }: { v: number | null; muted?: boolean }) {
  * berarti baris ketiga dari atas. Itulah gunanya nomor di sini: menyebut baris
  * lewat telepon tanpa harus mengeja nama outletnya.
  */
+/**
+ * Lencana merek — bentuk yang sama dengan tabel KPI Manajemen.
+ *
+ * Nordu, Cattu, Busari, dan Lesung Pipi berbeda jauh margin dan ritmenya;
+ * membedakannya sekilas mengubah daftar panjang jadi empat kelompok yang bisa
+ * dibandingkan. Aturannya satu tempat di `lib/kpi/merek.ts` supaya warnanya
+ * tidak pernah berbeda antar halaman.
+ */
+function kolomMerek<T>(nama: (b: T) => string): ColumnDef<T> {
+  return {
+    id: "merek",
+    header: "Brand",
+    accessorFn: (b) => labelMerek(nama(b)),
+    cell: ({ row }) => {
+      const m = merekOutlet(nama(row.original));
+      return m ? <Badge tone={m.tone}>{m.label}</Badge> : <span className="text-[11px] text-muted-foreground">—</span>;
+    },
+  };
+}
+
 function kolomNomor<T>(): ColumnDef<T> {
   return {
     id: "no",
@@ -193,6 +215,7 @@ export function TabelHygiene({
         accessorFn: (e) => (e.outletId ? namaOutlet.get(e.outletId) ?? e.outletId : "—"),
         cell: ({ getValue }) => <span className="font-medium text-foreground">{getValue<string>()}</span>,
       },
+      kolomMerek<EntriKpi>((e) => (e.outletId ? namaOutlet.get(e.outletId) ?? "" : "")),
       { accessorKey: "picNama", header: "PIC", cell: ({ getValue }) => <span className="text-foreground/80">{getValue<string>()}</span> },
       {
         id: "bukti",
@@ -344,6 +367,7 @@ function TabelAngkaOutlet({
           </div>
         ),
       },
+      kolomMerek<DetailOutletCa>((o) => o.outletNama),
       { accessorKey: "gross", header: "Gross Sales", cell: ({ getValue }) => <Rp v={getValue<number | null>()} muted /> },
       { id: "target", header: judulTarget, accessorFn: target, cell: ({ getValue }) => <Rp v={getValue<number | null>()} muted /> },
       {
@@ -375,10 +399,21 @@ function TabelAngkaOutlet({
           // target. Batang dan angka di sebelahnya yang menyatakan dua hal
           // berbeda adalah cara tercepat membuat tabel salah dibaca.
           const capai = tercapai(tableId, nilai(row.original) ?? 0, target(row.original) ?? Infinity);
+          // Bentuknya disamakan dengan KPI Manajemen: bilah lebih tebal dan
+          // angkanya ikut berwarna. Dua halaman yang menampilkan hal yang sama
+          // dengan dua bentuk berbeda membuat orang mengira keduanya mengukur
+          // hal yang berbeda.
           return (
-            <div className="flex w-28 items-center gap-2">
-              <Progress value={Math.min(100, Math.round(v))} tone={capai ? "success" : "danger"} />
-              <span className="w-12 text-right text-[11px] tabular-nums text-muted-foreground">{persen(v, 1)}</span>
+            <div className="flex w-32 items-center gap-2">
+              <Progress value={Math.min(100, Math.round(v))} tone={capai ? "success" : "danger"} className="h-2" />
+              <span
+                className={cn(
+                  "w-12 text-right text-[11.5px] font-medium tabular-nums",
+                  capai ? "text-emerald-600 dark:text-emerald-400" : "text-rose-600 dark:text-rose-400",
+                )}
+              >
+                {persen(v, 1)}
+              </span>
             </div>
           );
         },

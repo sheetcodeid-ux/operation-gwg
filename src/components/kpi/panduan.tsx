@@ -140,7 +140,9 @@ function langkahCa(): Langkah[] {
         <>
           Tombol di atas tabel: <b>Detail Hygiene Audit/CCTV</b>, <b>Detail Net Profit</b>, dan{" "}
           <b>Detail Harga Pokok Penjualan</b> memperlihatkan apa yang sudah masuk per outlet beserta persentasenya.
-          Gunakan itu untuk mencari outlet yang belum disetor sebelum bulan ditutup.
+          Gunakan itu untuk mencari outlet yang belum disetor sebelum bulan ditutup. Kolom <b>Brand</b> berwarna
+          (Nordu, Cattu, Busari, Lesung Pipi) memudahkan memisahkan merek yang margin dan ritmenya memang berbeda —
+          ketik nama mereknya di kotak cari untuk menyaring satu merek saja.
         </>
       ),
     },
@@ -342,11 +344,75 @@ export function DialogPanduanManajemen() {
           <>
             Skor akhir = A + B + C + D, skala 0–100. Pencapaian di atas 100% <b>tidak</b> menambah skor melebihi
             bobotnya. Ambangnya: Sangat Baik ≥ 85, Baik ≥ 70, Perlu Perhatian ≥ 50, di bawah itu Kritis.
+            <Awas>
+              Kolom <b>Persentase</b> berwarna hijau begitu mendekati target dan merah selama masih jauh; kolom{" "}
+              <b>%</b> di sebelahnya menyebut sumbangan komponen itu ke skor perusahaan. Ikon <b>ⓘ</b> di samping nama
+              komponen memuat rumusnya — arahkan kursor untuk membacanya.
+            </Awas>
+          </>
+        ),
+      },
+      {
+        judul: "Lima tabel, satu per pertanyaan",
+        isi: (
+          <>
+            Pengalih di atas tabel berpindah antara <b>Komponen</b> (ringkasan keempatnya), <b>Detail Gross Sales
+            Corporate</b>, <b>Detail Same Store</b>, <b>Detail EBITDA Same Store</b>, dan <b>Detail KPI Divisi</b>.
+            Ketiga tabel detail outlet berbentuk sama: bulan lalu, bulan ini, dan perbandingannya, dengan lencana{" "}
+            <b>Brand</b> berwarna supaya Nordu, Cattu, Busari, dan Lesung Pipi mudah dibedakan sekilas.
+          </>
+        ),
+      },
+      {
+        judul: "Grafik ikut tabel yang dibuka",
+        isi: (
+          <>
+            Di ketiga tabel detail, grafiknya berganti jadi <b>omzet per tanggal</b>: garis biru bulan berjalan, abu-abu
+            bulan lalu di tanggal yang sama, dan garis putus-putus oranye target harian. Tanggal yang{" "}
+            <b>menembus target</b> ditandai titik hijau berdenyut, dan Sabtu–Minggu ditulis merah.
+            <Awas>
+              Angka harian datang dari catatan penjualan harian SELURUH perusahaan — ia tidak bisa dipisah per outlet
+              dan tidak mengenal bulan yang diisi tangan. Pakai untuk melihat bentuk bulannya, bukan untuk mencocokkan
+              totalnya dengan kartu Gross Sales.
+            </Awas>
+          </>
+        ),
+      },
+      {
+        judul: "Rincian departemen dibuka di tempat",
+        isi: (
+          <>
+            Di <b>Detail KPI Divisi</b>, tekan nama departemen untuk membuka daftar posisinya tepat di bawah barisnya —
+            lengkap dengan nilai bulan ini, bulan lalu, dan selisihnya. Beberapa departemen bisa dibuka sekaligus untuk
+            dibandingkan.
+          </>
+        ),
+      },
+      {
+        judul: "Unduh laporannya",
+        isi: (
+          <>
+            Ikon <b>unduh</b> di samping kotak cari — ada di setiap tabel — mengeluarkan laporan PDF lengkap dengan
+            grafiknya, dengan pilihan mode terang atau gelap.
+          </>
+        ),
+      },
+      {
+        judul: "Pengaturan bobot dan target",
+        isi: (
+          <>
+            Tombol <b>Pengaturan</b> (hanya master admin) mengatur bobot keempat komponen, laju pertumbuhan, target
+            margin EBITDA, ambang tercapai, dan umur minimum same store. Berlaku untuk <b>seluruh bulan</b>, bukan
+            bulan yang sedang dibuka.
+            <Awas>
+              Jumlah bobot wajib 100. Kalau tidak, skor tertinggi ikut bergeser dan perusahaan akan tampak gagal
+              padahal pembaginya yang salah — karena itu simpan ditolak selama jumlahnya belum 100.
+            </Awas>
           </>
         ),
       },
     ],
     [],
   );
-  return <Panduan langkah={langkah} deskripsi="Empat komponen berbobot — dari mana angkanya datang dan mana yang perlu diisi." />;
+  return <Panduan langkah={langkah} deskripsi="Empat komponen berbobot — dari mana angkanya datang dan bagaimana membacanya." />;
 }
