@@ -27,6 +27,15 @@ export type KodePosisi =
 export interface Departemen {
   kode: KodeDepartemen;
   nama: string;
+  /**
+   * Nama pendek untuk sumbu grafik.
+   *
+   * "Product Development & Quality" berdampingan dengan "Human Resource
+   * Development" pada satu sumbu akan bertabrakan, lalu dipotong jadi dua
+   * label yang sama-sama berakhir dengan titik-titik — dan yang membacanya
+   * tidak bisa lagi membedakan keduanya.
+   */
+  singkat: string;
   ikon: string;
   /** Posisi yang KPI-nya sudah dirancang. Kosong = departemennya menyusul. */
   posisi: KodePosisi[];
@@ -67,21 +76,23 @@ export const DEPARTEMEN: Departemen[] = [
   {
     kode: "operational",
     nama: "Operational",
+    singkat: "Operational",
     ikon: "Store",
     posisi: ["operational_ca"],
     menyusul: ["System Support (Fikri)", "System Support POS (Evan, Adinda, Pricil)"],
   },
-  { kode: "creative", nama: "Creative", ikon: "Palette", posisi: ["creative_content", "creative_sosmed"] },
-  { kode: "finance", nama: "Finance", ikon: "Wallet", posisi: ["finance_accounting", "finance_finance", "finance_tax"] },
+  { kode: "creative", nama: "Creative", singkat: "Creative", ikon: "Palette", posisi: ["creative_content", "creative_sosmed"] },
+  { kode: "finance", nama: "Finance", singkat: "Finance", ikon: "Wallet", posisi: ["finance_accounting", "finance_finance", "finance_tax"] },
   {
     kode: "pdq",
     nama: "Product Development & Quality",
+    singkat: "PDQ",
     ikon: "FlaskConical",
     posisi: ["pdq_qc", "pdq_food", "pdq_beverage", "pdq_head_food", "pdq_head_pdq"],
     menyusul: ["Quality Assurance & Control (Radika)"],
   },
-  { kode: "marcomm", nama: "Marketing Communication", ikon: "Megaphone", posisi: ["marcomm"] },
-  { kode: "hrd", nama: "Human Resource Development", ikon: "UsersRound", posisi: [], menyusul: ["Human Resource Development (Dini Amalia)"] },
+  { kode: "marcomm", nama: "Marketing Communication", singkat: "MarComm", ikon: "Megaphone", posisi: ["marcomm"] },
+  { kode: "hrd", nama: "Human Resource Development", singkat: "HRD", ikon: "UsersRound", posisi: [], menyusul: ["Human Resource Development (Dini Amalia)"] },
 ];
 
 export const POSISI: Posisi[] = [

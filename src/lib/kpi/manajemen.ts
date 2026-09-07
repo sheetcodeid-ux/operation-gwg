@@ -85,6 +85,8 @@ export function hitungA(a: KomponenA): HasilKomponen {
 export interface OutletManajemen {
   id: string;
   nama: string;
+  /** Kode pendek outlet — dipakai grafik, yang tidak muat nama panjang. */
+  kode: string;
   /** Umur operasional dalam bulan. Null = belum diketahui. */
   umur: number | null;
   /** Sales tiga bulan sebelumnya, urut dari yang paling lama. */
@@ -167,28 +169,68 @@ export function hitungC(labaBersih: number, sales: number): HasilC {
 
 /* ─────────────────────────── D. KPI All Division ─────────────────────────── */
 
-export interface DivisiKpi {
+/** Satu posisi yang KPI-nya sudah punya modul, beserta capaian bulan lalunya. */
+export interface PosisiKpi {
+  kode: string;
   nama: string;
-  /** 0–100. */
-  nilai: number;
+  /** 0–100. Null = modulnya belum menghasilkan angka bulan itu. */
+  nilai: number | null;
+  lalu: number | null;
+}
+
+export interface DepartemenKpi {
+  kode: string;
+  nama: string;
+  /** Nama pendek untuk sumbu grafik. */
+  singkat: string;
+  posisi: PosisiKpi[];
+  /** Rata-rata posisi yang ADA nilainya. Null bila belum satu pun terisi. */
+  rata: number | null;
+  lalu: number | null;
 }
 
 export interface HasilD {
-  divisi: DivisiKpi[];
+  departemen: DepartemenKpi[];
   rata: number;
   skor: number;
 }
 
+/** Rata-rata yang mengabaikan yang belum terisi; kosong berarti null. */
+const rataAda = (nilai: (number | null)[]): number | null => {
+  const ada = nilai.filter((n): n is number => n !== null);
+  return ada.length === 0 ? null : ada.reduce((s, n) => s + n, 0) / ada.length;
+};
+
 /**
- * Seluruh divisi berbobot SAMA RATA.
+ * Dua tingkat: posisi dirata-ratakan di dalam departemennya, baru
+ * antar-departemen.
  *
- * Bukan karena semuanya sama pentingnya, melainkan karena tidak ada dasar yang
- * bisa dipertahankan untuk membedakannya — dan bobot yang dibuat-buat lebih
- * buruk daripada bobot yang rata.
+ * Merata-ratakan seluruh posisi sekaligus membuat departemen yang posisinya
+ * banyak berbobot lebih besar tanpa ada yang memutuskannya begitu: Finance
+ * dengan tiga posisi akan bersuara tiga kali, Marketing Communication dengan
+ * satu posisi sekali. Bertingkat membuat tiap departemen bersuara sekali,
+ * berapa pun jumlah posisinya — dan menambah posisi baru tidak diam-diam
+ * menggeser bobot departemen lain.
+ *
+ * Posisi yang belum menghasilkan angka DILEWATI, bukan dihitung nol. Nol
+ * berarti "dinilai dan gagal"; yang sebenarnya terjadi adalah "belum diukur",
+ * dan menyamakan keduanya menghukum departemen yang modulnya baru dipasang.
  */
-export function hitungD(divisi: DivisiKpi[]): HasilD {
-  const rata = divisi.length === 0 ? 0 : divisi.reduce((s, d) => s + d.nilai, 0) / divisi.length;
-  return { divisi, rata, skor: (Math.max(0, Math.min(100, rata)) / 100) * BOBOT.d };
+export function hitungD(departemen: DepartemenKpi[]): HasilD {
+  const rata = rataAda(departemen.map((d) => d.rata)) ?? 0;
+  return { departemen, rata, skor: (Math.max(0, Math.min(100, rata)) / 100) * BOBOT.d };
+}
+
+/** Membentuk satu departemen dari posisi-posisinya. */
+export function departemenKpi(kode: string, nama: string, singkat: string, posisi: PosisiKpi[]): DepartemenKpi {
+  return {
+    kode,
+    nama,
+    singkat,
+    posisi,
+    rata: rataAda(posisi.map((p) => p.nilai)),
+    lalu: rataAda(posisi.map((p) => p.lalu)),
+  };
 }
 
 /* ───────────────────────────── skor akhir ───────────────────────────── */
@@ -238,14 +280,12 @@ export function hitungManajemen(input: {
   a: KomponenA;
   outlet: OutletManajemen[];
   labaBersih: number;
-  /** Kosong = pakai total actual same store dari komponen B. */
-  salesManual: number | null;
-  divisi: DivisiKpi[];
+  departemen: DepartemenKpi[];
 }): SkorManajemen {
   const a = hitungA(input.a);
   const b = hitungB(input.outlet);
-  const c = hitungC(input.labaBersih, input.salesManual ?? b.actual);
-  const d = hitungD(input.divisi);
+  const c = hitungC(input.labaBersih, b.actual);
+  const d = hitungD(input.departemen);
   const akhir = Math.round((a.skor + b.skor + c.skor + d.skor) * 100) / 100;
   return { a, b, c, d, akhir, peringkat: peringkat(akhir) };
 }

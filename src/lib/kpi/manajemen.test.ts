@@ -6,6 +6,7 @@ import {
   hitungB,
   hitungC,
   hitungD,
+  departemenKpi,
   hitungManajemen,
   PERTUMBUHAN,
   peringkat,
@@ -73,10 +74,10 @@ describe("A — Gross Sales Corporate", () => {
 
 describe("B — Same Store Sales", () => {
   const outlet = [
-    { id: "1", nama: "Outlet A", umur: 24, bulanLalu: [100, 100, 100] as [number, number, number], actual: 120 },
-    { id: "2", nama: "Outlet B", umur: 8, bulanLalu: [200, 200, 200] as [number, number, number], actual: 100 },
-    { id: "3", nama: "Outlet C", umur: 4, bulanLalu: [50, 50, 50] as [number, number, number], actual: 50 },
-    { id: "4", nama: "Outlet D", umur: 1, bulanLalu: [10, 10, 10] as [number, number, number], actual: 9999 },
+    { id: "1", nama: "Outlet A", kode: "Outlet A", umur: 24, bulanLalu: [100, 100, 100] as [number, number, number], actual: 120 },
+    { id: "2", nama: "Outlet B", kode: "Outlet B", umur: 8, bulanLalu: [200, 200, 200] as [number, number, number], actual: 100 },
+    { id: "3", nama: "Outlet C", kode: "Outlet C", umur: 4, bulanLalu: [50, 50, 50] as [number, number, number], actual: 50 },
+    { id: "4", nama: "Outlet D", kode: "Outlet D", umur: 1, bulanLalu: [10, 10, 10] as [number, number, number], actual: 9999 },
   ];
 
   it("outlet berumur 3 bulan ke bawah DIKECUALIKAN, bukan dinilai nol", () => {
@@ -92,9 +93,9 @@ describe("B — Same Store Sales", () => {
   it("tepat 3 bulan masih terhitung baru; 4 bulan sudah ikut", () => {
     // Batasnya "lebih dari 3", bukan "3 atau lebih" — beda satu bulan di sini
     // menentukan satu outlet ikut dinilai atau tidak.
-    const tiga = hitungB([{ id: "x", nama: "X", umur: 3, bulanLalu: [10, 10, 10], actual: 10 }]);
+    const tiga = hitungB([{ id: "x", nama: "X", kode: "X", umur: 3, bulanLalu: [10, 10, 10], actual: 10 }]);
     expect(tiga.jumlahIkut).toBe(0);
-    const empat = hitungB([{ id: "x", nama: "X", umur: 4, bulanLalu: [10, 10, 10], actual: 10 }]);
+    const empat = hitungB([{ id: "x", nama: "X", kode: "X", umur: 4, bulanLalu: [10, 10, 10], actual: 10 }]);
     expect(empat.jumlahIkut).toBe(1);
   });
 
@@ -103,12 +104,12 @@ describe("B — Same Store Sales", () => {
     // tanpa tanggal langsung dikecualikan, dan karena hampir semua kosong
     // SELURUH tabel berstatus dikecualikan — padahal outletnya jalan
     // bertahun-tahun. Omzetnya sendiri sudah cukup jadi bukti.
-    const jalan = hitungB([{ id: "x", nama: "X", umur: null, bulanLalu: [10, 10, 10], actual: 10 }]);
+    const jalan = hitungB([{ id: "x", nama: "X", kode: "X", umur: null, bulanLalu: [10, 10, 10], actual: 10 }]);
     expect(jalan.jumlahIkut).toBe(1);
 
     // Satu bulan pembanding kosong berarti outletnya belum jalan penuh tiga
     // bulan — persis keadaan yang memang harus dikecualikan.
-    const belum = hitungB([{ id: "y", nama: "Y", umur: null, bulanLalu: [0, 10, 10], actual: 10 }]);
+    const belum = hitungB([{ id: "y", nama: "Y", kode: "Y", umur: null, bulanLalu: [0, 10, 10], actual: 10 }]);
     expect(belum.jumlahIkut).toBe(0);
   });
 
@@ -116,12 +117,12 @@ describe("B — Same Store Sales", () => {
     // Outlet baru bisa saja punya omzet di tiga bulan pembanding karena
     // bukanya di awal bulan. Kalau tanggalnya diketahui, tanggal itulah yang
     // dipakai — tebakan hanya untuk yang catatannya kosong.
-    const baru = hitungB([{ id: "z", nama: "Z", umur: 2, bulanLalu: [10, 10, 10], actual: 10 }]);
+    const baru = hitungB([{ id: "z", nama: "Z", kode: "Z", umur: 2, bulanLalu: [10, 10, 10], actual: 10 }]);
     expect(baru.jumlahIkut).toBe(0);
   });
 
   it("tanpa satu pun outlet layak, skornya nol", () => {
-    const b = hitungB([{ id: "x", nama: "X", umur: 1, bulanLalu: [10, 10, 10], actual: 10 }]);
+    const b = hitungB([{ id: "x", nama: "X", kode: "X", umur: 1, bulanLalu: [10, 10, 10], actual: 10 }]);
     expect(b.target).toBe(0);
     expect(b.skor).toBe(0);
   });
@@ -150,17 +151,44 @@ describe("C — EBITDA same store", () => {
   });
 });
 
+const dept = (nama: string, nilai: (number | null)[], lalu: (number | null)[] = []) =>
+  departemenKpi(nama.toLowerCase(), nama, nama, nilai.map((n, i) => ({ kode: `${nama}${i}`, nama: `${nama} ${i}`, nilai: n, lalu: lalu[i] ?? null })));
+
 describe("D — KPI All Division", () => {
-  it("rata-rata sederhana, seluruh divisi berbobot sama", () => {
+  it("rata-rata antar-departemen, tiap departemen berbobot sama", () => {
     const d = hitungD([
-      { nama: "HR", nilai: 92 },
-      { nama: "Finance", nilai: 95 },
-      { nama: "Marketing", nilai: 80 },
-      { nama: "Operation", nilai: 90 },
-      { nama: "Warehouse", nilai: 88 },
+      dept("HR", [92]),
+      dept("Finance", [95]),
+      dept("Marketing", [80]),
+      dept("Operation", [90]),
+      dept("Warehouse", [88]),
     ]);
     expect(d.rata).toBe(89);
     expect(d.skor).toBeCloseTo(8.9, 5);
+  });
+
+  it("posisi dirata-ratakan DI DALAM departemennya lebih dulu", () => {
+    // Finance punya tiga posisi, Marcomm satu. Merata-ratakan seluruh posisi
+    // sekaligus membuat Finance bersuara tiga kali tanpa ada yang
+    // memutuskannya begitu: hasilnya (60+60+60+100)/4 = 70, bukan 80.
+    const d = hitungD([dept("Finance", [60, 60, 60]), dept("Marcomm", [100])]);
+    expect(d.departemen[0].rata).toBe(60);
+    expect(d.rata).toBe(80);
+  });
+
+  it("posisi yang belum terukur DILEWATI, bukan dihitung nol", () => {
+    // Nol berarti "dinilai dan gagal". Yang sebenarnya terjadi adalah "belum
+    // diukur", dan menyamakan keduanya menghukum departemen yang modulnya
+    // baru dipasang.
+    const d = hitungD([dept("PDQ", [90, null, null])]);
+    expect(d.departemen[0].rata).toBe(90);
+    expect(d.rata).toBe(90);
+  });
+
+  it("departemen tanpa satu pun nilai tidak menyeret rata-rata", () => {
+    const d = hitungD([dept("Finance", [80]), dept("HRD", [null])]);
+    expect(d.departemen[1].rata).toBeNull();
+    expect(d.rata).toBe(80);
   });
 
   it("tanpa divisi sama sekali, tidak ada kontribusi skor", () => {
@@ -173,10 +201,10 @@ describe("skor akhir", () => {
   it("empat komponen dijumlah dan dibulatkan dua desimal", () => {
     const s = hitungManajemen({
       a: { bulanLalu: [4e9, 5e9, 6e9], actual: 5.75e9 },
-      outlet: [{ id: "1", nama: "A", umur: 24, bulanLalu: [1000, 1000, 1000], actual: 900 }],
+      outlet: [{ id: "1", nama: "A", kode: "A", umur: 24, bulanLalu: [1000, 1000, 1000], actual: 900 }],
       labaBersih: 270,
       salesManual: null,
-      divisi: [{ nama: "HR", nilai: 90 }],
+      departemen: [dept("HR", [90])],
     });
     expect(s.a.skor).toBe(40);
     // Outlet rata-rata 1000 → target 1150; actual 900 → 78,26% → 23,48.
@@ -188,16 +216,19 @@ describe("skor akhir", () => {
     expect(s.akhir).toBe(92.48);
   });
 
-  it("sales same store bisa ditulis tangan menggantikan total B", () => {
+  it("sales same store SELALU total actual komponen B", () => {
+    // Dulu bisa ditulis tangan menggantikan total B. Penggantian itu dihapus
+    // bersama seluruh isian tangan: dua angka penjualan pada satu halaman —
+    // satu di kartu Same Store, satu lagi di dalam rumus EBITDA — membuat
+    // margin yang tampil tidak bisa dicocokkan dengan apa pun di layar.
     const s = hitungManajemen({
       a: { bulanLalu: nol3, actual: 0 },
-      outlet: [{ id: "1", nama: "A", umur: 24, bulanLalu: [1000, 1000, 1000], actual: 900 }],
-      labaBersih: 300,
-      salesManual: 2000,
-      divisi: [],
+      outlet: [{ id: "1", nama: "A", kode: "A", umur: 24, bulanLalu: [1000, 1000, 1000], actual: 900 }],
+      labaBersih: 270,
+      departemen: [],
     });
-    expect(s.c.sales).toBe(2000);
-    expect(s.c.margin).toBeCloseTo(15, 5);
+    expect(s.c.sales).toBe(900);
+    expect(s.c.margin).toBeCloseTo(30, 5);
   });
 
   it("gauge sama dengan jumlah keempat kartunya", () => {
@@ -206,10 +237,10 @@ describe("skor akhir", () => {
     // sendiri tidak akan dipercaya siapa pun.
     const s = hitungManajemen({
       a: { bulanLalu: [3e9, 3e9, 3e9], actual: 2.77e9 },
-      outlet: [{ id: "1", nama: "A", umur: 12, bulanLalu: [777, 777, 777], actual: 666 }],
+      outlet: [{ id: "1", nama: "A", kode: "A", umur: 12, bulanLalu: [777, 777, 777], actual: 666 }],
       labaBersih: 111,
       salesManual: null,
-      divisi: [{ nama: "HR", nilai: 83 }, { nama: "Fin", nilai: 77 }],
+      departemen: [dept("HR", [83]), dept("Fin", [77])],
     });
     const jumlah = Math.round((s.a.skor + s.b.skor + s.c.skor + s.d.skor) * 100) / 100;
     expect(s.akhir).toBe(jumlah);

@@ -199,13 +199,20 @@ function tepi(index: number | undefined, jumlah: number): "start" | "middle" | "
  * dengan garis dasar. Yang ditukar tombol Angka/Persen adalah apa yang
  * TERTULIS: persen di sumbu, atau nominalnya di atas tiap titik.
  */
+/** Lebar minimum satu titik saat isinya terlalu banyak untuk muat sekaligus. */
+const LEBAR_TITIK = 52;
+/** Di atas jumlah ini, kartunya digulir ke samping alih-alih dipadatkan. */
+const BATAS_PADAT = 12;
+
 export function KpiPerformanceChart({
   baris,
   lalu,
+  judul = "Capaian per Indikator",
 }: {
   baris: BarisKpi[];
   /** Capaian bulan lalu per kunci indikator. */
   lalu: Record<string, LaluIndikator>;
+  judul?: string;
 }) {
   const [sumbu, setSumbu] = React.useState<Sumbu>("persen");
   const kotak = React.useRef<HTMLDivElement>(null);
@@ -252,13 +259,23 @@ export function KpiPerformanceChart({
   // separuh jatah ditambah sisipan tepinya. Menyamakan keduanya membuat nama
   // panjang di ujung menabrak tetangganya — persis yang terjadi pada posisi
   // yang indikatornya enam dan namanya panjang-panjang.
-  const jatah = (lebar - 64) / Math.max(1, data.length);
+  /**
+   * Isi yang banyak DIGULIR, bukan dipadatkan.
+   *
+   * Lima puluh delapan outlet pada satu kartu selebar layar menyisakan tujuh
+   * belas piksel per label — labelnya bertumpuk jadi bubur hitam, dan grafik
+   * yang tidak terbaca lebih buruk daripada grafik yang harus digeser. Di
+   * bawah ambang ini tidak ada yang berubah sama sekali.
+   */
+  const digulir = data.length > BATAS_PADAT;
+  const lebarIsi = digulir ? Math.max(lebar, data.length * LEBAR_TITIK) : lebar;
+  const jatah = (lebarIsi - 64) / Math.max(1, data.length);
   const muat = Math.max(6, Math.floor((jatah - 12) / 6.2));
   const muatTepi = Math.max(6, Math.floor((jatah / 2 + 18) / 6.2));
 
   return (
     <Kartu
-      title="Capaian per Indikator"
+      title={judul}
       aksi={
         <div className="inline-flex gap-1 rounded-lg border border-border bg-muted/50 p-1">
           {SUMBU.map((m) => {
@@ -283,8 +300,8 @@ export function KpiPerformanceChart({
         </div>
       }
     >
-      <div ref={kotak} className="min-h-[17rem] flex-1" style={{ outline: "none" }}>
-        <ResponsiveContainer width="100%" height="100%">
+      <div ref={kotak} className={cn("min-h-[17rem] flex-1", digulir && "overflow-x-auto")} style={{ outline: "none" }}>
+        <ResponsiveContainer width={digulir ? lebarIsi : "100%"} height="100%" minWidth={digulir ? lebarIsi : undefined}>
           <ComposedChart data={data} margin={{ top: sumbu === "angka" ? 22 : 10, right: 4, left: 0, bottom: 0 }} accessibilityLayer={false}>
             <defs>
               <linearGradient id="kpiBlue" x1="0" y1="0" x2="0" y2="1">
