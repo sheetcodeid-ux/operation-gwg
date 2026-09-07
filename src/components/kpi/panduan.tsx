@@ -4,7 +4,7 @@ import * as React from "react";
 import { BookOpen, TriangleAlert } from "lucide-react";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
 import type { Indikator } from "@/lib/kpi/indikator";
-import { TARGET_MARGIN, UMUR_SAME_STORE } from "@/lib/kpi/manajemen";
+import { PERTUMBUHAN_A, TARGET_MARGIN, UMUR_SAME_STORE } from "@/lib/kpi/manajemen";
 
 /**
  * Panduan pengisian KPI — dibaca sebelum menyentuh satu pun angka.
@@ -289,7 +289,8 @@ export function DialogPanduanManajemen() {
         judul: "A — Gross Sales Corporate (bobot 40%)",
         isi: (
           <>
-            Otomatis dari ESB. Target = <b>rata-rata omzet tiga bulan sebelumnya</b>, actual = omzet bulan berjalan.
+            Otomatis dari ESB, kecuali bulan yang diisi tangan — di situ angka ketikanlah yang dipakai. Target ={" "}
+            <b>rata-rata omzet tiga bulan sebelumnya + {PERTUMBUHAN_A}%</b>, actual = omzet bulan berjalan.
             SELURUH outlet ikut, termasuk yang baru buka — pertumbuhan korporat tidak boleh menghukum pembukaan outlet
             baru.
           </>

@@ -28,6 +28,16 @@ export const TARGET_MARGIN = 30;
 export const UMUR_SAME_STORE = 3;
 
 /**
+ * Pertumbuhan yang dituntut dari omzet korporat, dalam persen.
+ *
+ * Rata-rata tiga bulan adalah keadaan SEKARANG, bukan sasaran — memakainya
+ * apa adanya berarti perusahaan dinilai penuh hanya karena tidak menurun.
+ * Angkanya sama dengan target Gross Sales Coordinator Area supaya satu
+ * perusahaan tidak menuntut dua laju pertumbuhan yang berbeda.
+ */
+export const PERTUMBUHAN_A = 15;
+
+/**
  * Pencapaian dibatasi 1 (100%).
  *
  * Ditulis sebagai fungsi tersendiri, bukan ditempel di tiap rumus, supaya
@@ -61,7 +71,8 @@ export interface HasilKomponen {
 }
 
 export function hitungA(a: KomponenA): HasilKomponen {
-  const target = (a.bulanLalu[0] + a.bulanLalu[1] + a.bulanLalu[2]) / 3;
+  const rata = (a.bulanLalu[0] + a.bulanLalu[1] + a.bulanLalu[2]) / 3;
+  const target = rata * (1 + PERTUMBUHAN_A / 100);
   const capaian = rasio(a.actual, target);
   return { target, actual: a.actual, capaian, skor: batas1(capaian) * BOBOT.a };
 }

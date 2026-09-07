@@ -19,7 +19,7 @@ import { PilihTabel, statusCapaian } from "./papan-kpi";
 import { DialogPanduanManajemen } from "./panduan";
 import { BULAN, labelPeriode, periodeDari, tahunPilihan } from "./periode";
 import { simpanManajemenAction } from "@/lib/actions/kpi-manajemen";
-import { BOBOT, TARGET_MARGIN, UMUR_SAME_STORE, type DivisiKpi } from "@/lib/kpi/manajemen";
+import { BOBOT, PERTUMBUHAN_A, TARGET_MARGIN, UMUR_SAME_STORE, type DivisiKpi } from "@/lib/kpi/manajemen";
 import type { BarisKpi } from "@/lib/kpi/hitung";
 import type { DetailManajemen } from "@/lib/data/kpi-manajemen";
 import { formatIDR, formatNumber } from "@/lib/utils";
@@ -97,7 +97,7 @@ export function PapanManajemen({ detail }: { detail: DetailManajemen }) {
     });
     return [
       buat("a", "Gross Sales Corporate", BOBOT.a, skor.a.target, skor.a.actual, skor.a.capaian, skor.a.skor, "rupiah",
-        "Target = rata-rata omzet tiga bulan sebelumnya. Seluruh outlet ikut, termasuk yang baru buka."),
+        `Target = rata-rata omzet tiga bulan sebelumnya + ${PERTUMBUHAN_A}%. Seluruh outlet ikut, termasuk yang baru buka.`),
       buat("b", "Same Store Sales", BOBOT.b, skor.b.target, skor.b.actual, skor.b.capaian, skor.b.skor, "rupiah",
         `Hanya outlet berumur di atas ${UMUR_SAME_STORE} bulan. Target tiap outlet = rata-rata tiga bulan sebelumnya.`),
       buat("c", "EBITDA Same Store", BOBOT.c, TARGET_MARGIN, skor.c.margin, skor.c.capaian, skor.c.skor, "persen",
