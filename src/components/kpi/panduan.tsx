@@ -324,9 +324,15 @@ export function DialogPanduanManajemen() {
         judul: "D — KPI All Division (bobot 10%)",
         isi: (
           <>
-            Rata-rata nilai KPI seluruh divisi, semuanya berbobot sama. Divisi yang sudah punya modul KPI-nya sendiri
-            terisi otomatis dan ditandai <b>Modul KPI</b>; divisi lain (HR, Warehouse, dan seterusnya) diketik lewat
-            tombol <b>Isi Angka</b>. Nilai yang diketik menang atas angka otomatis.
+            Dihitung <b>dua tingkat</b>: nilai tiap posisi dirata-ratakan di dalam departemennya, lalu rata-rata
+            departemen itulah yang dirata-ratakan lagi. Jadi tiap departemen bersuara sekali, berapa pun jumlah
+            posisinya — Finance dengan tiga posisi tidak berbobot tiga kali Marketing Communication yang punya satu.
+            <Awas>
+              Seluruhnya otomatis dari modul KPI masing-masing; tidak ada satu angka pun yang diketik. Posisi baru
+              cukup didaftarkan strukturnya dan langsung ikut terhitung bulan itu juga. Posisi yang modulnya belum
+              menghasilkan angka DILEWATI, bukan dihitung nol — nol berarti dinilai dan gagal, sedangkan yang
+              sebenarnya terjadi adalah belum diukur.
+            </Awas>
           </>
         ),
       },

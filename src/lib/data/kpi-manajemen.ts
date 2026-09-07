@@ -4,9 +4,16 @@ import { db, dbEnabled } from "./db";
 import { getOutlets } from "./store";
 import { netBulananPerCabang } from "./esb-bulanan";
 import { bulanMulaiBerjalan, bulanSebelum, grossDiketik, grossKetikBulan, laporanKpi } from "./kpi";
-import { POSISI } from "@/lib/kpi/struktur";
+import { DEPARTEMEN, POSISI, posisiDari } from "@/lib/kpi/struktur";
 import { SEMUA_PIC } from "@/lib/kpi/semua-pic";
-import { hitungManajemen, type DivisiKpi, type OutletManajemen, type SkorManajemen } from "@/lib/kpi/manajemen";
+import {
+  departemenKpi,
+  hitungManajemen,
+  type DepartemenKpi,
+  type OutletManajemen,
+  type PosisiKpi,
+  type SkorManajemen,
+} from "@/lib/kpi/manajemen";
 import type { LaluIndikator } from "@/components/kpi/kpi-charts";
 
 /**
@@ -20,9 +27,25 @@ import type { LaluIndikator } from "@/components/kpi/kpi-charts";
  * basis data yang sama bukan cuma membuang waktu; ia menciptakan versi kedua
  * dari angka yang sama, dan versi kedua itu selalu yang berbeda.
  *
- * Yang tetap diketik hanya nilai KPI tiap divisi — sebagian divisi belum punya
- * modul KPI-nya sendiri, jadi angkanya memang tidak ada di mana pun.
+ * Komponen keempat pun kini otomatis: nilai tiap departemen dirata-ratakan dari
+ * modul KPI posisi-posisinya. Posisi yang modulnya menyusul tinggal didaftarkan
+ * di `POSISI` dan langsung ikut terhitung, tanpa ada yang perlu mengetik apa
+ * pun — persis supaya tidak ada bulan yang terlewat hanya karena tidak ada yang
+ * ingat mengisinya.
  */
+
+/** Satu outlet same store dengan laba bersih dan penjualannya. */
+export interface BarisEbitda {
+  outletId: string;
+  nama: string;
+  kode: string;
+  sales: number;
+  labaBersih: number | null;
+  /** Laba bersih bulan sebelumnya — pembanding, boleh kosong. */
+  labaLalu: number | null;
+  /** Margin dalam persen; null bila laba bersihnya belum diisi. */
+  margin: number | null;
+}
 
 export interface DetailManajemen {
   periode: string;
@@ -31,11 +54,9 @@ export interface DetailManajemen {
   bulanA: [string, string, string];
   /** Omzet korporat tiga bulan itu, urut sama dengan `bulanA`. */
   omzetLalu: [number, number, number];
-  /** Divisi yang nilainya datang dari modul KPI, bukan diketik. */
-  divisiOtomatis: string[];
   labaBersih: number;
-  salesManual: number | null;
-  catatan: string;
+  /** Laba bersih dan sales tiap outlet same store — bahan Detail EBITDA. */
+  ebitda: BarisEbitda[];
   /** Capaian bulan lalu per komponen — bahan grafik pembanding. */
   lalu: Record<string, LaluIndikator>;
 }
@@ -67,42 +88,21 @@ export function umurBulan(bukaTanggal: string | null, periode: string): number |
   return (tp - tm) * 12 + (bp - bm);
 }
 
-interface BarisManajemen {
-  divisi: DivisiKpi[];
-  labaBersih: number | null;
-  salesManual: number | null;
-  catatan: string;
-}
-
-async function isianManajemen(periode: string): Promise<BarisManajemen> {
-  const kosong: BarisManajemen = { divisi: [], labaBersih: null, salesManual: null, catatan: "" };
-  if (!dbEnabled) return kosong;
-  const { data } = await db()
-    .from("kpi_manajemen")
-    .select("divisi,laba_bersih,sales_manual,catatan")
-    .eq("periode", periode)
-    .maybeSingle();
-  if (!data) return kosong;
-  return {
-    divisi: ((data.divisi as DivisiKpi[]) ?? []).map((d) => ({ nama: String(d.nama ?? ""), nilai: angka(d.nilai) })),
-    labaBersih: data.laba_bersih === null || data.laba_bersih === undefined ? null : angka(data.laba_bersih),
-    salesManual: data.sales_manual === null || data.sales_manual === undefined ? null : angka(data.sales_manual),
-    catatan: String(data.catatan ?? ""),
-  };
-}
-
-/** Laba bersih seluruh outlet yang ikut same store, dari isian bulanan. */
-async function labaBersihOutlet(periode: string, outletIds: string[]): Promise<number | null> {
-  if (!dbEnabled || outletIds.length === 0) return null;
+/** Laba bersih tiap outlet same store, dari isian bulanan Coordinator Area. */
+async function labaOutlet(periode: string, outletIds: string[]): Promise<Map<string, number>> {
+  const peta = new Map<string, number>();
+  if (!dbEnabled || outletIds.length === 0) return peta;
   const { data } = await db()
     .from("kpi_outlet_bulanan")
     .select("outlet_id,net_profit")
     .eq("periode", periode)
     .in("outlet_id", outletIds);
-  const rows = (data ?? []).filter((r) => r.net_profit !== null && r.net_profit !== undefined);
-  // Tidak ada satu pun yang diisi BUKAN berarti labanya nol.
-  if (rows.length === 0) return null;
-  return rows.reduce((s, r) => s + angka(r.net_profit), 0);
+  for (const r of data ?? []) {
+    // Tidak diisi BUKAN berarti labanya nol — barisnya dilewati, bukan dinolkan.
+    if (r.net_profit === null || r.net_profit === undefined) continue;
+    peta.set(String(r.outlet_id), angka(r.net_profit));
+  }
+  return peta;
 }
 
 /**
@@ -112,6 +112,11 @@ async function labaBersihOutlet(periode: string, outletIds: string[]): Promise<n
  * menghitung indikator yang ada datanya. Memakai skor mentah membuat posisi
  * yang satu indikatornya belum terukur selalu tampak lebih buruk daripada yang
  * lengkap, dan rata-rata seluruh divisi ikut tertarik turun tiap bulan.
+ *
+ * Berkunci KODE posisi, bukan namanya. Nama posisi boleh berubah kapan saja
+ * tanpa mengubah apa pun; kalau ia jadi kunci, satu perubahan kata membuat
+ * angka bulan lalu tidak lagi ketemu pasangannya dan seluruh perbandingan
+ * berubah jadi "belum ada data" tanpa sebab yang terlihat.
  */
 async function skorPosisi(periode: string): Promise<Map<string, number>> {
   const hasil = new Map<string, number>();
@@ -122,20 +127,40 @@ async function skorPosisi(periode: string): Promise<Map<string, number>> {
   );
   laporan.forEach((l, i) => {
     const nilai = l?.ringkas.skorSetara ?? null;
-    if (nilai !== null) hasil.set(POSISI[i].nama, Math.round(nilai * 100) / 100);
+    if (nilai !== null) hasil.set(POSISI[i].kode, Math.round(nilai * 100) / 100);
   });
   return hasil;
 }
 
 /**
+ * Departemen beserta posisi-posisinya, bulan ini dan bulan lalu.
+ *
+ * Departemen yang belum punya satu pun posisi ber-modul TETAP DIDAFTAR dengan
+ * nilai kosong. Menyembunyikannya membuat daftar departemen berubah-ubah tiap
+ * bulan mengikuti kelengkapan data — dan yang membacanya akan mengira
+ * departemennya dihapus, bukan bahwa modulnya belum ada.
+ */
+function susunDepartemen(ini: Map<string, number>, lalu: Map<string, number>): DepartemenKpi[] {
+  return DEPARTEMEN.map((d) => {
+    const posisi: PosisiKpi[] = d.posisi.map((kode) => ({
+      kode,
+      nama: posisiDari(kode)?.nama ?? kode,
+      nilai: ini.get(kode) ?? null,
+      lalu: lalu.get(kode) ?? null,
+    }));
+    return departemenKpi(d.kode, d.nama, d.singkat, posisi);
+  });
+}
+
+/**
  * Capaian bulan lalu, untuk grafik pembanding.
  *
- * Dihitung TANPA memanggil ulang KPI tiap posisi — komponen D bulan lalu
- * diambil dari isian yang tersimpan saja. Menghitung ulang sebelas laporan
- * posisi hanya demi satu garis pembanding membuat halaman ini menunggu dua
- * kali lebih lama setiap dibuka.
+ * Dipanggil dalam bentuk RINGAN — tanpa membaca ulang KPI tiap posisi. Komponen
+ * D bulan lalu tidak diambil dari sini melainkan dari nilai per posisi yang
+ * sudah ditarik untuk tabel departemen, jadi dua belas laporan posisi cukup
+ * dibaca sekali saja.
  */
-async function capaianLalu(periode: string): Promise<Record<string, LaluIndikator>> {
+async function capaianLalu(periode: string, rataD: number): Promise<Record<string, LaluIndikator>> {
   const d = await detailManajemen(bulanSebelum(periode), { ringan: true }).catch(() => null);
   if (!d) return {};
   const { skor } = d;
@@ -143,7 +168,7 @@ async function capaianLalu(periode: string): Promise<Record<string, LaluIndikato
     a: { persen: skor.a.capaian * 100, actual: skor.a.actual },
     b: { persen: skor.b.capaian * 100, actual: skor.b.actual },
     c: { persen: skor.c.capaian * 100, actual: skor.c.margin },
-    d: { persen: skor.d.rata, actual: skor.d.rata },
+    d: { persen: rataD, actual: rataD },
   };
 }
 
@@ -194,6 +219,7 @@ export async function detailManajemen(
   const outlet: OutletManajemen[] = outletAktif.map((o) => ({
     id: o.id,
     nama: o.name,
+    kode: o.code ?? o.id,
     umur: umurBulan(o.bukaTanggal ?? null, periode),
     bulanLalu: [
       omzet(o, esbLalu[0], ketikLalu[0], bulanA[0]),
@@ -203,37 +229,54 @@ export async function detailManajemen(
     actual: omzet(o, esbIni, ketikIni, periode),
   }));
 
-  const isian = await isianManajemen(periode);
   const sementara = hitungManajemen({
     a: { bulanLalu: [0, 0, 0], actual: 0 },
     outlet,
     labaBersih: 0,
-    salesManual: null,
-    divisi: [],
+    departemen: [],
   });
-  const idIkut = sementara.b.baris.filter((b) => b.ikut).map((b) => b.id);
+  const ikut = sementara.b.baris.filter((b) => b.ikut);
+  const idIkut = ikut.map((b) => b.id);
 
-  const [labaOtomatis, skorModul] = await Promise.all([
-    labaBersihOutlet(periode, idIkut),
+  // Dua bulan sekaligus: bulan berjalan untuk nilainya, bulan sebelumnya untuk
+  // pembandingnya. Keduanya ditarik bersamaan supaya halaman tidak menunggu
+  // dua putaran berurutan.
+  const [laba, labaLalu, skorIni, skorLalu] = await Promise.all([
+    labaOutlet(periode, idIkut),
+    labaOutlet(bulanSebelum(periode), idIkut),
     opsi.ringan ? Promise.resolve(new Map<string, number>()) : skorPosisi(periode),
+    opsi.ringan ? Promise.resolve(new Map<string, number>()) : skorPosisi(bulanSebelum(periode)),
   ]);
-  const labaBersih = isian.labaBersih ?? labaOtomatis ?? 0;
 
-  // Divisi yang modulnya sudah ada dipakai nilainya; sisanya dari isian tangan.
-  // Yang sudah diketik MENANG — kalau tidak, angka yang sengaja dikoreksi orang
-  // akan tertimpa lagi setiap halaman dimuat ulang.
-  const diketik = new Map(isian.divisi.map((d) => [d.nama, d.nilai]));
-  const divisi: DivisiKpi[] = [
-    ...[...skorModul.entries()].map(([nama, nilai]) => ({ nama, nilai: diketik.get(nama) ?? nilai })),
-    ...isian.divisi.filter((d) => !skorModul.has(d.nama)),
-  ];
+  const ebitda: BarisEbitda[] = ikut.map((b) => {
+    const nilai = laba.get(b.id) ?? null;
+    return {
+      outletId: b.id,
+      nama: b.nama,
+      kode: b.kode,
+      sales: b.actual,
+      labaBersih: nilai,
+      labaLalu: labaLalu.get(b.id) ?? null,
+      margin: nilai !== null && b.actual > 0 ? (nilai / b.actual) * 100 : null,
+    };
+  });
+  // Outlet yang belum diisi labanya dilewati saat menjumlah laba, TAPI
+  // penjualannya tetap ikut di penyebut — itulah definisi marginnya: laba
+  // seluruh same store dibagi penjualan seluruh same store. Akibatnya margin
+  // tampak rendah selama isian Coordinator Area belum lengkap, jadi jumlah
+  // outlet yang belum diisi disebutkan di bawah tabelnya, bukan disembunyikan.
+  const labaBersih = ebitda.reduce((s, b) => s + (b.labaBersih ?? 0), 0);
+
+  const departemen = susunDepartemen(skorIni, skorLalu);
 
   const omzetLalu: [number, number, number] = [
     korporat(esbLalu[0], ketikLalu[0], bulanA[0]),
     korporat(esbLalu[1], ketikLalu[1], bulanA[1]),
     korporat(esbLalu[2], ketikLalu[2], bulanA[2]),
   ];
-  const lalu = opsi.ringan ? {} : await capaianLalu(periode);
+  const rataDLalu =
+    departemen.map((d) => d.lalu).filter((n): n is number => n !== null).reduce((s, n, _, a) => s + n / a.length, 0);
+  const lalu = opsi.ringan ? {} : await capaianLalu(periode, rataDLalu);
 
   return {
     lalu,
@@ -243,36 +286,10 @@ export async function detailManajemen(
       a: { bulanLalu: omzetLalu, actual: korporat(esbIni, ketikIni, periode) },
       outlet,
       labaBersih,
-      salesManual: isian.salesManual,
-      divisi,
+      departemen,
     }),
     bulanA,
-    divisiOtomatis: [...skorModul.keys()].filter((n) => !diketik.has(n)),
     labaBersih,
-    salesManual: isian.salesManual,
-    catatan: isian.catatan,
+    ebitda,
   };
-}
-
-export async function simpanManajemen(input: {
-  periode: string;
-  divisi: DivisiKpi[];
-  labaBersih: number | null;
-  salesManual: number | null;
-  catatan: string;
-  olehId: string;
-  olehNama: string;
-}): Promise<{ error?: string }> {
-  if (!dbEnabled) return { error: "Penyimpanan belum aktif." };
-  const { error } = await db().from("kpi_manajemen").upsert({
-    periode: input.periode,
-    divisi: input.divisi,
-    laba_bersih: input.labaBersih,
-    sales_manual: input.salesManual,
-    catatan: input.catatan,
-    diubah_oleh: input.olehId,
-    diubah_nama: input.olehNama,
-    diubah_pada: new Date().toISOString(),
-  });
-  return error ? { error: error.message } : {};
 }

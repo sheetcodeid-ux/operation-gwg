@@ -28,6 +28,14 @@ import type { Indikator, JenisTarget } from "./indikator";
 export interface BarisKpi {
   key: string;
   label: string;
+  /**
+   * Nama panjang untuk tooltip, saat `label` sengaja dipendekkan.
+   *
+   * Sumbu grafik hanya muat nomor urut atau kode; yang menunjuk satu titik
+   * tetap perlu tahu outlet mana itu, dan angka tanpa nama tidak bisa
+   * ditindaklanjuti.
+   */
+  labelPenuh?: string;
   kategori?: string;
   bobot: number;
   /** Null berarti targetnya belum bisa ditentukan (mis. belum ada bulan lalu). */

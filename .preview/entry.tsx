@@ -6,7 +6,7 @@ import { I18nProvider } from "@/lib/i18n/provider";
 import { navAll, accessibleMenuKeys } from "@/lib/nav";
 import { PapanKpi } from "@/components/kpi/papan-kpi";
 import { PapanManajemen } from "@/components/kpi/papan-manajemen";
-import { hitungManajemen } from "@/lib/kpi/manajemen";
+import { departemenKpi, hitungManajemen } from "@/lib/kpi/manajemen";
 import type { DetailManajemen } from "@/lib/data/kpi-manajemen";
 import { barisEfisiensi, barisKpi, ringkasEfisiensi, ringkasKpi } from "@/lib/kpi/hitung";
 import { indikatorPosisi } from "@/lib/kpi/indikator";
@@ -100,39 +100,66 @@ function buat(kode: KodePosisi) {
 
 /** Contoh KPI Manajemen — angkanya sekadar bentuk, bukan data sungguhan. */
 const OUTLET_MJ = [
-  { id: "1", nama: "Nordu Coffee Sambas", umur: null, bulanLalu: [412_000_000, 398_000_000, 405_000_000] as [number, number, number], actual: 421_500_000 },
-  { id: "2", nama: "Cattu A. Yani", umur: null, bulanLalu: [245_000_000, 251_000_000, 238_000_000] as [number, number, number], actual: 233_000_000 },
-  { id: "3", nama: "Nordu Bakes Samarinda", umur: 3, bulanLalu: [1_317_875_818, 982_548_182, 946_260_364] as [number, number, number], actual: 1_010_000_000 },
-  { id: "4", nama: "Nordu Coffee Canggu", umur: 2, bulanLalu: [108_000, 10_449_727, 36_002_909] as [number, number, number], actual: 44_000_000 },
+  { id: "1", nama: "Nordu Coffee Sambas", kode: "NCSB", umur: null, bulanLalu: [412_000_000, 398_000_000, 405_000_000] as [number, number, number], actual: 421_500_000 },
+  { id: "2", nama: "Cattu A. Yani", kode: "CCAY", umur: null, bulanLalu: [245_000_000, 251_000_000, 238_000_000] as [number, number, number], actual: 233_000_000 },
+  { id: "3", nama: "Nordu Bakes Samarinda", kode: "NBSM", umur: 3, bulanLalu: [1_317_875_818, 982_548_182, 946_260_364] as [number, number, number], actual: 1_010_000_000 },
+  { id: "4", nama: "Nordu Coffee Canggu", kode: "NCCG", umur: 2, bulanLalu: [16_526_000, 42_055_000, 30_276_000] as [number, number, number], actual: 44_000_000 },
+  { id: "5", nama: "Nordu Coffee Putussibau", kode: "NCPS", umur: null, bulanLalu: [667_620_031, 640_112_000, 655_400_000] as [number, number, number], actual: 690_000_000 },
+  { id: "6", nama: "Nordu Coffee Kayutangi", kode: "NCKT", umur: null, bulanLalu: [500_030_837, 512_000_000, 498_700_000] as [number, number, number], actual: 470_000_000 },
 ];
-const DIVISI_MJ = [
-  { nama: "Coordinator Area", nilai: 89.46 },
-  { nama: "Content Creator", nilai: 82.1 },
-  { nama: "Accounting", nilai: 91 },
-  { nama: "HR", nilai: 92 },
-  { nama: "Warehouse", nilai: 88 },
+const DEPT_MJ = [
+  departemenKpi("operational", "Operational", "Operational", [{ kode: "operational_ca", nama: "Coordinator Area", nilai: 89.46, lalu: 86.2 }]),
+  departemenKpi("creative", "Creative", "Creative", [
+    { kode: "creative_content", nama: "Content Creator", nilai: 82.1, lalu: 79.4 },
+    { kode: "creative_sosmed", nama: "Sosial Media", nilai: 76.8, lalu: 80.1 },
+  ]),
+  departemenKpi("finance", "Finance", "Finance", [
+    { kode: "finance_accounting", nama: "Accounting", nilai: 91, lalu: 88 },
+    { kode: "finance_finance", nama: "Finance", nilai: 94, lalu: 92 },
+    { kode: "finance_tax", nama: "Tax", nilai: 88, lalu: 90 },
+  ]),
+  departemenKpi("pdq", "Product Development & Quality", "PDQ", [
+    { kode: "pdq_qc", nama: "Quality Assurance & Control", nilai: 87.5, lalu: null },
+    { kode: "pdq_food", nama: "Food Staff", nilai: 80, lalu: 81 },
+    { kode: "pdq_beverage", nama: "Beverage Staff", nilai: 84, lalu: 82 },
+    { kode: "pdq_head_food", nama: "Head Food Development", nilai: null, lalu: null },
+    { kode: "pdq_head_pdq", nama: "Head Product Development & Quality", nilai: null, lalu: null },
+  ]),
+  departemenKpi("marcomm", "Marketing Communication", "MarComm", [{ kode: "marcomm", nama: "Marketing Communication", nilai: 78.3, lalu: 74.9 }]),
+  departemenKpi("hrd", "Human Resource Development", "HRD", []),
 ];
+const SKOR_MJ = hitungManajemen({
+  a: { bulanLalu: [13_029_795_465, 14_125_168_904, 13_987_095_243], actual: 13_100_000_000 },
+  outlet: OUTLET_MJ,
+  labaBersih: 520_000_000,
+  departemen: DEPT_MJ,
+});
 const DETAIL_MJ: DetailManajemen = {
   periode: "2026-09",
-  omzetLalu: [13_788_689_135, 13_552_933_420, 12_824_068_510],
+  omzetLalu: [13_029_795_465, 14_125_168_904, 13_987_095_243],
   bulanA: ["2026-06", "2026-07", "2026-08"],
-  divisiOtomatis: ["Coordinator Area", "Content Creator", "Accounting"],
-  labaBersih: 168_000_000,
-  salesManual: null,
-  catatan: "",
+  labaBersih: 520_000_000,
+  ebitda: SKOR_MJ.b.baris
+    .filter((b) => b.ikut)
+    .map((b, i) => {
+      const laba = i === 1 ? null : b.actual * (0.2 + i * 0.05);
+      return {
+        outletId: b.id,
+        nama: b.nama,
+        kode: b.kode,
+        sales: b.actual,
+        labaBersih: laba,
+        labaLalu: i === 2 ? null : b.bulanLalu[2] * (0.18 + i * 0.06),
+        margin: laba === null ? null : (laba / b.actual) * 100,
+      };
+    }),
   lalu: {
     a: { persen: 96.2, actual: 12_824_068_510 },
     b: { persen: 94.1, actual: 631_000_000 },
     c: { persen: 78.5, actual: 23.5 },
-    d: { persen: 86.2, actual: 86.2 },
+    d: { persen: 84.4, actual: 84.4 },
   },
-  skor: hitungManajemen({
-    a: { bulanLalu: [13_788_689_135, 13_552_933_420, 12_824_068_510], actual: 12_100_000_000 },
-    outlet: OUTLET_MJ,
-    labaBersih: 168_000_000,
-    salesManual: null,
-    divisi: DIVISI_MJ,
-  }),
+  skor: SKOR_MJ,
 };
 
 const kode = (location.hash.replace("#", "") || "operational_ca") as KodePosisi;
