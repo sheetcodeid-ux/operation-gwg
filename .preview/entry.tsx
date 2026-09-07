@@ -100,8 +100,8 @@ function buat(kode: KodePosisi) {
 
 /** Contoh KPI Manajemen — angkanya sekadar bentuk, bukan data sungguhan. */
 const OUTLET_MJ = [
-  { id: "1", nama: "Nordu Coffee Sambas", umur: 26, bulanLalu: [412_000_000, 398_000_000, 405_000_000] as [number, number, number], actual: 421_500_000 },
-  { id: "2", nama: "Cattu A. Yani", umur: 18, bulanLalu: [245_000_000, 251_000_000, 238_000_000] as [number, number, number], actual: 233_000_000 },
+  { id: "1", nama: "Nordu Coffee Sambas", umur: null, bulanLalu: [412_000_000, 398_000_000, 405_000_000] as [number, number, number], actual: 421_500_000 },
+  { id: "2", nama: "Cattu A. Yani", umur: null, bulanLalu: [245_000_000, 251_000_000, 238_000_000] as [number, number, number], actual: 233_000_000 },
   { id: "3", nama: "Nordu Bakes Samarinda", umur: 3, bulanLalu: [1_317_875_818, 982_548_182, 946_260_364] as [number, number, number], actual: 1_010_000_000 },
   { id: "4", nama: "Nordu Coffee Canggu", umur: 2, bulanLalu: [108_000, 10_449_727, 36_002_909] as [number, number, number], actual: 44_000_000 },
 ];
@@ -120,7 +120,6 @@ const DETAIL_MJ: DetailManajemen = {
   labaBersih: 168_000_000,
   salesManual: null,
   catatan: "",
-  tanpaUmur: ["Nordu Coffee Landak", "Nordu Tebas"],
   lalu: {
     a: { persen: 96.2, actual: 12_824_068_510 },
     b: { persen: 94.1, actual: 631_000_000 },

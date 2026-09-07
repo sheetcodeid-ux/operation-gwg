@@ -197,22 +197,7 @@ export function PapanManajemen({ detail }: { detail: DetailManajemen }) {
       {
         accessorKey: "nama",
         header: "Outlet",
-        cell: ({ row }) => (
-          <div className="flex min-w-0 items-center gap-2">
-            <span className="truncate font-medium text-foreground">{row.original.nama}</span>
-            {!row.original.ikut && (
-              <Badge tone="neutral">{row.original.umur === null ? "tanggal buka kosong" : "outlet baru"}</Badge>
-            )}
-          </div>
-        ),
-      },
-      {
-        accessorKey: "umur",
-        header: "Umur",
-        cell: ({ getValue }) => {
-          const v = getValue<number | null>();
-          return <span className="tabular-nums text-foreground/80">{v === null ? "—" : `${v} bln`}</span>;
-        },
+        cell: ({ getValue }) => <span className="truncate font-medium text-foreground">{getValue<string>()}</span>,
       },
       {
         id: "target",
@@ -348,14 +333,6 @@ function Ringkasan({ tampilan, detail }: { tampilan: Tampilan; detail: DetailMan
       <>
         {skor.b.jumlahIkut} outlet dihitung, {skor.b.jumlahBaru} dikecualikan · target {formatIDR(skor.b.target)} ·
         actual {formatIDR(skor.b.actual)} = <b className="text-foreground">{persen(skor.b.capaian * 100)}</b>
-        {detail.tanpaUmur.length > 0 && (
-          <>
-            {" · "}
-            {detail.tanpaUmur.length} outlet belum punya tanggal buka sehingga umurnya tidak bisa dihitung:{" "}
-            {detail.tanpaUmur.slice(0, 3).join(", ")}
-            {detail.tanpaUmur.length > 3 ? `, dan ${detail.tanpaUmur.length - 3} lainnya` : ""}.
-          </>
-        )}
       </>
     );
   } else if (tampilan === "divisi") {

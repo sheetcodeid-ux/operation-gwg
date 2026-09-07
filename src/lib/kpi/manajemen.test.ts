@@ -88,10 +88,26 @@ describe("B — Same Store Sales", () => {
     expect(empat.jumlahIkut).toBe(1);
   });
 
-  it("umur yang belum diketahui tidak ikut dinilai", () => {
-    // Menebaknya sebagai "sudah lama" memasukkan outlet baru ke same-store;
-    // menebaknya "baru" mengeluarkan outlet lama. Keduanya salah tanpa terlihat.
-    expect(hitungB([{ id: "x", nama: "X", umur: null, bulanLalu: [10, 10, 10], actual: 10 }]).jumlahIkut).toBe(0);
+  it("umur belum diketahui: dinilai dari omzet tiga bulan pembanding", () => {
+    // Tanggal buka adalah catatan administratif yang banyak kosong. Dulu outlet
+    // tanpa tanggal langsung dikecualikan, dan karena hampir semua kosong
+    // SELURUH tabel berstatus dikecualikan — padahal outletnya jalan
+    // bertahun-tahun. Omzetnya sendiri sudah cukup jadi bukti.
+    const jalan = hitungB([{ id: "x", nama: "X", umur: null, bulanLalu: [10, 10, 10], actual: 10 }]);
+    expect(jalan.jumlahIkut).toBe(1);
+
+    // Satu bulan pembanding kosong berarti outletnya belum jalan penuh tiga
+    // bulan — persis keadaan yang memang harus dikecualikan.
+    const belum = hitungB([{ id: "y", nama: "Y", umur: null, bulanLalu: [0, 10, 10], actual: 10 }]);
+    expect(belum.jumlahIkut).toBe(0);
+  });
+
+  it("tanggal buka yang ADA tetap menang atas omzet", () => {
+    // Outlet baru bisa saja punya omzet di tiga bulan pembanding karena
+    // bukanya di awal bulan. Kalau tanggalnya diketahui, tanggal itulah yang
+    // dipakai — tebakan hanya untuk yang catatannya kosong.
+    const baru = hitungB([{ id: "z", nama: "Z", umur: 2, bulanLalu: [10, 10, 10], actual: 10 }]);
+    expect(baru.jumlahIkut).toBe(0);
   });
 
   it("tanpa satu pun outlet layak, skornya nol", () => {
