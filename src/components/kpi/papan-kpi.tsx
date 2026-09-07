@@ -559,16 +559,22 @@ export function PilihTabel<T extends string>({
   onNilai: (v: T) => void;
 }) {
   return (
-    // Bingkainya DI LUAR kotak yang digulir, dan bentuk lengkungnya ikut
-    // memotong isinya. Kalau bingkai dan gulirannya jadi satu kotak, bantalan
-    // kiri ikut tergeser sampai tombol pertama menempel pada garis bingkai,
-    // cincin tombol terpilih terpotong garis itu, dan sudut lengkungnya hilang
-    // — yang terlihat bukan "sedang digeser" melainkan kotaknya rusak.
+    // TIGA LAPIS, dan tiap lapis punya satu tugas.
     //
-    // Bantalan tegaknya dipindah ke dalam: cincin tombol terpilih digambar di
-    // tepi tombol, dan kotak guliran setinggi tombol akan memangkasnya.
-    <div className="max-w-full overflow-hidden rounded-xl border border-border bg-muted/50 px-1">
-      <div className="scroll-fade-x flex items-center gap-1 py-1">
+    // Terluar memegang bingkai dan lengkungnya, serta memotong isinya mengikuti
+    // lengkung itu — jadi tombol yang tergeser keluar hilang di balik sudut
+    // membulat, bukan terpenggal garis lurus.
+    //
+    // Tengah adalah kotak guliran. Ia diberi bantalan di KEEMPAT sisi supaya
+    // cincin dan bayangan tombol terpilih — keduanya digambar di LUAR kotak
+    // tombol — punya ruang dan tidak terpangkas tepi kotak guliran sendiri.
+    //
+    // Lengkung tombol dibuat lebih kecil daripada lengkung bingkainya. Dua
+    // lengkung berbeda pusat yang saling memotong itulah yang membuat sudut
+    // tombol terlihat tergigit rata, dan jarak sebesar bantalan ini menjauhkan
+    // keduanya.
+    <div className="max-w-full overflow-hidden rounded-2xl border border-border bg-muted/50">
+      <div className="scroll-fade-x flex items-center gap-1 p-1.5">
         {pilihan.map((p) => {
           const on = p.id === nilai;
           const Icon = p.icon;
@@ -580,7 +586,9 @@ export function PilihTabel<T extends string>({
               aria-pressed={on}
               className={cn(
                 "inline-flex shrink-0 items-center justify-center gap-1.5 whitespace-nowrap rounded-lg px-2.5 py-1.5 text-xs font-medium transition-colors",
-                on ? "bg-background text-foreground shadow-sm ring-1 ring-border" : "text-muted-foreground hover:text-foreground",
+              // Cincinnya dipasang di dalam supaya tidak pernah keluar dari
+              // kotak tombol dan tidak bisa terpangkas kotak guliran.
+                on ? "bg-background text-foreground shadow-sm ring-1 ring-inset ring-border" : "text-muted-foreground hover:text-foreground",
               )}
             >
               <Icon className="size-3.5 shrink-0" />

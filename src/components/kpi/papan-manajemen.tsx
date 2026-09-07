@@ -3,10 +3,9 @@
 import * as React from "react";
 import { useRouter } from "next/navigation";
 import { type ColumnDef } from "@tanstack/react-table";
-import { Building2, ChevronRight, FileDown, Hash, Info, ListChecks, Percent, Store, TrendingUp, Wallet } from "lucide-react";
+import { Building2, ChevronRight, Hash, Info, ListChecks, Percent, Store, TrendingUp, Wallet } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
 import { Combobox } from "@/components/ui/combobox";
 import { DataTable } from "@/components/ui/data-table";
 import { Progress } from "@/components/ui/progress";
@@ -291,12 +290,12 @@ export function PapanManajemen({ detail }: { detail: DetailManajemen }) {
         },
         {
           accessorKey: "persenActual",
-          header: "Skor",
+          header: "%",
+          // Bobot keempat komponen berjumlah 100, jadi skornya MEMANG persentase
+          // — "33,23 / 40" menuntut pembacanya membagi sendiri untuk tahu
+          // sumbangannya ke skor perusahaan, padahal angkanya sudah itu.
           cell: ({ row }) => (
-            <span className="font-semibold tabular-nums text-foreground">
-              {angka(row.original.persenActual)}
-              <span className="ml-0.5 text-[11px] font-medium text-muted-foreground">/ {row.original.bobot}</span>
-            </span>
+            <span className="font-semibold tabular-nums text-foreground">{persen(row.original.persenActual)}</span>
           ),
         },
         {
@@ -533,9 +532,6 @@ export function PapanManajemen({ detail }: { detail: DetailManajemen }) {
         <div className="ml-auto flex shrink-0 items-center gap-2">
           <Badge tone={skor.peringkat.tone}>{skor.peringkat.label}</Badge>
           <DialogPanduanManajemen />
-          <Button size="sm" variant="outline" className="gap-1.5" onClick={() => setPdf(true)}>
-            <FileDown className="size-4" /> Unduh PDF
-          </Button>
         </div>
       </div>
 
@@ -550,19 +546,19 @@ export function PapanManajemen({ detail }: { detail: DetailManajemen }) {
       </div>
 
       {tampilan === "komponen" && (
-        <DataTable tableId="kpi-manajemen" columns={kolomKomponen} data={baris} searchPlaceholder="Cari komponen…" stickyHeader={false} showExport={false} toolbar={toolbar} />
+        <DataTable tableId="kpi-manajemen" columns={kolomKomponen} data={baris} searchPlaceholder="Cari komponen…" stickyHeader={false} toolbar={toolbar} onExport={() => setPdf(true)} exportTitle="Unduh laporan PDF" />
       )}
       {tampilan === "gross" && (
-        <DataTable tableId="kpi-manajemen-gross" columns={kolomGross} data={urutTurun(skor.b.baris)} searchPlaceholder="Cari outlet…" stickyHeader={false} toolbar={toolbar} />
+        <DataTable tableId="kpi-manajemen-gross" columns={kolomGross} data={urutTurun(skor.b.baris)} searchPlaceholder="Cari outlet…" stickyHeader={false} toolbar={toolbar} onExport={() => setPdf(true)} exportTitle="Unduh laporan PDF" />
       )}
       {tampilan === "outlet" && (
-        <DataTable tableId="kpi-manajemen-outlet" columns={kolomOutlet} data={urutCapaian(skor.b.baris)} searchPlaceholder="Cari outlet…" stickyHeader={false} toolbar={toolbar} />
+        <DataTable tableId="kpi-manajemen-outlet" columns={kolomOutlet} data={urutCapaian(skor.b.baris)} searchPlaceholder="Cari outlet…" stickyHeader={false} toolbar={toolbar} onExport={() => setPdf(true)} exportTitle="Unduh laporan PDF" />
       )}
       {tampilan === "ebitda" && (
-        <DataTable tableId="kpi-manajemen-ebitda" columns={kolomEbitda} data={urutMargin(detail.ebitda)} searchPlaceholder="Cari outlet…" stickyHeader={false} toolbar={toolbar} />
+        <DataTable tableId="kpi-manajemen-ebitda" columns={kolomEbitda} data={urutMargin(detail.ebitda)} searchPlaceholder="Cari outlet…" stickyHeader={false} toolbar={toolbar} onExport={() => setPdf(true)} exportTitle="Unduh laporan PDF" />
       )}
       {tampilan === "divisi" && (
-        <DataTable tableId="kpi-manajemen-divisi" columns={kolomDivisi} data={barisDivisi} searchPlaceholder="Cari departemen…" stickyHeader={false} toolbar={toolbar} />
+        <DataTable tableId="kpi-manajemen-divisi" columns={kolomDivisi} data={barisDivisi} searchPlaceholder="Cari departemen…" stickyHeader={false} toolbar={toolbar} onExport={() => setPdf(true)} exportTitle="Unduh laporan PDF" />
       )}
 
       <Ringkasan tampilan={tampilan} detail={detail} />
@@ -697,16 +693,7 @@ function Ringkasan({ tampilan, detail }: { tampilan: Tampilan; detail: DetailMan
   const { skor } = detail;
   let teks: React.ReactNode = null;
 
-  if (tampilan === "gross") {
-    teks = (
-      <>
-        Kolom % = sumbangan outlet terhadap omzet korporat · {skor.b.baris.filter((o) => o.actual > 0).length} outlet
-        berjualan · omzet korporat{" "}
-        <b className="text-foreground">{formatIDR(skor.a.actual)}</b> · target {formatIDR(skor.a.target)} ={" "}
-        {persen(skor.a.capaian * 100)}
-      </>
-    );
-  } else if (tampilan === "outlet") {
+  if (tampilan === "outlet") {
     teks = (
       <>
         Kolom % = capaian terhadap target outlet itu sendiri · {skor.b.jumlahIkut} outlet dihitung,{" "}

@@ -477,15 +477,30 @@ function TipHarian({
   );
 }
 
-/** Titik hijau untuk hari yang tembus target; titik biasa untuk sisanya. */
+/**
+ * Titik hari yang tembus target — BERDENYUT seperti radar.
+ *
+ * Titik diam berwarna lain sudah terbaca, tapi baru setelah mata menyapu
+ * seluruh grafik. Denyutnya menarik mata lebih dulu ke hari yang berhasil,
+ * dan itulah yang dicari orang saat membuka grafik ini. Denyutnya dibuat
+ * dengan SMIL di dalam SVG-nya sendiri, bukan CSS: grafiknya dirender ulang
+ * tiap kali datanya berubah, dan animasi CSS akan ikut mulai dari awal setiap
+ * kali sampai terlihat berkedip.
+ */
 function TitikHarian({ cx, cy, payload }: { cx?: number; cy?: number; payload?: HariOmzet & { target: number } }) {
   if (cx === undefined || cy === undefined || !payload || payload.ini === null) return null;
   const tembus = payload.target > 0 && payload.ini >= payload.target;
   if (!tembus) return <circle cx={cx} cy={cy} r={1.8} fill={BLUE} />;
+  // Fasenya digeser per tanggal supaya seluruh titik tidak berdenyut serentak
+  // — yang serentak terbaca sebagai kedipan layar, bukan penanda.
+  const geser = `-${(payload.tanggal % 5) * 0.4}s`;
   return (
     <g>
-      <circle cx={cx} cy={cy} r={5} fill="#10b981" fillOpacity={0.18} />
-      <circle cx={cx} cy={cy} r={3} fill="#10b981" stroke="var(--card, #fff)" strokeWidth={1.2} />
+      <circle cx={cx} cy={cy} r={3} fill="#10b981" fillOpacity={0.35}>
+        <animate attributeName="r" values="3;11;3" dur="2s" begin={geser} repeatCount="indefinite" />
+        <animate attributeName="fill-opacity" values="0.35;0;0.35" dur="2s" begin={geser} repeatCount="indefinite" />
+      </circle>
+      <circle cx={cx} cy={cy} r={3.2} fill="#10b981" stroke="#fff" strokeWidth={1.2} />
     </g>
   );
 }
@@ -537,9 +552,6 @@ export function GrafikHarian({
   const totalIni = terisi.reduce((s, d) => s + (d.ini ?? 0), 0);
   const totalLalu = data.reduce((s, d) => s + (d.lalu ?? 0), 0);
   const tembus = terisi.filter((d) => target > 0 && (d.ini ?? 0) >= target).length;
-  const sisaHari = data.length - terisi.length;
-  const kurang = targetBulan === null ? 0 : Math.max(0, targetBulan - totalIni);
-  const perluHarian = sisaHari > 0 ? kurang / sisaHari : 0;
 
   return (
     <Kartu
@@ -613,17 +625,6 @@ export function GrafikHarian({
           </ResponsiveContainer>
         )}
       </div>
-      {adaIsi && targetBulan !== null && (
-        <p className="mt-2 shrink-0 text-[11.5px] leading-relaxed text-muted-foreground">
-          Rata-rata {ringkas(terisi.length ? totalIni / terisi.length : 0, "rupiah")}/hari dari target{" "}
-          {ringkas(target, "rupiah")}/hari
-          {sisaHari > 0
-            ? ` · sisa ${sisaHari} hari perlu ${ringkas(perluHarian, "rupiah")}/hari untuk menutup ${ringkas(kurang, "rupiah")}`
-            : kurang > 0
-              ? ` · bulan berakhir kurang ${ringkas(kurang, "rupiah")}`
-              : " · target sebulan tercapai"}
-        </p>
-      )}
     </Kartu>
   );
 }
