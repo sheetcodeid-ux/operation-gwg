@@ -429,6 +429,120 @@ const MODE_TITLE: Record<Mode, string> = { hasil: "Actual", bobot: "Bobot" };
  * akan mendorong seluruh kartunya melar dan merusak sejajarannya dengan kartu
  * grafik di sebelahnya.
  */
+/* ─────────────────────────── grafik omzet harian ─────────────────────────── */
+
+export interface HariOmzet {
+  tanggal: number;
+  ini: number | null;
+  lalu: number | null;
+}
+
+function TipHarian({ active, payload, label }: { active?: boolean; payload?: { payload: HariOmzet & { target: number } }[]; label?: number }) {
+  if (!active || !payload?.length) return null;
+  const d = payload[0].payload;
+  const baris: [string, string, number | null][] = [
+    ["Bulan ini", BLUE, d.ini],
+    ["Bulan lalu", "#94a3b8", d.lalu],
+    ["Target/hari", "#f59e0b", d.target],
+  ];
+  return (
+    <div className="rounded-lg border border-border bg-card px-3 py-2 text-[11.5px] shadow-lg">
+      <p className="mb-1 font-medium text-foreground">Tanggal {label}</p>
+      {baris.map(([nama, warna, nilai]) => (
+        <p key={nama} className="flex items-center gap-1.5 text-muted-foreground">
+          <span className="size-2 shrink-0 rounded-full" style={{ background: warna }} />
+          {nama}: <span className="font-medium text-foreground">{nilai === null ? "—" : formatIDR(nilai)}</span>
+        </p>
+      ))}
+    </div>
+  );
+}
+
+/**
+ * Omzet per tanggal — bulan berjalan, bulan lalu, dan garis target harian.
+ *
+ * Grafik bulanan hanya menjawab "sudah berapa"; yang ini menjawab "masih
+ * sempat atau tidak". Garis targetnya rata — target bulan dibagi jumlah hari —
+ * dan justru keratanya yang berguna: hari-hari di bawah garis terlihat
+ * langsung, dan jarak yang harus dikejar sisa bulan bisa dikira-kira dengan
+ * mata.
+ */
+export function GrafikHarian({
+  judul,
+  hari,
+  targetBulan,
+}: {
+  judul: string;
+  hari: HariOmzet[];
+  /** Target sebulan; dibagi rata jadi garis target harian. */
+  targetBulan: number | null;
+}) {
+  const target = targetBulan === null || hari.length === 0 ? 0 : targetBulan / hari.length;
+  const data = React.useMemo(() => hari.map((h) => ({ ...h, target })), [hari, target]);
+  const adaIsi = data.some((d) => d.ini !== null || d.lalu !== null);
+
+  const totalIni = data.reduce((s, d) => s + (d.ini ?? 0), 0);
+  const totalLalu = data.reduce((s, d) => s + (d.lalu ?? 0), 0);
+
+  return (
+    <Kartu
+      title={judul}
+      aksi={
+        <div className="flex items-center gap-3 text-[11px] text-muted-foreground">
+          <span className="inline-flex items-center gap-1.5">
+            <span className="size-2 rounded-full" style={{ background: BLUE }} /> Bulan ini {ringkas(totalIni, "rupiah")}
+          </span>
+          <span className="inline-flex items-center gap-1.5">
+            <span className="size-2 rounded-full bg-slate-400" /> Bulan lalu {ringkas(totalLalu, "rupiah")}
+          </span>
+        </div>
+      }
+    >
+      <div className="min-h-[17rem] flex-1" style={{ outline: "none" }}>
+        {!adaIsi ? (
+          <div className="grid h-full min-h-[17rem] place-items-center text-[12px] text-muted-foreground">
+            Belum ada penjualan harian pada bulan ini.
+          </div>
+        ) : (
+          <ResponsiveContainer width="100%" height="100%">
+            <ComposedChart data={data} margin={{ top: 10, right: 6, left: 0, bottom: 0 }} accessibilityLayer={false}>
+              <defs>
+                <linearGradient id="hariBlue" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0%" stopColor={BLUE} stopOpacity={0.3} />
+                  <stop offset="100%" stopColor={BLUE} stopOpacity={0} />
+                </linearGradient>
+              </defs>
+              <CartesianGrid strokeDasharray="3 3" stroke="rgba(148,163,184,0.16)" vertical={false} />
+              <XAxis
+                dataKey="tanggal"
+                scale="point"
+                padding={{ left: 12, right: 12 }}
+                tickLine={false}
+                axisLine={false}
+                interval={0}
+                tick={{ fontSize: 10, fill: "rgb(100,116,139)" }}
+                tickFormatter={(v: number) => (hari.length > 20 && v % 2 === 0 ? "" : String(v))}
+              />
+              <YAxis
+                width={54}
+                tickLine={false}
+                axisLine={false}
+                tick={{ fontSize: 10.5, fill: "rgb(100,116,139)" }}
+                tickFormatter={(v: number) => ringkas(v, "rupiah")}
+              />
+              <Tooltip content={<TipHarian />} cursor={{ stroke: "rgba(148,163,184,0.35)" }} />
+              <Line type="linear" dataKey="target" stroke="#f59e0b" strokeWidth={1.5} strokeDasharray="6 5" dot={false} isAnimationActive={false} />
+              <Line type="linear" dataKey="lalu" stroke="#94a3b8" strokeWidth={1.5} dot={false} connectNulls isAnimationActive={false} />
+              <Area type="linear" dataKey="ini" stroke="none" fill="url(#hariBlue)" isAnimationActive={false} />
+              <Line type="linear" dataKey="ini" stroke={BLUE} strokeWidth={2} dot={{ r: 1.8, fill: BLUE }} connectNulls isAnimationActive={false} />
+            </ComposedChart>
+          </ResponsiveContainer>
+        )}
+      </div>
+    </Kartu>
+  );
+}
+
 export function KpiIndicatorDonut({ baris }: { baris: BarisKpi[] }) {
   const [mode, setMode] = React.useState<Mode>("hasil");
   const [aktif, setAktif] = React.useState<string | null>(null);

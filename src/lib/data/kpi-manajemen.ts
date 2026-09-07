@@ -34,6 +34,13 @@ import type { LaluIndikator } from "@/components/kpi/kpi-charts";
  * ingat mengisinya.
  */
 
+/** Omzet satu tanggal, bulan berjalan berdampingan dengan bulan sebelumnya. */
+export interface HariOmzet {
+  tanggal: number;
+  ini: number | null;
+  lalu: number | null;
+}
+
 /** Satu outlet same store dengan laba bersih dan penjualannya. */
 export interface BarisEbitda {
   outletId: string;
@@ -57,6 +64,8 @@ export interface DetailManajemen {
   labaBersih: number;
   /** Laba bersih dan sales tiap outlet same store — bahan Detail EBITDA. */
   ebitda: BarisEbitda[];
+  /** Omzet per tanggal, bulan ini dan bulan lalu — bahan grafik harian. */
+  harian: HariOmzet[];
   /** Capaian bulan lalu per komponen — bahan grafik pembanding. */
   lalu: Record<string, LaluIndikator>;
 }
@@ -86,6 +95,41 @@ export function umurBulan(bukaTanggal: string | null, periode: string): number |
   const [tm, bm] = mulai.split("-").map(Number);
   const [tp, bp] = periode.split("-").map(Number);
   return (tp - tm) * 12 + (bp - bm);
+}
+
+/** Jumlah hari dalam satu periode "YYYY-MM". */
+function jumlahHari(periode: string): number {
+  const [th, bl] = periode.split("-").map(Number);
+  return new Date(Date.UTC(th, bl, 0)).getUTCDate();
+}
+
+/**
+ * Omzet harian seluruh outlet, bulan berjalan berdampingan dengan bulan lalu.
+ *
+ * SUMBERNYA `sales_daily`, yang menyimpan penjualan harian SELURUH perusahaan
+ * tanpa rincian cabang — ESB memang ditarik per hari, tapi yang disimpan hanya
+ * jumlahnya. Karena itu grafik harian tidak bisa dipisah per outlet, dan
+ * angkanya juga tidak mengenal bulan yang ditandai manual. Ia dipakai untuk
+ * melihat BENTUK bulan berjalan — hari mana yang ramai, hari mana yang jatuh —
+ * bukan untuk mencocokkan totalnya dengan kartu Gross Sales di atasnya.
+ */
+async function omzetHarian(periode: string): Promise<HariOmzet[]> {
+  const hari = jumlahHari(periode);
+  const kosong = Array.from({ length: hari }, (_, i) => ({ tanggal: i + 1, ini: null, lalu: null }));
+  if (!dbEnabled) return kosong;
+
+  const lalu = bulanSebelum(periode);
+  const { data } = await db()
+    .from("sales_daily")
+    .select("day,net_sales")
+    .gte("day", `${lalu}-01`)
+    .lte("day", `${periode}-${String(hari).padStart(2, "0")}`);
+
+  const peta = new Map<string, number>();
+  for (const r of data ?? []) peta.set(String(r.day).slice(0, 10), angka(r.net_sales));
+
+  const ambil = (bulan: string, tgl: number) => peta.get(`${bulan}-${String(tgl).padStart(2, "0")}`) ?? null;
+  return kosong.map(({ tanggal }) => ({ tanggal, ini: ambil(periode, tanggal), lalu: ambil(lalu, tanggal) }));
 }
 
 /** Laba bersih tiap outlet same store, dari isian bulanan Coordinator Area. */
@@ -241,9 +285,10 @@ export async function detailManajemen(
   // Dua bulan sekaligus: bulan berjalan untuk nilainya, bulan sebelumnya untuk
   // pembandingnya. Keduanya ditarik bersamaan supaya halaman tidak menunggu
   // dua putaran berurutan.
-  const [laba, labaLalu, skorIni, skorLalu] = await Promise.all([
+  const [laba, labaLalu, harian, skorIni, skorLalu] = await Promise.all([
     labaOutlet(periode, idIkut),
     labaOutlet(bulanSebelum(periode), idIkut),
+    opsi.ringan ? Promise.resolve([] as HariOmzet[]) : omzetHarian(periode),
     opsi.ringan ? Promise.resolve(new Map<string, number>()) : skorPosisi(periode),
     opsi.ringan ? Promise.resolve(new Map<string, number>()) : skorPosisi(bulanSebelum(periode)),
   ]);
@@ -291,5 +336,6 @@ export async function detailManajemen(
     bulanA,
     labaBersih,
     ebitda,
+    harian,
   };
 }

@@ -153,6 +153,11 @@ const DETAIL_MJ: DetailManajemen = {
         margin: laba === null ? null : (laba / b.actual) * 100,
       };
     }),
+  harian: Array.from({ length: 30 }, (_, i) => {
+    const t = i + 1;
+    const pola = 380_000_000 + Math.sin(t / 3) * 90_000_000 + (t % 7 === 0 ? 120_000_000 : 0);
+    return { tanggal: t, ini: t <= 21 ? Math.round(pola) : null, lalu: Math.round(pola * 0.93 + (t % 5) * 8_000_000) };
+  }),
   lalu: {
     a: { persen: 96.2, actual: 12_824_068_510 },
     b: { persen: 94.1, actual: 631_000_000 },

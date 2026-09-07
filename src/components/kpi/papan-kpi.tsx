@@ -559,26 +559,32 @@ export function PilihTabel<T extends string>({
   onNilai: (v: T) => void;
 }) {
   return (
-    <div className="scroll-fade-x flex max-w-full items-center gap-1 rounded-xl border border-border bg-muted/50 p-1">
-      {pilihan.map((p) => {
-        const on = p.id === nilai;
-        const Icon = p.icon;
-        return (
-          <button
-            key={p.id}
-            type="button"
-            onClick={() => onNilai(p.id)}
-            aria-pressed={on}
-            className={cn(
-              "inline-flex shrink-0 items-center justify-center gap-1.5 whitespace-nowrap rounded-lg px-2.5 py-1.5 text-xs font-medium transition-colors",
-              on ? "bg-background text-foreground shadow-sm ring-1 ring-border" : "text-muted-foreground hover:text-foreground",
-            )}
-          >
-            <Icon className="size-3.5 shrink-0" />
-            {p.label}
-          </button>
-        );
-      })}
+    // Bingkai dan bantalannya di LUAR kotak yang digulir. Kalau keduanya jadi
+    // satu, bantalan kiri ikut tergulir dan tombol pertama menempel persis pada
+    // garis bingkai — cincin tombol terpilih terpotong garis itu, dan yang
+    // terlihat bukan "sedang digeser" melainkan kotaknya rusak.
+    <div className="max-w-full rounded-xl border border-border bg-muted/50 p-1">
+      <div className="scroll-fade-x flex items-center gap-1">
+        {pilihan.map((p) => {
+          const on = p.id === nilai;
+          const Icon = p.icon;
+          return (
+            <button
+              key={p.id}
+              type="button"
+              onClick={() => onNilai(p.id)}
+              aria-pressed={on}
+              className={cn(
+                "inline-flex shrink-0 items-center justify-center gap-1.5 whitespace-nowrap rounded-lg px-2.5 py-1.5 text-xs font-medium transition-colors",
+                on ? "bg-background text-foreground shadow-sm ring-1 ring-border" : "text-muted-foreground hover:text-foreground",
+              )}
+            >
+              <Icon className="size-3.5 shrink-0" />
+              {p.label}
+            </button>
+          );
+        })}
+      </div>
     </div>
   );
 }
