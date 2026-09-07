@@ -3,19 +3,20 @@
 import * as React from "react";
 import { useRouter } from "next/navigation";
 import { type ColumnDef } from "@tanstack/react-table";
-import { Building2, FileDown, Hash, ListChecks, Percent, Store, TrendingUp, Wallet } from "lucide-react";
+import { Building2, ChevronRight, FileDown, Hash, ListChecks, Percent, Store, TrendingUp, Wallet } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Combobox } from "@/components/ui/combobox";
 import { DataTable } from "@/components/ui/data-table";
+import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { Progress } from "@/components/ui/progress";
 import { KpiIndicatorDonut, KpiPerformanceChart, type LaluIndikator } from "./kpi-charts";
 import { DialogLaporanKpi } from "./laporan-pdf";
 import { PilihTabel, statusCapaian } from "./papan-kpi";
 import { DialogPanduanManajemen } from "./panduan";
 import { BULAN, periodeDari, tahunPilihan } from "./periode";
-import { BOBOT, PERTUMBUHAN, TARGET_MARGIN, UMUR_SAME_STORE, type DepartemenKpi } from "@/lib/kpi/manajemen";
+import { BOBOT, PERTUMBUHAN, TARGET_MARGIN, UMUR_SAME_STORE, type BarisOutletB, type DepartemenKpi } from "@/lib/kpi/manajemen";
 import { ringkasKpi, type BarisKpi } from "@/lib/kpi/hitung";
 import type { BarisEbitda, DetailManajemen } from "@/lib/data/kpi-manajemen";
 import type { LaporanKpi } from "@/lib/data/kpi";
@@ -47,6 +48,9 @@ const bersatuan = (n: number | null, satuan?: "angka" | "rupiah" | "persen") => 
   if (satuan === "persen") return persen(n, 0);
   return angka(n);
 };
+
+/** Satu outlet dalam tabel Same Store — dipakai juga tabel Gross Sales. */
+type BarisOutlet = BarisOutletB;
 
 type Tampilan = "komponen" | "gross" | "outlet" | "ebitda" | "divisi";
 type Satuan = "persen" | "angka";
@@ -174,17 +178,31 @@ export function PapanManajemen({ detail }: { detail: DetailManajemen }) {
      * memuat outlet yang lain — baris pertama tabel dicari di ujung kiri
      * grafik dan tidak ada di sana.
      */
+    /**
+     * Urutan grafik SAMA dengan urutan tabel di bawahnya, dan labelnya NOMOR
+     * URUT, bukan kode outlet.
+     *
+     * Lima puluh delapan kode empat huruf pada satu sumbu saling menabrak
+     * sampai tidak terbaca. Nomor urutnya justru yang dicari orang: ia
+     * menunjuk baris ke berapa di tabel, jadi titik terendah di grafik langsung
+     * ketemu barisnya. Nama outletnya tetap muncul saat titiknya disentuh.
+     */
     const dariOutlet = (
       sumber: { id: string; kode: string; nama: string; target: number; actual: number }[],
       judul: string,
       urut: "omzet" | "capaian",
     ) => ({
       judul,
-      baris: sumber
-        .filter((o) => o.target > 0 || o.actual > 0)
-        .map((o) => ({
+      baris: [...sumber]
+        .sort((a, b) =>
+          urut === "omzet"
+            ? b.actual - a.actual
+            : (b.target > 0 ? b.actual / b.target : -1) - (a.target > 0 ? a.actual / a.target : -1),
+        )
+        .map((o, i) => ({
           key: o.id,
-          label: o.kode,
+          label: String(i + 1),
+          labelPenuh: `${i + 1}. ${o.nama} (${o.kode})`,
           bobot: 0,
           target: o.target,
           actual: o.actual,
@@ -192,10 +210,7 @@ export function PapanManajemen({ detail }: { detail: DetailManajemen }) {
           persenActual: null,
           penjelasan: o.nama,
           satuan: "rupiah" as const,
-        }))
-        .sort((a, b) =>
-          urut === "omzet" ? (b.actual ?? 0) - (a.actual ?? 0) : (b.persentase ?? -1) - (a.persentase ?? -1),
-        ),
+        })),
       lalu: {},
     });
 
@@ -204,22 +219,22 @@ export function PapanManajemen({ detail }: { detail: DetailManajemen }) {
     if (tampilan === "ebitda") {
       return {
         judul: "Margin per Outlet",
-        baris: detail.ebitda
-          .filter((e) => e.margin !== null)
-          .map((e) => ({
+        baris: [...detail.ebitda]
+          .sort((a, b) => (b.margin ?? -1) - (a.margin ?? -1))
+          .map((e, i) => ({
             key: e.outletId,
-            label: e.kode,
+            label: String(i + 1),
+            labelPenuh: `${i + 1}. ${e.nama} (${e.kode})`,
             bobot: 0,
             target: TARGET_MARGIN,
             actual: e.margin,
-            persentase: Math.max(0, Math.min(100, ((e.margin ?? 0) / TARGET_MARGIN) * 100)),
+            persentase: e.margin === null ? null : Math.max(0, Math.min(100, (e.margin / TARGET_MARGIN) * 100)),
             persenActual: null,
             penjelasan: e.nama,
             satuan: "persen" as const,
             actualNominal: e.labaBersih ?? undefined,
             targetNominal: (e.sales * TARGET_MARGIN) / 100,
-          }))
-          .sort((a, b) => (b.persentase ?? -1) - (a.persentase ?? -1)),
+          })),
         lalu: {},
       };
     }
@@ -325,92 +340,108 @@ export function PapanManajemen({ detail }: { detail: DetailManajemen }) {
     [satuan],
   );
 
-  const kolomOutlet = React.useMemo<ColumnDef<(typeof skor.b.baris)[number]>[]>(
-    () => [
+  /**
+   * Tiga tabel detail memakai KERANGKA KOLOM YANG SAMA.
+   *
+   * Gross Sales, Same Store, dan EBITDA menjawab tiga pertanyaan berbeda tapi
+   * bentuk barisnya identik: satu outlet, angkanya bulan lalu, angkanya bulan
+   * ini, dan seberapa jauh geraknya. Menyusun tiganya berbeda memaksa orang
+   * mencari ulang kolom yang sama tiap kali berpindah tab.
+   */
+  const kolomDetail = React.useCallback(
+    <T,>(opsi: {
+      lalu: (b: T) => number | null;
+      ini: (b: T) => number | null;
+      satuanNilai: "rupiah" | "persen";
+      judulUtama: string;
+      utama: (b: T) => number | null;
+      penuh: number;
+      status: (b: T) => { label: string; tone: "success" | "warning" | "danger" | "neutral" | "brand" };
+    }): ColumnDef<T>[] => [
       kolomNo(),
-      { accessorKey: "kode", header: "Kode", cell: ({ getValue }) => <span className="font-mono text-[11.5px] text-muted-foreground">{getValue<string>()}</span> },
+      { id: "kode", header: "Kode", accessorFn: (b: T) => (b as { kode: string }).kode, cell: ({ getValue }) => <span className="font-mono text-[11.5px] text-muted-foreground">{getValue<string>()}</span> },
       {
-        accessorKey: "nama",
+        id: "nama",
         header: "Outlet",
+        accessorFn: (b: T) => (b as { nama: string }).nama,
         cell: ({ getValue }) => <span className="truncate font-medium text-foreground">{getValue<string>()}</span>,
       },
       {
-        id: "target",
-        header: `Target (avg 3 bln +${PERTUMBUHAN}%)`,
-        accessorFn: (o) => o.target,
-        cell: ({ getValue }) => <span className="tabular-nums text-muted-foreground">{formatIDR(getValue<number>())}</span>,
+        id: "lalu",
+        header: "Bulan Lalu",
+        accessorFn: (b: T) => opsi.lalu(b),
+        cell: ({ getValue }) => <span className="tabular-nums text-muted-foreground">{bersatuan(getValue<number | null>(), opsi.satuanNilai)}</span>,
       },
       {
-        accessorKey: "actual",
-        header: "Actual",
-        cell: ({ getValue }) => <span className="tabular-nums text-foreground/80">{formatIDR(getValue<number>())}</span>,
+        id: "ini",
+        header: "Bulan Ini",
+        accessorFn: (b: T) => opsi.ini(b),
+        cell: ({ getValue }) => <span className="tabular-nums text-foreground/80">{bersatuan(getValue<number | null>(), opsi.satuanNilai)}</span>,
       },
-      barisPersen("capaian", "% thd Target", (o) => (o.target > 0 ? (o.actual / o.target) * 100 : null)),
+      {
+        id: "banding",
+        header: "Perbandingan",
+        accessorFn: (b: T) => bandingPersen(opsi.lalu(b), opsi.ini(b)),
+        cell: ({ getValue }) => <Selisih nilai={getValue<number | null>()} />,
+      },
+      barisPersen(opsi.judulUtama.toLowerCase().replace(/\W+/g, "_"), opsi.judulUtama, opsi.utama, opsi.penuh),
       {
         id: "status",
         header: "Status",
-        accessorFn: (o) => (o.ikut ? "Dihitung" : "Dikecualikan"),
-        cell: ({ row }) =>
-          row.original.ikut ? <Badge tone="success">Dihitung</Badge> : <Badge tone="neutral">Dikecualikan</Badge>,
+        accessorFn: (b: T) => opsi.status(b).label,
+        cell: ({ row }) => {
+          const st = opsi.status(row.original);
+          return <Badge tone={st.tone}>{st.label}</Badge>;
+        },
       },
     ],
     [],
   );
 
-  const kolomGross = React.useMemo<ColumnDef<(typeof skor.b.baris)[number]>[]>(() => {
+  const kolomGross = React.useMemo<ColumnDef<BarisOutlet>[]>(() => {
     const total = skor.a.actual;
-    return [
-      kolomNo(),
-      { accessorKey: "kode", header: "Kode", cell: ({ getValue }) => <span className="font-mono text-[11.5px] text-muted-foreground">{getValue<string>()}</span> },
-      {
-        accessorKey: "nama",
-        header: "Outlet",
-        cell: ({ getValue }) => <span className="truncate font-medium text-foreground">{getValue<string>()}</span>,
-      },
-      {
-        accessorKey: "actual",
-        header: "Omzet Bulan Ini",
-        cell: ({ getValue }) => <span className="tabular-nums text-foreground/80">{formatIDR(getValue<number>())}</span>,
-      },
-      barisPersen("kontribusi", "% thd Korporat", (o) => (total > 0 ? (o.actual / total) * 100 : null), 100),
-    ];
-  }, [skor.a.actual]);
+    return kolomDetail<BarisOutlet>({
+      lalu: (o) => o.bulanLalu[2],
+      ini: (o) => o.actual,
+      satuanNilai: "rupiah",
+      judulUtama: "% thd Korporat",
+      utama: (o) => (total > 0 ? (o.actual / total) * 100 : null),
+      penuh: 100,
+      status: (o) => arahStatus(bandingPersen(o.bulanLalu[2], o.actual)),
+    });
+  }, [kolomDetail, skor.a.actual]);
+
+  const kolomOutlet = React.useMemo<ColumnDef<BarisOutlet>[]>(
+    () =>
+      kolomDetail<BarisOutlet>({
+        lalu: (o) => o.bulanLalu[2],
+        ini: (o) => o.actual,
+        satuanNilai: "rupiah",
+        judulUtama: `% thd Target (avg 3 bln +${PERTUMBUHAN}%)`,
+        utama: (o) => (o.target > 0 ? (o.actual / o.target) * 100 : null),
+        penuh: 100,
+        status: (o) => (o.ikut ? { label: "Dihitung", tone: "success" } : { label: "Dikecualikan", tone: "neutral" }),
+      }),
+    [kolomDetail],
+  );
 
   const kolomEbitda = React.useMemo<ColumnDef<BarisEbitda>[]>(
-    () => [
-      kolomNo(),
-      { accessorKey: "kode", header: "Kode", cell: ({ getValue }) => <span className="font-mono text-[11.5px] text-muted-foreground">{getValue<string>()}</span> },
-      {
-        accessorKey: "nama",
-        header: "Outlet",
-        cell: ({ getValue }) => <span className="truncate font-medium text-foreground">{getValue<string>()}</span>,
-      },
-      {
-        accessorKey: "sales",
-        header: "Sales",
-        cell: ({ getValue }) => <span className="tabular-nums text-muted-foreground">{formatIDR(getValue<number>())}</span>,
-      },
-      {
-        accessorKey: "labaBersih",
-        header: "Laba Bersih",
-        cell: ({ getValue }) => {
-          const v = getValue<number | null>();
-          return <span className="tabular-nums text-foreground/80">{v === null ? "—" : formatIDR(v)}</span>;
-        },
-      },
-      barisPersen("margin", `Margin (target ${TARGET_MARGIN}%)`, (e) => e.margin, TARGET_MARGIN),
-      {
-        id: "status",
-        header: "Status",
-        accessorFn: (e) => (e.margin === null ? "Belum diisi" : e.margin >= TARGET_MARGIN ? "Tercapai" : "Belum tercapai"),
-        cell: ({ row }) => {
-          const m = row.original.margin;
-          if (m === null) return <Badge tone="neutral">Belum diisi</Badge>;
-          return m >= TARGET_MARGIN ? <Badge tone="success">Tercapai</Badge> : <Badge tone="warning">Belum tercapai</Badge>;
-        },
-      },
-    ],
-    [],
+    () =>
+      kolomDetail<BarisEbitda>({
+        lalu: (e) => e.labaLalu,
+        ini: (e) => e.labaBersih,
+        satuanNilai: "rupiah",
+        judulUtama: `Margin (target ${TARGET_MARGIN}%)`,
+        utama: (e) => e.margin,
+        penuh: TARGET_MARGIN,
+        status: (e) =>
+          e.margin === null
+            ? { label: "Belum diisi", tone: "neutral" }
+            : e.margin >= TARGET_MARGIN
+              ? { label: "Tercapai", tone: "success" }
+              : { label: "Belum tercapai", tone: "warning" },
+      }),
+    [kolomDetail],
   );
 
   const kolomDivisi = React.useMemo<ColumnDef<DepartemenKpi>[]>(
@@ -418,59 +449,15 @@ export function PapanManajemen({ detail }: { detail: DetailManajemen }) {
       {
         accessorKey: "nama",
         header: "Departemen",
-        cell: ({ row }) => (
-          <div className="min-w-0 max-w-[22rem]">
-            <p className="truncate font-medium text-foreground">{row.original.nama}</p>
-            <p className="truncate text-[11px] text-muted-foreground">
-              {row.original.posisi.length === 0
-                ? "belum ada posisi ber-modul"
-                : row.original.posisi.map((p) => `${p.nama} ${p.nilai === null ? "—" : angka(p.nilai)}`).join(" · ")}
-            </p>
-          </div>
-        ),
+        cell: ({ row }) => <SelDepartemen dept={row.original} />,
       },
-      {
-        id: "posisi",
-        header: "Posisi",
-        accessorFn: (d) => d.posisi.length,
-        cell: ({ getValue }) => <span className="tabular-nums text-muted-foreground">{getValue<number>()}</span>,
-      },
-      {
-        id: "lalu",
-        header: "Bulan Lalu",
-        accessorFn: (d) => d.lalu,
-        cell: ({ getValue }) => <span className="tabular-nums text-muted-foreground">{angka(getValue<number | null>())}</span>,
-      },
-      {
-        id: "ini",
-        header: "Bulan Ini",
-        accessorFn: (d) => d.rata,
-        cell: ({ getValue }) => {
-          const v = getValue<number | null>();
-          if (v === null) return <span className="text-[11px] text-muted-foreground">belum ada data</span>;
-          return (
-            <div className="flex w-40 items-center gap-2">
-              <Progress value={Math.min(100, v)} tone={v >= 85 ? "success" : v >= 70 ? "warning" : "danger"} />
-              <span className="w-12 text-right text-[11px] tabular-nums text-muted-foreground">{angka(v)}</span>
-            </div>
-          );
-        },
-      },
+      barisNilai("lalu", "Bulan Lalu", (d) => d.lalu),
+      barisNilai("ini", "Bulan Ini", (d) => d.rata),
       {
         id: "selisih",
         header: "Perbandingan",
         accessorFn: (d) => (d.rata === null || d.lalu === null ? null : d.rata - d.lalu),
-        cell: ({ getValue }) => {
-          const v = getValue<number | null>();
-          if (v === null) return <span className="text-[11px] text-muted-foreground">—</span>;
-          const naik = v > 0.005;
-          const turun = v < -0.005;
-          return (
-            <Badge tone={naik ? "success" : turun ? "danger" : "neutral"}>
-              {naik ? "▲" : turun ? "▼" : "—"} {angka(Math.abs(v))}
-            </Badge>
-          );
-        },
+        cell: ({ getValue }) => <Selisih nilai={getValue<number | null>()} satuan="poin" />,
       },
     ],
     [],
@@ -550,6 +537,126 @@ export function PapanManajemen({ detail }: { detail: DetailManajemen }) {
         namaPic=""
       />
     </div>
+  );
+}
+
+/** Selisih dua bulan dalam persen; null bila salah satunya belum ada. */
+function bandingPersen(lalu: number | null, ini: number | null): number | null {
+  if (lalu === null || ini === null || lalu === 0) return null;
+  return ((ini - lalu) / Math.abs(lalu)) * 100;
+}
+
+/** Arah gerak sebagai status — dipakai tabel yang tidak punya target sendiri. */
+function arahStatus(v: number | null): { label: string; tone: "success" | "danger" | "neutral" } {
+  if (v === null) return { label: "Belum ada pembanding", tone: "neutral" };
+  if (v > 0.05) return { label: "Naik", tone: "success" };
+  if (v < -0.05) return { label: "Turun", tone: "danger" };
+  return { label: "Tetap", tone: "neutral" };
+}
+
+/** Lencana selisih — bentuk yang sama dipakai tabel outlet maupun departemen. */
+function Selisih({ nilai, satuan = "%" }: { nilai: number | null; satuan?: string }) {
+  if (nilai === null) return <span className="text-[11px] text-muted-foreground">—</span>;
+  const naik = nilai > 0.005;
+  const turun = nilai < -0.005;
+  return (
+    <Badge tone={naik ? "success" : turun ? "danger" : "neutral"}>
+      {naik ? "▲" : turun ? "▼" : "—"} {angka(Math.abs(nilai))}
+      {satuan === "%" ? "%" : ` ${satuan}`}
+    </Badge>
+  );
+}
+
+/** Nilai 0–100 berbentuk bilah — dipakai kolom bulan lalu DAN bulan ini. */
+function barisNilai(id: string, header: string, ambil: (d: DepartemenKpi) => number | null): ColumnDef<DepartemenKpi> {
+  return {
+    id,
+    header,
+    accessorFn: (d) => ambil(d),
+    cell: ({ getValue }) => {
+      const v = getValue<number | null>();
+      if (v === null) return <span className="text-[11px] text-muted-foreground">belum ada data</span>;
+      return (
+        <div className="flex w-36 items-center gap-2">
+          <Progress value={Math.min(100, v)} tone={v >= 85 ? "success" : v >= 70 ? "warning" : "danger"} />
+          <span className="w-11 text-right text-[11px] tabular-nums text-muted-foreground">{angka(v)}</span>
+        </div>
+      );
+    },
+  };
+}
+
+/**
+ * Nama departemen sekaligus pintu ke rincian posisinya.
+ *
+ * Jumlah posisi sebagai angka telanjang tidak menjawab apa pun: yang dicari
+ * orang saat melihat departemen turun adalah POSISI MANA yang turun. Angkanya
+ * digabung ke sini supaya satu kolom menjawab keduanya — berapa posisinya, dan
+ * ketika ditekan, siapa saja mereka beserta nilainya bulan ini dan bulan lalu.
+ */
+function SelDepartemen({ dept }: { dept: DepartemenKpi }) {
+  const [buka, setBuka] = React.useState(false);
+  const kosong = dept.posisi.length === 0;
+  return (
+    <>
+      <button
+        type="button"
+        disabled={kosong}
+        onClick={() => setBuka(true)}
+        className="group flex min-w-0 max-w-[24rem] items-center gap-2 text-left disabled:cursor-default"
+      >
+        <span className="min-w-0">
+          <span className="block truncate font-medium text-foreground group-enabled:group-hover:underline">{dept.nama}</span>
+          <span className="block truncate text-[11px] text-muted-foreground">
+            {kosong ? "belum ada posisi ber-modul" : `${dept.posisi.length} posisi · lihat rincian`}
+          </span>
+        </span>
+        {!kosong && <ChevronRight className="size-3.5 shrink-0 text-muted-foreground" />}
+      </button>
+
+      <Dialog open={buka} onOpenChange={setBuka}>
+        <DialogContent title={dept.nama} description={`${dept.posisi.length} posisi · nilai KPI bulan ini dan bulan lalu`} align="center" className="max-w-xl">
+          <div className="max-h-[70vh] overflow-auto p-5">
+            <table className="w-full text-[12.5px]">
+              <thead>
+                <tr className="border-b border-border text-left text-[11px] uppercase tracking-wide text-muted-foreground">
+                  <th className="pb-2 font-medium">Posisi</th>
+                  <th className="pb-2 text-right font-medium">Bulan Lalu</th>
+                  <th className="pb-2 text-right font-medium">Bulan Ini</th>
+                  <th className="pb-2 text-right font-medium">Perbandingan</th>
+                </tr>
+              </thead>
+              <tbody>
+                {dept.posisi.map((p) => (
+                  <tr key={p.kode} className="border-b border-border/60 last:border-0">
+                    <td className="py-2 pr-3 font-medium text-foreground">{p.nama}</td>
+                    <td className="py-2 text-right tabular-nums text-muted-foreground">{angka(p.lalu)}</td>
+                    <td className="py-2 text-right tabular-nums text-foreground/80">
+                      {p.nilai === null ? <span className="text-[11px] text-muted-foreground">belum terukur</span> : angka(p.nilai)}
+                    </td>
+                    <td className="py-2 text-right">
+                      <Selisih nilai={p.nilai === null || p.lalu === null ? null : p.nilai - p.lalu} satuan="poin" />
+                    </td>
+                  </tr>
+                ))}
+                <tr className="border-t border-border">
+                  <td className="pt-2 font-semibold text-foreground">Rata-rata departemen</td>
+                  <td className="pt-2 text-right tabular-nums text-muted-foreground">{angka(dept.lalu)}</td>
+                  <td className="pt-2 text-right font-semibold tabular-nums text-foreground">{angka(dept.rata)}</td>
+                  <td className="pt-2 text-right">
+                    <Selisih nilai={dept.rata === null || dept.lalu === null ? null : dept.rata - dept.lalu} satuan="poin" />
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+            <p className="mt-3 text-[11.5px] leading-relaxed text-muted-foreground">
+              Posisi yang belum terukur dilewati, bukan dihitung nol — rata-rata departemen hanya menghitung posisi
+              yang modulnya sudah menghasilkan angka.
+            </p>
+          </div>
+        </DialogContent>
+      </Dialog>
+    </>
   );
 }
 

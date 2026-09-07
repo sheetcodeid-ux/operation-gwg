@@ -41,6 +41,8 @@ export interface BarisEbitda {
   kode: string;
   sales: number;
   labaBersih: number | null;
+  /** Laba bersih bulan sebelumnya — pembanding, boleh kosong. */
+  labaLalu: number | null;
   /** Margin dalam persen; null bila laba bersihnya belum diisi. */
   margin: number | null;
 }
@@ -239,8 +241,9 @@ export async function detailManajemen(
   // Dua bulan sekaligus: bulan berjalan untuk nilainya, bulan sebelumnya untuk
   // pembandingnya. Keduanya ditarik bersamaan supaya halaman tidak menunggu
   // dua putaran berurutan.
-  const [laba, skorIni, skorLalu] = await Promise.all([
+  const [laba, labaLalu, skorIni, skorLalu] = await Promise.all([
     labaOutlet(periode, idIkut),
+    labaOutlet(bulanSebelum(periode), idIkut),
     opsi.ringan ? Promise.resolve(new Map<string, number>()) : skorPosisi(periode),
     opsi.ringan ? Promise.resolve(new Map<string, number>()) : skorPosisi(bulanSebelum(periode)),
   ]);
@@ -253,6 +256,7 @@ export async function detailManajemen(
       kode: b.kode,
       sales: b.actual,
       labaBersih: nilai,
+      labaLalu: labaLalu.get(b.id) ?? null,
       margin: nilai !== null && b.actual > 0 ? (nilai / b.actual) * 100 : null,
     };
   });

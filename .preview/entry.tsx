@@ -149,6 +149,7 @@ const DETAIL_MJ: DetailManajemen = {
         kode: b.kode,
         sales: b.actual,
         labaBersih: laba,
+        labaLalu: i === 2 ? null : b.bulanLalu[2] * (0.18 + i * 0.06),
         margin: laba === null ? null : (laba / b.actual) * 100,
       };
     }),

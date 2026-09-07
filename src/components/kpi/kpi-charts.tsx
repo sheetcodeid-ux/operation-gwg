@@ -199,8 +199,6 @@ function tepi(index: number | undefined, jumlah: number): "start" | "middle" | "
  * dengan garis dasar. Yang ditukar tombol Angka/Persen adalah apa yang
  * TERTULIS: persen di sumbu, atau nominalnya di atas tiap titik.
  */
-/** Lebar minimum satu titik saat isinya terlalu banyak untuk muat sekaligus. */
-const LEBAR_TITIK = 52;
 /** Di atas jumlah ini, kartunya digulir ke samping alih-alih dipadatkan. */
 const BATAS_PADAT = 12;
 
@@ -237,7 +235,7 @@ export function KpiPerformanceChart({
         const pakaiNominal = b.actualNominal !== undefined && b.actualNominal !== null;
         return {
           name: b.label,
-          full: b.label,
+          full: b.labelPenuh ?? b.label,
           ini: b.persentase === null ? 0 : Math.round(b.persentase),
           lalu: lalu[b.key]?.persen == null ? 0 : Math.round(lalu[b.key].persen!),
           target: 100,
@@ -268,7 +266,11 @@ export function KpiPerformanceChart({
    * bawah ambang ini tidak ada yang berubah sama sekali.
    */
   const digulir = data.length > BATAS_PADAT;
-  const lebarIsi = digulir ? Math.max(lebar, data.length * LEBAR_TITIK) : lebar;
+  // Lebar satu titik mengikuti label TERPANJANG, bukan angka tetap. Nomor urut
+  // butuh seperempat ruang nama outlet; memakai satu angka untuk keduanya
+  // membuat grafik bernomor digulir jauh lebih panjang daripada perlunya.
+  const hurufTerpanjang = data.reduce((n, d) => Math.max(n, d.name.length), 1);
+  const lebarIsi = digulir ? Math.max(lebar, data.length * Math.max(26, hurufTerpanjang * 7 + 14)) : lebar;
   const jatah = (lebarIsi - 64) / Math.max(1, data.length);
   const muat = Math.max(6, Math.floor((jatah - 12) / 6.2));
   const muatTepi = Math.max(6, Math.floor((jatah / 2 + 18) / 6.2));
