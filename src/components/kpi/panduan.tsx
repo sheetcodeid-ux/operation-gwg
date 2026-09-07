@@ -4,7 +4,7 @@ import * as React from "react";
 import { BookOpen, TriangleAlert } from "lucide-react";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
 import type { Indikator } from "@/lib/kpi/indikator";
-import { PERTUMBUHAN_A, TARGET_MARGIN, UMUR_SAME_STORE } from "@/lib/kpi/manajemen";
+import { PERTUMBUHAN, TARGET_MARGIN, UMUR_SAME_STORE } from "@/lib/kpi/manajemen";
 
 /**
  * Panduan pengisian KPI — dibaca sebelum menyentuh satu pun angka.
@@ -290,7 +290,7 @@ export function DialogPanduanManajemen() {
         isi: (
           <>
             Otomatis dari ESB, kecuali bulan yang diisi tangan — di situ angka ketikanlah yang dipakai. Target ={" "}
-            <b>rata-rata omzet tiga bulan sebelumnya + {PERTUMBUHAN_A}%</b>, actual = omzet bulan berjalan.
+            <b>rata-rata omzet tiga bulan sebelumnya + {PERTUMBUHAN}%</b>, actual = omzet bulan berjalan.
             SELURUH outlet ikut, termasuk yang baru buka — pertumbuhan korporat tidak boleh menghukum pembukaan outlet
             baru.
           </>
@@ -300,11 +300,12 @@ export function DialogPanduanManajemen() {
         judul: "B — Same Store Sales (bobot 30%)",
         isi: (
           <>
-            Otomatis dari ESB, tapi <b>hanya outlet berumur di atas {UMUR_SAME_STORE} bulan</b>. Umur dihitung dari
-            tanggal buka outlet dengan aturan tanggal 15 yang sama dengan KPI Coordinator Area.
+            Hanya <b>outlet berumur di atas {UMUR_SAME_STORE} bulan</b>. Target tiap outlet ={" "}
+            <b>rata-rata tiga bulan outlet itu sendiri + {PERTUMBUHAN}%</b>, lalu seluruhnya dijumlahkan.
             <Awas>
-              Outlet yang tanggal bukanya belum diisi TIDAK ditebak — ia dikeluarkan dari perhitungan dan namanya
-              disebut di bawah tabel Detail Same Store. Isi tanggal bukanya supaya ikut terhitung.
+              Umur dihitung dari tanggal buka outlet, dengan aturan tanggal 15 yang sama dengan KPI Coordinator Area.
+              Kalau tanggalnya belum diisi, yang dipakai omzetnya sendiri: outlet yang punya penjualan di KETIGA bulan
+              pembanding sudah pasti berjalan lebih dari tiga bulan. Tanggal buka yang ADA tetap menang atas omzet.
             </Awas>
           </>
         ),

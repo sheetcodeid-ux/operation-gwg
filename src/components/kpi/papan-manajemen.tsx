@@ -19,7 +19,7 @@ import { PilihTabel, statusCapaian } from "./papan-kpi";
 import { DialogPanduanManajemen } from "./panduan";
 import { BULAN, labelPeriode, periodeDari, tahunPilihan } from "./periode";
 import { simpanManajemenAction } from "@/lib/actions/kpi-manajemen";
-import { BOBOT, PERTUMBUHAN_A, TARGET_MARGIN, UMUR_SAME_STORE, type DivisiKpi } from "@/lib/kpi/manajemen";
+import { BOBOT, PERTUMBUHAN, TARGET_MARGIN, UMUR_SAME_STORE, type DivisiKpi } from "@/lib/kpi/manajemen";
 import type { BarisKpi } from "@/lib/kpi/hitung";
 import type { DetailManajemen } from "@/lib/data/kpi-manajemen";
 import { formatIDR, formatNumber } from "@/lib/utils";
@@ -97,9 +97,9 @@ export function PapanManajemen({ detail }: { detail: DetailManajemen }) {
     });
     return [
       buat("a", "Gross Sales Corporate", BOBOT.a, skor.a.target, skor.a.actual, skor.a.capaian, skor.a.skor, "rupiah",
-        `Target = rata-rata omzet tiga bulan sebelumnya + ${PERTUMBUHAN_A}%. Seluruh outlet ikut, termasuk yang baru buka.`),
+        `Target = rata-rata omzet tiga bulan sebelumnya + ${PERTUMBUHAN}%. Seluruh outlet ikut, termasuk yang baru buka.`),
       buat("b", "Same Store Sales", BOBOT.b, skor.b.target, skor.b.actual, skor.b.capaian, skor.b.skor, "rupiah",
-        `Hanya outlet berumur di atas ${UMUR_SAME_STORE} bulan. Target tiap outlet = rata-rata tiga bulan sebelumnya.`),
+        `Hanya outlet berumur di atas ${UMUR_SAME_STORE} bulan. Target tiap outlet = rata-rata tiga bulan sebelumnya + ${PERTUMBUHAN}%.`),
       buat("c", "EBITDA Same Store", BOBOT.c, TARGET_MARGIN, skor.c.margin, skor.c.capaian, skor.c.skor, "persen",
         `Margin laba bersih terhadap sales same store, target ${TARGET_MARGIN}%. Berjenjang, bukan lulus-atau-tidak.`),
       buat("d", "KPI All Division", BOBOT.d, 100, skor.d.rata, skor.d.rata / 100, skor.d.skor, "angka",
@@ -201,7 +201,7 @@ export function PapanManajemen({ detail }: { detail: DetailManajemen }) {
       },
       {
         id: "target",
-        header: "Target (avg 3 bln)",
+        header: `Target (avg 3 bln +${PERTUMBUHAN}%)`,
         accessorFn: (o) => o.target,
         cell: ({ getValue }) => <span className="tabular-nums text-muted-foreground">{formatIDR(getValue<number>())}</span>,
       },
