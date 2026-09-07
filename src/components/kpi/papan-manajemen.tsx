@@ -3,7 +3,7 @@
 import * as React from "react";
 import { useRouter } from "next/navigation";
 import { type ColumnDef } from "@tanstack/react-table";
-import { Building2, ChevronRight, FileDown, Hash, ListChecks, Percent, Store, TrendingUp, Wallet } from "lucide-react";
+import { Building2, ChevronRight, FileDown, Hash, Info, ListChecks, Percent, Store, TrendingUp, Wallet } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -60,6 +60,9 @@ interface BarisDivisi {
   lalu: number | null;
   ini: number | null;
 }
+
+/** Ambang status EBITDA: persen dari target margin yang sudah dianggap tercapai. */
+const AMBANG_EBITDA = 85;
 
 type Tampilan = "komponen" | "gross" | "outlet" | "ebitda" | "divisi";
 type Satuan = "persen" | "angka";
@@ -245,9 +248,9 @@ export function PapanManajemen({ detail }: { detail: DetailManajemen }) {
           accessorKey: "label",
           header: "Komponen",
           cell: ({ row }) => (
-            <div className="min-w-0 max-w-[22rem]">
-              <p className="truncate font-medium text-foreground">{row.original.label}</p>
-              <p className="truncate text-[11px] text-muted-foreground">{row.original.penjelasan}</p>
+            <div className="flex min-w-0 max-w-[22rem] items-center gap-1.5">
+              <span className="truncate font-medium text-foreground">{row.original.label}</span>
+              <Keterangan teks={row.original.penjelasan} />
             </div>
           ),
         },
@@ -399,12 +402,16 @@ export function PapanManajemen({ detail }: { detail: DetailManajemen }) {
         satuanNilai: "rupiah",
         utama: (e) => e.margin,
         penuh: TARGET_MARGIN,
+        // Ambangnya 85% DARI TARGET, bukan target penuh. Margin adalah hasil
+        // puluhan keputusan kecil sepanjang bulan; menuntut 30% persis membuat
+        // outlet yang meleset setengah persen dinilai sama dengan yang meleset
+        // sepuluh persen, dan status yang hampir selalu merah berhenti dibaca.
         status: (e) =>
           e.margin === null
             ? { label: "Belum diisi", tone: "neutral" }
-            : e.margin >= TARGET_MARGIN
+            : e.margin >= TARGET_MARGIN * (AMBANG_EBITDA / 100)
               ? { label: "Tercapai", tone: "success" }
-              : { label: "Belum tercapai", tone: "warning" },
+              : { label: "Belum tercapai", tone: "danger" },
       }),
     [kolomDetail],
   );
@@ -446,10 +453,7 @@ export function PapanManajemen({ detail }: { detail: DetailManajemen }) {
           const b = row.original;
           if (b.jenis === "posisi") {
             return (
-              <div className="flex min-w-0 items-center gap-2 pl-7">
-                <span className="h-3 w-3 shrink-0 rounded-bl-md border-b border-l border-border" />
-                <span className="truncate text-foreground/80">{b.nama}</span>
-              </div>
+              <span className="block truncate pl-9 text-foreground/80">{b.nama}</span>
             );
           }
           const kosong = b.dept.posisi.length === 0;
@@ -538,7 +542,7 @@ export function PapanManajemen({ detail }: { detail: DetailManajemen }) {
       {/* Grafik + donat — grid yang sama dengan halaman KPI posisi. */}
       <div className="mb-4 grid items-stretch gap-4 lg:grid-cols-[minmax(0,1fr)_23rem]">
         {harian ? (
-          <GrafikHarian judul={harian.judul} hari={detail.harian} targetBulan={harian.target} />
+          <GrafikHarian judul={harian.judul} periode={detail.periode} hari={detail.harian} targetBulan={harian.target} />
         ) : (
           <KpiPerformanceChart judul={grafik.judul} baris={grafik.baris} lalu={grafik.lalu} />
         )}
@@ -620,6 +624,32 @@ function Nilai({ n, tebal }: { n: number | null; tebal: boolean }) {
   );
 }
 
+/**
+ * Keterangan yang muncul saat kursor diarahkan.
+ *
+ * Kalimat penjelas di bawah tiap nama komponen memakan setengah tinggi baris
+ * dan tetap terpotong di tengah kata. Yang membacanya sudah tahu isinya
+ * setelah sekali baca; yang belum tahu tinggal mengarahkan kursor. Dibuat
+ * dengan CSS saja — tanpa pustaka, tanpa state, dan tetap bisa dibuka dengan
+ * papan tik lewat fokus.
+ */
+function Keterangan({ teks }: { teks: string }) {
+  if (!teks) return null;
+  return (
+    <span className="group/ket relative inline-flex shrink-0">
+      <button type="button" aria-label={teks} className="text-muted-foreground/70 transition-colors hover:text-foreground focus-visible:text-foreground">
+        <Info className="size-3.5" />
+      </button>
+      <span
+        role="tooltip"
+        className="pointer-events-none absolute left-1/2 top-full z-30 mt-1.5 w-72 -translate-x-1/2 rounded-lg border border-border bg-card px-3 py-2 text-[11.5px] leading-relaxed text-muted-foreground opacity-0 shadow-lg transition-opacity group-hover/ket:opacity-100 group-focus-within/ket:opacity-100"
+      >
+        {teks}
+      </span>
+    </span>
+  );
+}
+
 /** Nomor baris yang mengikuti urutan tampil, bukan urutan data. */
 function kolomNo<T>(): ColumnDef<T> {
   return {
@@ -688,7 +718,8 @@ function Ringkasan({ tampilan, detail }: { tampilan: Tampilan; detail: DetailMan
     const kosong = detail.ebitda.filter((e) => e.labaBersih === null).length;
     teks = (
       <>
-        Kolom % = margin outlet itu, target {TARGET_MARGIN}% · laba bersih {formatIDR(skor.c.labaBersih)} ÷ sales{" "}
+        Kolom % = margin outlet terhadap target {TARGET_MARGIN}%; {AMBANG_EBITDA}% ke atas sudah dihitung tercapai ·
+        laba bersih {formatIDR(skor.c.labaBersih)} ÷ sales{" "}
         {formatIDR(skor.c.sales)} ={" "}
         <b className="text-foreground">{persen(skor.c.margin)}</b> dari target {TARGET_MARGIN}%
         {kosong > 0 ? ` · ${kosong} outlet belum diisi laba bersihnya oleh Coordinator Area` : ""}
