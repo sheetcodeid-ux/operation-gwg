@@ -1,4 +1,5 @@
 import type { Role } from "./types";
+import { DEPARTEMEN, MENU_POSISI, POSISI } from "./kpi/struktur";
 
 /** Every navigable menu in the app. */
 export type MenuKey =
@@ -585,19 +586,23 @@ export const DIVISION_MENUS: { division: Division; menus: MenuKey[] }[] = [
   },
   // sys_review sits under Operation for placement, but access is jabatan-gated
   // (System Support) via an injected grant — it is NOT a general Operation menu.
-  // KPI departemennya sendiri ikut di sini: yang dinilai harus bisa membaca
-  // capaiannya tanpa menunggu dikirimi. Rapor yang hanya bisa dibuka atasannya
-  // berhenti jadi alat kerja dan berubah jadi alat vonis.
-  { division: "Operation", menus: [...OPERATION_FULL, "sys_review", "it_review", "elearning", "elearning_admin", "kpi_op_ca"] },
+  //
+  // MENU KPI TIDAK LAGI DIULANG DI DIVISI KERJANYA. Satu halaman yang sama
+  // muncul di dua tempat membuat orang mengira isinya berbeda, lalu membuka
+  // keduanya untuk memastikan — dan tetap tidak yakin. Seluruh KPI berkumpul
+  // di divisi "Key Performance Indicator" yang kini duduk paling atas; yang
+  // dinilai tetap bisa membaca capaiannya sendiri di sana, lewat aturan akses
+  // yang sama.
+  { division: "Operation", menus: [...OPERATION_FULL, "sys_review", "it_review", "elearning", "elearning_admin"] },
   { division: "Supervisor", menus: ["events", "hospitality", "hygiene", "complaints", "hc_kontrak", "hc_submit", "sys_submit"] },
   // Complaints ikut di sini, tapi PDQ hanya melihat kategori Food Quality —
   // penyaringnya di `complaintCategoryScope`, dan memasukkan komplain tetap
   // milik Marketing Communication.
-  { division: "Product Development & Quality", menus: ["hpp_dash", "work", "hpp", "hpp_db", "hpp_bahan", "hpp_price", "hpp_comp", "complaints", "kpi_pdq_qc", "kpi_pdq_food", "kpi_pdq_beverage", "kpi_pdq_head_food", "kpi_pdq_head_pdq"] },
+  { division: "Product Development & Quality", menus: ["hpp_dash", "work", "hpp", "hpp_db", "hpp_bahan", "hpp_price", "hpp_comp", "complaints"] },
   { division: "Human Capital", menus: ["work", "hcmos", "hcmos_raci", "hc_bagan", "hc_struktur", "hc_karyawan", "hc_culture", "hc_sop", "hc_rekrutmen", "hc_kompetensi", "hc_modul", "hc_faststart", "hc_pretest", "hc_selflearning", "hc_kinerja", "hc_appraisal", "hc_intervensi", "hc_career", "hc_kompensasi", "hc_relasi", "hc_compliance", "hc_kebijakan", "hc_monitoring", "hc_kpi", "hc_kontrak", "hc_review", "hc_reqreview", "hc_training", "assessment", "elearning"] },
   // New department-aligned divisions — Work Tracker only for now.
-  { division: "Finance", menus: ["work", "fin_training", "kpi_fin_accounting", "kpi_fin_finance", "kpi_fin_tax"] },
-  { division: "Creative", menus: ["work", "creative_design", "creative_penilaian", "kpi_creative_content", "kpi_creative_sosmed"] },
+  { division: "Finance", menus: ["work", "fin_training"] },
+  { division: "Creative", menus: ["work", "creative_design", "creative_penilaian"] },
   { division: "Project Manager", menus: ["work"] },
   { division: "Auditor", menus: ["work"] },
   { division: "Executive Assistant", menus: ["work"] },
@@ -610,7 +615,7 @@ export const DIVISION_MENUS: { division: Division; menus: MenuKey[] }[] = [
   // Marketing Communication: Work Tracker + the Event/Promo ACC & impact tracker.
   // MarComm adalah pintu masuk keluhan dari kanal publik (Google Review,
   // Instagram, TikTok), jadi Complaints ikut di divisinya.
-  { division: "Marketing Communication", menus: ["work", "mc_events", "complaints", "kpi_marcomm"] },
+  { division: "Marketing Communication", menus: ["work", "mc_events", "complaints"] },
   { division: "Administrator", menus: ["users", "audit"] },
 ];
 
@@ -902,7 +907,29 @@ export function kepalaDepartemen(user: { role: Role; jabatan?: string | null }):
   return user.role.startsWith("head_") || /^\s*head\b/i.test(user.jabatan ?? "");
 }
 
+/**
+ * Divisi kerja pemilik tiap menu KPI.
+ *
+ * Dibangun dari struktur posisi, BUKAN dari daftar menu sidebar. Menu KPI
+ * sengaja tidak lagi diulang di divisi kerjanya supaya tidak ada dua baris
+ * menuju halaman yang sama; kalau hak akses ikut membaca daftar itu, staf
+ * kehilangan rapornya sendiri begitu barisnya dihapus — hilang tanpa satu pun
+ * pesan, dan yang kehilangan tidak punya cara menebak sebabnya.
+ */
+const DIVISI_PEMILIK_KPI: Map<string, string> = new Map(
+  POSISI.map((p) => {
+    const nama = DEPARTEMEN.find((d) => d.kode === p.departemen)?.nama ?? "";
+    return [MENU_POSISI[p.kode], divisiDari(nama) ?? nama] as const;
+  }),
+);
+
+/** Menu KPI ini milik divisi kerja tersebut? */
+export function divisiPemilikKpi(division: string, key: MenuKey): boolean {
+  return DIVISI_PEMILIK_KPI.get(key) === division;
+}
+
 export function divisionHasMenu(division: string, key: MenuKey): boolean {
+  if (MENU_KPI.has(key)) return divisiPemilikKpi(division, key);
   if (UNIVERSAL_MENUS.includes(key) && !NO_UNIVERSAL.includes(division)) return true;
   if (DIVISION_MENUS.some((d) => d.division === division && d.menus.includes(key))) return true;
   return EXTRA_DIVISIONS.some((d) => d.name === division && d.menus.includes(key));

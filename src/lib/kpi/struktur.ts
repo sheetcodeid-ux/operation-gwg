@@ -112,6 +112,28 @@ export const POSISI: Posisi[] = [
   { kode: "pdq_head_pdq", departemen: "pdq", nama: "Head Product Development & Quality", pic: [] },
 ];
 
+/**
+ * Menu sidebar untuk tiap posisi.
+ *
+ * Tinggal di sini, bersama posisinya sendiri, supaya aturan akses bisa
+ * memakainya tanpa lewat lapisan izin — dan supaya menambah posisi baru
+ * berarti mengubah SATU berkas, bukan dua yang harus diubah serempak.
+ */
+export const MENU_POSISI: Record<KodePosisi, string> = {
+  operational_ca: "kpi_op_ca",
+  creative_content: "kpi_creative_content",
+  creative_sosmed: "kpi_creative_sosmed",
+  finance_accounting: "kpi_fin_accounting",
+  finance_finance: "kpi_fin_finance",
+  finance_tax: "kpi_fin_tax",
+  marcomm: "kpi_marcomm",
+  pdq_qc: "kpi_pdq_qc",
+  pdq_food: "kpi_pdq_food",
+  pdq_beverage: "kpi_pdq_beverage",
+  pdq_head_food: "kpi_pdq_head_food",
+  pdq_head_pdq: "kpi_pdq_head_pdq",
+};
+
 export const posisiDari = (kode: string): Posisi | undefined => POSISI.find((p) => p.kode === kode);
 export const departemenDari = (kode: string): Departemen | undefined => DEPARTEMEN.find((d) => d.kode === kode);
 export const posisiDepartemen = (kode: KodeDepartemen): Posisi[] =>

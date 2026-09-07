@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 import { requireSessionUser } from "@/lib/auth";
 import { canReachMenu, type MenuKey } from "@/lib/nav";
+import { bolehAturKpi } from "@/lib/kpi/akses";
 import { periodeSekarang } from "@/lib/data/kpi";
 import { detailManajemen } from "@/lib/data/kpi-manajemen";
 import { PageHeader } from "@/components/ui/page-header";
@@ -34,7 +35,7 @@ export default async function KpiManajemenPage({
   return (
     <div className="w-full">
       <PageHeader title="KPI Manajemen" />
-      <PapanManajemen detail={detail} />
+      <PapanManajemen detail={detail} bolehAtur={bolehAturKpi(user)} />
     </div>
   );
 }

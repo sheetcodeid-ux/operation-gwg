@@ -1,29 +1,9 @@
-import type { KodePosisi } from "./struktur";
 import type { UserProfile } from "@/lib/types";
 import { canReachMenu, type MenuKey } from "@/lib/nav";
 
-/**
- * Menu sidebar untuk tiap posisi.
- *
- * Dipisah dari daftar menu supaya halamannya bisa memeriksa izin dengan kunci
- * yang PERSIS sama dengan yang dipakai sidebar. Menyalin pemetaan ini di dua
- * tempat berarti suatu saat sidebar menampilkan baris yang halamannya menolak
- * membuka — dan yang terlihat pengguna cuma menu yang melempar balik.
- */
-export const MENU_POSISI: Record<KodePosisi, string> = {
-  operational_ca: "kpi_op_ca",
-  creative_content: "kpi_creative_content",
-  creative_sosmed: "kpi_creative_sosmed",
-  finance_accounting: "kpi_fin_accounting",
-  finance_finance: "kpi_fin_finance",
-  finance_tax: "kpi_fin_tax",
-  marcomm: "kpi_marcomm",
-  pdq_qc: "kpi_pdq_qc",
-  pdq_food: "kpi_pdq_food",
-  pdq_beverage: "kpi_pdq_beverage",
-  pdq_head_food: "kpi_pdq_head_food",
-  pdq_head_pdq: "kpi_pdq_head_pdq",
-};
+// Pemetaan posisi → menu pindah ke `struktur.ts`, bersama posisinya sendiri.
+// Diteruskan dari sini supaya pemanggil lama tidak perlu ikut berubah.
+export { MENU_POSISI } from "./struktur";
 
 /**
  * Siapa boleh mengubah bobot dan target.

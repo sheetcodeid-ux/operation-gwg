@@ -4,9 +4,13 @@ import * as React from "react";
 import { useRouter } from "next/navigation";
 import { type ColumnDef } from "@tanstack/react-table";
 import { createPortal } from "react-dom";
-import { Building2, ChevronRight, Hash, Info, ListChecks, Minus, Percent, Store, TrendingDown, TrendingUp, Wallet } from "lucide-react";
+import { toast } from "sonner";
+import { Building2, ChevronRight, Hash, Info, ListChecks, Loader2, Minus, Percent, Save, Settings2, Store, TrendingDown, TrendingUp, Wallet } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Dialog, DialogContent } from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
 import { Combobox } from "@/components/ui/combobox";
 import { DataTable } from "@/components/ui/data-table";
 import { Progress } from "@/components/ui/progress";
@@ -15,10 +19,12 @@ import { DialogLaporanKpi } from "./laporan-pdf";
 import { PilihTabel, statusCapaian } from "./papan-kpi";
 import { DialogPanduanManajemen } from "./panduan";
 import { BULAN, periodeDari, tahunPilihan } from "./periode";
-import { BOBOT, PERTUMBUHAN, TARGET_MARGIN, UMUR_SAME_STORE, type BarisOutletB, type DepartemenKpi } from "@/lib/kpi/manajemen";
+import { type BarisOutletB, type DepartemenKpi, type SetelanManajemen } from "@/lib/kpi/manajemen";
 import { ringkasKpi, type BarisKpi } from "@/lib/kpi/hitung";
 import type { BarisEbitda, DetailManajemen } from "@/lib/data/kpi-manajemen";
 import type { LaporanKpi } from "@/lib/data/kpi";
+import { merekOutlet } from "@/lib/kpi/merek";
+import { simpanSetelanManajemenAction } from "@/lib/actions/kpi-manajemen";
 import { cn, formatIDR, formatNumber } from "@/lib/utils";
 
 /**
@@ -61,28 +67,8 @@ interface BarisDivisi {
   ini: number | null;
 }
 
-/**
- * Merek dikenali dari NAMA OUTLET, bukan kolom tersendiri.
- *
- * Tidak ada kolom merek di basis data, dan menambahkannya berarti 58 baris
- * yang harus diisi tangan lalu dijaga selamanya. Namanya sudah memuat
- * mereknya di depan; yang tidak dikenali dibiarkan kosong, bukan ditebak —
- * merek salah lebih buruk daripada merek yang tidak ditulis.
- */
-const MEREK: { uji: RegExp; label: string; tone: "danger" | "brand" | "amber" | "success" }[] = [
-  { uji: /busari/i, label: "Busari", tone: "amber" },
-  { uji: /lesung\s*pipi/i, label: "Lesung Pipi", tone: "success" },
-  { uji: /cattu/i, label: "Cattu", tone: "brand" },
-  { uji: /nordu/i, label: "Nordu", tone: "danger" },
-];
-
-const merekDari = (nama: string) => MEREK.find((m) => m.uji.test(nama)) ?? null;
-
 /** Ambang batas warna persentase: di atas ini hijau, di bawahnya merah. */
 const AMBANG_HIJAU = 80;
-
-/** Ambang status EBITDA: persen dari target margin yang sudah dianggap tercapai. */
-const AMBANG_EBITDA = 85;
 
 type Tampilan = "komponen" | "gross" | "outlet" | "ebitda" | "divisi";
 type Satuan = "persen" | "angka";
@@ -94,7 +80,10 @@ function PilihSatuan({ nilai, onNilai }: { nilai: Satuan; onNilai: (v: Satuan) =
     { id: "angka", label: "Angka", icon: Hash },
   ];
   return (
-    <div className="inline-flex shrink-0 gap-1 rounded-lg border border-border bg-muted/50 p-1">
+    // Bentuk dan tinggi PERSIS sama dengan pengalih tabel di sebelahnya —
+    // dua kotak sejenis yang berbeda tinggi terbaca sebagai dua hal yang
+    // berbeda derajatnya, padahal keduanya sama-sama saklar tampilan.
+    <div className="inline-flex shrink-0 items-center gap-1 overflow-hidden rounded-2xl border border-border bg-muted/50 p-1.5">
       {opsi.map((m) => {
         const on = nilai === m.id;
         const Icon = m.icon;
@@ -105,8 +94,8 @@ function PilihSatuan({ nilai, onNilai }: { nilai: Satuan; onNilai: (v: Satuan) =
             onClick={() => onNilai(m.id)}
             aria-pressed={on}
             className={cn(
-              "inline-flex items-center gap-1.5 rounded-md px-2.5 py-1 text-[11px] font-medium transition-colors",
-              on ? "bg-background text-foreground shadow-sm ring-1 ring-border" : "text-muted-foreground hover:text-foreground",
+              "inline-flex shrink-0 items-center justify-center gap-1.5 whitespace-nowrap rounded-lg px-2.5 py-1.5 text-xs font-medium transition-colors",
+              on ? "bg-background text-foreground shadow-sm ring-1 ring-inset ring-border" : "text-muted-foreground hover:text-foreground",
             )}
           >
             <Icon className="size-3.5 shrink-0" />
@@ -118,7 +107,8 @@ function PilihSatuan({ nilai, onNilai }: { nilai: Satuan; onNilai: (v: Satuan) =
   );
 }
 
-export function PapanManajemen({ detail }: { detail: DetailManajemen }) {
+export function PapanManajemen({ detail, bolehAtur }: { detail: DetailManajemen; bolehAtur: boolean }) {
+  const st = detail.setelan;
   const router = useRouter();
   const { skor } = detail;
   const [tampilan, setTampilan] = React.useState<Tampilan>("komponen");
@@ -171,19 +161,19 @@ export function PapanManajemen({ detail }: { detail: DetailManajemen }) {
       targetNominal: nominal?.target,
     });
     return [
-      buat("a", "Gross Sales Corporate", BOBOT.a, skor.a.target, skor.a.actual, skor.a.capaian, skor.a.skor, "rupiah",
-        `Target = rata-rata omzet tiga bulan sebelumnya + ${PERTUMBUHAN}%. Seluruh outlet ikut, termasuk yang baru buka.`),
-      buat("b", "Same Store Sales", BOBOT.b, skor.b.target, skor.b.actual, skor.b.capaian, skor.b.skor, "rupiah",
-        `Hanya outlet berumur di atas ${UMUR_SAME_STORE} bulan. Target tiap outlet = rata-rata tiga bulan sebelumnya + ${PERTUMBUHAN}%.`),
+      buat("a", "Gross Sales Corporate", st.bobot.a, skor.a.target, skor.a.actual, skor.a.capaian, skor.a.skor, "rupiah",
+        `Target = rata-rata omzet tiga bulan sebelumnya + ${st.pertumbuhan}%. Seluruh outlet ikut, termasuk yang baru buka.`),
+      buat("b", "Same Store Sales", st.bobot.b, skor.b.target, skor.b.actual, skor.b.capaian, skor.b.skor, "rupiah",
+        `Hanya outlet berumur di atas ${st.umurSameStore} bulan. Target tiap outlet = rata-rata tiga bulan sebelumnya + ${st.pertumbuhan}%.`),
       // EBITDA aslinya rasio. Nominalnya dibawa terpisah supaya mode Angka
       // menampilkan rupiah laba bersih, bukan "30%" di bawah tombol Angka.
-      buat("c", "EBITDA Same Store", BOBOT.c, TARGET_MARGIN, skor.c.margin, skor.c.capaian, skor.c.skor, "persen",
-        `Margin laba bersih terhadap sales same store, target ${TARGET_MARGIN}%. Berjenjang, bukan lulus-atau-tidak.`,
-        { actual: skor.c.labaBersih, target: (skor.c.sales * TARGET_MARGIN) / 100 }),
-      buat("d", "KPI All Division", BOBOT.d, 100, skor.d.rata, skor.d.rata / 100, skor.d.skor, "angka",
+      buat("c", "EBITDA Same Store", st.bobot.c, st.targetMargin, skor.c.margin, skor.c.capaian, skor.c.skor, "persen",
+        `Margin laba bersih terhadap sales same store, target ${st.targetMargin}%. Berjenjang, bukan lulus-atau-tidak.`,
+        { actual: skor.c.labaBersih, target: (skor.c.sales * st.targetMargin) / 100 }),
+      buat("d", "KPI All Division", st.bobot.d, 100, skor.d.rata, skor.d.rata / 100, skor.d.skor, "angka",
         "Rata-rata nilai tiap departemen; tiap departemen bersuara sekali, berapa pun jumlah posisinya."),
     ];
-  }, [skor]);
+  }, [skor, st]);
 
   const pilihanTabel = React.useMemo<{ id: Tampilan; label: string; icon: LucideIcon }[]>(
     () => [
@@ -223,9 +213,9 @@ export function PapanManajemen({ detail }: { detail: DetailManajemen }) {
    * bawahnya berganti.
    */
   const harian = React.useMemo<{ judul: string; target: number | null } | null>(() => {
-    if (tampilan === "gross") return { judul: "Omzet Harian — Seluruh Outlet", target: skor.a.target };
-    if (tampilan === "outlet") return { judul: "Omzet Harian — Seluruh Outlet", target: skor.b.target };
-    if (tampilan === "ebitda") return { judul: "Omzet Harian — Seluruh Outlet", target: skor.b.target };
+    if (tampilan === "gross") return { judul: "Omzet Harian", target: skor.a.target };
+    if (tampilan === "outlet") return { judul: "Omzet Harian", target: skor.b.target };
+    if (tampilan === "ebitda") return { judul: "Omzet Harian", target: skor.b.target };
     return null;
   }, [tampilan, skor.a.target, skor.b.target]);
 
@@ -306,24 +296,10 @@ export function PapanManajemen({ detail }: { detail: DetailManajemen }) {
           // Bobot keempat komponen berjumlah 100, jadi skornya MEMANG persentase
           // — "33,23 / 40" menuntut pembacanya membagi sendiri untuk tahu
           // sumbangannya ke skor perusahaan, padahal angkanya sudah itu.
-          cell: ({ row }) => {
-            const b = row.original;
-            const baik = (b.persentase ?? 0) >= AMBANG_HIJAU;
-            return (
-              <span
-                className={cn(
-                  "tabular-nums",
-                  b.persenActual === null
-                    ? "text-muted-foreground"
-                    : baik
-                      ? "text-emerald-600 dark:text-emerald-400"
-                      : "text-rose-600 dark:text-rose-400",
-                )}
-              >
-                {persen(b.persenActual)}
-              </span>
-            );
-          },
+          // Warna disimpan untuk bilah Persentase saja. Dua kolom berwarna
+          // bersebelahan membuat keduanya berebut perhatian, dan kolom ini
+          // hanya menyebut sumbangan — bukan hal yang perlu diperingatkan.
+          cell: ({ row }) => <span className="tabular-nums text-foreground/80">{persen(row.original.persenActual)}</span>,
         },
         {
           id: "status",
@@ -356,19 +332,19 @@ export function PapanManajemen({ detail }: { detail: DetailManajemen }) {
     }): ColumnDef<T>[] => [
       kolomNo(),
       {
-        id: "merek",
-        header: "Brand",
-        accessorFn: (b: T) => merekDari((b as { nama: string }).nama)?.label ?? "—",
-        cell: ({ row }) => {
-          const m = merekDari((row.original as { nama: string }).nama);
-          return m ? <Badge tone={m.tone}>{m.label}</Badge> : <span className="text-[11px] text-muted-foreground">—</span>;
-        },
-      },
-      {
         id: "nama",
         header: "Outlet",
         accessorFn: (b: T) => (b as { nama: string }).nama,
         cell: ({ getValue }) => <span className="truncate font-medium text-foreground">{getValue<string>()}</span>,
+      },
+      {
+        id: "merek",
+        header: "Brand",
+        accessorFn: (b: T) => merekOutlet((b as { nama: string }).nama)?.label ?? "—",
+        cell: ({ row }) => {
+          const m = merekOutlet((row.original as { nama: string }).nama);
+          return m ? <Badge tone={m.tone}>{m.label}</Badge> : <span className="text-[11px] text-muted-foreground">—</span>;
+        },
       },
       {
         id: "lalu",
@@ -434,11 +410,11 @@ export function PapanManajemen({ detail }: { detail: DetailManajemen }) {
         status: (e) =>
           e.margin === null
             ? { label: "Belum diisi", tone: "neutral" }
-            : e.margin >= TARGET_MARGIN * (AMBANG_EBITDA / 100)
+            : e.margin >= st.targetMargin * (st.ambangEbitda / 100)
               ? { label: "Tercapai", tone: "success" }
               : { label: "Belum tercapai", tone: "danger" },
       }),
-    [kolomDetail],
+    [kolomDetail, st],
   );
 
   /**
@@ -558,6 +534,7 @@ export function PapanManajemen({ detail }: { detail: DetailManajemen }) {
         <div className="ml-auto flex shrink-0 items-center gap-2">
           <Badge tone={skor.peringkat.tone}>{skor.peringkat.label}</Badge>
           <DialogPanduanManajemen />
+          {bolehAtur && <DialogSetelan setelan={st} />}
         </div>
       </div>
 
@@ -709,6 +686,154 @@ function Keterangan({ teks }: { teks: string }) {
   );
 }
 
+/**
+ * Satu isian angka bersatuan.
+ *
+ * Ditulis DI LUAR dialognya, bukan di dalam: komponen yang dibuat ulang tiap
+ * render membuat React menganggapnya komponen baru, memasang ulang kotak
+ * isiannya, dan fokus keyboard lepas tiap satu huruf diketik.
+ */
+function IsianAngka({
+  label,
+  nilai,
+  ubah,
+  satuan,
+  catatan,
+}: {
+  label: string;
+  nilai: number;
+  ubah: (v: number) => void;
+  satuan: string;
+  catatan?: string;
+}) {
+  return (
+    <label className="block">
+      <span className="mb-1 block text-[11.5px] text-muted-foreground">{label}</span>
+      <span className="relative block">
+        <Input
+          value={String(nilai)}
+          onChange={(e) => {
+            const t = e.target.value.replace(",", ".").replace(/[^\d.-]/g, "");
+            const x = Number(t);
+            ubah(Number.isFinite(x) ? x : 0);
+          }}
+          inputMode="decimal"
+          className="h-9 pr-24 tabular-nums"
+        />
+        <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-[11px] text-muted-foreground">{satuan}</span>
+      </span>
+      {catatan ? <span className="mt-1 block text-[11px] leading-relaxed text-muted-foreground">{catatan}</span> : null}
+    </label>
+  );
+}
+
+/**
+ * Bobot dan target — satu-satunya angka di halaman ini yang memang diketik.
+ *
+ * Bukan data bulanan melainkan KEBIJAKAN: berlaku untuk seluruh bulan sekaligus
+ * dan hanya berubah saat manajemen memutuskan mengubahnya. Karena itu ia duduk
+ * di dialog tersendiri, bukan tercampur dengan angka bulan berjalan, dan hanya
+ * master admin yang melihat tombolnya.
+ */
+function DialogSetelan({ setelan }: { setelan: SetelanManajemen }) {
+  const router = useRouter();
+  const [buka, setBuka] = React.useState(false);
+  const [sibuk, setSibuk] = React.useState(false);
+  // Isian disetel ulang saat dialognya DIBUKA, bukan lewat efek yang mengintip
+  // propnya: efek semacam itu berjalan setelah render dan memicu render kedua
+  // tiap kali halaman menyegarkan dirinya, sementara yang sedang mengetik
+  // kehilangan ketikannya di tengah jalan.
+  const [n, setN] = React.useState(setelan);
+  const bukaForm = () => {
+    setN(setelan);
+    setBuka(true);
+  };
+
+  const totalBobot = n.bobot.a + n.bobot.b + n.bobot.c + n.bobot.d;
+  const timpang = Math.abs(totalBobot - 100) > 0.001;
+
+  async function simpan() {
+    setSibuk(true);
+    const res = await simpanSetelanManajemenAction(n);
+    setSibuk(false);
+    if (res.error) return toast.error(res.error);
+    toast.success("Bobot dan target tersimpan");
+    setBuka(false);
+    router.refresh();
+  }
+
+  return (
+    <>
+      <Button size="sm" variant="outline" className="gap-1.5" onClick={bukaForm}>
+        <Settings2 className="size-4" /> Pengaturan
+      </Button>
+
+      <Dialog open={buka} onOpenChange={setBuka}>
+        <DialogContent title="Pengaturan KPI Manajemen" description="Bobot dan target yang berlaku untuk seluruh bulan" align="center" className="max-w-2xl">
+          <div className="flex max-h-[75vh] flex-col gap-5 overflow-auto p-5">
+            <section>
+              <h4 className="mb-2 text-[12.5px] font-semibold text-foreground">Bobot komponen</h4>
+              <div className="grid gap-3 sm:grid-cols-4">
+                <IsianAngka label="Gross Sales Corporate" nilai={n.bobot.a} satuan="%" ubah={(v) => setN({ ...n, bobot: { ...n.bobot, a: v } })} />
+                <IsianAngka label="Same Store Sales" nilai={n.bobot.b} satuan="%" ubah={(v) => setN({ ...n, bobot: { ...n.bobot, b: v } })} />
+                <IsianAngka label="EBITDA Same Store" nilai={n.bobot.c} satuan="%" ubah={(v) => setN({ ...n, bobot: { ...n.bobot, c: v } })} />
+                <IsianAngka label="KPI All Division" nilai={n.bobot.d} satuan="%" ubah={(v) => setN({ ...n, bobot: { ...n.bobot, d: v } })} />
+              </div>
+              <p className={cn("mt-2 text-[11.5px]", timpang ? "text-rose-600 dark:text-rose-400" : "text-muted-foreground")}>
+                Jumlah bobot {angka(totalBobot)} dari 100
+                {timpang ? " — skor tertinggi ikut bergeser dan perusahaan akan tampak gagal padahal pembaginya yang salah." : "."}
+              </p>
+            </section>
+
+            <section>
+              <h4 className="mb-2 text-[12.5px] font-semibold text-foreground">Target dan ambang</h4>
+              <div className="grid gap-3 sm:grid-cols-2">
+                <IsianAngka
+                  label="Pertumbuhan penjualan"
+                  nilai={n.pertumbuhan}
+                  satuan="%"
+                  ubah={(v) => setN({ ...n, pertumbuhan: v })}
+                  catatan="Ditambahkan ke rata-rata tiga bulan, untuk Gross Sales Corporate maupun Same Store."
+                />
+                <IsianAngka
+                  label="Target margin EBITDA"
+                  nilai={n.targetMargin}
+                  satuan="%"
+                  ubah={(v) => setN({ ...n, targetMargin: v })}
+                  catatan="Laba bersih dibagi sales same store."
+                />
+                <IsianAngka
+                  label="Ambang EBITDA tercapai"
+                  nilai={n.ambangEbitda}
+                  satuan="% dari target"
+                  ubah={(v) => setN({ ...n, ambangEbitda: v })}
+                  catatan="Outlet yang mencapai sebanyak ini dari target margin sudah dihitung tercapai."
+                />
+                <IsianAngka
+                  label="Umur minimum same store"
+                  nilai={n.umurSameStore}
+                  satuan="bulan"
+                  ubah={(v) => setN({ ...n, umurSameStore: v })}
+                  catatan="Outlet yang lebih muda dikecualikan dari Same Store Sales, bukan dinilai nol."
+                />
+              </div>
+            </section>
+          </div>
+
+          <div className="flex items-center justify-end gap-2 border-t border-border p-4">
+            <Button variant="ghost" size="sm" onClick={() => setN(setelan)} disabled={sibuk}>
+              Batalkan perubahan
+            </Button>
+            <Button size="sm" onClick={simpan} disabled={sibuk || timpang} className="gap-1.5">
+              {sibuk ? <Loader2 className="size-4 animate-spin" /> : <Save className="size-4" />} Simpan
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+    </>
+  );
+}
+
 /** Nomor baris yang mengikuti urutan tampil, bukan urutan data. */
 function kolomNo<T>(): ColumnDef<T> {
   return {
@@ -768,10 +893,10 @@ function Ringkasan({ tampilan, detail }: { tampilan: Tampilan; detail: DetailMan
     const kosong = detail.ebitda.filter((e) => e.labaBersih === null).length;
     teks = (
       <>
-        Kolom % = margin outlet terhadap target {TARGET_MARGIN}%; {AMBANG_EBITDA}% ke atas sudah dihitung tercapai ·
-        laba bersih {formatIDR(skor.c.labaBersih)} ÷ sales{" "}
+        Margin outlet terhadap target {detail.setelan.targetMargin}%; {detail.setelan.ambangEbitda}% ke atas sudah
+        dihitung tercapai · laba bersih {formatIDR(skor.c.labaBersih)} ÷ sales{" "}
         {formatIDR(skor.c.sales)} ={" "}
-        <b className="text-foreground">{persen(skor.c.margin)}</b> dari target {TARGET_MARGIN}%
+        <b className="text-foreground">{persen(skor.c.margin)}</b>
         {kosong > 0 ? ` · ${kosong} outlet belum diisi laba bersihnya oleh Coordinator Area` : ""}
       </>
     );

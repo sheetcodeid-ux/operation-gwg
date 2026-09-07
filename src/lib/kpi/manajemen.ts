@@ -19,10 +19,34 @@
  * kebijakan di salah satu tempat diam-diam mengubah yang lain.
  */
 
+/**
+ * Bobot dan target adalah KEBIJAKAN, bukan tetapan program.
+ *
+ * Angkanya tetap ditulis di sini sebagai NILAI BAWAAN — halaman harus tetap
+ * bisa dihitung saat penyimpanannya belum terisi — tapi yang dipakai
+ * perhitungan adalah setelan yang datang dari basis data. Menanam kebijakan di
+ * dalam kode berarti tiap penyesuaian menunggu deploy, dan sampai deploy itu
+ * terjadi angkanya tidak bisa disesuaikan sama sekali.
+ */
+export interface SetelanManajemen {
+  bobot: { a: number; b: number; c: number; d: number };
+  /** Pertumbuhan yang dituntut dari penjualan, dalam persen. */
+  pertumbuhan: number;
+  /** Target margin EBITDA terhadap sales same store. */
+  targetMargin: number;
+  /** Persen dari target margin yang sudah dihitung tercapai. */
+  ambangEbitda: number;
+  /** Umur minimum outlet (bulan) supaya ikut Same Store Sales. */
+  umurSameStore: number;
+}
+
 export const BOBOT = { a: 40, b: 30, c: 20, d: 10 } as const;
 
 /** Target margin EBITDA terhadap sales same store. */
 export const TARGET_MARGIN = 30;
+
+/** Persen dari target margin yang sudah dianggap tercapai. */
+export const AMBANG_EBITDA = 85;
 
 /** Umur minimum outlet (bulan) supaya ikut Same Store Sales. */
 export const UMUR_SAME_STORE = 3;
@@ -39,6 +63,14 @@ export const UMUR_SAME_STORE = 3;
  * dan yang membacanya akan mengira salah satunya salah hitung.
  */
 export const PERTUMBUHAN = 15;
+
+export const SETELAN_BAWAAN: SetelanManajemen = {
+  bobot: { ...BOBOT },
+  pertumbuhan: PERTUMBUHAN,
+  targetMargin: TARGET_MARGIN,
+  ambangEbitda: AMBANG_EBITDA,
+  umurSameStore: UMUR_SAME_STORE,
+};
 
 /**
  * Pencapaian dibatasi 1 (100%).
@@ -73,11 +105,11 @@ export interface HasilKomponen {
   skor: number;
 }
 
-export function hitungA(a: KomponenA): HasilKomponen {
+export function hitungA(a: KomponenA, st: SetelanManajemen = SETELAN_BAWAAN): HasilKomponen {
   const rata = (a.bulanLalu[0] + a.bulanLalu[1] + a.bulanLalu[2]) / 3;
-  const target = rata * (1 + PERTUMBUHAN / 100);
+  const target = rata * (1 + st.pertumbuhan / 100);
   const capaian = rasio(a.actual, target);
-  return { target, actual: a.actual, capaian, skor: batas1(capaian) * BOBOT.a };
+  return { target, actual: a.actual, capaian, skor: batas1(capaian) * st.bobot.a };
 }
 
 /* ─────────────────────────── B. Same Store Sales ─────────────────────────── */
@@ -121,11 +153,11 @@ export interface HasilB extends HasilKomponen {
  * sendiri: outlet yang punya omzet di KETIGA bulan pembanding sudah pasti
  * berjalan lebih dari tiga bulan. Aturan yang sama dipakai Coordinator Area.
  */
-export function hitungB(outlet: OutletManajemen[]): HasilB {
+export function hitungB(outlet: OutletManajemen[], st: SetelanManajemen = SETELAN_BAWAAN): HasilB {
   const baris: BarisOutletB[] = outlet.map((o) => ({
     ...o,
-    target: ((o.bulanLalu[0] + o.bulanLalu[1] + o.bulanLalu[2]) / 3) * (1 + PERTUMBUHAN / 100),
-    ikut: o.umur === null ? o.bulanLalu.every((n) => n > 0) : o.umur > UMUR_SAME_STORE,
+    target: ((o.bulanLalu[0] + o.bulanLalu[1] + o.bulanLalu[2]) / 3) * (1 + st.pertumbuhan / 100),
+    ikut: o.umur === null ? o.bulanLalu.every((n) => n > 0) : o.umur > st.umurSameStore,
   }));
   const ikut = baris.filter((b) => b.ikut);
   const target = ikut.reduce((s, b) => s + b.target, 0);
@@ -138,7 +170,7 @@ export function hitungB(outlet: OutletManajemen[]): HasilB {
     target,
     actual,
     capaian,
-    skor: batas1(capaian) * BOBOT.b,
+    skor: batas1(capaian) * st.bobot.b,
   };
 }
 
@@ -161,10 +193,10 @@ export interface HasilC {
  * menilainya nol-atau-penuh membuat selisih 0,1% berarti sama besar dengan
  * selisih 15%.
  */
-export function hitungC(labaBersih: number, sales: number): HasilC {
+export function hitungC(labaBersih: number, sales: number, st: SetelanManajemen = SETELAN_BAWAAN): HasilC {
   const margin = rasio(labaBersih, sales) * 100;
-  const capaian = rasio(margin, TARGET_MARGIN);
-  return { labaBersih, sales, margin, capaian, skor: batas1(capaian) * BOBOT.c };
+  const capaian = rasio(margin, st.targetMargin);
+  return { labaBersih, sales, margin, capaian, skor: batas1(capaian) * st.bobot.c };
 }
 
 /* ─────────────────────────── D. KPI All Division ─────────────────────────── */
@@ -216,9 +248,9 @@ const rataAda = (nilai: (number | null)[]): number | null => {
  * berarti "dinilai dan gagal"; yang sebenarnya terjadi adalah "belum diukur",
  * dan menyamakan keduanya menghukum departemen yang modulnya baru dipasang.
  */
-export function hitungD(departemen: DepartemenKpi[]): HasilD {
+export function hitungD(departemen: DepartemenKpi[], st: SetelanManajemen = SETELAN_BAWAAN): HasilD {
   const rata = rataAda(departemen.map((d) => d.rata)) ?? 0;
-  return { departemen, rata, skor: (Math.max(0, Math.min(100, rata)) / 100) * BOBOT.d };
+  return { departemen, rata, skor: (Math.max(0, Math.min(100, rata)) / 100) * st.bobot.d };
 }
 
 /** Membentuk satu departemen dari posisi-posisinya. */
@@ -281,11 +313,13 @@ export function hitungManajemen(input: {
   outlet: OutletManajemen[];
   labaBersih: number;
   departemen: DepartemenKpi[];
+  setelan?: SetelanManajemen;
 }): SkorManajemen {
-  const a = hitungA(input.a);
-  const b = hitungB(input.outlet);
-  const c = hitungC(input.labaBersih, b.actual);
-  const d = hitungD(input.departemen);
+  const st = input.setelan ?? SETELAN_BAWAAN;
+  const a = hitungA(input.a, st);
+  const b = hitungB(input.outlet, st);
+  const c = hitungC(input.labaBersih, b.actual, st);
+  const d = hitungD(input.departemen, st);
   const akhir = Math.round((a.skor + b.skor + c.skor + d.skor) * 100) / 100;
   return { a, b, c, d, akhir, peringkat: peringkat(akhir) };
 }
