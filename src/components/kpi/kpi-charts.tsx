@@ -1,10 +1,11 @@
 "use client";
 
 import * as React from "react";
-import { Area, Bar, CartesianGrid, ComposedChart, Line, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
+import { Area, Bar, CartesianGrid, Cell, ComposedChart, Line, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { ChartPie, Check, Hash, Layers, Percent, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { BarisKpi } from "@/lib/kpi/hitung";
+import type { BarisMinggu, RentangMinggu } from "@/lib/kpi/minggu";
 import { formatIDR, formatNumber } from "@/lib/utils";
 
 /**
@@ -661,6 +662,154 @@ export function GrafikHarian({
         )}
       </div>
     </Kartu>
+  );
+}
+
+
+/**
+ * Omzet MINGGU DEMI MINGGU — pendamping grafik harian di tab Detail Mingguan.
+ *
+ * KENAPA MINGGUAN, BUKAN HARIAN, di Coordinator Area. Angka harian yang ada
+ * hanya milik SELURUH perusahaan; ia tidak bisa dipisah per outlet, jadi tidak
+ * bisa dipersempit ke satu area. Yang bisa dipersempit adalah angka mingguan
+ * per cabang, dan itu pula yang dipakai tabel di bawahnya — grafik dan tabel
+ * membaca sumber yang sama, sehingga tidak mungkin bercerita berbeda.
+ *
+ * Batang, bukan garis: minggu itu satuan yang berdiri sendiri, dan lima titik
+ * yang dihubungkan garis mengesankan perubahan mulus di antara minggu padahal
+ * tidak ada yang terjadi "di antara" dua minggu.
+ */
+export function GrafikMingguan({
+  judul,
+  minggu,
+  baris,
+}: {
+  judul: string;
+  minggu: RentangMinggu[];
+  /** Baris gabungan seluruh outlet yang terukur; targetnya sudah dihitung. */
+  baris: BarisMinggu;
+}) {
+  const data = React.useMemo(
+    () =>
+      minggu.map((m, i) => ({
+        minggu: m.minggu,
+        label: `M${m.minggu}`,
+        rentang: `${m.dari}–${m.sampai}`,
+        ini: baris.actual[i],
+        target: baris.target[i],
+        // Minggu yang belum penuh ditandai supaya batangnya yang pendek tidak
+        // terbaca sebagai minggu yang buruk.
+        penuh: baris.hariAda[i] >= m.hari,
+        hariAda: baris.hariAda[i],
+        hariMinggu: m.hari,
+      })),
+    [minggu, baris],
+  );
+  const adaIsi = data.some((d) => d.ini !== null);
+  const tembus = data.filter((d) => d.ini !== null && d.target > 0 && (d.ini ?? 0) >= d.target).length;
+  const terisi = data.filter((d) => d.ini !== null).length;
+
+  return (
+    <Kartu
+      title={judul}
+      aksi={
+        <div className="flex items-center gap-3 text-[11px] text-muted-foreground">
+          <span className="inline-flex items-center gap-1.5">
+            <span className="size-2 rounded-full" style={{ background: BLUE }} /> Terkumpul {ringkas(baris.terkumpul, "rupiah")}
+          </span>
+          <span className="inline-flex items-center gap-1.5">
+            <span className="size-2 rounded-full bg-amber-500" /> Target {ringkas(baris.targetBulan, "rupiah")}
+          </span>
+          <span className="inline-flex items-center gap-1.5">
+            <span className="size-2 rounded-full bg-emerald-500" /> Tembus {tembus}/{terisi} minggu
+          </span>
+        </div>
+      }
+    >
+      <div className="min-h-[16rem] flex-1" style={{ outline: "none" }}>
+        {!adaIsi ? (
+          <div className="grid h-full min-h-[16rem] place-items-center text-[12px] text-muted-foreground">
+            Rincian mingguan bulan ini belum ditarik dari ESB.
+          </div>
+        ) : (
+          <ResponsiveContainer width="100%" height="100%">
+            <ComposedChart data={data} margin={{ top: 10, right: 6, left: 0, bottom: 0 }} accessibilityLayer={false}>
+              <CartesianGrid strokeDasharray="3 3" stroke="rgba(148,163,184,0.16)" vertical={false} />
+              <XAxis
+                dataKey="label"
+                tickLine={false}
+                axisLine={false}
+                interval={0}
+                tick={{ fontSize: 11, fill: "rgb(100,116,139)" }}
+              />
+              <YAxis
+                width={54}
+                tickLine={false}
+                axisLine={false}
+                tick={{ fontSize: 10.5, fill: "rgb(100,116,139)" }}
+                tickFormatter={(v: number) => ringkas(v, "rupiah")}
+              />
+              <Tooltip content={<TipMinggu />} cursor={{ fill: "rgba(148,163,184,0.12)" }} />
+              <Bar dataKey="ini" radius={[6, 6, 0, 0]} maxBarSize={54} isAnimationActive={false}>
+                {data.map((d) => (
+                  <Cell
+                    key={d.minggu}
+                    // BAHASA WARNA YANG SAMA dengan grafik harian: biru itu
+                    // keadaan biasa, hijau menandai yang menembus target, dan
+                    // yang di bawah target TIDAK dimerahkan. Minggu 94% yang
+                    // digambar merah menyamakan yang nyaris berhasil dengan
+                    // yang gagal telak, dan warna yang hampir selalu merah
+                    // berhenti dibaca. Yang belum penuh dibuat pudar — ia belum
+                    // selesai, bukan belum tercapai.
+                    fill={!d.penuh ? "rgba(59,130,246,0.42)" : d.target > 0 && (d.ini ?? 0) >= d.target ? "#10b981" : BLUE}
+                  />
+                ))}
+              </Bar>
+              <Line type="linear" dataKey="target" stroke="#f59e0b" strokeWidth={1.5} strokeDasharray="6 5" dot={false} isAnimationActive={false} />
+            </ComposedChart>
+          </ResponsiveContainer>
+        )}
+      </div>
+    </Kartu>
+  );
+}
+
+interface TitikMinggu {
+  label: string;
+  rentang: string;
+  ini: number | null;
+  target: number;
+  penuh: boolean;
+  hariAda: number;
+  hariMinggu: number;
+}
+
+function TipMinggu({ active, payload }: { active?: boolean; payload?: { payload: TitikMinggu }[] }) {
+  if (!active || !payload?.length) return null;
+  const d = payload[0].payload;
+  const ini = d.ini ?? 0;
+  const beda = ini - d.target;
+  const tembus = d.target > 0 && ini >= d.target;
+  return (
+    <div className="rounded-xl border border-border bg-card/95 px-3 py-2 text-[11.5px] shadow-lg backdrop-blur">
+      <div className="mb-1 font-semibold text-foreground">
+        Minggu {d.label.slice(1)} · tanggal {d.rentang}
+      </div>
+      <div className="tabular-nums text-muted-foreground">
+        Omzet <b className="text-foreground">{formatIDR(ini)}</b>
+      </div>
+      <div className="tabular-nums text-muted-foreground">Target {formatIDR(Math.round(d.target))}</div>
+      {!d.penuh && (
+        <div className="mt-1 text-[11px] text-muted-foreground">
+          Baru {d.hariAda} dari {d.hariMinggu} hari — belum selesai.
+        </div>
+      )}
+      {d.penuh && (
+        <div className={cn("mt-1 text-[11px] font-medium", tembus ? "text-emerald-600 dark:text-emerald-400" : "text-rose-600 dark:text-rose-400")}>
+          {tembus ? "Tembus target" : "Di bawah target"} {formatIDR(Math.abs(Math.round(beda)))}
+        </div>
+      )}
+    </div>
   );
 }
 

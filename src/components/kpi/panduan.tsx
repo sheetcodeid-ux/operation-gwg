@@ -154,6 +154,28 @@ function langkahCa(): Langkah[] {
       ),
     },
     {
+      judul: "Detail Mingguan — outlet mana yang tertinggal minggu ini",
+      isi: (
+        <>
+          Bentuk yang sama persis dengan KPI Manajemen, hanya outletnya dibatasi ke area Anda. Satu baris satu outlet,
+          satu kolom satu minggu; kolom <b>Harus Dikejar</b> menyebut berapa yang harus masuk di minggu berjalan supaya
+          kekurangan minggu sebelumnya ikut tertutup. Yang paling tertinggal ada di baris paling atas.
+          <Awas>
+            Mingguya dibagi menurut TANGGAL — 1–7, 8–14, 15–21, 22–28, lalu sisanya — bukan Senin–Minggu, supaya minggu
+            ke-N bulan ini sebanding dengan minggu ke-N bulan lalu. Targetnya memakai rata-rata tiga bulan outlet itu
+            sendiri + 15%, angka yang sama dengan indikator Gross Sales, jadi satu outlet tidak mungkin terbaca gagal di
+            sini tapi tercapai di indikatornya.
+          </Awas>
+          <Awas>
+            Grafiknya ikut berganti jadi <b>omzet per minggu</b>. Mingguan, bukan harian: angka harian yang ada hanya
+            milik seluruh perusahaan dan tidak bisa dipisah per outlet, sehingga tidak bisa dipersempit ke satu area.
+            Batang pudar berarti minggunya belum selesai — bukan berarti buruk. Outlet yang mingguanya belum ditarik ESB
+            ditulis <b>&ldquo;belum ditarik&rdquo;</b>, bukan nol.
+          </Awas>
+        </>
+      ),
+    },
+    {
       judul: "Cetak laporannya",
       isi: (
         <>
