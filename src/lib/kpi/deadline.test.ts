@@ -9,6 +9,9 @@ import { TENGGAT, lewatTenggat, nilaiTenggat, tanggalTenggat } from "./deadline"
 describe("tanggal tenggat dihitung dari tanggal permintaan", () => {
   it("H-5 jatuh lima hari setelahnya, H-3 tiga hari", () => {
     // Contoh yang dipakai saat aturannya ditetapkan: minta 6 September.
+    // "Sebelum H-5" ditetapkan enam hari, bukan tebakan: kalau angkanya
+    // bergeser diam-diam, seluruh tenggat yang sudah tercatat ikut bergeser.
+    expect(tanggalTenggat("2026-09-06", "sebelum_h5")).toBe("2026-09-12");
     expect(tanggalTenggat("2026-09-06", "h5")).toBe("2026-09-11");
     expect(tanggalTenggat("2026-09-06", "h3")).toBe("2026-09-09");
     expect(tanggalTenggat("2026-09-06", "h1")).toBe("2026-09-07");

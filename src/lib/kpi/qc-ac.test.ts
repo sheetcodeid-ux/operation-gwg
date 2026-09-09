@@ -69,16 +69,21 @@ describe("rumus tiap indikator", () => {
     expect(b.persenActual).toBeCloseTo(24, 5);
   });
 
-  it("Complaint: 20 atau kurang bernilai penuh, di atas itu (20 ÷ actual) × bobot", () => {
-    // Juknisnya tegas: "<=20 complaint = 15% | >20 = (20 / Actual) x 15%".
-    // BEDA dari Coordinator Area, yang tiap komplainnya berbiaya — di sana
-    // yang dinilai satu area kecil, di sini seluruh perusahaan.
-    expect(ind("qc_complaint").penilaian).toBe("batas_maks");
-    expect(persentaseCapaian(20, 20, "batas_maks")).toBe(100);
-    expect(persentaseCapaian(5, 20, "batas_maks")).toBe(100);
-    const b = barisKpi({ indikator: ind("qc_complaint"), bobot: 15, target: 20, actual: 40 });
-    expect(b.persentase).toBe(50);
-    expect(b.persenActual).toBe(7.5);
+  it("Complaint: tiap komplain memotong 5%, sama seperti Coordinator Area", () => {
+    // MENYIMPANG DARI JUKNIS ASLINYA, atas keputusan pemiliknya. Juknis menulis
+    // "<=20 complaint = 15% | >20 = (20 / Actual) x 15%", dan itu membuat
+    // sembilan belas komplain bernilai sama dengan nol komplain: indikatornya
+    // diam sepanjang bulan lalu jatuh sekaligus. Yang dipakai sekarang rumus
+    // Coordinator Area — satu komplain berharga 5% capaian indikator ini.
+    expect(ind("qc_complaint").penilaian).toBe("kurang_linear");
+    expect(persentaseCapaian(0, 20, "kurang_linear")).toBe(100);
+    expect(persentaseCapaian(1, 20, "kurang_linear")).toBe(95);
+    expect(persentaseCapaian(20, 20, "kurang_linear")).toBe(0);
+    // Tidak pernah minus: 40 komplain dari batas 20 berarti nol, bukan −100%.
+    expect(persentaseCapaian(40, 20, "kurang_linear")).toBe(0);
+    const b = barisKpi({ indikator: ind("qc_complaint"), bobot: 15, target: 20, actual: 4 });
+    expect(b.persentase).toBe(80);
+    expect(b.persenActual).toBe(12);
   });
 
   it("CCTV: (actual ÷ 40) × 10%, dan di atas 40 tidak menambah", () => {
@@ -108,7 +113,9 @@ describe("skor akhir", () => {
       qc_quality: 95,
       qc_hygiene: 95,
       qc_sop: 95,
-      qc_complaint: 12,
+      // Nol komplain, bukan dua belas: dengan rumus Coordinator Area, dua belas
+      // komplain sudah memotong 60% capaian indikatornya.
+      qc_complaint: 0,
       qc_cctv: 40,
       qc_reporting: 100,
     };

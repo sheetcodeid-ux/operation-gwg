@@ -433,8 +433,14 @@ const qualityControl: Indikator[] = [
     bobot: 15,
     target: { jenis: "tetap", nilai: 20 },
     actual: { sumber: "otomatis", kode: "komplain_food_quality" },
-    penilaian: "batas_maks",
-    penjelasan: "Komplain kategori kualitas dari modul Complaints. Batas 20 per bulan; lebih dari itu turun proporsional.",
+    // RUMUS YANG SAMA PERSIS dengan Complaint di Coordinator Area, atas
+    // keputusan pemiliknya. Sebelumnya `batas_maks`, dan itu membuat sembilan
+    // belas komplain bernilai sama dengan nol komplain — indikatornya baru
+    // bergerak setelah batasnya nyaris terlampaui, sehingga sepanjang bulan ia
+    // tidak mengukur apa pun. Satu komplain kini berharga 5% capaian.
+    penilaian: "kurang_linear",
+    penjelasan:
+      "Komplain kategori kualitas makanan dari modul Complaints. Batas 20 per bulan, dan tiap komplain memotong 5% capaian indikator ini (0,75% dari skor total); 20 komplain membuatnya nol.",
   },
   {
     key: "qc_cctv",
