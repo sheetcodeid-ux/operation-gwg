@@ -20,6 +20,7 @@ import {
 import type { BarisEfisiensi } from "@/lib/kpi/hitung";
 import type { JenisEntri } from "@/lib/kpi/indikator";
 import type { DetailFee } from "@/lib/data/kpi";
+import { Progress } from "@/components/ui/progress";
 import { uploadMany } from "@/lib/upload-client";
 import { BULAN, labelPeriode, periodeDari, tahunPilihan } from "./periode";
 import { bacaLembar, unduhLembar } from "./lembar-outlet";
@@ -488,6 +489,8 @@ export function FormKegiatan({
   const router = useRouter();
   const [buka, setBuka] = React.useState(false);
   const [sibuk, setSibuk] = React.useState(false);
+  /** Persen unggahan, 0–100. Null = tidak sedang mengunggah berkas. */
+  const [maju, setMaju] = React.useState<number | null>(null);
   const [jenis, setJenis] = React.useState<OpsiKegiatan["jenis"]>(opsi[0]?.jenis ?? "event");
   const [baris, setBaris] = React.useState<BarisKegiatan[]>([]);
   const [isiOutlet, setIsiOutlet] = React.useState<Record<string, { gross: string; netProfit: string; hppNominal: string }>>({});
@@ -641,12 +644,25 @@ export function FormKegiatan({
     }
 
     setSibuk(true);
+    // Kemajuan dihitung dari SELURUH berkas seluruh baris, bukan per baris:
+    // yang menunggu ingin tahu berapa lama lagi semuanya selesai, bukan berapa
+    // lama baris keempat selesai.
+    const totalBerkas = isi.reduce((n, b) => n + b.bukti.reduce((m, f) => m + f.size, 0), 0);
+    let sudah = 0;
+    setMaju(totalBerkas > 0 ? 0 : null);
     try {
       // Diunggah baris demi baris supaya berkas milik satu baris tidak pernah
       // tertukar ke baris lain saat sebagiannya gagal.
       const kirim = [];
       for (const b of isi) {
-        const lampiran = b.bukti.length > 0 ? await uploadMany("kpi", b.bukti, uploadKpiBuktiAction) : [];
+        const besarBaris = b.bukti.reduce((m, f) => m + f.size, 0);
+        const lampiran =
+          b.bukti.length > 0
+            ? await uploadMany("kpi", b.bukti, uploadKpiBuktiAction, (p) => {
+                if (totalBerkas > 0) setMaju(Math.min(99, Math.round(((sudah + (besarBaris * p) / 100) / totalBerkas) * 100)));
+              })
+            : [];
+        sudah += besarBaris;
         kirim.push({
           tanggal: b.tanggal,
           picNama: b.picNama,
@@ -656,6 +672,7 @@ export function FormKegiatan({
           lampiran,
         });
       }
+      setMaju(100);
       const res = await simpanEntriMassalAction({ posisi, periode, pic, jenis: jenis as JenisEntri, baris: kirim });
       if (res.error) return toast.error(res.error);
       toast.success(`${res.tersimpan} baris tersimpan`);
@@ -665,6 +682,7 @@ export function FormKegiatan({
       toast.error(e instanceof Error ? e.message : "Unggah bukti gagal.");
     } finally {
       setSibuk(false);
+      setMaju(null);
     }
   }
 
@@ -762,8 +780,18 @@ export function FormKegiatan({
                 <Button variant="ghost" onClick={() => setBuka(false)} disabled={sibuk}>
                   Batal
                 </Button>
+                {/* Bar kemajuan menggantikan tombol yang diam. Berkas 40 MB
+                    dari ponsel bisa memakan semenit penuh, dan tombol yang
+                    tidak bergerak selama itu membuat orang menekannya lagi. */}
+                {maju !== null && (
+                  <div className="flex min-w-[9rem] items-center gap-2">
+                    <Progress value={maju} tone={maju >= 100 ? "success" : "brand"} className="h-2 flex-1" />
+                    <span className="w-10 text-right text-[11.5px] font-medium tabular-nums text-muted-foreground">{maju}%</span>
+                  </div>
+                )}
                 <Button onClick={perOutlet ? simpanOutlet : simpanKegiatan} disabled={sibuk}>
-                  {sibuk ? <Loader2 className="size-4 animate-spin" /> : <Save className="size-4" />} Simpan semua
+                  {sibuk ? <Loader2 className="size-4 animate-spin" /> : <Save className="size-4" />}{" "}
+                  {maju !== null ? "Mengunggah…" : "Simpan semua"}
                 </Button>
               </div>
             </div>

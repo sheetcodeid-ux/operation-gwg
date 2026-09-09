@@ -36,6 +36,29 @@ import type { LaluIndikator } from "@/components/kpi/kpi-charts";
  * ingat mengisinya.
  */
 
+/**
+ * Omzet minggu berjalan dibandingkan minggu yang SAMA pada bulan lalu.
+ *
+ * Bukan tujuh hari terakhir dibanding tujuh hari sebelumnya: penjualan F&B
+ * punya irama mingguan yang kuat, jadi membandingkan Senin–Rabu dengan
+ * Jumat–Minggu selalu terlihat anjlok padahal tidak ada yang berubah. Yang
+ * dibandingkan tanggal yang sama — minggu keberapa dalam bulannya — supaya
+ * jumlah akhir pekannya ikut sebanding.
+ */
+export interface MingguIni {
+  /** Nomor minggu dalam bulan, 1–5. */
+  minggu: number;
+  /** Rentang tanggal minggu ini, "1–7". */
+  rentang: string;
+  ini: number;
+  lalu: number;
+  /** Target minggu ini = target bulan dibagi jumlah minggu yang ada isinya. */
+  target: number;
+  /** Hari yang sudah ada angkanya di minggu ini — target ikut disesuaikan. */
+  hariTerisi: number;
+  hariMinggu: number;
+}
+
 /** Omzet satu tanggal, bulan berjalan berdampingan dengan bulan sebelumnya. */
 export interface HariOmzet {
   tanggal: number;
@@ -68,6 +91,8 @@ export interface DetailManajemen {
   ebitda: BarisEbitda[];
   /** Omzet per tanggal, bulan ini dan bulan lalu — bahan grafik harian. */
   harian: HariOmzet[];
+  /** Minggu berjalan dibanding minggu yang sama bulan lalu. Null = belum ada isinya. */
+  minggu: MingguIni | null;
   /** Bobot dan target yang sedang berlaku. */
   setelan: SetelanManajemen;
   /** Capaian bulan lalu per komponen — bahan grafik pembanding. */
@@ -189,6 +214,33 @@ async function omzetHarian(periode: string): Promise<HariOmzet[]> {
 
   const ambil = (bulan: string, tgl: number) => peta.get(`${bulan}-${String(tgl).padStart(2, "0")}`) ?? null;
   return kosong.map(({ tanggal }) => ({ tanggal, ini: ambil(periode, tanggal), lalu: ambil(lalu, tanggal) }));
+}
+
+/**
+ * Minggu berjalan: minggu terakhir yang SUDAH ada angkanya.
+ *
+ * Bukan minggu kalender hari ini — kalau bulan yang dibuka bukan bulan
+ * berjalan, "minggu ini" tidak ada artinya, sedangkan minggu terakhir yang
+ * terisi selalu ada dan selalu bisa dibandingkan.
+ */
+function mingguBerjalan(hari: HariOmzet[], targetBulan: number | null): MingguIni | null {
+  const terisi = hari.filter((h) => h.ini !== null);
+  if (terisi.length === 0) return null;
+  const tanggalAkhir = terisi[terisi.length - 1].tanggal;
+  const minggu = Math.ceil(tanggalAkhir / 7);
+  const dari = (minggu - 1) * 7 + 1;
+  const sampai = Math.min(minggu * 7, hari.length);
+  const dalam = hari.filter((h) => h.tanggal >= dari && h.tanggal <= sampai);
+
+  const ini = dalam.reduce((s, h) => s + (h.ini ?? 0), 0);
+  const lalu = dalam.reduce((s, h) => s + (h.lalu ?? 0), 0);
+  const hariMinggu = sampai - dari + 1;
+  const hariTerisi = dalam.filter((h) => h.ini !== null).length;
+  // Targetnya sebanding hari yang sudah berjalan, bukan seminggu penuh:
+  // membandingkan tiga hari terhadap target tujuh hari selalu terbaca gagal.
+  const target = targetBulan === null || hari.length === 0 ? 0 : (targetBulan / hari.length) * hariTerisi;
+
+  return { minggu, rentang: `${dari}–${sampai}`, ini, lalu, target, hariTerisi, hariMinggu };
 }
 
 /** Laba bersih tiap outlet same store, dari isian bulanan Coordinator Area. */
@@ -384,21 +436,25 @@ export async function detailManajemen(
     departemen.map((d) => d.lalu).filter((n): n is number => n !== null).reduce((s, n, _, a) => s + n / a.length, 0);
   const lalu = opsi.ringan ? {} : await capaianLalu(periode, rataDLalu);
 
+  const skor = hitungManajemen({
+    a: { bulanLalu: omzetLalu, actual: korporat(esbIni, ketikIni, periode) },
+    outlet,
+    labaBersih,
+    departemen,
+    setelan,
+  });
+  const skorA = skor.a;
+
   return {
     lalu,
     periode,
     omzetLalu,
-    skor: hitungManajemen({
-      a: { bulanLalu: omzetLalu, actual: korporat(esbIni, ketikIni, periode) },
-      outlet,
-      labaBersih,
-      departemen,
-      setelan,
-    }),
+    skor,
     bulanA,
     labaBersih,
     ebitda,
     harian,
+    minggu: mingguBerjalan(harian, skorA.target),
     setelan,
   };
 }

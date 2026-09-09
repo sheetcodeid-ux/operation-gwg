@@ -3,9 +3,10 @@
 import * as React from "react";
 import { useRouter } from "next/navigation";
 import { type ColumnDef } from "@tanstack/react-table";
-import { Download, FileText, Loader2, Trash2 } from "lucide-react";
+import { ChevronLeft, ChevronRight, Download, FileText, Loader2, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
+import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { DataTable } from "@/components/ui/data-table";
 import { Progress } from "@/components/ui/progress";
 import { labelMerek, merekOutlet } from "@/lib/kpi/merek";
@@ -201,6 +202,7 @@ export function TabelHygiene({
 }) {
   const router = useRouter();
   const bukti = React.useMemo(() => buktiDari(entri), [entri]);
+  const [pratinjau, setPratinjau] = React.useState<{ berkas: { nama: string; url: string }[]; ke: number } | null>(null);
   const kolom = React.useMemo<ColumnDef<EntriKpi>[]>(
     () => [
       kolomNomor<EntriKpi>(),
@@ -227,18 +229,25 @@ export function TabelHygiene({
             <Badge tone="danger">tanpa bukti</Badge>
           ) : (
             <div className="flex flex-wrap gap-1.5">
-              {row.original.lampiran.map((l) => (
-                <a
+              {row.original.lampiran.map((l, i) => (
+                <button
                   key={l.path}
-                  href={tautanBukti({ entriId: row.original.id, path: l.path, name: l.name })}
-                  target="_blank"
-                  rel="noreferrer"
+                  type="button"
                   title={l.name}
+                  onClick={() =>
+                    setPratinjau({
+                      berkas: row.original.lampiran.map((x) => ({
+                        nama: x.name,
+                        url: tautanBukti({ entriId: row.original.id, path: x.path, name: x.name }),
+                      })),
+                      ke: i,
+                    })
+                  }
                   className="inline-flex max-w-[12rem] items-center gap-1 rounded-md border border-border px-1.5 py-0.5 text-[11px] text-muted-foreground hover:bg-muted hover:text-foreground"
                 >
                   <FileText className="size-3 shrink-0" />
                   <span className="truncate">{l.name}</span>
-                </a>
+                </button>
               ))}
             </div>
           ),
@@ -280,20 +289,111 @@ export function TabelHygiene({
   );
 
   return (
-    <DataTable
-      tableId="kpi-hygiene"
-      columns={kolom}
-      data={entri}
-      searchPlaceholder="Cari bukti…"
-      stickyHeader={false}
-      showExport={false}
-      toolbar={
-        <div className="flex flex-wrap items-center gap-2">
-          {toolbar}
-          <UnduhMassal bukti={bukti} periode={periode} />
+    <>
+      <DataTable
+        tableId="kpi-hygiene"
+        columns={kolom}
+        data={entri}
+        searchPlaceholder="Cari bukti…"
+        stickyHeader={false}
+        showExport={false}
+        toolbar={
+          <div className="flex flex-wrap items-center gap-2">
+            {toolbar}
+            <UnduhMassal bukti={bukti} periode={periode} />
+          </div>
+        }
+      />
+      {pratinjau && (
+        <PratinjauBukti
+          isi={pratinjau}
+          onTutup={() => setPratinjau(null)}
+          onGeser={(ke: number) => setPratinjau((p) => (p ? { ...p, ke } : p))}
+        />
+      )}
+    </>
+  );
+}
+
+/**
+ * Pratinjau bukti — DI DALAM halaman, bukan tab baru.
+ *
+ * Tab baru membuang tempat orang berada: ia sedang menyisir daftar bukti satu
+ * bulan, dan tiap berkas yang dibuka memindahkannya ke jendela lain yang harus
+ * ditutup lagi. Di sini gambarnya muncul di atas daftarnya, dan panah
+ * kiri-kanan membawanya ke bukti berikutnya tanpa menutup apa pun.
+ */
+function PratinjauBukti({
+  isi,
+  onTutup,
+  onGeser,
+}: {
+  isi: { berkas: { nama: string; url: string }[]; ke: number };
+  onTutup: () => void;
+  onGeser: (ke: number) => void;
+}) {
+  const b = isi.berkas[isi.ke];
+  const pdf = /\.pdf($|\?)/i.test(b?.nama ?? "");
+
+  React.useEffect(() => {
+    const tekan = (e: KeyboardEvent) => {
+      if (e.key === "ArrowRight" && isi.ke < isi.berkas.length - 1) onGeser(isi.ke + 1);
+      if (e.key === "ArrowLeft" && isi.ke > 0) onGeser(isi.ke - 1);
+    };
+    window.addEventListener("keydown", tekan);
+    return () => window.removeEventListener("keydown", tekan);
+  }, [isi, onGeser]);
+
+  if (!b) return null;
+  return (
+    <Dialog open onOpenChange={(v) => !v && onTutup()}>
+      <DialogContent
+        title={b.nama}
+        description={isi.berkas.length > 1 ? `Bukti ${isi.ke + 1} dari ${isi.berkas.length}` : "Bukti submit"}
+        align="center"
+        className="max-w-4xl"
+      >
+        <div className="relative flex max-h-[75vh] min-h-[22rem] items-center justify-center overflow-auto bg-muted/30 p-3">
+          {pdf ? (
+            <iframe title={b.nama} src={b.url} className="h-[70vh] w-full rounded-lg bg-white" />
+          ) : (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img src={b.url} alt={b.nama} className="max-h-[70vh] w-auto rounded-lg object-contain" />
+          )}
+          {isi.berkas.length > 1 && (
+            <>
+              <button
+                type="button"
+                aria-label="Bukti sebelumnya"
+                disabled={isi.ke === 0}
+                onClick={() => onGeser(isi.ke - 1)}
+                className="absolute left-3 top-1/2 -translate-y-1/2 rounded-full border border-border bg-card/90 p-2 text-foreground shadow-sm disabled:opacity-30"
+              >
+                <ChevronLeft className="size-4" />
+              </button>
+              <button
+                type="button"
+                aria-label="Bukti berikutnya"
+                disabled={isi.ke === isi.berkas.length - 1}
+                onClick={() => onGeser(isi.ke + 1)}
+                className="absolute right-3 top-1/2 -translate-y-1/2 rounded-full border border-border bg-card/90 p-2 text-foreground shadow-sm disabled:opacity-30"
+              >
+                <ChevronRight className="size-4" />
+              </button>
+            </>
+          )}
         </div>
-      }
-    />
+        <div className="flex items-center justify-between gap-2 border-t border-border px-4 py-3">
+          <span className="truncate text-[11.5px] text-muted-foreground">{b.nama}</span>
+          <a
+            href={`${b.url}${b.url.includes("?") ? "&" : "?"}unduh=1`}
+            className="inline-flex items-center gap-1.5 rounded-lg border border-border px-2.5 py-1.5 text-[12px] font-medium text-foreground hover:bg-muted"
+          >
+            <Download className="size-3.5" /> Unduh
+          </a>
+        </div>
+      </DialogContent>
+    </Dialog>
   );
 }
 

@@ -74,8 +74,25 @@ const SCOPE_PREFIX: Record<UploadScope, string> = {
   system: "system",
 };
 
-/** Maks 10 MB — sama dengan batas yang dijanjikan tiap modul. */
-const PRESIGN_MAX = 10 * 1024 * 1024;
+/**
+ * Batas ukuran PER TUJUAN, bukan satu angka untuk semuanya.
+ *
+ * Bukti Hygiene Audit adalah foto layar submission dari ponsel, dan ponsel
+ * baru menghasilkan berkas 20–40 MB tanpa ada yang mengubah pengaturannya.
+ * Batas 10 MB di situ menolak bukti yang sah, dan yang ditolak akhirnya tidak
+ * dilampirkan sama sekali. Tujuan lain tetap 10 MB: berkas sebesar itu tidak
+ * pernah dibutuhkan, dan batas yang longgar tanpa alasan hanya memindahkan
+ * biayanya ke penyimpanan.
+ */
+const PRESIGN_MAX: Record<UploadScope, number> = {
+  hcdoc: 10 * 1024 * 1024,
+  kontrak: 10 * 1024 * 1024,
+  kpi: 100 * 1024 * 1024,
+  marcomm: 10 * 1024 * 1024,
+  system: 10 * 1024 * 1024,
+};
+
+const mb = (n: number) => Math.round(n / (1024 * 1024));
 
 export async function presignAttachmentAction(input: {
   scope: UploadScope;
@@ -90,7 +107,8 @@ export async function presignAttachmentAction(input: {
   if (!menus.some((m) => canReachMenu(user, m))) return { error: "Tidak punya akses." };
   // R2 mati ⇒ pemanggil memakai jalur server action seperti biasa.
   if (!r2Enabled()) return { unavailable: true };
-  if (input.size > PRESIGN_MAX) return { error: `Berkas "${input.name}" melebihi 10 MB.` };
+  const maks = PRESIGN_MAX[input.scope];
+  if (input.size > maks) return { error: `Berkas "${input.name}" melebihi ${mb(maks)} MB.` };
   if (input.contentType !== "application/pdf" && !input.contentType.startsWith("image/")) {
     return { error: `"${input.name}" harus PDF atau gambar (JPG/PNG).` };
   }

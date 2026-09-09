@@ -158,6 +158,16 @@ const DETAIL_MJ: DetailManajemen = {
     const pola = 380_000_000 + Math.sin(t / 3) * 90_000_000 + (t % 7 === 0 ? 120_000_000 : 0);
     return { tanggal: t, ini: t <= 21 ? Math.round(pola) : null, lalu: Math.round(pola * 0.93 + (t % 5) * 8_000_000) };
   }),
+  // Minggu berjalan = minggu terakhir yang sudah ada isinya (tanggal 15–21).
+  minggu: {
+    minggu: 3,
+    rentang: "15–21",
+    ini: 2_640_000_000,
+    lalu: 2_512_000_000,
+    target: (SKOR_MJ.a.target / 30) * 7,
+    hariTerisi: 7,
+    hariMinggu: 7,
+  },
   lalu: {
     a: { persen: 96.2, actual: 12_824_068_510 },
     b: { persen: 94.1, actual: 631_000_000 },

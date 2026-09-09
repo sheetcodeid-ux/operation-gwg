@@ -21,7 +21,7 @@ import { DialogPanduanManajemen } from "./panduan";
 import { BULAN, periodeDari, tahunPilihan } from "./periode";
 import { type BarisOutletB, type DepartemenKpi, type SetelanManajemen } from "@/lib/kpi/manajemen";
 import { ringkasKpi, type BarisKpi } from "@/lib/kpi/hitung";
-import type { BarisEbitda, DetailManajemen } from "@/lib/data/kpi-manajemen";
+import type { BarisEbitda, DetailManajemen, MingguIni } from "@/lib/data/kpi-manajemen";
 import type { LaporanKpi } from "@/lib/data/kpi";
 import { merekOutlet } from "@/lib/kpi/merek";
 import { simpanSetelanManajemenAction } from "@/lib/actions/kpi-manajemen";
@@ -548,6 +548,8 @@ export function PapanManajemen({ detail, bolehAtur }: { detail: DetailManajemen;
         <KpiIndicatorDonut baris={baris} />
       </div>
 
+      {harian && detail.minggu && <KartuMinggu minggu={detail.minggu} />}
+
       {tampilan === "komponen" && (
         <DataTable tableId="kpi-manajemen" columns={kolomKomponen} data={baris} searchPlaceholder="Cari komponen…" stickyHeader={false} toolbar={toolbar} onExport={() => setPdf(true)} exportTitle="Unduh laporan PDF" />
       )}
@@ -575,6 +577,98 @@ export function PapanManajemen({ detail, bolehAtur }: { detail: DetailManajemen;
         namaDepartemen="Korporat"
         namaPic=""
       />
+    </div>
+  );
+}
+
+/**
+ * Perbandingan MINGGU BERJALAN — pendamping perbandingan bulanan.
+ *
+ * Perbandingan bulanan baru bisa dibaca setelah bulannya lewat; yang memimpin
+ * outlet butuh tahu keadaannya SEKARANG, saat masih ada sisa hari untuk
+ * memperbaikinya. Pembandingnya minggu bernomor sama pada bulan lalu, bukan
+ * tujuh hari sebelumnya: penjualan F&B punya irama mingguan, jadi
+ * membandingkan Senin–Rabu dengan Jumat–Minggu selalu terbaca anjlok padahal
+ * tidak ada yang berubah.
+ *
+ * Targetnya sebanding hari yang SUDAH berjalan, bukan seminggu penuh — tiga
+ * hari yang diukur terhadap target tujuh hari selalu gagal, dan angka yang
+ * selalu merah berhenti dibaca.
+ */
+function KartuMinggu({ minggu }: { minggu: MingguIni }) {
+  const capaian = minggu.target > 0 ? (minggu.ini / minggu.target) * 100 : null;
+  const st = capaian === null ? { label: "Belum ada target", tone: "neutral" as const } : statusCapaian(capaian);
+  const beda = bandingPersen(minggu.lalu || null, minggu.ini);
+  const penuh = minggu.hariTerisi >= minggu.hariMinggu;
+
+  return (
+    <div className="mb-4 overflow-hidden rounded-2xl border border-border bg-card">
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-1 border-b border-border/70 px-4 py-2.5">
+        <span className="text-[13px] font-semibold text-foreground">Minggu ke-{minggu.minggu}</span>
+        <span className="text-[12px] text-muted-foreground">tanggal {minggu.rentang}</span>
+        <span className="text-[12px] text-muted-foreground">
+          · {minggu.hariTerisi} dari {minggu.hariMinggu} hari{penuh ? " (lengkap)" : " berjalan"}
+        </span>
+        <Badge tone={st.tone} className="ml-auto">{st.label}</Badge>
+      </div>
+      <div className="grid gap-px bg-border/70 sm:grid-cols-2 lg:grid-cols-4">
+        <SelMinggu label="Omzet minggu ini" nilai={formatIDR(minggu.ini)} tebal />
+        <SelMinggu
+          label={`Minggu ke-${minggu.minggu} bulan lalu`}
+          nilai={formatIDR(minggu.lalu)}
+          bawah={<Selisih nilai={beda} />}
+        />
+        <SelMinggu
+          label="Target minggu ini"
+          nilai={formatIDR(minggu.target)}
+          bawah={
+            <span className="text-[11px] text-muted-foreground">
+              sebanding {minggu.hariTerisi} hari yang sudah berjalan
+            </span>
+          }
+        />
+        <SelMinggu
+          label="Capaian terhadap target"
+          nilai={capaian === null ? "—" : persen(capaian)}
+          warna={capaian === null ? undefined : capaian >= AMBANG_HIJAU}
+          bawah={<BarPersen nilai={capaian} />}
+        />
+      </div>
+    </div>
+  );
+}
+
+function SelMinggu({
+  label,
+  nilai,
+  tebal,
+  warna,
+  bawah,
+}: {
+  label: string;
+  nilai: string;
+  tebal?: boolean;
+  /** true = hijau, false = merah, undefined = warna teks biasa. */
+  warna?: boolean;
+  bawah?: React.ReactNode;
+}) {
+  return (
+    <div className="bg-card px-4 py-3">
+      <p className="text-[11.5px] text-muted-foreground">{label}</p>
+      <p
+        className={cn(
+          "mt-1 text-[15px] tabular-nums",
+          tebal ? "font-semibold" : "font-medium",
+          warna === undefined
+            ? "text-foreground"
+            : warna
+              ? "text-emerald-600 dark:text-emerald-400"
+              : "text-rose-600 dark:text-rose-400",
+        )}
+      >
+        {nilai}
+      </p>
+      {bawah && <div className="mt-1.5">{bawah}</div>}
     </div>
   );
 }
