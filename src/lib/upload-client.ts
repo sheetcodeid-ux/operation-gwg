@@ -31,7 +31,30 @@ export interface UploadedFile {
   name: string;
 }
 
-async function direct(scope: UploadScope, file: File): Promise<UploadedFile | null> {
+/**
+ * PUT ke R2 lewat XHR, bukan `fetch`.
+ *
+ * `fetch` tidak melaporkan kemajuan unggahan sama sekali. Untuk berkas 40 MB
+ * dari ponsel itu berarti tombol yang diam satu menit penuh — dan yang
+ * menunggunya menekan ulang, mengira aplikasinya menggantung. XHR punya
+ * `upload.onprogress`, satu-satunya cara mendapatkan persentase yang benar.
+ */
+function putBerkas(url: string, file: File, onMaju?: (persen: number) => void): Promise<number> {
+  return new Promise((selesai, gagal) => {
+    const xhr = new XMLHttpRequest();
+    xhr.open("PUT", url, true);
+    xhr.setRequestHeader("content-type", file.type || "application/octet-stream");
+    xhr.upload.onprogress = (e) => {
+      if (e.lengthComputable && onMaju) onMaju(Math.min(99, Math.round((e.loaded / e.total) * 100)));
+    };
+    xhr.onload = () => selesai(xhr.status);
+    xhr.onerror = () => gagal(new Error("jaringan"));
+    xhr.onabort = () => gagal(new Error("dibatalkan"));
+    xhr.send(file);
+  });
+}
+
+async function direct(scope: UploadScope, file: File, onMaju?: (persen: number) => void): Promise<UploadedFile | null> {
   const signed = await presignAttachmentAction({
     scope,
     name: file.name,
@@ -43,27 +66,31 @@ async function direct(scope: UploadScope, file: File): Promise<UploadedFile | nu
   if (signed.error) throw new Error(signed.error);
   if (!signed.url || !signed.path) return null;
 
-  let res: Response;
+  let status: number;
   try {
-    res = await fetch(signed.url, {
-      method: "PUT",
-      body: file,
-      headers: { "content-type": file.type || "application/octet-stream" },
-    });
+    status = await putBerkas(signed.url, file, onMaju);
   } catch {
-    // fetch menolak tanpa status = permintaan diblokir browser, hampir selalu
-    // karena CORS bucket belum mengizinkan PUT dari domain ini. Sebutkan itu
-    // supaya tidak terbaca sebagai gangguan acak.
+    // Permintaan ditolak browser tanpa status — hampir selalu karena CORS
+    // bucket belum mengizinkan PUT dari domain ini. Sebutkan itu supaya tidak
+    // terbaca sebagai gangguan acak.
     throw new Error(`Gagal mengunggah "${file.name}" — koneksi ke penyimpanan ditolak (cek izin CORS bucket R2).`);
   }
-  if (!res.ok) throw new Error(`Gagal mengunggah "${file.name}" — penyimpanan menolak (${res.status}).`);
+  if (status < 200 || status >= 300) {
+    throw new Error(`Gagal mengunggah "${file.name}" — penyimpanan menolak (${status}).`);
+  }
+  onMaju?.(100);
   return { path: signed.path, name: file.name };
 }
 
 /** Unggah satu berkas: langsung ke R2, dan hanya mundur ke `legacy` bila perlu. */
-export async function uploadOne(scope: UploadScope, file: File, legacy: LegacyUpload): Promise<UploadedFile> {
+export async function uploadOne(
+  scope: UploadScope,
+  file: File,
+  legacy: LegacyUpload,
+  onMaju?: (persen: number) => void,
+): Promise<UploadedFile> {
   try {
-    const up = await direct(scope, file);
+    const up = await direct(scope, file, onMaju);
     if (up) return up;
   } catch (e) {
     // Berkas besar TIDAK boleh mundur ke server action: di sana ia pasti
@@ -81,9 +108,52 @@ export async function uploadOne(scope: UploadScope, file: File, legacy: LegacyUp
   return { path: res.path, name: res.name ?? file.name };
 }
 
-/** Unggah beberapa berkas berurutan; melempar pada kegagalan pertama. */
-export async function uploadMany(scope: UploadScope, files: File[], legacy: LegacyUpload): Promise<UploadedFile[]> {
-  const out: UploadedFile[] = [];
-  for (const f of files) out.push(await uploadOne(scope, f, legacy));
-  return out;
+/**
+ * Batas berkas yang diunggah BERSAMAAN.
+ *
+ * Berurutan satu per satu membuat sepuluh foto memakan sepuluh kali waktu satu
+ * foto, padahal jaringan menganggur di antaranya. Tidak semuanya sekaligus
+ * juga: koneksi seluler yang dipaksa membuka sepuluh unggahan besar justru
+ * melambat, dan kegagalannya menyeret semuanya.
+ */
+const SERENTAK = 3;
+
+/**
+ * Unggah beberapa berkas, tiga sekaligus; melempar pada kegagalan pertama.
+ *
+ * `onMaju` menerima persentase GABUNGAN — dihitung dari byte, bukan dari
+ * jumlah berkas yang selesai. Sepuluh foto berukuran sangat berbeda akan
+ * membuat bar berbasis hitungan melompat-lompat dan berhenti lama di satu
+ * angka; yang berbasis byte bergerak sehalus unggahannya sendiri.
+ */
+export async function uploadMany(
+  scope: UploadScope,
+  files: File[],
+  legacy: LegacyUpload,
+  onMaju?: (persen: number) => void,
+): Promise<UploadedFile[]> {
+  const total = files.reduce((s, f) => s + f.size, 0) || 1;
+  const majuPer = new Array(files.length).fill(0);
+  const lapor = () => {
+    if (!onMaju) return;
+    const naik = files.reduce((s, f, i) => s + (f.size * majuPer[i]) / 100, 0);
+    onMaju(Math.min(100, Math.round((naik / total) * 100)));
+  };
+
+  const hasil = new Array<UploadedFile>(files.length);
+  let berikut = 0;
+  const pekerja = async () => {
+    for (;;) {
+      const i = berikut++;
+      if (i >= files.length) return;
+      hasil[i] = await uploadOne(scope, files[i], legacy, (p) => {
+        majuPer[i] = p;
+        lapor();
+      });
+      majuPer[i] = 100;
+      lapor();
+    }
+  };
+  await Promise.all(Array.from({ length: Math.min(SERENTAK, files.length) }, pekerja));
+  return hasil;
 }

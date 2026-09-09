@@ -108,8 +108,13 @@ function langkahCa(): Langkah[] {
       isi: (
         <>
           Tekan <b>Catat Kegiatan</b> → <b>Hygiene Audit / CCTV Monitoring</b>. Tiap baris: tanggal, outlet, dan{" "}
-          <b>bukti submit</b> (JPG, PNG, atau PDF, maksimal 10 MB). Targetnya 10x per minggu = 40 per bulan.
-          <Awas>Baris tanpa bukti tidak bisa disimpan. Bukti adalah satu-satunya yang membedakan audit yang benar dilakukan dari yang hanya diketik.</Awas>
+          <b>bukti submit</b> (JPG, PNG, atau PDF, <b>maksimal 100 MB per berkas</b> dan boleh <b>beberapa berkas
+          sekaligus</b>). Targetnya 10x per minggu = 40 per bulan. Saat mengunggah, bar <b>1–100%</b> menunjukkan
+          kemajuannya — tiga berkas naik bersamaan supaya tidak menunggu satu per satu.
+          <Awas>
+            Baris tanpa bukti tidak bisa disimpan. Bukti adalah satu-satunya yang membedakan audit yang benar dilakukan
+            dari yang hanya diketik. Foto dari ponsel baru memang bisa 20–40 MB — tidak perlu dikecilkan dulu.
+          </Awas>
         </>
       ),
     },
@@ -140,7 +145,9 @@ function langkahCa(): Langkah[] {
         <>
           Tombol di atas tabel: <b>Detail Hygiene Audit/CCTV</b>, <b>Detail Net Profit</b>, dan{" "}
           <b>Detail Harga Pokok Penjualan</b> memperlihatkan apa yang sudah masuk per outlet beserta persentasenya.
-          Gunakan itu untuk mencari outlet yang belum disetor sebelum bulan ditutup. Kolom <b>Brand</b> berwarna
+          Gunakan itu untuk mencari outlet yang belum disetor sebelum bulan ditutup. Bukti dibuka sebagai{" "}
+          <b>pratinjau di halaman yang sama</b> — bukan tab baru — dan tombol panah kiri/kanan (atau tombol panah di
+          papan ketik) berpindah antarbukti tanpa menutupnya. Kolom <b>Brand</b> berwarna
           (Nordu, Cattu, Busari, Lesung Pipi) memudahkan memisahkan merek yang margin dan ritmenya memang berbeda —
           ketik nama mereknya di kotak cari untuk menyaring satu merek saja.
         </>
@@ -316,9 +323,9 @@ export function DialogPanduanManajemen() {
         judul: "C — EBITDA Same Store (bobot 20%)",
         isi: (
           <>
-            Margin = laba bersih ÷ sales same store, target <b>{TARGET_MARGIN}%</b>. Laba bersihnya terisi otomatis dari
-            isian bulanan Coordinator Area; kalau laporan keuangan berbeda, ketik ulang lewat tombol{" "}
-            <b>Isi Angka</b>. Sales same store dikosongkan berarti memakai total actual komponen B.
+            Margin = laba bersih ÷ sales same store, target <b>{TARGET_MARGIN}%</b>. Laba bersihnya datang dari isian
+            bulanan Coordinator Area, dan salesnya dari komponen B — seluruhnya otomatis, tidak ada yang diketik di
+            halaman ini. Outlet yang laba bersihnya belum diisi <b>dilewati</b>, bukan dihitung nol.
           </>
         ),
       },
@@ -353,11 +360,12 @@ export function DialogPanduanManajemen() {
         ),
       },
       {
-        judul: "Lima tabel, satu per pertanyaan",
+        judul: "Enam tabel, satu per pertanyaan",
         isi: (
           <>
             Pengalih di atas tabel berpindah antara <b>Komponen</b> (ringkasan keempatnya), <b>Detail Gross Sales
-            Corporate</b>, <b>Detail Same Store</b>, <b>Detail EBITDA Same Store</b>, dan <b>Detail KPI Divisi</b>.
+            Corporate</b>, <b>Detail Same Store</b>, <b>Detail EBITDA Same Store</b>, <b>Detail Mingguan</b>, dan{" "}
+            <b>Detail KPI Divisi</b>.
             Ketiga tabel detail outlet berbentuk sama: bulan lalu, bulan ini, dan perbandingannya, dengan lencana{" "}
             <b>Brand</b> berwarna supaya Nordu, Cattu, Busari, dan Lesung Pipi mudah dibedakan sekilas.
           </>
@@ -374,6 +382,30 @@ export function DialogPanduanManajemen() {
               Angka harian datang dari catatan penjualan harian SELURUH perusahaan — ia tidak bisa dipisah per outlet
               dan tidak mengenal bulan yang diisi tangan. Pakai untuk melihat bentuk bulannya, bukan untuk mencocokkan
               totalnya dengan kartu Gross Sales.
+            </Awas>
+          </>
+        ),
+      },
+      {
+        judul: "Detail Mingguan — siapa yang tertinggal, dan harus mengejar berapa",
+        isi: (
+          <>
+            Satu baris satu outlet, satu kolom satu minggu. Tiap sel memuat omzet minggu itu dan capaiannya terhadap
+            target minggu itu sendiri; kolom <b>Harus Dikejar</b> menyebut berapa yang harus masuk di minggu berjalan
+            supaya kekurangan minggu-minggu sebelumnya ikut tertutup. Yang paling tertinggal berada di baris paling
+            atas.
+            <Awas>
+              Mingguya dibagi menurut TANGGAL — 1–7, 8–14, 15–21, 22–28, lalu sisanya — bukan Senin–Minggu. Minggu yang
+              mengikuti hari akan bergeser tiap bulan, dan minggu ke-N dua bulan berbeda tidak lagi bisa dibandingkan.
+              Minggu terakhir memang cuma 2–3 hari, karena itu targetnya ikut lebih kecil: dibagi porsi hari, bukan
+              dibagi jumlah minggu.
+            </Awas>
+            <Awas>
+              Angkanya ditarik dari ESB satu panggilan per outlet per minggu dan berjalan sendiri tiap jam. Outlet yang
+              mingguanya belum ditarik ditulis <b>&ldquo;belum ditarik&rdquo;</b>, bukan nol — nol berarti tutup
+              seminggu penuh. Outlet yang omzetnya diketik bulanan (belum masuk ESB) ditandai{" "}
+              <b>&ldquo;diketik bulanan&rdquo;</b> dan tidak ikut dijumlahkan ke baris Seluruh Outlet, supaya totalnya
+              tidak tertarik ke bawah oleh outlet yang memang tidak terukur mingguan.
             </Awas>
           </>
         ),

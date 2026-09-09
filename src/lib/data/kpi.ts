@@ -5,6 +5,7 @@ import { db, dbEnabled } from "./db";
 import { getOutlets, getUser, getUsers } from "./store";
 import { listHcRequests } from "./hc-requests";
 import { netBulananPerCabang } from "./esb-bulanan";
+import { nilaiKetepatanDesign } from "./design-rapor";
 import { WORK_BRANDS } from "@/lib/constants";
 import {
   actualLulus,
@@ -1059,11 +1060,15 @@ export async function laporanKpi(posisi: KodePosisi, periode: string, pic = ""):
   }
 
   const perluDesign = daftar.some((i) => i.actual.sumber === "otomatis" && i.actual.kode === "design_request");
+  const perluKetepatan = daftar.some((i) => i.actual.sumber === "otomatis" && i.actual.kode === "ketepatan_design");
   const perluKomplain = daftar.some((i) => i.actual.sumber === "otomatis" && i.actual.kode === "komplain_food_quality");
   const perluFee = daftar.some((i) => i.actual.sumber === "otomatis" && i.actual.kode === "management_fee");
 
-  const [design, komplain, netBulan, average, netPerusahaan, omsetTigaBulan, averageTrx] = await Promise.all([
+  const [design, ketepatan, komplain, netBulan, average, netPerusahaan, omsetTigaBulan, averageTrx] = await Promise.all([
     perluDesign ? designRequest(periode) : Promise.resolve(null),
+    // Ketepatan dinilai PER ORANG saat posisinya dinilai per orang: yang
+    // dihitung pekerjaan yang ditugaskan kepadanya, bukan seluruh antrian.
+    perluKetepatan ? nilaiKetepatanDesign(periode, pic && pic !== SEMUA_PIC ? pic : undefined) : Promise.resolve(null),
     perluKomplain ? komplainFoodQuality(periode) : Promise.resolve(null),
     perluFee ? netSalesLengkap(periode) : Promise.resolve(null),
     PAKAI_EFISIENSI.includes(posisi) ? averageTigaBulan(periode) : Promise.resolve(null),
@@ -1155,6 +1160,7 @@ export async function laporanKpi(posisi: KodePosisi, periode: string, pic = ""):
     jumlahBrand: WORK_BRANDS.length,
     jumlahOutlet: outletAktif.length,
     design,
+    ketepatan,
     komplain,
     efisiensi,
     fee,
@@ -1188,6 +1194,7 @@ interface KonteksBaris {
   jumlahBrand: number;
   jumlahOutlet: number;
   design: { masuk: number; selesai: number } | null;
+  ketepatan: { nilai: number; dinilai: number } | null;
   komplain: number | null;
   efisiensi: LaporanKpi["efisiensi"];
   fee: DetailFee[] | null;
@@ -1300,6 +1307,19 @@ function susunBaris(i: Indikator, k: KonteksBaris): BarisKpi {
           actual = k.ca?.hpp ?? null;
           if (actual === null) alasan = alasanAngkaOutlet(k.ca, "Harga pokok penjualan");
           break;
+        case "ketepatan_design": {
+          // Skala 0–100 dari nilai rata-rata tiap permintaan. Nol berarti
+          // "seimbang": tidak ada yang terlambat pada tenggat longgar, dan
+          // tidak ada nilai tambah dari tenggat mendesak yang ditepati.
+          // Rentangnya −3 sampai +3, jadi titik tengahnya 50.
+          if (!k.ketepatan) {
+            alasan = "Belum ada permintaan desain yang selesai atau lewat tenggat bulan ini.";
+            break;
+          }
+          const rata = k.ketepatan.nilai / k.ketepatan.dinilai;
+          actual = Math.max(0, Math.min(100, 50 + (rata / 3) * 50));
+          break;
+        }
         case "net_sales_korporat":
           // Net Sales Achievement diambil dari ESB, bukan diketik — angkanya
           // sudah ada dan mengetik ulang cuma menambah cara untuk salah.

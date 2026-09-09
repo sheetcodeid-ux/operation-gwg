@@ -68,6 +68,8 @@ const fromRow = (r: any): HcRequest => ({
   budgetApproved: Number(r.budget_approved ?? 0),
   designType: r.design_type ?? null,
   designSize: r.design_size ?? null,
+  deadlineKategori: r.design_deadline_kategori ?? null,
+  deadline: r.design_deadline ?? null,
   plannedDate: r.planned_date ?? null,
   attachments: rawAttachments(r.attachments),
   status: (r.status ?? "menunggu_hc") as HcRequestStatus,
@@ -202,6 +204,8 @@ export interface CreateRequestInput {
   budget?: number;
   designType?: string | null;
   designSize?: string | null;
+  deadlineKategori?: string | null;
+  deadline?: string | null;
   plannedDate?: string | null;
   attachments: HcRequestAttachment[];
 }
@@ -228,6 +232,8 @@ export async function createHcRequest(input: CreateRequestInput): Promise<{ id?:
     budget_approved: 0,
     design_type: input.designType ?? null,
     design_size: input.designSize ?? null,
+    design_deadline_kategori: input.deadlineKategori ?? null,
+    design_deadline: input.deadline ?? null,
     planned_date: input.plannedDate || null,
     attachments: input.attachments.filter((a) => a?.path && a?.name).map((a) => ({ path: a.path, name: a.name })),
     status: "menunggu_hc" as HcRequestStatus,

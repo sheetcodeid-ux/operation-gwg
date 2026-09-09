@@ -10,6 +10,7 @@ import { persistMessage } from "@/lib/data/persist";
 import { createHcRequest, deleteHcRequest, getHcRequest, listHcRequests, updateHcRequest } from "@/lib/data/hc-requests";
 import { canSeeRequest, requestScopeFor } from "@/lib/data/request-scope";
 import { notify } from "@/lib/data/notify";
+import { TENGGAT, tanggalTenggat } from "@/lib/kpi/deadline";
 import {
   antrianUntukPic,
   kelolaAntrianDesign,
@@ -183,6 +184,10 @@ export async function presignHcUploadAction(input: {
   }
 }
 
+/** Kategori tenggat yang benar-benar dikenal — selain itu diabaikan. */
+const kategoriTenggatSah = (k: string | null | undefined): string | null =>
+  k && TENGGAT.some((t) => t.kategori === k) ? k : null;
+
 export interface SubmitRequestInput {
   kind: HcRequestKind;
   title: string;
@@ -198,6 +203,8 @@ export interface SubmitRequestInput {
   budget?: number;
   designType?: string;
   designSize?: string;
+  /** Kategori tenggat pengajuan desain — lihat `lib/kpi/deadline.ts`. */
+  deadlineKategori?: string | null;
   plannedDate?: string;
   attachments: HcRequestAttachment[];
 }
@@ -255,6 +262,13 @@ export async function submitHcRequestAction(input: SubmitRequestInput): Promise<
       budget: input.budget ?? 0,
       designType: input.designType?.trim() || null,
       designSize: input.designSize?.trim() || null,
+      // Tanggal tenggat DIHITUNG DI SERVER dari tanggal hari ini, bukan
+      // diterima dari peramban. Yang dikirim peramban bisa disetel sendiri,
+      // dan tenggat yang bisa disetel sendiri berhenti jadi tenggat.
+      deadlineKategori: kategoriTenggatSah(input.deadlineKategori),
+      deadline: kategoriTenggatSah(input.deadlineKategori)
+        ? tanggalTenggat(new Date().toISOString().slice(0, 10), input.deadlineKategori!)
+        : null,
       plannedDate: input.plannedDate || null,
       attachments: input.attachments ?? [],
     });

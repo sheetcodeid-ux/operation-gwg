@@ -264,6 +264,10 @@ export interface HcRequest {
   /** design */
   designType: string | null;
   designSize: string | null;
+  /** Kategori tenggat yang dipilih pemohon — lihat `lib/kpi/deadline.ts`. */
+  deadlineKategori: string | null;
+  /** Tanggal jatuh tempo, "YYYY-MM-DD". Disimpan, bukan dihitung ulang. */
+  deadline: string | null;
   /** Rencana pelaksanaan (pelatihan) / target mulai (rekrutmen) / deadline (design). */
   plannedDate: string | null;
   attachments: HcRequestAttachment[];

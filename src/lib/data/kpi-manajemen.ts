@@ -3,6 +3,7 @@ import "server-only";
 import { db, dbEnabled } from "./db";
 import { getOutlets } from "./store";
 import { netBulananPerCabang } from "./esb-bulanan";
+import { hariTerhitung, netMingguanPerCabang } from "./esb-mingguan";
 import { bulanMulaiBerjalan, bulanSebelum, grossDiketik, grossKetikBulan, laporanKpi } from "./kpi";
 import { DEPARTEMEN, POSISI, posisiDari } from "@/lib/kpi/struktur";
 import { SEMUA_PIC } from "@/lib/kpi/semua-pic";
@@ -16,6 +17,14 @@ import {
   type SetelanManajemen,
   type SkorManajemen,
 } from "@/lib/kpi/manajemen";
+import {
+  hitungMinggu,
+  korporatMinggu,
+  mingguBulan,
+  type BarisMinggu,
+  type RentangMinggu,
+  type SumberMinggu,
+} from "@/lib/kpi/minggu";
 import type { LaluIndikator } from "@/components/kpi/kpi-charts";
 
 /**
@@ -35,6 +44,25 @@ import type { LaluIndikator } from "@/components/kpi/kpi-charts";
  * pun — persis supaya tidak ada bulan yang terlewat hanya karena tidak ada yang
  * ingat mengisinya.
  */
+
+/**
+ * Rincian MINGGU DEMI MINGGU dalam satu bulan, per outlet.
+ *
+ * Perbandingan bulanan baru bisa dibaca setelah bulannya lewat; yang memimpin
+ * outlet butuh tahu keadaannya saat masih ada sisa hari untuk memperbaikinya —
+ * dan butuh tahu OUTLET MANA yang tertinggal, bukan hanya bahwa perusahaan
+ * tertinggal.
+ */
+export interface DetailMinggu {
+  /** Pembagian minggu bulan itu: 1–7, 8–14, 15–21, 22–28, sisanya. */
+  minggu: RentangMinggu[];
+  /** Satu baris per outlet, sudah lengkap dengan target dan angka kejarnya. */
+  baris: BarisMinggu[];
+  /** Jumlah seluruh outlet yang terukur mingguan. Null = belum ada satu pun. */
+  korporat: BarisMinggu | null;
+  /** Outlet yang omzetnya diketik bulanan sehingga tak punya rincian mingguan. */
+  tanpaRincian: number;
+}
 
 /** Omzet satu tanggal, bulan berjalan berdampingan dengan bulan sebelumnya. */
 export interface HariOmzet {
@@ -68,6 +96,8 @@ export interface DetailManajemen {
   ebitda: BarisEbitda[];
   /** Omzet per tanggal, bulan ini dan bulan lalu — bahan grafik harian. */
   harian: HariOmzet[];
+  /** Rincian minggu demi minggu per outlet. Null = ESB belum menarik satu minggu pun. */
+  minggu: DetailMinggu | null;
   /** Bobot dan target yang sedang berlaku. */
   setelan: SetelanManajemen;
   /** Capaian bulan lalu per komponen — bahan grafik pembanding. */
@@ -189,6 +219,55 @@ async function omzetHarian(periode: string): Promise<HariOmzet[]> {
 
   const ambil = (bulan: string, tgl: number) => peta.get(`${bulan}-${String(tgl).padStart(2, "0")}`) ?? null;
   return kosong.map(({ tanggal }) => ({ tanggal, ini: ambil(periode, tanggal), lalu: ambil(lalu, tanggal) }));
+}
+
+/**
+ * Rincian mingguan per outlet untuk satu bulan.
+ *
+ * TARGETNYA TARGET OUTLET ITU SENDIRI, bukan target korporat dibagi rata.
+ * Angka yang sama dipakai kolom Target di Detail Same Store — kalau di sini
+ * dibagi rata, satu outlet bisa terlihat gagal di tab ini dan tercapai di tab
+ * sebelahnya, dan yang membacanya tidak punya cara tahu mana yang benar.
+ *
+ * OUTLET YANG OMZETNYA DIKETIK BULANAN TIDAK DIBERI ANGKA NOL. Bulan yang
+ * ditandai manual memang tidak punya rincian mingguan — angkanya masuk sebagai
+ * satu total sebulan — dan nol di situ akan terbaca sebagai outlet yang tidak
+ * berjualan seminggu penuh. Barisnya tetap tampil, ditandai, dan dikeluarkan
+ * dari jumlah korporat supaya totalnya tidak ikut tertarik ke bawah.
+ */
+async function mingguOutlet(
+  periode: string,
+  outletAktif: { id: string; name: string; code?: string | null; esbBranchId?: string | null }[],
+  target: Map<string, number>,
+  manual: (id: string) => boolean,
+): Promise<DetailMinggu | null> {
+  const minggu = mingguBulan(periode);
+  const hari = jumlahHari(periode);
+  const peta = await netMingguanPerCabang(periode);
+  if (peta.size === 0) return null;
+
+  const sumber: SumberMinggu[] = outletAktif.map((o) => {
+    const cabang = o.esbBranchId ?? null;
+    const tanpaRincian = manual(o.id) || cabang === null;
+    const baris = minggu.map((m) => (tanpaRincian || cabang === null ? null : (peta.get(`${cabang}|${m.minggu}`) ?? null)));
+    return {
+      id: o.id,
+      nama: o.name,
+      kode: o.code ?? o.id,
+      targetBulan: target.get(o.id) ?? 0,
+      actual: baris.map((r) => (r === null ? null : r.net)),
+      hariAda: minggu.map((m, i) => hariTerhitung(periode, m, baris[i]?.sampai ?? null)),
+      tanpaRincian,
+    };
+  });
+
+  const baris = hitungMinggu(sumber, minggu, hari);
+  return {
+    minggu,
+    baris,
+    korporat: korporatMinggu(baris, minggu, hari),
+    tanpaRincian: baris.filter((b) => b.tanpaRincian).length,
+  };
 }
 
 /** Laba bersih tiap outlet same store, dari isian bulanan Coordinator Area. */
@@ -346,10 +425,21 @@ export async function detailManajemen(
   // Dua bulan sekaligus: bulan berjalan untuk nilainya, bulan sebelumnya untuk
   // pembandingnya. Keduanya ditarik bersamaan supaya halaman tidak menunggu
   // dua putaran berurutan.
-  const [laba, labaLalu, harian, skorIni, skorLalu] = await Promise.all([
+  // Target sebulan tiap outlet — persis angka yang dipakai kolom Target di
+  // Detail Same Store, supaya satu outlet tidak terlihat gagal di satu tab dan
+  // tercapai di tab sebelahnya.
+  const targetOutlet = new Map(sementara.b.baris.map((b) => [b.id, b.target]));
+
+  const [laba, labaLalu, harian, minggu, skorIni, skorLalu] = await Promise.all([
     labaOutlet(periode, idIkut),
     labaOutlet(bulanSebelum(periode), idIkut),
     opsi.ringan ? Promise.resolve([] as HariOmzet[]) : omzetHarian(periode),
+    opsi.ringan
+      ? Promise.resolve(null)
+      : mingguOutlet(periode, outletAktif, targetOutlet, (id) => {
+          const o = outletAktif.find((x) => x.id === id);
+          return o ? grossDiketik({ esbMulai: o.esbMulai ?? null, esbAbaikan: o.esbAbaikan ?? [] }, periode) : false;
+        }),
     opsi.ringan ? Promise.resolve(new Map<string, number>()) : skorPosisi(periode),
     opsi.ringan ? Promise.resolve(new Map<string, number>()) : skorPosisi(bulanSebelum(periode)),
   ]);
@@ -384,21 +474,24 @@ export async function detailManajemen(
     departemen.map((d) => d.lalu).filter((n): n is number => n !== null).reduce((s, n, _, a) => s + n / a.length, 0);
   const lalu = opsi.ringan ? {} : await capaianLalu(periode, rataDLalu);
 
+  const skor = hitungManajemen({
+    a: { bulanLalu: omzetLalu, actual: korporat(esbIni, ketikIni, periode) },
+    outlet,
+    labaBersih,
+    departemen,
+    setelan,
+  });
+
   return {
     lalu,
     periode,
     omzetLalu,
-    skor: hitungManajemen({
-      a: { bulanLalu: omzetLalu, actual: korporat(esbIni, ketikIni, periode) },
-      outlet,
-      labaBersih,
-      departemen,
-      setelan,
-    }),
+    skor,
     bulanA,
     labaBersih,
     ebitda,
     harian,
+    minggu,
     setelan,
   };
 }
