@@ -1246,18 +1246,6 @@ function susunBaris(i: Indikator, k: KonteksBaris): BarisKpi {
   let actual: number | null = null;
   let alasan: string | undefined;
 
-  // Net Sales Achievement diambil dari ESB, bukan diketik — angkanya sudah ada
-  // dan mengetik ulang cuma menambah cara untuk salah.
-  if (i.key === "net_sales" && k.netPerusahaan !== null && k.netPerusahaan !== undefined) {
-    return barisKpi({
-      indikator: i,
-      bobot,
-      target,
-      actual: k.netPerusahaan,
-      alasan: target === null ? "Belum ada net sales bulan lalu sebagai dasar target." : undefined,
-    });
-  }
-
   switch (i.actual.sumber) {
     case "manual":
     case "manual_brand":
@@ -1311,6 +1299,12 @@ function susunBaris(i: Indikator, k: KonteksBaris): BarisKpi {
         case "hpp_area":
           actual = k.ca?.hpp ?? null;
           if (actual === null) alasan = alasanAngkaOutlet(k.ca, "Harga pokok penjualan");
+          break;
+        case "net_sales_korporat":
+          // Net Sales Achievement diambil dari ESB, bukan diketik — angkanya
+          // sudah ada dan mengetik ulang cuma menambah cara untuk salah.
+          actual = k.netPerusahaan ?? null;
+          if (actual === null) alasan = "Net sales bulan ini belum ditarik dari ESB.";
           break;
         case "average_transaction":
           // Bulan yang datanya belum lengkap TIDAK ditampilkan angkanya.

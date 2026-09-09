@@ -539,7 +539,7 @@ export const DIVISION_GROUPS: Partial<Record<Division, NavGroupDef[]>> = {
     // departemen membuatnya terbaca seolah milik departemen itu.
     { name: "Korporat", icon: "Briefcase", urutan: 0, menus: ["kpi_manajemen"] },
     { name: "Operational", icon: "Store", urutan: 1, menus: ["kpi_op_ca"] },
-    { name: "Creative", icon: "Palette", urutan: 2, menus: ["kpi_creative_content", "kpi_creative_sosmed"] },
+    { name: "Creative", icon: "Palette", urutan: 2, menus: ["kpi_creative_content"] },
     { name: "Finance", icon: "Wallet", urutan: 3, menus: ["kpi_fin_accounting", "kpi_fin_finance", "kpi_fin_tax"] },
     {
       name: "Product Development & Quality",
@@ -547,7 +547,7 @@ export const DIVISION_GROUPS: Partial<Record<Division, NavGroupDef[]>> = {
       urutan: 4,
       menus: ["kpi_pdq_qc", "kpi_pdq_food", "kpi_pdq_beverage", "kpi_pdq_head_food", "kpi_pdq_head_pdq"],
     },
-    { name: "Marketing Communication", icon: "Megaphone", urutan: 5, menus: ["kpi_marcomm"] },
+    { name: "Marketing Communication", icon: "Megaphone", urutan: 5, menus: ["kpi_marcomm", "kpi_creative_sosmed"] },
   ],
   Creative: [
     { name: "Permintaan Masuk", icon: "Palette", menus: ["creative_design"] },

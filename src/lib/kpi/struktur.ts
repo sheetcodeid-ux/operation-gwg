@@ -81,7 +81,7 @@ export const DEPARTEMEN: Departemen[] = [
     posisi: ["operational_ca"],
     menyusul: ["System Support (Fikri)", "System Support POS (Evan, Adinda, Pricil)"],
   },
-  { kode: "creative", nama: "Creative", singkat: "Creative", ikon: "Palette", posisi: ["creative_content", "creative_sosmed"] },
+  { kode: "creative", nama: "Creative", singkat: "Creative", ikon: "Palette", posisi: ["creative_content"] },
   { kode: "finance", nama: "Finance", singkat: "Finance", ikon: "Wallet", posisi: ["finance_accounting", "finance_finance", "finance_tax"] },
   {
     kode: "pdq",
@@ -91,7 +91,7 @@ export const DEPARTEMEN: Departemen[] = [
     posisi: ["pdq_qc", "pdq_food", "pdq_beverage", "pdq_head_food", "pdq_head_pdq"],
     menyusul: ["Quality Assurance & Control (Radika)"],
   },
-  { kode: "marcomm", nama: "Marketing Communication", singkat: "MarComm", ikon: "Megaphone", posisi: ["marcomm"] },
+  { kode: "marcomm", nama: "Marketing Communication", singkat: "MarComm", ikon: "Megaphone", posisi: ["marcomm", "creative_sosmed"] },
   { kode: "hrd", nama: "Human Resource Development", singkat: "HRD", ikon: "UsersRound", posisi: [], menyusul: ["Human Resource Development (Dini Amalia)"] },
 ];
 
@@ -99,14 +99,22 @@ export const POSISI: Posisi[] = [
   // PIC-nya kosong di sini dengan sengaja — diisi dari daftar Coordinator Area
   // di basis data, lihat `picDinamis`.
   { kode: "operational_ca", departemen: "operational", nama: "Coordinator Area", pic: [], perPic: true, picDinamis: "area_coordinator" },
-  { kode: "creative_content", departemen: "creative", nama: "Content Creator", pic: ["Ricky", "Seka"] },
-  { kode: "creative_sosmed", departemen: "creative", nama: "Sosial Media", pic: ["Via", "Zia"] },
+  { kode: "creative_content", departemen: "creative", nama: "Content Creator", pic: ["Via", "Dhimas", "Seka", "Ricky"], perPic: true },
+  // Sosial Media pindah ke Marketing Communication — sejak tim ini tidak lagi
+  // bergabung dengan Creative. KODE POSISINYA SENGAJA TIDAK DIUBAH: seluruh
+  // catatan kegiatan dan angka bulanannya menempel pada kode itu, dan
+  // menggantinya akan memutus riwayat yang sudah terkumpul tanpa satu pun
+  // pesan.
+  { kode: "creative_sosmed", departemen: "marcomm", nama: "Sosial Media", pic: ["Zia"] },
   { kode: "finance_accounting", departemen: "finance", nama: "Accounting", pic: ["Bella"] },
   { kode: "finance_finance", departemen: "finance", nama: "Finance", pic: ["Nisa", "Fatin", "Fetty"], perPic: true },
   { kode: "finance_tax", departemen: "finance", nama: "Tax", pic: ["Samsul"] },
   { kode: "marcomm", departemen: "marcomm", nama: "Marketing Communication", pic: ["Amanda", "Dita", "Marta"] },
   { kode: "pdq_qc", departemen: "pdq", nama: "Quality Assurance & Control", pic: ["Radika"] },
-  { kode: "pdq_food", departemen: "pdq", nama: "Food Staff", pic: ["Mustadi", "Nanda", "Bagas"], perPic: true },
+    // Nanda TIDAK ikut di sini: ia dinilai sebagai Head Food Development, dan
+  // satu orang yang muncul di dua daftar akan dinilai dua kali dengan indikator
+  // yang berbeda tanpa ada yang menyadarinya.
+  { kode: "pdq_food", departemen: "pdq", nama: "Food Staff", pic: ["Mustadi", "Bagas"], perPic: true },
   { kode: "pdq_beverage", departemen: "pdq", nama: "Beverage Staff", pic: ["Adam", "Abil"], perPic: true },
   { kode: "pdq_head_food", departemen: "pdq", nama: "Head Food Development", pic: ["Nanda"] },
   { kode: "pdq_head_pdq", departemen: "pdq", nama: "Head Product Development & Quality", pic: [] },
