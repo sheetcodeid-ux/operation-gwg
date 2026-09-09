@@ -26,16 +26,18 @@ export interface AturanTenggat {
 }
 
 /**
- * "Sebelum H-5" tidak punya jarak hari yang pasti: yang meminta memilih
- * sendiri tanggalnya, asal lebih dari lima hari. Dipakai delapan hari sebagai
- * bawaan supaya tanggalnya tetap terisi otomatis dan tidak ada yang perlu
- * mengetiknya.
+ * "Sebelum H-5" berjarak ENAM hari, ditetapkan pemiliknya.
+ *
+ * Kategorinya sendiri tidak menyebut jarak pasti — "sebelum H-5" hanya berarti
+ * lebih longgar daripada H-5. Angkanya perlu ditetapkan supaya tanggal
+ * tenggatnya terisi otomatis dan tidak ada yang mengetiknya sendiri-sendiri;
+ * enam hari yang dipilih, dan terlambat di situ tetap mengurangi.
  */
 export const TENGGAT: AturanTenggat[] = [
   {
     kategori: "sebelum_h5",
     label: "Sebelum H-5",
-    hari: 8,
+    hari: 6,
     gagal: -3,
     selesai: 0,
     keterangan: "Waktunya paling longgar — terlambat di sini paling mahal.",
