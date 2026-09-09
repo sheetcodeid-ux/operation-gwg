@@ -3,14 +3,15 @@
 import * as React from "react";
 import { useRouter } from "next/navigation";
 import { type ColumnDef } from "@tanstack/react-table";
-import { ClipboardList, ClipboardCheck, Coins, ListChecks, Lock, PiggyBank, ReceiptText, Store, Trash2, UtensilsCrossed } from "lucide-react";
+import { CalendarRange, ClipboardList, ClipboardCheck, Coins, ListChecks, Lock, PiggyBank, ReceiptText, Store, Trash2, UtensilsCrossed } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { Combobox } from "@/components/ui/combobox";
 import { DataTable } from "@/components/ui/data-table";
 import { Progress } from "@/components/ui/progress";
-import { KpiIndicatorDonut, KpiPerformanceChart, type LaluIndikator } from "./kpi-charts";
+import { GrafikMingguan, KpiIndicatorDonut, KpiPerformanceChart, type LaluIndikator } from "./kpi-charts";
+import { TabMinggu } from "./tabel-minggu";
 import { DialogInput, bentukIsian, type OutletRingkas } from "./dialog-input";
 import { DialogPengaturan } from "./dialog-pengaturan";
 import { FormEfisiensi, FormFee, FormKegiatan, FormMenuPasar, type MenuEsb, type OpsiKegiatan } from "./form-tabel";
@@ -92,7 +93,7 @@ export interface OpsiPosisi {
   label: string;
 }
 
-type Tampilan = "indikator" | "efisiensi" | "fee" | "pasar" | "hygiene" | "netprofit" | "hpp" | "riwayat";
+type Tampilan = "indikator" | "efisiensi" | "fee" | "pasar" | "hygiene" | "minggu" | "netprofit" | "hpp" | "riwayat";
 
 export function PapanKpi({
   laporan,
@@ -160,6 +161,12 @@ export function PapanKpi({
         label: jenisBukti.includes("hygiene_cctv") ? "Detail Hygiene Audit/CCTV" : "Detail Monitoring CCTV",
         icon: ClipboardCheck,
       });
+    }
+    // Detail Mingguan — bentuk yang sama persis dengan KPI Manajemen, hanya
+    // outletnya dibatasi ke area orang ini. Muncul hanya bila ESB sudah menarik
+    // minggunya; tombol menuju tabel kosong lebih buruk daripada tidak ada.
+    if (laporan.ca?.minggu) {
+      out.push({ id: "minggu", label: "Detail Mingguan", icon: CalendarRange });
     }
     if (laporan.ca && indikator.some((i) => i.key === "net_profit")) {
       out.push({ id: "netprofit", label: "Detail Net Profit", icon: PiggyBank });
@@ -432,9 +439,18 @@ export function PapanKpi({
         </div>
       </div>
 
-      {/* Grafik + donat — grid yang sama dengan Work Tracker. */}
+      {/* Grafik + donat — grid yang sama dengan Work Tracker.
+          Grafiknya IKUT TAB YANG DIBUKA, seperti di KPI Manajemen: yang dicari
+          orang di Detail Mingguan bukan lagi capaian per indikator melainkan
+          bentuk bulan berjalan. Donatnya sengaja tidak ikut berganti — ia
+          menjawab pertanyaan lain, dari mana skor orang ini datang, dan itu
+          tidak berubah karena tabel di bawahnya berganti. */}
       <div className="mb-4 grid items-stretch gap-4 lg:grid-cols-[minmax(0,1fr)_23rem]">
-        <KpiPerformanceChart baris={baris} lalu={lalu} />
+        {tampilan === "minggu" && laporan.ca?.minggu?.korporat ? (
+          <GrafikMingguan judul="Omzet Mingguan" minggu={laporan.ca.minggu.minggu} baris={laporan.ca.minggu.korporat} />
+        ) : (
+          <KpiPerformanceChart baris={baris} lalu={lalu} />
+        )}
         <KpiIndicatorDonut baris={baris} />
       </div>
 
@@ -515,6 +531,15 @@ export function PapanKpi({
           pic={laporan.pic}
           bolehHapus={!laporan.dikunci && bolehSimpan}
           toolbar={toolbar}
+        />
+      )}
+      {tampilan === "minggu" && laporan.ca?.minggu && (
+        <TabMinggu
+          detail={laporan.ca.minggu}
+          tableId="kpi-ca-minggu"
+          judul="Seluruh outlet area"
+          toolbar={toolbar}
+          onExport={() => setLaporanTerbuka(true)}
         />
       )}
       {tampilan === "netprofit" && laporan.ca && <TabelNetProfit detail={laporan.ca.detail} rasio={rasioNetProfit} toolbar={toolbar} />}

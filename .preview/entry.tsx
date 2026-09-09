@@ -48,6 +48,26 @@ const MENU_ESB = [
   ["Matcha Latte", "Non Coffee", 11_720_000],
 ].map(([menu, kategori, estimasi]) => ({ menu: menu as string, kategori: kategori as string, estimasi: estimasi as number }));
 
+
+/** Rincian mingguan tiruan: dua minggu penuh, minggu ketiga baru tiga hari. */
+function mingguContoh(baris: [string, string, number, boolean][]) {
+  const mg = mingguBulan("2026-09");
+  const hari = 30;
+  const sumber = baris.map(([id, nama, target, manual], i) => ({
+    id,
+    nama,
+    kode: id,
+    targetBulan: target,
+    actual: manual
+      ? mg.map(() => null)
+      : mg.map((m, j) => (j <= 2 ? (target / hari) * (j === 2 ? 3 : m.hari) * [0.94, 1.03, 0.88][i % 3] : null)),
+    hariAda: mg.map((m, j) => (manual ? 0 : j <= 1 ? m.hari : j === 2 ? 3 : 0)),
+    tanpaRincian: manual,
+  }));
+  const hasil = hitungMinggu(sumber, mg, hari);
+  return { minggu: mg, baris: hasil, korporat: korporatMinggu(hasil, mg, hari), tanpaRincian: hasil.filter((b) => b.tanpaRincian).length };
+}
+
 function buat(kode: KodePosisi) {
   const daftar = indikatorPosisi(kode);
   const baris = daftar.map((i) => {
@@ -86,13 +106,21 @@ function buat(kode: KodePosisi) {
     ca: kode === "operational_ca" ? {
       outlet: [], belumTigaBulan: [], grossSales: 4_186_500_000, rataTiga: 3_640_000_000,
       komplain: 6, netProfit: 1_010_400_000, hpp: 37.4, hppNominal: 261_900_000, hppDasar: 700_640_000, jumlahPic: 1, bulanKosong: [], tanpaGross: [],
+      minggu: mingguContoh([
+        ["o0", "Nordu Coffee Sambas", 458_000_000, false],
+        ["o1", "Nordu Coffee Siantan", 0, true],
+        ["o2", "Ayam Goreng Busari Siantan", 0, true],
+        ["o3", "Ayam Goreng Busari Serdam", 0, true],
+        ["o5", "Nordu Landak", 0, true],
+        ["o4", "Cattu M. Sohor", 316_700_000, false],
+      ]),
       detail: [
-        { outletId: "o0", outletNama: "Nordu Coffee Sambas", gross: 412_500_000, dariEsb: true, grossKetik: null, netProfit: 110_000_000, hppNominal: 149_800_000, grossManual: false, grossTangan: false, average: 398_200_000, ikut: true },
-        { outletId: "o1", outletNama: "Nordu Coffee Siantan", gross: null, dariEsb: false, grossKetik: null, netProfit: null, hppNominal: null, grossManual: true, grossTangan: true, average: null, ikut: false },
-        { outletId: "o2", outletNama: "Ayam Goreng Busari Siantan", gross: null, dariEsb: false, grossKetik: null, netProfit: null, hppNominal: null, grossManual: true, grossTangan: true, average: null, ikut: false },
-        { outletId: "o3", outletNama: "Ayam Goreng Busari Serdam", gross: null, dariEsb: false, grossKetik: null, netProfit: null, hppNominal: null, grossManual: true, grossTangan: true, average: null, ikut: false },
-        { outletId: "o5", outletNama: "Nordu Landak", gross: 300_896_908, dariEsb: true, grossKetik: null, netProfit: null, hppNominal: null, grossManual: true, grossTangan: false, average: null, ikut: false },
-        { outletId: "o4", outletNama: "Cattu M. Sohor", gross: 288_140_000, dariEsb: true, grossKetik: null, netProfit: 74_500_000, hppNominal: 112_100_000, grossManual: false, grossTangan: false, average: 275_400_000, ikut: true },
+        { outletId: "o0", outletNama: "Nordu Coffee Sambas", cabang: "b0", gross: 412_500_000, dariEsb: true, grossKetik: null, netProfit: 110_000_000, hppNominal: 149_800_000, grossManual: false, grossTangan: false, average: 398_200_000, ikut: true },
+        { outletId: "o1", outletNama: "Nordu Coffee Siantan", cabang: null, gross: null, dariEsb: false, grossKetik: null, netProfit: null, hppNominal: null, grossManual: true, grossTangan: true, average: null, ikut: false },
+        { outletId: "o2", outletNama: "Ayam Goreng Busari Siantan", cabang: null, gross: null, dariEsb: false, grossKetik: null, netProfit: null, hppNominal: null, grossManual: true, grossTangan: true, average: null, ikut: false },
+        { outletId: "o3", outletNama: "Ayam Goreng Busari Serdam", cabang: null, gross: null, dariEsb: false, grossKetik: null, netProfit: null, hppNominal: null, grossManual: true, grossTangan: true, average: null, ikut: false },
+        { outletId: "o5", outletNama: "Nordu Landak", cabang: "b5", gross: 300_896_908, dariEsb: true, grossKetik: null, netProfit: null, hppNominal: null, grossManual: true, grossTangan: false, average: null, ikut: false },
+        { outletId: "o4", outletNama: "Cattu M. Sohor", cabang: "b4", gross: 288_140_000, dariEsb: true, grossKetik: null, netProfit: 74_500_000, hppNominal: 112_100_000, grossManual: false, grossTangan: false, average: 275_400_000, ikut: true },
       ],
     } : null,
   };

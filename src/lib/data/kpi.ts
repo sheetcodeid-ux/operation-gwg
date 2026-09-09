@@ -6,6 +6,8 @@ import { getOutlets, getUser, getUsers } from "./store";
 import { listHcRequests } from "./hc-requests";
 import { netBulananPerCabang } from "./esb-bulanan";
 import { nilaiKetepatanDesign } from "./design-rapor";
+import { rincianMinggu, type DetailMinggu } from "./minggu-outlet";
+import { hariBulan } from "@/lib/kpi/minggu";
 import { WORK_BRANDS } from "@/lib/constants";
 import {
   actualLulus,
@@ -568,9 +570,26 @@ function sudahTigaBulan(o: OutletCa, periode: string, nilaiTigaBulan: (number | 
   return nilaiTigaBulan.every(berjalan);
 }
 
+
+/**
+ * Laju pertumbuhan target Gross Sales Coordinator Area, DIBACA DARI
+ * indikatornya sendiri — bukan angka 15 yang ditulis ulang di sini.
+ *
+ * Target mingguan harus memakai laju yang sama persis dengan target bulanan.
+ * Ditulis ulang, keduanya akan berbeda begitu salah satunya diubah, dan satu
+ * outlet terbaca gagal di tab mingguan tapi tercapai di indikator bulanannya —
+ * tanpa satu pun tanda bahwa dua angka itu memang tidak sepakat.
+ */
+const tumbuhCa = (): number => {
+  const t = indikatorPosisi("operational_ca").find((i) => i.key === "gross_sales")?.target;
+  return t && t.jenis === "avg3" ? t.pertumbuhan : 0;
+};
+
 export interface DetailOutletCa {
   outletId: string;
   outletNama: string;
+  /** Cabang ESB-nya; kosong berarti tidak punya rincian mingguan. */
+  cabang: string | null;
   /** Gross sales bulan ini; null = belum ada dari mana pun. */
   gross: number | null;
   /** Angkanya dari ESB — kalau ya, isian tangan tidak dipakai dan tidak perlu. */
@@ -623,6 +642,14 @@ export interface AngkaCa {
    *  grafik mode Angka: "37,4%" tidak bisa dibandingkan dengan rupiah. */
   hppNominal: number | null;
   hppDasar: number | null;
+  /**
+   * Rincian minggu demi minggu outlet-outlet area ini.
+   *
+   * Persis bentuk yang dipakai KPI Manajemen, hanya outletnya yang dibatasi ke
+   * area orang itu — pertanyaannya sama, dan yang memegang area justru paling
+   * butuh tahu outlet mana yang tertinggal saat bulannya masih bisa dikejar.
+   */
+  minggu: DetailMinggu | null;
   /** Berapa Coordinator Area yang tercakup — pengali target per orang. */
   jumlahPic: number;
 }
@@ -728,6 +755,7 @@ async function angkaCa(periode: string, picIds: string[], jumlahPic: number): Pr
     return {
       outletId: o.id,
       outletNama: o.nama,
+      cabang: o.branch,
       gross: grossOutlet(o, periode, esbIni, tanganIni),
       dariEsb,
       grossKetik: tanganIni.get(o.id)?.gross ?? null,
@@ -740,7 +768,25 @@ async function angkaCa(periode: string, picIds: string[], jumlahPic: number): Pr
     };
   });
 
-  return { outlet: lolos, detail, belumTigaBulan: belum, bulanKosong, tanpaGross, grossSales, rataTiga, komplain, netProfit, hpp, hppNominal, hppDasar, jumlahPic };
+  // Rincian mingguan area ini. TARGETNYA TARGET OUTLET ITU SENDIRI — rata-rata
+  // tiga bulannya + pertumbuhan yang sama dengan indikator Gross Sales, supaya
+  // satu outlet tidak terlihat gagal di tab mingguan dan tercapai di indikator
+  // bulanannya. Outlet yang belum genap tiga bulan tetap ditampilkan tapi tanpa
+  // target: ia memang belum dinilai, dan memberinya target berarti menghukum
+  // outlet yang baru buka.
+  const minggu = await rincianMinggu(
+    periode,
+    detail.map((d) => ({
+      id: d.outletId,
+      nama: d.outletNama,
+      cabang: d.cabang,
+      targetBulan: d.ikut && d.average !== null ? d.average * (1 + tumbuhCa() / 100) : 0,
+      manual: d.grossTangan,
+    })),
+    hariBulan(periode),
+  );
+
+  return { outlet: lolos, detail, belumTigaBulan: belum, bulanKosong, tanpaGross, grossSales, rataTiga, komplain, netProfit, hpp, hppNominal, hppDasar, jumlahPic, minggu };
 }
 
 /**
