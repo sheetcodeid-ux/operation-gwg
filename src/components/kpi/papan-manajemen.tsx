@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { type ColumnDef } from "@tanstack/react-table";
 import { createPortal } from "react-dom";
 import { toast } from "sonner";
-import { Building2, ChevronRight, Hash, Info, ListChecks, Loader2, Minus, Percent, Save, Settings2, Store, TrendingDown, TrendingUp, Wallet } from "lucide-react";
+import { Building2, CalendarRange, ChevronRight, Hash, Info, ListChecks, Loader2, Minus, Percent, Save, Settings2, Store, TrendingDown, TrendingUp, Wallet } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -21,11 +21,12 @@ import { DialogPanduanManajemen } from "./panduan";
 import { BULAN, periodeDari, tahunPilihan } from "./periode";
 import { type BarisOutletB, type DepartemenKpi, type SetelanManajemen } from "@/lib/kpi/manajemen";
 import { ringkasKpi, type BarisKpi } from "@/lib/kpi/hitung";
-import type { BarisEbitda, DetailManajemen, MingguIni } from "@/lib/data/kpi-manajemen";
+import type { BarisEbitda, DetailManajemen, DetailMinggu } from "@/lib/data/kpi-manajemen";
+import type { BarisMinggu, RentangMinggu } from "@/lib/kpi/minggu";
 import type { LaporanKpi } from "@/lib/data/kpi";
 import { merekOutlet } from "@/lib/kpi/merek";
 import { simpanSetelanManajemenAction } from "@/lib/actions/kpi-manajemen";
-import { cn, formatIDR, formatNumber } from "@/lib/utils";
+import { cn, formatIDR, formatIDRShort, formatNumber } from "@/lib/utils";
 
 /**
  * Kalkulator KPI Manajemen.
@@ -70,7 +71,7 @@ interface BarisDivisi {
 /** Ambang batas warna persentase: di atas ini hijau, di bawahnya merah. */
 const AMBANG_HIJAU = 80;
 
-type Tampilan = "komponen" | "gross" | "outlet" | "ebitda" | "divisi";
+type Tampilan = "komponen" | "gross" | "outlet" | "ebitda" | "minggu" | "divisi";
 type Satuan = "persen" | "angka";
 
 /** Pengalih persen/angka — bentuknya sama dengan yang ada di kartu grafik. */
@@ -181,6 +182,7 @@ export function PapanManajemen({ detail, bolehAtur }: { detail: DetailManajemen;
       { id: "gross", label: "Detail Gross Sales Corporate", icon: TrendingUp },
       { id: "outlet", label: "Detail Same Store", icon: Store },
       { id: "ebitda", label: "Detail EBITDA Same Store", icon: Wallet },
+      { id: "minggu", label: "Detail Mingguan", icon: CalendarRange },
       { id: "divisi", label: "Detail KPI Divisi", icon: Building2 },
     ],
     [],
@@ -216,6 +218,7 @@ export function PapanManajemen({ detail, bolehAtur }: { detail: DetailManajemen;
     if (tampilan === "gross") return { judul: "Omzet Harian", target: skor.a.target };
     if (tampilan === "outlet") return { judul: "Omzet Harian", target: skor.b.target };
     if (tampilan === "ebitda") return { judul: "Omzet Harian", target: skor.b.target };
+    if (tampilan === "minggu") return { judul: "Omzet Harian", target: skor.a.target };
     return null;
   }, [tampilan, skor.a.target, skor.b.target]);
 
@@ -376,6 +379,99 @@ export function PapanManajemen({ detail, bolehAtur }: { detail: DetailManajemen;
     ],
     [],
   );
+
+
+  /**
+   * Tabel MINGGU DEMI MINGGU.
+   *
+   * Satu baris satu outlet, satu kolom satu minggu — bukan sebaliknya. Yang
+   * dicari saat membukanya adalah OUTLET MANA yang tertinggal, dan outlet
+   * sebagai baris membuat mata menyusuri satu nama dari kiri ke kanan; outlet
+   * sebagai kolom memaksa membaca menyilang enam puluh kolom.
+   *
+   * Kolom terakhir menjawab pertanyaan yang selalu menyusul: kalau minggu ke-1
+   * kurang, minggu ke-2 harus berapa supaya tertutup.
+   */
+  const kolomMinggu = React.useMemo<ColumnDef<BarisMinggu>[]>(() => {
+    const mg = detail.minggu?.minggu ?? [];
+    return [
+      kolomNo(),
+      {
+        id: "nama",
+        header: "Outlet",
+        accessorFn: (b) => b.nama,
+        cell: ({ row }) => (
+          <div className="flex min-w-0 items-center gap-1.5">
+            <span className="truncate font-medium text-foreground">{row.original.nama}</span>
+            {row.original.tanpaRincian && (
+              <Keterangan teks="Omzet outlet ini diketik sebagai satu angka sebulan karena belum masuk ESB, jadi tidak punya rincian mingguan. Barisnya tetap ditampilkan, tapi tidak ikut dijumlahkan ke baris Seluruh Outlet." />
+            )}
+          </div>
+        ),
+      },
+      {
+        id: "merek",
+        header: "Brand",
+        accessorFn: (b) => merekOutlet(b.nama)?.label ?? "—",
+        cell: ({ row }) => {
+          const m = merekOutlet(row.original.nama);
+          return m ? <Badge tone={m.tone}>{m.label}</Badge> : <span className="text-[11px] text-muted-foreground">—</span>;
+        },
+      },
+      ...mg.map(
+        (m): ColumnDef<BarisMinggu> => ({
+          id: `m${m.minggu}`,
+          header: () => <KepalaMinggu m={m} />,
+          accessorFn: (b) => b.actual[m.minggu - 1],
+          cell: ({ row }) => (
+            <SelMinggu
+              actual={row.original.actual[m.minggu - 1]}
+              target={row.original.target[m.minggu - 1]}
+              capaian={row.original.capaian[m.minggu - 1]}
+              hariAda={row.original.hariAda[m.minggu - 1]}
+              hariMinggu={m.hari}
+              tanpaRincian={row.original.tanpaRincian === true}
+            />
+          ),
+        }),
+      ),
+      {
+        id: "terkumpul",
+        header: "Terkumpul",
+        accessorFn: (b) => b.terkumpul,
+        cell: ({ row }) =>
+          row.original.tanpaRincian ? (
+            <span className="text-[11px] text-muted-foreground">—</span>
+          ) : (
+            <div className="whitespace-nowrap">
+              <div className="text-[12.5px] font-medium tabular-nums text-foreground">{formatIDR(row.original.terkumpul)}</div>
+              <div className="text-[11px] tabular-nums text-muted-foreground">dari {formatIDR(row.original.targetSampai)}</div>
+            </div>
+          ),
+      },
+      {
+        id: "persen",
+        header: "%",
+        accessorFn: (b) => b.persen,
+        cell: ({ row }) => (row.original.tanpaRincian ? <span className="text-[11px] text-muted-foreground">—</span> : <BarPersen nilai={row.original.persen} />),
+      },
+      {
+        id: "kejar",
+        header: "Harus Dikejar",
+        accessorFn: (b) => b.kejar,
+        cell: ({ row }) => <Kejar baris={row.original} />,
+      },
+      {
+        id: "status",
+        header: "Status",
+        accessorFn: (b) => statusMinggu(b).label,
+        cell: ({ row }) => {
+          const st = statusMinggu(row.original);
+          return <Badge tone={st.tone}>{st.label}</Badge>;
+        },
+      },
+    ];
+  }, [detail.minggu]);
 
   const kolomGross = React.useMemo<ColumnDef<BarisOutlet>[]>(() => {
     return kolomDetail<BarisOutlet>({
@@ -548,8 +644,6 @@ export function PapanManajemen({ detail, bolehAtur }: { detail: DetailManajemen;
         <KpiIndicatorDonut baris={baris} />
       </div>
 
-      {harian && detail.minggu && <KartuMinggu minggu={detail.minggu} />}
-
       {tampilan === "komponen" && (
         <DataTable tableId="kpi-manajemen" columns={kolomKomponen} data={baris} searchPlaceholder="Cari komponen…" stickyHeader={false} toolbar={toolbar} onExport={() => setPdf(true)} exportTitle="Unduh laporan PDF" />
       )}
@@ -562,6 +656,21 @@ export function PapanManajemen({ detail, bolehAtur }: { detail: DetailManajemen;
       {tampilan === "ebitda" && (
         <DataTable tableId="kpi-manajemen-ebitda" columns={kolomEbitda} data={urutMargin(detail.ebitda)} searchPlaceholder="Cari outlet…" stickyHeader={false} toolbar={toolbar} onExport={() => setPdf(true)} exportTitle="Unduh laporan PDF" />
       )}
+      {tampilan === "minggu" &&
+        (detail.minggu ? (
+          <>
+            <RingkasMinggu detail={detail.minggu} />
+            <DataTable tableId="kpi-manajemen-minggu" columns={kolomMinggu} data={urutMingguTertinggal(detail.minggu.baris)} searchPlaceholder="Cari outlet…" stickyHeader={false} toolbar={toolbar} onExport={() => setPdf(true)} exportTitle="Unduh laporan PDF" />
+          </>
+        ) : (
+          <div className="rounded-2xl border border-border bg-card p-6">
+            <div className="mb-3">{toolbar}</div>
+            <p className="text-[13px] text-muted-foreground">
+              Rincian mingguan bulan ini belum ditarik dari ESB. Penarikannya berjalan sendiri tiap jam — satu panggilan
+              per outlet per minggu — dan tabel ini terisi begitu minggu pertama selesai.
+            </p>
+          </div>
+        ))}
       {tampilan === "divisi" && (
         <DataTable tableId="kpi-manajemen-divisi" columns={kolomDivisi} data={barisDivisi} searchPlaceholder="Cari departemen…" stickyHeader={false} toolbar={toolbar} onExport={() => setPdf(true)} exportTitle="Unduh laporan PDF" />
       )}
@@ -581,64 +690,62 @@ export function PapanManajemen({ detail, bolehAtur }: { detail: DetailManajemen;
   );
 }
 
-/**
- * Perbandingan MINGGU BERJALAN — pendamping perbandingan bulanan.
- *
- * Perbandingan bulanan baru bisa dibaca setelah bulannya lewat; yang memimpin
- * outlet butuh tahu keadaannya SEKARANG, saat masih ada sisa hari untuk
- * memperbaikinya. Pembandingnya minggu bernomor sama pada bulan lalu, bukan
- * tujuh hari sebelumnya: penjualan F&B punya irama mingguan, jadi
- * membandingkan Senin–Rabu dengan Jumat–Minggu selalu terbaca anjlok padahal
- * tidak ada yang berubah.
- *
- * Targetnya sebanding hari yang SUDAH berjalan, bukan seminggu penuh — tiga
- * hari yang diukur terhadap target tujuh hari selalu gagal, dan angka yang
- * selalu merah berhenti dibaca.
- */
-function KartuMinggu({ minggu }: { minggu: MingguIni }) {
-  const capaian = minggu.target > 0 ? (minggu.ini / minggu.target) * 100 : null;
-  const st = capaian === null ? { label: "Belum ada target", tone: "neutral" as const } : statusCapaian(capaian);
-  const beda = bandingPersen(minggu.lalu || null, minggu.ini);
-  const penuh = minggu.hariTerisi >= minggu.hariMinggu;
 
+
+/**
+ * Baris SELURUH OUTLET di atas tabel mingguan.
+ *
+ * Ditaruh di luar tabel, bukan sebagai baris pertama di dalamnya: baris total
+ * yang ikut diurutkan dan ikut tersaring kotak cari akan hilang begitu ada
+ * yang mengetik nama outlet — persis saat ia paling dibutuhkan sebagai
+ * pembanding.
+ */
+function RingkasMinggu({ detail }: { detail: DetailMinggu }) {
+  const k = detail.korporat;
+  if (!k) return null;
   return (
     <div className="mb-4 overflow-hidden rounded-2xl border border-border bg-card">
       <div className="flex flex-wrap items-center gap-x-3 gap-y-1 border-b border-border/70 px-4 py-2.5">
-        <span className="text-[13px] font-semibold text-foreground">Minggu ke-{minggu.minggu}</span>
-        <span className="text-[12px] text-muted-foreground">tanggal {minggu.rentang}</span>
+        <span className="text-[13px] font-semibold text-foreground">Seluruh outlet</span>
         <span className="text-[12px] text-muted-foreground">
-          · {minggu.hariTerisi} dari {minggu.hariMinggu} hari{penuh ? " (lengkap)" : " berjalan"}
+          {detail.minggu.length} minggu · target sebulan {formatIDR(Math.round(k.targetBulan))}
         </span>
-        <Badge tone={st.tone} className="ml-auto">{st.label}</Badge>
+        {detail.tanpaRincian > 0 && (
+          <span className="text-[12px] text-muted-foreground">
+            · {detail.tanpaRincian} outlet diketik bulanan, tidak ikut dijumlahkan
+          </span>
+        )}
+        <Badge tone={statusMinggu(k).tone} className="ml-auto">
+          {statusMinggu(k).label}
+        </Badge>
       </div>
       <div className="grid gap-px bg-border/70 sm:grid-cols-2 lg:grid-cols-4">
-        <SelMinggu label="Omzet minggu ini" nilai={formatIDR(minggu.ini)} tebal />
-        <SelMinggu
-          label={`Minggu ke-${minggu.minggu} bulan lalu`}
-          nilai={formatIDR(minggu.lalu)}
-          bawah={<Selisih nilai={beda} />}
+        <PetakMinggu label="Terkumpul" nilai={formatIDR(Math.round(k.terkumpul))} tebal />
+        <PetakMinggu
+          label="Target sampai hari ini"
+          nilai={formatIDR(Math.round(k.targetSampai))}
+          bawah={<BarPersen nilai={k.persen} />}
         />
-        <SelMinggu
-          label="Target minggu ini"
-          nilai={formatIDR(minggu.target)}
+        <PetakMinggu
+          label="Kekurangan"
+          nilai={k.kurang > 0 ? formatIDR(Math.round(k.kurang)) : "Tidak ada"}
+          warna={k.kurang > 0 ? false : true}
+        />
+        <PetakMinggu
+          label={k.mingguKejar === null ? "Minggu tersisa" : `Minggu ${k.mingguKejar} harus`}
+          nilai={k.kejar === null ? "Bulannya sudah habis" : formatIDR(Math.round(k.kejar))}
           bawah={
-            <span className="text-[11px] text-muted-foreground">
-              sebanding {minggu.hariTerisi} hari yang sudah berjalan
-            </span>
+            k.mingguKejar === null ? undefined : (
+              <span className="text-[11px] text-muted-foreground">termasuk menutup kekurangan minggu sebelumnya</span>
+            )
           }
-        />
-        <SelMinggu
-          label="Capaian terhadap target"
-          nilai={capaian === null ? "—" : persen(capaian)}
-          warna={capaian === null ? undefined : capaian >= AMBANG_HIJAU}
-          bawah={<BarPersen nilai={capaian} />}
         />
       </div>
     </div>
   );
 }
 
-function SelMinggu({
+function PetakMinggu({
   label,
   nilai,
   tebal,
@@ -671,6 +778,117 @@ function SelMinggu({
       {bawah && <div className="mt-1.5">{bawah}</div>}
     </div>
   );
+}
+
+/**
+ * Yang paling tertinggal di atas.
+ *
+ * Tabel ini dibuka untuk mencari outlet yang bermasalah, bukan untuk membaca
+ * enam puluh outlet berurutan; mengurutnya menurut abjad membuat yang dicari
+ * bisa ada di baris mana saja. Outlet tanpa rincian ditaruh paling bawah — ia
+ * bukan tertinggal, ia hanya tidak terukur.
+ */
+const urutMingguTertinggal = (baris: BarisMinggu[]): BarisMinggu[] =>
+  [...baris].sort((a, b) => {
+    if (a.tanpaRincian !== b.tanpaRincian) return a.tanpaRincian ? 1 : -1;
+    return (a.persen ?? Number.POSITIVE_INFINITY) - (b.persen ?? Number.POSITIVE_INFINITY);
+  });
+
+/** Kepala kolom minggu: nomornya besar, rentang tanggalnya kecil di bawahnya. */
+function KepalaMinggu({ m }: { m: RentangMinggu }) {
+  return (
+    <div className="whitespace-nowrap leading-tight">
+      <div>Minggu {m.minggu}</div>
+      <div className="text-[10.5px] font-normal text-muted-foreground">
+        tgl {m.dari}–{m.sampai}
+      </div>
+    </div>
+  );
+}
+
+/**
+ * Satu sel minggu: nominalnya di atas, capaiannya terhadap target minggu itu
+ * di bawahnya.
+ *
+ * Nominal saja tidak cukup — minggu terakhir hanya dua atau tiga hari, jadi
+ * angkanya SELALU paling kecil dan selalu terbaca sebagai minggu terburuk.
+ * Persentase terhadap target minggu itu sendirilah yang membuat kelimanya
+ * sebanding.
+ */
+function SelMinggu({
+  actual,
+  target,
+  capaian,
+  hariAda,
+  hariMinggu,
+  tanpaRincian,
+}: {
+  actual: number | null;
+  target: number;
+  capaian: number | null;
+  hariAda: number;
+  hariMinggu: number;
+  tanpaRincian: boolean;
+}) {
+  if (tanpaRincian) return <span className="text-[11px] text-muted-foreground">diketik bulanan</span>;
+  // Belum ditarik BUKAN nol: outlet yang minggunya belum masuk akan terbaca
+  // sebagai outlet yang tutup seminggu penuh.
+  if (actual === null) return <span className="text-[11px] text-muted-foreground">belum ditarik</span>;
+  const baik = capaian !== null && capaian >= AMBANG_HIJAU;
+  const berjalan = hariAda > 0 && hariAda < hariMinggu;
+  return (
+    <div className="whitespace-nowrap">
+      <div className="text-[12.5px] tabular-nums text-foreground/90">{formatIDRShort(actual)}</div>
+      <div
+        className={cn(
+          "text-[11px] tabular-nums",
+          capaian === null ? "text-muted-foreground" : baik ? "text-emerald-600 dark:text-emerald-400" : "text-rose-600 dark:text-rose-400",
+        )}
+        title={`Target minggu penuh ${formatIDR(Math.round(target))}${berjalan ? ` · baru ${hariAda} dari ${hariMinggu} hari` : ""}`}
+      >
+        {capaian === null ? "—" : persen(capaian, 0)}
+        {/* Minggu yang belum penuh disebutkan apa adanya. Persentasenya sudah
+            diukur terhadap hari yang lewat, jadi tanpa tanda ini ia terbaca
+            seolah minggu itu sudah selesai. */}
+        {berjalan && <span className="ml-1 text-muted-foreground">· {hariAda}/{hariMinggu} hr</span>}
+      </div>
+    </div>
+  );
+}
+
+/**
+ * Angka kejar — inti tabel ini.
+ *
+ * Bukan "kurang sekian" melainkan "minggu ke-N harus sekian": kekurangan
+ * memberi tahu apa yang sudah terjadi, sedangkan angka ini memberi tahu apa
+ * yang harus dilakukan, dan hanya yang kedua bisa ditindaklanjuti hari itu
+ * juga.
+ */
+function Kejar({ baris }: { baris: BarisMinggu }) {
+  if (baris.tanpaRincian) return <span className="text-[11px] text-muted-foreground">—</span>;
+  if (baris.kejar === null || baris.mingguKejar === null) {
+    return <span className="text-[11px] text-muted-foreground">bulannya sudah habis</span>;
+  }
+  return (
+    <div className="whitespace-nowrap">
+      <div className={cn("text-[12.5px] font-medium tabular-nums", baris.kurang > 0 ? "text-rose-600 dark:text-rose-400" : "text-foreground/80")}>
+        {formatIDR(Math.round(baris.kejar))}
+      </div>
+      <div className="text-[11px] text-muted-foreground">
+        di Minggu {baris.mingguKejar}
+        {baris.kurang > 0 ? ` · nutup ${formatIDRShort(Math.round(baris.kurang))}` : ""}
+      </div>
+    </div>
+  );
+}
+
+/** Status baris mingguan — capaian kumulatif, bukan minggu terakhir saja. */
+function statusMinggu(b: BarisMinggu): { label: string; tone: "success" | "warning" | "danger" | "neutral" } {
+  if (b.tanpaRincian) return { label: "Tanpa rincian", tone: "neutral" };
+  if (b.persen === null) return { label: "Belum terukur", tone: "neutral" };
+  if (b.persen >= 100) return { label: "Di atas target", tone: "success" };
+  if (b.persen >= AMBANG_HIJAU) return { label: "Mendekati", tone: "warning" };
+  return { label: "Tertinggal", tone: "danger" };
 }
 
 /** Selisih dua bulan dalam persen; null bila salah satunya belum ada. */

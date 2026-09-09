@@ -360,11 +360,12 @@ export function DialogPanduanManajemen() {
         ),
       },
       {
-        judul: "Lima tabel, satu per pertanyaan",
+        judul: "Enam tabel, satu per pertanyaan",
         isi: (
           <>
             Pengalih di atas tabel berpindah antara <b>Komponen</b> (ringkasan keempatnya), <b>Detail Gross Sales
-            Corporate</b>, <b>Detail Same Store</b>, <b>Detail EBITDA Same Store</b>, dan <b>Detail KPI Divisi</b>.
+            Corporate</b>, <b>Detail Same Store</b>, <b>Detail EBITDA Same Store</b>, <b>Detail Mingguan</b>, dan{" "}
+            <b>Detail KPI Divisi</b>.
             Ketiga tabel detail outlet berbentuk sama: bulan lalu, bulan ini, dan perbandingannya, dengan lencana{" "}
             <b>Brand</b> berwarna supaya Nordu, Cattu, Busari, dan Lesung Pipi mudah dibedakan sekilas.
           </>
@@ -386,16 +387,25 @@ export function DialogPanduanManajemen() {
         ),
       },
       {
-        judul: "Minggu berjalan, di atas tabelnya",
+        judul: "Detail Mingguan — siapa yang tertinggal, dan harus mengejar berapa",
         isi: (
           <>
-            Di ketiga tabel detail itu juga muncul kartu <b>Minggu ke-N</b>: omzet minggu berjalan, minggu bernomor
-            SAMA pada bulan lalu, target minggu itu, dan capaiannya.
+            Satu baris satu outlet, satu kolom satu minggu. Tiap sel memuat omzet minggu itu dan capaiannya terhadap
+            target minggu itu sendiri; kolom <b>Harus Dikejar</b> menyebut berapa yang harus masuk di minggu berjalan
+            supaya kekurangan minggu-minggu sebelumnya ikut tertutup. Yang paling tertinggal berada di baris paling
+            atas.
             <Awas>
-              Pembandingnya minggu bernomor sama, bukan tujuh hari terakhir — penjualan punya irama mingguan, jadi
-              membandingkan Senin–Rabu dengan Jumat–Minggu selalu terbaca anjlok padahal tidak ada yang berubah.
-              Targetnya pun <b>sebanding hari yang sudah berjalan</b>: tiga hari yang diukur terhadap target tujuh hari
-              selalu gagal, dan angka yang selalu merah berhenti dibaca.
+              Mingguya dibagi menurut TANGGAL — 1–7, 8–14, 15–21, 22–28, lalu sisanya — bukan Senin–Minggu. Minggu yang
+              mengikuti hari akan bergeser tiap bulan, dan minggu ke-N dua bulan berbeda tidak lagi bisa dibandingkan.
+              Minggu terakhir memang cuma 2–3 hari, karena itu targetnya ikut lebih kecil: dibagi porsi hari, bukan
+              dibagi jumlah minggu.
+            </Awas>
+            <Awas>
+              Angkanya ditarik dari ESB satu panggilan per outlet per minggu dan berjalan sendiri tiap jam. Outlet yang
+              mingguanya belum ditarik ditulis <b>&ldquo;belum ditarik&rdquo;</b>, bukan nol — nol berarti tutup
+              seminggu penuh. Outlet yang omzetnya diketik bulanan (belum masuk ESB) ditandai{" "}
+              <b>&ldquo;diketik bulanan&rdquo;</b> dan tidak ikut dijumlahkan ke baris Seluruh Outlet, supaya totalnya
+              tidak tertarik ke bawah oleh outlet yang memang tidak terukur mingguan.
             </Awas>
           </>
         ),

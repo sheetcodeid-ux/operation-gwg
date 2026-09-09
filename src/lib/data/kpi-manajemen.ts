@@ -3,6 +3,7 @@ import "server-only";
 import { db, dbEnabled } from "./db";
 import { getOutlets } from "./store";
 import { netBulananPerCabang } from "./esb-bulanan";
+import { hariTerhitung, netMingguanPerCabang } from "./esb-mingguan";
 import { bulanMulaiBerjalan, bulanSebelum, grossDiketik, grossKetikBulan, laporanKpi } from "./kpi";
 import { DEPARTEMEN, POSISI, posisiDari } from "@/lib/kpi/struktur";
 import { SEMUA_PIC } from "@/lib/kpi/semua-pic";
@@ -16,6 +17,14 @@ import {
   type SetelanManajemen,
   type SkorManajemen,
 } from "@/lib/kpi/manajemen";
+import {
+  hitungMinggu,
+  korporatMinggu,
+  mingguBulan,
+  type BarisMinggu,
+  type RentangMinggu,
+  type SumberMinggu,
+} from "@/lib/kpi/minggu";
 import type { LaluIndikator } from "@/components/kpi/kpi-charts";
 
 /**
@@ -37,26 +46,22 @@ import type { LaluIndikator } from "@/components/kpi/kpi-charts";
  */
 
 /**
- * Omzet minggu berjalan dibandingkan minggu yang SAMA pada bulan lalu.
+ * Rincian MINGGU DEMI MINGGU dalam satu bulan, per outlet.
  *
- * Bukan tujuh hari terakhir dibanding tujuh hari sebelumnya: penjualan F&B
- * punya irama mingguan yang kuat, jadi membandingkan Senin–Rabu dengan
- * Jumat–Minggu selalu terlihat anjlok padahal tidak ada yang berubah. Yang
- * dibandingkan tanggal yang sama — minggu keberapa dalam bulannya — supaya
- * jumlah akhir pekannya ikut sebanding.
+ * Perbandingan bulanan baru bisa dibaca setelah bulannya lewat; yang memimpin
+ * outlet butuh tahu keadaannya saat masih ada sisa hari untuk memperbaikinya —
+ * dan butuh tahu OUTLET MANA yang tertinggal, bukan hanya bahwa perusahaan
+ * tertinggal.
  */
-export interface MingguIni {
-  /** Nomor minggu dalam bulan, 1–5. */
-  minggu: number;
-  /** Rentang tanggal minggu ini, "1–7". */
-  rentang: string;
-  ini: number;
-  lalu: number;
-  /** Target minggu ini = target bulan dibagi jumlah minggu yang ada isinya. */
-  target: number;
-  /** Hari yang sudah ada angkanya di minggu ini — target ikut disesuaikan. */
-  hariTerisi: number;
-  hariMinggu: number;
+export interface DetailMinggu {
+  /** Pembagian minggu bulan itu: 1–7, 8–14, 15–21, 22–28, sisanya. */
+  minggu: RentangMinggu[];
+  /** Satu baris per outlet, sudah lengkap dengan target dan angka kejarnya. */
+  baris: BarisMinggu[];
+  /** Jumlah seluruh outlet yang terukur mingguan. Null = belum ada satu pun. */
+  korporat: BarisMinggu | null;
+  /** Outlet yang omzetnya diketik bulanan sehingga tak punya rincian mingguan. */
+  tanpaRincian: number;
 }
 
 /** Omzet satu tanggal, bulan berjalan berdampingan dengan bulan sebelumnya. */
@@ -91,8 +96,8 @@ export interface DetailManajemen {
   ebitda: BarisEbitda[];
   /** Omzet per tanggal, bulan ini dan bulan lalu — bahan grafik harian. */
   harian: HariOmzet[];
-  /** Minggu berjalan dibanding minggu yang sama bulan lalu. Null = belum ada isinya. */
-  minggu: MingguIni | null;
+  /** Rincian minggu demi minggu per outlet. Null = ESB belum menarik satu minggu pun. */
+  minggu: DetailMinggu | null;
   /** Bobot dan target yang sedang berlaku. */
   setelan: SetelanManajemen;
   /** Capaian bulan lalu per komponen — bahan grafik pembanding. */
@@ -217,30 +222,52 @@ async function omzetHarian(periode: string): Promise<HariOmzet[]> {
 }
 
 /**
- * Minggu berjalan: minggu terakhir yang SUDAH ada angkanya.
+ * Rincian mingguan per outlet untuk satu bulan.
  *
- * Bukan minggu kalender hari ini — kalau bulan yang dibuka bukan bulan
- * berjalan, "minggu ini" tidak ada artinya, sedangkan minggu terakhir yang
- * terisi selalu ada dan selalu bisa dibandingkan.
+ * TARGETNYA TARGET OUTLET ITU SENDIRI, bukan target korporat dibagi rata.
+ * Angka yang sama dipakai kolom Target di Detail Same Store — kalau di sini
+ * dibagi rata, satu outlet bisa terlihat gagal di tab ini dan tercapai di tab
+ * sebelahnya, dan yang membacanya tidak punya cara tahu mana yang benar.
+ *
+ * OUTLET YANG OMZETNYA DIKETIK BULANAN TIDAK DIBERI ANGKA NOL. Bulan yang
+ * ditandai manual memang tidak punya rincian mingguan — angkanya masuk sebagai
+ * satu total sebulan — dan nol di situ akan terbaca sebagai outlet yang tidak
+ * berjualan seminggu penuh. Barisnya tetap tampil, ditandai, dan dikeluarkan
+ * dari jumlah korporat supaya totalnya tidak ikut tertarik ke bawah.
  */
-function mingguBerjalan(hari: HariOmzet[], targetBulan: number | null): MingguIni | null {
-  const terisi = hari.filter((h) => h.ini !== null);
-  if (terisi.length === 0) return null;
-  const tanggalAkhir = terisi[terisi.length - 1].tanggal;
-  const minggu = Math.ceil(tanggalAkhir / 7);
-  const dari = (minggu - 1) * 7 + 1;
-  const sampai = Math.min(minggu * 7, hari.length);
-  const dalam = hari.filter((h) => h.tanggal >= dari && h.tanggal <= sampai);
+async function mingguOutlet(
+  periode: string,
+  outletAktif: { id: string; name: string; code?: string | null; esbBranchId?: string | null }[],
+  target: Map<string, number>,
+  manual: (id: string) => boolean,
+): Promise<DetailMinggu | null> {
+  const minggu = mingguBulan(periode);
+  const hari = jumlahHari(periode);
+  const peta = await netMingguanPerCabang(periode);
+  if (peta.size === 0) return null;
 
-  const ini = dalam.reduce((s, h) => s + (h.ini ?? 0), 0);
-  const lalu = dalam.reduce((s, h) => s + (h.lalu ?? 0), 0);
-  const hariMinggu = sampai - dari + 1;
-  const hariTerisi = dalam.filter((h) => h.ini !== null).length;
-  // Targetnya sebanding hari yang sudah berjalan, bukan seminggu penuh:
-  // membandingkan tiga hari terhadap target tujuh hari selalu terbaca gagal.
-  const target = targetBulan === null || hari.length === 0 ? 0 : (targetBulan / hari.length) * hariTerisi;
+  const sumber: SumberMinggu[] = outletAktif.map((o) => {
+    const cabang = o.esbBranchId ?? null;
+    const tanpaRincian = manual(o.id) || cabang === null;
+    const baris = minggu.map((m) => (tanpaRincian || cabang === null ? null : (peta.get(`${cabang}|${m.minggu}`) ?? null)));
+    return {
+      id: o.id,
+      nama: o.name,
+      kode: o.code ?? o.id,
+      targetBulan: target.get(o.id) ?? 0,
+      actual: baris.map((r) => (r === null ? null : r.net)),
+      hariAda: minggu.map((m, i) => hariTerhitung(periode, m, baris[i]?.sampai ?? null)),
+      tanpaRincian,
+    };
+  });
 
-  return { minggu, rentang: `${dari}–${sampai}`, ini, lalu, target, hariTerisi, hariMinggu };
+  const baris = hitungMinggu(sumber, minggu, hari);
+  return {
+    minggu,
+    baris,
+    korporat: korporatMinggu(baris, minggu, hari),
+    tanpaRincian: baris.filter((b) => b.tanpaRincian).length,
+  };
 }
 
 /** Laba bersih tiap outlet same store, dari isian bulanan Coordinator Area. */
@@ -398,10 +425,21 @@ export async function detailManajemen(
   // Dua bulan sekaligus: bulan berjalan untuk nilainya, bulan sebelumnya untuk
   // pembandingnya. Keduanya ditarik bersamaan supaya halaman tidak menunggu
   // dua putaran berurutan.
-  const [laba, labaLalu, harian, skorIni, skorLalu] = await Promise.all([
+  // Target sebulan tiap outlet — persis angka yang dipakai kolom Target di
+  // Detail Same Store, supaya satu outlet tidak terlihat gagal di satu tab dan
+  // tercapai di tab sebelahnya.
+  const targetOutlet = new Map(sementara.b.baris.map((b) => [b.id, b.target]));
+
+  const [laba, labaLalu, harian, minggu, skorIni, skorLalu] = await Promise.all([
     labaOutlet(periode, idIkut),
     labaOutlet(bulanSebelum(periode), idIkut),
     opsi.ringan ? Promise.resolve([] as HariOmzet[]) : omzetHarian(periode),
+    opsi.ringan
+      ? Promise.resolve(null)
+      : mingguOutlet(periode, outletAktif, targetOutlet, (id) => {
+          const o = outletAktif.find((x) => x.id === id);
+          return o ? grossDiketik({ esbMulai: o.esbMulai ?? null, esbAbaikan: o.esbAbaikan ?? [] }, periode) : false;
+        }),
     opsi.ringan ? Promise.resolve(new Map<string, number>()) : skorPosisi(periode),
     opsi.ringan ? Promise.resolve(new Map<string, number>()) : skorPosisi(bulanSebelum(periode)),
   ]);
@@ -443,7 +481,6 @@ export async function detailManajemen(
     departemen,
     setelan,
   });
-  const skorA = skor.a;
 
   return {
     lalu,
@@ -454,7 +491,7 @@ export async function detailManajemen(
     labaBersih,
     ebitda,
     harian,
-    minggu: mingguBerjalan(harian, skorA.target),
+    minggu,
     setelan,
   };
 }

@@ -155,6 +155,22 @@ async function jalankan(req: Request): Promise<NextResponse> {
     return NextResponse.json({ ok: true, tookMs: Date.now() - started, results });
   }
 
+  // Dedicated job: net sales PER MINGGU per branch — one ESB call per branch
+  // per week. Lima panggilan sebulan per cabang, bukan tiga puluh seperti jalur
+  // harian; itu yang membuat rincian mingguan bisa lengkap untuk SELURUH outlet
+  // dalam hitungan menit, bukan menunggu giliran berhari-hari.
+  if (job === "net-mingguan") {
+    try {
+      const { cabangTerpasang } = await import("@/lib/data/esb-bulanan");
+      const { syncNetMingguan } = await import("@/lib/data/esb-mingguan");
+      const periode = new URL(req.url).searchParams.get("periode") ?? ymdWib(0).slice(0, 7);
+      results["net-mingguan"] = await syncNetMingguan(await cabangTerpasang(), periode, left() - 4_000);
+    } catch (e) {
+      results["net-mingguan"] = { error: e instanceof Error ? e.message : "failed" };
+    }
+    return NextResponse.json({ ok: true, tookMs: Date.now() - started, results });
+  }
+
   // Dedicated job: pair outlets with their ESB branch id. Runs on demand
   // (?job=pair-outlets) — the mapping only changes when a branch opens or is
   // renamed, so scheduling it would spend an ESB call an hour on nothing.
@@ -229,6 +245,27 @@ async function jalankan(req: Request): Promise<NextResponse> {
       results["seasonal"] = await syncSeasonalDays(`${y}-01-01`, ymdWib(0), "", Math.min(left() - 3_000, 18_000));
     } catch (e) {
       results["seasonal"] = { error: e instanceof Error ? e.message : "failed" };
+    }
+  }
+
+  // Phase 4b — rincian MINGGUAN bulan berjalan per cabang.
+  //
+  // Didahulukan atas seasonal per-cabang di bawahnya: yang ini mengisi tabel
+  // yang dibaca orang tiap hari di KPI Manajemen, dan barisnya yang belum
+  // ditarik terbaca sebagai outlet yang tidak berjualan. Minggu yang sudah
+  // lewat ditarik sekali lalu selesai, jadi setelah bulannya terkejar biayanya
+  // tinggal minggu berjalan saja.
+  if (left() > 6_000) {
+    try {
+      const { cabangTerpasang } = await import("@/lib/data/esb-bulanan");
+      const { syncNetMingguan } = await import("@/lib/data/esb-mingguan");
+      results["net-mingguan"] = await syncNetMingguan(
+        await cabangTerpasang(),
+        ymdWib(0).slice(0, 7),
+        Math.min(left() - 3_000, 16_000),
+      );
+    } catch (e) {
+      results["net-mingguan"] = { error: e instanceof Error ? e.message : "failed" };
     }
   }
 

@@ -7,6 +7,7 @@ import { navAll, accessibleMenuKeys } from "@/lib/nav";
 import { PapanKpi } from "@/components/kpi/papan-kpi";
 import { PapanManajemen } from "@/components/kpi/papan-manajemen";
 import { SETELAN_BAWAAN, departemenKpi, hitungManajemen } from "@/lib/kpi/manajemen";
+import { hitungMinggu, korporatMinggu, mingguBulan } from "@/lib/kpi/minggu";
 import type { DetailManajemen } from "@/lib/data/kpi-manajemen";
 import { barisEfisiensi, barisKpi, ringkasEfisiensi, ringkasKpi } from "@/lib/kpi/hitung";
 import { indikatorPosisi } from "@/lib/kpi/indikator";
@@ -158,16 +159,29 @@ const DETAIL_MJ: DetailManajemen = {
     const pola = 380_000_000 + Math.sin(t / 3) * 90_000_000 + (t % 7 === 0 ? 120_000_000 : 0);
     return { tanggal: t, ini: t <= 21 ? Math.round(pola) : null, lalu: Math.round(pola * 0.93 + (t % 5) * 8_000_000) };
   }),
-  // Minggu berjalan = minggu terakhir yang sudah ada isinya (tanggal 15–21).
-  minggu: {
-    minggu: 3,
-    rentang: "15–21",
-    ini: 2_640_000_000,
-    lalu: 2_512_000_000,
-    target: (SKOR_MJ.a.target / 30) * 7,
-    hariTerisi: 7,
-    hariMinggu: 7,
-  },
+  // Rincian mingguan: minggu 1-2 penuh, minggu 3 baru tiga hari.
+  minggu: (() => {
+    const mg = mingguBulan("2026-09");
+    const hari = 30;
+    const sumber = SKOR_MJ.b.baris.map((b, i) => {
+      const tanpaRincian = i % 7 === 3;
+      const rata = b.target / mg.length;
+      const goyang = [0.92, 1.05, 0.78, 0.99, 1.12][i % 5];
+      return {
+        id: b.id,
+        nama: b.nama,
+        kode: b.kode,
+        targetBulan: b.target,
+        actual: tanpaRincian
+          ? mg.map(() => null)
+          : mg.map((m, j) => (j === 0 ? rata * goyang : j === 1 ? rata * (goyang + 0.06) : j === 2 ? rata * 0.4 : null)),
+        hariAda: mg.map((m, j) => (tanpaRincian ? 0 : j === 0 || j === 1 ? m.hari : j === 2 ? 3 : 0)),
+        tanpaRincian,
+      };
+    });
+    const baris = hitungMinggu(sumber, mg, hari);
+    return { minggu: mg, baris, korporat: korporatMinggu(baris, mg, hari), tanpaRincian: baris.filter((b) => b.tanpaRincian).length };
+  })(),
   lalu: {
     a: { persen: 96.2, actual: 12_824_068_510 },
     b: { persen: 94.1, actual: 631_000_000 },
