@@ -1,0 +1,85 @@
+/**
+ * Pilihan tenggat pengajuan desain — dan harganya di KPI.
+ *
+ * YANG DINILAI DUA PIHAK SEKALIGUS. Bagi tim Creative, tenggat panjang berarti
+ * tidak ada alasan terlambat: gagal menepatinya MENGURANGI skor, dan menepatinya
+ * hanya berarti tidak berkurang. Tenggat pendek sebaliknya — gagal tidak
+ * menghukum, karena yang meminta sendiri yang menyisakan waktu terlalu sempit,
+ * sedangkan berhasil menepatinya MENAMBAH skor.
+ *
+ * Bagi yang meminta, pilihannya ikut tercatat. Supervisor yang terus-menerus
+ * meminta H-1 akan terlihat di rapotnya sendiri, tanpa siapa pun perlu
+ * mengingat-ingat.
+ */
+export type KategoriTenggat = "sebelum_h5" | "h5" | "h3" | "h1";
+
+export interface AturanTenggat {
+  kategori: KategoriTenggat;
+  label: string;
+  /** Berapa hari setelah tanggal permintaan tenggatnya jatuh. */
+  hari: number;
+  /** Nilai bila LEWAT tenggat — nol atau minus. */
+  gagal: number;
+  /** Nilai bila selesai tepat waktu — nol atau plus. */
+  selesai: number;
+  keterangan: string;
+}
+
+/**
+ * "Sebelum H-5" tidak punya jarak hari yang pasti: yang meminta memilih
+ * sendiri tanggalnya, asal lebih dari lima hari. Dipakai delapan hari sebagai
+ * bawaan supaya tanggalnya tetap terisi otomatis dan tidak ada yang perlu
+ * mengetiknya.
+ */
+export const TENGGAT: AturanTenggat[] = [
+  {
+    kategori: "sebelum_h5",
+    label: "Sebelum H-5",
+    hari: 8,
+    gagal: -3,
+    selesai: 0,
+    keterangan: "Waktunya paling longgar — terlambat di sini paling mahal.",
+  },
+  { kategori: "h5", label: "H-5", hari: 5, gagal: -2, selesai: 0, keterangan: "Masih cukup waktu; terlambat tetap mengurangi." },
+  { kategori: "h3", label: "H-3", hari: 3, gagal: 0, selesai: 2, keterangan: "Waktunya sempit — selesai tepat waktu bernilai tambah." },
+  { kategori: "h1", label: "H-1", hari: 1, gagal: 0, selesai: 3, keterangan: "Mendesak. Terlambat tidak menghukum, selesai bernilai paling besar." },
+];
+
+export const aturanTenggat = (k: string): AturanTenggat | undefined => TENGGAT.find((t) => t.kategori === k);
+
+export const labelTenggat = (k: string | null): string => (k ? (aturanTenggat(k)?.label ?? k) : "—");
+
+/** Tanggal tenggat dari tanggal permintaan — "YYYY-MM-DD" masuk, "YYYY-MM-DD" keluar. */
+export function tanggalTenggat(tanggalRequest: string, kategori: string): string | null {
+  const aturan = aturanTenggat(kategori);
+  if (!aturan || !/^\d{4}-\d{2}-\d{2}$/.test(tanggalRequest)) return null;
+  const [th, bl, tg] = tanggalRequest.split("-").map(Number);
+  const d = new Date(Date.UTC(th, bl - 1, tg + aturan.hari));
+  return d.toISOString().slice(0, 10);
+}
+
+/**
+ * Nilai satu permintaan bagi tim Creative.
+ *
+ * Permintaan yang BELUM selesai dan belum lewat tenggat belum bernilai apa pun —
+ * ia masih punya waktu, dan menghitungnya sebagai gagal berarti menghukum
+ * pekerjaan yang sedang berjalan.
+ */
+export function nilaiTenggat(input: {
+  kategori: string | null;
+  tenggat: string | null;
+  selesaiPada: string | null;
+  /** Tanggal hari ini, "YYYY-MM-DD" — untuk menilai yang belum selesai. */
+  hariIni: string;
+}): number | null {
+  const aturan = input.kategori ? aturanTenggat(input.kategori) : undefined;
+  if (!aturan || !input.tenggat) return null;
+  if (input.selesaiPada) return input.selesaiPada.slice(0, 10) <= input.tenggat ? aturan.selesai : aturan.gagal;
+  return input.hariIni > input.tenggat ? aturan.gagal : null;
+}
+
+/** Permintaan ini sudah lewat tenggat? */
+export function lewatTenggat(input: { tenggat: string | null; selesaiPada: string | null; hariIni: string }): boolean {
+  if (!input.tenggat) return false;
+  return input.selesaiPada ? input.selesaiPada.slice(0, 10) > input.tenggat : input.hariIni > input.tenggat;
+}

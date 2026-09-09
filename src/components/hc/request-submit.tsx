@@ -4,7 +4,7 @@ import * as React from "react";
 import { useRouter } from "next/navigation";
 import { AlertCircle, Loader2, Plus, RotateCcw, Trash2 } from "lucide-react";
 import { toast } from "sonner";
-import { cn } from "@/lib/utils";
+import { cn, formatDate } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Combobox } from "@/components/ui/combobox";
 import { DatePicker } from "@/components/ui/date-picker";
@@ -29,6 +29,13 @@ import {
 } from "@/lib/hc-request";
 import { DiscussButton } from "@/components/chat/forward-request";
 import { FilePicker, RequestEmpty, RequestList, uploadAll } from "./request-shared";
+import { TENGGAT, tanggalTenggat } from "@/lib/kpi/deadline";
+
+/** Tanggal hari ini menurut jam pemakainya, bukan UTC. */
+function hariIniLokal(): string {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
 
 const COPY: Record<HcRequestKind, { new: string; title: string; formDesc: string; empty: string }> = {
   rekrutmen: {
@@ -233,7 +240,7 @@ function FieldError({ children }: { children?: string }) {
   );
 }
 
-type Errors = Partial<Record<"title" | "position" | "headcount" | "outletId" | "trainingType" | "participants" | "designType" | "subjectName", string>>;
+type Errors = Partial<Record<"title" | "position" | "headcount" | "outletId" | "trainingType" | "participants" | "designType" | "subjectName" | "tenggat", string>>;
 
 export interface PilihanOutlet {
   id: string;
@@ -268,6 +275,12 @@ function RequestForm({
   const [designType, setDesignType] = React.useState(DESIGN_TYPES[0]);
   const [customDesign, setCustomDesign] = React.useState("");
   const [designSize, setDesignSize] = React.useState("");
+  // Tanggal permintaan adalah HARI INI dan tidak bisa diketik: ia menyatakan
+  // kapan permintaan benar-benar masuk, dan tanggal yang bisa dipilih sendiri
+  // membuat pemohon bisa memundurkannya untuk memperpanjang tenggat.
+  const [tenggatKategori, setTenggatKategori] = React.useState<string>("");
+  const tanggalRequest = React.useMemo(() => hariIniLokal(), []);
+  const tanggalDeadline = tenggatKategori ? tanggalTenggat(tanggalRequest, tenggatKategori) : null;
   const [subjectName, setSubjectName] = React.useState("");
   const [participantIds, setParticipantIds] = React.useState<string[]>([]);
   const [participants, setParticipants] = React.useState("");
@@ -301,6 +314,7 @@ function RequestForm({
       }
     } else if (isDesign) {
       if (!resolvedDesign) e.designType = "Sebutkan jenis designnya.";
+      if (!tenggatKategori) e.tenggat = "Pilih tenggatnya lebih dulu.";
       if (!subjectName.trim()) e.subjectName = "Tulis nama pemohon atau untuk siapa design ini.";
     } else {
       if (!position.trim()) e.position = "Posisi yang diminta wajib diisi.";
@@ -333,6 +347,7 @@ function RequestForm({
         budget: budgetNum,
         designType: isDesign ? resolvedDesign : "",
         designSize: designSize.trim(),
+        deadlineKategori: isDesign ? tenggatKategori : null,
         plannedDate,
         attachments,
       });
@@ -406,8 +421,37 @@ function RequestForm({
             <Field label="Ukuran / Format" hint="Kosongkan bila mengikuti standar tim Creative.">
               <Input value={designSize} onChange={(e) => setDesignSize(e.target.value)} placeholder="cth. 1080 x 1350 px" />
             </Field>
-            <Field label="Dibutuhkan Tanggal">
+            <Field label="Rencana Upload" hint="Kapan materinya dipakai. Boleh kosong.">
               <DatePicker value={plannedDate} onChange={setPlannedDate} />
+            </Field>
+          </div>
+
+          {/* Tenggat DIPILIH dari empat kelonggaran, bukan diketik tanggalnya.
+              Tanggal bebas membuat tiap pemohon memakai ukuran "mendesak"
+              sendiri-sendiri, dan tidak ada yang bisa dibandingkan sesudahnya.
+              Empat pilihan ini punya harga yang jelas di KPI kedua belah pihak. */}
+          <Field label="Deadline" hint="Pilih kelonggarannya — tanggalnya dihitung otomatis.">
+            <Combobox
+              searchable={false}
+              value={tenggatKategori}
+              onChange={setTenggatKategori}
+              options={TENGGAT.map((t) => ({ value: t.kategori, label: `${t.label} — ${t.keterangan}` }))}
+              placeholder="Pilih Deadline"
+              matchTriggerWidth
+            />
+            <FieldError>{errors.tenggat}</FieldError>
+          </Field>
+
+          <div className="grid gap-3 sm:grid-cols-2">
+            <Field label="Tanggal Request">
+              <div className="flex h-9 items-center rounded-lg border border-border bg-muted/40 px-3 text-[13px] tabular-nums text-foreground/80">
+                {formatDate(tanggalRequest)}
+              </div>
+            </Field>
+            <Field label="Tanggal Deadline">
+              <div className="flex h-9 items-center rounded-lg border border-border bg-muted/40 px-3 text-[13px] tabular-nums text-foreground/80">
+                {tanggalDeadline ? formatDate(tanggalDeadline) : <span className="text-muted-foreground">pilih deadline dulu</span>}
+              </div>
             </Field>
           </div>
         </>

@@ -62,6 +62,7 @@ export type JenisEntri =
 /** Perhitungan otomatis dari modul/data lain. */
 export type KodeOtomatis =
   | "design_request"
+  | "ketepatan_design"
   | "net_sales_korporat"
   | "komplain_food_quality"
   | "efisiensi_operasional"
@@ -122,87 +123,34 @@ export const TUMBUH_CREATIVE = 10;
 /** Pertumbuhan bawaan untuk indikator Marketing Communication. */
 export const TUMBUH_MARCOMM = 15;
 
+/**
+ * Content Creator dinilai atas DUA hal saja.
+ *
+ * Daftar panjang sebelumnya — jumlah post, reels, story, views, profile visit —
+ * mengukur kegiatan, bukan hasil, dan seluruhnya diketik sendiri oleh yang
+ * dinilai. Yang tersisa dua: menepati tenggat pekerjaan yang benar-benar
+ * diminta orang lain, dan dampaknya pada engagement.
+ */
 const contentCreator: Indikator[] = [
   {
-    key: "konten_post",
-    label: "Jumlah Konten Post",
-    kategori: JUMLAH,
-    bobot: 20,
-    target: { jenis: "tetap", nilai: 10, perBrand: true },
-    actual: { sumber: "manual_brand" },
-    penjelasan: "Diisi per brand, lalu dijumlah. Target 10 per brand.",
-  },
-  {
-    key: "konten_reels",
-    label: "Jumlah Konten Reels",
-    kategori: JUMLAH,
-    bobot: 20,
-    target: { jenis: "tetap", nilai: 10, perBrand: true },
-    actual: { sumber: "manual_brand" },
-    penjelasan: "Diisi per brand, lalu dijumlah. Target 10 per brand.",
-  },
-  {
-    key: "konten_story",
-    label: "Jumlah Konten Story",
-    kategori: JUMLAH,
-    bobot: 5,
-    target: { jenis: "tetap", nilai: 5, perBrand: true },
-    actual: { sumber: "manual_brand" },
-    penjelasan: "Diisi per brand, lalu dijumlah. Target 5 per brand.",
-  },
-  {
-    key: "design_request",
-    label: "Design By Request",
-    kategori: JUMLAH,
-    bobot: 15,
-    target: { jenis: "pekerjaan" },
-    actual: { sumber: "otomatis", kode: "design_request" },
-    penjelasan: "Otomatis dari Antrian Design: target = permintaan yang masuk, actual = yang selesai.",
-  },
-  {
-    key: "produksi_media",
-    label: "Produksi Foto / Video",
-    kategori: KUALITAS,
-    bobot: 10,
-    target: { jenis: "tumbuh", pertumbuhan: TUMBUH_CREATIVE },
-    actual: { sumber: "manual" },
-    penjelasan: `Target = capaian bulan lalu + ${TUMBUH_CREATIVE}%.`,
+    key: "ketepatan_design",
+    label: "Ketepatan Waktu",
+    bobot: 80,
+    // Targetnya 100% dan capaiannya dihitung dari nilai tiap permintaan:
+    // tenggat longgar yang terlambat MENGURANGI, tenggat mendesak yang
+    // ditepati MENAMBAH. Yang meminta ikut menanggung akibat pilihannya.
+    target: { jenis: "tetap", nilai: 100 },
+    actual: { sumber: "otomatis", kode: "ketepatan_design" },
+    penjelasan:
+      "Otomatis dari Antrian Design. Terlambat pada tenggat longgar (Sebelum H-5, H-5) mengurangi; tepat waktu pada tenggat mendesak (H-3, H-1) menambah.",
   },
   {
     key: "interaksi",
-    label: "Like + Komentar + Share + Save",
-    kategori: KUALITAS,
-    bobot: 10,
+    label: "Impact — Engagement",
+    bobot: 20,
     target: { jenis: "tumbuh", pertumbuhan: TUMBUH_CREATIVE },
     actual: { sumber: "manual" },
-    penjelasan: `Target = capaian bulan lalu + ${TUMBUH_CREATIVE}%.`,
-  },
-  {
-    key: "views",
-    label: "Views",
-    kategori: KUALITAS,
-    bobot: 5,
-    target: { jenis: "tumbuh", pertumbuhan: TUMBUH_CREATIVE },
-    actual: { sumber: "manual" },
-    penjelasan: `Target = capaian bulan lalu + ${TUMBUH_CREATIVE}%.`,
-  },
-  {
-    key: "profile_visit",
-    label: "Profile Visit",
-    kategori: KUALITAS,
-    bobot: 5,
-    target: { jenis: "tumbuh", pertumbuhan: TUMBUH_CREATIVE },
-    actual: { sumber: "manual" },
-    penjelasan: `Target = capaian bulan lalu + ${TUMBUH_CREATIVE}%.`,
-  },
-  {
-    key: "kecepatan",
-    label: "Kecepatan & Ketepatan",
-    kategori: KUALITAS,
-    bobot: 10,
-    target: { jenis: "tetap", nilai: 100 },
-    actual: { sumber: "manual" },
-    penjelasan: "Penilaian atasan dalam persen, 0–100.",
+    penjelasan: `Like + komentar + share + save. Target = capaian bulan lalu + ${TUMBUH_CREATIVE}%.`,
   },
 ];
 

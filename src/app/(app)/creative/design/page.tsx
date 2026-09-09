@@ -6,6 +6,8 @@ import { kelolaAntrianDesign } from "@/lib/hc-request";
 import { getUsers } from "@/lib/data/store";
 import { PitaCreative } from "@/components/creative/kit-creative";
 import { HcRequestReview } from "@/components/hc/request-review";
+import { PapanDesign } from "@/components/creative/papan-design";
+import { papanDesign } from "@/lib/data/design-rapor";
 
 export const metadata: Metadata = { title: "Antrian Design" };
 
@@ -27,6 +29,11 @@ export default async function CreativeDesignQueuePage() {
   // (`allHcRequestsAction`); di sini hanya menentukan tampilannya.
   const kelola = kelolaAntrianDesign(user);
 
+  // Papan angka hanya untuk yang MENGELOLA antrian. Yang mengerjakan melihat
+  // pekerjaannya sendiri; menampilkan rapot rekan sedivisi kepadanya mengubah
+  // alat kerja jadi papan pengumuman siapa yang tertinggal.
+  const papan = kelola ? await papanDesign() : null;
+
   return (
     <div className="flex w-full flex-col gap-3">
       {/* Pita yang sama dengan Penilaian Request. Dua halaman Creative yang
@@ -42,6 +49,7 @@ export default async function CreativeDesignQueuePage() {
             : "Tab Menunggu berisi permintaan baru seluruh tim; tab lainnya hanya pekerjaan Anda sendiri. Ambil dari Menunggu untuk mulai mengerjakan, lalu tandai selesai beserta hasilnya."
         }
       />
+      {papan && <PapanDesign ringkas={papan.ringkas} peminta={papan.peminta} creative={papan.creative} />}
       <HcRequestReview mode="hc" kind="design" picOptions={picOptions} kelola={kelola} meId={user.id} />
     </div>
   );

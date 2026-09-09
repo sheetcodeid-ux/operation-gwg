@@ -4,6 +4,7 @@ import * as React from "react";
 import { Check, ChevronDown, FileText, GraduationCap, Image as ImageIcon, Palette, Paperclip, Upload, UserPlus, Users, X } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
+import { labelTenggat } from "@/lib/kpi/deadline";
 import { Badge } from "@/components/ui/badge";
 import { DetailRows, DetailTitle, type DetailRow } from "@/components/ui/detail-rows";
 import { presignHcUploadAction, uploadHcRequestFileAction } from "@/lib/actions/hc-requests";
@@ -284,6 +285,13 @@ function RequestDetail({ r }: { r: HcRequest }) {
   } else {
     rows.push({ label: "Jenis design", value: r.designType || "—" });
     if (r.designSize) rows.push({ label: "Ukuran / format", value: r.designSize });
+    rows.push({ label: "Tanggal request", value: fmtDate(r.createdAt) });
+    if (r.deadline) {
+      // Kategorinya ikut ditulis di sebelah tanggalnya. Tanggal sendirian tidak
+      // memberi tahu seberapa longgar permintaan ini diajukan, padahal justru
+      // itu yang menentukan nilainya di KPI kedua belah pihak.
+      rows.push({ label: "Deadline", value: `${fmtDate(r.deadline)} · ${labelTenggat(r.deadlineKategori)}` });
+    }
     if (r.subjectName) rows.push({ label: "Untuk", value: r.subjectName });
     if (r.plannedDate) rows.push({ label: "Dibutuhkan", value: fmtDate(r.plannedDate) });
     // Pemohon berhak tahu siapa yang mengerjakan designnya.
