@@ -62,6 +62,7 @@ export type JenisEntri =
 /** Perhitungan otomatis dari modul/data lain. */
 export type KodeOtomatis =
   | "design_request"
+  | "net_sales_korporat"
   | "komplain_food_quality"
   | "efisiensi_operasional"
   | "keberhasilan_pasar"
@@ -343,7 +344,11 @@ const marcomm: Indikator[] = [
     label: "Net Sales Achievement",
     bobot: 40,
     target: { jenis: "tumbuh", pertumbuhan: TUMBUH_MARCOMM },
-    actual: { sumber: "manual" },
+    // Ditandai OTOMATIS, bukan manual. Angkanya memang sudah ditarik dari ESB
+    // sejak awal, tapi selama ia tertulis "manual" pilihannya tetap muncul di
+    // dialog Input — dan indikator otomatis yang bisa diketik ulang adalah cara
+    // paling mudah membuat dua angka berbeda untuk hal yang sama.
+    actual: { sumber: "otomatis", kode: "net_sales_korporat" },
     penjelasan: `Otomatis dari ESB. Target = net sales bulan lalu + ${TUMBUH_MARCOMM}%.`,
   },
   {

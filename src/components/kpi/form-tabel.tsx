@@ -459,6 +459,7 @@ export function FormKegiatan({
   picOpsi,
   opsi,
   outlet,
+  outletSemua,
   bulanKosong,
   bolehKegiatan = true,
   onPeriode,
@@ -469,6 +470,15 @@ export function FormKegiatan({
   picOpsi: string[];
   opsi: OpsiKegiatan[];
   outlet: OutletBaris[];
+  /**
+   * Daftar outlet untuk dropdown kegiatan.
+   *
+   * TERPISAH dari `outlet` di atas, yang isinya angka bulanan Coordinator Area
+   * dan KOSONG untuk posisi lain. Dulu dropdown-nya ikut memakai daftar itu,
+   * jadi Quality Control di PDQ membuka pilihan outlet yang tidak berisi satu
+   * baris pun — dan yang mencatat kegiatan tidak punya cara menebak sebabnya.
+   */
+  outletSemua: { id: string; nama: string }[];
   bulanKosong: string[];
   /** Catatan kegiatan menempel pada orang; saat "Semua" dipilih tidak ada orangnya. */
   bolehKegiatan?: boolean;
@@ -711,8 +721,9 @@ export function FormKegiatan({
               <TabelKegiatan
                 baris={baris}
                 picOpsi={picOpsi}
-                outlet={outlet}
+                outlet={outletSemua}
                 perluBukti={perluBukti}
+                judulNama={jenis === "riset_menu" ? "Nama Menu" : "Nama Kegiatan"}
                 ubah={ubah}
               />
             )}
@@ -769,12 +780,15 @@ function TabelKegiatan({
   picOpsi,
   outlet,
   perluBukti,
+  judulNama,
   ubah,
 }: {
   baris: BarisKegiatan[];
   picOpsi: string[];
-  outlet: OutletBaris[];
+  outlet: { id: string; nama: string }[];
   perluBukti: boolean;
+  /** Judul kolom nama — Riset Menu mencatat NAMA MENU, bukan nama kegiatan. */
+  judulNama: string;
   ubah: (i: number, kolom: keyof BarisKegiatan, v: string | File[]) => void;
 }) {
   return (
@@ -789,7 +803,7 @@ function TabelKegiatan({
             {/* Hygiene Audit tidak punya "nama kegiatan": yang dicatat kunjungan
                 ke satu outlet pada satu tanggal, dan buktinya yang bercerita.
                 Indikator lain (event, riset menu) tetap butuh namanya. */}
-            {!perluBukti && <Kepala>Nama Kegiatan</Kepala>}
+            {!perluBukti && <Kepala>{judulNama}</Kepala>}
             {perluBukti && <Kepala className="w-48">Bukti submit</Kepala>}
             <Kepala>Keterangan</Kepala>
           </tr>
@@ -822,7 +836,7 @@ function TabelKegiatan({
                   className="w-full"
                   value={b.outletId}
                   onChange={(v) => ubah(i, "outletId", v)}
-                  options={[{ value: "", label: "— tanpa outlet —" }, ...outlet.map((o) => ({ value: o.outletId, label: o.outletNama }))]}
+                  options={[{ value: "", label: "— tanpa outlet —" }, ...outlet.map((o) => ({ value: o.id, label: o.nama }))]}
                 />
               </td>
               {!perluBukti && (

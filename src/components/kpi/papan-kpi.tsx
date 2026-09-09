@@ -407,6 +407,7 @@ export function PapanKpi({
               picOpsi={pic}
               opsi={opsiKegiatan}
               outlet={laporan.ca?.detail ?? []}
+              outletSemua={outlets}
               bulanKosong={laporan.ca?.bulanKosong ?? []}
               bolehKegiatan={bolehSimpan}
               onPeriode={(p) => pindah(`/kpi/${laporan.posisi}?periode=${p}${laporan.pic ? `&pic=${encodeURIComponent(laporan.pic)}` : ""}`)}
