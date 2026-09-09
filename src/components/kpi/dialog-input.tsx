@@ -72,7 +72,7 @@ const KETERANGAN: Record<Bentuk, string> = {
   tenggat: "Catat pengirimannya. Yang telat mengurangi poin.",
   efisiensi: "Isi realisasi beban satu outlet.",
   fee: "Tandai apakah management fee outlet ini sudah sesuai.",
-  pasar: "Tambah menu yang dinilai, beserta penjualan dan omset bulan ini.",
+  pasar: "Tambah menu yang dinilai, beserta penjualan dan omsetnya SELAMA TIGA BULAN TERAKHIR — bukan bulan ini saja.",
   otomatis: "Indikator ini terisi otomatis — tidak perlu diisi tangan.",
 };
 
