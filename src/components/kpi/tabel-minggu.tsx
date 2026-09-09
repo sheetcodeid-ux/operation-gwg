@@ -2,6 +2,7 @@
 
 import * as React from "react";
 import { type ColumnDef } from "@tanstack/react-table";
+import { TrendingDown, TrendingUp } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { DataTable } from "@/components/ui/data-table";
 import { Progress } from "@/components/ui/progress";
@@ -53,29 +54,52 @@ function RingkasMinggu({ detail, judul }: { detail: DetailMinggu; judul: string 
           {statusMinggu(k).label}
         </Badge>
       </div>
-      <div className="grid gap-px bg-border/70 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="grid gap-px bg-border/70 sm:grid-cols-2 lg:grid-cols-5">
         <PetakMinggu label="Terkumpul" nilai={formatIDR(Math.round(k.terkumpul))} tebal />
-        <PetakMinggu
-          label="Target sampai hari ini"
-          nilai={formatIDR(Math.round(k.targetSampai))}
-          bawah={<BarPersen nilai={k.persen} />}
-        />
+        <PetakMinggu label="Target sampai hari ini" nilai={formatIDR(Math.round(k.targetSampai))} />
+        <PetakMinggu label="Capaian" nilai={<Arah nilai={k.persen} />} />
         <PetakMinggu
           label="Kekurangan"
           nilai={k.kurang > 0 ? formatIDR(Math.round(k.kurang)) : "Tidak ada"}
-          warna={k.kurang > 0 ? false : true}
+          warna={k.kurang <= 0}
         />
         <PetakMinggu
           label={k.mingguKejar === null ? "Minggu tersisa" : `Minggu ${k.mingguKejar} harus`}
           nilai={k.kejar === null ? "Bulannya sudah habis" : formatIDR(Math.round(k.kejar))}
-          bawah={
-            k.mingguKejar === null ? undefined : (
-              <span className="text-[11px] text-muted-foreground">termasuk menutup kekurangan minggu sebelumnya</span>
-            )
-          }
         />
       </div>
     </div>
+  );
+}
+
+/**
+ * Capaian sebagai PANAH, bukan bilah.
+ *
+ * Bentuk yang sama dengan kolom Perbandingan di tabel: garis yang mendaki atau
+ * menukik menyatakan arah sekaligus memberi bentuk yang terbaca sekilas dari
+ * seberang meja. Bilah di dalam kartu ringkas justru menuntut dibandingkan
+ * dengan ujung kanannya lebih dulu sebelum angkanya berarti — padahal di sini
+ * yang dicari cuma satu hal: sedang di atas target atau di bawah.
+ */
+function Arah({ nilai }: { nilai: number | null }) {
+  if (nilai === null) return <span className="text-[13px] text-muted-foreground">belum terukur</span>;
+  // ARAH PANAH DAN WARNANYA MEMAKAI AMBANG YANG SAMA. Dipisah — panah dari
+  // 100%, warna dari ambang hijau — hasilnya panah turun berwarna hijau pada
+  // capaian 92%, dua tanda yang saling membantah dalam satu angka. Ambangnya
+  // ambang yang dipakai seluruh aplikasi, jadi kartu ini tidak pernah berbeda
+  // warna dengan bilah di tabel untuk angka yang sama.
+  const naik = nilai >= AMBANG_HIJAU;
+  const Ikon = naik ? TrendingUp : TrendingDown;
+  return (
+    <span
+      className={cn(
+        "inline-flex items-center gap-1.5 tabular-nums",
+        naik ? "text-emerald-600 dark:text-emerald-400" : "text-rose-600 dark:text-rose-400",
+      )}
+    >
+      <Ikon className="size-4 shrink-0" />
+      {persen(nilai, 0)}
+    </span>
   );
 }
 
@@ -84,14 +108,12 @@ function PetakMinggu({
   nilai,
   tebal,
   warna,
-  bawah,
 }: {
   label: string;
-  nilai: string;
+  nilai: React.ReactNode;
   tebal?: boolean;
   /** true = hijau, false = merah, undefined = warna teks biasa. */
   warna?: boolean;
-  bawah?: React.ReactNode;
 }) {
   return (
     <div className="bg-card px-4 py-3">
@@ -109,7 +131,6 @@ function PetakMinggu({
       >
         {nilai}
       </p>
-      {bawah && <div className="mt-1.5">{bawah}</div>}
     </div>
   );
 }
