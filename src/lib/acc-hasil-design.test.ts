@@ -83,9 +83,11 @@ describe("tahap menunggu ACC berdiri sendiri", () => {
     expect(requestStage({ kind: "design", status: "menunggu_atasan", revisions: revisi })).toBe("acc");
   });
 
-  it("punya saringan sendiri di antrian design, dan hanya di sana", () => {
-    expect(stageFilters("design").map((o) => o.value)).toContain("acc");
-    for (const k of ["rekrutmen", "pelatihan"] as const) {
+  it("TIDAK punya saringan sendiri lagi — tahapnya sudah dihapus dari alur", () => {
+    // Hasil designer kini langsung sampai ke pemohonnya, jadi tidak ada lagi
+    // baris yang tertahan di tahap ini. Saringan yang selamanya nol membuat
+    // orang mengira ada pekerjaan tertahan di tempat yang tidak ada.
+    for (const k of ["design", "rekrutmen", "pelatihan"] as const) {
       expect(stageFilters(k).map((o) => o.value)).not.toContain("acc");
     }
   });
@@ -102,10 +104,13 @@ describe("tombol mengikuti tahap, bukan sebaliknya", () => {
     expect(s.accAtasan).toBe(false);
   });
 
-  it("atasan memutuskan saat hasilnya menunggu", () => {
+  it("tidak ada lagi tombol ACC atasan, bahkan untuk baris lama", () => {
+    // Baris lama yang terlanjur berhenti di status ini tidak boleh menampilkan
+    // tombol menuju tahap yang sudah tidak ada; ia dibereskan lewat migrasi
+    // data, bukan lewat tombol yang tertinggal.
     const s = nextActions(pada("menunggu_atasan"));
     expect(s.complete).toBe(false);
-    expect(s.accAtasan).toBe(true);
+    expect(s.accAtasan).toBe(false);
   });
 
   it("jenis lain tidak pernah punya langkah ACC atasan", () => {

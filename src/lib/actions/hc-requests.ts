@@ -547,7 +547,16 @@ export async function submitDesignResultAction(input: {
   if (berkas.length === 0) return { error: "Lampirkan dulu berkas hasil designnya." };
 
   const sekarang = new Date().toISOString();
-  const langsung = bolehAccHasil(user);
+  // TIDAK ADA LAGI TAHAP ACC ATASAN — hasil designer langsung sampai ke
+  // pemohonnya, atas keputusan pemiliknya.
+  //
+  // Gerbang itu dulu ada supaya setiap hasil pernah dilihat orang yang
+  // berwenang. Yang terjadi sebenarnya: berkasnya sudah dilampirkan, sudah bisa
+  // dibuka pemohon, dan yang menahannya cuma satu klik yang tidak menambah
+  // pemeriksaan apa pun — sementara pemohon menunggu tanpa tahu pekerjaannya
+  // sudah jadi. Kalau hasilnya keliru, jalur revisi tetap ada dan justru dipakai
+  // orang yang paling tahu: pemohonnya sendiri.
+  const langsung = true;
   const hasil: HcRequestHasil = {
     at: sekarang,
     byId: user!.id,

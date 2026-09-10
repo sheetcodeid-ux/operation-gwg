@@ -1,6 +1,7 @@
 "use client";
 
 import * as React from "react";
+import { type ColumnDef } from "@tanstack/react-table";
 import { CheckCircle2, CircleDashed, ClipboardCheck, Loader2, SendHorizonal, ShieldCheck, Undo2, UserRound, Wallet, XCircle } from "lucide-react";
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
@@ -33,12 +34,16 @@ import {
   nextActions,
   requestStage,
   stageFilters,
+  statusMeta,
   type HcRequest,
   type HcRequestKind,
   type RequestStage,
   type ScopeManpower,
 } from "@/lib/hc-request";
 import { StageFilterChips } from "@/components/ui/stage-filter";
+import { DataTable } from "@/components/ui/data-table";
+import { merekOutlet } from "@/lib/kpi/merek";
+import { cn, formatDate } from "@/lib/utils";
 import { DiscussButton } from "@/components/chat/forward-request";
 import { FileChip, FilePicker, RequestEmpty, RequestList, uploadAll, type UploadProgress } from "./request-shared";
 import {
@@ -69,6 +74,171 @@ export interface PicOption {
  * memotongnya sebelum sampai ke sini — sementara yang MENGELOLA menerima
  * seluruh antrian dan butuh saringan per PIC untuk membaginya.
  */
+
+/**
+ * Brand sebuah pengajuan design.
+ *
+ * Dibaca dari NAMA PEMOHON/UNTUK SIAPA lebih dulu, baru judulnya. Kolom itulah
+ * yang memuat outletnya ("Nordu Coffee Banjarbaru — SPV Adan"); judul sering
+ * hanya menyebut materinya ("Poster promo akhir pekan") dan tidak menyebut
+ * brand sama sekali. Membaca judul lebih dulu membuat sebagian antrian
+ * tergolong "tanpa brand" padahal outletnya jelas tertulis satu kolom di
+ * sebelahnya.
+ */
+/**
+ * Antrian sebagai TABEL — pilihan kedua di sebelah kartu.
+ *
+ * Kartu menang saat MENGERJAKAN satu permintaan: judul, brief, tenggat, dan
+ * tombolnya ada di satu tempat. Tabel menang saat membandingkan ANTARBARIS —
+ * siapa paling banyak meminta, brand mana yang paling ramai, mana yang
+ * tenggatnya paling dekat — dan itu pekerjaan yang berbeda, bukan selera yang
+ * berbeda. Karena itu keduanya disediakan, bukan yang satu menggantikan yang
+ * lain.
+ *
+ * Urutannya TENGGAT TERDEKAT DI ATAS, bukan yang terbaru. Antrian dibuka untuk
+ * tahu apa yang harus dikerjakan lebih dulu, dan yang paling mendesak bukan
+ * yang paling baru masuk.
+ */
+function TabelAntrian({
+  rows,
+  mode,
+  picOptions,
+  kelola,
+  meId,
+  onDone,
+}: {
+  rows: HcRequest[];
+  mode: "hc" | "finance";
+  picOptions: PicOption[];
+  kelola: boolean;
+  meId?: string;
+  onDone: () => void;
+}) {
+  const data = React.useMemo(
+    () =>
+      [...rows].sort((a, b) => {
+        // Yang tanpa tenggat turun ke bawah: ia tidak mendesak, dan menaruhnya
+        // di atas menutupi yang benar-benar mendesak.
+        const ta = a.deadline ?? "9999-12-31";
+        const tb = b.deadline ?? "9999-12-31";
+        return ta.localeCompare(tb);
+      }),
+    [rows],
+  );
+
+  const kolom = React.useMemo<ColumnDef<HcRequest>[]>(
+    () => [
+      {
+        id: "judul",
+        header: "Permintaan",
+        accessorFn: (r) => r.title,
+        cell: ({ row }) => (
+          <div className="min-w-0 max-w-[22rem]">
+            <div className="truncate font-medium text-foreground">{row.original.title}</div>
+            <div className="truncate text-[11px] text-muted-foreground">{row.original.subjectName || "—"}</div>
+          </div>
+        ),
+      },
+      {
+        id: "merek",
+        header: "Brand",
+        accessorFn: (r) => merekPengajuan(r)?.label ?? "—",
+        cell: ({ row }) => {
+          const m = merekPengajuan(row.original);
+          return m ? <Badge tone={m.tone}>{m.label}</Badge> : <span className="text-[11px] text-muted-foreground">—</span>;
+        },
+      },
+      {
+        id: "pemohon",
+        header: "Pemohon",
+        accessorFn: (r) => r.requesterName,
+        cell: ({ row }) => (
+          <div className="min-w-0">
+            <div className="truncate text-foreground/90">{row.original.requesterName}</div>
+            <div className="truncate text-[11px] text-muted-foreground">{row.original.department || "—"}</div>
+          </div>
+        ),
+      },
+      {
+        id: "jenis",
+        header: "Jenis",
+        accessorFn: (r) => r.designType ?? "—",
+        cell: ({ getValue }) => <span className="text-foreground/80">{getValue<string>() || "—"}</span>,
+      },
+      {
+        id: "pic",
+        header: "PIC",
+        accessorFn: (r) => r.assigneeName ?? "",
+        cell: ({ row }) =>
+          row.original.assigneeName ? (
+            <span className="text-foreground/80">{row.original.assigneeName}</span>
+          ) : (
+            <span className="text-[11px] text-muted-foreground">belum ditugaskan</span>
+          ),
+      },
+      {
+        id: "tenggat",
+        header: "Tenggat",
+        accessorFn: (r) => r.deadline ?? "",
+        cell: ({ row }) => <SelTenggat r={row.original} />,
+      },
+      {
+        id: "status",
+        header: "Status",
+        accessorFn: (r) => statusMeta(r.kind, r.status).label,
+        cell: ({ row }) => {
+          const st = statusMeta(row.original.kind, row.original.status);
+          return <Badge tone={st.tone}>{st.label}</Badge>;
+        },
+      },
+      {
+        id: "aksi",
+        header: "",
+        enableSorting: false,
+        cell: ({ row }) => (
+          <div className="flex flex-wrap items-center justify-end gap-1.5">
+            <DiscussButton requestId={row.original.id} requestTitle={row.original.title} suggestedIds={[row.original.requesterId]} label="Tanya" />
+            <Actions r={row.original} mode={mode} picOptions={picOptions} kelola={kelola} meId={meId} onDone={onDone} />
+          </div>
+        ),
+      },
+    ],
+    [mode, picOptions, kelola, meId, onDone],
+  );
+
+  return <DataTable tableId="antrian-design" columns={kolom} data={data} searchPlaceholder="Cari permintaan…" stickyHeader={false} />;
+}
+
+/**
+ * Tenggat sebagai tanggal PLUS sisa harinya.
+ *
+ * Tanggal saja menuntut pembacanya menghitung sendiri berapa hari lagi, tiap
+ * baris, tiap kali. Sisa harinyalah yang menentukan urutan kerja — dan yang
+ * sudah lewat ditandai merah supaya tidak tenggelam di antara yang belum.
+ */
+function SelTenggat({ r }: { r: HcRequest }) {
+  if (!r.deadline) return <span className="text-[11px] text-muted-foreground">—</span>;
+  const selesai = r.status === "terlaksana" || r.status === "ditolak_hc" || r.status === "ditolak_finance";
+  const hariIni = new Date().toISOString().slice(0, 10);
+  const sisa = Math.round((Date.parse(`${r.deadline}T00:00:00Z`) - Date.parse(`${hariIni}T00:00:00Z`)) / 86_400_000);
+  const lewat = !selesai && sisa < 0;
+  return (
+    <div className="whitespace-nowrap">
+      <div className="tabular-nums text-foreground/90">{formatDate(r.deadline)}</div>
+      {!selesai && (
+        <div className={cn("text-[11px] tabular-nums", lewat ? "text-rose-600 dark:text-rose-400" : sisa <= 1 ? "text-amber-600 dark:text-amber-400" : "text-muted-foreground")}>
+          {lewat ? `telat ${Math.abs(sisa)} hari` : sisa === 0 ? "hari ini" : `${sisa} hari lagi`}
+        </div>
+      )}
+    </div>
+  );
+}
+
+
+function merekPengajuan(r: { subjectName?: string | null; title?: string | null; department?: string | null }) {
+  return merekOutlet(r.subjectName ?? "") ?? merekOutlet(r.title ?? "") ?? merekOutlet(r.department ?? "");
+}
+
 export function HcRequestReview({
   mode,
   kind,
@@ -98,6 +268,12 @@ export function HcRequestReview({
   const { bingkai: refBingkai, layarPenuh, alih } = useLayarPenuh();
   const [pic, setPic] = React.useState("all");
   const [scope, setScope] = React.useState<ScopeManpower | "all">("all");
+  const [merek, setMerek] = React.useState("all");
+  // Kartu dulu, tabel menyusul — bukan sebaliknya. Kartu memuat judul, brief,
+  // tenggat, dan tombolnya sekaligus; itu yang dibutuhkan saat MENGERJAKAN
+  // antrian. Tabel dipilih saat yang dicari perbandingan antarbaris: siapa
+  // paling banyak meminta, mana yang tenggatnya paling dekat.
+  const [tampilan, setTampilan] = React.useState<"kartu" | "tabel">("kartu");
 
   const load = React.useCallback(async () => {
     setRows(mode === "hc" ? await allHcRequestsAction(kind) : await financeTrainingRequestsAction());
@@ -150,12 +326,26 @@ export function HcRequestReview({
    */
   const q = cari.trim().toLowerCase();
   const shown = React.useMemo(() => {
-    const perTahap = stage === "all" ? semua : semua.filter((r) => tahapDari(r) === stage);
-    if (!q) return perTahap;
-    return perTahap.filter((r) =>
-      `${r.title ?? ""} ${r.requesterName ?? ""} ${r.department ?? ""}`.toLowerCase().includes(q),
+    let hasil = stage === "all" ? semua : semua.filter((r) => tahapDari(r) === stage);
+    if (merek !== "all") hasil = hasil.filter((r) => (merekPengajuan(r)?.label ?? "—") === merek);
+    if (!q) return hasil;
+    return hasil.filter((r) =>
+      `${r.title ?? ""} ${r.requesterName ?? ""} ${r.department ?? ""} ${r.subjectName ?? ""}`.toLowerCase().includes(q),
     );
-  }, [semua, stage, tahapDari, q]);
+  }, [semua, stage, tahapDari, q, merek]);
+
+  /** Brand yang benar-benar muncul di antrian — bukan daftar tetap. */
+  const opsiMerek = React.useMemo(() => {
+    const ada = new Map<string, number>();
+    for (const r of semua) {
+      const label = merekPengajuan(r)?.label ?? "Tanpa brand";
+      ada.set(label, (ada.get(label) ?? 0) + 1);
+    }
+    return [
+      { value: "all", label: `Semua brand (${semua.length})` },
+      ...[...ada.entries()].sort((a, b) => b[1] - a[1]).map(([label, n]) => ({ value: label, label: `${label} (${n})` })),
+    ];
+  }, [semua]);
   const hitung = React.useCallback(
     (v: RequestStage | "all") => (v === "all" ? semua.length : semua.filter((r) => tahapDari(r) === v).length),
     [semua, tahapDari],
@@ -187,13 +377,34 @@ export function HcRequestReview({
       {kind === "design" && !kelola && (
         <p className="mb-3 rounded-xl border border-border bg-muted/30 px-3 py-2 text-[11px] leading-relaxed text-muted-foreground">
           <b className="text-foreground">Menunggu</b> berisi permintaan baru seluruh tim Creative — siapa pun boleh
-          mengambilnya. Tab lainnya (Sedang Dikerjakan, Revisi, Menunggu ACC, Selesai, Ditolak) hanya berisi{" "}
+          mengambilnya. Tab lainnya (Sedang Dikerjakan, Revisi, Selesai, Ditolak) hanya berisi{" "}
           <b className="text-foreground">pekerjaan Anda sendiri</b>, jadi tidak tercampur dengan pekerjaan rekan.
-          Setelah <b className="text-foreground">Kirim Hasil</b>, berkasnya menunggu ACC atasan dulu — pemohon belum
-          menerima apa pun sampai itu selesai.
+          Setelah <b className="text-foreground">Kirim Hasil</b>, berkasnya <b className="text-foreground">langsung
+          sampai ke pemohon</b> — tidak ada lagi tahap ACC di antaranya, jadi pastikan yang dilampirkan memang versi
+          final.
         </p>
       )}
-      <StageFilterChips className="mb-4" options={opsi} value={stage} onChange={setStage} count={hitung} />
+      <StageFilterChips className="mb-3" options={opsi} value={stage} onChange={setStage} count={hitung} />
+
+      {/* Saringan brand dan pengalih tampilan HANYA untuk antrian design.
+          Pengajuan karyawan dan pelatihan tidak punya brand, dan saringan yang
+          isinya cuma "Tanpa brand" hanya memakan tempat. */}
+      {kind === "design" && (
+        <div className="mb-4 flex flex-wrap items-center gap-2">
+          <Combobox value={merek} onChange={setMerek} options={opsiMerek} className="w-full sm:w-56" searchable={false} />
+          <div className="ml-auto">
+            <SegmentedTabs
+              size="sm"
+              value={tampilan}
+              onChange={(v) => setTampilan(v as "kartu" | "tabel")}
+              items={[
+                { value: "kartu", label: "Kartu" },
+                { value: "tabel", label: "Tabel" },
+              ]}
+            />
+          </div>
+        </div>
+      )}
 
       {rows === null ? (
         <div className="flex items-center gap-2 py-10 text-sm text-muted-foreground">
@@ -207,6 +418,15 @@ export function HcRequestReview({
               : "Belum ada pengajuan pelatihan yang butuh persetujuan dana."
             : `Tidak ada pengajuan pada tahap "${opsi.find((o) => o.value === stage)?.label ?? stage}".`}
         </RequestEmpty>
+      ) : kind === "design" && tampilan === "tabel" ? (
+        <TabelAntrian
+          rows={shown}
+          mode={mode}
+          picOptions={picOptions}
+          kelola={kelola}
+          meId={meId}
+          onDone={load}
+        />
       ) : (
         <RequestList
           rows={shown}
@@ -243,10 +463,11 @@ export function HcRequestReview({
         onCari={setCari}
         cariPlaceholder="Cari judul, pemohon, departemen…"
         hitung={{ tampil: shown.length, total: semua.length }}
-        menyaring={q !== "" || stage !== "all"}
+        menyaring={q !== "" || stage !== "all" || merek !== "all"}
         onBersihkan={() => {
           setCari("");
           setStage("all");
+          setMerek("all");
         }}
         panduan={kepala.panduan}
         layarPenuh={layarPenuh}
@@ -321,17 +542,6 @@ function Actions({
             {isDesign ? "Kirim Hasil" : "Tandai Terlaksana"}
           </Button>
         )}
-        {/* Menunggu ACC. Yang mengerjakan tetap melihat barisnya — supaya ia
-            tahu hasilnya sudah masuk dan sedang di tangan siapa — tapi tombolnya
-            hanya muncul untuk yang berhak memutuskan. */}
-        {step.accAtasan &&
-          (kelola ? (
-            <Button size="sm" onClick={() => setDialog("acc")}>
-              <ShieldCheck className="size-4" /> Periksa Hasil
-            </Button>
-          ) : (
-            <span className="text-[11px] text-muted-foreground">Menunggu ACC atasan</span>
-          ))}
         {dialog === "hc" && <HcDecideDialog r={r} onClose={() => setDialog(null)} onDone={onDone} />}
         {dialog === "assign" && (
           <AssignDialog r={r} picOptions={picOptions} kelola={kelola} meId={meId} onClose={() => setDialog(null)} onDone={onDone} />
@@ -591,17 +801,12 @@ function KirimHasilDialog({
         id: r.id,
         note,
         attachments,
-        // Hanya bila kirimannya memang langsung sampai ke pemohon. Kalau masih
-        // menunggu ACC, penilaiannya diisi di dialog ACC — mengisinya dua kali
-        // berarti yang belakangan menimpa yang duluan tanpa ada yang tahu.
+        // Penilaian pemohon hanya diisi oleh yang mengelola antrian; designer
+        // yang mengirim hasilnya sendiri tidak menilai permintaannya sendiri.
         ...(kelola ? { ceklis, catatanNilai } : {}),
       });
       if (res.error) return toast.error(res.error);
-      toast.success(
-        res.langsungTerkirim
-          ? `Hasil terkirim ke ${r.requesterName}`
-          : "Hasil dikirim — menunggu ACC atasan sebelum sampai ke pemohon",
-      );
+      toast.success(`Hasil terkirim ke ${r.requesterName}`);
       onClose();
       onDone();
     } catch (e) {
@@ -616,22 +821,13 @@ function KirimHasilDialog({
     <Dialog open onOpenChange={(v) => !v && onClose()}>
       <DialogContent title={ulang ? "Kirim Ulang Hasil Design" : "Kirim Hasil Design"} description={r.title} align="center" className="max-w-md">
         <div className="max-h-[70vh] space-y-3 overflow-y-auto p-5">
-          {/* Kalimatnya mengikuti apa yang benar-benar terjadi setelah tombol
-              Kirim ditekan. Yang mengelola antrian tidak menunggu ACC siapa
-              pun — memberitahunya "diperiksa atasan dulu" membuat ia mengira
-              masih ada tahap yang sebetulnya tidak ada. */}
+          {/* Satu kalimat, karena sekarang hanya satu hal yang terjadi: tidak
+              ada lagi tahap ACC di antara designer dan pemohon. Menyisakan dua
+              kemungkinan di layar membuat orang mencari tahap yang tidak ada. */}
           <p className="rounded-lg bg-brand-500/10 px-3 py-2 text-xs leading-relaxed text-muted-foreground">
-            {kelola ? (
-              <>
-                Berkasnya langsung sampai ke <b className="text-foreground">{r.requesterName}</b> begitu dikirim, karena
-                Anda sendiri yang berwenang meloloskannya.
-              </>
-            ) : (
-              <>
-                Hasilnya diperiksa atasan dulu. Setelah di-ACC, berkasnya baru muncul di halaman pengajuan{" "}
-                <b className="text-foreground">{r.requesterName}</b>.
-              </>
-            )}
+            Berkasnya <b className="text-foreground">langsung sampai ke {r.requesterName}</b> begitu dikirim — tidak ada
+            tahap pemeriksaan di antaranya. Pastikan yang dilampirkan versi final; kalau keliru, pemohon bisa meminta
+            revisi.
           </p>
 
           {/* Alasan pengembalian terakhir ditaruh DI SINI, bukan cuma di rincian
@@ -651,12 +847,12 @@ function KirimHasilDialog({
           <Field label="Hasil design (JPG / PNG / PDF)" hint={UPLOAD_HINT}>
             <FilePicker files={files} onChange={setFiles} disabled={busy} label="Unggah hasil design" />
           </Field>
-          <Field label={kelola ? "Catatan hasil (opsional)" : "Catatan untuk atasan (opsional)"}>
+          <Field label="Catatan hasil (opsional)">
             <Textarea
               rows={3}
               value={note}
               onChange={(e) => setNote(e.target.value)}
-              placeholder={kelola ? "Yang perlu diketahui pemohon soal hasilnya…" : "Yang perlu diperhatikan sebelum dikirim ke pemohon…"}
+              placeholder="Yang perlu diketahui pemohon soal hasilnya…"
             />
           </Field>
 

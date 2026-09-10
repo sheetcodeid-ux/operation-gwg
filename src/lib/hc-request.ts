@@ -340,12 +340,10 @@ export function stageFilters(kind: HcRequestKind): { value: RequestStage | "all"
     { value: "all", label: "Semua" },
     { value: "menunggu", label: "Menunggu" },
     { value: "dikerjakan", label: dikerjakan },
-    ...(kind === "design"
-      ? ([
-          { value: "revisi", label: "Revisi" },
-          { value: "acc", label: "Menunggu ACC" },
-        ] as const)
-      : []),
+    // Tanpa "Menunggu ACC": tahapnya sudah dihapus dari alur, dan tombol
+    // saringan yang selamanya nol hanya membuat orang mengira ada pekerjaan
+    // tertahan di tempat yang sebenarnya tidak ada.
+    ...(kind === "design" ? ([{ value: "revisi", label: "Revisi" }] as const) : []),
     { value: "selesai", label: "Selesai" },
     { value: "ditolak", label: "Ditolak" },
   ];
@@ -378,7 +376,9 @@ export function nextActions(r: HcRequest): {
     hc: r.status === "menunggu_hc",
     finance: false,
     complete: r.status === "disetujui_hc",
-    accAtasan: r.kind === "design" && r.status === "menunggu_atasan",
+    // Tahap ACC atasan sudah dihapus dari alur design; barisnya tidak pernah
+    // lagi masuk ke status itu, jadi tombolnya tidak pernah perlu muncul.
+    accAtasan: false,
   };
 }
 
