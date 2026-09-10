@@ -9,11 +9,11 @@ import { HcRequestReview } from "@/components/hc/request-review";
 import { PapanDesign } from "@/components/creative/papan-design";
 import { papanDesign } from "@/lib/data/design-rapor";
 
-export const metadata: Metadata = { title: "Antrian Operasional" };
+export const metadata: Metadata = { title: "Antrian Konten" };
 
-export default async function CreativeDesignQueuePage() {
+export default async function CreativeKontenQueuePage() {
   const user = await requireSessionUser();
-  if (!canReachMenu(user, "creative_design")) redirect("/dashboard");
+  if (!canReachMenu(user, "creative_konten")) redirect("/dashboard");
 
   // Kandidat PIC = anggota aktif tim Creative. Akun tanpa departemen (mis. Super
   // Admin) melihat seluruh karyawan aktif — kalau tidak, daftar PIC-nya kosong
@@ -40,17 +40,17 @@ export default async function CreativeDesignQueuePage() {
           memakai kepala berbeda membuat divisinya terbaca seperti dua produk
           yang kebetulan sama-sama dipasang di sini. */}
       <PitaCreative
-        ikon="Palette"
+        ikon="Megaphone"
         eyebrow="Creative · Permintaan Masuk"
-        judul="Antrian Operasional"
+        judul="Antrian Konten"
         ringkas={
           kelola
-            ? "Materi dari manajemen dan supervisor — tenggatnya dari kelonggaran yang dipilih pemohon. Tugaskan PIC-nya, lalu kirim hasilnya."
-            : "Tab Menunggu berisi permintaan baru seluruh tim; tab lainnya hanya pekerjaan Anda sendiri. Ambil dari Menunggu untuk mulai mengerjakan, lalu kirim hasilnya."
+            ? "Materi dari Marketing Communication — punya tanggal tayang, dan tenggat desainnya sehari sebelumnya. Tugaskan PIC-nya, lalu kirim hasilnya."
+            : "Materi konten dari Marketing Communication. Ambil dari Menunggu untuk mulai mengerjakan, lalu kirim hasilnya."
         }
       />
       {papan && <PapanDesign ringkas={papan.ringkas} peminta={papan.peminta} creative={papan.creative} />}
-      <HcRequestReview mode="hc" kind="design" sumber="operasional" picOptions={picOptions} kelola={kelola} meId={user.id} />
+      <HcRequestReview mode="hc" kind="design" sumber="marcomm" picOptions={picOptions} kelola={kelola} meId={user.id} />
     </div>
   );
 }

@@ -57,6 +57,7 @@ export type MenuKey =
   | "hc_training"
   | "fin_training"
   | "creative_design"
+  | "creative_konten"
   | "creative_penilaian"
   | "kpi"
   | "kpi_manajemen"
@@ -187,7 +188,14 @@ export const NAV_MENUS: Omit<NavItem, "section" | "group" | "groupIcon">[] = [
   { key: "hc_reqreview", label: "Permintaan Karyawan", href: "/hc/permintaan", icon: "ClipboardCheck" },
   { key: "hc_training", label: "Pelatihan", href: "/hc/pelatihan", icon: "GraduationCap" },
   { key: "fin_training", label: "ACC Dana Pelatihan", href: "/finance/pelatihan", icon: "Wallet" },
-  { key: "creative_design", label: "Antrian Design", href: "/creative/design", icon: "Palette" },
+  // DUA ANTRIAN, bukan satu yang disaring. Isinya memang pekerjaan berbentuk
+  // berbeda: yang dari Marketing Communication punya tanggal tayang dan
+  // biasanya berseri, yang dari manajemen dan supervisor datang satu-satu
+  // dengan kelonggaran yang dipilih sendiri. Namanya menyebut JENIS
+  // PEKERJAANNYA, bukan bagan organisasinya — yang mengerjakan mencari "materi
+  // konten" atau "materi outlet", bukan "punya divisi A" atau "punya divisi B".
+  { key: "creative_design", label: "Antrian Operasional", href: "/creative/design", icon: "Palette" },
+  { key: "creative_konten", label: "Antrian Konten", href: "/creative/konten", icon: "Megaphone" },
   { key: "creative_penilaian", label: "Penilaian Request", href: "/creative/penilaian", icon: "Gauge" },
 
   // Key Performance Indicator — satu baris per posisi yang dinilai. Menunya
@@ -550,7 +558,7 @@ export const DIVISION_GROUPS: Partial<Record<Division, NavGroupDef[]>> = {
     { name: "Marketing Communication", icon: "Megaphone", urutan: 5, menus: ["kpi_marcomm", "kpi_creative_sosmed"] },
   ],
   Creative: [
-    { name: "Permintaan Masuk", icon: "Palette", menus: ["creative_design"] },
+    { name: "Permintaan Masuk", icon: "Palette", menus: ["creative_design", "creative_konten"] },
     { name: "Monitoring", icon: "Gauge", menus: ["creative_penilaian"] },
     // Kelompoknya dinamai sama persis dengan yang ada di sidebar Marketing
     // Communication: menu yang sama sebaiknya berada di bawah nama yang sama,
@@ -613,7 +621,7 @@ export const DIVISION_MENUS: { division: Division; menus: MenuKey[] }[] = [
   // pindah ke MarComm, jadwal itu tidak lagi berada di divisi yang sama dengan
   // yang mengerjakan desainnya. Tanpa aksesnya, satu-satunya cara tim Creative
   // tahu ada promo yang perlu materi adalah menunggu seseorang mengabarkan.
-  { division: "Creative", menus: ["work", "creative_design", "creative_penilaian", "mc_events"] },
+  { division: "Creative", menus: ["work", "creative_design", "creative_konten", "creative_penilaian", "mc_events"] },
   { division: "Project Manager", menus: ["work"] },
   { division: "Auditor", menus: ["work"] },
   { division: "Executive Assistant", menus: ["work"] },

@@ -349,10 +349,27 @@ export async function myHcRequestsAction(): Promise<HcRequest[]> {
 }
 
 /** Pengajuan yang masuk ke HC — dibatasi satu jenis bila diminta. */
-export async function allHcRequestsAction(kind?: HcRequestKind): Promise<HcRequest[]> {
+/**
+ * Dari mana pengajuan design itu datang — dipakai memecah antriannya jadi dua.
+ *
+ * Bukan sekadar saringan tampilan: dua antrian ini berisi pekerjaan yang
+ * bentuknya memang berbeda. Yang dari Marketing Communication punya tanggal
+ * tayang dan biasanya berseri; yang dari manajemen dan supervisor datang
+ * satu-satu dengan kelonggaran yang dipilih sendiri. Menggabungkannya membuat
+ * yang mengerjakan harus memilah ulang tiap kali membuka halamannya.
+ */
+export type SumberAntrian = "marcomm" | "operasional";
+
+export async function allHcRequestsAction(kind?: HcRequestKind, sumber?: SumberAntrian): Promise<HcRequest[]> {
   const user = await getSessionUser();
   if (kind === "design" ? !canCreative(user) : !canHc(user)) return [];
-  const rows = await listHcRequests(kind ? { kind } : {});
+  let rows = await listHcRequests(kind ? { kind } : {});
+  // Disaring DI SINI, bukan di layar: baris yang bukan milik antrian ini tidak
+  // perlu sampai ke peramban sama sekali.
+  if (kind === "design" && sumber) {
+    const dariMarcomm = (r: HcRequest) => pakaiRencanaUpload(r.department);
+    rows = rows.filter((r) => (sumber === "marcomm" ? dariMarcomm(r) : !dariMarcomm(r)));
+  }
 
   // Antrian Design dipakai beberapa designer sekaligus. Penyaringannya
   // dilakukan DI SINI, bukan di layar: yang tidak boleh dilihat sebaiknya tidak

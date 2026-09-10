@@ -11,6 +11,7 @@ import { Field, Input, Textarea } from "@/components/ui/input";
 import {
   accDesignResultAction,
   allHcRequestsAction,
+  type SumberAntrian,
   assignDesignRequestAction,
   completeHcRequestAction,
   financeDecideRequestAction,
@@ -245,6 +246,7 @@ export function HcRequestReview({
   picOptions = [],
   kelola = false,
   meId,
+  sumber,
   bingkai: kepala,
 }: {
   mode: Mode;
@@ -252,6 +254,8 @@ export function HcRequestReview({
   picOptions?: PicOption[];
   kelola?: boolean;
   meId?: string;
+  /** Membatasi antrian design ke satu asal permintaan; kosong = seluruhnya. */
+  sumber?: SumberAntrian;
   /**
    * Bila diisi, antreannya dibungkus bingkai modul HC-MOS: batang alat berisi
    * identitas modul, pencarian, panduan, dan layar penuh.
@@ -276,8 +280,8 @@ export function HcRequestReview({
   const [tampilan, setTampilan] = React.useState<"kartu" | "tabel">("kartu");
 
   const load = React.useCallback(async () => {
-    setRows(mode === "hc" ? await allHcRequestsAction(kind) : await financeTrainingRequestsAction());
-  }, [mode, kind]);
+    setRows(mode === "hc" ? await allHcRequestsAction(kind, sumber) : await financeTrainingRequestsAction());
+  }, [mode, kind, sumber]);
   React.useEffect(() => {
     void load();
   }, [load]);
