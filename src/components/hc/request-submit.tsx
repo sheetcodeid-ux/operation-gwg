@@ -29,7 +29,7 @@ import {
 } from "@/lib/hc-request";
 import { DiscussButton } from "@/components/chat/forward-request";
 import { FilePicker, RequestEmpty, RequestList, uploadAll } from "./request-shared";
-import { TENGGAT, tanggalTenggat } from "@/lib/kpi/deadline";
+import { TENGGAT, pakaiRencanaUpload, tanggalTenggat, tenggatDariRencanaUpload } from "@/lib/kpi/deadline";
 
 /** Tanggal hari ini menurut jam pemakainya, bukan UTC. */
 function hariIniLokal(): string {
@@ -208,12 +208,21 @@ export function NewRequestButton({
   members = [],
   outlets = [],
   scopeAwal = "manajemen",
+  departemen = null,
 }: {
   kind: HcRequestKind;
   members?: DeptMember[];
   /** Cabang yang boleh dipilih pemohon — hanya untuk permintaan karyawan. */
   outlets?: PilihanOutlet[];
   scopeAwal?: ScopeManpower;
+  /**
+   * Departemen pemohon — menentukan bentuk isian tenggatnya.
+   *
+   * Hanya untuk MENAMPILKAN isian yang benar. Yang menentukan tenggat
+   * sesungguhnya tetap server, dari departemen di sesi: kalau nilai ini yang
+   * dipercaya, siapa pun bisa mengaku MarComm untuk memakai aturan lain.
+   */
+  departemen?: string | null;
 }) {
   const copy = COPY[kind];
   return (
@@ -224,7 +233,7 @@ export function NewRequestButton({
         </Button>
       </DialogTrigger>
       <DialogContent title={copy.title} description={copy.formDesc} align="center" className="max-w-lg">
-        <RequestForm kind={kind} members={members} outlets={outlets} scopeAwal={scopeAwal} />
+        <RequestForm kind={kind} members={members} outlets={outlets} scopeAwal={scopeAwal} departemen={departemen} />
       </DialogContent>
     </Dialog>
   );
@@ -252,11 +261,13 @@ function RequestForm({
   members,
   outlets,
   scopeAwal,
+  departemen,
 }: {
   kind: HcRequestKind;
   members: DeptMember[];
   outlets: PilihanOutlet[];
   scopeAwal: ScopeManpower;
+  departemen: string | null;
 }) {
   const router = useRouter();
   const { setOpen } = useDialogControl();
@@ -272,6 +283,10 @@ function RequestForm({
   const [outletId, setOutletId] = React.useState(outlets.length === 1 ? outlets[0].id : "");
   const [trainingType, setTrainingType] = React.useState(TRAINING_TYPES[0]);
   const [customType, setCustomType] = React.useState("");
+  // MarComm mengisi TANGGAL TAYANG; departemen lain memilih kelonggaran.
+  // Keduanya menghasilkan tenggat, tapi datang dari arah yang berlawanan —
+  // yang satu dihitung mundur dari tanggal tayang, yang lain maju dari hari ini.
+  const dariUpload = kind === "design" && pakaiRencanaUpload(departemen);
   const [designType, setDesignType] = React.useState(DESIGN_TYPES[0]);
   const [customDesign, setCustomDesign] = React.useState("");
   const [designSize, setDesignSize] = React.useState("");
@@ -280,12 +295,16 @@ function RequestForm({
   // membuat pemohon bisa memundurkannya untuk memperpanjang tenggat.
   const [tenggatKategori, setTenggatKategori] = React.useState<string>("");
   const tanggalRequest = React.useMemo(() => hariIniLokal(), []);
-  const tanggalDeadline = tenggatKategori ? tanggalTenggat(tanggalRequest, tenggatKategori) : null;
   const [subjectName, setSubjectName] = React.useState("");
   const [participantIds, setParticipantIds] = React.useState<string[]>([]);
   const [participants, setParticipants] = React.useState("");
   const [budget, setBudget] = React.useState("");
   const [plannedDate, setPlannedDate] = React.useState("");
+  const tanggalDeadline = dariUpload
+    ? (plannedDate ? tenggatDariRencanaUpload(plannedDate) : null)
+    : tenggatKategori
+      ? tanggalTenggat(tanggalRequest, tenggatKategori)
+      : null;
   const [files, setFiles] = React.useState<File[]>([]);
   const [errors, setErrors] = React.useState<Errors>({});
   const [busy, setBusy] = React.useState(false);
@@ -314,7 +333,14 @@ function RequestForm({
       }
     } else if (isDesign) {
       if (!resolvedDesign) e.designType = "Sebutkan jenis designnya.";
-      if (!tenggatKategori) e.tenggat = "Pilih tenggatnya lebih dulu.";
+      // Yang wajib diisi ikut bentuk isiannya: MarComm tanpa tanggal tayang
+      // tidak punya tenggat sama sekali, dan permintaan tanpa tenggat adalah
+      // permintaan yang tidak bisa dinilai terlambat atau tidak.
+      if (dariUpload) {
+        if (!plannedDate) e.tenggat = "Isi tanggal rencana upload-nya lebih dulu.";
+      } else if (!tenggatKategori) {
+        e.tenggat = "Pilih tenggatnya lebih dulu.";
+      }
       if (!subjectName.trim()) e.subjectName = "Tulis nama pemohon atau untuk siapa design ini.";
     } else {
       if (!position.trim()) e.position = "Posisi yang diminta wajib diisi.";
@@ -347,7 +373,7 @@ function RequestForm({
         budget: budgetNum,
         designType: isDesign ? resolvedDesign : "",
         designSize: designSize.trim(),
-        deadlineKategori: isDesign ? tenggatKategori : null,
+        deadlineKategori: isDesign && !dariUpload ? tenggatKategori : null,
         plannedDate,
         attachments,
       });
@@ -421,26 +447,34 @@ function RequestForm({
             <Field label="Ukuran / Format" hint="Kosongkan bila mengikuti standar tim Creative.">
               <Input value={designSize} onChange={(e) => setDesignSize(e.target.value)} placeholder="cth. 1080 x 1350 px" />
             </Field>
-            <Field label="Rencana Upload" hint="Kapan materinya dipakai. Boleh kosong.">
-              <DatePicker value={plannedDate} onChange={setPlannedDate} />
-            </Field>
+            {/* SATU kolom tenggat, bukan dua. Rencana Upload dan Deadline
+                menjawab pertanyaan yang sama dari arah berlawanan; menampilkan
+                keduanya berarti meminta orang menjawabnya dua kali lalu
+                membiarkan keduanya bisa saling bertentangan. */}
+            {dariUpload ? (
+              <Field label="Rencana Upload" hint="Tanggal materinya tayang — tenggat desainnya sehari sebelumnya.">
+                <DatePicker value={plannedDate} onChange={setPlannedDate} />
+                <FieldError>{errors.tenggat}</FieldError>
+              </Field>
+            ) : (
+              /* Tenggat DIPILIH dari empat kelonggaran, bukan diketik
+                 tanggalnya. Tanggal bebas membuat tiap pemohon memakai ukuran
+                 "mendesak" sendiri-sendiri, dan tidak ada yang bisa
+                 dibandingkan sesudahnya. Empat pilihan ini punya harga yang
+                 jelas di KPI kedua belah pihak. */
+              <Field label="Deadline" hint="Pilih kelonggarannya — tanggalnya dihitung otomatis.">
+                <Combobox
+                  searchable={false}
+                  value={tenggatKategori}
+                  onChange={setTenggatKategori}
+                  options={TENGGAT.map((t) => ({ value: t.kategori, label: `${t.label} — ${t.keterangan}` }))}
+                  placeholder="Pilih Deadline"
+                  matchTriggerWidth
+                />
+                <FieldError>{errors.tenggat}</FieldError>
+              </Field>
+            )}
           </div>
-
-          {/* Tenggat DIPILIH dari empat kelonggaran, bukan diketik tanggalnya.
-              Tanggal bebas membuat tiap pemohon memakai ukuran "mendesak"
-              sendiri-sendiri, dan tidak ada yang bisa dibandingkan sesudahnya.
-              Empat pilihan ini punya harga yang jelas di KPI kedua belah pihak. */}
-          <Field label="Deadline" hint="Pilih kelonggarannya — tanggalnya dihitung otomatis.">
-            <Combobox
-              searchable={false}
-              value={tenggatKategori}
-              onChange={setTenggatKategori}
-              options={TENGGAT.map((t) => ({ value: t.kategori, label: `${t.label} — ${t.keterangan}` }))}
-              placeholder="Pilih Deadline"
-              matchTriggerWidth
-            />
-            <FieldError>{errors.tenggat}</FieldError>
-          </Field>
 
           <div className="grid gap-3 sm:grid-cols-2">
             <Field label="Tanggal Request">

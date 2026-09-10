@@ -10,7 +10,7 @@ import { persistMessage } from "@/lib/data/persist";
 import { createHcRequest, deleteHcRequest, getHcRequest, listHcRequests, updateHcRequest } from "@/lib/data/hc-requests";
 import { canSeeRequest, requestScopeFor } from "@/lib/data/request-scope";
 import { notify } from "@/lib/data/notify";
-import { TENGGAT, tanggalTenggat } from "@/lib/kpi/deadline";
+import { TENGGAT, pakaiRencanaUpload, tanggalTenggat, tenggatDariRencanaUpload } from "@/lib/kpi/deadline";
 import {
   antrianUntukPic,
   kelolaAntrianDesign,
@@ -188,6 +188,38 @@ export async function presignHcUploadAction(input: {
 const kategoriTenggatSah = (k: string | null | undefined): string | null =>
   k && TENGGAT.some((t) => t.kategori === k) ? k : null;
 
+
+/**
+ * Tenggat sebuah pengajuan desain — DITENTUKAN SERVER, dari departemen ASLI
+ * pemohonnya.
+ *
+ * Dua aturan, bukan satu. Marketing Communication mengisi tanggal tayang dan
+ * tenggatnya dihitung mundur sehari dari situ; departemen lain memilih
+ * kelonggaran (Sebelum H-5 … H-1) dan tenggatnya dihitung maju dari hari ini.
+ *
+ * KEDUANYA DIHITUNG DI SINI, bukan diterima dari peramban. Yang dikirim
+ * peramban bisa disetel sendiri, dan tenggat yang bisa disetel sendiri berhenti
+ * jadi tenggat. Departemennya pun dibaca dari sesi, bukan dari isian: kalau
+ * tidak, siapa pun bisa mengaku MarComm untuk memakai aturan yang berbeda.
+ */
+function tenggatPengajuan(
+  input: { deadlineKategori?: string | null; plannedDate?: string },
+  departemen: string | null | undefined,
+): { deadlineKategori: string | null; deadline: string | null } {
+  if (pakaiRencanaUpload(departemen)) {
+    // Kategorinya tetap dicatat "h1" supaya penilaian KPI-nya memakai jalur
+    // yang sama dengan pengajuan lain — yang berbeda cuma dari mana tanggalnya
+    // datang, bukan berapa harganya kalau terlambat.
+    const tenggat = input.plannedDate ? tenggatDariRencanaUpload(input.plannedDate) : null;
+    return { deadlineKategori: tenggat ? "h1" : null, deadline: tenggat };
+  }
+  const kategori = kategoriTenggatSah(input.deadlineKategori);
+  return {
+    deadlineKategori: kategori,
+    deadline: kategori ? tanggalTenggat(new Date().toISOString().slice(0, 10), kategori) : null,
+  };
+}
+
 export interface SubmitRequestInput {
   kind: HcRequestKind;
   title: string;
@@ -262,13 +294,7 @@ export async function submitHcRequestAction(input: SubmitRequestInput): Promise<
       budget: input.budget ?? 0,
       designType: input.designType?.trim() || null,
       designSize: input.designSize?.trim() || null,
-      // Tanggal tenggat DIHITUNG DI SERVER dari tanggal hari ini, bukan
-      // diterima dari peramban. Yang dikirim peramban bisa disetel sendiri,
-      // dan tenggat yang bisa disetel sendiri berhenti jadi tenggat.
-      deadlineKategori: kategoriTenggatSah(input.deadlineKategori),
-      deadline: kategoriTenggatSah(input.deadlineKategori)
-        ? tanggalTenggat(new Date().toISOString().slice(0, 10), input.deadlineKategori!)
-        : null,
+      ...tenggatPengajuan(input, user!.department),
       plannedDate: input.plannedDate || null,
       attachments: input.attachments ?? [],
     });

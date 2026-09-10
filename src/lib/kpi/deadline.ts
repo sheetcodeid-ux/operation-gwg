@@ -85,3 +85,32 @@ export function lewatTenggat(input: { tenggat: string | null; selesaiPada: strin
   if (!input.tenggat) return false;
   return input.selesaiPada ? input.selesaiPada.slice(0, 10) > input.tenggat : input.hariIni > input.tenggat;
 }
+
+/**
+ * Departemen yang tenggatnya DIHITUNG MUNDUR dari rencana unggah.
+ *
+ * Marketing Communication tidak meminta desain "secepatnya" — materinya sudah
+ * punya tanggal tayang yang ditetapkan kalender kontennya. Menyuruh mereka
+ * memilih kelonggaran H-5/H-3/H-1 berarti menerjemahkan tanggal yang sudah
+ * pasti menjadi tebakan, lalu menerjemahkannya balik jadi tanggal lagi. Yang
+ * mereka isi tanggal tayangnya, dan tenggat desainnya menyusul dari situ.
+ */
+export const DEPARTEMEN_RENCANA_UPLOAD = "Marketing Communication";
+
+/** Apakah departemen itu memakai rencana unggah, bukan pilihan kelonggaran. */
+export const pakaiRencanaUpload = (departemen: string | null | undefined): boolean =>
+  (departemen ?? "").trim().toLowerCase() === DEPARTEMEN_RENCANA_UPLOAD.toLowerCase();
+
+/**
+ * Tenggat desain untuk permintaan berbasis rencana unggah: SEHARI SEBELUMNYA.
+ *
+ * Materi yang baru selesai pada hari tayang tidak bisa lagi diperiksa, dijadwal,
+ * atau diperbaiki — dan yang menayangkannya belum tentu orang yang sama dengan
+ * yang membuatnya. Satu hari jeda itulah bedanya antara materi yang siap tayang
+ * dan materi yang baru jadi.
+ */
+export function tenggatDariRencanaUpload(rencanaUpload: string): string | null {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(rencanaUpload)) return null;
+  const [th, bl, tg] = rencanaUpload.split("-").map(Number);
+  return new Date(Date.UTC(th, bl - 1, tg - 1)).toISOString().slice(0, 10);
+}
