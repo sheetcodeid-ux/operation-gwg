@@ -36,14 +36,21 @@ function Kartu({ label, nilai, tone }: { label: string; nilai: number; tone?: "d
   );
 }
 
+/**
+ * Bagian-bagian papan antrian, dipanggil terpisah oleh tabnya.
+ *
+ * Ketiganya OPSIONAL dengan sengaja: tab Performa memanggil ringkasan dan tabel
+ * designer, tab Kebiasaan Pemohon memanggil rapot peminta. Memaksakan ketiganya
+ * selalu ada berarti tiap tab menggambar dua bagian yang tidak sedang dibuka.
+ */
 export function PapanDesign({
   ringkas,
   peminta,
   creative,
 }: {
-  ringkas: RingkasDesign;
-  peminta: BarisRaporPeminta[];
-  creative: BarisKerjaCreative[];
+  ringkas?: RingkasDesign;
+  peminta?: BarisRaporPeminta[];
+  creative?: BarisKerjaCreative[];
 }) {
   const kolomPeminta = React.useMemo<ColumnDef<BarisRaporPeminta>[]>(
     () => [
@@ -131,15 +138,17 @@ export function PapanDesign({
 
   return (
     <div className="flex flex-col gap-3">
-      <div className="grid gap-3 sm:grid-cols-3 lg:grid-cols-5">
-        <Kartu label="Total Desain Request" nilai={ringkas.request} />
-        <Kartu label="Total Desain Waiting" nilai={ringkas.menunggu} tone="warning" />
-        <Kartu label="Total Desain On Progress" nilai={ringkas.dikerjakan} />
-        <Kartu label="Total Desain Selesai" nilai={ringkas.selesai} tone="success" />
-        <Kartu label="Total Desain Lewat Deadline" nilai={ringkas.lewatDeadline} tone="danger" />
-      </div>
+      {ringkas && (
+        <div className="grid gap-3 sm:grid-cols-3 lg:grid-cols-5">
+          <Kartu label="Total Desain Request" nilai={ringkas.request} />
+          <Kartu label="Total Desain Waiting" nilai={ringkas.menunggu} tone="warning" />
+          <Kartu label="Total Desain On Progress" nilai={ringkas.dikerjakan} />
+          <Kartu label="Total Desain Selesai" nilai={ringkas.selesai} tone="success" />
+          <Kartu label="Total Desain Lewat Deadline" nilai={ringkas.lewatDeadline} tone="danger" />
+        </div>
+      )}
 
-      {creative.length > 0 && (
+      {creative && creative.length > 0 && (
         <DataTable
           tableId="design-creative"
           columns={kolomCreative}
@@ -151,9 +160,9 @@ export function PapanDesign({
         />
       )}
 
-      {peminta.length > 0 && (
+      {peminta && peminta.length > 0 && (
         <>
-          <h3 className="mt-1 text-[13px] font-semibold text-foreground">Rapot Pe-Request</h3>
+          <h3 className="text-[13px] font-semibold text-foreground">Kebiasaan Pemohon</h3>
           <p className="-mt-2 text-[11.5px] leading-relaxed text-muted-foreground">
             Yang dinilai bukan banyaknya permintaan, melainkan seberapa sering waktunya disisakan terlalu sempit.
             Kolom % Mendesak adalah bagian permintaan H-3 dan H-1 terhadap totalnya.

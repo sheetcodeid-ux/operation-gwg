@@ -5,8 +5,7 @@ import { canReachMenu } from "@/lib/nav";
 import { kelolaAntrianDesign } from "@/lib/hc-request";
 import { getUsers } from "@/lib/data/store";
 import { PitaCreative } from "@/components/creative/kit-creative";
-import { HcRequestReview } from "@/components/hc/request-review";
-import { PapanDesign } from "@/components/creative/papan-design";
+import { PapanAntrianDesign } from "@/components/creative/papan-antrian";
 import { papanDesign } from "@/lib/data/design-rapor";
 
 export const metadata: Metadata = { title: "Antrian Operasional" };
@@ -49,8 +48,7 @@ export default async function CreativeDesignQueuePage() {
             : "Tab Menunggu berisi permintaan baru seluruh tim; tab lainnya hanya pekerjaan Anda sendiri. Ambil dari Menunggu untuk mulai mengerjakan, lalu kirim hasilnya."
         }
       />
-      {papan && <PapanDesign ringkas={papan.ringkas} peminta={papan.peminta} creative={papan.creative} />}
-      <HcRequestReview mode="hc" kind="design" sumber="operasional" picOptions={picOptions} kelola={kelola} meId={user.id} />
+      <PapanAntrianDesign sumber="operasional" papan={papan} picOptions={picOptions} kelola={kelola} meId={user.id} />
     </div>
   );
 }

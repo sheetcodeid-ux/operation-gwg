@@ -5,8 +5,7 @@ import { canReachMenu } from "@/lib/nav";
 import { kelolaAntrianDesign } from "@/lib/hc-request";
 import { getUsers } from "@/lib/data/store";
 import { PitaCreative } from "@/components/creative/kit-creative";
-import { HcRequestReview } from "@/components/hc/request-review";
-import { PapanDesign } from "@/components/creative/papan-design";
+import { PapanAntrianDesign } from "@/components/creative/papan-antrian";
 import { papanDesign } from "@/lib/data/design-rapor";
 
 export const metadata: Metadata = { title: "Antrian Konten" };
@@ -49,8 +48,7 @@ export default async function CreativeKontenQueuePage() {
             : "Materi konten dari Marketing Communication. Ambil dari Menunggu untuk mulai mengerjakan, lalu kirim hasilnya."
         }
       />
-      {papan && <PapanDesign ringkas={papan.ringkas} peminta={papan.peminta} creative={papan.creative} />}
-      <HcRequestReview mode="hc" kind="design" sumber="marcomm" picOptions={picOptions} kelola={kelola} meId={user.id} />
+      <PapanAntrianDesign sumber="marcomm" papan={papan} picOptions={picOptions} kelola={kelola} meId={user.id} />
     </div>
   );
 }

@@ -2,6 +2,7 @@ import "server-only";
 
 import { listHcRequests } from "./hc-requests";
 import { TENGGAT, lewatTenggat, nilaiTenggat } from "@/lib/kpi/deadline";
+import { merekOutlet } from "@/lib/kpi/merek";
 
 /**
  * Rekap Antrian Design — ringkasan papan dan rapot pihak yang meminta.
@@ -45,6 +46,10 @@ export interface PapanDesign {
   ringkas: RingkasDesign;
   peminta: BarisRaporPeminta[];
   creative: BarisKerjaCreative[];
+  /** Permintaan per brand — dari mana bebannya datang. */
+  sebaranBrand: BarisSebaran[];
+  /** Permintaan per jenis materi — berbentuk apa bebannya. */
+  sebaranJenis: BarisSebaran[];
 }
 
 /** Status yang berarti permintaannya sudah rampung. */
@@ -69,6 +74,13 @@ function raporPeminta(persenMendesak: number, total: number): BarisRaporPeminta[
 }
 
 /** Papan Antrian Design untuk satu bulan, "YYYY-MM"; kosong = seluruh riwayat. */
+/** Satu baris sebaran: berapa permintaan, berapa yang lewat tenggat. */
+export interface BarisSebaran {
+  label: string;
+  total: number;
+  lewatDeadline: number;
+}
+
 export async function papanDesign(periode?: string): Promise<PapanDesign> {
   const semua = await listHcRequests({ kind: "design" });
   const hariIni = new Date().toISOString().slice(0, 10);
@@ -83,6 +95,31 @@ export async function papanDesign(periode?: string): Promise<PapanDesign> {
       lewatTenggat({ tenggat: r.deadline, selesaiPada: SELESAI.has(r.status) ? r.completedAt : null, hariIni }),
     ).length,
   };
+
+  /**
+   * Sebaran permintaan per brand dan per jenis materi.
+   *
+   * Ringkasan lima kartu menjawab "berapa banyak"; ini menjawab "dari mana dan
+   * berbentuk apa" — dan itu yang menentukan siapa yang perlu ditambah orangnya
+   * atau materi mana yang layak dibuatkan templat. Kolom lewat tenggat ikut
+   * dibawa karena beban dan keterlambatan tidak selalu menumpuk di tempat yang
+   * sama: brand paling ramai belum tentu brand yang paling sering telat.
+   */
+  const sebar = (kunci: (r: (typeof baris)[number]) => string): BarisSebaran[] => {
+    const peta = new Map<string, BarisSebaran>();
+    for (const r of baris) {
+      const label = kunci(r) || "Tanpa keterangan";
+      const b = peta.get(label) ?? { label, total: 0, lewatDeadline: 0 };
+      b.total += 1;
+      if (lewatTenggat({ tenggat: r.deadline, selesaiPada: SELESAI.has(r.status) ? r.completedAt : null, hariIni })) {
+        b.lewatDeadline += 1;
+      }
+      peta.set(label, b);
+    }
+    return [...peta.values()].sort((a, b) => b.total - a.total);
+  };
+  const sebaranBrand = sebar((r) => merekOutlet(r.subjectName ?? "")?.label ?? merekOutlet(r.title ?? "")?.label ?? "Tanpa brand");
+  const sebaranJenis = sebar((r) => r.designType ?? "");
 
   const peminta = new Map<string, BarisRaporPeminta>();
   for (const r of baris) {
@@ -130,6 +167,8 @@ export async function papanDesign(periode?: string): Promise<PapanDesign> {
     ringkas,
     peminta: [...peminta.values()].sort((a, b) => b.persenMendesak - a.persenMendesak || b.total - a.total),
     creative: [...creative.values()].sort((a, b) => b.selesai - a.selesai),
+    sebaranBrand,
+    sebaranJenis,
   };
 }
 
