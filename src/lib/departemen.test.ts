@@ -148,3 +148,22 @@ describe("kotak masuk kerja tetap milik pemegangnya", () => {
     expect(canReachMenu(orang("Operational"), "hygiene" as MenuKey)).toBe(true);
   });
 });
+
+describe("Creative boleh membuka Event Tracker milik Marketing Communication", () => {
+  const orang = (department: string) => ({ role: "member" as const, grants: [], department });
+
+  it("seluruh anggota Creative bisa mencapainya tanpa izin tambahan", () => {
+    // Materi yang dikerjakan Creative berasal dari event dan promo yang
+    // direncanakan MarComm; sejak Sosial Media pindah ke sana, jadwalnya tidak
+    // lagi satu divisi dengan yang mengerjakan desainnya.
+    expect(canReachMenu(orang("Creative"), "mc_events" as MenuKey)).toBe(true);
+    expect(divisionHasMenu("Creative", "mc_events" as MenuKey)).toBe(true);
+  });
+
+  it("yang dibuka HANYA Event Tracker, bukan seluruh isi MarComm", () => {
+    // Complaints tetap milik divisinya sendiri: membukanya berarti menambah
+    // yang bertanggung jawab atas kotak masuk yang sama, dan kotak masuk yang
+    // dimiliki dua divisi adalah kotak masuk yang tidak dikerjakan siapa pun.
+    expect(divisionHasMenu("Creative", "complaints" as MenuKey)).toBe(false);
+  });
+});
