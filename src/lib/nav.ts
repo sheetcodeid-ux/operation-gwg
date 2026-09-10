@@ -552,6 +552,10 @@ export const DIVISION_GROUPS: Partial<Record<Division, NavGroupDef[]>> = {
   Creative: [
     { name: "Permintaan Masuk", icon: "Palette", menus: ["creative_design"] },
     { name: "Monitoring", icon: "Gauge", menus: ["creative_penilaian"] },
+    // Kelompoknya dinamai sama persis dengan yang ada di sidebar Marketing
+    // Communication: menu yang sama sebaiknya berada di bawah nama yang sama,
+    // supaya orang yang berpindah divisi tidak perlu mencarinya dua kali.
+    { name: "Event & Promo", icon: "Megaphone", menus: ["mc_events"] },
   ],
   Finance: [{ name: "Persetujuan Dana", icon: "Wallet", menus: ["fin_training"] }],
   "Marketing Communication": [
@@ -602,7 +606,14 @@ export const DIVISION_MENUS: { division: Division; menus: MenuKey[] }[] = [
   { division: "Human Capital", menus: ["work", "hcmos", "hcmos_raci", "hc_bagan", "hc_struktur", "hc_karyawan", "hc_culture", "hc_sop", "hc_rekrutmen", "hc_kompetensi", "hc_modul", "hc_faststart", "hc_pretest", "hc_selflearning", "hc_kinerja", "hc_appraisal", "hc_intervensi", "hc_career", "hc_kompensasi", "hc_relasi", "hc_compliance", "hc_kebijakan", "hc_monitoring", "hc_kpi", "hc_kontrak", "hc_review", "hc_reqreview", "hc_training", "assessment", "elearning"] },
   // New department-aligned divisions — Work Tracker only for now.
   { division: "Finance", menus: ["work", "fin_training"] },
-  { division: "Creative", menus: ["work", "creative_design", "creative_penilaian"] },
+  // Event Tracker ikut dibuka untuk Creative, atas permintaan pemiliknya.
+  //
+  // Materi yang dikerjakan Creative hampir seluruhnya BERASAL dari event dan
+  // promo yang direncanakan Marketing Communication, dan sejak Sosial Media
+  // pindah ke MarComm, jadwal itu tidak lagi berada di divisi yang sama dengan
+  // yang mengerjakan desainnya. Tanpa aksesnya, satu-satunya cara tim Creative
+  // tahu ada promo yang perlu materi adalah menunggu seseorang mengabarkan.
+  { division: "Creative", menus: ["work", "creative_design", "creative_penilaian", "mc_events"] },
   { division: "Project Manager", menus: ["work"] },
   { division: "Auditor", menus: ["work"] },
   { division: "Executive Assistant", menus: ["work"] },
