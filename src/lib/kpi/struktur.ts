@@ -22,7 +22,8 @@ export type KodePosisi =
   | "pdq_food"
   | "pdq_beverage"
   | "pdq_head_food"
-  | "pdq_head_pdq";
+  | "pdq_head_pdq"
+  | "hc";
 
 export interface Departemen {
   kode: KodeDepartemen;
@@ -92,7 +93,11 @@ export const DEPARTEMEN: Departemen[] = [
     menyusul: ["Quality Assurance & Control (Radika)"],
   },
   { kode: "marcomm", nama: "Marketing Communication", singkat: "MarComm", ikon: "Megaphone", posisi: ["marcomm", "creative_sosmed"] },
-  { kode: "hrd", nama: "Human Resource Development", singkat: "HRD", ikon: "UsersRound", posisi: [], menyusul: ["Human Resource Development (Dini Amalia)"] },
+  // Namanya "Human Capital" — itu yang dipakai perusahaan, dan itu pula yang
+  // tertulis di departemen tiap orangnya di basis data. KODE DEPARTEMENNYA
+  // sengaja tetap "hrd": nilai bulanan dan riwayat KPI menempel pada kode itu,
+  // dan menggantinya memutus riwayat yang sudah terkumpul tanpa satu pun pesan.
+  { kode: "hrd", nama: "Human Capital", singkat: "Human Capital", ikon: "UsersRound", posisi: ["hc"] },
 ];
 
 export const POSISI: Posisi[] = [
@@ -118,6 +123,14 @@ export const POSISI: Posisi[] = [
   { kode: "pdq_beverage", departemen: "pdq", nama: "Beverage Staff", pic: ["Adam", "Abil"], perPic: true },
   { kode: "pdq_head_food", departemen: "pdq", nama: "Head Food Development", pic: ["Nanda"] },
   { kode: "pdq_head_pdq", departemen: "pdq", nama: "Head Product Development & Quality", pic: [] },
+  // SATU POSISI untuk seluruh departemen, bukan satu per orang.
+  //
+  // Keenam angkanya memang angka departemen: kepatuhan kontrak, kepatuhan
+  // laporan bulanan, dan turnover dihitung dari seluruh outlet sekaligus dan
+  // tidak bisa dibagi ke satu orang. Memecahnya per orang berarti mengarang
+  // pembagian yang tidak ada di datanya, lalu menilai orang atas angka yang
+  // bukan hasil pekerjaannya sendiri.
+  { kode: "hc", departemen: "hrd", nama: "Human Capital", pic: ["MT Adrianto", "Dini Amalia", "Riva Asila", "Uswatun Khasanah"] },
 ];
 
 /**
@@ -140,6 +153,7 @@ export const MENU_POSISI: Record<KodePosisi, string> = {
   pdq_beverage: "kpi_pdq_beverage",
   pdq_head_food: "kpi_pdq_head_food",
   pdq_head_pdq: "kpi_pdq_head_pdq",
+  hc: "kpi_hc",
 };
 
 export const posisiDari = (kode: string): Posisi | undefined => POSISI.find((p) => p.kode === kode);

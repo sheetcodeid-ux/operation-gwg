@@ -132,7 +132,7 @@ describe("menunya terdaftar utuh", () => {
     expect(nav).toMatch(/menus: \["creative_penilaian"\]/);
     // Menu KPI Creative ikut di divisi yang sama; yang dijaga di sini keduanya
     // ada, bukan urutan persisnya.
-    expect(nav).toContain('{ division: "Creative", menus: ["work", "creative_design", "creative_penilaian"');
+    expect(nav).toContain('"creative_design", "creative_konten", "creative_penilaian"');
   });
 
   it("halamannya dijaga menunya sendiri", () => {

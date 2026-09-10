@@ -10,7 +10,7 @@ import { persistMessage } from "@/lib/data/persist";
 import { createHcRequest, deleteHcRequest, getHcRequest, listHcRequests, updateHcRequest } from "@/lib/data/hc-requests";
 import { canSeeRequest, requestScopeFor } from "@/lib/data/request-scope";
 import { notify } from "@/lib/data/notify";
-import { TENGGAT, tanggalTenggat } from "@/lib/kpi/deadline";
+import { TENGGAT, pakaiRencanaUpload, tanggalTenggat, tenggatDariRencanaUpload } from "@/lib/kpi/deadline";
 import {
   antrianUntukPic,
   kelolaAntrianDesign,
@@ -188,6 +188,38 @@ export async function presignHcUploadAction(input: {
 const kategoriTenggatSah = (k: string | null | undefined): string | null =>
   k && TENGGAT.some((t) => t.kategori === k) ? k : null;
 
+
+/**
+ * Tenggat sebuah pengajuan desain — DITENTUKAN SERVER, dari departemen ASLI
+ * pemohonnya.
+ *
+ * Dua aturan, bukan satu. Marketing Communication mengisi tanggal tayang dan
+ * tenggatnya dihitung mundur sehari dari situ; departemen lain memilih
+ * kelonggaran (Sebelum H-5 … H-1) dan tenggatnya dihitung maju dari hari ini.
+ *
+ * KEDUANYA DIHITUNG DI SINI, bukan diterima dari peramban. Yang dikirim
+ * peramban bisa disetel sendiri, dan tenggat yang bisa disetel sendiri berhenti
+ * jadi tenggat. Departemennya pun dibaca dari sesi, bukan dari isian: kalau
+ * tidak, siapa pun bisa mengaku MarComm untuk memakai aturan yang berbeda.
+ */
+function tenggatPengajuan(
+  input: { deadlineKategori?: string | null; plannedDate?: string },
+  departemen: string | null | undefined,
+): { deadlineKategori: string | null; deadline: string | null } {
+  if (pakaiRencanaUpload(departemen)) {
+    // Kategorinya tetap dicatat "h1" supaya penilaian KPI-nya memakai jalur
+    // yang sama dengan pengajuan lain — yang berbeda cuma dari mana tanggalnya
+    // datang, bukan berapa harganya kalau terlambat.
+    const tenggat = input.plannedDate ? tenggatDariRencanaUpload(input.plannedDate) : null;
+    return { deadlineKategori: tenggat ? "h1" : null, deadline: tenggat };
+  }
+  const kategori = kategoriTenggatSah(input.deadlineKategori);
+  return {
+    deadlineKategori: kategori,
+    deadline: kategori ? tanggalTenggat(new Date().toISOString().slice(0, 10), kategori) : null,
+  };
+}
+
 export interface SubmitRequestInput {
   kind: HcRequestKind;
   title: string;
@@ -262,13 +294,7 @@ export async function submitHcRequestAction(input: SubmitRequestInput): Promise<
       budget: input.budget ?? 0,
       designType: input.designType?.trim() || null,
       designSize: input.designSize?.trim() || null,
-      // Tanggal tenggat DIHITUNG DI SERVER dari tanggal hari ini, bukan
-      // diterima dari peramban. Yang dikirim peramban bisa disetel sendiri,
-      // dan tenggat yang bisa disetel sendiri berhenti jadi tenggat.
-      deadlineKategori: kategoriTenggatSah(input.deadlineKategori),
-      deadline: kategoriTenggatSah(input.deadlineKategori)
-        ? tanggalTenggat(new Date().toISOString().slice(0, 10), input.deadlineKategori!)
-        : null,
+      ...tenggatPengajuan(input, user!.department),
       plannedDate: input.plannedDate || null,
       attachments: input.attachments ?? [],
     });
@@ -323,10 +349,27 @@ export async function myHcRequestsAction(): Promise<HcRequest[]> {
 }
 
 /** Pengajuan yang masuk ke HC — dibatasi satu jenis bila diminta. */
-export async function allHcRequestsAction(kind?: HcRequestKind): Promise<HcRequest[]> {
+/**
+ * Dari mana pengajuan design itu datang — dipakai memecah antriannya jadi dua.
+ *
+ * Bukan sekadar saringan tampilan: dua antrian ini berisi pekerjaan yang
+ * bentuknya memang berbeda. Yang dari Marketing Communication punya tanggal
+ * tayang dan biasanya berseri; yang dari manajemen dan supervisor datang
+ * satu-satu dengan kelonggaran yang dipilih sendiri. Menggabungkannya membuat
+ * yang mengerjakan harus memilah ulang tiap kali membuka halamannya.
+ */
+export type SumberAntrian = "marcomm" | "operasional";
+
+export async function allHcRequestsAction(kind?: HcRequestKind, sumber?: SumberAntrian): Promise<HcRequest[]> {
   const user = await getSessionUser();
   if (kind === "design" ? !canCreative(user) : !canHc(user)) return [];
-  const rows = await listHcRequests(kind ? { kind } : {});
+  let rows = await listHcRequests(kind ? { kind } : {});
+  // Disaring DI SINI, bukan di layar: baris yang bukan milik antrian ini tidak
+  // perlu sampai ke peramban sama sekali.
+  if (kind === "design" && sumber) {
+    const dariMarcomm = (r: HcRequest) => pakaiRencanaUpload(r.department);
+    rows = rows.filter((r) => (sumber === "marcomm" ? dariMarcomm(r) : !dariMarcomm(r)));
+  }
 
   // Antrian Design dipakai beberapa designer sekaligus. Penyaringannya
   // dilakukan DI SINI, bukan di layar: yang tidak boleh dilihat sebaiknya tidak
@@ -521,7 +564,16 @@ export async function submitDesignResultAction(input: {
   if (berkas.length === 0) return { error: "Lampirkan dulu berkas hasil designnya." };
 
   const sekarang = new Date().toISOString();
-  const langsung = bolehAccHasil(user);
+  // TIDAK ADA LAGI TAHAP ACC ATASAN — hasil designer langsung sampai ke
+  // pemohonnya, atas keputusan pemiliknya.
+  //
+  // Gerbang itu dulu ada supaya setiap hasil pernah dilihat orang yang
+  // berwenang. Yang terjadi sebenarnya: berkasnya sudah dilampirkan, sudah bisa
+  // dibuka pemohon, dan yang menahannya cuma satu klik yang tidak menambah
+  // pemeriksaan apa pun — sementara pemohon menunggu tanpa tahu pekerjaannya
+  // sudah jadi. Kalau hasilnya keliru, jalur revisi tetap ada dan justru dipakai
+  // orang yang paling tahu: pemohonnya sendiri.
+  const langsung = true;
   const hasil: HcRequestHasil = {
     at: sekarang,
     byId: user!.id,

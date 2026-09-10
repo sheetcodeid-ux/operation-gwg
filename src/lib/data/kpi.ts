@@ -9,6 +9,7 @@ import { nilaiKetepatanDesign } from "./design-rapor";
 import { rincianMinggu, type DetailMinggu } from "./minggu-outlet";
 import { hariBulan } from "@/lib/kpi/minggu";
 import { WORK_BRANDS } from "@/lib/constants";
+import type { UserProfile } from "@/lib/types";
 import {
   actualLulus,
   actualPengurang,
@@ -1109,8 +1110,11 @@ export async function laporanKpi(posisi: KodePosisi, periode: string, pic = ""):
   const perluKetepatan = daftar.some((i) => i.actual.sumber === "otomatis" && i.actual.kode === "ketepatan_design");
   const perluKomplain = daftar.some((i) => i.actual.sumber === "otomatis" && i.actual.kode === "komplain_food_quality");
   const perluFee = daftar.some((i) => i.actual.sumber === "otomatis" && i.actual.kode === "management_fee");
+  // Keenam angka Human Capital datang dari SATU perhitungan — menariknya enam
+  // kali berarti enam kali membaca Kontrak Tracker untuk hasil yang sama.
+  const perluHc = daftar.some((i) => i.actual.sumber === "otomatis" && i.actual.kode.startsWith("hc_"));
 
-  const [design, ketepatan, komplain, netBulan, average, netPerusahaan, omsetTigaBulan, averageTrx] = await Promise.all([
+  const [design, ketepatan, komplain, netBulan, average, netPerusahaan, omsetTigaBulan, averageTrx, hc] = await Promise.all([
     perluDesign ? designRequest(periode) : Promise.resolve(null),
     // Ketepatan dinilai PER ORANG saat posisinya dinilai per orang: yang
     // dihitung pekerjaan yang ditugaskan kepadanya, bukan seluruh antrian.
@@ -1126,6 +1130,7 @@ export async function laporanKpi(posisi: KodePosisi, periode: string, pic = ""):
       ? netSalesPerusahaan(bulanSebelum(bulanSebelum(periode)), periode)
       : Promise.resolve(null),
     perluAverage ? averageTransaksi(periode) : Promise.resolve(null),
+    perluHc ? angkaHc(periode) : Promise.resolve(null),
   ]);
 
   /* --- angka se-area (Coordinator Area) --- */
@@ -1198,6 +1203,7 @@ export async function laporanKpi(posisi: KodePosisi, periode: string, pic = ""):
 
   /* --- baris indikator --- */
   const baris = daftar.map((i) => susunBaris(i, {
+    hc,
     pengaturan: pengaturan.get(i.key),
     manual: manual.get(i.key) ?? null,
     lalu: lalu.get(i.key) ?? null,
@@ -1249,6 +1255,33 @@ interface KonteksBaris {
   averageTrx: AverageTrx | null;
   /** Angka se-area untuk Coordinator Area. Null untuk posisi lain. */
   ca: AngkaCa | null;
+  /** Keenam angka Human Capital, dikunci nama indikatornya. */
+  hc: Map<string, number | null> | null;
+}
+
+
+/**
+ * Keenam angka KPI Human Capital, DIBACA DARI PERHITUNGAN YANG SUDAH ADA.
+ *
+ * Bukan dihitung ulang di sini. Rumusnya tinggal di modul HC-MOS bersama data
+ * yang dibacanya, dan halaman KPI hanya meminjam hasilnya — kalau dihitung dua
+ * kali, dua halaman akan menyebut skor berbeda untuk departemen yang sama dan
+ * tidak ada cara tahu mana yang benar.
+ *
+ * Dilihat sebagai SUPER ADMIN, bukan sebagai yang membuka halamannya. Kepatuhan
+ * kontrak dan turnover dihitung dari seluruh outlet; kalau dibatasi outlet
+ * milik pembacanya, dua orang HC akan melihat skor departemen yang berbeda.
+ */
+async function angkaHc(periode: string): Promise<Map<string, number | null>> {
+  const peta = new Map<string, number | null>();
+  try {
+    const { hitungKpiHc } = await import("./hcmos-kpi");
+    const hasil = await hitungKpiHc({ role: "super_admin" } as UserProfile, periode);
+    for (const b of hasil.baris) peta.set(`hc_${b.key}`, b.realisasi);
+  } catch (e) {
+    console.error("[kpi] gagal membaca angka Human Capital:", e);
+  }
+  return peta;
 }
 
 /**
@@ -1322,6 +1355,21 @@ function susunBaris(i: Indikator, k: KonteksBaris): BarisKpi {
         case "komplain_food_quality":
           actual = actualPengurang(target, k.komplain ?? 0);
           break;
+        case "hc_pemenuhan_rekrutmen":
+        case "hc_kecepatan_rekrutmen":
+        case "hc_kepatuhan_kontrak":
+        case "hc_kepatuhan_laporan":
+        case "hc_penyelesaian_onboarding":
+        case "hc_turnover": {
+          // `undefined` berarti perhitungannya gagal dibaca; `null` berarti
+          // datanya memang belum ada. Keduanya sama-sama kosong di layar, tapi
+          // hanya yang kedua yang punya kalimat penjelas — yang pertama sudah
+          // tercatat di log server sebagai kesalahan.
+          const nilai = k.hc?.get(i.actual.kode);
+          actual = nilai ?? null;
+          if (actual === null) alasan = "Datanya belum ada di modul Human Capital untuk bulan ini.";
+          break;
+        }
         case "efisiensi_operasional":
           actual = k.efisiensi?.ringkas.capaian ?? null;
           if (actual === null) alasan = "Realisasi beban operasional belum diisi untuk satu outlet pun.";

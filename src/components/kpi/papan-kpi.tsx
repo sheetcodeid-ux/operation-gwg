@@ -180,8 +180,14 @@ export function PapanKpi({
     // dua tombol menuju isi yang sama membuat orang mengira ada dua daftar.
     // Posisi lain tetap memerlukannya: di sanalah satu-satunya tempat catatan
     // bisa dilihat dan dihapus.
+    //
+    // Posisi yang SELURUH indikatornya otomatis tidak punya riwayat input sama
+    // sekali: tidak ada satu pun catatan yang bisa dilihat atau dihapus di
+    // sana. Tombolnya dulu tetap muncul karena syaratnya diperiksa dari sisi
+    // "apakah semua catatan sudah punya tabel sendiri" — dan pada posisi tanpa
+    // catatan, jawabannya kebetulan juga "belum".
     const semuaTercakup = adaHygiene && dariEntri.every((i) => WAJIB_BUKTI_ENTRI.includes((i.actual as { entri: JenisEntri }).entri));
-    if (!semuaTercakup) out.push({ id: "riwayat", label: "Riwayat Input", icon: ClipboardList });
+    if (dariEntri.length > 0 && !semuaTercakup) out.push({ id: "riwayat", label: "Riwayat Input", icon: ClipboardList });
     return out;
   }, [laporan.efisiensi, laporan.fee, laporan.pasar, laporan.ca, indikator]);
 
