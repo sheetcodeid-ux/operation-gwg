@@ -63,6 +63,12 @@ export type JenisEntri =
 export type KodeOtomatis =
   | "design_request"
   | "ketepatan_design"
+  | "hc_pemenuhan_rekrutmen"
+  | "hc_kecepatan_rekrutmen"
+  | "hc_kepatuhan_kontrak"
+  | "hc_kepatuhan_laporan"
+  | "hc_penyelesaian_onboarding"
+  | "hc_turnover"
   | "net_sales_korporat"
   | "komplain_food_quality"
   | "efisiensi_operasional"
@@ -517,8 +523,85 @@ const coordinatorArea: Indikator[] = [
   },
 ];
 
+
+/**
+ * Human Capital.
+ *
+ * KEENAM ANGKANYA SUDAH ADA dan sudah otomatis — dihitung modul HC-MOS dari
+ * Permintaan Karyawan, Kontrak Tracker, dan Onboarding. Yang ditambahkan di
+ * sini BUKAN perhitungan baru, melainkan pintu masuknya ke halaman KPI: bobot
+ * dan targetnya disalin dari definisi yang sama, dan angkanya dibaca dari
+ * perhitungan yang sama. Menuliskan ulang rumusnya berarti dua tempat yang
+ * bisa berbeda diam-diam, dan dua halaman yang menyebut skor berbeda untuk
+ * departemen yang sama.
+ *
+ * Dua di antaranya MAKIN KECIL MAKIN BAIK — kecepatan pemenuhan (hari) dan
+ * turnover. Tanpa `batas_maks` keduanya dinilai terbalik: turnover 30% dari
+ * batas 10% menghasilkan 300% lalu dipotong jadi 100%, dan departemen yang
+ * paling banyak kehilangan orang justru mendapat nilai penuh.
+ */
+const humanCapital: Indikator[] = [
+  {
+    key: "hc_pemenuhan_rekrutmen",
+    label: "Pemenuhan Permintaan Pegawai",
+    bobot: 15,
+    target: { jenis: "tetap", nilai: 90 },
+    actual: { sumber: "otomatis", kode: "hc_pemenuhan_rekrutmen" },
+    satuan: "persen",
+    penjelasan: "Otomatis dari Permintaan Karyawan: jumlah direkrut dibanding jumlah diminta. Target 90%.",
+  },
+  {
+    key: "hc_kecepatan_rekrutmen",
+    label: "Kecepatan Pemenuhan",
+    bobot: 10,
+    target: { jenis: "tetap", nilai: 30 },
+    actual: { sumber: "otomatis", kode: "hc_kecepatan_rekrutmen" },
+    penilaian: "batas_maks",
+    satuan: "angka",
+    penjelasan: "Rata-rata HARI dari permintaan diajukan sampai terlaksana. Batas 30 hari — makin cepat makin baik.",
+  },
+  {
+    key: "hc_kepatuhan_kontrak",
+    label: "Kepatuhan Kontrak Kerja",
+    bobot: 25,
+    target: { jenis: "tetap", nilai: 95 },
+    actual: { sumber: "otomatis", kode: "hc_kepatuhan_kontrak" },
+    satuan: "persen",
+    penjelasan: "Otomatis dari Kontrak Tracker: karyawan outlet yang kontraknya masih berlaku. Target 95%.",
+  },
+  {
+    key: "hc_kepatuhan_laporan",
+    label: "Kepatuhan Update Bulanan",
+    bobot: 15,
+    target: { jenis: "tetap", nilai: 90 },
+    actual: { sumber: "otomatis", kode: "hc_kepatuhan_laporan" },
+    satuan: "persen",
+    penjelasan: "Otomatis dari Kontrak Tracker: outlet yang mengirim laporan bulan berjalan. Target 90%.",
+  },
+  {
+    key: "hc_penyelesaian_onboarding",
+    label: "Penyelesaian Onboarding",
+    bobot: 15,
+    target: { jenis: "tetap", nilai: 85 },
+    actual: { sumber: "otomatis", kode: "hc_penyelesaian_onboarding" },
+    satuan: "persen",
+    penjelasan: "Otomatis dari modul Onboarding: rata-rata butir ceklis yang sudah tuntas. Target 85%.",
+  },
+  {
+    key: "hc_turnover",
+    label: "Turnover Karyawan Outlet",
+    bobot: 20,
+    target: { jenis: "tetap", nilai: 10 },
+    actual: { sumber: "otomatis", kode: "hc_turnover" },
+    penilaian: "batas_maks",
+    satuan: "persen",
+    penjelasan: "Otomatis dari Kontrak Tracker: karyawan keluar dibanding jumlah karyawan. Batas 10% — makin kecil makin baik.",
+  },
+];
+
 export const INDIKATOR: Record<KodePosisi, Indikator[]> = {
   operational_ca: coordinatorArea,
+  hc: humanCapital,
   creative_content: contentCreator,
   creative_sosmed: sosialMedia,
   finance_accounting: accounting,

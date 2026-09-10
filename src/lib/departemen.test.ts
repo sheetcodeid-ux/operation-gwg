@@ -167,3 +167,17 @@ describe("Creative boleh membuka Event Tracker milik Marketing Communication", (
     expect(divisionHasMenu("Creative", "complaints" as MenuKey)).toBe(false);
   });
 });
+
+describe("KPI Human Capital terbuka untuk departemennya sendiri", () => {
+  const orang = (department: string) => ({ role: "member" as const, grants: [], department });
+
+  it("anggota Human Capital bisa membukanya tanpa izin tambahan", () => {
+    expect(canReachMenu(orang("Human Capital"), "kpi_hc" as MenuKey)).toBe(true);
+  });
+
+  it("departemen lain tidak — KPI satu departemen bukan tontonan departemen lain", () => {
+    for (const d of ["Creative", "Supervisor", "Finance Accounting Tax"]) {
+      expect(canReachMenu(orang(d), "kpi_hc" as MenuKey), d).toBe(false);
+    }
+  });
+});

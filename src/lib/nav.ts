@@ -68,6 +68,7 @@ export type MenuKey =
   | "kpi_fin_finance"
   | "kpi_fin_tax"
   | "kpi_marcomm"
+  | "kpi_hc"
   | "kpi_pdq_qc"
   | "kpi_pdq_food"
   | "kpi_pdq_beverage"
@@ -211,6 +212,7 @@ export const NAV_MENUS: Omit<NavItem, "section" | "group" | "groupIcon">[] = [
   { key: "kpi_fin_finance", label: "Finance", href: "/kpi/finance_finance", icon: "Wallet" },
   { key: "kpi_fin_tax", label: "Tax", href: "/kpi/finance_tax", icon: "ReceiptText" },
   { key: "kpi_marcomm", label: "Marketing Communication", href: "/kpi/marcomm", icon: "Megaphone" },
+  { key: "kpi_hc", label: "Human Capital", href: "/kpi/hc", icon: "UsersRound" },
   { key: "kpi_pdq_qc", label: "Quality Assurance & Control", href: "/kpi/pdq_qc", icon: "ShieldCheck" },
   { key: "kpi_pdq_food", label: "Food Staff", href: "/kpi/pdq_food", icon: "UtensilsCrossed" },
   { key: "kpi_pdq_beverage", label: "Beverage Staff", href: "/kpi/pdq_beverage", icon: "CupSoda" },
@@ -556,6 +558,7 @@ export const DIVISION_GROUPS: Partial<Record<Division, NavGroupDef[]>> = {
       menus: ["kpi_pdq_qc", "kpi_pdq_food", "kpi_pdq_beverage", "kpi_pdq_head_food", "kpi_pdq_head_pdq"],
     },
     { name: "Marketing Communication", icon: "Megaphone", urutan: 5, menus: ["kpi_marcomm", "kpi_creative_sosmed"] },
+    { name: "Human Capital", icon: "UsersRound", urutan: 6, menus: ["kpi_hc"] },
   ],
   Creative: [
     { name: "Permintaan Masuk", icon: "Palette", menus: ["creative_design", "creative_konten"] },
@@ -594,6 +597,7 @@ export const DIVISION_MENUS: { division: Division; menus: MenuKey[] }[] = [
       "kpi_pdq_head_food",
       "kpi_pdq_head_pdq",
       "kpi_marcomm",
+      "kpi_hc",
     ],
   },
   // sys_review sits under Operation for placement, but access is jabatan-gated
