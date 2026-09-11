@@ -977,6 +977,26 @@ export function divisionHasMenu(division: string, key: MenuKey): boolean {
 }
 
 
+
+/**
+ * Divisi yang TIDAK punya anggota — sidebar, bukan departemen.
+ *
+ * Keduanya muncul sebagai bidang di sidebar, tapi tak seorang pun "berdepartemen"
+ * di situ: Key Performance Indicator berisi rapor milik seluruh departemen, dan
+ * Sosial Media dibuka dari JABATAN orang yang departemennya tetap Creative.
+ *
+ * Dipisah sebagai daftar karena pemilih departemen di User Management menyusun
+ * pilihannya dari seluruh nama divisi. Tanpa ini, "Sosial Media" tampil sebagai
+ * departemen yang bisa dipilih — lalu orang yang memilihnya keluar dari
+ * Creative, dan rapor KPI Creative kehilangan satu anggotanya tanpa satu pun
+ * pesan.
+ */
+export const DIVISI_TANPA_ANGGOTA: readonly string[] = [DIVISI_KPI, "Sosial Media"];
+
+/** Nama divisi yang benar-benar bisa dipakai sebagai departemen seseorang. */
+export const divisiBerdepartemen = (): string[] =>
+  builtInDivisions().filter((d) => !DIVISI_TANPA_ANGGOTA.includes(d));
+
 /**
  * Tim Sosial Media — dikenali dari JABATAN, bukan departemen.
  *

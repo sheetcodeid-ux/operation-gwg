@@ -29,7 +29,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { ROLE_LABEL, type Tone } from "@/lib/constants";
-import { ROLE_DIVISION, accessibleMenuKeys, assignableDivisions, builtInDivisions, grantsForDivision, navAll, setNavExtras, type Division, type NavExtra } from "@/lib/nav";
+import { ROLE_DIVISION, accessibleMenuKeys, assignableDivisions, builtInDivisions, divisiBerdepartemen, grantsForDivision, navAll, setNavExtras, type Division, type NavExtra } from "@/lib/nav";
 import { builtInStructure } from "@/lib/assessment/org";
 import { GroupManager, type DivisionGroups } from "./group-manager";
 import type { Role } from "@/lib/types";
@@ -114,7 +114,11 @@ const NO_OUTLETS: string[] = [];
 const rolesInDivision = (d: Division) => ROLES.filter((r) => ROLE_DIVISION[r] === d);
 /** Merge + de-dupe department suggestions for the pickers. */
 const deptSuggestions = (extra: string[], current?: string) =>
-  [...new Set([...HO_DEPARTMENTS, ...ALL_DIVISIONS, ...extra, ...(current ? [current] : [])].filter(Boolean))];
+  // Divisi TANPA ANGGOTA dikeluarkan: "Key Performance Indicator" dan "Sosial
+  // Media" adalah bidang di sidebar, bukan tempat orang berdepartemen. Ikut
+  // ditawarkan, orang yang memilihnya keluar dari departemen aslinya — dan
+  // rapor KPI departemen itu kehilangan satu anggotanya tanpa satu pun pesan.
+  [...new Set([...HO_DEPARTMENTS, ...divisiBerdepartemen(), ...extra, ...(current ? [current] : [])].filter(Boolean))];
 /** Jabatan list for a department: built-in HO structure ∪ admin-managed taxonomy.
  *  Falls back to every known jabatan when the department has none defined yet. */
 function jabatanFor(department: string, orgDepts: OrgDept[], current?: string): string[] {

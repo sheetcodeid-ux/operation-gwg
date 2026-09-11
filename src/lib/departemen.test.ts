@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { canReachMenu, divisiDari, divisionHasMenu, DIVISION_ICON, type MenuKey } from "./nav";
+import { builtInDivisions, canReachMenu, divisiBerdepartemen, divisiDari, divisionHasMenu, DIVISION_ICON, type MenuKey } from "./nav";
 
 /**
  * Penjaga akses per-departemen.
@@ -204,5 +204,28 @@ describe("Pengajuan Design Sosial Media dibuka JABATAN, bukan departemen", () =>
     for (const d of ["Supervisor", "Operational", "Creative"]) {
       expect(canReachMenu(orang(d), "hc_request" as MenuKey), d).toBe(true);
     }
+  });
+});
+
+describe("Sosial Media adalah BIDANG SIDEBAR, bukan departemen", () => {
+  it("tidak ikut ditawarkan sebagai departemen di User Management", () => {
+    // Ikut ditawarkan, orang yang memilihnya keluar dari Creative — dan rapor
+    // KPI Creative kehilangan satu anggotanya tanpa satu pun pesan.
+    expect(divisiBerdepartemen()).not.toContain("Sosial Media");
+    // Key Performance Indicator sama halnya: ia berisi rapor milik seluruh
+    // departemen, bukan tempat orang bekerja.
+    expect(divisiBerdepartemen()).not.toContain("Key Performance Indicator");
+  });
+
+  it("tetap terdaftar sebagai divisi sidebar", () => {
+    expect(builtInDivisions()).toContain("Sosial Media");
+  });
+
+  it("departemennya tetap Creative — yang membuka sidebarnya jabatan", () => {
+    const zia = { role: "member" as const, grants: [], department: "Creative", jabatan: "Social Media" };
+    expect(divisiDari(zia.department)).toBe("Creative");
+    expect(canReachMenu(zia, "sosmed_request" as MenuKey)).toBe(true);
+    // Dan ia tetap anggota Creative untuk hal lain.
+    expect(canReachMenu(zia, "creative_design" as MenuKey)).toBe(true);
   });
 });
