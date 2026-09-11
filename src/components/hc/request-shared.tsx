@@ -285,6 +285,10 @@ function RequestDetail({ r }: { r: HcRequest }) {
   } else {
     rows.push({ label: "Jenis design", value: r.designType || "—" });
     if (r.designSize) rows.push({ label: "Ukuran / format", value: r.designSize });
+    // Tautan video ikut ditampilkan apa adanya. Materi video tidak pernah ada
+    // di daftar lampiran, jadi tanpa baris ini yang mengerjakan akan membuka
+    // pengajuan yang terlihat tidak punya materi sama sekali.
+    if (r.linkVideo) rows.push({ label: "Link video", value: r.linkVideo });
     rows.push({ label: "Tanggal request", value: fmtDate(r.createdAt) });
     if (r.deadline) {
       // Kategorinya ikut ditulis di sebelah tanggalnya. Tanggal sendirian tidak

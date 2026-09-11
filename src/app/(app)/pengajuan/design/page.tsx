@@ -7,7 +7,6 @@ import { listHcRequests } from "@/lib/data/hc-requests";
 import { requestScopeFor } from "@/lib/data/request-scope";
 import { PageHeader } from "@/components/ui/page-header";
 import { HcRequestList, NewRequestButton } from "@/components/hc/request-submit";
-import { pakaiRencanaUpload } from "@/lib/kpi/deadline";
 
 export const metadata: Metadata = { title: "Pengajuan Design" };
 
@@ -22,12 +21,8 @@ export default async function PengajuanDesignPage() {
       <PageHeader
         icon={Palette}
         title="Pengajuan Design"
-        description={
-          pakaiRencanaUpload(user.department)
-            ? "Ajukan kebutuhan materi desain ke tim Creative. Isi tanggal tayangnya — tenggat desain dihitung sehari sebelumnya."
-            : "Ajukan kebutuhan materi desain ke tim Creative. Lengkapi brief agar tidak bolak-balik revisi."
-        }
-        actions={<NewRequestButton kind="design" departemen={user.department ?? null} />}
+        description="Ajukan kebutuhan materi desain ke tim Creative. Lengkapi brief agar tidak bolak-balik revisi."
+        actions={<NewRequestButton kind="design" />}
       />
       <HcRequestList rows={rows} kind="design" canDelete={user.role === "super_admin"} meId={user.id} />
     </div>

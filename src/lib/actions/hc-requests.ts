@@ -10,7 +10,7 @@ import { persistMessage } from "@/lib/data/persist";
 import { createHcRequest, deleteHcRequest, getHcRequest, listHcRequests, updateHcRequest } from "@/lib/data/hc-requests";
 import { canSeeRequest, requestScopeFor } from "@/lib/data/request-scope";
 import { notify } from "@/lib/data/notify";
-import { TENGGAT, pakaiRencanaUpload, tanggalTenggat, tenggatDariRencanaUpload } from "@/lib/kpi/deadline";
+import { TENGGAT, tanggalTenggat, tenggatDariRencanaUpload } from "@/lib/kpi/deadline";
 import {
   antrianUntukPic,
   kelolaAntrianDesign,
@@ -184,29 +184,34 @@ export async function presignHcUploadAction(input: {
   }
 }
 
+/** Kanal yang dikenal; apa pun selain "sosmed" dianggap pengajuan umum. */
+const kanalSah = (k: string | null | undefined): "umum" | "sosmed" => (k === "sosmed" ? "sosmed" : "umum");
+
 /** Kategori tenggat yang benar-benar dikenal — selain itu diabaikan. */
 const kategoriTenggatSah = (k: string | null | undefined): string | null =>
   k && TENGGAT.some((t) => t.kategori === k) ? k : null;
 
 
 /**
- * Tenggat sebuah pengajuan desain — DITENTUKAN SERVER, dari departemen ASLI
- * pemohonnya.
+ * Tenggat sebuah pengajuan desain — DITENTUKAN SERVER, dari FORM yang dipakai.
  *
- * Dua aturan, bukan satu. Marketing Communication mengisi tanggal tayang dan
- * tenggatnya dihitung mundur sehari dari situ; departemen lain memilih
+ * Dua aturan, bukan satu. Pengajuan Sosial Media mengisi tanggal tayang dan
+ * tenggatnya dihitung mundur tiga hari dari situ; pengajuan umum memilih
  * kelonggaran (Sebelum H-5 … H-1) dan tenggatnya dihitung maju dari hari ini.
  *
  * KEDUANYA DIHITUNG DI SINI, bukan diterima dari peramban. Yang dikirim
  * peramban bisa disetel sendiri, dan tenggat yang bisa disetel sendiri berhenti
- * jadi tenggat. Departemennya pun dibaca dari sesi, bukan dari isian: kalau
- * tidak, siapa pun bisa mengaku MarComm untuk memakai aturan yang berbeda.
+ * jadi tenggat.
+ *
+ * Yang membedakan FORMNYA, bukan departemen pemohon. Departemen sebagai
+ * pembeda adalah tebakan yang salah di dua arah: Marketing Communication juga
+ * meminta poster cetak, dan tim lain juga meminta materi untuk diunggah.
  */
 function tenggatPengajuan(
   input: { deadlineKategori?: string | null; plannedDate?: string },
-  departemen: string | null | undefined,
+  kanal: string,
 ): { deadlineKategori: string | null; deadline: string | null } {
-  if (pakaiRencanaUpload(departemen)) {
+  if (kanal === "sosmed") {
     // Kategorinya tetap dicatat "h1" supaya penilaian KPI-nya memakai jalur
     // yang sama dengan pengajuan lain — yang berbeda cuma dari mana tanggalnya
     // datang, bukan berapa harganya kalau terlambat.
@@ -235,6 +240,10 @@ export interface SubmitRequestInput {
   budget?: number;
   designType?: string;
   designSize?: string;
+  /** Form asal pengajuan design: "umum" atau "sosmed". */
+  designKanal?: string | null;
+  /** Tautan materi video — hanya pengajuan Sosial Media. */
+  linkVideo?: string | null;
   /** Kategori tenggat pengajuan desain — lihat `lib/kpi/deadline.ts`. */
   deadlineKategori?: string | null;
   plannedDate?: string;
@@ -276,6 +285,7 @@ export async function submitHcRequestAction(input: SubmitRequestInput): Promise<
   if (input.kind === "design" && !input.subjectName?.trim()) {
     return { error: "Nama pemohon design wajib diisi." };
   }
+  const kanal = input.kind === "design" ? kanalSah(input.designKanal) : "umum";
   try {
     const res = await createHcRequest({
       kind: input.kind,
@@ -294,7 +304,9 @@ export async function submitHcRequestAction(input: SubmitRequestInput): Promise<
       budget: input.budget ?? 0,
       designType: input.designType?.trim() || null,
       designSize: input.designSize?.trim() || null,
-      ...tenggatPengajuan(input, user!.department),
+      designKanal: kanal,
+      linkVideo: kanal === "sosmed" ? (input.linkVideo?.trim() || null) : null,
+      ...tenggatPengajuan(input, kanal),
       plannedDate: input.plannedDate || null,
       attachments: input.attachments ?? [],
     });
@@ -358,7 +370,7 @@ export async function myHcRequestsAction(): Promise<HcRequest[]> {
  * satu-satu dengan kelonggaran yang dipilih sendiri. Menggabungkannya membuat
  * yang mengerjakan harus memilah ulang tiap kali membuka halamannya.
  */
-export type SumberAntrian = "marcomm" | "operasional";
+export type SumberAntrian = "sosmed" | "umum";
 
 export async function allHcRequestsAction(kind?: HcRequestKind, sumber?: SumberAntrian): Promise<HcRequest[]> {
   const user = await getSessionUser();
@@ -366,10 +378,7 @@ export async function allHcRequestsAction(kind?: HcRequestKind, sumber?: SumberA
   let rows = await listHcRequests(kind ? { kind } : {});
   // Disaring DI SINI, bukan di layar: baris yang bukan milik antrian ini tidak
   // perlu sampai ke peramban sama sekali.
-  if (kind === "design" && sumber) {
-    const dariMarcomm = (r: HcRequest) => pakaiRencanaUpload(r.department);
-    rows = rows.filter((r) => (sumber === "marcomm" ? dariMarcomm(r) : !dariMarcomm(r)));
-  }
+  if (kind === "design" && sumber) rows = rows.filter((r) => (r.designKanal ?? "umum") === sumber);
 
   // Antrian Design dipakai beberapa designer sekaligus. Penyaringannya
   // dilakukan DI SINI, bukan di layar: yang tidak boleh dilihat sebaiknya tidak

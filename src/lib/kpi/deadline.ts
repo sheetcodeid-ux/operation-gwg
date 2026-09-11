@@ -87,30 +87,28 @@ export function lewatTenggat(input: { tenggat: string | null; selesaiPada: strin
 }
 
 /**
- * Departemen yang tenggatnya DIHITUNG MUNDUR dari rencana unggah.
+ * Jarak antara tenggat desain dan tanggal tayangnya: TIGA HARI.
  *
- * Marketing Communication tidak meminta desain "secepatnya" — materinya sudah
- * punya tanggal tayang yang ditetapkan kalender kontennya. Menyuruh mereka
- * memilih kelonggaran H-5/H-3/H-1 berarti menerjemahkan tanggal yang sudah
- * pasti menjadi tebakan, lalu menerjemahkannya balik jadi tanggal lagi. Yang
- * mereka isi tanggal tayangnya, dan tenggat desainnya menyusul dari situ.
+ * Ditetapkan pemiliknya lewat contohnya sendiri — tayang tanggal 20 berarti
+ * tenggat tanggal 17. (Sebelumnya satu hari; diubah atas permintaannya.)
+ *
+ * Tiga hari, bukan satu, karena materi konten tidak selesai saat desainnya
+ * jadi: masih ada penulisan caption, penjadwalan, dan koreksi kalau ada yang
+ * keliru. Satu hari jeda hanya cukup untuk menyerahkan berkasnya, tidak untuk
+ * memperbaikinya.
  */
-export const DEPARTEMEN_RENCANA_UPLOAD = "Marketing Communication";
-
-/** Apakah departemen itu memakai rencana unggah, bukan pilihan kelonggaran. */
-export const pakaiRencanaUpload = (departemen: string | null | undefined): boolean =>
-  (departemen ?? "").trim().toLowerCase() === DEPARTEMEN_RENCANA_UPLOAD.toLowerCase();
+export const JEDA_TENGGAT_UPLOAD = 3;
 
 /**
- * Tenggat desain untuk permintaan berbasis rencana unggah: SEHARI SEBELUMNYA.
+ * Tenggat desain dari tanggal tayang: mundur {@link JEDA_TENGGAT_UPLOAD} hari.
  *
- * Materi yang baru selesai pada hari tayang tidak bisa lagi diperiksa, dijadwal,
- * atau diperbaiki — dan yang menayangkannya belum tentu orang yang sama dengan
- * yang membuatnya. Satu hari jeda itulah bedanya antara materi yang siap tayang
- * dan materi yang baru jadi.
+ * Dipakai pengajuan Sosial Media, yang mengisi TANGGAL TAYANG alih-alih memilih
+ * kelonggaran. Materinya sudah punya tanggal pasti di kalender konten; menyuruh
+ * pemohonnya memilih "H-5" atau "H-3" berarti menerjemahkan tanggal yang sudah
+ * pasti jadi tebakan, lalu menerjemahkannya balik jadi tanggal lagi.
  */
 export function tenggatDariRencanaUpload(rencanaUpload: string): string | null {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(rencanaUpload)) return null;
   const [th, bl, tg] = rencanaUpload.split("-").map(Number);
-  return new Date(Date.UTC(th, bl - 1, tg - 1)).toISOString().slice(0, 10);
+  return new Date(Date.UTC(th, bl - 1, tg - JEDA_TENGGAT_UPLOAD)).toISOString().slice(0, 10);
 }

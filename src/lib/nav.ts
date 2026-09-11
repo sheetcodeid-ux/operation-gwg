@@ -58,6 +58,7 @@ export type MenuKey =
   | "fin_training"
   | "creative_design"
   | "creative_konten"
+  | "sosmed_request"
   | "creative_penilaian"
   | "kpi"
   | "kpi_manajemen"
@@ -197,6 +198,7 @@ export const NAV_MENUS: Omit<NavItem, "section" | "group" | "groupIcon">[] = [
   // konten" atau "materi outlet", bukan "punya divisi A" atau "punya divisi B".
   { key: "creative_design", label: "Antrian Operasional", href: "/creative/design", icon: "Palette" },
   { key: "creative_konten", label: "Antrian Konten", href: "/creative/konten", icon: "Megaphone" },
+  { key: "sosmed_request", label: "Pengajuan Design Sosmed", href: "/pengajuan/sosmed", icon: "Megaphone" },
   { key: "creative_penilaian", label: "Penilaian Request", href: "/creative/penilaian", icon: "Gauge" },
 
   // Key Performance Indicator — satu baris per posisi yang dinilai. Menunya
@@ -570,6 +572,11 @@ export const DIVISION_GROUPS: Partial<Record<Division, NavGroupDef[]>> = {
   ],
   Finance: [{ name: "Persetujuan Dana", icon: "Wallet", menus: ["fin_training"] }],
   "Marketing Communication": [
+    // Bidang tersendiri untuk Sosial Media. Pengajuan materinya berbeda bentuk
+    // dari pengajuan desain lain — berisi tanggal tayang, bukan kelonggaran —
+    // dan menaruhnya di bawah nama yang sama dengan yang mengerjakannya membuat
+    // orang tidak perlu menebak form mana yang benar.
+    { name: "Sosial Media", icon: "Megaphone", menus: ["sosmed_request"] },
     { name: "Event & Promo", icon: "Megaphone", menus: ["mc_events"] },
     { name: "Suara Pelanggan", icon: "MessageSquareWarning", menus: ["complaints"] },
   ],
@@ -638,7 +645,7 @@ export const DIVISION_MENUS: { division: Division; menus: MenuKey[] }[] = [
   // Marketing Communication: Work Tracker + the Event/Promo ACC & impact tracker.
   // MarComm adalah pintu masuk keluhan dari kanal publik (Google Review,
   // Instagram, TikTok), jadi Complaints ikut di divisinya.
-  { division: "Marketing Communication", menus: ["work", "mc_events", "complaints"] },
+  { division: "Marketing Communication", menus: ["work", "sosmed_request", "mc_events", "complaints"] },
   { division: "Administrator", menus: ["users", "audit"] },
 ];
 
