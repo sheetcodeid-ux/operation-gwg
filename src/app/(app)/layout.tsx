@@ -62,7 +62,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   // pernah cocok dengan divisi "Operation" kalau dibandingkan mentah-mentah,
   // dan seluruh menu departemennya ikut terkunci tanpa pesan apa pun.
   const department = divisiDari(user.department);
-  const canOpenItem = navOpenPredicate({ homeDivision: home, allowedKeys, department, grants, isAdmin });
+  const canOpenItem = navOpenPredicate({ homeDivision: home, allowedKeys, department, grants, isAdmin, jabatan: user.jabatan });
   // Divisi yang terkunci mengunci isinya — sama seperti sidebar. Tanpa ini
   // command palette menawarkan "Pengajuan" dari divisi orang lain, padahal
   // sidebar menampilkannya terkunci di sana.
@@ -96,7 +96,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
               <Topbar user={user} notifications={notifications} navItems={navItems} allowedKeys={allowedKeys} homeDivision={home} isAdmin={isAdmin} grants={grants} department={department} showHome={canReachMenu(user, "dashboard")} />
             </ChromeSlot>
             <div className="flex min-h-0 flex-1">
-              <Sidebar items={navItems} allowedKeys={allowedKeys} homeDivision={home} isAdmin={isAdmin} grants={grants} department={department} />
+              <Sidebar items={navItems} allowedKeys={allowedKeys} homeDivision={home} isAdmin={isAdmin} grants={grants} department={department} jabatan={user.jabatan} />
               {/* overflow-x-clip: no child may widen the page — wide content must
                   scroll inside its own overflow-x-auto wrapper (tables, kanban). */}
               <div data-scroll-root className="flex min-h-0 min-w-0 flex-1 flex-col clip-x overflow-y-auto">

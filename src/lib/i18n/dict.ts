@@ -104,7 +104,8 @@ export const DICT: Record<Lang, Record<string, string>> = {
     "nav.Head Product Development & Quality": "Head Product Development & Quality",
     "group.Monitoring": "Monitoring",
     "group.Persetujuan Dana": "Budget Approval",
-    "group.Sosial Media": "Social Media",
+    "section.Sosial Media": "Social Media",
+    "group.Permintaan Materi": "Material Requests",
     "group.Event & Promo": "Event & Promo",
     "group.Suara Pelanggan": "Customer Voice",
 
@@ -397,7 +398,8 @@ export const DICT: Record<Lang, Record<string, string>> = {
     "nav.Head Product Development & Quality": "Head Product Development & Quality",
     "group.Monitoring": "Monitoring",
     "group.Persetujuan Dana": "Persetujuan Dana",
-    "group.Sosial Media": "Sosial Media",
+    "section.Sosial Media": "Sosial Media",
+    "group.Permintaan Materi": "Permintaan Materi",
     "group.Event & Promo": "Event & Promo",
     "group.Suara Pelanggan": "Suara Pelanggan",
 
