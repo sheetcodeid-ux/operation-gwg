@@ -199,7 +199,11 @@ export const NAV_MENUS: Omit<NavItem, "section" | "group" | "groupIcon">[] = [
   // konten" atau "materi outlet", bukan "punya divisi A" atau "punya divisi B".
   { key: "creative_design", label: "Antrian Operasional", href: "/creative/design", icon: "Palette" },
   { key: "creative_konten", label: "Antrian Konten", href: "/creative/konten", icon: "Megaphone" },
-  { key: "sosmed_request", label: "Pengajuan Design Sosmed", href: "/pengajuan/sosmed", icon: "Megaphone" },
+  // TERSEMBUNYI dari sidebar, tapi tetap bisa dibuka: pintunya ada di halaman
+  // Pengajuan, bersama seluruh pengajuan lain. `hidden` di sini berarti "jangan
+  // tampil sebagai barisnya sendiri", bukan "tidak boleh dibuka" — penjaga
+  // rutenya tetap memeriksa kunci ini.
+  { key: "sosmed_request", label: "Pengajuan Design Sosmed", href: "/pengajuan/sosmed", icon: "AtSign", hidden: true },
   { key: "creative_penilaian", label: "Penilaian Request", href: "/creative/penilaian", icon: "Gauge" },
 
   // Key Performance Indicator — satu baris per posisi yang dinilai. Menunya
@@ -258,7 +262,10 @@ export const DIVISION_ICON: Record<Division, string> = {
   "Supply Chain": "Truck",
   Production: "ChefHat",
   "Marketing Communication": "Megaphone",
-  "Sosial Media": "Megaphone",
+  // Ikonnya WAJIB beda dari Marketing Communication. Dua bidang bersebelahan
+  // dengan ikon yang sama membuat keduanya terbaca sebagai satu bidang yang
+  // tercetak dua kali.
+  "Sosial Media": "AtSign",
   "Key Performance Indicator": "Target",
 };
 
@@ -567,20 +574,11 @@ export const DIVISION_GROUPS: Partial<Record<Division, NavGroupDef[]>> = {
   Creative: [
     { name: "Permintaan Masuk", icon: "Palette", menus: ["creative_design", "creative_konten"] },
     { name: "Monitoring", icon: "Gauge", menus: ["creative_penilaian"] },
-    // Kelompoknya dinamai sama persis dengan yang ada di sidebar Marketing
-    // Communication: menu yang sama sebaiknya berada di bawah nama yang sama,
-    // supaya orang yang berpindah divisi tidak perlu mencarinya dua kali.
-    { name: "Event & Promo", icon: "Megaphone", menus: ["mc_events"] },
   ],
   Finance: [{ name: "Persetujuan Dana", icon: "Wallet", menus: ["fin_training"] }],
-  "Sosial Media": [
-    { name: "Permintaan Materi", icon: "Megaphone", menus: ["sosmed_request"] },
-    { name: "Event & Promo", icon: "Megaphone", menus: ["mc_events"] },
-  ],
-  "Marketing Communication": [
-    { name: "Event & Promo", icon: "Megaphone", menus: ["mc_events"] },
-    { name: "Suara Pelanggan", icon: "MessageSquareWarning", menus: ["complaints"] },
-  ],
+  // Sosial Media dan Marketing Communication TIDAK punya kelompok: menunya
+  // sedikit, dan kelompok yang isinya satu baris hanya menambah satu baris
+  // judul di atas satu baris menu — dua baris untuk satu tujuan.
 };
 
 /** Menus shown per division in the Super Admin sidebar (all divisions listed). */
@@ -646,7 +644,7 @@ export const DIVISION_MENUS: { division: Division; menus: MenuKey[] }[] = [
   // Marketing Communication: Work Tracker + the Event/Promo ACC & impact tracker.
   // MarComm adalah pintu masuk keluhan dari kanal publik (Google Review,
   // Instagram, TikTok), jadi Complaints ikut di divisinya.
-  { division: "Marketing Communication", menus: ["work", "mc_events", "complaints"] },
+  { division: "Marketing Communication", menus: ["work", "mc_events"] },
   // SIDEBAR TERSENDIRI, bukan bidang di dalam divisi lain.
   //
   // Sosial Media secara departemen berada di Creative, tapi pekerjaannya
@@ -656,7 +654,7 @@ export const DIVISION_MENUS: { division: Division; menus: MenuKey[] }[] = [
   // sebagai pelengkap divisi lain.
   //
   // Anggotanya dikenali dari JABATAN, bukan departemen — lihat `timSosialMedia`.
-  { division: "Sosial Media", menus: ["work", "sosmed_request", "mc_events"] },
+  { division: "Sosial Media", menus: ["work", "sosmed_request", "mc_events", "complaints"] },
   { division: "Administrator", menus: ["users", "audit"] },
 ];
 
@@ -761,8 +759,20 @@ function itemsForDivision(division: string, menus: MenuKey[], sectionIcon: strin
         used.add(e);
         return { ...MENU_BY_KEY[e]!, section: division, sectionIcon, group: g.name, groupIcon: g.icon, groupFlat: g.datar };
       });
+    // KELOMPOK BERISI SATU BARIS TIDAK DIGAMBAR SEBAGAI KELOMPOK.
+    //
+    // Judul kelompok di atas satu baris menu berarti dua baris untuk satu
+    // tujuan, dan satu ketukan tambahan untuk membukanya — sementara namanya
+    // tidak menerangkan apa pun yang belum disebut baris di bawahnya. Diperiksa
+    // SESUDAH penyaringan hak akses, bukan dari daftar tulisnya: kelompok
+    // berisi tiga menu yang dua-duanya tertutup bagi pemakai ini memang tinggal
+    // satu baris baginya, dan tetap layak diratakan.
+    const datar = items.length === 1;
+    const siap = datar
+      ? items.map((i) => ({ ...i, group: undefined, groupIcon: undefined, groupFlat: undefined }))
+      : items;
     // Bidang kerja yang urutannya bermakna mempertahankan urutan tulisnya.
-    grouped.push(...(g.urutan === undefined ? [...items].sort(byName) : items));
+    grouped.push(...(g.urutan === undefined ? [...siap].sort(byName) : siap));
   }
 
   // Menu umum: selalu paling bawah, urut abjad.

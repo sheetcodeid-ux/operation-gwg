@@ -1,8 +1,8 @@
-import { FileUp, GraduationCap, MonitorCog, Palette, Send, UserPlus, CodeXml } from "lucide-react";
+import { FileUp, GraduationCap, Megaphone, MonitorCog, Palette, Send, UserPlus, CodeXml } from "lucide-react";
 import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 import { requireSessionUser } from "@/lib/auth";
-import { canReachMenu } from "@/lib/nav";
+import { canReachMenu, timSosialMedia } from "@/lib/nav";
 import { listHcRequests } from "@/lib/data/hc-requests";
 import { requestScopeFor } from "@/lib/data/request-scope";
 import { isOpen } from "@/lib/hc-request";
@@ -42,14 +42,29 @@ export default async function PengajuanPage() {
       description: "Program pelatihan & pengembangan tim — ACC Human Capital, lalu Finance menyetujui dananya.",
       openCount: openOf("pelatihan"),
     },
-    {
-      href: "/pengajuan/design",
-      icon: Palette,
-      title: "Pengajuan Design",
-      description: "Materi promosi, konten, dan cetakan — dikerjakan tim Creative setelah brief disetujui.",
-      openCount: openOf("design"),
-    },
   ];
+
+  // SATU KARTU DESIGN, bukan dua. Yang berjabatan Sosial Media selalu memakai
+  // form tanggal tayang; menampilkan dua kartu kepadanya berarti meminta ia
+  // memilih ulang tiap kali — dan salah pilih berarti pengajuannya masuk
+  // antrian yang bukan miliknya, dengan aturan tenggat yang bukan aturannya.
+  categories.push(
+    timSosialMedia(user)
+      ? {
+          href: "/pengajuan/sosmed",
+          icon: Megaphone,
+          title: "Pengajuan Design Sosial Media",
+          description: "Materi konten — isi tanggal tayangnya, tenggat desain dihitung otomatis dari situ.",
+          openCount: openOf("design"),
+        }
+      : {
+          href: "/pengajuan/design",
+          icon: Palette,
+          title: "Pengajuan Design",
+          description: "Materi promosi, konten, dan cetakan — dikerjakan tim Creative setelah brief disetujui.",
+          openCount: openOf("design"),
+        },
+  );
 
   // Menu pengajuan lain yang sudah ada di aplikasi ikut ditampilkan di sini bila
   // pengguna memang berhak membukanya — supaya semua yang sifatnya "pengajuan"
