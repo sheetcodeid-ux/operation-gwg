@@ -104,6 +104,7 @@ export const DICT: Record<Lang, Record<string, string>> = {
     "nav.Head Product Development & Quality": "Head Product Development & Quality",
     "group.Monitoring": "Monitoring",
     "group.Persetujuan Dana": "Budget Approval",
+    "group.Sosial Media": "Social Media",
     "group.Event & Promo": "Event & Promo",
     "group.Suara Pelanggan": "Customer Voice",
 
@@ -121,6 +122,7 @@ export const DICT: Record<Lang, Record<string, string>> = {
     "nav.Human Capital": "Human Capital",
     "nav.Antrian Operasional": "Operations Queue",
     "nav.Antrian Konten": "Content Queue",
+    "nav.Pengajuan Design Sosmed": "Social Media Design Request",
     "nav.Penilaian Request": "Request Scoring",
     "nav.Analytics Harga Kompetitor": "Competitor Price Analytics",
     "nav.Data Analysis": "Data Analysis",
@@ -395,6 +397,7 @@ export const DICT: Record<Lang, Record<string, string>> = {
     "nav.Head Product Development & Quality": "Head Product Development & Quality",
     "group.Monitoring": "Monitoring",
     "group.Persetujuan Dana": "Persetujuan Dana",
+    "group.Sosial Media": "Sosial Media",
     "group.Event & Promo": "Event & Promo",
     "group.Suara Pelanggan": "Suara Pelanggan",
 
@@ -410,6 +413,7 @@ export const DICT: Record<Lang, Record<string, string>> = {
     "nav.Human Capital": "Human Capital",
     "nav.Antrian Operasional": "Antrian Operasional",
     "nav.Antrian Konten": "Antrian Konten",
+    "nav.Pengajuan Design Sosmed": "Pengajuan Design Sosmed",
     "nav.Penilaian Request": "Penilaian Request",
     "nav.Analytics Harga Kompetitor": "Analytics Harga Kompetitor",
     "nav.Data Analysis": "Analisis Data",

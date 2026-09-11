@@ -181,3 +181,20 @@ describe("KPI Human Capital terbuka untuk departemennya sendiri", () => {
     }
   });
 });
+
+describe("Pengajuan Design Sosial Media punya menunya sendiri", () => {
+  const orang = (department: string) => ({ role: "member" as const, grants: [], department });
+
+  it("Marketing Communication bisa membukanya", () => {
+    expect(canReachMenu(orang("Marketing Communication"), "sosmed_request" as MenuKey)).toBe(true);
+  });
+
+  it("departemen lain memakai Pengajuan Design yang umum, bukan yang ini", () => {
+    // Dua form, dan yang menentukan FORMNYA — bukan departemen pemohon.
+    // Supervisor tetap bisa mengajukan desain, lewat menu yang satunya.
+    for (const d of ["Supervisor", "Operational", "Creative"]) {
+      expect(canReachMenu(orang(d), "sosmed_request" as MenuKey), d).toBe(false);
+      expect(canReachMenu(orang(d), "hc_request" as MenuKey), d).toBe(true);
+    }
+  });
+});

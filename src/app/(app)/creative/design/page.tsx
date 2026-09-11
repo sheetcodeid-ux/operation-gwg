@@ -48,7 +48,7 @@ export default async function CreativeDesignQueuePage() {
             : "Tab Menunggu berisi permintaan baru seluruh tim; tab lainnya hanya pekerjaan Anda sendiri. Ambil dari Menunggu untuk mulai mengerjakan, lalu kirim hasilnya."
         }
       />
-      <PapanAntrianDesign sumber="operasional" papan={papan} picOptions={picOptions} kelola={kelola} meId={user.id} />
+      <PapanAntrianDesign sumber="umum" papan={papan} picOptions={picOptions} kelola={kelola} meId={user.id} />
     </div>
   );
 }

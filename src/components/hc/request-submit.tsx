@@ -29,7 +29,7 @@ import {
 } from "@/lib/hc-request";
 import { DiscussButton } from "@/components/chat/forward-request";
 import { FilePicker, RequestEmpty, RequestList, uploadAll } from "./request-shared";
-import { TENGGAT, pakaiRencanaUpload, tanggalTenggat, tenggatDariRencanaUpload } from "@/lib/kpi/deadline";
+import { JEDA_TENGGAT_UPLOAD, TENGGAT, tanggalTenggat, tenggatDariRencanaUpload } from "@/lib/kpi/deadline";
 
 /** Tanggal hari ini menurut jam pemakainya, bukan UTC. */
 function hariIniLokal(): string {
@@ -208,7 +208,7 @@ export function NewRequestButton({
   members = [],
   outlets = [],
   scopeAwal = "manajemen",
-  departemen = null,
+  kanal = "umum",
 }: {
   kind: HcRequestKind;
   members?: DeptMember[];
@@ -216,13 +216,13 @@ export function NewRequestButton({
   outlets?: PilihanOutlet[];
   scopeAwal?: ScopeManpower;
   /**
-   * Departemen pemohon — menentukan bentuk isian tenggatnya.
+   * Form asal pengajuan design: "umum" atau "sosmed".
    *
-   * Hanya untuk MENAMPILKAN isian yang benar. Yang menentukan tenggat
-   * sesungguhnya tetap server, dari departemen di sesi: kalau nilai ini yang
-   * dipercaya, siapa pun bisa mengaku MarComm untuk memakai aturan lain.
+   * Ditentukan HALAMANNYA, bukan departemen pemohon. Departemen sebagai
+   * pembeda adalah tebakan yang salah di dua arah: Marketing Communication juga
+   * meminta poster cetak, dan tim lain juga meminta materi untuk diunggah.
    */
-  departemen?: string | null;
+  kanal?: "umum" | "sosmed";
 }) {
   const copy = COPY[kind];
   return (
@@ -233,7 +233,7 @@ export function NewRequestButton({
         </Button>
       </DialogTrigger>
       <DialogContent title={copy.title} description={copy.formDesc} align="center" className="max-w-lg">
-        <RequestForm kind={kind} members={members} outlets={outlets} scopeAwal={scopeAwal} departemen={departemen} />
+        <RequestForm kind={kind} members={members} outlets={outlets} scopeAwal={scopeAwal} kanal={kanal} />
       </DialogContent>
     </Dialog>
   );
@@ -261,13 +261,13 @@ function RequestForm({
   members,
   outlets,
   scopeAwal,
-  departemen,
+  kanal,
 }: {
   kind: HcRequestKind;
   members: DeptMember[];
   outlets: PilihanOutlet[];
   scopeAwal: ScopeManpower;
-  departemen: string | null;
+  kanal: "umum" | "sosmed";
 }) {
   const router = useRouter();
   const { setOpen } = useDialogControl();
@@ -283,10 +283,11 @@ function RequestForm({
   const [outletId, setOutletId] = React.useState(outlets.length === 1 ? outlets[0].id : "");
   const [trainingType, setTrainingType] = React.useState(TRAINING_TYPES[0]);
   const [customType, setCustomType] = React.useState("");
-  // MarComm mengisi TANGGAL TAYANG; departemen lain memilih kelonggaran.
+  // Sosial Media mengisi TANGGAL TAYANG; form umum memilih kelonggaran.
   // Keduanya menghasilkan tenggat, tapi datang dari arah yang berlawanan —
   // yang satu dihitung mundur dari tanggal tayang, yang lain maju dari hari ini.
-  const dariUpload = kind === "design" && pakaiRencanaUpload(departemen);
+  const dariUpload = kind === "design" && kanal === "sosmed";
+  const [linkVideo, setLinkVideo] = React.useState("");
   const [designType, setDesignType] = React.useState(DESIGN_TYPES[0]);
   const [customDesign, setCustomDesign] = React.useState("");
   const [designSize, setDesignSize] = React.useState("");
@@ -373,6 +374,8 @@ function RequestForm({
         budget: budgetNum,
         designType: isDesign ? resolvedDesign : "",
         designSize: designSize.trim(),
+        designKanal: isDesign ? kanal : undefined,
+        linkVideo: dariUpload ? linkVideo.trim() : undefined,
         deadlineKategori: isDesign && !dariUpload ? tenggatKategori : null,
         plannedDate,
         attachments,
@@ -452,7 +455,10 @@ function RequestForm({
                 keduanya berarti meminta orang menjawabnya dua kali lalu
                 membiarkan keduanya bisa saling bertentangan. */}
             {dariUpload ? (
-              <Field label="Rencana Upload" hint="Tanggal materinya tayang — tenggat desainnya sehari sebelumnya.">
+              <Field
+                label="Rencana Upload"
+                hint={`Tanggal materinya tayang — tenggat desainnya ${JEDA_TENGGAT_UPLOAD} hari sebelumnya.`}
+              >
                 <DatePicker value={plannedDate} onChange={setPlannedDate} />
                 <FieldError>{errors.tenggat}</FieldError>
               </Field>
@@ -475,6 +481,22 @@ function RequestForm({
               </Field>
             )}
           </div>
+
+          {/* VIDEO DICATAT SEBAGAI TAUTAN, bukan diunggah. Satu berkas video
+              mentah gampang melewati batas 100 MB, dan yang mengerjakannya tetap
+              perlu membukanya di tempat aslinya — memaksakannya lewat unggahan
+              berarti menolak materi yang sah lalu materinya dikirim lewat chat,
+              di luar pengajuan, dan hilang dari jejaknya. */}
+          {dariUpload && (
+            <Field label="Link Video (opsional)" hint="Tempel tautan Drive / YouTube bila materinya berupa video.">
+              <Input
+                value={linkVideo}
+                onChange={(e) => setLinkVideo(e.target.value)}
+                placeholder="https://drive.google.com/…"
+                inputMode="url"
+              />
+            </Field>
+          )}
 
           <div className="grid gap-3 sm:grid-cols-2">
             <Field label="Tanggal Request">

@@ -48,7 +48,7 @@ export default async function CreativeKontenQueuePage() {
             : "Materi konten dari Marketing Communication. Ambil dari Menunggu untuk mulai mengerjakan, lalu kirim hasilnya."
         }
       />
-      <PapanAntrianDesign sumber="marcomm" papan={papan} picOptions={picOptions} kelola={kelola} meId={user.id} />
+      <PapanAntrianDesign sumber="sosmed" papan={papan} picOptions={picOptions} kelola={kelola} meId={user.id} />
     </div>
   );
 }

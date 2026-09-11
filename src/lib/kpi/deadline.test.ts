@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { TENGGAT, lewatTenggat, nilaiTenggat, pakaiRencanaUpload, tanggalTenggat, tenggatDariRencanaUpload } from "./deadline";
+import { JEDA_TENGGAT_UPLOAD, TENGGAT, lewatTenggat, nilaiTenggat, tanggalTenggat, tenggatDariRencanaUpload } from "./deadline";
 
 /**
  * Aturan tenggat yang kalau dilanggar TIDAK terlihat salah: tanggal yang meleset
@@ -74,30 +74,23 @@ describe("penanda lewat tenggat", () => {
   });
 });
 
-describe("tenggat dari rencana unggah — Marketing Communication", () => {
-  it("tenggatnya sehari sebelum tanggal tayang", () => {
-    // Contoh pemiliknya: unggah tanggal 20 ⇒ tenggat desain tanggal 19.
-    expect(tenggatDariRencanaUpload("2026-09-20")).toBe("2026-09-19");
+describe("tenggat dari rencana unggah — pengajuan Sosial Media", () => {
+  it("tenggatnya tiga hari sebelum tanggal tayang", () => {
+    // Contoh pemiliknya: tayang tanggal 20 ⇒ tenggat desain tanggal 17.
+    expect(tenggatDariRencanaUpload("2026-09-20")).toBe("2026-09-17");
+    expect(JEDA_TENGGAT_UPLOAD).toBe(3);
   });
 
   it("mundur melewati awal bulan dengan benar", () => {
-    // Ditulis sebagai tanggal, bukan pengurangan pada teks: 1 − 1 harus jadi
-    // 31 Agustus, bukan "September 0".
-    expect(tenggatDariRencanaUpload("2026-09-01")).toBe("2026-08-31");
-    expect(tenggatDariRencanaUpload("2026-03-01")).toBe("2026-02-28");
-    expect(tenggatDariRencanaUpload("2024-03-01")).toBe("2024-02-29");
+    // Ditulis sebagai tanggal, bukan pengurangan pada teks: 2 − 3 harus jadi
+    // 30 Agustus, bukan "September -1".
+    expect(tenggatDariRencanaUpload("2026-09-02")).toBe("2026-08-30");
+    expect(tenggatDariRencanaUpload("2026-03-01")).toBe("2026-02-26");
+    expect(tenggatDariRencanaUpload("2024-03-01")).toBe("2024-02-27");
   });
 
   it("tanggal yang tidak berbentuk tanggal tidak menghasilkan tenggat asal-asalan", () => {
     expect(tenggatDariRencanaUpload("")).toBeNull();
     expect(tenggatDariRencanaUpload("besok")).toBeNull();
-  });
-
-  it("hanya Marketing Communication yang memakainya", () => {
-    expect(pakaiRencanaUpload("Marketing Communication")).toBe(true);
-    expect(pakaiRencanaUpload("marketing communication")).toBe(true);
-    expect(pakaiRencanaUpload("Supervisor")).toBe(false);
-    expect(pakaiRencanaUpload("Creative")).toBe(false);
-    expect(pakaiRencanaUpload(null)).toBe(false);
   });
 });

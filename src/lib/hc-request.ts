@@ -264,6 +264,17 @@ export interface HcRequest {
   /** design */
   designType: string | null;
   designSize: string | null;
+  /**
+   * Form asal pengajuan design: "umum" atau "sosmed".
+   *
+   * Menentukan antrian mana yang memuatnya DAN aturan tenggatnya. Dipilih
+   * pemohon lewat form yang ia buka, bukan disimpulkan dari departemennya —
+   * departemen sebagai pembeda salah di dua arah: Marketing Communication juga
+   * meminta poster cetak, dan tim lain juga meminta materi untuk diunggah.
+   */
+  designKanal: string;
+  /** Tautan materi video — hanya pada pengajuan Sosial Media. */
+  linkVideo: string | null;
   /** Kategori tenggat yang dipilih pemohon — lihat `lib/kpi/deadline.ts`. */
   deadlineKategori: string | null;
   /** Tanggal jatuh tempo, "YYYY-MM-DD". Disimpan, bukan dihitung ulang. */
