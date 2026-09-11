@@ -91,6 +91,18 @@ export function listHospitality(user: UserProfile): HospitalityAssessment[] {
   const ids = visibleOutletIdSet(user);
   return SEED.hospitality.filter((h) => ids.has(h.outletId)).sort(byDateDesc("date"));
 }
+/**
+ * SELURUH tugas Work Tracker, tanpa pembatasan cabang.
+ *
+ * Dipakai perhitungan yang memang lintas cabang — indikator KPI Problem Solver
+ * dihitung dari pekerjaan satu orang di mana pun cabangnya, dan menyaringnya
+ * lewat cakupan pembaca akan membuat dua orang melihat skor berbeda untuk
+ * orang yang sama.
+ */
+export function semuaTugas(): WorkTask[] {
+  return SEED.tasks;
+}
+
 export function listTasks(user: UserProfile): WorkTask[] {
   const ids = visibleOutletIdSet(user);
   return SEED.tasks.filter((t) => t.outletId === null || ids.has(t.outletId)).sort(byDateDesc("createdAt"));

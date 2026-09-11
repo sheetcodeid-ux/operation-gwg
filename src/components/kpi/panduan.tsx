@@ -191,7 +191,9 @@ function langkahCa(): Langkah[] {
 
 /** Langkah umum — dipakai posisi yang tidak dinilai per outlet. */
 function langkahUmum(indikator: Indikator[]): Langkah[] {
-  const dariEntri = indikator.filter((i) => i.actual.sumber === "entri" || i.actual.sumber === "pengurang");
+  const dariEntri = indikator.filter(
+    (i) => i.actual.sumber === "entri" || i.actual.sumber === "pengurang" || i.actual.sumber === "harian",
+  );
   const otomatis = indikator.filter((i) => i.actual.sumber === "otomatis");
   const manual = indikator.filter((i) => i.actual.sumber === "manual" || i.actual.sumber === "manual_brand");
   const daftar = (d: Indikator[]) => d.map((i) => i.label).join(", ");

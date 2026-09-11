@@ -30,6 +30,10 @@ const ANGKA: Record<string, [number | null, number | null, number | null]> = {
   hc_pemenuhan_rekrutmen: [90, 82, 88], hc_kecepatan_rekrutmen: [30, 24, 92],
   hc_kepatuhan_kontrak: [95, 91, 94], hc_kepatuhan_laporan: [90, 76, 81],
   hc_penyelesaian_onboarding: [85, 88, 90], hc_turnover: [10, 7.4, 86],
+  data_integrity: [4, 4, 95], reporting_timeliness: [4, 3, 100],
+  software_complaint: [5, 1, 60], problem_solver_data: [10, 8, 70],
+  pos_masterdata: [5, 6, 80], pos_sla: [5, 4, 100],
+  pos_refresh: [4, 3, 75], pos_uptime: [100, 83.87, 96.7],
 };
 const OUTLET: [string, number, number | null, number | null][] = [
   ["Cattu A. Yani", 245633267, 70000000, 3000000],
@@ -88,7 +92,11 @@ function buat(kode: KodePosisi) {
     { id: "e1", jenis: "event" as const, periode: "2026-09", posisi: kode, tanggal: "2026-09-03", picNama: "Amanda", outletId: null, judul: "Promo Ramadan Nordu", deskripsi: "Aktivasi 12 cabang", nominal: null, nominalSeharusnya: null, tenggat: null, gagal: false, lampiran: [], dibuatNama: "GWG Admin" },
     { id: "e2", jenis: "quality_control" as const, periode: "2026-09", posisi: kode, tanggal: "2026-09-07", picNama: "Mustadi", outletId: "o0", judul: "Kunjungan Cattu A. Yani", deskripsi: "Suhu chiller di atas standar", nominal: null, nominalSeharusnya: null, tenggat: null, gagal: false, lampiran: [], dibuatNama: "GWG Admin" },
     { id: "e3", jenis: "temuan" as const, periode: "2026-09", posisi: kode, tanggal: "2026-09-12", picNama: "Nisa", outletId: null, judul: "Invoice warehouse tidak masuk laporan", deskripsi: "", nominal: null, nominalSeharusnya: null, tenggat: null, gagal: true, lampiran: [], dibuatNama: "GWG Admin" },
-  ];
+    { id: "e4", jenis: "pos_masterdata" as const, periode: "2026-09", posisi: kode, tanggal: "2026-09-04", picNama: "Evan Wijaya", outletId: null, semuaOutlet: true, kategori: "Setting Promo / Program", judul: "", deskripsi: "Promo Gajian 25%", nominal: null, nominalSeharusnya: null, tenggat: null, selesai: null, hariLewat: null, gagal: false, lampiran: [], dibuatNama: "GWG Admin" },
+    { id: "e5", jenis: "pos_sla" as const, periode: "2026-09", posisi: kode, tanggal: "2026-09-08", picNama: "Evan Wijaya", outletId: "o0", semuaOutlet: false, kategori: "Update Harga", judul: "", deskripsi: "Menunggu konfirmasi harga baru", nominal: null, nominalSeharusnya: null, tenggat: null, selesai: "2026-09-11", hariLewat: 2, gagal: true, lampiran: [], dibuatNama: "GWG Admin" },
+    { id: "e6", jenis: "pos_uptime" as const, periode: "2026-09", posisi: kode, tanggal: "2026-09-09", picNama: "Evan Wijaya", outletId: null, semuaOutlet: true, kategori: "Monitoring tanggal 9", judul: "", deskripsi: "", nominal: null, nominalSeharusnya: null, tenggat: null, selesai: null, hariLewat: null, gagal: false, lampiran: [], dibuatNama: "GWG Admin" },
+    { id: "e7", jenis: "laporan_owner" as const, periode: "2026-09", posisi: kode, tanggal: "2026-09-08", picNama: "Fikri", outletId: null, semuaOutlet: false, kategori: "Laporan tanggal 8", judul: "", deskripsi: "Terkirim pukul 16.40", nominal: null, nominalSeharusnya: null, tenggat: null, selesai: null, hariLewat: null, gagal: false, lampiran: [], dibuatNama: "GWG Admin" },
+  ].map((e) => ({ semuaOutlet: false, kategori: "", selesai: null, hariLewat: null, ...e }));
 
   const laporan: LaporanKpi = {
     posisi: kode, periode: "2026-09", baris, ringkas: ringkasKpi(baris), dikunci: false,
@@ -140,7 +148,11 @@ const OUTLET_MJ = [
   { id: "6", nama: "Nordu Coffee Kayutangi", kode: "NCKT", umur: null, bulanLalu: [500_030_837, 512_000_000, 498_700_000] as [number, number, number], actual: 470_000_000 },
 ];
 const DEPT_MJ = [
-  departemenKpi("operational", "Operational", "Operational", [{ kode: "operational_ca", nama: "Coordinator Area", nilai: 89.46, lalu: 86.2 }]),
+  departemenKpi("operational", "Operational", "Operational", [
+    { kode: "operational_ca", nama: "Coordinator Area", nilai: 89.46, lalu: 86.2 },
+    { kode: "operational_software", nama: "Coordinator Software", nilai: 91.2, lalu: 88.7 },
+    { kode: "operational_pos", nama: "Coordinator POS", nilai: 84.3, lalu: 80.5 },
+  ]),
   departemenKpi("creative", "Creative", "Creative", [
     { kode: "creative_content", nama: "Content Creator", nilai: 82.1, lalu: 79.4 },
     { kode: "creative_sosmed", nama: "Sosial Media", nilai: 76.8, lalu: 80.1 },

@@ -52,6 +52,9 @@ export function bentukIsian(i: Indikator): Bentuk {
   if (i.actual.sumber === "entri") return "kegiatan";
   if (i.actual.sumber === "pengurang") return i.actual.entri === "penyampaian" ? "tenggat" : "temuan";
   if (i.actual.sumber === "lulus") return "tenggat";
+  // Monitoring harian diisi lewat tabel kegiatan — barisnya dibuatkan satu per
+  // tanggal, dan dialog satuan tidak punya bentuk untuk itu.
+  if (i.actual.sumber === "harian") return "kegiatan";
   switch (i.actual.kode) {
     case "efisiensi_operasional":
       return "efisiensi";

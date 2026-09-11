@@ -63,6 +63,8 @@ export type MenuKey =
   | "kpi"
   | "kpi_manajemen"
   | "kpi_op_ca"
+  | "kpi_op_software"
+  | "kpi_op_pos"
   | "kpi_creative_content"
   | "kpi_creative_sosmed"
   | "kpi_fin_accounting"
@@ -213,6 +215,8 @@ export const NAV_MENUS: Omit<NavItem, "section" | "group" | "groupIcon">[] = [
   { key: "kpi", label: "Ringkasan KPI", href: "/kpi", icon: "Target" },
   { key: "kpi_manajemen", label: "Manajemen", href: "/kpi/manajemen", icon: "Briefcase" },
   { key: "kpi_op_ca", label: "Coordinator Area", href: "/kpi/operational_ca", icon: "Store" },
+  { key: "kpi_op_software", label: "Coordinator Software", href: "/kpi/operational_software", icon: "DatabaseZap" },
+  { key: "kpi_op_pos", label: "Coordinator POS", href: "/kpi/operational_pos", icon: "ScanBarcode" },
   { key: "kpi_creative_content", label: "Content Creator", href: "/kpi/creative_content", icon: "Clapperboard" },
   { key: "kpi_creative_sosmed", label: "Sosial Media", href: "/kpi/creative_sosmed", icon: "Share2" },
   { key: "kpi_fin_accounting", label: "Accounting", href: "/kpi/finance_accounting", icon: "Calculator" },
@@ -322,8 +326,10 @@ export const ROLE_MENUS: Record<Role, MenuKey[]> = {
   // hanya bisa mengajukan untuk cabang yang memang dipegangnya.
   // KPI-nya sendiri ikut dibuka, TAPI hanya areanya — lihat `picTerkunci`.
   area_coordinator: [...OPERATION_FULL, "elearning", "assessment", "hc_submit", "creative_penilaian", "kpi_op_ca"], // learner (E-Learning), menus scoped to their area
-  data_operation: ["work", "op_analysis", "assessment"],
-  pos_operation: ["work", "op_analysis", "assessment"],
+  // Keduanya boleh membaca rapornya sendiri — halaman yang sama yang dibaca
+  // atasannya, bukan salinan yang lebih ramah.
+  data_operation: ["work", "op_analysis", "assessment", "kpi_op_software"],
+  pos_operation: ["work", "op_analysis", "assessment", "kpi_op_pos"],
   admin_operation: ["work", "complaints", "op_analysis", "assessment"],
   supervisor: ["events", "hospitality", "hygiene", "complaints", "hc_kontrak", "hc_submit", "sys_submit"], // field SPV — event/promo proposals + visits + HC docs + system requests
   head_bar_rnd: ["hpp_dash", "work", "hpp", "hpp_db", "hpp_bahan", "hpp_price", "hpp_comp", "assessment"],
@@ -559,7 +565,7 @@ export const DIVISION_GROUPS: Partial<Record<Division, NavGroupDef[]>> = {
     // satu posisi melainkan PERUSAHAAN, dan menaruhnya di dalam salah satu
     // departemen membuatnya terbaca seolah milik departemen itu.
     { name: "Korporat", icon: "Briefcase", urutan: 0, menus: ["kpi_manajemen"] },
-    { name: "Operational", icon: "Store", urutan: 1, menus: ["kpi_op_ca"] },
+    { name: "Operational", icon: "Store", urutan: 1, menus: ["kpi_op_ca", "kpi_op_software", "kpi_op_pos"] },
     { name: "Creative", icon: "Palette", urutan: 2, menus: ["kpi_creative_content"] },
     { name: "Finance", icon: "Wallet", urutan: 3, menus: ["kpi_fin_accounting", "kpi_fin_finance", "kpi_fin_tax"] },
     {
@@ -592,6 +598,8 @@ export const DIVISION_MENUS: { division: Division; menus: MenuKey[] }[] = [
       "kpi",
       "kpi_manajemen",
       "kpi_op_ca",
+      "kpi_op_software",
+      "kpi_op_pos",
       "kpi_creative_content",
       "kpi_creative_sosmed",
       "kpi_fin_accounting",

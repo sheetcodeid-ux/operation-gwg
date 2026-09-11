@@ -2,7 +2,7 @@ import "server-only";
 
 import { randomUUID } from "node:crypto";
 import { db, dbEnabled } from "./db";
-import { getOutlets, getUser, getUsers } from "./store";
+import { getOutlets, getUser, getUsers, semuaTugas } from "./store";
 import { listHcRequests } from "./hc-requests";
 import { netBulananPerCabang } from "./esb-bulanan";
 import { nilaiKetepatanDesign } from "./design-rapor";
@@ -45,11 +45,19 @@ export interface EntriKpi {
   tanggal: string;
   picNama: string;
   outletId: string | null;
+  /** Catatan ini berlaku untuk seluruh outlet sekaligus. */
+  semuaOutlet: boolean;
+  /** Kategori pekerjaannya; kosong untuk jenis catatan yang tidak berkategori. */
+  kategori: string;
   judul: string;
   deskripsi: string;
   nominal: number | null;
   nominalSeharusnya: number | null;
   tenggat: string | null;
+  /** Tanggal selesai — hanya terisi pada catatan yang punya rentang pengerjaan. */
+  selesai: string | null;
+  /** Berapa hari pengerjaannya melewati targetnya. */
+  hariLewat: number | null;
   gagal: boolean;
   lampiran: { path: string; name: string }[];
   dibuatNama: string;
@@ -112,11 +120,15 @@ const entriDari = (r: Record<string, unknown>): EntriKpi => ({
   tanggal: String(r.tanggal ?? ""),
   picNama: String(r.pic_nama ?? "—"),
   outletId: (r.outlet_id as string | null) ?? null,
+  semuaOutlet: !!r.semua_outlet,
+  kategori: String(r.kategori ?? ""),
   judul: String(r.judul ?? ""),
   deskripsi: String(r.deskripsi ?? ""),
   nominal: angka(r.nominal),
   nominalSeharusnya: angka(r.nominal_seharusnya),
   tenggat: (r.tenggat as string | null) ?? null,
+  selesai: (r.selesai as string | null) ?? null,
+  hariLewat: angka(r.hari_lewat),
   gagal: !!r.gagal,
   lampiran: (Array.isArray(r.lampiran) ? r.lampiran : []) as { path: string; name: string }[],
   dibuatNama: String(r.dibuat_nama ?? ""),
@@ -311,11 +323,15 @@ export async function simpanEntri(
     tanggal: input.tanggal,
     pic_nama: input.picNama,
     outlet_id: input.outletId,
+    semua_outlet: input.semuaOutlet,
+    kategori: input.kategori,
     judul: input.judul,
     deskripsi: input.deskripsi,
     nominal: input.nominal,
     nominal_seharusnya: input.nominalSeharusnya,
     tenggat: input.tenggat,
+    selesai: input.selesai,
+    hari_lewat: input.hariLewat,
     gagal: input.gagal,
     lampiran: input.lampiran,
     dibuat_oleh: input.olehId,
@@ -1015,6 +1031,42 @@ const labelBulanSingkat = (periode: string): string => {
 const alasanKosong = (esbBranchId: string | null | undefined): string =>
   esbBranchId ? "angka ESB bulan ini belum ditarik" : "outlet belum dipasangkan ke cabang ESB";
 
+
+/**
+ * Tugas Work Tracker yang SELESAI pada bulan itu, milik PIC posisi ini.
+ *
+ * Dicocokkan lewat NAMA PIC yang terdaftar pada posisinya, bukan lewat peran.
+ * Tidak ada peran tersendiri untuk Coordinator Software — ia dan tiga rekannya
+ * sama-sama berperan `member` di departemen Operational — sehingga peran tidak
+ * bisa membedakan pekerjaan siapa yang sedang dinilai. Nama PIC sudah menjadi
+ * identitas yang dipakai seluruh modul KPI untuk posisi non-dinamis, jadi ini
+ * bukan kelemahan baru melainkan kunci yang sama.
+ *
+ * Mengembalikan null bila nama PIC-nya tidak ketemu satu pun pengguna: nol
+ * berarti "tidak ada yang diselesaikan", dan itu penilaian yang jauh berbeda
+ * dari "namanya tidak cocok dengan siapa pun". Yang pertama menghukum orangnya,
+ * yang kedua menyuruh admin membetulkan datanya.
+ */
+function tugasSelesai(posisi: KodePosisi, periode: string): number | null {
+  const nama = (posisiDari(posisi)?.pic ?? []).map((n) => n.trim().toLowerCase()).filter(Boolean);
+  if (nama.length === 0) return null;
+  const orang = new Set(
+    getUsers()
+      .filter((u) => nama.includes((u.name ?? "").trim().toLowerCase()))
+      .map((u) => u.id),
+  );
+  if (orang.size === 0) return null;
+  return semuaTugas().filter((t) => {
+    if (t.status !== "done") return false;
+    if (!t.picIds.some((id) => orang.has(id))) return false;
+    // Tanggal selesainya yang menentukan bulan. Baris lama yang belum punya
+    // tanggal selesai memakai tenggatnya — perkiraan terbaik yang ada, dan
+    // jauh lebih dekat daripada tanggal dibuatnya.
+    const tanggal = t.completionDate || t.dueDate;
+    return typeof tanggal === "string" && tanggal.slice(0, 7) === periode;
+  }).length;
+}
+
 /* ──────────────────────────────── laporan ──────────────────────────────── */
 
 const PAKAI_EFISIENSI: KodePosisi[] = ["pdq_food", "pdq_beverage"];
@@ -1042,6 +1094,14 @@ export async function laporanKpi(posisi: KodePosisi, periode: string, pic = ""):
   const entri = ((entriRows.data ?? []) as Record<string, unknown>[]).map(entriDari);
   const jumlahEntri = (jenis: JenisEntri) => entri.filter((e) => e.jenis === jenis).length;
   const jumlahGagal = (jenis: JenisEntri) => entri.filter((e) => e.jenis === jenis && e.gagal).length;
+  // HARI yang tercatat, bukan jumlah barisnya. Monitoring yang dicatat dua kali
+  // pada tanggal yang sama tetap satu hari yang termonitor — menghitungnya dua
+  // kali membuat uptime tembus 100% tanpa satu hari tambahan pun dipantau.
+  const hariTercatat = (jenis: JenisEntri) =>
+    new Set(entri.filter((e) => e.jenis === jenis).map((e) => e.tanggal)).size;
+  const problemSolver = daftar.some((i) => i.actual.sumber === "otomatis" && i.actual.kode === "problem_solver_data")
+    ? tugasSelesai(posisi, periode)
+    : null;
 
   // Angka manual: dijumlah lintas brand, karena indikator per brand disimpan
   // satu baris per brand.
@@ -1209,6 +1269,9 @@ export async function laporanKpi(posisi: KodePosisi, periode: string, pic = ""):
     lalu: lalu.get(i.key) ?? null,
     jumlahEntri,
     jumlahGagal,
+    hariTercatat,
+    hariBulan: hariBulan(periode),
+    problemSolver,
     jumlahBrand: WORK_BRANDS.length,
     jumlahOutlet: outletAktif.length,
     design,
@@ -1243,6 +1306,12 @@ interface KonteksBaris {
   lalu: number | null;
   jumlahEntri: (j: JenisEntri) => number;
   jumlahGagal: (j: JenisEntri) => number;
+  /** Jumlah HARI berbeda yang punya catatan jenis itu. */
+  hariTercatat: (j: JenisEntri) => number;
+  /** Jumlah hari bulan yang sedang dihitung. */
+  hariBulan: number;
+  /** Tugas Work Tracker yang selesai bulan itu. Null = posisinya tidak menilainya. */
+  problemSolver: number | null;
   jumlahBrand: number;
   jumlahOutlet: number;
   design: { masuk: number; selesai: number } | null;
@@ -1347,6 +1416,13 @@ function susunBaris(i: Indikator, k: KonteksBaris): BarisKpi {
     case "lulus":
       actual = actualLulus(target, k.jumlahGagal(i.actual.entri));
       break;
+    case "harian":
+      // Porsi hari, bukan jumlah baris: satu hari pada bulan 31 hari bernilai
+      // 3,23% dan pada Februari bernilai 3,57%. Ditulis sebagai angka tetap,
+      // bulan pendek akan selalu terlihat gagal dan bulan panjang akan
+      // menembus seratus persen tanpa ada yang bekerja lebih keras.
+      actual = k.hariBulan === 0 ? null : (k.hariTercatat(i.actual.entri) / k.hariBulan) * 100;
+      break;
     case "otomatis":
       switch (i.actual.kode) {
         case "design_request":
@@ -1354,6 +1430,10 @@ function susunBaris(i: Indikator, k: KonteksBaris): BarisKpi {
           break;
         case "komplain_food_quality":
           actual = actualPengurang(target, k.komplain ?? 0);
+          break;
+        case "problem_solver_data":
+          actual = k.problemSolver;
+          if (actual === null) alasan = "Nama PIC posisi ini belum cocok dengan pengguna mana pun di User Management.";
           break;
         case "hc_pemenuhan_rekrutmen":
         case "hc_kecepatan_rekrutmen":

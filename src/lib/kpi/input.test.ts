@@ -25,7 +25,7 @@ describe("setiap indikator punya jalan masuk", () => {
   it("tidak ada indikator yang tak bisa diisi maupun dihitung", () => {
     // Indikator yang bukan otomatis dan tidak punya bentuk isian adalah kolom
     // yang selamanya kosong — dan tidak ada yang bisa dilakukan pemakainya.
-    const dikenal = new Set(["manual", "manual_brand", "entri", "pengurang", "lulus", "otomatis"]);
+    const dikenal = new Set(["manual", "manual_brand", "entri", "pengurang", "lulus", "harian", "otomatis"]);
     for (const [posisi, daftar] of Object.entries(INDIKATOR)) {
       for (const i of daftar) {
         expect(dikenal.has(i.actual.sumber), `${posisi}/${i.key}: ${i.actual.sumber}`).toBe(true);

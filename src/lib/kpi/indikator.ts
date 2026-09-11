@@ -57,7 +57,12 @@ export type JenisEntri =
   | "faktur"
   | "penyampaian"
   | "temuan"
-  | "pelunasan";
+  | "pelunasan"
+  | "pos_masterdata"
+  | "pos_sla"
+  | "pos_refresh"
+  | "pos_uptime"
+  | "laporan_owner";
 
 /** Perhitungan otomatis dari modul/data lain. */
 export type KodeOtomatis =
@@ -75,6 +80,7 @@ export type KodeOtomatis =
   | "keberhasilan_pasar"
   | "management_fee"
   | "average_transaction"
+  | "problem_solver_data"
   | "gross_sales_area"
   | "komplain_area"
   | "net_profit_area"
@@ -95,6 +101,16 @@ export type SumberActual =
    * ada nilai tengah. Dipakai Kelengkapan & Kualitas Data Analisa.
    */
   | { sumber: "lulus"; entri: JenisEntri }
+  /**
+   * Persentase HARI yang tercatat dalam bulan itu.
+   *
+   * Dipakai ESB System Monitoring & Uptime: targetnya 100%, dan satu hari yang
+   * termonitor bernilai satu per jumlah hari bulan itu — 3,23% pada bulan 31
+   * hari, 3,57% pada Februari. Ditulis sebagai porsi hari, bukan sebagai angka
+   * tetap, supaya bulan pendek tidak otomatis terlihat gagal dan bulan panjang
+   * tidak otomatis terlihat lebih dari sempurna.
+   */
+  | { sumber: "harian"; entri: JenisEntri }
   /** Dihitung modul lain. */
   | { sumber: "otomatis"; kode: KodeOtomatis };
 
@@ -599,8 +615,109 @@ const humanCapital: Indikator[] = [
   },
 ];
 
+/**
+ * Coordinator Software.
+ *
+ * Yang dijaga posisi ini DATA, bukan outlet: ketepatan angka yang dipakai
+ * seluruh perusahaan, ketepatan waktu menyampaikannya, dan seberapa cepat
+ * masalahnya diselesaikan. Tiga dari empat indikatornya diketik karena memang
+ * belum ada sistem yang mengukurnya; yang keempat dibaca langsung dari Work
+ * Tracker supaya jumlah pekerjaan yang diselesaikan tidak perlu diakui sendiri.
+ */
+const coordinatorSoftware: Indikator[] = [
+  {
+    key: "data_integrity",
+    label: "Data Integrity & Accuracy",
+    bobot: 40,
+    target: { jenis: "tetap", nilai: 4 },
+    actual: { sumber: "manual" },
+    penjelasan: "Diketik. Ketepatan dan keutuhan data yang dipakai seluruh perusahaan. Target 4.",
+  },
+  {
+    key: "reporting_timeliness",
+    label: "Reporting Timeliness",
+    bobot: 30,
+    target: { jenis: "tetap", nilai: 4 },
+    actual: { sumber: "entri", entri: "laporan_owner" },
+    penjelasan:
+      "Laporan ke owner empat kali sebulan — tanggal 8, 15, 22, dan 29. Tiap laporan yang ditandai selesai bernilai satu poin.",
+  },
+  {
+    key: "software_complaint",
+    label: "Complaint",
+    bobot: 20,
+    target: { jenis: "tetap", nilai: 5 },
+    actual: { sumber: "manual" },
+    // RUMUS YANG SAMA dengan Complaint di Coordinator Area dan Quality Control,
+    // atas keputusan pemiliknya sebelumnya: batasnya titik nol, dan tiap
+    // komplain memotong seperlima capaian indikator ini.
+    penilaian: "kurang_linear",
+    penjelasan:
+      "Diketik. Batas 5 komplain sebulan, dan tiap komplain memotong 20% capaian indikator ini (4% dari skor total); 5 komplain membuatnya nol.",
+  },
+  {
+    key: "problem_solver_data",
+    label: "Problem Solver (Data)",
+    bobot: 10,
+    target: { jenis: "tetap", nilai: 10 },
+    actual: { sumber: "otomatis", kode: "problem_solver_data" },
+    penjelasan: "Otomatis dari Work Tracker: tugas yang selesai pada bulan itu. Target 10.",
+  },
+];
+
+/**
+ * Coordinator POS.
+ *
+ * Empat indikator yang seluruhnya bicara tentang MESIN KASIR dan data yang
+ * dimasukkan ke dalamnya. Tiga dicatat sebagai daftar pekerjaan — satu baris
+ * satu poin — dan satu dihitung dari hari: sistem yang dipantau tiap hari
+ * bernilai penuh, yang bolong seminggu kehilangan porsi tujuh harinya.
+ */
+const coordinatorPos: Indikator[] = [
+  {
+    key: "pos_masterdata",
+    label: "Menu & Promo Master Data Accuracy",
+    bobot: 35,
+    target: { jenis: "tetap", nilai: 5 },
+    actual: { sumber: "entri", entri: "pos_masterdata" },
+    penjelasan: "Satu pekerjaan tercatat bernilai satu poin: input menu baru, update harga, setting promo, input membership. Target 5.",
+  },
+  {
+    key: "pos_sla",
+    label: "SLA Menu & Promo Deployment",
+    bobot: 25,
+    target: { jenis: "tetap", nilai: 5 },
+    // PENGURANG, bukan penambah. Yang dinilai di sini bukan berapa banyak yang
+    // dikerjakan — itu sudah dihitung indikator di atasnya — melainkan berapa
+    // yang selesai terlambat. Menghitungnya sebagai penambah berarti satu
+    // pekerjaan yang sama dinilai dua kali.
+    actual: { sumber: "pengurang", entri: "pos_sla" },
+    penjelasan: "Target 5. Tiap penyetelan yang selesai melewati tanggal targetnya mengurangi satu poin.",
+  },
+  {
+    key: "pos_refresh",
+    label: "Cashier System Refreshment & Competency",
+    bobot: 20,
+    target: { jenis: "tetap", nilai: 4 },
+    actual: { sumber: "entri", entri: "pos_refresh" },
+    penjelasan: "Satu refreshment tercatat bernilai satu poin. Target 4 sebulan.",
+  },
+  {
+    key: "pos_uptime",
+    label: "ESB System Monitoring & Uptime",
+    bobot: 20,
+    target: { jenis: "tetap", nilai: 100 },
+    actual: { sumber: "harian", entri: "pos_uptime" },
+    satuan: "persen",
+    penjelasan:
+      "Target 100%. Tiap hari yang termonitor bernilai satu per jumlah hari bulan itu — 3,23% pada bulan 31 hari, 3,33% pada bulan 30 hari.",
+  },
+];
+
 export const INDIKATOR: Record<KodePosisi, Indikator[]> = {
   operational_ca: coordinatorArea,
+  operational_software: coordinatorSoftware,
+  operational_pos: coordinatorPos,
   hc: humanCapital,
   creative_content: contentCreator,
   creative_sosmed: sosialMedia,
@@ -620,5 +737,8 @@ export const indikatorPosisi = (kode: KodePosisi): Indikator[] => INDIKATOR[kode
 /** Tenggat penyampaian data per posisi — tanggal dalam bulan berjalan. */
 export const TENGGAT: Partial<Record<KodePosisi, number[]>> = {
   finance_finance: [15],
+  // Laporan ke owner empat kali sebulan — tanggal yang sama dipakai baris
+  // otomatis Reporting Timeliness, lihat `entri-skema.ts`.
+  operational_software: [8, 15, 22, 29],
   finance_tax: [8, 15, 22, 28],
 };

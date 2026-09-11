@@ -19,6 +19,7 @@ import { TabelHpp, TabelHygiene, TabelNetProfit, bagianDari } from "./tabel-moni
 import { DialogLaporanKpi } from "./laporan-pdf";
 import { DialogPanduan } from "./panduan";
 import type { JenisEntri } from "@/lib/kpi/indikator";
+import { skemaEntri } from "@/lib/kpi/entri-skema";
 import { BULAN, periodeDari, tahunPilihan } from "./periode";
 import { hapusEntriAction, hapusMenuPasarAction } from "@/lib/actions/kpi";
 import { SEMUA_PIC } from "@/lib/kpi/semua-pic";
@@ -150,7 +151,9 @@ export function PapanKpi({
     // Tiga tabel pemantauan: apa yang SUDAH masuk, bukan berapa skornya.
     // Muncul hanya bila posisinya memang dinilai atas angka itu — pilihan yang
     // menuju tabel kosong lebih buruk daripada tidak ada pilihannya.
-    const dariEntri = indikator.filter((i) => i.actual.sumber === "entri" || i.actual.sumber === "pengurang");
+    const dariEntri = indikator.filter(
+      (i) => i.actual.sumber === "entri" || i.actual.sumber === "pengurang" || i.actual.sumber === "harian",
+    );
     const jenisBukti = dariEntri
       .map((i) => (i.actual as { entri: JenisEntri }).entri)
       .filter((j) => WAJIB_BUKTI_ENTRI.includes(j));
@@ -228,7 +231,16 @@ export function PapanKpi({
   // isiannya sendiri di dialog Input.
   const opsiKegiatan = React.useMemo<OpsiKegiatan[]>(() => {
     const out: OpsiKegiatan[] = indikator
-      .filter((i) => i.actual.sumber === "entri")
+      // Selain catatan biasa, ikut di sini: indikator yang dinilai per HARI
+      // (monitoring uptime) dan indikator PENGURANG yang punya bentuk tabelnya
+      // sendiri (SLA). Keduanya diisi berbaris tanggal, persis seperti catatan
+      // biasa — memberinya form sendiri berarti dua pintu masuk ke satu tujuan.
+      .filter(
+        (i) =>
+          i.actual.sumber === "entri" ||
+          i.actual.sumber === "harian" ||
+          (i.actual.sumber === "pengurang" && !!skemaEntri(i.actual.entri)),
+      )
       .map((i) => ({
         jenis: (i.actual as { entri: JenisEntri }).entri,
         label: i.label,
@@ -551,7 +563,14 @@ export function PapanKpi({
       {tampilan === "netprofit" && laporan.ca && <TabelNetProfit detail={laporan.ca.detail} rasio={rasioNetProfit} toolbar={toolbar} />}
       {tampilan === "hpp" && laporan.ca && <TabelHpp detail={laporan.ca.detail} rasio={rasioHpp} toolbar={toolbar} />}
       {tampilan === "riwayat" && (
-        <TabelRiwayat entri={laporan.entri} posisi={laporan.posisi} periode={laporan.periode} pic={laporan.pic} toolbar={toolbar} />
+        <TabelRiwayat
+          entri={laporan.entri}
+          posisi={laporan.posisi}
+          periode={laporan.periode}
+          pic={laporan.pic}
+          namaOutlet={namaOutlet}
+          toolbar={toolbar}
+        />
       )}
 
       <Ringkasan tampilan={tampilan} laporan={laporan} rasioNetProfit={rasioNetProfit} rasioHpp={rasioHpp} />
@@ -842,6 +861,11 @@ const LABEL_ENTRI: Record<string, string> = {
   penyampaian: "Penyampaian Data",
   temuan: "Temuan Head",
   pelunasan: "Pelunasan",
+  pos_masterdata: "Master Data Menu & Promo",
+  pos_sla: "SLA Deployment",
+  pos_refresh: "Refreshment Kasir",
+  pos_uptime: "Monitoring ESB",
+  laporan_owner: "Laporan ke Owner",
 };
 
 function TabelRiwayat({
@@ -849,12 +873,14 @@ function TabelRiwayat({
   posisi,
   periode,
   pic,
+  namaOutlet,
   toolbar,
 }: {
   entri: EntriKpi[];
   posisi: string;
   periode: string;
   pic: string;
+  namaOutlet: Map<string, string>;
   toolbar: React.ReactNode;
 }) {
   const router = useRouter();
@@ -873,12 +899,38 @@ function TabelRiwayat({
       {
         accessorKey: "judul",
         header: "Keterangan",
+        // Kategori lebih dulu: pada catatan berkategori, `judul` memang kosong
+        // — kolomnya akan penuh tanda pisah padahal barisnya berisi.
         cell: ({ row }) => (
           <div className="min-w-0 max-w-[22rem]">
-            <p className="truncate font-medium text-foreground">{row.original.judul || "—"}</p>
+            <p className="truncate font-medium text-foreground">{row.original.kategori || row.original.judul || "—"}</p>
             {row.original.deskripsi && <p className="truncate text-[11px] text-muted-foreground">{row.original.deskripsi}</p>}
           </div>
         ),
+      },
+      {
+        id: "cakupan",
+        header: "Outlet",
+        enableSorting: false,
+        cell: ({ row }) =>
+          row.original.semuaOutlet ? (
+            <Badge tone="brand">Semua Outlet</Badge>
+          ) : (
+            <span className="text-foreground/80">{row.original.outletId ? namaOutlet.get(row.original.outletId) ?? "—" : "—"}</span>
+          ),
+      },
+      {
+        accessorKey: "hariLewat",
+        header: "Hari Terlewat",
+        cell: ({ row }) => {
+          const n = row.original.hariLewat;
+          if (row.original.selesai === null && n === null) return <span className="text-muted-foreground">—</span>;
+          return (
+            <span className={cn("tabular-nums", (n ?? 0) > 0 ? "text-rose-600 dark:text-rose-400" : "text-foreground/80")}>
+              {n ?? 0}
+            </span>
+          );
+        },
       },
       { accessorKey: "picNama", header: "PIC", cell: ({ getValue }) => <span className="text-foreground/80">{getValue<string>()}</span> },
       {
@@ -906,7 +958,7 @@ function TabelRiwayat({
         ),
       },
     ],
-    [posisi, periode, pic, router],
+    [posisi, periode, pic, namaOutlet, router],
   );
 
   return (

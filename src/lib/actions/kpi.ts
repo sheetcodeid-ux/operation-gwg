@@ -24,6 +24,7 @@ import {
 import { MENU_POSISI, bolehAngkaOutlet, bolehAturKpi, picTerkunci } from "@/lib/kpi/akses";
 import { indikatorPosisi } from "@/lib/kpi/indikator";
 import type { JenisEntri } from "@/lib/kpi/indikator";
+import { skemaEntri } from "@/lib/kpi/entri-skema";
 import { posisiDari, type KodePosisi } from "@/lib/kpi/struktur";
 import type { UserProfile } from "@/lib/types";
 
@@ -198,11 +199,15 @@ export async function simpanEntriAction(input: {
     tanggal: input.tanggal,
     picNama: (input.picNama ?? g.user.name).slice(0, 120),
     outletId: input.outletId ?? null,
+    semuaOutlet: false,
+    kategori: "",
     judul: (input.judul ?? "").slice(0, 200),
     deskripsi: (input.deskripsi ?? "").slice(0, 1000),
     nominal: input.nominal ?? null,
     nominalSeharusnya: input.nominalSeharusnya ?? null,
     tenggat: input.tenggat ?? null,
+    selesai: null,
+    hariLewat: null,
     gagal: !!input.gagal,
     lampiran: (input.lampiran ?? []).slice(0, 10),
     olehId: g.user.id,
@@ -228,23 +233,44 @@ export async function simpanEntriMassalAction(input: {
     tanggal: string;
     picNama?: string;
     outletId?: string | null;
+    /** Catatan ini berlaku untuk seluruh outlet sekaligus. */
+    semuaOutlet?: boolean;
+    kategori?: string;
     judul?: string;
     deskripsi?: string;
+    /** Tanggal selesai — hanya untuk catatan yang punya rentang pengerjaan. */
+    selesai?: string | null;
+    /** Hari yang terlewat dari targetnya; lebih dari nol mengurangi poin. */
+    hariLewat?: number | null;
     lampiran?: { path: string; name: string }[];
   }[];
 }): Promise<{ ok?: true; tersimpan?: number; error?: string }> {
   const g = await gerbang(input.posisi, input.periode, input.pic);
   if ("error" in g) return { error: g.error };
   let n = 0;
+  const skema = skemaEntri(input.jenis);
   for (const b of input.baris) {
-    if (!b.tanggal && !b.judul) continue; // baris kosong yang tidak jadi diisi
+    if (!b.tanggal && !b.judul && !b.kategori) continue; // baris kosong yang tidak jadi diisi
     if (!/^\d{4}-\d{2}-\d{2}$/.test(b.tanggal)) return { error: "Ada baris yang tanggalnya belum diisi." };
     if (b.tanggal.slice(0, 7) !== input.periode) return { error: "Ada tanggal di luar bulan yang sedang diisi." };
+    // Kategori diperiksa DI SERVER terhadap daftarnya sendiri. Kalau hanya
+    // dropdown-nya yang dibatasi di layar, satu permintaan yang disusun tangan
+    // cukup untuk menanam kategori yang tidak ada dalam daftar mana pun — dan
+    // sebaran per kategori berhenti bisa dibaca.
+    if (skema?.kategori) {
+      if (!b.kategori) return { error: "Ada baris yang kategorinya belum dipilih." };
+      if (!skema.kategori.includes(b.kategori)) return { error: `Kategori "${b.kategori}" tidak dikenali.` };
+    }
+    if (b.selesai) {
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(b.selesai)) return { error: "Ada tanggal selesai yang bentuknya keliru." };
+      if (b.selesai < b.tanggal) return { error: "Ada baris yang tanggal selesainya mendahului tanggal mulai." };
+    }
     // Buktinya diperiksa PER BARIS. Memeriksanya sekali untuk seluruh tabel
     // berarti satu lampiran cukup untuk empat puluh baris.
     if (WAJIB_BUKTI.includes(input.jenis) && (b.lampiran ?? []).length === 0) {
       return { error: "Ada baris tanpa bukti — tiap catatan wajib berlampiran." };
     }
+    const lewat = Math.max(0, Math.trunc(b.hariLewat ?? 0));
 
     const res = await simpanEntri({
       jenis: input.jenis,
@@ -254,12 +280,20 @@ export async function simpanEntriMassalAction(input: {
       tanggal: b.tanggal,
       picNama: (b.picNama ?? g.user.name).slice(0, 120),
       outletId: b.outletId ?? null,
+      semuaOutlet: !!b.semuaOutlet,
+      kategori: (b.kategori ?? "").slice(0, 120),
       judul: (b.judul ?? "").slice(0, 200),
       deskripsi: (b.deskripsi ?? "").slice(0, 1000),
       nominal: null,
       nominalSeharusnya: null,
       tenggat: null,
-      gagal: false,
+      selesai: b.selesai ?? null,
+      hariLewat: lewat,
+      // `gagal` DIISI DARI hari terlewat, bukan dikirim terpisah. Dua sumber
+      // untuk satu kenyataan berarti suatu saat ada baris yang terlewat tiga
+      // hari tapi tidak mengurangi poin, dan tidak ada cara tahu mana yang
+      // benar tanpa membuka basis data.
+      gagal: lewat > 0,
       lampiran: (b.lampiran ?? []).slice(0, 10),
       olehId: g.user.id,
       olehNama: g.user.name,
