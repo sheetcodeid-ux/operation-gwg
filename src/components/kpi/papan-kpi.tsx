@@ -20,13 +20,14 @@ import { DialogLaporanKpi } from "./laporan-pdf";
 import { DialogPanduan } from "./panduan";
 import type { JenisEntri } from "@/lib/kpi/indikator";
 import { skemaEntri } from "@/lib/kpi/entri-skema";
+import { actualBersatuan, angka, bersatuan, persen } from "@/lib/kpi/satuan";
 import { BULAN, periodeDari, tahunPilihan } from "./periode";
 import { hapusEntriAction, hapusMenuPasarAction } from "@/lib/actions/kpi";
 import { SEMUA_PIC } from "@/lib/kpi/semua-pic";
 import type { BarisKpi, BarisEfisiensi } from "@/lib/kpi/hitung";
 import type { DetailFee, DetailPasar, EntriKpi, LaporanKpi } from "@/lib/data/kpi";
 import type { Indikator } from "@/lib/kpi/indikator";
-import { formatDate, formatIDR, formatNumber } from "@/lib/utils";
+import { formatDate, formatIDR } from "@/lib/utils";
 import { cn } from "@/lib/utils";
 
 /**
@@ -50,24 +51,7 @@ import { cn } from "@/lib/utils";
 /** Jenis catatan yang tiap barisnya wajib berlampiran — sama dengan server. */
 const WAJIB_BUKTI_ENTRI: JenisEntri[] = ["hygiene_cctv", "cctv_qc"];
 
-const persen = (n: number | null, digit = 2) =>
-  n === null ? "—" : `${formatNumber(n, { minimumFractionDigits: digit, maximumFractionDigits: digit })}%`;
 
-const angka = (n: number | null) => (n === null ? "—" : formatNumber(n, { maximumFractionDigits: 2 }));
-
-/**
- * Angka dengan satuannya.
- *
- * Rp 13.244.543.327 dan "40%" dibaca berbeda dari "13244543327" dan "40" —
- * dan indikator yang salah dibaca satuannya akan disangka meleset jauh padahal
- * tepat. Yang tanpa satuan tetap angka biasa.
- */
-const bersatuan = (n: number | null, satuan?: "angka" | "rupiah" | "persen") => {
-  if (n === null) return "—";
-  if (satuan === "rupiah") return formatIDR(n);
-  if (satuan === "persen") return persen(n, 0);
-  return angka(n);
-};
 
 /**
  * Status satu indikator dalam satu kata yang bisa dibaca sekilas.
@@ -319,7 +303,8 @@ export function PapanKpi({
       {
         accessorKey: "actual",
         header: "Actual",
-        cell: ({ row }) => <span className="tabular-nums text-foreground/80">{bersatuan(row.original.actual, row.original.satuan)}</span>,
+        // Kosong ditulis 0, bukan tanda pisah — lihat `actualBersatuan`.
+        cell: ({ row }) => <span className="tabular-nums text-foreground/80">{actualBersatuan(row.original.actual, row.original.satuan)}</span>,
       },
       {
         accessorKey: "persentase",

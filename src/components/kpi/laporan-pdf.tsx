@@ -9,8 +9,9 @@ import { labelPeriode } from "./periode";
 import { statusCapaian } from "./papan-kpi";
 import type { BarisKpi } from "@/lib/kpi/hitung";
 import type { LaporanKpi } from "@/lib/data/kpi";
-import { formatIDR, formatNumber } from "@/lib/utils";
+import { formatIDR } from "@/lib/utils";
 import { cn } from "@/lib/utils";
+import { actualBersatuan, bersatuan, persen } from "@/lib/kpi/satuan";
 
 /**
  * Laporan KPI satu posisi sebagai dokumen cetak.
@@ -47,15 +48,6 @@ const ABU = "#94a3b8";
 const TARGET = "#f59e0b";
 const WARNA = ["#3b82f6", "#f59e0b", "#06b6d4", "#8b5cf6", "#10b981", "#f43f5e", "#64748b", "#eab308"];
 
-const persen = (n: number | null, digit = 2) =>
-  n === null ? "—" : `${formatNumber(n, { minimumFractionDigits: digit, maximumFractionDigits: digit })}%`;
-
-const bersatuan = (n: number | null, satuan?: "angka" | "rupiah" | "persen") => {
-  if (n === null) return "—";
-  if (satuan === "rupiah") return formatIDR(n);
-  if (satuan === "persen") return persen(n, 0);
-  return formatNumber(n, { maximumFractionDigits: 2 });
-};
 
 /** Teks apa pun yang masuk dokumen dilewatkan sini — nama outlet dan keterangan
  *  diketik orang, dan satu tanda "<" cukup untuk merusak seluruh halamannya. */
@@ -260,7 +252,7 @@ export function buatLaporanHtml({
       ${adaKategori ? sel(aman(b.kategori ?? "—"), `color:${t.sub}`) : ""}
       ${sel(persen(b.bobot, 0), "text-align:right")}
       ${sel(bersatuan(b.target, b.satuan), "text-align:right")}
-      ${sel(bersatuan(b.actual, b.satuan), "text-align:right")}
+      ${sel(actualBersatuan(b.actual, b.satuan), "text-align:right")}
       ${sel(persen(b.persentase), "text-align:right")}
       ${sel(`<b style="color:${t.text}">${persen(b.persenActual)}</b>`, "text-align:right")}
       ${sel(lencana(statusCapaian(b.persentase), t))}

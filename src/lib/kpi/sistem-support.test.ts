@@ -92,6 +92,35 @@ describe("complaint Coordinator Software", () => {
   });
 });
 
+describe("complaint kosong berarti nol komplain", () => {
+  const i = ind("operational_software", "software_complaint");
+
+  it("dinilai kurang_linear, jadi kosong memang berarti nol", () => {
+    // Inilah yang membedakannya dari indikator manual lain: tidak seorang pun
+    // mengetik "0 komplain", dan bulan paling bersih justru bulan yang
+    // kotaknya dibiarkan kosong. Kalau kosong dibaca "belum terukur",
+    // indikator ini keluar dari skor tepat pada bulan terbaiknya.
+    expect(i.penilaian).toBe("kurang_linear");
+    expect(i.actual.sumber).toBe("manual");
+  });
+
+  it("nol komplain bernilai penuh, satu komplain sudah memotong", () => {
+    expect(persentaseCapaian(0, 5, i.penilaian)).toBe(100);
+    expect(persentaseCapaian(1, 5, i.penilaian)).toBeLessThan(100);
+  });
+
+  it("aturan kosong-berarti-nol dibaca dari penilaiannya, bukan daftar nama", () => {
+    // Penjaga terhadap penulisan ulang di lapisan data: yang menentukan
+    // perlakuan itu `penilaian`, sehingga indikator komplain berikutnya ikut
+    // benar tanpa ada yang perlu mengingat menambahkannya ke daftar mana pun.
+    const manualKurang = Object.values(INDIKATOR)
+      .flat()
+      .filter((x) => x.actual.sumber === "manual" && x.penilaian === "kurang_linear")
+      .map((x) => x.key);
+    expect(manualKurang).toContain("software_complaint");
+  });
+});
+
 describe("baris yang dibuatkan otomatis", () => {
   it("monitoring harian sebanyak hari bulannya, tidak lebih", () => {
     const skema = skemaEntri("pos_uptime");
