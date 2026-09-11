@@ -182,18 +182,26 @@ describe("KPI Human Capital terbuka untuk departemennya sendiri", () => {
   });
 });
 
-describe("Pengajuan Design Sosial Media punya menunya sendiri", () => {
-  const orang = (department: string) => ({ role: "member" as const, grants: [], department });
+describe("Pengajuan Design Sosial Media dibuka JABATAN, bukan departemen", () => {
+  const orang = (department: string, jabatan?: string) => ({ role: "member" as const, grants: [], department, jabatan });
 
-  it("Marketing Communication bisa membukanya", () => {
-    expect(canReachMenu(orang("Marketing Communication"), "sosmed_request" as MenuKey)).toBe(true);
+  it("yang berjabatan Sosial Media bisa membukanya, apa pun departemennya", () => {
+    // Departemennya Creative; sidebarnya berdiri sendiri.
+    expect(canReachMenu(orang("Creative", "Sosial Media"), "sosmed_request" as MenuKey)).toBe(true);
+    // Ejaannya diketik admin, jadi pengenalannya dibuat longgar.
+    expect(canReachMenu(orang("Creative", "Social Media"), "sosmed_request" as MenuKey)).toBe(true);
+    expect(canReachMenu(orang("Marketing Communication", "Sosmed"), "sosmed_request" as MenuKey)).toBe(true);
   });
 
-  it("departemen lain memakai Pengajuan Design yang umum, bukan yang ini", () => {
-    // Dua form, dan yang menentukan FORMNYA — bukan departemen pemohon.
-    // Supervisor tetap bisa mengajukan desain, lewat menu yang satunya.
+  it("rekan sedepartemen TANPA jabatan itu tidak ikut terbuka", () => {
+    // Kalau digantungkan pada departemen, seluruh Creative ikut mendapat menu
+    // yang bukan pekerjaannya.
+    expect(canReachMenu(orang("Creative", "Content Creator"), "sosmed_request" as MenuKey)).toBe(false);
+    expect(canReachMenu(orang("Marketing Communication"), "sosmed_request" as MenuKey)).toBe(false);
+  });
+
+  it("semua orang tetap bisa mengajukan design lewat form umum", () => {
     for (const d of ["Supervisor", "Operational", "Creative"]) {
-      expect(canReachMenu(orang(d), "sosmed_request" as MenuKey), d).toBe(false);
       expect(canReachMenu(orang(d), "hc_request" as MenuKey), d).toBe(true);
     }
   });

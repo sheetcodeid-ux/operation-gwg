@@ -104,6 +104,7 @@ export type Division =
   | "Supply Chain"
   | "Production"
   | "Marketing Communication"
+  | "Sosial Media"
   | "Key Performance Indicator";
 
 export interface NavItem {
@@ -257,6 +258,7 @@ export const DIVISION_ICON: Record<Division, string> = {
   "Supply Chain": "Truck",
   Production: "ChefHat",
   "Marketing Communication": "Megaphone",
+  "Sosial Media": "Megaphone",
   "Key Performance Indicator": "Target",
 };
 
@@ -571,12 +573,11 @@ export const DIVISION_GROUPS: Partial<Record<Division, NavGroupDef[]>> = {
     { name: "Event & Promo", icon: "Megaphone", menus: ["mc_events"] },
   ],
   Finance: [{ name: "Persetujuan Dana", icon: "Wallet", menus: ["fin_training"] }],
+  "Sosial Media": [
+    { name: "Permintaan Materi", icon: "Megaphone", menus: ["sosmed_request"] },
+    { name: "Event & Promo", icon: "Megaphone", menus: ["mc_events"] },
+  ],
   "Marketing Communication": [
-    // Bidang tersendiri untuk Sosial Media. Pengajuan materinya berbeda bentuk
-    // dari pengajuan desain lain — berisi tanggal tayang, bukan kelonggaran —
-    // dan menaruhnya di bawah nama yang sama dengan yang mengerjakannya membuat
-    // orang tidak perlu menebak form mana yang benar.
-    { name: "Sosial Media", icon: "Megaphone", menus: ["sosmed_request"] },
     { name: "Event & Promo", icon: "Megaphone", menus: ["mc_events"] },
     { name: "Suara Pelanggan", icon: "MessageSquareWarning", menus: ["complaints"] },
   ],
@@ -645,7 +646,17 @@ export const DIVISION_MENUS: { division: Division; menus: MenuKey[] }[] = [
   // Marketing Communication: Work Tracker + the Event/Promo ACC & impact tracker.
   // MarComm adalah pintu masuk keluhan dari kanal publik (Google Review,
   // Instagram, TikTok), jadi Complaints ikut di divisinya.
-  { division: "Marketing Communication", menus: ["work", "sosmed_request", "mc_events", "complaints"] },
+  { division: "Marketing Communication", menus: ["work", "mc_events", "complaints"] },
+  // SIDEBAR TERSENDIRI, bukan bidang di dalam divisi lain.
+  //
+  // Sosial Media secara departemen berada di Creative, tapi pekerjaannya
+  // berdiri sendiri: ia meminta materi dengan form yang berbeda bentuk, dan
+  // membaca jadwal event yang direncanakan Marketing Communication. Menaruhnya
+  // sebagai bidang di bawah salah satu dari keduanya membuat ia selalu terbaca
+  // sebagai pelengkap divisi lain.
+  //
+  // Anggotanya dikenali dari JABATAN, bukan departemen — lihat `timSosialMedia`.
+  { division: "Sosial Media", menus: ["work", "sosmed_request", "mc_events"] },
   { division: "Administrator", menus: ["users", "audit"] },
 ];
 
@@ -965,6 +976,27 @@ export function divisionHasMenu(division: string, key: MenuKey): boolean {
   return EXTRA_DIVISIONS.some((d) => d.name === division && d.menus.includes(key));
 }
 
+
+/**
+ * Tim Sosial Media — dikenali dari JABATAN, bukan departemen.
+ *
+ * Departemennya Creative, tapi sidebarnya berdiri sendiri: pekerjaannya
+ * memakai form pengajuan yang berbeda bentuk dan kalender event milik
+ * Marketing Communication. Kalau aksesnya digantungkan pada departemen, seluruh
+ * Creative ikut mendapat menu yang bukan pekerjaannya — dan memindahkan
+ * departemen orangnya hanya untuk membuka satu menu berarti mengacaukan
+ * rapor KPI yang menempel pada departemen itu.
+ *
+ * Jabatannya diketik admin di User Management, jadi pengenalannya dibuat
+ * longgar: "Sosial Media", "Social Media", dan "Sosmed" sama-sama diterima.
+ */
+export function timSosialMedia(user: { jabatan?: string | null }): boolean {
+  return /so[cs]ial\s*media|sosmed/i.test(user.jabatan ?? "");
+}
+
+/** Menu yang dibuka jabatan Sosial Media. */
+const MENU_SOSMED = new Set<MenuKey>(DIVISION_MENUS.find((d) => d.division === "Sosial Media")?.menus ?? []);
+
 /** Full route access, mirroring the sidebar's `canOpen` exactly: super admin,
  *  the role's own menus, an explicit per-user grant, OR the user's department
  *  division containing the menu (department-aligned members). Use this in page
@@ -980,6 +1012,8 @@ export function canReachMenu(
   // harus diminta satu per satu ke masing-masing orang tidak akan pernah
   // sampai tepat waktu.
   if (MENU_KPI.has(key) && kepalaDepartemen(user)) return true;
+  // Sidebarnya dibuka jabatan, bukan departemen — lihat `timSosialMedia`.
+  if (MENU_SOSMED.has(key) && timSosialMedia(user)) return true;
   if (MENU_DIGERBANGI_JABATAN.includes(key)) return false;
   const divisi = divisiDari(user.department);
   return !!divisi && divisionHasMenu(divisi, key);
@@ -1003,6 +1037,8 @@ export interface NavAccess {
   department: string;
   grants: Iterable<string>;
   isAdmin: boolean;
+  /** Jabatan yang diketik admin — membuka divisi Sosial Media. */
+  jabatan?: string | null;
 }
 
 export function navOpenPredicate(a: NavAccess): (item: { section: string; key: MenuKey }) => boolean {
@@ -1022,6 +1058,9 @@ export function navOpenPredicate(a: NavAccess): (item: { section: string; key: M
     // Keanggotaan departemen membuka seluruh menu divisinya — kecuali kotak
     // masuk yang digerbangi jabatan, yang tetap hanya lewat grant.
     (item.section === a.department && !MENU_DIGERBANGI_JABATAN.includes(item.key)) ||
+    // Divisi Sosial Media dibuka JABATAN, bukan departemen: departemennya
+    // Creative, tapi menunya bukan menu seluruh Creative.
+    (item.section === "Sosial Media" && timSosialMedia({ jabatan: a.jabatan })) ||
     // Divisi Key Performance Indicator TIDAK punya anggota: ia berisi rapor
     // milik seluruh departemen. Karena itu haknya diperiksa per BARIS, bukan
     // per divisi — kalau tidak, seluruh isinya terkunci bagi semua orang

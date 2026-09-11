@@ -8,6 +8,8 @@ import { requestScopeFor } from "@/lib/data/request-scope";
 import { PageHeader } from "@/components/ui/page-header";
 import { HcRequestList, NewRequestButton } from "@/components/hc/request-submit";
 import { JEDA_TENGGAT_UPLOAD } from "@/lib/kpi/deadline";
+import { getUsers } from "@/lib/data/store";
+import { timSosialMedia } from "@/lib/nav";
 
 export const metadata: Metadata = { title: "Pengajuan Design Sosial Media" };
 
@@ -29,13 +31,22 @@ export default async function PengajuanSosmedPage() {
     (r) => r.designKanal === "sosmed",
   );
 
+  // Nama pemohonnya DIPILIH, bukan diketik — daftarnya dari jabatan yang diset
+  // admin di User Management. Diketik bebas, satu orang bisa tercatat sebagai
+  // "Zia", "zia", dan "Zia Sosmed" sekaligus, lalu rapor per pemohon memecah
+  // tiga baris untuk satu orang tanpa ada yang menyadarinya.
+  const picSosmed = getUsers()
+    .filter((u) => u.active && timSosialMedia(u))
+    .map((u) => u.name)
+    .sort((a, b) => a.localeCompare(b, "id"));
+
   return (
     <div className="w-full">
       <PageHeader
         icon={Megaphone}
         title="Pengajuan Design Sosial Media"
         description={`Isi tanggal tayangnya — tenggat desain dihitung otomatis ${JEDA_TENGGAT_UPLOAD} hari sebelumnya.`}
-        actions={<NewRequestButton kind="design" kanal="sosmed" />}
+        actions={<NewRequestButton kind="design" kanal="sosmed" picSosmed={picSosmed} />}
       />
       <HcRequestList rows={rows} kind="design" canDelete={user.role === "super_admin"} meId={user.id} />
     </div>

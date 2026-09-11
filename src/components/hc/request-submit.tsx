@@ -209,6 +209,7 @@ export function NewRequestButton({
   outlets = [],
   scopeAwal = "manajemen",
   kanal = "umum",
+  picSosmed = [],
 }: {
   kind: HcRequestKind;
   members?: DeptMember[];
@@ -223,6 +224,8 @@ export function NewRequestButton({
    * meminta poster cetak, dan tim lain juga meminta materi untuk diunggah.
    */
   kanal?: "umum" | "sosmed";
+  /** Nama karyawan berjabatan Sosial Media — mengisi dropdown Nama Pemohon. */
+  picSosmed?: string[];
 }) {
   const copy = COPY[kind];
   return (
@@ -233,7 +236,7 @@ export function NewRequestButton({
         </Button>
       </DialogTrigger>
       <DialogContent title={copy.title} description={copy.formDesc} align="center" className="max-w-lg">
-        <RequestForm kind={kind} members={members} outlets={outlets} scopeAwal={scopeAwal} kanal={kanal} />
+        <RequestForm kind={kind} members={members} outlets={outlets} scopeAwal={scopeAwal} kanal={kanal} picSosmed={picSosmed} />
       </DialogContent>
     </Dialog>
   );
@@ -262,12 +265,14 @@ function RequestForm({
   outlets,
   scopeAwal,
   kanal,
+  picSosmed,
 }: {
   kind: HcRequestKind;
   members: DeptMember[];
   outlets: PilihanOutlet[];
   scopeAwal: ScopeManpower;
   kanal: "umum" | "sosmed";
+  picSosmed: string[];
 }) {
   const router = useRouter();
   const { setOpen } = useDialogControl();
@@ -436,15 +441,38 @@ function RequestForm({
             <FieldError>{errors.designType}</FieldError>
           </Field>
 
-          <Field label="Nama Pemohon / Untuk Siapa" hint="Nama orang atau outlet yang memakai design ini.">
-            <Input
-              value={subjectName}
-              onChange={(e) => setSubjectName(e.target.value)}
-              className={cn(errors.subjectName && "border-red-500/60")}
-              placeholder="cth. Nordu Coffee Banjarbaru — SPV Adan"
-            />
-            <FieldError>{errors.subjectName}</FieldError>
-          </Field>
+          {/* PADA FORM SOSIAL MEDIA NAMANYA DIPILIH, bukan diketik.
+              Pemintanya selalu orang yang sama — beberapa saja, dan daftarnya
+              datang dari jabatan yang diset admin di User Management. Diketik
+              bebas, satu orang bisa tercatat sebagai "Zia", "zia", dan "Zia
+              Sosmed" sekaligus, lalu rapor per pemohon memecah tiga baris untuk
+              satu orang tanpa ada yang menyadarinya.
+
+              Form umum tetap kotak isian bebas: yang memakai designnya di sana
+              bisa outlet, bisa orang, dan tidak ada daftar yang memuat
+              keduanya. */}
+          {dariUpload && picSosmed.length > 0 ? (
+            <Field label="Nama Pemohon" hint="Diambil dari karyawan berjabatan Sosial Media.">
+              <Combobox
+                value={subjectName}
+                onChange={setSubjectName}
+                options={picSosmed.map((n) => ({ value: n, label: n }))}
+                placeholder="Pilih nama"
+                matchTriggerWidth
+              />
+              <FieldError>{errors.subjectName}</FieldError>
+            </Field>
+          ) : (
+            <Field label="Nama Pemohon / Untuk Siapa" hint="Nama orang atau outlet yang memakai design ini.">
+              <Input
+                value={subjectName}
+                onChange={(e) => setSubjectName(e.target.value)}
+                className={cn(errors.subjectName && "border-red-500/60")}
+                placeholder="cth. Nordu Coffee Banjarbaru — SPV Adan"
+              />
+              <FieldError>{errors.subjectName}</FieldError>
+            </Field>
+          )}
 
           <div className="grid gap-3 sm:grid-cols-2">
             <Field label="Ukuran / Format" hint="Kosongkan bila mengikuti standar tim Creative.">
@@ -481,22 +509,6 @@ function RequestForm({
               </Field>
             )}
           </div>
-
-          {/* VIDEO DICATAT SEBAGAI TAUTAN, bukan diunggah. Satu berkas video
-              mentah gampang melewati batas 100 MB, dan yang mengerjakannya tetap
-              perlu membukanya di tempat aslinya — memaksakannya lewat unggahan
-              berarti menolak materi yang sah lalu materinya dikirim lewat chat,
-              di luar pengajuan, dan hilang dari jejaknya. */}
-          {dariUpload && (
-            <Field label="Link Video (opsional)" hint="Tempel tautan Drive / YouTube bila materinya berupa video.">
-              <Input
-                value={linkVideo}
-                onChange={(e) => setLinkVideo(e.target.value)}
-                placeholder="https://drive.google.com/…"
-                inputMode="url"
-              />
-            </Field>
-          )}
 
           <div className="grid gap-3 sm:grid-cols-2">
             <Field label="Tanggal Request">
@@ -673,6 +685,24 @@ function RequestForm({
           }
         />
       </Field>
+
+      {/* VIDEO DICATAT SEBAGAI TAUTAN, bukan diunggah, dan letaknya TEPAT DI
+          ATAS pemilih berkas. Keduanya menjawab pertanyaan yang sama — di mana
+          materinya — jadi yang mengisinya tidak perlu mencari-cari: kalau
+          berupa berkas, unggah di bawah; kalau berupa video, tempel di sini.
+          Videonya tidak bisa diunggah: satu berkas mentah gampang melewati
+          batas 100 MB, dan yang mengerjakannya tetap perlu membukanya di tempat
+          aslinya. */}
+      {dariUpload && (
+        <Field label="Link Video (opsional)" hint="Tempel tautan Drive / YouTube bila materinya berupa video.">
+          <Input
+            value={linkVideo}
+            onChange={(e) => setLinkVideo(e.target.value)}
+            placeholder="https://drive.google.com/…"
+            inputMode="url"
+          />
+        </Field>
+      )}
 
       <Field
         label={

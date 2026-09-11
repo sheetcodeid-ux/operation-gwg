@@ -23,6 +23,7 @@ export function Sidebar({
   isAdmin,
   grants = [],
   department = "",
+  jabatan = null,
 }: {
   items: NavItem[];
   allowedKeys: MenuKey[];
@@ -30,6 +31,8 @@ export function Sidebar({
   isAdmin: boolean;
   grants?: string[];
   department?: string;
+  /** Jabatan pemakai — membuka divisi Sosial Media. */
+  jabatan?: string | null;
 }) {
   const router = useRouter();
   const { t } = useI18n();
@@ -44,8 +47,8 @@ export function Sidebar({
   // Aturannya dipusatkan di nav.ts — sidebar, menu ponsel, dan command palette
   // harus memakai syarat yang persis sama.
   const canOpen = useMemo(
-    () => navOpenPredicate({ homeDivision, allowedKeys, department, grants, isAdmin }),
-    [homeDivision, allowedKeys, department, grants, isAdmin],
+    () => navOpenPredicate({ homeDivision, allowedKeys, department, grants, isAdmin, jabatan }),
+    [homeDivision, allowedKeys, department, grants, isAdmin, jabatan],
   );
 
   // Single-open accordion: the user's own division starts open; opening another
