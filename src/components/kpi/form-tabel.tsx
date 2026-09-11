@@ -19,12 +19,14 @@ import {
 } from "@/lib/actions/kpi";
 import type { BarisEfisiensi } from "@/lib/kpi/hitung";
 import type { JenisEntri } from "@/lib/kpi/indikator";
+import { skemaEntri, tanggalOtomatis, type SkemaEntri } from "@/lib/kpi/entri-skema";
+import { hariBulan } from "@/lib/kpi/minggu";
 import type { DetailFee } from "@/lib/data/kpi";
 import { Progress } from "@/components/ui/progress";
 import { uploadMany } from "@/lib/upload-client";
 import { BULAN, labelPeriode, periodeDari, tahunPilihan } from "./periode";
 import { bacaLembar, unduhLembar } from "./lembar-outlet";
-import { formatIDR, formatNumber } from "@/lib/utils";
+import { formatDate, formatIDR, formatNumber } from "@/lib/utils";
 
 /**
  * Form berbentuk TABEL — seluruh outlet sekaligus, satu kali simpan.
@@ -370,10 +372,22 @@ interface BarisKegiatan {
   tanggal: string;
   picNama: string;
   outletId: string;
+  /** Berlaku untuk seluruh outlet sekaligus — pilihan teratas dropdown outlet. */
+  semuaOutlet: boolean;
+  kategori: string;
   judul: string;
   deskripsi: string;
+  /** Tanggal selesai; hanya dipakai catatan ber-SLA. */
+  selesai: string;
+  /** Hari yang terlewat dari targetnya, sebagai teks supaya bisa dikosongkan. */
+  hariLewat: string;
+  /** Baris yang dibuatkan otomatis sudah dikerjakan. */
+  selesaiTanda: boolean;
   bukti: File[];
 }
+
+/** Nilai "seluruh outlet" pada dropdown outlet — bukan id outlet mana pun. */
+const SEMUA_OUTLET = "__semua__";
 
 const BARIS_AWAL = 5;
 
@@ -508,9 +522,44 @@ export function FormKegiatan({
   const perOutlet = jenis === "net_profit" || jenis === "hpp" || jenis === "gross_manual";
   const perluBukti = !!dipilih?.bukti;
 
+  const skema = React.useMemo(() => skemaEntri(jenis as JenisEntri), [jenis]);
+  const hari = React.useMemo(() => hariBulan(periode), [periode]);
+  /** Porsi tiap hari untuk indikator yang dinilai per hari — 3,23% pada bulan 31 hari. */
+  const porsiHari = hari > 0 ? 100 / hari : 0;
+
   const kosong = React.useCallback(
-    (): BarisKegiatan => ({ tanggal: `${periode}-01`, picNama: pic || picOpsi[0] || "", outletId: "", judul: "", deskripsi: "", bukti: [] }),
+    (tanggal?: number, kategori?: string): BarisKegiatan => ({
+      tanggal: `${periode}-${String(tanggal ?? 1).padStart(2, "0")}`,
+      picNama: pic || picOpsi[0] || "",
+      outletId: "",
+      semuaOutlet: false,
+      kategori: kategori ?? "",
+      judul: "",
+      deskripsi: "",
+      selesai: "",
+      hariLewat: "",
+      selesaiTanda: false,
+      bukti: [],
+    }),
     [periode, pic, picOpsi],
+  );
+
+  /**
+   * Baris awal untuk satu jenis catatan.
+   *
+   * Jenis yang tanggalnya sudah pasti — monitoring harian, laporan berkala —
+   * dibuatkan barisnya lengkap sebulan. Mengetiknya ulang tiap bulan bukan
+   * cuma lama: satu tanggal yang salah ketik masuk ke bulan yang salah, dan
+   * baru ketahuan saat skornya sudah dibaca orang.
+   */
+  const barisAwal = React.useCallback(
+    (j: OpsiKegiatan["jenis"]): BarisKegiatan[] => {
+      const sk = skemaEntri(j as JenisEntri);
+      const tanggal = tanggalOtomatis(sk, hariBulan(periode));
+      if (tanggal.length === 0) return Array.from({ length: BARIS_AWAL }, () => kosong());
+      return tanggal.map((t) => kosong(t, `${sk!.otomatis!.awalan} ${t}`));
+    },
+    [periode, kosong],
   );
 
   const dariProps = React.useCallback(
@@ -536,17 +585,26 @@ export function FormKegiatan({
   if (periode !== periodeIsi) {
     setPeriodeIsi(periode);
     setIsiOutlet(dariProps());
-    setBaris((b) => b.map((r) => ({ ...r, tanggal: `${periode}-01` })));
+    // Baris yang dibuatkan otomatis disusun ulang: jumlah harinya berbeda
+    // antar-bulan, dan menggeser tanggalnya saja akan menyisakan baris tanggal
+    // 31 pada bulan yang hanya punya 30 hari.
+    setBaris((b) => (skemaEntri(jenis as JenisEntri)?.otomatis ? barisAwal(jenis) : b.map((r) => ({ ...r, tanggal: `${periode}-${r.tanggal.slice(8, 10)}` }))));
+  }
+
+  function gantiJenis(j: OpsiKegiatan["jenis"]) {
+    setJenis(j);
+    setBaris(barisAwal(j));
   }
 
   function bukaForm() {
-    setJenis(opsiTampil[0]?.jenis ?? "event");
-    setBaris(Array.from({ length: BARIS_AWAL }, kosong));
+    const awal = opsiTampil[0]?.jenis ?? "event";
+    setJenis(awal);
+    setBaris(barisAwal(awal));
     setIsiOutlet(dariProps());
     setBuka(true);
   }
 
-  const ubah = (i: number, kolom: keyof BarisKegiatan, v: string | File[]) =>
+  const ubah = (i: number, kolom: keyof BarisKegiatan, v: string | boolean | File[]) =>
     setBaris((s) => s.map((b, n) => (n === i ? { ...b, [kolom]: v } : b)));
 
   const ubahOutlet = (id: string, kolom: KolomOutlet, v: string) =>
@@ -632,14 +690,37 @@ export function FormKegiatan({
     router.refresh();
   }
 
+  /**
+   * Baris mana yang benar-benar diisi.
+   *
+   * Bergantung bentuknya, dan itu disengaja. Baris yang DIBUATKAN otomatis
+   * selalu ada semua — tanpa penanda, tiga puluh baris kosong akan tersimpan
+   * sebagai tiga puluh hari yang termonitor, dan uptime-nya 100% tanpa satu
+   * hari pun benar-benar diperiksa.
+   */
+  const terisi = React.useCallback(
+    (b: BarisKegiatan): boolean => {
+      const tanda = skema?.otomatis?.tanda;
+      if (tanda === "outlet") return b.semuaOutlet || b.outletId !== "";
+      if (tanda === "selesai") return b.selesaiTanda;
+      if (skema?.kategori) return b.kategori !== "";
+      return b.judul.trim() !== "" || b.bukti.length > 0;
+    },
+    [skema],
+  );
+
   async function simpanKegiatan() {
-    const isi = baris.filter((b) => b.judul.trim() !== "" || b.bukti.length > 0);
+    const isi = baris.filter(terisi);
     if (isi.length === 0) {
       toast.info("Belum ada baris yang diisi.");
       return;
     }
     if (perluBukti && isi.some((b) => b.bukti.length === 0)) {
       toast.error("Ada baris tanpa bukti — tiap catatan wajib berlampiran.");
+      return;
+    }
+    if (skema?.sla && isi.some((b) => b.selesai !== "" && b.selesai < b.tanggal)) {
+      toast.error("Ada baris yang tanggal selesainya mendahului tanggal mulai.");
       return;
     }
 
@@ -666,9 +747,15 @@ export function FormKegiatan({
         kirim.push({
           tanggal: b.tanggal,
           picNama: b.picNama,
-          outletId: b.outletId || null,
+          // "Seluruh outlet" bukan id outlet mana pun — dikirim sebagai
+          // penandanya sendiri, bukan sebagai outlet yang kebetulan mewakili.
+          outletId: b.semuaOutlet ? null : b.outletId || null,
+          semuaOutlet: b.semuaOutlet,
+          kategori: b.kategori,
           judul: b.judul.trim(),
           deskripsi: b.deskripsi.trim(),
+          selesai: b.selesai || null,
+          hariLewat: b.hariLewat === "" ? null : Number(b.hariLewat),
           lampiran,
         });
       }
@@ -699,7 +786,10 @@ export function FormKegiatan({
           title="Catat Kegiatan"
           description="Satu tabel untuk sebulan — pilih indikatornya, isi barisnya, lalu simpan sekali"
           align="center"
-          className="max-w-5xl"
+          // SLA membawa dua kolom tambahan (tanggal selesai dan hari
+          // terlewat). Pada lebar yang sama, kolom Keterangan terdorong keluar
+          // layar dan yang mengisi tidak punya petunjuk bahwa ia masih ada.
+          className={skema?.sla ? "max-w-7xl" : "max-w-5xl"}
         >
           <div className="flex max-h-[78vh] flex-col p-5">
             <div className="mb-3 flex shrink-0 flex-wrap items-center gap-2">
@@ -709,7 +799,7 @@ export function FormKegiatan({
                 searchable={false}
                 className="w-72"
                 value={jenis}
-                onChange={(v) => setJenis(v as OpsiKegiatan["jenis"])}
+                onChange={(v) => gantiJenis(v as OpsiKegiatan["jenis"])}
                 options={opsiTampil.map((o) => ({ value: o.jenis, label: o.label }))}
               />
               {/* Bulannya bisa diganti dari sini, dan halaman KPI di belakangnya
@@ -742,6 +832,8 @@ export function FormKegiatan({
                 outlet={outletSemua}
                 perluBukti={perluBukti}
                 judulNama={jenis === "riset_menu" ? "Nama Menu" : "Nama Kegiatan"}
+                skema={skema}
+                porsiHari={porsiHari}
                 ubah={ubah}
               />
             )}
@@ -772,9 +864,20 @@ export function FormKegiatan({
                   <span className="text-[12px] text-muted-foreground">Kosongkan yang tidak diubah.</span>
                 </div>
               ) : (
-                <Button size="sm" variant="ghost" className="gap-1.5" onClick={() => setBaris((s) => [...s, kosong()])} disabled={sibuk}>
-                  <Plus className="size-4" /> Tambah baris
-                </Button>
+                // Barisnya dibuatkan satu per tanggal; menambah baris ke-32
+                // pada bulan 31 hari hanya menghasilkan baris yang ditolak
+                // server, dan penolakan itu datang setelah semuanya terlanjur
+                // diisi.
+                // `<span />` kosong, bukan tidak merender apa pun: bilahnya
+                // memakai justify-between, dan tanpa anak di kiri tombol Simpan
+                // melompat ke tepi kiri layar.
+                skema?.otomatis ? (
+                  <span />
+                ) : (
+                  <Button size="sm" variant="ghost" className="gap-1.5" onClick={() => setBaris((s) => [...s, kosong()])} disabled={sibuk}>
+                    <Plus className="size-4" /> Tambah baris
+                  </Button>
+                )
               )}
               <div className="flex gap-2">
                 <Button variant="ghost" onClick={() => setBuka(false)} disabled={sibuk}>
@@ -802,13 +905,24 @@ export function FormKegiatan({
   );
 }
 
-/** Tabel kegiatan: satu baris satu kejadian. */
+/**
+ * Tabel kegiatan: satu baris satu kejadian.
+ *
+ * KOLOMNYA MENGIKUTI SKEMA JENISNYA, bukan daftar tetap. Menu & Promo butuh
+ * kategori, SLA butuh tanggal selesai dan hari terlewat, monitoring harian
+ * hanya butuh outlet. Menampilkan semuanya untuk semua jenis berarti tiap
+ * pengisi menghadapi empat kolom yang tidak pernah ia isi, dan kolom yang
+ * selalu kosong akan terbaca sebagai data yang hilang, bukan kolom yang
+ * memang bukan urusannya.
+ */
 function TabelKegiatan({
   baris,
   picOpsi,
   outlet,
   perluBukti,
   judulNama,
+  skema,
+  porsiHari,
   ubah,
 }: {
   baris: BarisKegiatan[];
@@ -817,71 +931,179 @@ function TabelKegiatan({
   perluBukti: boolean;
   /** Judul kolom nama — Riset Menu mencatat NAMA MENU, bukan nama kegiatan. */
   judulNama: string;
-  ubah: (i: number, kolom: keyof BarisKegiatan, v: string | File[]) => void;
+  /** Bentuk kolom untuk jenis ini; kosong berarti bentuk lamanya. */
+  skema?: SkemaEntri;
+  /** Porsi satu hari dalam persen — hanya dipakai indikator yang dinilai per hari. */
+  porsiHari: number;
+  ubah: (i: number, kolom: keyof BarisKegiatan, v: string | boolean | File[]) => void;
 }) {
+  const otomatis = skema?.otomatis;
+  // Baris yang dibuatkan otomatis TIDAK boleh diganti tanggalnya: tanggalnya
+  // itulah yang membuat barisnya ada, dan menggesernya membuat dua baris
+  // bertanggal sama sementara satu tanggal lain hilang tanpa jejak.
+  const kunciTanggal = !!otomatis;
+  const adaKategori = !!skema?.kategori || !!otomatis;
+  const adaNama = !perluBukti && !skema;
+  // Laporan ke owner tidak menyangkut cabang mana pun — kolom outlet di sana
+  // akan selalu kosong, dan kolom yang selalu kosong terbaca sebagai data yang
+  // hilang, bukan kolom yang memang bukan urusannya.
+  const adaOutlet = !skema || !!skema.semuaOutlet;
+  // Kolomnya lebih banyak pada form berskema, jadi lebarnya dirapatkan — tanpa
+  // ini kolom Keterangan terdorong keluar layar pada tabel SLA yang berkolom
+  // tujuh, dan yang mengisi tidak punya petunjuk bahwa ia masih ada.
+  const rapat = !!skema?.sla;
+  const lebarTanggal = rapat ? "w-36" : "w-44";
+  const lebarPic = rapat ? "w-32" : "w-40";
+  const lebarOutlet = rapat ? "w-44" : "w-56";
+  const opsiOutlet = [
+    ...(skema?.semuaOutlet ? [{ value: SEMUA_OUTLET, label: "Semua Outlet" }] : []),
+    { value: "", label: "— tanpa outlet —" },
+    ...outlet.map((o) => ({ value: o.id, label: o.nama })),
+  ];
+
   return (
     <div className="min-h-0 flex-1 overflow-auto rounded-xl border border-border">
       <table className="w-full min-w-[900px] border-collapse text-sm">
         <thead className="sticky top-0 z-10">
           <tr className="border-b border-border text-left">
             <Kepala className="w-10 text-center">#</Kepala>
-            <Kepala className="w-44">Tanggal</Kepala>
-            <Kepala className="w-40">PIC</Kepala>
-            <Kepala className="w-56">Outlet</Kepala>
+            <Kepala className={lebarTanggal}>{skema?.sla ? "Tanggal Mulai" : "Tanggal"}</Kepala>
+            {skema?.sla && <Kepala className={lebarTanggal}>Tanggal Selesai</Kepala>}
+            {skema?.sla && <Kepala className="w-24">Hari Terlewat</Kepala>}
+            {adaKategori && <Kepala className={rapat ? "w-48" : "w-56"}>{skema?.labelKategori ?? "Kategori"}</Kepala>}
+            {!otomatis && <Kepala className={lebarPic}>PIC</Kepala>}
+            {otomatis?.tanda === "selesai" && <Kepala className="w-28 text-center">Selesai</Kepala>}
+            {adaOutlet && <Kepala className={lebarOutlet}>Outlet</Kepala>}
+            {skema?.persenHari && <Kepala className="w-28 text-right">Persentase</Kepala>}
             {/* Hygiene Audit tidak punya "nama kegiatan": yang dicatat kunjungan
                 ke satu outlet pada satu tanggal, dan buktinya yang bercerita.
                 Indikator lain (event, riset menu) tetap butuh namanya. */}
-            {!perluBukti && <Kepala>{judulNama}</Kepala>}
+            {adaNama && <Kepala>{judulNama}</Kepala>}
             {perluBukti && <Kepala className="w-48">Bukti submit</Kepala>}
-            <Kepala>Keterangan</Kepala>
+            <Kepala>{skema?.keterangan ?? "Keterangan"}</Kepala>
           </tr>
         </thead>
         <tbody>
-          {baris.map((b, i) => (
-            <tr key={i} className="border-b border-border/60 last:border-0">
-              <td className="px-3 py-1.5 text-center text-[12px] tabular-nums text-muted-foreground">{i + 1}</td>
-              <td className="px-3 py-1.5">
-                <DatePicker value={b.tanggal} onChange={(v) => ubah(i, "tanggal", v)} />
-              </td>
-              <td className="px-3 py-1.5">
-                {picOpsi.length > 0 ? (
-                  <Combobox
-                    portal
-                    searchable={false}
-                    className="w-full"
-                    value={b.picNama}
-                    onChange={(v) => ubah(i, "picNama", v)}
-                    options={picOpsi.map((p) => ({ value: p, label: p }))}
-                  />
-                ) : (
-                  <Input className="h-8" value={b.picNama} onChange={(e) => ubah(i, "picNama", e.target.value)} />
+          {baris.map((b, i) => {
+            const terisi = otomatis?.tanda === "outlet" ? b.semuaOutlet || b.outletId !== "" : b.selesaiTanda;
+            return (
+              <tr key={i} className="border-b border-border/60 last:border-0">
+                <td className="px-3 py-1.5 text-center text-[12px] tabular-nums text-muted-foreground">{i + 1}</td>
+                <td className="px-3 py-1.5">
+                  {kunciTanggal ? (
+                    <span className="text-[13px] tabular-nums text-foreground/80">{formatDate(b.tanggal)}</span>
+                  ) : (
+                    <DatePicker value={b.tanggal} onChange={(v) => ubah(i, "tanggal", v)} />
+                  )}
+                </td>
+                {skema?.sla && (
+                  <td className="px-3 py-1.5">
+                    <DatePicker value={b.selesai} onChange={(v) => ubah(i, "selesai", v)} />
+                  </td>
                 )}
-              </td>
-              <td className="px-3 py-1.5">
-                <Combobox
-                  portal
-                  searchPlaceholder="Cari outlet…"
-                  className="w-full"
-                  value={b.outletId}
-                  onChange={(v) => ubah(i, "outletId", v)}
-                  options={[{ value: "", label: "— tanpa outlet —" }, ...outlet.map((o) => ({ value: o.id, label: o.nama }))]}
-                />
-              </td>
-              {!perluBukti && (
+                {skema?.sla && (
+                  <td className="px-3 py-1.5">
+                    <Input
+                      inputMode="numeric"
+                      className="h-8 text-right tabular-nums"
+                      placeholder="0"
+                      value={b.hariLewat}
+                      onChange={(e) => ubah(i, "hariLewat", e.target.value.replace(/[^\d]/g, ""))}
+                    />
+                  </td>
+                )}
+                {adaKategori && (
+                  <td className="px-3 py-1.5">
+                    {otomatis ? (
+                      <span className="text-[13px] text-foreground/80">{b.kategori}</span>
+                    ) : (
+                      <Combobox
+                        portal
+                        searchable={false}
+                        className="w-full"
+                        placeholder="Pilih kategori…"
+                        value={b.kategori}
+                        onChange={(v) => ubah(i, "kategori", v)}
+                        options={(skema?.kategori ?? []).map((k) => ({ value: k, label: k }))}
+                      />
+                    )}
+                  </td>
+                )}
+                {!otomatis && (
+                  <td className="px-3 py-1.5">
+                    {picOpsi.length > 0 ? (
+                      <Combobox
+                        portal
+                        searchable={false}
+                        className="w-full"
+                        value={b.picNama}
+                        onChange={(v) => ubah(i, "picNama", v)}
+                        options={picOpsi.map((p) => ({ value: p, label: p }))}
+                      />
+                    ) : (
+                      <Input className="h-8" value={b.picNama} onChange={(e) => ubah(i, "picNama", e.target.value)} />
+                    )}
+                  </td>
+                )}
+                {otomatis?.tanda === "selesai" && (
+                  <td className="px-3 py-1.5 text-center">
+                    <input
+                      type="checkbox"
+                      className="size-4 accent-brand-500"
+                      checked={b.selesaiTanda}
+                      onChange={(e) => ubah(i, "selesaiTanda", e.target.checked)}
+                      aria-label={`${b.kategori} sudah selesai`}
+                    />
+                  </td>
+                )}
+                {adaOutlet && (
+                  <td className="px-3 py-1.5">
+                    <Combobox
+                      portal
+                      searchPlaceholder="Cari outlet…"
+                      className="w-full"
+                      value={b.semuaOutlet ? SEMUA_OUTLET : b.outletId}
+                      onChange={(v) => {
+                        // Dua isian, satu pilihan: menyimpan keduanya berarti
+                        // suatu saat ada baris yang bertanda "semua outlet"
+                        // sekaligus menyebut satu outlet, dan tidak ada cara
+                        // tahu mana yang dimaksud.
+                        ubah(i, "semuaOutlet", v === SEMUA_OUTLET);
+                        ubah(i, "outletId", v === SEMUA_OUTLET ? "" : v);
+                      }}
+                      options={opsiOutlet}
+                    />
+                  </td>
+                )}
+                {skema?.persenHari && (
+                  <td className="px-3 py-1.5 text-right text-[13px] tabular-nums">
+                    {/* Kosong, bukan nol: hari yang belum dipantau bukan hari
+                        yang dipantau nol persen. */}
+                    {terisi ? (
+                      <span className="font-medium text-emerald-600 dark:text-emerald-400">
+                        {formatNumber(porsiHari, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}%
+                      </span>
+                    ) : (
+                      <span className="text-muted-foreground">—</span>
+                    )}
+                  </td>
+                )}
+                {adaNama && (
+                  <td className="px-3 py-1.5">
+                    <Input className="h-8" placeholder="…" value={b.judul} onChange={(e) => ubah(i, "judul", e.target.value)} />
+                  </td>
+                )}
+                {perluBukti && (
+                  <td className="px-3 py-1.5">
+                    <BuktiBaris berkas={b.bukti} onPilih={(f) => ubah(i, "bukti", f)} />
+                  </td>
+                )}
                 <td className="px-3 py-1.5">
-                  <Input className="h-8" placeholder="…" value={b.judul} onChange={(e) => ubah(i, "judul", e.target.value)} />
+                  <Input className="h-8" placeholder="opsional" value={b.deskripsi} onChange={(e) => ubah(i, "deskripsi", e.target.value)} />
                 </td>
-              )}
-              {perluBukti && (
-                <td className="px-3 py-1.5">
-                  <BuktiBaris berkas={b.bukti} onPilih={(f) => ubah(i, "bukti", f)} />
-                </td>
-              )}
-              <td className="px-3 py-1.5">
-                <Input className="h-8" placeholder="opsional" value={b.deskripsi} onChange={(e) => ubah(i, "deskripsi", e.target.value)} />
-              </td>
-            </tr>
-          ))}
+              </tr>
+            );
+          })}
         </tbody>
       </table>
     </div>

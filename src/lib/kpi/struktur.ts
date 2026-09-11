@@ -12,6 +12,8 @@ export type KodeDepartemen = "operational" | "creative" | "finance" | "pdq" | "m
 
 export type KodePosisi =
   | "operational_ca"
+  | "operational_software"
+  | "operational_pos"
   | "creative_content"
   | "creative_sosmed"
   | "finance_accounting"
@@ -79,8 +81,11 @@ export const DEPARTEMEN: Departemen[] = [
     nama: "Operational",
     singkat: "Operational",
     ikon: "Store",
-    posisi: ["operational_ca"],
-    menyusul: ["System Support (Fikri)", "System Support POS (Evan, Adinda, Pricil)"],
+    posisi: ["operational_ca", "operational_software", "operational_pos"],
+    // Yang tersisa menyusul tinggal System Support-nya sendiri — indikatornya
+    // belum ditentukan, dan mendaftarkannya sebagai posisi berarti membuka
+    // halaman KPI yang seluruh barisnya kosong.
+    menyusul: ["System Support (Pricil, Adinda Latifah)"],
   },
   { kode: "creative", nama: "Creative", singkat: "Creative", ikon: "Palette", posisi: ["creative_content"] },
   { kode: "finance", nama: "Finance", singkat: "Finance", ikon: "Wallet", posisi: ["finance_accounting", "finance_finance", "finance_tax"] },
@@ -104,6 +109,12 @@ export const POSISI: Posisi[] = [
   // PIC-nya kosong di sini dengan sengaja — diisi dari daftar Coordinator Area
   // di basis data, lihat `picDinamis`.
   { kode: "operational_ca", departemen: "operational", nama: "Coordinator Area", pic: [], perPic: true, picDinamis: "area_coordinator" },
+  // Dua posisi yang menopang sistem, bukan outlet. Keduanya duduk di
+  // Operational karena yang mereka jaga — data penjualan dan mesin kasir —
+  // adalah alat kerja outlet; tapi keduanya dinilai atas pekerjaan sistem,
+  // bukan atas omzet satu area.
+  { kode: "operational_software", departemen: "operational", nama: "Coordinator Software", pic: ["Fikri"] },
+  { kode: "operational_pos", departemen: "operational", nama: "Coordinator POS", pic: ["Evan Wijaya"] },
   { kode: "creative_content", departemen: "creative", nama: "Content Creator", pic: ["Via", "Dhimas", "Seka", "Ricky"], perPic: true },
   // Sosial Media pindah ke Marketing Communication — sejak tim ini tidak lagi
   // bergabung dengan Creative. KODE POSISINYA SENGAJA TIDAK DIUBAH: seluruh
@@ -142,6 +153,8 @@ export const POSISI: Posisi[] = [
  */
 export const MENU_POSISI: Record<KodePosisi, string> = {
   operational_ca: "kpi_op_ca",
+  operational_software: "kpi_op_software",
+  operational_pos: "kpi_op_pos",
   creative_content: "kpi_creative_content",
   creative_sosmed: "kpi_creative_sosmed",
   finance_accounting: "kpi_fin_accounting",
