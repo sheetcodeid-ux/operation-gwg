@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { builtInDivisions, canReachMenu, divisiBerdepartemen, divisiDari, divisionHasMenu, DIVISION_ICON, type MenuKey } from "./nav";
+import { builtInDivisions, canReachMenu, divisiBerdepartemen, divisiDari, divisionHasMenu, navAll, DIVISION_ICON, type MenuKey } from "./nav";
 
 /**
  * Penjaga akses per-departemen.
@@ -227,5 +227,27 @@ describe("Sosial Media adalah BIDANG SIDEBAR, bukan departemen", () => {
     expect(canReachMenu(zia, "sosmed_request" as MenuKey)).toBe(true);
     // Dan ia tetap anggota Creative untuk hal lain.
     expect(canReachMenu(zia, "creative_design" as MenuKey)).toBe(true);
+  });
+});
+
+describe("kelompok berisi satu baris tidak digambar sebagai kelompok", () => {
+  it("tidak ada satu pun kelompok bersisa satu baris di sidebar super admin", () => {
+    // Judul kelompok di atas satu baris menu berarti dua baris untuk satu
+    // tujuan, dan satu ketukan tambahan untuk membukanya.
+    const hitung = new Map<string, number>();
+    for (const item of navAll()) {
+      if (!item.group) continue;
+      const kunci = `${item.section}/${item.group}`;
+      hitung.set(kunci, (hitung.get(kunci) ?? 0) + 1);
+    }
+    expect([...hitung.entries()].filter(([, n]) => n < 2).map(([k]) => k)).toEqual([]);
+  });
+});
+
+describe("ikon bidang sidebar tidak ada yang kembar", () => {
+  it("Sosial Media dan Marketing Communication memakai ikon berbeda", () => {
+    // Dua bidang bersebelahan dengan ikon sama terbaca sebagai satu bidang
+    // yang tercetak dua kali.
+    expect(DIVISION_ICON["Sosial Media"]).not.toBe(DIVISION_ICON["Marketing Communication"]);
   });
 });

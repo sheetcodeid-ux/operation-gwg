@@ -105,9 +105,6 @@ export const DICT: Record<Lang, Record<string, string>> = {
     "group.Monitoring": "Monitoring",
     "group.Persetujuan Dana": "Budget Approval",
     "section.Sosial Media": "Social Media",
-    "group.Permintaan Materi": "Material Requests",
-    "group.Event & Promo": "Event & Promo",
-    "group.Suara Pelanggan": "Customer Voice",
 
     // Menu yang selama ini tidak punya terjemahan sama sekali — sidebar tampil
     // separuh Inggris separuh Indonesia begitu bahasa diganti.
@@ -399,9 +396,6 @@ export const DICT: Record<Lang, Record<string, string>> = {
     "group.Monitoring": "Monitoring",
     "group.Persetujuan Dana": "Persetujuan Dana",
     "section.Sosial Media": "Sosial Media",
-    "group.Permintaan Materi": "Permintaan Materi",
-    "group.Event & Promo": "Event & Promo",
-    "group.Suara Pelanggan": "Suara Pelanggan",
 
     "nav.Pengajuan": "Pengajuan",
     "nav.Pesan": "Pesan",
