@@ -1405,7 +1405,20 @@ function susunBaris(i: Indikator, k: KonteksBaris): BarisKpi {
     case "manual":
     case "manual_brand":
       actual = k.manual;
-      if (actual === null) alasan = "Angkanya belum diisi untuk bulan ini.";
+      if (actual === null) {
+        // INDIKATOR YANG MENGHITUNG KEJADIAN BURUK: tidak ada catatan berarti
+        // tidak ada kejadian — bukan belum diukur.
+        //
+        // Tidak seorang pun mengetik "0 komplain"; bulan yang bersih justru
+        // bulan yang kotaknya dibiarkan kosong. Diperlakukan sebagai belum
+        // terukur, bulan tanpa satu pun komplain akan mengeluarkan indikator
+        // itu dari skor — dan yang bekerja paling bersih kehilangan bobotnya
+        // sendiri. Dikenali dari cara penilaiannya, bukan dari daftar nama
+        // indikator: `kurang_linear` berarti targetnya titik nol dan tiap
+        // kejadian mengurangi, jadi kosong memang berarti nol.
+        if (i.penilaian === "kurang_linear") actual = 0;
+        else alasan = "Angkanya belum diisi untuk bulan ini.";
+      }
       break;
     case "entri":
       actual = k.jumlahEntri(i.actual.entri);

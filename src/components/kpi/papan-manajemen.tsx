@@ -27,6 +27,7 @@ import type { LaporanKpi } from "@/lib/data/kpi";
 import { merekOutlet } from "@/lib/kpi/merek";
 import { simpanSetelanManajemenAction } from "@/lib/actions/kpi-manajemen";
 import { cn, formatIDR, formatNumber } from "@/lib/utils";
+import { actualBersatuan, angka, bersatuan, persen } from "@/lib/kpi/satuan";
 
 /**
  * Kalkulator KPI Manajemen.
@@ -43,17 +44,6 @@ import { cn, formatIDR, formatNumber } from "@/lib/utils";
  * tidak ada yang ingat mengisinya.
  */
 
-const persen = (n: number | null, digit = 2) =>
-  n === null ? "—" : `${formatNumber(n, { minimumFractionDigits: digit, maximumFractionDigits: digit })}%`;
-
-const angka = (n: number | null) => (n === null ? "—" : formatNumber(n, { maximumFractionDigits: 2 }));
-
-const bersatuan = (n: number | null, satuan?: "angka" | "rupiah" | "persen") => {
-  if (n === null) return "—";
-  if (satuan === "rupiah") return formatIDR(n);
-  if (satuan === "persen") return persen(n, 0);
-  return angka(n);
-};
 
 /** Satu outlet dalam tabel Same Store — dipakai juga tabel Gross Sales. */
 type BarisOutlet = BarisOutletB;
@@ -283,9 +273,10 @@ export function PapanManajemen({ detail, bolehAtur }: { detail: DetailManajemen;
         {
           accessorKey: "actual",
           header: "Actual",
+          // Kosong ditulis 0, bukan tanda pisah — lihat `actualBersatuan`.
           cell: ({ row }) => {
             const v = nilai(row.original, "actual");
-            return <span className="tabular-nums text-foreground/80">{bersatuan(v.n, v.s)}</span>;
+            return <span className="tabular-nums text-foreground/80">{actualBersatuan(v.n, v.s)}</span>;
           },
         },
         {

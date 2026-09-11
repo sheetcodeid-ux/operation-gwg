@@ -31,7 +31,7 @@ const ANGKA: Record<string, [number | null, number | null, number | null]> = {
   hc_kepatuhan_kontrak: [95, 91, 94], hc_kepatuhan_laporan: [90, 76, 81],
   hc_penyelesaian_onboarding: [85, 88, 90], hc_turnover: [10, 7.4, 86],
   data_integrity: [4, 4, 95], reporting_timeliness: [4, 3, 100],
-  software_complaint: [5, 1, 60], problem_solver_data: [10, 8, 70],
+  software_complaint: [5, 0, 100], problem_solver_data: [10, null, 70],
   pos_masterdata: [5, 6, 80], pos_sla: [5, 4, 100],
   pos_refresh: [4, 3, 75], pos_uptime: [100, 83.87, 96.7],
 };
