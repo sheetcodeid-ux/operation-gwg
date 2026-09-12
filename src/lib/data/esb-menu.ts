@@ -3,7 +3,7 @@ import "server-only";
 import { db, dbEnabled } from "./db";
 import { selectAll } from "./paged";
 import { randomUUID } from "node:crypto";
-import { esbConfigured, esbGenerateMenuRecap, esbReadMenuPages, esbEnsureDeadline, type HalamanMenuRecap } from "@/lib/integrations/esb-client";
+import { esbConfigured, esbMintaMenuRecap, esbBacaHalamanMenu, esbReadMenuPages, esbEnsureDeadline, type HalamanMenuRecap } from "@/lib/integrations/esb-client";
 import { classifyMenuCategory } from "@/lib/integrations/esb";
 import { getAppConfig, setAppConfig } from "./app-config";
 
@@ -126,6 +126,7 @@ interface Cursor {
   url: string;
   from: string;
   to: string;
+  /** 0 = halaman 0 belum terbaca, jadi jumlah halamannya belum diketahui. */
   totalItems: number;
   pageSize: number;
   nextPage: number;
@@ -278,6 +279,8 @@ export interface HasilSyncMenu {
   totalPages?: number;
   dari?: string;
   sampai?: string;
+  /** Ekspornya masih dibangun ESB — belum ada yang bisa dibaca jalan ini. */
+  menunggu?: boolean;
   skipped?: string;
 }
 
@@ -296,6 +299,7 @@ export interface HasilSyncMenu {
 export async function syncEsbMenus(budgetMs = 48_000): Promise<HasilSyncMenu> {
   if (!dbEnabled || !esbConfigured()) return { menus: 0, skipped: "not configured" };
   const started = Date.now();
+  const sisa = () => budgetMs - (Date.now() - started);
   esbEnsureDeadline(budgetMs); // batas waktu ikut berlaku di dalam klien ESB
 
   let cursor: Cursor | null = null;
@@ -315,28 +319,43 @@ export async function syncEsbMenus(budgetMs = 48_000): Promise<HasilSyncMenu> {
 
   if (fresh) {
     if (cursor?.runId) await db().from("esb_menu_stage").delete().eq("run_id", cursor.runId);
-    const runId = `run_${randomUUID()}`;
-    const ex = await esbGenerateMenuRecap(rentang.from, rentang.to); // menunggu ~45 detik + membaca halaman 0
+    // URL-nya DISIMPAN SEBELUM berkasnya siap. Menunggu di sini sampai ekspor
+    // selesai dibangun menghabiskan seluruh anggaran satu jalannya cron tanpa
+    // menyimpan apa pun — dan jalan berikutnya memulai dari nol, menunggu lagi,
+    // gagal lagi. Itu persis yang membuat katalog macet sejak 30 Agustus.
+    const url = await esbMintaMenuRecap(rentang.from, rentang.to);
     cursor = {
-      url: ex.url,
+      url,
       from: rentang.from,
       to: rentang.to,
-      totalItems: ex.totalItems,
-      pageSize: Math.max(1, ex.pageSize),
-      nextPage: 1,
+      totalItems: 0,
+      pageSize: 0,
+      nextPage: 0,
       startedAt: new Date().toISOString(),
       windowDays: rentang.days,
-      runId,
+      runId: `run_${randomUUID()}`,
     };
-    await simpanHalaman(runId, [{ page: 0, rows: ex.firstRows }]);
     await setAppConfig(CURSOR_KEY, JSON.stringify(cursor));
   }
 
   const c = cursor!;
-  const totalPages = Math.max(1, Math.ceil(c.totalItems / c.pageSize));
 
-  if (c.nextPage < totalPages && Date.now() - started < budgetMs - 4000) {
-    const read = await esbReadMenuPages(c.url, c.nextPage, totalPages, budgetMs - (Date.now() - started) - 2000);
+  // Halaman 0 sekaligus memberi tahu jumlah halaman seluruhnya. Selama ia belum
+  // terbaca, belum ada yang bisa dikerjakan selain mencoba mengambilnya.
+  if (c.totalItems === 0) {
+    const hal0 = await esbBacaHalamanMenu(c.url, 0, Math.max(3_000, sisa() - 6_000));
+    if (!hal0) return { menus: 0, complete: false, nextPage: 0, menunggu: true, dari: c.from, sampai: c.to };
+    await simpanHalaman(c.runId, [{ page: 0, rows: hal0.rows }]);
+    c.totalItems = hal0.totalItems;
+    c.pageSize = Math.max(1, hal0.pageSize);
+    c.nextPage = 1;
+    await setAppConfig(CURSOR_KEY, JSON.stringify(c));
+  }
+
+  const totalPages = Math.max(1, Math.ceil(c.totalItems / Math.max(1, c.pageSize)));
+
+  if (c.nextPage < totalPages && sisa() > 4_000) {
+    const read = await esbReadMenuPages(c.url, c.nextPage, totalPages, sisa() - 2_000);
     await simpanHalaman(c.runId, read.pages);
     c.nextPage = read.nextPage;
     await setAppConfig(CURSOR_KEY, JSON.stringify(c));

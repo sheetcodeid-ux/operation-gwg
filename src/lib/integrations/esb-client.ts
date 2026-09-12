@@ -546,7 +546,7 @@ export async function esbFetchSales(dateFromYmd: string, dateToYmd: string, bran
 
 /* -------------------- Sales Menu Recapitulation (catalog) -------------------- */
 
-import { parseMenuRecapReport, type MenuRecapRow } from "./esb";
+import { parseMenuRecapReport, type MenuRecapReport, type MenuRecapRow } from "./esb";
 
 
 /**
@@ -555,17 +555,22 @@ import { parseMenuRecapReport, type MenuRecapRow } from "./esb";
  * the cancel export (ESB serves one export per session). Field names verified
  * from a live HAR capture (SalesMenuRecapReport).
  */
-export interface EsbMenuExport {
-  url: string; // OSS export URL — reusable across calls until it expires
-  totalItems: number;
-  pageSize: number;
-  firstRows: MenuRecapRow[]; // page 0 (already read while waiting for generation)
-}
-
-/** Generate the Sales Menu Recap export and read page 0 (waits for the async
- *  generation, which is slow for this ~2.5k-row report). Returns the OSS url so
- *  the caller can resume reading later pages across separate invocations. */
-export function esbGenerateMenuRecap(dateFromYmd: string, dateToYmd: string): Promise<EsbMenuExport> {
+/**
+ * MINTA ESB membangkitkan ekspor menu-recap, kembalikan URL-nya saja.
+ *
+ * TIDAK MENUNGGU BERKASNYA SIAP, dan itulah inti perbaikannya. Sebelumnya
+ * fungsi ini menunggu halaman 0 selesai dibangkitkan sebelum mengembalikan apa
+ * pun — dan untuk rentang tiga bulan, pembangkitannya lebih lama daripada
+ * anggaran waktu satu jalannya cron. Akibatnya seluruh jalan habis untuk
+ * menunggu, gagal di ujung, dan TIDAK MENYIMPAN APA PUN: jalan berikutnya
+ * memulai dari nol, menunggu lagi, gagal lagi. Katalognya macet total sejak
+ * 30 Agustus tanpa satu pun pesan di layar mana pun.
+ *
+ * URL-nya sudah diketahui sejak balasan pertama; yang belum siap cuma isinya.
+ * Dengan menyimpan URL itu lebih dulu, jalan berikutnya tinggal mengambil
+ * hasilnya — ESB terus membangun di belakang layar.
+ */
+export function esbMintaMenuRecap(dateFromYmd: string, dateToYmd: string): Promise<string> {
   return serialized(async () => {
     await ensureSession();
     const from = toEsbDate(dateFromYmd);
@@ -595,11 +600,32 @@ export function esbGenerateMenuRecap(dateFromYmd: string, dateToYmd: string): Pr
     if (!res.ok) throw new Error(`ESB report-sales-menu-recap failed (${res.status})`);
     const json = await bacaJson<{ status?: number; data?: string }>(res, "report-sales-menu-recap");
     if (!json?.data) throw new Error("ESB: menu-recap export URL missing");
-    const url = json.data;
     await pokeQueue();
-    // The export can take ~45s to generate — poll patiently on page 0.
-    const first = parseMenuRecapReport(await readExportPageRaw(url, 0, 26, true));
-    return { url, totalItems: first.totalItems, pageSize: Math.max(1, first.pageSize), firstRows: first.rows };
+    return json.data;
+  });
+}
+
+/**
+ * Baca satu halaman ekspor menu — NULL bila ekspornya belum selesai dibangun.
+ *
+ * Mengembalikan null alih-alih melempar galat: "belum siap" bukan kegagalan,
+ * melainkan keadaan yang wajar dan sudah diperhitungkan. Yang memanggilnya
+ * menyimpan posisinya lalu pulang; jalan berikutnya melanjutkan.
+ */
+export function esbBacaHalamanMenu(url: string, page: number, budgetMs: number): Promise<MenuRecapReport | null> {
+  return serialized(async () => {
+    const batas = Date.now() + budgetMs;
+    // Sekali-dua kali percobaan saja per jalan; sisanya urusan jalan berikutnya.
+    while (Date.now() < batas) {
+      try {
+        return parseMenuRecapReport(await readExportPageRaw(url, page, 1));
+      } catch {
+        if (Date.now() + 4_000 > batas) break;
+        await pokeQueue(); // dorong antrean ESB seperti yang dilakukan peramban
+        await sleep(3_000);
+      }
+    }
+    return null;
   });
 }
 
