@@ -5,10 +5,9 @@ import { usePathname, useRouter } from "next/navigation";
 import { ChevronLeft, ChevronRight, Download, FileUp, Loader2, Save } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
 import { simpanUnggahAction } from "@/lib/actions/unggah-data";
-import { KELOMPOK, TEMPLATE, bacaBarisUnggah, judulKolom, type BarisUnggah } from "@/lib/ops/template-unggah";
-import { cn, formatNumber } from "@/lib/utils";
+import { TEMPLATE, bacaBarisUnggah, judulKolom, type BarisUnggah } from "@/lib/ops/template-unggah";
+import { formatNumber } from "@/lib/utils";
 
 /**
  * Satu pintu unggah data.
@@ -48,7 +47,6 @@ export function UnggahData({ month, awal }: { month: string; awal: BarisAwal[] }
   const router = useRouter();
   const pathname = usePathname();
   const [baris, setBaris] = React.useState<BarisUnggah[] | null>(null);
-  const [namaBerkas, setNamaBerkas] = React.useState("");
   const [sibuk, start] = React.useTransition();
   const berkasRef = React.useRef<HTMLInputElement>(null);
 
@@ -64,7 +62,6 @@ export function UnggahData({ month, awal }: { month: string; awal: BarisAwal[] }
   if (konteks !== month) {
     setKonteks(month);
     setBaris(null);
-    setNamaBerkas("");
   }
 
   async function unduh() {
@@ -95,7 +92,6 @@ export function UnggahData({ month, awal }: { month: string; awal: BarisAwal[] }
       }
       if (tanpaKunci > 0) toast.info(`${tanpaKunci} baris tanpa ${t.kunci} dilewati.`);
       setBaris(terbaca);
-      setNamaBerkas(file.name);
       // Belum tersimpan, dan itu disengaja: berkas yang salah harus sempat
       // terlihat di layar sebelum menimpa angka yang sudah benar.
       toast.success(`${terbaca.length} baris terbaca — periksa dulu, lalu Simpan.`);
@@ -124,7 +120,6 @@ export function UnggahData({ month, awal }: { month: string; awal: BarisAwal[] }
       if (res.dilewati) toast.info(`${res.dilewati} outlet dilewati karena seluruh angkanya kosong.`);
       toast.success(`${res.tersimpan} outlet tersimpan — masuk ke ${res.tujuan?.length ?? 0} tempat.`);
       setBaris(null);
-      setNamaBerkas("");
       router.refresh();
     });
   }
@@ -168,106 +163,92 @@ export function UnggahData({ month, awal }: { month: string; awal: BarisAwal[] }
             </Button>
           </div>
         </div>
-
-        <div className="mt-3 border-t border-border pt-3">
-          <p className="text-[12px] font-medium text-foreground">Satu berkas ini masuk ke:</p>
-          <div className="mt-1.5 flex flex-wrap gap-1.5">
-            {t.tujuan.map((x) => (
-              <Badge key={x} tone="brand">
-                {x}
-              </Badge>
-            ))}
-          </div>
-          <p className="mt-2 text-[11px] text-muted-foreground">
-            Pendapatan tidak diminta — gross sales ditarik otomatis dan tidak ditimpa dari sini. Total beban
-            dijumlahkan sendiri dari delapan kolom rinciannya.
-          </p>
-        </div>
       </div>
 
-      {baris ? (
-        <Pratinjau baris={baris} namaBerkas={namaBerkas} />
-      ) : (
-        <div className="rounded-2xl border border-dashed border-border p-6 text-center">
-          <p className="text-sm font-medium text-foreground">Belum ada berkas yang dibaca.</p>
-          <p className="mt-1 text-[12px] text-muted-foreground">
-            Unduh templatenya dulu — kode dan nama outlet sudah terisi beserta angka yang sudah tersimpan bulan
-            ini, tinggal dilengkapi.
-            {awal.length > 0 && ` Saat ini ${awal.length} outlet siap diunduh.`}
-          </p>
-        </div>
-      )}
+      {/* Tabelnya selalu ada. Sebelum ada berkas yang dibaca, isinya angka
+          yang SUDAH tersimpan bulan itu — jadi terlihat apa yang akan ditimpa,
+          bukan kotak kosong yang tidak mengatakan apa-apa. */}
+      <Pratinjau baris={baris ?? awal} />
     </div>
   );
 }
 
-/** Pratinjau sebelum disimpan — angka apa adanya, kosong tetap kosong. */
-function Pratinjau({ baris, namaBerkas }: { baris: BarisUnggah[]; namaBerkas: string }) {
+/**
+ * Pratinjau sebelum disimpan — angka apa adanya, kosong tetap kosong.
+ *
+ * Nomor urut, bukan kode outlet: kodenya tetap ada di dalam berkas sebagai
+ * identitas baris — itulah yang dicocokkan saat disimpan — tapi di layar ia
+ * tidak menambah apa pun selain satu kolom yang harus dilewati mata.
+ *
+ * Kolom outlet dibekukan di kiri. Tanpa itu, menggulir ke Laba Bersih membuat
+ * angka kehilangan nama outletnya — dan angka tanpa nama outlet adalah persis
+ * cara satu baris salah dibaca sebagai baris lain.
+ */
+function Pratinjau({ baris }: { baris: BarisUnggah[] }) {
   const t = TEMPLATE;
-  const judul = judulKolom(t);
-  const kosong = baris.filter((b) => t.angka.every((k) => b.angka[k] === null)).length;
+  // Lebar kolom nomor dipatok angka, bukan kelas lebar: posisi beku kolom
+  // outlet dihitung dari sini, dan dua nilai yang harus sama persis lebih aman
+  // ditulis sekali daripada dua kali di tempat berbeda.
+  const LEBAR_NO = 48;
+  const namaOutlet = (b: BarisUnggah) => b.teks["Outlet"] || b.kunci;
+  const urut = [...baris].sort((a, b) => namaOutlet(a).localeCompare(namaOutlet(b), "id"));
 
   return (
-    <div className="space-y-2">
-      <p className="text-[12px] text-muted-foreground">
-        <b className="text-foreground">{baris.length} baris</b> dari <b className="text-foreground">{namaBerkas}</b> — belum tersimpan.
-        {kosong > 0 && ` ${kosong} di antaranya kosong dan tidak akan ditulis.`}
-      </p>
-      <div className="max-h-[28rem] overflow-auto rounded-2xl border border-border">
-        <table className="w-full border-collapse text-sm">
-          <thead className="sticky top-0 z-10 bg-muted/80 backdrop-blur">
-            {/* Baris judul kelompok — berkasnya tetap satu baris judul, ini
-                hanya supaya dua belas kolom di layar masih bisa dibaca. */}
-            <tr className="border-b border-border/60 text-left">
-              <th colSpan={1 + t.teks.length} className="px-3 pt-2 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
-                Outlet
+    <div className="max-h-[32rem] overflow-auto rounded-2xl border border-border">
+      <table className="w-full border-collapse text-sm">
+        <thead className="sticky top-0 z-20">
+          <tr className="text-left">
+            <th
+              style={{ width: LEBAR_NO, minWidth: LEBAR_NO, left: 0 }}
+              className="sticky z-30 border-b border-border bg-muted px-3 py-2 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground"
+            >
+              #
+            </th>
+            <th
+              style={{ left: LEBAR_NO }}
+              className="sticky z-30 border-b border-r border-border bg-muted px-3 py-2 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground"
+            >
+              Outlet
+            </th>
+            {t.angka.map((k) => (
+              <th
+                key={k}
+                className="whitespace-nowrap border-b border-border bg-muted px-3 py-2 text-right text-[11px] font-semibold uppercase tracking-wide text-muted-foreground"
+              >
+                {k}
               </th>
-              {KELOMPOK.map((g) => (
-                <th
-                  key={g.nama}
-                  colSpan={g.kolom.length}
-                  className="border-l border-border/60 px-3 pt-2 text-center text-[11px] font-semibold uppercase tracking-wide text-muted-foreground"
-                >
-                  {g.nama}
-                </th>
-              ))}
-            </tr>
-            <tr className="border-b border-border text-left">
-              {judul.map((k) => (
-                <th
-                  key={k}
-                  className={cn(
-                    "whitespace-nowrap px-3 pb-2 text-[11px] font-medium text-muted-foreground",
-                    t.angka.includes(k) && "text-right",
-                  )}
-                >
-                  {k}
-                </th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {baris.map((b, i) => (
-              <tr key={`${b.kunci}-${i}`} className="border-b border-border/60 last:border-0">
-                {judul.map((k) => {
-                  if (k === t.kunci) return <td key={k} className="px-3 py-1.5 font-medium text-foreground">{b.kunci}</td>;
-                  if (t.angka.includes(k)) {
-                    const n = b.angka[k];
-                    return (
-                      <td key={k} className="whitespace-nowrap px-3 py-1.5 text-right tabular-nums">
-                        {/* Kosong TIDAK ditulis nol: yang satu berarti belum
-                            dilaporkan, yang lain berarti nol rupiah. */}
-                        {n === null ? <span className="text-muted-foreground">—</span> : formatNumber(n)}
-                      </td>
-                    );
-                  }
-                  return <td key={k} className="whitespace-nowrap px-3 py-1.5 text-foreground/80">{b.teks[k] || "—"}</td>;
-                })}
-              </tr>
             ))}
-          </tbody>
-        </table>
-      </div>
+          </tr>
+        </thead>
+        <tbody>
+          {urut.map((b, i) => (
+            <tr key={`${b.kunci}-${i}`} className="border-b border-border/60 last:border-0">
+              <td
+                style={{ width: LEBAR_NO, minWidth: LEBAR_NO, left: 0 }}
+                className="sticky z-10 bg-card px-3 py-1.5 text-right tabular-nums text-muted-foreground"
+              >
+                {i + 1}
+              </td>
+              <td
+                style={{ left: LEBAR_NO }}
+                className="sticky z-10 whitespace-nowrap border-r border-border bg-card px-3 py-1.5 font-medium text-foreground"
+              >
+                {namaOutlet(b)}
+              </td>
+              {t.angka.map((k) => {
+                const n = b.angka[k];
+                return (
+                  <td key={k} className="whitespace-nowrap px-3 py-1.5 text-right tabular-nums">
+                    {/* Kosong TIDAK ditulis nol: yang satu berarti belum
+                        dilaporkan, yang lain berarti nol rupiah. */}
+                    {n === null ? <span className="text-muted-foreground">—</span> : formatNumber(n)}
+                  </td>
+                );
+              })}
+            </tr>
+          ))}
+        </tbody>
+      </table>
     </div>
   );
 }
