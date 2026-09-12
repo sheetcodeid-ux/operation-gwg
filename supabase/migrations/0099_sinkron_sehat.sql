@@ -21,3 +21,10 @@ create table if not exists public.sinkron_sehat (
   pesan            text,
   hasil            jsonb
 );
+
+-- Pagar yang sama dengan seluruh tabel lain di proyek ini: RLS DINYALAKAN tanpa
+-- satu pun policy, sehingga hanya server (service role, yang memang melewati
+-- RLS) bisa menyentuhnya. Tanpa ini, tabel di skema public bisa terbaca lewat
+-- API publik — dan dua tabel yang dibuat belakangan sempat lolos dari pola itu.
+alter table public.sinkron_sehat enable row level security;
+alter table public.esb_menu_stage enable row level security;
