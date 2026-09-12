@@ -334,7 +334,14 @@ export async function syncEsbMenus(budgetMs = 48_000): Promise<HasilSyncMenu> {
   const fresh = !cursor || basi || bedaRentang || !cursor.runId;
 
   if (fresh) {
-    if (cursor?.runId) await db().from("esb_menu_stage").delete().eq("run_id", cursor.runId);
+    // Baris singgahan penarikan sebelumnya dibuang — TERMASUK yang yatim.
+    //
+    // Menghapus hanya berdasarkan runId di kursor tidak cukup: begitu kursornya
+    // hilang (kedaluwarsa, dibersihkan tangan, atau penarikannya tak pernah
+    // selesai), tidak ada lagi yang tahu runId-nya, dan barisnya menetap
+    // selamanya. Penarikan berjalan satu per satu, jadi apa pun yang tersisa
+    // di sini sebelum penarikan baru dimulai sudah pasti bukan miliknya.
+    await db().from("esb_menu_stage").delete().neq("run_id", "");
     // URL-nya DISIMPAN SEBELUM berkasnya siap. Menunggu di sini sampai ekspor
     // selesai dibangun menghabiskan seluruh anggaran satu jalannya cron tanpa
     // menyimpan apa pun — dan jalan berikutnya memulai dari nol, menunggu lagi,
