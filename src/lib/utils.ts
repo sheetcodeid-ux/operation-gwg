@@ -44,6 +44,25 @@ export function formatDate(input: string | Date) {
   }).format(d);
 }
 
+/**
+ * Rentang dua tanggal sebagai satu kalimat pendek: "1 Jun – 31 Agu 2026".
+ *
+ * DIPAKAI MENGGANTIKAN kalimat "30 hari terakhir" yang diketik tangan di enam
+ * layar. Kalimat yang diketik tangan akan tetap berbunyi 30 hari lama setelah
+ * jendelanya diubah — tidak ada yang gagal saat itu terjadi, hanya enam layar
+ * yang berbohong dengan tenang. Yang ini dibaca dari tanggal datanya sendiri.
+ */
+export function formatRentang(dari: string | null, sampai: string | null): string | null {
+  if (!dari || !sampai) return null;
+  const a = new Date(dari);
+  const b = new Date(sampai);
+  if (Number.isNaN(a.getTime()) || Number.isNaN(b.getTime())) return null;
+  const tahunSama = a.getFullYear() === b.getFullYear();
+  const kiri = new Intl.DateTimeFormat("id-ID", { day: "numeric", month: "short", ...(tahunSama ? {} : { year: "numeric" }) }).format(a);
+  const kanan = new Intl.DateTimeFormat("id-ID", { day: "numeric", month: "short", year: "numeric" }).format(b);
+  return `${kiri} – ${kanan}`;
+}
+
 /** Relative time from the demo "now" (e.g. "3 days ago", "in 2 days").
  *  Dihitung dari jam nyata, sehingga "2 hari lagi" benar-benar dua hari lagi. */
 export function fromNow(input: string | Date) {

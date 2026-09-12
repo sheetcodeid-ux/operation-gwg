@@ -26,7 +26,7 @@ import { Progress } from "@/components/ui/progress";
 import { uploadMany } from "@/lib/upload-client";
 import { BULAN, labelPeriode, periodeDari, tahunPilihan } from "./periode";
 import { bacaLembar, unduhLembar } from "./lembar-outlet";
-import { formatDate, formatIDR, formatNumber } from "@/lib/utils";
+import { formatDate, formatIDR, formatNumber, formatRentang } from "@/lib/utils";
 
 /**
  * Form berbentuk TABEL — seluruh outlet sekaligus, satu kali simpan.
@@ -1310,8 +1310,11 @@ function TabelOutlet({
 export interface MenuEsb {
   menu: string;
   kategori: string;
-  /** Penjualan 30 hari terakhir menurut katalog ESB. */
-  estimasi: number;
+  /** Nilai penjualan menurut ESB sepanjang rentang katalog. */
+  penjualan: number;
+  /** Rentang katalognya, "YYYY-MM-DD". */
+  dari: string | null;
+  sampai: string | null;
 }
 
 /**
@@ -1323,10 +1326,12 @@ export interface MenuEsb {
  * akan pernah cocok dengan nama di ESB, dan penjualannya berhenti terbaca
  * berbulan-bulan tanpa ada pesan salah satu pun.
  *
- * ANGKA PENJUALANNYA MASIH BISA DIUBAH, DAN ITU DISENGAJA. Katalog ESB hanya
- * menyimpan penjualan 30 hari terakhir, sedangkan indikator ini menghitung tiga
- * bulan. Angka katalog dipakai sebagai isian awal — jelas ditulis rentangnya —
- * supaya tidak ada yang mengira 30 hari itu sudah tiga bulan.
+ * ANGKA PENJUALANNYA MASIH BISA DIUBAH, DAN ITU DISENGAJA. Katalognya berisi
+ * tiga bulan kalender lengkap terakhir; indikator ini juga menghitung tiga
+ * bulan, tapi tiga bulan yang berakhir di BULAN YANG SEDANG DINILAI. Untuk
+ * bulan berjalan keduanya sama; untuk bulan yang dibuka jauh ke belakang tidak.
+ * Karena itu rentang katalognya ditulis apa adanya di tiap baris — dan bila
+ * tidak cocok dengan bulan yang sedang dinilai, layarnya mengatakannya.
  */
 export function FormMenuPasar({
   posisi,
@@ -1366,7 +1371,7 @@ export function FormMenuPasar({
       ...s,
       // Saat dicentang, angka penjualannya langsung terisi dari ESB supaya tidak
       // ada yang perlu diketik ulang; yang sudah pernah diisi tidak ditimpa.
-      [m.menu]: { pilih, penjualan: s[m.menu]?.penjualan || (pilih ? String(Math.round(m.estimasi)) : "") },
+      [m.menu]: { pilih, penjualan: s[m.menu]?.penjualan || (pilih ? String(Math.round(m.penjualan)) : "") },
     }));
 
   const isiPenjualan = (menu: string, v: string) =>
@@ -1377,6 +1382,21 @@ export function FormMenuPasar({
     if (!q) return katalog;
     return katalog.filter((m) => m.menu.toLowerCase().includes(q) || m.kategori.toLowerCase().includes(q));
   }, [katalog, cari]);
+
+  // Rentang katalognya dibaca dari datanya sendiri.
+  const sumber = katalog.find((m) => m.dari && m.sampai);
+  const rentangKatalog = sumber ? formatRentang(sumber.dari, sumber.sampai) : null;
+
+  /**
+   * Apakah rentang katalog memang tiga bulan yang berakhir di bulan ini?
+   *
+   * Null berarti belum bisa diketahui (katalognya belum pernah ditarik).
+   * Dibandingkan karena keduanya sama-sama "tiga bulan" tapi belum tentu tiga
+   * bulan YANG SAMA: katalognya selalu tiga bulan terakhir, sedangkan yang
+   * dinilai bisa bulan yang sudah lama lewat. Diam-diam memakai angka yang
+   * salah periode adalah kesalahan yang paling sulit ditemukan belakangan.
+   */
+  const cocokPeriode = sumber?.sampai ? sumber.sampai.slice(0, 7) === periode : null;
 
   const dipilih = katalog.filter((m) => isi[m.menu]?.pilih);
 
@@ -1448,7 +1468,10 @@ export function FormMenuPasar({
                         <td className="px-3 py-1.5">
                           <p className="font-medium text-foreground">{m.menu}</p>
                           <p className="text-[11px] text-muted-foreground">
-                            30 hari terakhir di ESB: {formatIDR(m.estimasi)}
+                            {/* Rentangnya ditulis apa adanya, bukan "30 hari
+                                terakhir" yang diketik tangan dan tidak pernah
+                                ikut berubah saat jendelanya diubah. */}
+                            ESB {rentangKatalog ?? "(rentang belum diketahui)"}: {formatIDR(m.penjualan)}
                           </p>
                         </td>
                         <td className="px-3 py-1.5 text-muted-foreground">{m.kategori || "—"}</td>
@@ -1477,8 +1500,14 @@ export function FormMenuPasar({
             </div>
 
             <p className="mt-3 shrink-0 text-[12px] leading-relaxed text-muted-foreground">
-              Omsetnya tidak diisi: diambil sendiri dari net sales ESB pada rentang yang sama. Angka penjualan terisi
-              otomatis dari katalog ESB yang berjangka 30 hari — sesuaikan bila angka tiga bulannya berbeda.
+              Omsetnya tidak diisi: diambil sendiri dari net sales ESB pada rentang yang sama. Angka penjualan diambil
+              apa adanya dari ESB{rentangKatalog ? ` untuk ${rentangKatalog}` : ""}.{" "}
+              {cocokPeriode === false && (
+                <span className="font-medium text-amber-600 dark:text-amber-400">
+                  Rentang itu BUKAN tiga bulan yang berakhir di {labelPeriode(periode)} — periksa dan sesuaikan sendiri
+                  angkanya sebelum disimpan.
+                </span>
+              )}
             </p>
 
             <div className="mt-3 flex shrink-0 justify-end gap-2">

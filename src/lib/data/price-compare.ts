@@ -19,7 +19,7 @@ export interface PriceCompareRow {
   category: "makanan" | "minuman";
   className: string; // 'Class (Nordu)' | '—'
   esbPrice: number | null; // ESB pre-tax unit price
-  esbQty30d: number;
+  esbQty: number;
   latestHpp: number | null; // newest HPP (cost)
   hppPrice: number | null; // R&D chosen selling price (tanpa pajak)
   hppPct: number | null; // food cost = HPP ÷ ESB price
@@ -93,7 +93,7 @@ function buildRow(name: string, e: EsbMenu | null, hpp: HppRecord | null): Price
     category,
     className: hpp?.useClass ? "Class (Nordu)" : "—",
     esbPrice,
-    esbQty30d: e?.qty30d ?? 0,
+    esbQty: e?.qty ?? 0,
     latestHpp,
     hppPrice: hpp ? hpp.chosenPrice || null : null,
     hppPct,

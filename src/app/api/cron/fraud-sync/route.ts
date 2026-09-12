@@ -112,7 +112,7 @@ async function jalankan(req: Request): Promise<NextResponse> {
   if (job === "menu") {
     try {
       const { syncEsbMenus } = await import("@/lib/data/esb-menu");
-      results["menu"] = await syncEsbMenus(30, 50_000);
+      results["menu"] = await syncEsbMenus(50_000);
     } catch (e) {
       results["menu"] = { error: e instanceof Error ? e.message : "failed" };
     }

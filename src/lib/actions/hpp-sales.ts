@@ -35,8 +35,11 @@ export async function syncSalesAction(month?: string) {
       menuName: mn.menu,
       categoryName: mn.category || null,
       category: mn.categoryDetail || null,
-      qty: mn.qty30d,
-      amount: Math.round(mn.qty30d * (mn.unitPrice || 0)),
+      qty: mn.qty,
+      // Nilai penjualan DIBACA dari ESB, tidak lagi dikalikan sendiri dari
+      // qty × harga: satu menu bisa terjual pada beberapa harga dalam satu
+      // jendela, dan perkalian apa pun meleset pada menu seperti itu.
+      amount: Math.round(mn.amount),
       volume: null,
       omzet: null,
       keterangan: null,

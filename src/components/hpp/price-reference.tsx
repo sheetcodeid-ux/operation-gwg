@@ -51,7 +51,7 @@ export function PriceReference({ initial, esbSyncedAt, canSync }: { initial: Pri
         case "esbPrice": return r.esbPrice ?? -1;
         case "latestHpp": return r.latestHpp ?? -1;
         case "hppPct": return r.hppPct ?? -1;
-        case "qty": return r.esbQty30d;
+        case "qty": return r.esbQty;
         default: return r.diff ?? Number.NEGATIVE_INFINITY;
       }
     };
@@ -150,7 +150,7 @@ export function PriceReference({ initial, esbSyncedAt, canSync }: { initial: Pri
                   <Th k="latestHpp" className="sticky top-0 z-20 border-b border-border bg-background text-right">HPP Terbaru</Th>
                   <Th k="hppPct" className="sticky top-0 z-20 border-b border-border bg-background text-right">HPP %</Th>
                   <Th k="diff" className="sticky top-0 z-20 border-b border-border bg-background text-right">Selisih</Th>
-                  <Th k="qty" className="sticky top-0 z-20 border-b border-border bg-background text-right">Qty 30h</Th>
+                  <Th k="qty" className="sticky top-0 z-20 border-b border-border bg-background text-right">Qty</Th>
                   <th className="sticky top-0 z-20 border-b border-border bg-background px-2.5 py-2 text-center font-medium">Status</th>
                 </tr>
               </thead>
@@ -169,7 +169,7 @@ export function PriceReference({ initial, esbSyncedAt, canSync }: { initial: Pri
                         {r.diff == null ? "—" : `${r.diff >= 0 ? "+" : ""}${formatIDR(r.diff)}`}
                         {r.diffPct != null && <span className="ml-1 text-[10px] opacity-70">({r.diffPct >= 0 ? "+" : ""}{(r.diffPct * 100).toFixed(0)}%)</span>}
                       </td>
-                      <td className="px-2.5 py-1.5 text-right tabular-nums text-muted-foreground">{r.esbQty30d.toLocaleString("id-ID")}</td>
+                      <td className="px-2.5 py-1.5 text-right tabular-nums text-muted-foreground">{r.esbQty.toLocaleString("id-ID")}</td>
                       <td className="px-2.5 py-1.5 text-center">
                         <span className={cn("inline-block whitespace-nowrap rounded-full px-2 py-0.5 text-[10px] font-medium", st.cls)}>{st.label}</span>
                       </td>

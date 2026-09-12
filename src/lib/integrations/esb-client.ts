@@ -603,21 +603,41 @@ export function esbGenerateMenuRecap(dateFromYmd: string, dateToYmd: string): Pr
   });
 }
 
-/** Read a contiguous range of already-generated pages [fromPage, …) within a
- *  time budget. Returns the rows read and the next page to resume from. */
-export function esbReadMenuPages(url: string, fromPage: number, totalPages: number, budgetMs = 45_000): Promise<{ rows: MenuRecapRow[]; nextPage: number; done: boolean }> {
+/** Satu halaman ekspor beserta nomornya. */
+export interface HalamanMenuRecap {
+  page: number;
+  rows: MenuRecapRow[];
+}
+
+/**
+ * Read a contiguous range of already-generated pages [fromPage, …) within a
+ * time budget. Returns the next page to resume from.
+ *
+ * BARISNYA DIKEMBALIKAN PER HALAMAN, bukan sebagai satu tumpukan. Yang
+ * menyimpannya menjumlahkan qty antar-halaman, dan penjumlahan hanya aman bila
+ * ia tahu halaman mana yang sudah masuk: satu jalannya cron yang mati setelah
+ * menulis baris tapi sebelum menyimpan posisi kursornya akan membaca ulang
+ * halaman yang sama pada jalan berikutnya — dan tanpa nomor halaman, qty-nya
+ * bertambah dua kali tanpa satu pun tanda.
+ */
+export function esbReadMenuPages(
+  url: string,
+  fromPage: number,
+  totalPages: number,
+  budgetMs = 45_000,
+): Promise<{ pages: HalamanMenuRecap[]; nextPage: number; done: boolean }> {
   return serialized(async () => {
     const started = Date.now();
-    const rows: MenuRecapRow[] = [];
+    const pages: HalamanMenuRecap[] = [];
     let p = fromPage;
     for (; p < totalPages; p++) {
       if (Date.now() - started > budgetMs) break;
       try {
-        rows.push(...parseMenuRecapReport(await readExportPageRaw(url, p, 4)).rows);
+        pages.push({ page: p, rows: parseMenuRecapReport(await readExportPageRaw(url, p, 4)).rows });
       } catch {
         break; // export page expired/failed — caller regenerates next run
       }
     }
-    return { rows, nextPage: p, done: p >= totalPages };
+    return { pages, nextPage: p, done: p >= totalPages };
   });
 }

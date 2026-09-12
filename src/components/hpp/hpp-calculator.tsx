@@ -84,7 +84,7 @@ import { StatTile } from "@/components/ui/stat";
 import { Combobox } from "@/components/ui/combobox";
 import { useConfirm } from "@/components/ui/confirm";
 import { recipeUnits } from "@/lib/hpp/units";
-import { cn } from "@/lib/utils";
+import { cn, formatRentang } from "@/lib/utils";
 
 /* ---------- helpers ---------- */
 const round0 = (n: number) => Math.round((n + Number.EPSILON) * 100) / 100;
@@ -141,7 +141,22 @@ export type IngredientOption = {
 /** Client-safe costing policy (food-cost target + selling margin band per category). */
 export type PolicyOption = { scope: string; foodPct: number; bevPct: number; foodMarginMin: number; foodMarginMax: number; bevMarginMin: number; bevMarginMax: number };
 /** Client-safe ESB catalog entry for the product picker. */
-export type EsbMenuOption = { menu: string; foodBev: "makanan" | "minuman"; qty30d: number; unitPrice: number };
+export type EsbMenuOption = {
+  menu: string;
+  foodBev: "makanan" | "minuman";
+  /** Jumlah terjual sepanjang jendela katalog. */
+  qty: number;
+  /** Panjang jendela katalog dalam hari — target bulanan dihitung darinya. */
+  windowDays: number;
+  /** Rentang jendelanya, untuk disebut apa adanya di layar. */
+  dari: string | null;
+  sampai: string | null;
+  unitPrice: number;
+};
+
+/** Rata-rata penjualan SEBULAN dari jendela katalog yang panjangnya bisa berubah. */
+export const perBulan = (qty: number, windowDays: number): number =>
+  windowDays > 0 ? (qty * 30) / windowDays : qty;
 /** Client-safe reusable overhead template (applying only pre-fills the form). */
 export type OverheadTemplateOption = { id: string; name: string; brand: string | null; items: { name: string; monthly: number; kind: OverheadKind }[] };
 
@@ -258,14 +273,26 @@ export function HppCalculator({
   // bukan food cost bahan baku saja.
   const hppPctVal = hppPct(hpp, price);
   const hppSt = hppStatus(hppPctVal, category, brand);
-  // Pick an ESB catalog product: fill name + category, and recommend the
-  // monthly sales target from the last-30-day qty (avg/day × 30 ≈ the 30d total).
+  // Pilih produk dari katalog ESB: isi nama + kategori, dan rekomendasikan
+  // target penjualan SEBULAN.
+  //
+  // Dibagi panjang jendelanya, bukan dipakai apa adanya. Katalognya kini
+  // berjangka tiga bulan; memakai qty mentah sebagai target sebulan membuat
+  // rekomendasinya tiga kali lipat dari yang wajar — dan angka sebesar itu
+  // tidak akan terlihat salah oleh siapa pun yang tidak tahu jendelanya
+  // berubah.
+  // Rentang katalog ESB, dibaca dari datanya sendiri — bukan ditulis tangan.
+  const rentangEsb = React.useMemo(() => {
+    const m = esbMenus.find((x) => x.dari && x.sampai);
+    return m ? formatRentang(m.dari, m.sampai) : null;
+  }, [esbMenus]);
+
   const pickEsbProduct = React.useCallback((menuName: string) => {
     setName(menuName);
     const m = esbMenus.find((x) => x.menu === menuName);
     if (!m) return;
     setCategory(m.foodBev);
-    const rec = Math.max(1, Math.round(m.qty30d));
+    const rec = Math.max(1, Math.round(perBulan(m.qty, m.windowDays)));
     setEsbTargetRec(rec);
     setTargetSales(rec);
     setTargetCustom(false);
@@ -509,7 +536,10 @@ export function HppCalculator({
                   searchPlaceholder="Cari produk ESB…"
                   placeholder="Pilih produk dari ESB…"
                 />
-                <p className="mt-1 text-[11px] text-muted-foreground">Daftar produk {category === "minuman" ? "Beverage" : "Food"} dari ESB. Target penjualan direkomendasikan dari 30 hari terakhir.</p>
+                <p className="mt-1 text-[11px] text-muted-foreground">
+                  Daftar produk {category === "minuman" ? "Beverage" : "Food"} dari ESB
+                  {rentangEsb ? ` (${rentangEsb})` : ""}. Target penjualan direkomendasikan sebagai rata-rata sebulan.
+                </p>
               </>
             )}
           </div>
@@ -718,7 +748,11 @@ export function HppCalculator({
                 )}
               </div>
               <NumInput value={targetSales} onChange={(v) => { setTargetSales(v); if (esbTargetRec != null) setTargetCustom(true); }} placeholder="1000" />
-              {esbTargetRec != null && !targetCustom && <p className="mt-1 text-[10px] text-muted-foreground">Dari penjualan 30 hari terakhir ESB (~{Math.round(esbTargetRec / 30)}/hari).</p>}
+              {esbTargetRec != null && !targetCustom && (
+                <p className="mt-1 text-[10px] text-muted-foreground">
+                  Rata-rata sebulan dari penjualan ESB{rentangEsb ? ` ${rentangEsb}` : ""} (~{Math.round(esbTargetRec / 30)}/hari).
+                </p>
+              )}
             </div>
             {allocMode === "even" && (
               <Field label="Total Unit Semua Produk (unit/bln)">

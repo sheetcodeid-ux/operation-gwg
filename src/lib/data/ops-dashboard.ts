@@ -94,10 +94,10 @@ export interface OpsDashboardData {
 
 async function loadProducts(): Promise<OpsProduct[] | null> {
   try {
-    const menus = await listEsbMenus(); // ESB catalog (rolling 30-day qty + price)
+    const menus = await listEsbMenus(); // katalog ESB — tiga bulan kalender terakhir
     if (!menus.length) return null;
     return menus
-      .map((m) => ({ name: m.menu, category: m.category || "Lainnya", qty: m.qty30d, amount: Math.round(m.qty30d * (m.unitPrice || 0)) }))
+      .map((m) => ({ name: m.menu, category: m.category || "Lainnya", qty: m.qty, amount: Math.round(m.amount) }))
       .sort((a, b) => b.amount - a.amount)
       .slice(0, 50);
   } catch {

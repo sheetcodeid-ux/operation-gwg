@@ -46,7 +46,15 @@ export default async function HppPage({ searchParams }: { searchParams: Promise<
     bevMarginMin: p.bevMarginMin,
     bevMarginMax: p.bevMarginMax,
   }));
-  const esbMenus = esbMenusRaw.map((m) => ({ menu: m.menu, foodBev: m.foodBev, qty30d: m.qty30d, unitPrice: m.unitPrice }));
+  const esbMenus = esbMenusRaw.map((m) => ({
+    menu: m.menu,
+    foodBev: m.foodBev,
+    qty: m.qty,
+    windowDays: m.windowDays,
+    dari: m.dari,
+    sampai: m.sampai,
+    unitPrice: m.unitPrice,
+  }));
   const ingredients: IngredientOption[] = rawIngredients.map((i) => ({
     id: i.id,
     name: i.name,
