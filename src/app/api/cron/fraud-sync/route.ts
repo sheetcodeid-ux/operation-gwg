@@ -4,6 +4,7 @@ import { esbSetDeadline } from "@/lib/integrations/esb-client";
 import { syncSeasonalDays } from "@/lib/data/seasonal";
 import { cronAuthorized } from "@/lib/cron-auth";
 import { ambilKunciEsb, lepasKunciEsb } from "@/lib/data/esb-lock";
+import { catatHasilSinkron } from "@/lib/data/sinkron-sehat";
 
 /**
  * Server-side fraud sync — runs UNATTENDED so the data is always ready before
@@ -104,6 +105,19 @@ async function jalankan(req: Request): Promise<NextResponse> {
   // sini karena hanya route yang tahu batas sesungguhnya.
   esbSetDeadline(left());
   const results: Record<string, unknown> = {};
+
+  /**
+   * SATU pintu keluar untuk seluruh cabang route ini.
+   *
+   * Ada tujuh tempat yang mengembalikan hasil, dan pencatatan kesehatan yang
+   * ditempel satu per satu pasti akan terlewat di salah satunya suatu hari —
+   * justru pada cabang yang paling jarang dijalankan, yang berarti paling
+   * jarang diperiksa orang.
+   */
+  const selesai = async () => {
+    await catatHasilSinkron(results);
+    return selesai();
+  };
   const job = new URL(req.url).searchParams.get("job");
 
   // Dedicated job: ESB product catalog sync (menu-recap is ~124 pages, needs a
@@ -116,7 +130,7 @@ async function jalankan(req: Request): Promise<NextResponse> {
     } catch (e) {
       results["menu"] = { error: e instanceof Error ? e.message : "failed" };
     }
-    return NextResponse.json({ ok: true, tookMs: Date.now() - started, results });
+    return selesai();
   }
 
   // Dedicated job: spend the WHOLE budget backfilling this year's history so the
@@ -132,7 +146,7 @@ async function jalankan(req: Request): Promise<NextResponse> {
         results[`backfill:${kind}`] = { error: e instanceof Error ? e.message : "failed" };
       }
     }
-    return NextResponse.json({ ok: true, tookMs: Date.now() - started, results });
+    return selesai();
   }
 
   // Dedicated job: monthly net sales per branch — ONE ESB call per branch per
@@ -152,7 +166,7 @@ async function jalankan(req: Request): Promise<NextResponse> {
     } catch (e) {
       results["net-bulanan"] = { error: e instanceof Error ? e.message : "failed" };
     }
-    return NextResponse.json({ ok: true, tookMs: Date.now() - started, results });
+    return selesai();
   }
 
   // Dedicated job: net sales PER MINGGU per branch — one ESB call per branch
@@ -168,7 +182,7 @@ async function jalankan(req: Request): Promise<NextResponse> {
     } catch (e) {
       results["net-mingguan"] = { error: e instanceof Error ? e.message : "failed" };
     }
-    return NextResponse.json({ ok: true, tookMs: Date.now() - started, results });
+    return selesai();
   }
 
   // Dedicated job: pair outlets with their ESB branch id. Runs on demand
@@ -181,7 +195,7 @@ async function jalankan(req: Request): Promise<NextResponse> {
     } catch (e) {
       results["pair-outlets"] = { error: e instanceof Error ? e.message : "failed" };
     }
-    return NextResponse.json({ ok: true, tookMs: Date.now() - started, results });
+    return selesai();
   }
 
   // Dedicated job: prime the seasonal (Musiman) daily gross+net cache for the
@@ -194,7 +208,7 @@ async function jalankan(req: Request): Promise<NextResponse> {
     } catch (e) {
       results["seasonal"] = { error: e instanceof Error ? e.message : "failed" };
     }
-    return NextResponse.json({ ok: true, tookMs: Date.now() - started, results });
+    return selesai();
   }
 
   // Phase 1 — keep the live window fresh (yesterday + today, both kinds).
@@ -288,5 +302,5 @@ async function jalankan(req: Request): Promise<NextResponse> {
     }
   }
 
-  return NextResponse.json({ ok: true, tookMs: Date.now() - started, results });
+  return selesai();
 }

@@ -88,7 +88,8 @@ export type MenuKey =
   | "sc_hpp"
   | "sc_rekap"
   | "users"
-  | "audit";
+  | "audit"
+  | "sinkron";
 
 /** Division a role belongs to — used as the sidebar group header. */
 export type Division =
@@ -242,6 +243,7 @@ export const NAV_MENUS: Omit<NavItem, "section" | "group" | "groupIcon">[] = [
   { key: "sc_rekap", label: "Database Produksi", href: "/supply-chain/rekap", icon: "Table2" },
   { key: "users", label: "User Management", href: "/admin/users", icon: "Users" },
   { key: "audit", label: "Audit Logs", href: "/admin/audit", icon: "ScrollText" },
+  { key: "sinkron", label: "Kesehatan Data", href: "/admin/sinkron", icon: "HeartPulse" },
 ];
 
 /** Menu definition by key — lookup used when assembling the sidebar. */
@@ -663,7 +665,7 @@ export const DIVISION_MENUS: { division: Division; menus: MenuKey[] }[] = [
   //
   // Anggotanya dikenali dari JABATAN, bukan departemen — lihat `timSosialMedia`.
   { division: "Sosial Media", menus: ["work", "sosmed_request", "mc_events", "complaints"] },
-  { division: "Administrator", menus: ["users", "audit"] },
+  { division: "Administrator", menus: ["users", "audit", "sinkron"] },
 ];
 
 // ── Admin-defined extra divisions (DB-backed) ──────────────────────────────

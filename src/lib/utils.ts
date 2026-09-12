@@ -83,6 +83,30 @@ export function fromNow(input: string | Date) {
   return "just now";
 }
 
+/**
+ * Waktu relatif dalam BAHASA INDONESIA — "12 hari lalu", "24 menit lalu".
+ *
+ * Berdiri sendiri di samping `fromNow` yang berbahasa Inggris, bukan
+ * menggantikannya: `fromNow` dipakai belasan layar lain, dan mengubah
+ * bahasanya diam-diam di satu tempat ini berarti mengubahnya di semua tempat
+ * tanpa ada yang meminta.
+ */
+export function sejakKini(input: string | Date): string {
+  const d = typeof input === "string" ? new Date(input) : input;
+  const diff = d.getTime() - nowMs();
+  const abs = Math.abs(diff);
+  const rtf = new Intl.RelativeTimeFormat("id", { numeric: "auto" });
+  const units: [Intl.RelativeTimeFormatUnit, number][] = [
+    ["day", 86_400_000],
+    ["hour", 3_600_000],
+    ["minute", 60_000],
+  ];
+  for (const [unit, ms] of units) {
+    if (abs >= ms || unit === "minute") return rtf.format(Math.round(diff / ms), unit);
+  }
+  return "baru saja";
+}
+
 /** Clamp a number to a [min, max] range. */
 export function clamp(value: number, min: number, max: number) {
   return Math.min(Math.max(value, min), max);

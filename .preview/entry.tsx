@@ -5,6 +5,8 @@ import { NavLockProvider } from "@/components/layout/nav-lock";
 import { I18nProvider } from "@/lib/i18n/provider";
 import { navAll, accessibleMenuKeys } from "@/lib/nav";
 import { PapanKpi } from "@/components/kpi/papan-kpi";
+import { TabelSinkronSehat } from "@/components/admin/sinkron-sehat";
+import type { BarisSehat } from "@/lib/data/sinkron-sehat";
 import { PapanManajemen } from "@/components/kpi/papan-manajemen";
 import { SETELAN_BAWAAN, departemenKpi, hitungManajemen } from "@/lib/kpi/manajemen";
 import { hitungMinggu, korporatMinggu, mingguBulan } from "@/lib/kpi/minggu";
@@ -255,6 +257,25 @@ if (kode === "sidebar") {
           </div>
         </NavLockProvider>
       </SidebarProvider>
+    </I18nProvider>,
+  );
+  throw new Error("__stop__");
+}
+if (kode === "sinkron") {
+  const jamLalu = (n: number) => new Date(Date.now() - n * 3_600_000).toISOString();
+  // Contoh yang memuat keadaan nyata waktu itu: katalog menu dicoba terus
+  // tapi tidak pernah tuntas selama dua belas hari.
+  const contoh: BarisSehat[] = [
+    { job: "menu", label: "Katalog Menu ESB", terakhirCoba: jamLalu(0.2), terakhirSukses: jamLalu(288), terakhirTuntas: jamLalu(288), gagalBeruntun: 24, pesan: "ESB: waktu habis sebelum ekspor siap — dilanjutkan di sinkronisasi berikutnya", jedaWajarJam: 24, status: "bermasalah", umurJam: 288 },
+    { job: "seasonal", label: "Musiman Harian", terakhirCoba: jamLalu(0.4), terakhirSukses: jamLalu(0.4), terakhirTuntas: null, gagalBeruntun: 0, pesan: null, jedaWajarJam: 24, status: "tertunda", umurJam: null },
+    { job: "sales:today", label: "Omset Hari Ini", terakhirCoba: jamLalu(0.4), terakhirSukses: jamLalu(30), terakhirTuntas: jamLalu(30), gagalBeruntun: 2, pesan: "ESB highlight: respons tidak terbaca", jedaWajarJam: 12, status: "tertunda", umurJam: 30 },
+    { job: "net-bulanan", label: "Net Sales Bulanan", terakhirCoba: jamLalu(0.6), terakhirSukses: jamLalu(0.6), terakhirTuntas: jamLalu(0.6), gagalBeruntun: 0, pesan: null, jedaWajarJam: 6, status: "sehat", umurJam: 0.6 },
+    { job: "net-mingguan", label: "Net Sales Mingguan", terakhirCoba: jamLalu(1), terakhirSukses: jamLalu(1), terakhirTuntas: jamLalu(1), gagalBeruntun: 0, pesan: null, jedaWajarJam: 12, status: "sehat", umurJam: 1 },
+    { job: "fresh:all", label: "Fraud — Cancel/Void", terakhirCoba: jamLalu(1), terakhirSukses: jamLalu(1), terakhirTuntas: jamLalu(1), gagalBeruntun: 0, pesan: null, jedaWajarJam: 12, status: "sehat", umurJam: 1 },
+  ];
+  createRoot(document.getElementById("root")!).render(
+    <I18nProvider initialLang="id">
+      <div className="p-6"><TabelSinkronSehat baris={contoh} /></div>
     </I18nProvider>,
   );
   throw new Error("__stop__");

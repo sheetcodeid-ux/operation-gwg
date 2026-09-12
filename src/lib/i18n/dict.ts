@@ -148,6 +148,7 @@ export const DICT: Record<Lang, Record<string, string>> = {
     "nav.Organization": "Organization",
     "nav.Departemen & Divisi": "Departments & Divisions",
     "nav.Audit Logs": "Audit Logs",
+    "nav.Kesehatan Data": "Data Health",
 
     "common.commandCenter": "Command Center",
     "common.realtime": "Real-time monitoring",
@@ -439,6 +440,7 @@ export const DICT: Record<Lang, Record<string, string>> = {
     "nav.Organization": "Organisasi",
     "nav.Departemen & Divisi": "Departemen & Divisi",
     "nav.Audit Logs": "Log Audit",
+    "nav.Kesehatan Data": "Kesehatan Data",
 
     "common.commandCenter": "Pusat Kendali",
     "common.realtime": "Pemantauan real-time",
