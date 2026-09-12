@@ -25,7 +25,7 @@ import type { DetailFee } from "@/lib/data/kpi";
 import { Progress } from "@/components/ui/progress";
 import { uploadMany } from "@/lib/upload-client";
 import { BULAN, labelPeriode, periodeDari, tahunPilihan } from "./periode";
-import { bacaLembar, unduhLembar } from "./lembar-outlet";
+import { LEMBAR_ANGKA_OUTLET, LEMBAR_EFISIENSI, bacaLembar, unduhLembar } from "./lembar-outlet";
 import { cn, formatDate, formatIDR, formatNumber, formatRentang } from "@/lib/utils";
 
 /**
@@ -86,6 +86,64 @@ export function FormEfisiensi({
 
   const ubah = (id: string, kolom: "wh" | "nonWh", v: string) =>
     setIsi((s) => ({ ...s, [id]: { ...(s[id] ?? { wh: "", nonWh: "" }), [kolom]: v } }));
+
+  const lembarRef = React.useRef<HTMLInputElement>(null);
+
+  /**
+   * Unduh lembar berisi SELURUH outlet, sudah bernama.
+   *
+   * Average dan Budget ikut dibawa sebagai keterangan supaya yang mengisi
+   * punya pembandingnya di kolom sebelah — bukan supaya bisa diubah. Keduanya
+   * dihitung sistem dari net sales tiga bulan, dan pembacanya memang tidak
+   * pernah membaca kolom keterangan kembali.
+   */
+  function ekspor() {
+    unduhLembar(
+      LEMBAR_EFISIENSI,
+      `KPI ${labelPeriode(periode)} — realisasi beban operasional`,
+      baris.map((b) => ({
+        outletId: b.outletId,
+        outletNama: b.outletNama,
+        // Yang sedang diketik di layar ikut terbawa, bukan yang tersimpan saja:
+        // kalau tidak, mengunduh di tengah pengisian akan mengembalikan lembar
+        // yang isinya lebih lama daripada yang ada di depan mata.
+        nilai: [num(isi[b.outletId]?.wh ?? "") ?? b.actualWh, num(isi[b.outletId]?.nonWh ?? "") ?? b.actualNonWh],
+        konteks: [b.average, b.budget],
+      })),
+    );
+  }
+
+  async function impor(file: File) {
+    try {
+      const { baris: terbaca, asing } = await bacaLembar(LEMBAR_EFISIENSI, file, new Set(baris.map((b) => b.outletId)));
+      if (asing.length > 0) {
+        // Disebut, tidak didiamkan: berkas bulan lain atau daftar outlet yang
+        // sudah berubah akan terbaca seperti berhasil, dan yang mengisinya baru
+        // sadar berbulan-bulan kemudian bahwa angkanya tidak pernah masuk.
+        toast.error(
+          `${asing.length} baris tidak dikenali dan dilewati: ${asing.slice(0, 3).join(", ")}${asing.length > 3 ? "…" : ""}`,
+        );
+      }
+      if (terbaca.length === 0) return toast.info("Tidak ada angka yang terbaca dari berkas itu.");
+      setIsi((s) => {
+        const out = { ...s };
+        for (const b of terbaca) {
+          const lama = out[b.outletId] ?? { wh: "", nonWh: "" };
+          const [wh, nonWh] = b.nilai;
+          out[b.outletId] = {
+            wh: wh === null ? lama.wh : String(wh),
+            nonWh: nonWh === null ? lama.nonWh : String(nonWh),
+          };
+        }
+        return out;
+      });
+      // Belum tersimpan, dan itu disengaja: berkas yang salah harus sempat
+      // terlihat di layar sebelum menimpa angka yang sudah benar.
+      toast.success(`${terbaca.length} outlet terbaca — periksa dulu, lalu Simpan semua.`);
+    } catch {
+      toast.error("Berkasnya tidak bisa dibaca. Pakai format yang diunduh dari sini.");
+    }
+  }
 
   async function simpan() {
     // Hanya yang berubah. Mengirim 58 baris utuh setiap kali menyimpan berarti
@@ -182,13 +240,42 @@ export function FormEfisiensi({
               </table>
             </div>
 
-            <div className="mt-3 flex shrink-0 justify-end gap-2">
-              <Button variant="ghost" onClick={() => setBuka(false)} disabled={sibuk}>
-                Batal
-              </Button>
-              <Button onClick={simpan} disabled={sibuk}>
-                {sibuk ? <Loader2 className="size-4 animate-spin" /> : <Save className="size-4" />} Simpan semua
-              </Button>
+            <div className="mt-3 flex shrink-0 flex-wrap items-center justify-between gap-2">
+              <div className="flex flex-wrap items-center gap-2">
+                {/* Bentuknya sama persis dengan lembar angka per outlet milik
+                    Coordinator Area: yang mengisi keduanya sering orang yang
+                    sama, dan dua cara berbeda untuk pekerjaan yang sama hanya
+                    menambah satu hal lagi yang harus diingat. */}
+                <Button size="sm" variant="outline" className="gap-1.5" onClick={ekspor} disabled={sibuk}>
+                  <Download className="size-4" /> Unduh format
+                </Button>
+                <Button size="sm" variant="outline" className="gap-1.5" onClick={() => lembarRef.current?.click()} disabled={sibuk}>
+                  <Upload className="size-4" /> Unggah isian
+                </Button>
+                <input
+                  ref={lembarRef}
+                  type="file"
+                  accept=".xlsx,.xls,.csv"
+                  hidden
+                  onChange={(e) => {
+                    const f = e.target.files?.[0];
+                    // Dikosongkan lebih dulu supaya berkas yang SAMA bisa
+                    // diunggah lagi setelah diperbaiki — tanpa ini, unggahan
+                    // kedua tidak memicu apa pun dan terlihat seperti hang.
+                    e.target.value = "";
+                    if (f) void impor(f);
+                  }}
+                />
+                <span className="text-[12px] text-muted-foreground">Kosongkan yang tidak diubah.</span>
+              </div>
+              <div className="flex gap-2">
+                <Button variant="ghost" onClick={() => setBuka(false)} disabled={sibuk}>
+                  Batal
+                </Button>
+                <Button onClick={simpan} disabled={sibuk}>
+                  {sibuk ? <Loader2 className="size-4 animate-spin" /> : <Save className="size-4" />} Simpan semua
+                </Button>
+              </div>
             </div>
           </div>
         </DialogContent>
@@ -614,19 +701,22 @@ export function FormKegiatan({
 
   function ekspor() {
     unduhLembar(
+      LEMBAR_ANGKA_OUTLET,
       `KPI ${labelPeriode(periode)} — angka per outlet`,
       outlet.map((o) => ({
         outletId: o.outletId,
         outletNama: o.outletNama,
-        netProfit: num(isiOutlet[o.outletId]?.netProfit ?? "") ?? o.netProfit,
-        hppNominal: num(isiOutlet[o.outletId]?.hppNominal ?? "") ?? o.hppNominal,
+        nilai: [
+          num(isiOutlet[o.outletId]?.netProfit ?? "") ?? o.netProfit,
+          num(isiOutlet[o.outletId]?.hppNominal ?? "") ?? o.hppNominal,
+        ],
       })),
     );
   }
 
   async function impor(file: File) {
     try {
-      const { baris, asing } = await bacaLembar(file, new Set(outlet.map((o) => o.outletId)));
+      const { baris, asing } = await bacaLembar(LEMBAR_ANGKA_OUTLET, file, new Set(outlet.map((o) => o.outletId)));
       if (asing.length > 0) {
         // Disebut, tidak didiamkan: berkas bulan lain atau area orang lain akan
         // terbaca seperti berhasil, dan yang mengisinya baru sadar
@@ -638,10 +728,11 @@ export function FormKegiatan({
         const out = { ...s };
         for (const b of baris) {
           const lama = out[b.outletId] ?? { gross: "", netProfit: "", hppNominal: "" };
+          const [netProfit, hppNominal] = b.nilai;
           out[b.outletId] = {
             ...lama,
-            netProfit: b.netProfit === null ? lama.netProfit : String(b.netProfit),
-            hppNominal: b.hppNominal === null ? lama.hppNominal : String(b.hppNominal),
+            netProfit: netProfit === null ? lama.netProfit : String(netProfit),
+            hppNominal: hppNominal === null ? lama.hppNominal : String(hppNominal),
           };
         }
         return out;
