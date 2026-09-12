@@ -2,7 +2,7 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { angkaExcel, angkaExcelNol } from "./angka-excel";
-import { TEMPLATE, bacaBarisUnggah, judulKolom, templateDari } from "./template-unggah";
+import { KELOMPOK, TEMPLATE, bacaBarisUnggah, barisKosong, judulKolom } from "./template-unggah";
 
 /**
  * Satu pintu unggah data.
@@ -41,7 +41,7 @@ describe("membaca angka dari Excel", () => {
 });
 
 describe("membaca baris template", () => {
-  const t = templateDari("pembelian")!;
+  const t = TEMPLATE;
 
   it("judul kolom tidak harus persis — beda huruf besar dan spasi tetap cocok", () => {
     // Berkas yang beredar lewat WhatsApp sering pulang dengan "kode" atau
@@ -71,23 +71,53 @@ describe("membaca baris template", () => {
 });
 
 describe("susunan template", () => {
-  it("setiap template menyebutkan ke mana datanya masuk", () => {
+  it("hanya ada SATU template — satu unduh, satu unggah, satu baris per outlet", () => {
+    // Memecahnya per jenis hanya memindahkan pekerjaan berulang: outlet yang
+    // sama harus diunduh dan diunggah beberapa kali.
+    expect(Array.isArray(TEMPLATE)).toBe(false);
+    expect(TEMPLATE.kunci).toBe("Kode");
+  });
+
+  it("menyebutkan ke mana datanya masuk", () => {
     // Tujuannya ditulis di layar, bukan disimpan di kepala orang: yang
     // mengunggah berhak tahu angkanya muncul di mana sebelum menekan Simpan.
-    for (const t of TEMPLATE) expect(t.tujuan.length, t.nama).toBeGreaterThan(0);
+    expect(TEMPLATE.tujuan.length).toBeGreaterThan(0);
   });
 
   it("judul kolomnya tidak ada yang kembar", () => {
     // Dua kolom bernama sama membuat yang kedua menimpa yang pertama saat
     // dibaca kembali, dan tidak ada yang gagal saat itu terjadi.
-    for (const t of TEMPLATE) {
-      const j = judulKolom(t);
-      expect(new Set(j).size, t.nama).toBe(j.length);
-    }
+    const j = judulKolom(TEMPLATE);
+    expect(new Set(j).size).toBe(j.length);
   });
 
-  it("hanya Bahan Baku yang bukan data bulanan", () => {
-    expect(TEMPLATE.filter((t) => !t.perBulan).map((t) => t.jenis)).toEqual(["bahan_baku"]);
+  it("kelompoknya menutup seluruh kolom angka, tanpa sisa", () => {
+    // Kalau ada kolom angka di luar kelompok mana pun, judul kelompok di layar
+    // akan bergeser dan angka terbaca di bawah judul yang salah.
+    expect(KELOMPOK.flatMap((k) => k.kolom)).toEqual([...TEMPLATE.angka]);
+  });
+
+  it("Pendapatan TIDAK diminta — gross sales tidak ditimpa dari sini", () => {
+    expect(TEMPLATE.angka).not.toContain("Pendapatan");
+  });
+
+  it("total Beban TIDAK diminta terpisah — dijumlahkan dari rinciannya", () => {
+    // Satu angka yang bisa diketik berbeda dari rinciannya cepat atau lambat
+    // akan berbeda, dan tidak ada yang memberi tahu saat itu terjadi.
+    expect(TEMPLATE.angka).not.toContain("Beban");
+    expect(TEMPLATE.angka).toContain("Utilitas");
+    expect(TEMPLATE.angka).toContain("Laba Bersih");
+  });
+
+  it("baris yang seluruh angkanya kosong dikenali sebagai tidak dilaporkan", () => {
+    // Bukan nol rupiah. Menulisnya akan menghapus angka yang sudah benar hanya
+    // karena barisnya ikut terbawa di template.
+    const { baris } = bacaBarisUnggah(TEMPLATE, [
+      { Kode: "NCSB", Outlet: "Nordu Sambas" },
+      { Kode: "CCAY", Outlet: "Cattu", Warehouse: "1.000.000" },
+    ]);
+    expect(barisKosong(TEMPLATE, baris[0])).toBe(true);
+    expect(barisKosong(TEMPLATE, baris[1])).toBe(false);
   });
 });
 
@@ -100,6 +130,17 @@ describe("angka yang TIDAK boleh ikut tertulis", () => {
     // menimpa angka mesin dengan angka ketikan — kesalahan yang paling sulit
     // ditemukan belakangan.
     expect(aksi).not.toMatch(/\bgross\s*:/);
+  });
+
+  it("pendapatan yang sudah tersimpan dibaca dan ditulis kembali, tidak jadi nol", () => {
+    // Kolomnya tidak ada di berkas. Kalau tidak dibaca dulu, setiap unggahan
+    // akan menimpa pendapatan yang benar dengan nol — diam-diam.
+    expect(aksi).toContain("pendapatanLama");
+    expect(aksi).toContain("listPnl(periode)");
+  });
+
+  it("baris kosong tidak ditulis", () => {
+    expect(aksi).toContain("barisKosong(TEMPLATE, b)");
   });
 
   it("laba bersih dan harga pokok memang ikut ke KPI", () => {

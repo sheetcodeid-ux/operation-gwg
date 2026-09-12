@@ -1,111 +1,86 @@
-import { EXPENSE_COLS, EXPENSE_LABELS, PNL_COLS, PNL_LABELS } from "./categories";
+import { EXPENSE_COLS, EXPENSE_LABELS, PNL_LABELS } from "./categories";
 import { angkaExcel } from "./angka-excel";
 
 /**
- * Satu pintu unggah data — definisi templatenya, dipakai bersama layar dan server.
+ * Satu pintu unggah data — SATU berkas, SATU baris judul, seluruh angka outlet.
  *
- * KENAPA SATU PINTU. Angka yang sama selama ini diketik di dua tempat yang
- * tidak saling tahu: laba bersih dan harga pokok di Operation → Laba Rugi DAN
- * di KPI Coordinator Area; pembelian warehouse di Operation → Pembelian DAN di
- * KPI PDQ. Dua salinan untuk satu kenyataan berarti keduanya bisa berbeda, dan
+ * KENAPA SATU. Angka yang sama selama ini diketik di beberapa tempat yang tidak
+ * saling tahu: laba bersih dan harga pokok di Operation → Laba Rugi DAN di KPI
+ * Coordinator Area; pembelian warehouse di Operation → Pembelian DAN di KPI
+ * PDQ. Dua salinan untuk satu kenyataan berarti keduanya bisa berbeda, dan
  * tidak ada cara tahu mana yang benar. Hasilnya terlihat di basis data: empat
  * dari lima tabel itu kosong karena orang memilih mengisi satu saja.
  *
- * Sekarang satu berkas masuk sekali, lalu dituliskan ke SEMUA tempat yang
- * membutuhkannya dalam satu tindakan — sehingga tidak mungkin lagi separuh
- * terisi.
+ * Memecahnya jadi beberapa template hanya memindahkan masalahnya — tetap
+ * beberapa kali unduh, beberapa kali unggah, untuk satu outlet yang sama.
+ * Maka satu berkas: satu baris per outlet, seluruh kolom yang dibutuhkan
+ * berjajar, lalu dituliskan ke SEMUA tempat yang memakainya dalam satu
+ * tindakan — sehingga tidak mungkin lagi separuh terisi.
  *
  * TUJUANNYA DITULIS DI LAYAR, bukan disimpan di kepala orang. Yang mengunggah
  * berhak tahu angkanya akan muncul di mana sebelum ia menekan Simpan.
  */
 
-export type JenisUnggah = "laba_rugi" | "pembelian" | "beban" | "bahan_baku";
+/** Kolom angka, dikelompokkan — kelompoknya hanya untuk dibaca manusia di layar. */
+export interface KelompokKolom {
+  nama: string;
+  kolom: readonly string[];
+}
+
+export const KOL_PEMBELIAN = ["Warehouse", "Non Warehouse"] as const;
+export const KOL_BEBAN = EXPENSE_COLS.map((c) => EXPENSE_LABELS[c]);
+
+export const KELOMPOK: readonly KelompokKolom[] = [
+  { nama: "Pembelian", kolom: KOL_PEMBELIAN },
+  { nama: "Harga Pokok", kolom: [PNL_LABELS.hpp] },
+  { nama: "Beban Operasional", kolom: KOL_BEBAN },
+  { nama: "Hasil", kolom: [PNL_LABELS.laba_bersih] },
+];
 
 export interface TemplateUnggah {
-  jenis: JenisUnggah;
   nama: string;
   /** Nama sheet dan awalan nama berkasnya. */
   sheet: string;
-  /**
-   * Datanya milik satu BULAN tertentu.
-   *
-   * Bahan baku tidak: ia daftar harga yang berlaku sampai diganti. Bulan yang
-   * dipilih tetap dicatat sebagai kapan daftar itu disetorkan, tapi tidak
-   * membuat versi terpisah per bulan — dan layarnya mengatakan itu apa adanya
-   * supaya tidak ada yang mengira harga Agustus tersimpan terpisah dari
-   * September.
-   */
-  perBulan: boolean;
   /** Kolom kunci — identitas barisnya. */
   kunci: string;
   /** Kolom teks yang ikut dibawa. */
   teks: readonly string[];
-  /** Kolom angka. */
+  /** Seluruh kolom angka, urut seperti di berkasnya. */
   angka: readonly string[];
   /** Ke mana datanya masuk, apa adanya. */
   tujuan: readonly string[];
 }
 
-export const TEMPLATE: TemplateUnggah[] = [
-  {
-    jenis: "laba_rugi",
-    nama: "Laba Rugi per Outlet",
-    sheet: "Laba Rugi",
-    perBulan: true,
-    kunci: "Kode",
-    teks: ["Outlet"],
-    angka: PNL_COLS.map((c) => PNL_LABELS[c]),
-    tujuan: [
-      "Operation → Laba Rugi",
-      "Ops Dashboard",
-      "KPI Coordinator Area — Net Profit (30%) & Harga Pokok Penjualan (20%)",
-      "KPI Manajemen — komponen EBITDA",
-    ],
-  },
-  {
-    jenis: "pembelian",
-    nama: "Pembelian Warehouse & Non-Warehouse",
-    sheet: "Pembelian",
-    perBulan: true,
-    kunci: "Kode",
-    teks: ["Outlet"],
-    angka: ["Warehouse", "Non Warehouse"],
-    tujuan: [
-      "Operation → Pembelian",
-      "Ops Dashboard",
-      "KPI PDQ Food & Beverage — Efisiensi Beban Operasional (berlaku sama untuk seluruh PIC)",
-    ],
-  },
-  {
-    jenis: "beban",
-    nama: "Beban Operasional",
-    sheet: "Beban",
-    perBulan: true,
-    kunci: "Kode",
-    teks: ["Outlet"],
-    angka: EXPENSE_COLS.map((c) => EXPENSE_LABELS[c]),
-    tujuan: ["Operation → Beban Operasional", "Ops Dashboard"],
-  },
-  {
-    jenis: "bahan_baku",
-    nama: "Bahan Baku HPP",
-    sheet: "Bahan Baku",
-    perBulan: false,
-    kunci: "Nama Bahan",
-    teks: ["ID", "Satuan", "Satuan Pakai", "Golongan", "Wilayah"],
-    angka: ["Harga Beli", "Qty", "Isi"],
-    tujuan: [
-      "R&D → Bahan Baku",
-      "Seluruh perhitungan HPP resep",
-      "Referensi Harga & peringatan kenaikan harga bahan",
-    ],
-  },
-];
+/**
+ * PENDAPATAN SENGAJA TIDAK DIMINTA.
+ *
+ * Gross sales ditarik otomatis dari ESB untuk outlet yang tersambung, dan
+ * outlet yang diketik tangan punya jalurnya sendiri. Memintanya di sini berarti
+ * angka ketikan menimpa angka mesin — kesalahan yang paling sulit ditemukan
+ * belakangan, karena hasilnya tetap terlihat masuk akal.
+ *
+ * Begitu juga total beban: tidak diminta terpisah, melainkan dijumlahkan dari
+ * delapan kolom rinciannya. Satu angka yang bisa diketik berbeda dari
+ * rinciannya adalah satu angka yang cepat atau lambat akan berbeda.
+ */
+export const TEMPLATE: TemplateUnggah = {
+  nama: "Data Bulanan Outlet",
+  sheet: "Data Outlet",
+  kunci: "Kode",
+  teks: ["Outlet"],
+  angka: KELOMPOK.flatMap((k) => k.kolom),
+  tujuan: [
+    "Operation → Pembelian",
+    "Operation → Beban Operasional",
+    "Operation → Laba Rugi",
+    "Ops Dashboard",
+    "KPI Coordinator Area — Net Profit (30%) & Harga Pokok Penjualan (20%)",
+    "KPI PDQ Food & Beverage — Efisiensi Beban Operasional (berlaku sama untuk seluruh PIC)",
+    "KPI Manajemen — komponen EBITDA",
+  ],
+};
 
-export const templateDari = (jenis: string): TemplateUnggah | undefined =>
-  TEMPLATE.find((t) => t.jenis === jenis);
-
-/** Seluruh judul kolom satu template, urut seperti di berkasnya. */
+/** Seluruh judul kolom, urut seperti di berkasnya. */
 export const judulKolom = (t: TemplateUnggah): string[] => [t.kunci, ...t.teks, ...t.angka];
 
 /** Satu baris hasil bacaan — teks apa adanya, angka sudah jadi angka. */
@@ -120,6 +95,10 @@ export interface HasilBacaUnggah {
   /** Baris yang kuncinya kosong — dilewati, tapi dihitung supaya bisa disebut. */
   tanpaKunci: number;
 }
+
+/** Baris yang seluruh kolom angkanya kosong — tidak dilaporkan bulan itu. */
+export const barisKosong = (t: TemplateUnggah, b: BarisUnggah): boolean =>
+  t.angka.every((k) => b.angka[k] === null);
 
 /**
  * Membaca baris mentah dari Excel menjadi bentuk yang bisa disimpan.

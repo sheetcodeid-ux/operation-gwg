@@ -7,7 +7,6 @@ import { navAll, accessibleMenuKeys } from "@/lib/nav";
 import { PapanKpi } from "@/components/kpi/papan-kpi";
 import { TabelSinkronSehat } from "@/components/admin/sinkron-sehat";
 import { UnggahData, type BarisAwal } from "@/components/admin/unggah-data";
-import type { JenisUnggah } from "@/lib/ops/template-unggah";
 import type { BarisSehat } from "@/lib/data/sinkron-sehat";
 import { PapanManajemen } from "@/components/kpi/papan-manajemen";
 import { SETELAN_BAWAAN, departemenKpi, hitungManajemen } from "@/lib/kpi/manajemen";
@@ -268,14 +267,16 @@ if (kode === "unggah") {
     ["NCSB", "Nordu Coffee Sambas"], ["CCAY", "Cattu A. Yani"], ["NBTD", "Nordu Bakes Tanjung Duren"],
     ["AGBD", "Ayam Goreng Busari Depok"], ["LPBG", "Lesung Pipi Bogor"], ["NCKM", "Nordu Kemang"],
   ];
-  const baris = (angka: Record<string, number | null>): BarisAwal[] =>
-    outlet.map(([code, nama]) => ({ kunci: code, teks: { Outlet: nama }, angka }));
-  const awal: Record<JenisUnggah, BarisAwal[]> = {
-    laba_rugi: baris({ Pendapatan: 245_633_267, HPP: 91_800_000, Beban: 77_374_479, "Laba Bersih": 76_458_788 }),
-    pembelian: baris({ Warehouse: 70_000_000, "Non Warehouse": 3_000_000 }),
-    beban: baris({ Utilitas: 8_400_000, Sewa: 25_000_000, "Tenaga Kerja": 31_000_000, Potongan: 0, "Manajemen Fee": 6_602_500, Pemasaran: 3_100_000, "Ongkos Kirim": 1_250_000, Lainnya: 2_022_000 }),
-    bahan_baku: [],
-  };
+  const awal: BarisAwal[] = outlet.map(([code, nama]) => ({
+    kunci: code,
+    teks: { Outlet: nama },
+    angka: {
+      Warehouse: 70_000_000, "Non Warehouse": 3_000_000, HPP: 91_800_000,
+      Utilitas: 8_400_000, Sewa: 25_000_000, "Tenaga Kerja": 31_000_000, Potongan: 0,
+      "Manajemen Fee": 6_602_500, Pemasaran: 3_100_000, "Ongkos Kirim": 1_250_000, Lainnya: 2_022_000,
+      "Laba Bersih": 76_458_788,
+    },
+  }));
   createRoot(document.getElementById("root")!).render(
     <I18nProvider initialLang="id">
       <div className="p-6"><UnggahData month="2026-09" awal={awal} /></div>

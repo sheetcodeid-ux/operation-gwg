@@ -7,11 +7,15 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { simpanUnggahAction } from "@/lib/actions/unggah-data";
-import { TEMPLATE, bacaBarisUnggah, judulKolom, type BarisUnggah, type JenisUnggah, type TemplateUnggah } from "@/lib/ops/template-unggah";
+import { KELOMPOK, TEMPLATE, bacaBarisUnggah, judulKolom, type BarisUnggah } from "@/lib/ops/template-unggah";
 import { cn, formatNumber } from "@/lib/utils";
 
 /**
  * Satu pintu unggah data.
+ *
+ * SATU BERKAS, SATU BARIS JUDUL. Tidak dipecah per jenis: memecahnya berarti
+ * beberapa kali unduh dan beberapa kali unggah untuk outlet yang sama — hanya
+ * memindahkan pekerjaan berulang, bukan menghilangkannya.
  *
  * Bentuknya sengaja sama persis dengan halaman Beban Operasional — panah bulan,
  * unduh, unggah, simpan — karena yang memakainya orang yang sama, dan dua cara
@@ -33,41 +37,32 @@ const geserBulan = (m: string, by: number) => {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
 };
 
-/** Baris contoh yang ikut diunduh, supaya kolom kuncinya tidak perlu ditebak. */
+/** Baris yang ikut diunduh, supaya kode outletnya tidak perlu diketik ulang. */
 export interface BarisAwal {
   kunci: string;
   teks: Record<string, string>;
   angka: Record<string, number | null>;
 }
 
-export function UnggahData({
-  month,
-  awal,
-}: {
-  month: string;
-  /** Isi template per jenis: baris yang sudah ada supaya tinggal ditimpa. */
-  awal: Record<JenisUnggah, BarisAwal[]>;
-}) {
+export function UnggahData({ month, awal }: { month: string; awal: BarisAwal[] }) {
   const router = useRouter();
   const pathname = usePathname();
-  const [jenis, setJenis] = React.useState<JenisUnggah>("laba_rugi");
   const [baris, setBaris] = React.useState<BarisUnggah[] | null>(null);
   const [namaBerkas, setNamaBerkas] = React.useState("");
   const [sibuk, start] = React.useTransition();
   const berkasRef = React.useRef<HTMLInputElement>(null);
 
-  const t = TEMPLATE.find((x) => x.jenis === jenis)!;
-  const isiAwal = awal[jenis] ?? [];
+  const t = TEMPLATE;
 
-  // Berkas yang sudah terbaca dibuang saat jenis atau bulannya berganti: tabel
-  // pratinjau yang tertinggal dari jenis sebelumnya akan tersimpan ke tempat
-  // yang salah hanya karena terlihat benar.
+  // Berkas yang sudah terbaca dibuang saat bulannya berganti: tabel pratinjau
+  // yang tertinggal dari bulan sebelumnya akan tersimpan ke bulan yang salah
+  // hanya karena terlihat benar.
   //
   // Disesuaikan SAAT RENDER, bukan lewat efek — pola resmi React untuk state
   // yang bergantung pada prop, dan pola yang sama dipakai form KPI di sebelah.
-  const [konteks, setKonteks] = React.useState(`${jenis}|${month}`);
-  if (konteks !== `${jenis}|${month}`) {
-    setKonteks(`${jenis}|${month}`);
+  const [konteks, setKonteks] = React.useState(month);
+  if (konteks !== month) {
+    setKonteks(month);
     setBaris(null);
     setNamaBerkas("");
   }
@@ -77,13 +72,13 @@ export function UnggahData({
     const judul = judulKolom(t);
     const aoa: (string | number)[][] = [
       judul,
-      ...isiAwal.map((b) => judul.map((k) => (k === t.kunci ? b.kunci : (b.teks[k] ?? b.angka[k] ?? "")))),
+      ...awal.map((b) => judul.map((k) => (k === t.kunci ? b.kunci : (b.teks[k] ?? b.angka[k] ?? "")))),
     ];
     const ws = XLSX.utils.aoa_to_sheet(aoa);
     ws["!cols"] = judul.map((k) => ({ wch: Math.max(16, k.length + 4) }));
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, t.sheet);
-    XLSX.writeFile(wb, `${t.sheet.toLowerCase().replace(/\s+/g, "-")}${t.perBulan ? `-${month}` : ""}.xlsx`);
+    XLSX.writeFile(wb, `data-outlet-${month}.xlsx`);
     toast.success("Template diunduh — isi kolom angkanya, lalu unggah kembali.");
   }
 
@@ -112,7 +107,7 @@ export function UnggahData({
   function simpan() {
     if (!baris) return;
     start(async () => {
-      const res = await simpanUnggahAction({ jenis, periode: month, baris });
+      const res = await simpanUnggahAction({ periode: month, baris });
       if (res.error) {
         toast.error(res.error);
         if (res.asing?.length) {
@@ -126,7 +121,8 @@ export function UnggahData({
         // kemudian bahwa angkanya tidak pernah masuk.
         toast.error(`${res.asing.length} baris dilewati karena kodenya tidak dikenali: ${res.asing.slice(0, 3).join(", ")}${res.asing.length > 3 ? "…" : ""}`);
       }
-      toast.success(`${res.tersimpan} baris tersimpan — masuk ke ${res.tujuan?.length ?? 0} tempat.`);
+      if (res.dilewati) toast.info(`${res.dilewati} outlet dilewati karena seluruh angkanya kosong.`);
+      toast.success(`${res.tersimpan} outlet tersimpan — masuk ke ${res.tujuan?.length ?? 0} tempat.`);
       setBaris(null);
       setNamaBerkas("");
       router.refresh();
@@ -135,48 +131,16 @@ export function UnggahData({
 
   return (
     <div className="space-y-4">
-      {/* Pemilih jenis data. Kartu, bukan dropdown: tujuan tiap jenis perlu
-          terbaca SEBELUM dipilih, bukan setelahnya. */}
-      <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
-        {TEMPLATE.map((x) => (
-          <button
-            key={x.jenis}
-            type="button"
-            onClick={() => setJenis(x.jenis)}
-            className={cn(
-              "rounded-2xl border p-3 text-left transition-colors",
-              x.jenis === jenis ? "border-brand-500 bg-brand-50/60 dark:bg-brand-500/10" : "border-border hover:bg-muted/60",
-            )}
-          >
-            <p className="text-sm font-semibold text-foreground">{x.nama}</p>
-            <p className="mt-0.5 text-[11px] text-muted-foreground">
-              {x.perBulan ? `${x.angka.length} kolom angka · per bulan` : `${x.angka.length} kolom angka · tanpa bulan`}
-            </p>
-          </button>
-        ))}
-      </div>
-
       <div className="card-gradient rounded-2xl p-4">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div className="flex items-center gap-2">
-            {t.perBulan ? (
-              <>
-                <Button size="sm" variant="outline" className="size-8 p-0" onClick={() => router.push(`${pathname}?month=${geserBulan(month, -1)}`)}>
-                  <ChevronLeft className="size-4" />
-                </Button>
-                <span className="min-w-[10rem] text-center text-sm font-semibold text-foreground">{bulanLabel(month)}</span>
-                <Button size="sm" variant="outline" className="size-8 p-0" onClick={() => router.push(`${pathname}?month=${geserBulan(month, 1)}`)}>
-                  <ChevronRight className="size-4" />
-                </Button>
-              </>
-            ) : (
-              // Dikatakan apa adanya. Dibiarkan tampak seperti data bulanan,
-              // orang akan mengira harga Agustus tersimpan terpisah dari
-              // September — lalu mencarinya, dan tidak menemukannya.
-              <span className="text-[12px] text-muted-foreground">
-                Daftar harga yang berlaku sampai diganti — tidak disimpan per bulan.
-              </span>
-            )}
+            <Button size="sm" variant="outline" className="size-8 p-0" onClick={() => router.push(`${pathname}?month=${geserBulan(month, -1)}`)}>
+              <ChevronLeft className="size-4" />
+            </Button>
+            <span className="min-w-[10rem] text-center text-sm font-semibold text-foreground">{bulanLabel(month)}</span>
+            <Button size="sm" variant="outline" className="size-8 p-0" onClick={() => router.push(`${pathname}?month=${geserBulan(month, 1)}`)}>
+              <ChevronRight className="size-4" />
+            </Button>
           </div>
 
           <div className="flex flex-wrap items-center gap-2">
@@ -206,7 +170,7 @@ export function UnggahData({
         </div>
 
         <div className="mt-3 border-t border-border pt-3">
-          <p className="text-[12px] font-medium text-foreground">Data ini akan masuk ke:</p>
+          <p className="text-[12px] font-medium text-foreground">Satu berkas ini masuk ke:</p>
           <div className="mt-1.5 flex flex-wrap gap-1.5">
             {t.tujuan.map((x) => (
               <Badge key={x} tone="brand">
@@ -214,18 +178,22 @@ export function UnggahData({
               </Badge>
             ))}
           </div>
+          <p className="mt-2 text-[11px] text-muted-foreground">
+            Pendapatan tidak diminta — gross sales ditarik otomatis dan tidak ditimpa dari sini. Total beban
+            dijumlahkan sendiri dari delapan kolom rinciannya.
+          </p>
         </div>
       </div>
 
       {baris ? (
-        <Pratinjau t={t} baris={baris} namaBerkas={namaBerkas} />
+        <Pratinjau baris={baris} namaBerkas={namaBerkas} />
       ) : (
         <div className="rounded-2xl border border-dashed border-border p-6 text-center">
           <p className="text-sm font-medium text-foreground">Belum ada berkas yang dibaca.</p>
           <p className="mt-1 text-[12px] text-muted-foreground">
-            Unduh templatenya dulu — barisnya sudah disiapkan lengkap dengan kolom {t.kunci}, tinggal
-            melengkapi angkanya.
-            {isiAwal.length > 0 && ` Saat ini ${isiAwal.length} baris siap diunduh.`}
+            Unduh templatenya dulu — kode dan nama outlet sudah terisi beserta angka yang sudah tersimpan bulan
+            ini, tinggal dilengkapi.
+            {awal.length > 0 && ` Saat ini ${awal.length} outlet siap diunduh.`}
           </p>
         </div>
       )}
@@ -234,22 +202,42 @@ export function UnggahData({
 }
 
 /** Pratinjau sebelum disimpan — angka apa adanya, kosong tetap kosong. */
-function Pratinjau({ t, baris, namaBerkas }: { t: TemplateUnggah; baris: BarisUnggah[]; namaBerkas: string }) {
+function Pratinjau({ baris, namaBerkas }: { baris: BarisUnggah[]; namaBerkas: string }) {
+  const t = TEMPLATE;
   const judul = judulKolom(t);
+  const kosong = baris.filter((b) => t.angka.every((k) => b.angka[k] === null)).length;
+
   return (
     <div className="space-y-2">
       <p className="text-[12px] text-muted-foreground">
         <b className="text-foreground">{baris.length} baris</b> dari <b className="text-foreground">{namaBerkas}</b> — belum tersimpan.
+        {kosong > 0 && ` ${kosong} di antaranya kosong dan tidak akan ditulis.`}
       </p>
       <div className="max-h-[28rem] overflow-auto rounded-2xl border border-border">
         <table className="w-full border-collapse text-sm">
           <thead className="sticky top-0 z-10 bg-muted/80 backdrop-blur">
+            {/* Baris judul kelompok — berkasnya tetap satu baris judul, ini
+                hanya supaya dua belas kolom di layar masih bisa dibaca. */}
+            <tr className="border-b border-border/60 text-left">
+              <th colSpan={1 + t.teks.length} className="px-3 pt-2 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+                Outlet
+              </th>
+              {KELOMPOK.map((g) => (
+                <th
+                  key={g.nama}
+                  colSpan={g.kolom.length}
+                  className="border-l border-border/60 px-3 pt-2 text-center text-[11px] font-semibold uppercase tracking-wide text-muted-foreground"
+                >
+                  {g.nama}
+                </th>
+              ))}
+            </tr>
             <tr className="border-b border-border text-left">
               {judul.map((k) => (
                 <th
                   key={k}
                   className={cn(
-                    "whitespace-nowrap px-3 py-2 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground",
+                    "whitespace-nowrap px-3 pb-2 text-[11px] font-medium text-muted-foreground",
                     t.angka.includes(k) && "text-right",
                   )}
                 >
@@ -266,14 +254,14 @@ function Pratinjau({ t, baris, namaBerkas }: { t: TemplateUnggah; baris: BarisUn
                   if (t.angka.includes(k)) {
                     const n = b.angka[k];
                     return (
-                      <td key={k} className="px-3 py-1.5 text-right tabular-nums">
+                      <td key={k} className="whitespace-nowrap px-3 py-1.5 text-right tabular-nums">
                         {/* Kosong TIDAK ditulis nol: yang satu berarti belum
                             dilaporkan, yang lain berarti nol rupiah. */}
                         {n === null ? <span className="text-muted-foreground">—</span> : formatNumber(n)}
                       </td>
                     );
                   }
-                  return <td key={k} className="px-3 py-1.5 text-foreground/80">{b.teks[k] || "—"}</td>;
+                  return <td key={k} className="whitespace-nowrap px-3 py-1.5 text-foreground/80">{b.teks[k] || "—"}</td>;
                 })}
               </tr>
             ))}
