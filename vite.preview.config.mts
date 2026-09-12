@@ -22,6 +22,7 @@ export default defineConfig({
       { find: "next/navigation", replacement: fileURLToPath(new URL("./.preview/next-navigation-stub.ts", import.meta.url)) },
       // Aksi server ditiru: tanpa ini seluruh lapisan server ikut terbawa ke
       // bundel peramban, termasuk modul yang membaca kredensial.
+      { find: "@/lib/actions/unggah-data", replacement: fileURLToPath(new URL("./.preview/unggah-actions-stub.ts", import.meta.url)) },
       { find: "@/lib/actions/kpi-manajemen", replacement: fileURLToPath(new URL("./.preview/kpi-manajemen-actions-stub.ts", import.meta.url)) },
       { find: "@/lib/actions/kpi", replacement: fileURLToPath(new URL("./.preview/kpi-actions-stub.ts", import.meta.url)) },
       { find: "@/lib/data/kpi", replacement: fileURLToPath(new URL("./.preview/data-kpi-stub.ts", import.meta.url)) },

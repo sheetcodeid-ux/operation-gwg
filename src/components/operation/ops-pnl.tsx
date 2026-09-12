@@ -4,6 +4,7 @@ import * as React from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { ChevronLeft, ChevronRight, Download, FileUp, Loader2, Save, Search, TriangleAlert } from "lucide-react";
 import { toast } from "sonner";
+import { angkaExcelNol } from "@/lib/ops/angka-excel";
 import { Button } from "@/components/ui/button";
 import { PNL_COLS, PNL_LABELS, pnlComputed, type PnlCol, type PnlRow } from "@/lib/ops/categories";
 import { savePnlAction } from "@/lib/actions/ops-pnl";
@@ -82,7 +83,7 @@ export function OpsPnl({ month, rows: initial }: { month: string; rows: PnlRow[]
         hit++;
         for (const [k, v] of Object.entries(raw)) {
           const col = labelToCol.get(k.trim().toLowerCase());
-          if (col) row[col] = Number(String(v).replace(/[^\d.-]/g, "")) || 0;
+          if (col) row[col] = angkaExcelNol(v);
         }
       }
       if (hit === 0) { toast.error("Tidak ada baris cocok (cek kolom 'Kode'). Pakai template."); return; }

@@ -227,17 +227,54 @@ export async function simpanEfisiensi(input: {
   olehId: string;
 }): Promise<{ error?: string }> {
   if (!dbEnabled) return { error: "Penyimpanan belum aktif." };
-  const { error } = await db().from("kpi_efisiensi").upsert({
-    periode: input.periode,
-    posisi: input.posisi,
-    pic: input.pic ?? "",
-    outlet_id: input.outletId,
-    actual_wh: input.actualWh,
-    actual_non_wh: input.actualNonWh,
-    diisi_oleh: input.olehId,
-    diisi_pada: new Date().toISOString(),
-  });
+  // Disimpan sebagai PEMBELIAN OUTLET, bukan sebagai isian milik satu PIC.
+  //
+  // `posisi` dan `pic` sengaja tidak ikut tersimpan: pembelian warehouse satu
+  // outlet tidak berubah tergantung siapa yang dinilai atasnya. Dulu kuncinya
+  // (bulan, posisi, pic, outlet) — satu angka harus diketik empat kali supaya
+  // Adam, Abil, dan rekannya melihat hal yang sama, dan empat salinan itu bisa
+  // berbeda diam-diam.
+  const outlet = getOutlets().find((o) => o.id === input.outletId);
+  if (!outlet) return { error: "Outlet tidak dikenali." };
+  if (!outlet.code?.trim()) return { error: `Outlet "${outlet.name}" belum punya kode — lengkapi dulu di Master Outlet.` };
+
+  const { error } = await db().from("op_purchases").upsert(
+    {
+      month: input.periode,
+      outlet_code: outlet.code,
+      outlet_name: outlet.name,
+      warehouse: input.actualWh ?? 0,
+      non_warehouse: input.actualNonWh ?? 0,
+      updated_at: new Date().toISOString(),
+    },
+    { onConflict: "month,outlet_code" },
+  );
   return error ? { error: error.message } : {};
+}
+
+/**
+ * Pembelian per outlet satu bulan, berkunci ID OUTLET.
+ *
+ * Tabelnya berkunci kode outlet — itu yang dipakai halaman Operation dan
+ * lembar Excel-nya, karena kode yang bisa dibaca orang jauh lebih berguna di
+ * dalam berkas daripada id acak. Pemetaannya dikerjakan di sini, satu kali,
+ * supaya sisi KPI tetap bicara dalam id seperti seluruh bagian lain.
+ */
+export async function pembelianPerOutlet(periode: string): Promise<Map<string, { wh: number | null; nonWh: number | null }>> {
+  const peta = new Map<string, { wh: number | null; nonWh: number | null }>();
+  if (!dbEnabled) return peta;
+  const { data } = await db().from("op_purchases").select("outlet_code,warehouse,non_warehouse").eq("month", periode);
+  const idDariKode = new Map(
+    getOutlets()
+      .filter((o) => o.code?.trim())
+      .map((o) => [o.code.trim().toLowerCase(), o.id]),
+  );
+  for (const r of ((data ?? []) as Record<string, unknown>[])) {
+    const id = idDariKode.get(String(r.outlet_code ?? "").trim().toLowerCase());
+    if (!id) continue; // outlet sudah tidak aktif atau kodenya berubah
+    peta.set(id, { wh: angka(r.warehouse), nonWh: angka(r.non_warehouse) });
+  }
+  return peta;
 }
 
 export async function simpanFee(input: {
@@ -1199,13 +1236,14 @@ export async function laporanKpi(posisi: KodePosisi, periode: string, pic = ""):
   /* --- panel efisiensi --- */
   let efisiensi: LaporanKpi["efisiensi"] = null;
   if (average) {
-    const { data } = dbEnabled
-      ? await db().from("kpi_efisiensi").select("*").eq("posisi", posisi).eq("periode", periode).eq("pic", pic)
-      : { data: [] };
-    const isian = new Map<string, { wh: number | null; nonWh: number | null }>();
-    for (const r of ((data ?? []) as Record<string, unknown>[])) {
-      isian.set(String(r.outlet_id), { wh: angka(r.actual_wh), nonWh: angka(r.actual_non_wh) });
-    }
+    // DIBACA DARI PEMBELIAN OPERATION, bukan dari salinan milik tiap PIC.
+    //
+    // Pembelian warehouse dan non-warehouse satu outlet adalah angka outlet
+    // itu — sama bagi Adam, Abil, dan siapa pun di PDQ yang membutuhkannya.
+    // Disimpan per PIC, satu angka harus diketik ulang untuk tiap orang, dan
+    // empat salinan yang bisa berbeda diam-diam adalah cara paling pasti untuk
+    // membuat dua staf dinilai atas angka yang berbeda untuk outlet yang sama.
+    const isian = await pembelianPerOutlet(periode);
     const baris = outletAktif.map((o) => {
       const avg = (o.esbBranchId ? average.get(o.esbBranchId) : undefined) ?? null;
       return {

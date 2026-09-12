@@ -4,6 +4,7 @@ import * as React from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { ChevronLeft, ChevronRight, Download, FileUp, Loader2, Save, Search } from "lucide-react";
 import { toast } from "sonner";
+import { angkaExcelNol } from "@/lib/ops/angka-excel";
 import { Button } from "@/components/ui/button";
 import { EXPENSE_COLS, EXPENSE_LABELS, expenseTotal, type ExpenseCol, type ExpenseRow } from "@/lib/ops/categories";
 import { saveExpensesAction } from "@/lib/actions/ops-finance";
@@ -78,7 +79,7 @@ export function OpsBeban({ month, rows: initial }: { month: string; rows: Expens
         hit++;
         for (const [k, v] of Object.entries(raw)) {
           const col = labelToCol.get(k.trim().toLowerCase());
-          if (col) row[col] = Number(String(v).replace(/[^\d.-]/g, "")) || 0;
+          if (col) row[col] = angkaExcelNol(v);
         }
       }
       if (hit === 0) { toast.error("Tidak ada baris cocok (cek kolom 'Kode'). Pakai template."); return; }

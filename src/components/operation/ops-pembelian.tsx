@@ -4,6 +4,7 @@ import * as React from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { ChevronLeft, ChevronRight, Download, FileUp, Loader2, Save, Search } from "lucide-react";
 import { toast } from "sonner";
+import { angkaExcelNol } from "@/lib/ops/angka-excel";
 import { Button } from "@/components/ui/button";
 import type { PurchaseRow } from "@/lib/ops/categories";
 import { savePurchasesAction } from "@/lib/actions/ops-finance";
@@ -64,15 +65,14 @@ export function OpsPembelian({ month, rows: initial }: { month: string; rows: Pu
       const wb = XLSX.read(buf);
       const json = XLSX.utils.sheet_to_json<Record<string, unknown>>(wb.Sheets[wb.SheetNames[0]]);
       const byCode = new Map(rows.map((r) => [r.outletCode, { ...r }]));
-      const numOf = (v: unknown) => Number(String(v ?? "").replace(/[^\d.-]/g, "")) || 0;
       let hit = 0;
       for (const raw of json) {
         const code = String(raw["Kode"] ?? raw["kode"] ?? "").trim();
         const row = byCode.get(code);
         if (!row) continue;
         hit++;
-        if ("Warehouse" in raw) row.warehouse = numOf(raw["Warehouse"]);
-        if ("Non Warehouse" in raw) row.nonWarehouse = numOf(raw["Non Warehouse"]);
+        if ("Warehouse" in raw) row.warehouse = angkaExcelNol(raw["Warehouse"]);
+        if ("Non Warehouse" in raw) row.nonWarehouse = angkaExcelNol(raw["Non Warehouse"]);
       }
       if (hit === 0) { toast.error("Tidak ada baris cocok (cek kolom 'Kode'). Pakai template."); return; }
       setRows([...byCode.values()]);
