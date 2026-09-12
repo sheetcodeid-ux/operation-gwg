@@ -53,7 +53,14 @@ const MENU_ESB = [
   ["Es Teh Manis", "Non Coffee", 3_240_000],
   ["Nasi Goreng Kampung", "Main Course", 6_180_000],
   ["Matcha Latte", "Non Coffee", 11_720_000],
-].map(([menu, kategori, estimasi]) => ({ menu: menu as string, kategori: kategori as string, estimasi: estimasi as number }));
+].map(([menu, kategori, penjualan]) => ({
+  menu: menu as string,
+  kategori: kategori as string,
+  penjualan: penjualan as number,
+  // Rentang katalog: tiga bulan kalender lengkap terakhir.
+  dari: "2026-06-01",
+  sampai: "2026-08-31",
+}));
 
 
 /** Rincian mingguan tiruan: dua minggu penuh, minggu ketiga baru tiga hari. */
