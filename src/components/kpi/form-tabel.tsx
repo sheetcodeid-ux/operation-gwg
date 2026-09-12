@@ -26,7 +26,7 @@ import { Progress } from "@/components/ui/progress";
 import { uploadMany } from "@/lib/upload-client";
 import { BULAN, labelPeriode, periodeDari, tahunPilihan } from "./periode";
 import { bacaLembar, unduhLembar } from "./lembar-outlet";
-import { formatDate, formatIDR, formatNumber, formatRentang } from "@/lib/utils";
+import { cn, formatDate, formatIDR, formatNumber, formatRentang } from "@/lib/utils";
 
 /**
  * Form berbentuk TABEL — seluruh outlet sekaligus, satu kali simpan.
@@ -1350,32 +1350,26 @@ export function FormMenuPasar({
   const [buka, setBuka] = React.useState(false);
   const [sibuk, setSibuk] = React.useState(false);
   const [cari, setCari] = React.useState("");
-  const [isi, setIsi] = React.useState<Record<string, { pilih: boolean; penjualan: string }>>({});
+  /**
+   * Yang disimpan di sini HANYA centangnya.
+   *
+   * Angka penjualannya tidak pernah diketik lagi — ia dibaca apa adanya dari
+   * katalog ESB. Sebelumnya angka itu bisa disunting, dan itu peninggalan masa
+   * ketika katalognya cuma berjangka 30 hari sehingga yang mengisi memang harus
+   * membetulkannya jadi tiga bulan. Sejak katalognya sendiri tiga bulan, kotak
+   * isian itu berhenti jadi alat bantu dan berubah jadi satu-satunya tempat
+   * angka resmi bisa berbeda dari ESB tanpa ada yang tahu.
+   */
+  const [pilih, setPilih] = React.useState<Record<string, boolean>>({});
 
   function bukaForm() {
-    const sudah = new Map(terpilih.map((t) => [t.menu, t.penjualan]));
-    setIsi(
-      Object.fromEntries(
-        katalog.map((m) => {
-          const n = sudah.get(m.menu);
-          return [m.menu, { pilih: n !== undefined, penjualan: n === undefined ? "" : String(n) }];
-        }),
-      ),
-    );
+    const sudah = new Set(terpilih.map((t) => t.menu));
+    setPilih(Object.fromEntries(katalog.map((m) => [m.menu, sudah.has(m.menu)])));
     setCari("");
     setBuka(true);
   }
 
-  const alih = (m: MenuEsb, pilih: boolean) =>
-    setIsi((s) => ({
-      ...s,
-      // Saat dicentang, angka penjualannya langsung terisi dari ESB supaya tidak
-      // ada yang perlu diketik ulang; yang sudah pernah diisi tidak ditimpa.
-      [m.menu]: { pilih, penjualan: s[m.menu]?.penjualan || (pilih ? String(Math.round(m.penjualan)) : "") },
-    }));
-
-  const isiPenjualan = (menu: string, v: string) =>
-    setIsi((s) => ({ ...s, [menu]: { pilih: s[menu]?.pilih ?? true, penjualan: v } }));
+  const alih = (m: MenuEsb, dicentang: boolean) => setPilih((s) => ({ ...s, [m.menu]: dicentang }));
 
   const tampil = React.useMemo(() => {
     const q = cari.trim().toLowerCase();
@@ -1398,10 +1392,11 @@ export function FormMenuPasar({
    */
   const cocokPeriode = sumber?.sampai ? sumber.sampai.slice(0, 7) === periode : null;
 
-  const dipilih = katalog.filter((m) => isi[m.menu]?.pilih);
+  const dipilih = katalog.filter((m) => pilih[m.menu]);
 
   async function simpan() {
-    const kirim = dipilih.map((m) => ({ menu: m.menu, penjualan: num(isi[m.menu].penjualan) ?? 0 }));
+    // Angkanya dari ESB, bukan dari layar. Tidak ada jalan lain untuk mengisinya.
+    const kirim = dipilih.map((m) => ({ menu: m.menu, penjualan: Math.round(m.penjualan) }));
     if (kirim.length === 0) {
       toast.info("Belum ada menu yang dicentang.");
       return;
@@ -1448,43 +1443,49 @@ export function FormMenuPasar({
                     <Kepala className="w-14 text-center">Pilih</Kepala>
                     <Kepala>Nama Menu</Kepala>
                     <Kepala>Kategori</Kepala>
-                    <Kepala className="w-52">Penjualan 3 Bulan</Kepala>
+                    {/* Rentang dan dasarnya disebut SEKALI di kepala kolom,
+                        bukan diulang di tiap baris: isinya sama untuk seluruh
+                        baris, dan mengulangnya hanya menutupi angkanya. */}
+                    <Kepala className="w-56 text-right">
+                      Penjualan 3 Bulan
+                      <span className="block text-[10.5px] font-normal normal-case tracking-normal opacity-70">
+                        {rentangKatalog ?? "rentang belum diketahui"} · sebelum pajak
+                      </span>
+                    </Kepala>
                   </tr>
                 </thead>
                 <tbody>
                   {tampil.map((m) => {
-                    const s = isi[m.menu] ?? { pilih: false, penjualan: "" };
+                    const dicentang = !!pilih[m.menu];
                     return (
                       <tr key={m.menu} className="border-b border-border/60 last:border-0">
                         <td className="px-3 py-1.5 text-center">
                           <input
                             type="checkbox"
                             className="size-4 accent-brand-500"
-                            checked={s.pilih}
+                            checked={dicentang}
                             onChange={(e) => alih(m, e.target.checked)}
                             aria-label={`Nilai menu ${m.menu}`}
                           />
                         </td>
                         <td className="px-3 py-1.5">
                           <p className="font-medium text-foreground">{m.menu}</p>
-                          <p className="text-[11px] text-muted-foreground">
-                            {/* Rentangnya ditulis apa adanya, bukan "30 hari
-                                terakhir" yang diketik tangan dan tidak pernah
-                                ikut berubah saat jendelanya diubah. */}
-                            ESB {rentangKatalog ?? "(rentang belum diketahui)"}: {formatIDR(m.penjualan)}{" "}
-                            <span className="opacity-70">· sebelum pajak</span>
-                          </p>
                         </td>
                         <td className="px-3 py-1.5 text-muted-foreground">{m.kategori || "—"}</td>
-                        <td className="px-3 py-1.5">
-                          <Input
-                            inputMode="numeric"
-                            className="h-8"
-                            placeholder="0"
-                            disabled={!s.pilih}
-                            value={s.penjualan}
-                            onChange={(e) => isiPenjualan(m.menu, e.target.value)}
-                          />
+                        <td className="px-3 py-1.5 text-right">
+                          {/* Angka ESB apa adanya — tidak bisa diketik. Sejak
+                              katalognya sendiri berjangka tiga bulan, kotak
+                              isian di sini berhenti jadi alat bantu dan berubah
+                              jadi satu-satunya tempat angka resmi bisa berbeda
+                              dari ESB tanpa ada yang tahu. */}
+                          <span
+                            className={cn(
+                              "tabular-nums",
+                              dicentang ? "font-semibold text-foreground" : "text-muted-foreground",
+                            )}
+                          >
+                            {formatIDR(m.penjualan)}
+                          </span>
                         </td>
                       </tr>
                     );
@@ -1501,13 +1502,13 @@ export function FormMenuPasar({
             </div>
 
             <p className="mt-3 shrink-0 text-[12px] leading-relaxed text-muted-foreground">
-              Omsetnya tidak diisi: diambil sendiri dari net sales ESB pada rentang yang sama. Angka penjualan diambil
-              apa adanya dari ESB{rentangKatalog ? ` untuk ${rentangKatalog}` : ""}, sebelum pajak — dasar yang sama
-              dengan omzetnya, supaya bagiannya tidak ikut naik hanya karena pajak.{" "}
+              Angkanya tidak bisa diketik: penjualan diambil apa adanya dari ESB, dan omsetnya diambil sendiri dari net
+              sales ESB pada rentang yang sama — keduanya sebelum pajak, supaya bagiannya tidak ikut naik hanya karena
+              pajak.{" "}
               {cocokPeriode === false && (
                 <span className="font-medium text-amber-600 dark:text-amber-400">
-                  Rentang itu BUKAN tiga bulan yang berakhir di {labelPeriode(periode)} — periksa dan sesuaikan sendiri
-                  angkanya sebelum disimpan.
+                  Rentang katalognya BUKAN tiga bulan yang berakhir di {labelPeriode(periode)}. Angka yang tersimpan akan
+                  mengikuti rentang di atas, bukan bulan yang sedang dinilai.
                 </span>
               )}
             </p>
