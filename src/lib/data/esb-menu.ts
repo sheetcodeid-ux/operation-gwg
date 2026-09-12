@@ -32,8 +32,19 @@ export interface EsbMenu {
   foodBev: "makanan" | "minuman";
   /** Jumlah terjual sepanjang jendelanya. */
   qty: number;
-  /** Nilai penjualan sepanjang jendelanya — jumlah Grand Total dari ESB. */
+  /**
+   * Nilai penjualan sepanjang jendelanya, SEBELUM PAJAK.
+   *
+   * Inilah patokan yang dipakai perusahaan — dicocokkan dengan tarikan ESB
+   * milik pemiliknya untuk Juni–Agustus 2026 dan selisihnya Rp 25, murni
+   * pembulatan. Dipakai juga oleh Keberhasilan Pasar, yang pembaginya net
+   * sales ESB — sama-sama sebelum pajak. Membandingkan penjualan menu bersama
+   * pajak dengan omzet tanpa pajak menaikkan bagiannya ~9% tanpa satu menu pun
+   * benar-benar terjual lebih banyak.
+   */
   amount: number;
+  /** Nilai kotor termasuk pajak — untuk penelusuran, bukan dasar penilaian. */
+  amountKotor: number;
   /** Harga satuan rata-rata TERTIMBANG qty, sebelum pajak. */
   unitPrice: number;
   /** Panjang jendelanya dalam hari — dipakai menormalkan ke per bulan/per hari. */
@@ -59,6 +70,7 @@ interface Row {
   food_bev: string;
   qty_30d: number | string;
   amount: number | string;
+  amount_kotor: number | string;
   unit_price: number | string;
   window_days: number;
   periode_dari: string | null;
@@ -74,6 +86,7 @@ const fromRow = (r: Row): EsbMenu => ({
   foodBev: r.food_bev === "minuman" ? "minuman" : "makanan",
   qty: Number(r.qty_30d) || 0,
   amount: Number(r.amount) || 0,
+  amountKotor: Number(r.amount_kotor) || 0,
   unitPrice: Number(r.unit_price) || 0,
   windowDays: r.window_days || 30,
   dari: r.periode_dari,
@@ -196,9 +209,10 @@ async function simpanHalaman(runId: string, halaman: HalamanMenuRecap[]): Promis
           harga_qty: 0,
         } satisfies BarisSinggah);
       cur.qty += r.qty;
-      // Nilai penjualan DIBACA dari ESB, bukan dikalikan sendiri. Satu menu
-      // bisa terjual pada beberapa harga dalam satu jendela, dan perkalian
-      // apa pun akan meleset pada menu seperti itu.
+      // Keduanya DIBACA dari ESB, bukan dikira-kira: `grandTotal` sudah
+      // termasuk pajak, sedangkan harga satuan ESB memang harga sebelum pajak.
+      // Menjumlahkan harga × qty PER BARIS — bukan mengalikan ulang harga
+      // rata-rata di ujung — membuat angkanya tepat sampai rupiah terakhir.
       cur.amount += r.grandTotal;
       cur.harga_qty += r.unitPrice * r.qty;
       if (!cur.menu_code && r.menuCode) cur.menu_code = r.menuCode;
@@ -251,7 +265,9 @@ async function pindahkanKeKatalog(c: Cursor): Promise<number> {
     category_detail: m.detail,
     food_bev: classifyMenuCategory(m.cat, m.detail),
     qty_30d: m.qty,
-    amount: m.amount,
+    // Yang jadi patokan angka SEBELUM PAJAK; yang kotor dibawa berdampingan.
+    amount: m.hargaQty,
+    amount_kotor: m.amount,
     // Rata-rata TERTIMBANG qty. Rata-rata biasa memberi bobot sama kepada satu
     // cangkir di harga promo dan seribu cangkir di harga normal.
     unit_price: m.qty > 0 ? m.hargaQty / m.qty : 0,

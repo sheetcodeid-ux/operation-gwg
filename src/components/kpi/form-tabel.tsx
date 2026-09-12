@@ -1471,7 +1471,8 @@ export function FormMenuPasar({
                             {/* Rentangnya ditulis apa adanya, bukan "30 hari
                                 terakhir" yang diketik tangan dan tidak pernah
                                 ikut berubah saat jendelanya diubah. */}
-                            ESB {rentangKatalog ?? "(rentang belum diketahui)"}: {formatIDR(m.penjualan)}
+                            ESB {rentangKatalog ?? "(rentang belum diketahui)"}: {formatIDR(m.penjualan)}{" "}
+                            <span className="opacity-70">· sebelum pajak</span>
                           </p>
                         </td>
                         <td className="px-3 py-1.5 text-muted-foreground">{m.kategori || "—"}</td>
@@ -1501,7 +1502,8 @@ export function FormMenuPasar({
 
             <p className="mt-3 shrink-0 text-[12px] leading-relaxed text-muted-foreground">
               Omsetnya tidak diisi: diambil sendiri dari net sales ESB pada rentang yang sama. Angka penjualan diambil
-              apa adanya dari ESB{rentangKatalog ? ` untuk ${rentangKatalog}` : ""}.{" "}
+              apa adanya dari ESB{rentangKatalog ? ` untuk ${rentangKatalog}` : ""}, sebelum pajak — dasar yang sama
+              dengan omzetnya, supaya bagiannya tidak ikut naik hanya karena pajak.{" "}
               {cocokPeriode === false && (
                 <span className="font-medium text-amber-600 dark:text-amber-400">
                   Rentang itu BUKAN tiga bulan yang berakhir di {labelPeriode(periode)} — periksa dan sesuaikan sendiri
