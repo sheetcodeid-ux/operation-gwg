@@ -243,9 +243,9 @@ export function DataAnalysis({ data, branches, rangeLabel }: { data: AnalysisDat
           {/* Products — FULL table, all products, searchable/sortable/paginated */}
           {data.products.length > 0 && (
             <Card className="p-5">
-              <SectionTitle title="Product Analysis" desc={`Semua produk · ${data.products.length} item · katalog ESB 30 hari (semua outlet)`} />
+              <SectionTitle title="Product Analysis" desc={`Semua produk · ${data.products.length} item · katalog ESB${data.esbRentang ? ` ${data.esbRentang}` : ""} (semua outlet)`} />
               <DataTable tableId="an-produk" columns={productCols} data={data.products} searchPlaceholder="Cari produk / kategori…" pageSize={12} />
-              {data.deadProducts.length > 0 && <p className="mt-2 text-[11px] text-red-600 dark:text-red-400"><b>{data.deadProducts.length}</b> produk mati (tanpa penjualan 30 hari).</p>}
+              {data.deadProducts.length > 0 && <p className="mt-2 text-[11px] text-red-600 dark:text-red-400"><b>{data.deadProducts.length}</b> produk mati (tanpa penjualan{data.esbRentang ? ` pada ${data.esbRentang}` : ""}).</p>}
             </Card>
           )}
 

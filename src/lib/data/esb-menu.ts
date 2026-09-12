@@ -2,15 +2,27 @@ import "server-only";
 
 import { db, dbEnabled } from "./db";
 import { selectAll } from "./paged";
-import { esbConfigured, esbGenerateMenuRecap, esbReadMenuPages, esbEnsureDeadline } from "@/lib/integrations/esb-client";
-import { classifyMenuCategory, type MenuRecapRow } from "@/lib/integrations/esb";
+import { randomUUID } from "node:crypto";
+import { esbConfigured, esbGenerateMenuRecap, esbReadMenuPages, esbEnsureDeadline, type HalamanMenuRecap } from "@/lib/integrations/esb-client";
+import { classifyMenuCategory } from "@/lib/integrations/esb";
 import { getAppConfig, setAppConfig } from "./app-config";
 
 /**
- * ESB product catalog (table `esb_menu`), synced from the Sales Menu
- * Recapitulation over a rolling 30-day window: one row per distinct menu with
- * its ESB unit price (pre-tax, HPP-comparable) and total qty sold — the basis
- * for the product picker, target-sales recommendation, and price comparison.
+ * Katalog produk ESB (tabel `esb_menu`), ditarik dari Sales Menu Recapitulation
+ * untuk TIGA BULAN KALENDER TERAKHIR YANG SUDAH LENGKAP.
+ *
+ * NILAI PENJUALANNYA DIBACA, BUKAN DIKIRA-KIRA. Sebelumnya angka penjualan
+ * dihitung qty × harga satuan, padahal ESB sudah mengirim Grand Total tiap
+ * barisnya. Satu menu yang terjual pada lebih dari satu harga — promo, ukuran
+ * berbeda, tingkat harga outlet berbeda — tidak mungkin benar dengan perkalian
+ * itu, dan "harga satuan" yang dipakai kebetulan harga terakhir yang terbaca.
+ *
+ * JENDELANYA TIGA BULAN, bukan 30 hari. Yang membacanya adalah indikator
+ * Keberhasilan Pasar, dan indikator itu menghitung tiga bulan; katalog 30 hari
+ * memaksa yang mengisinya mengalikan sendiri di kepala, dan tidak ada satu pun
+ * yang mengingatkan kalau ia lupa. Tiga bulan KALENDER LENGKAP, bukan 90 hari
+ * bergulir: "1 Juni–31 Agustus" bisa dicocokkan dengan laporan ESB apa pun,
+ * sedangkan "14 Juni–12 September" tidak bisa dicocokkan dengan apa pun.
  */
 export interface EsbMenu {
   menu: string;
@@ -18,11 +30,24 @@ export interface EsbMenu {
   category: string;
   categoryDetail: string;
   foodBev: "makanan" | "minuman";
-  qty30d: number;
+  /** Jumlah terjual sepanjang jendelanya. */
+  qty: number;
+  /** Nilai penjualan sepanjang jendelanya — jumlah Grand Total dari ESB. */
+  amount: number;
+  /** Harga satuan rata-rata TERTIMBANG qty, sebelum pajak. */
   unitPrice: number;
+  /** Panjang jendelanya dalam hari — dipakai menormalkan ke per bulan/per hari. */
   windowDays: number;
+  /** Tanggal awal jendelanya, "YYYY-MM-DD". Kosong pada baris lama. */
+  dari: string | null;
+  /** Tanggal akhir jendelanya, "YYYY-MM-DD". */
+  sampai: string | null;
   syncedAt: string;
 }
+
+/** Berapa bulan kalender lengkap yang ditarik — sama dengan jangka indikator
+ *  Keberhasilan Pasar. */
+export const BULAN_KATALOG = 3;
 
 export const esbMenuEnabled = () => dbEnabled;
 
@@ -33,8 +58,11 @@ interface Row {
   category_detail: string;
   food_bev: string;
   qty_30d: number | string;
+  amount: number | string;
   unit_price: number | string;
   window_days: number;
+  periode_dari: string | null;
+  periode_sampai: string | null;
   synced_at: string;
 }
 
@@ -44,11 +72,27 @@ const fromRow = (r: Row): EsbMenu => ({
   category: r.category,
   categoryDetail: r.category_detail,
   foodBev: r.food_bev === "minuman" ? "minuman" : "makanan",
-  qty30d: Number(r.qty_30d) || 0,
+  qty: Number(r.qty_30d) || 0,
+  amount: Number(r.amount) || 0,
   unitPrice: Number(r.unit_price) || 0,
   windowDays: r.window_days || 30,
+  dari: r.periode_dari,
+  sampai: r.periode_sampai,
   syncedAt: r.synced_at,
 });
+
+/**
+ * Rentang katalog sebagaimana tertulis pada barisnya — untuk disebut di layar.
+ *
+ * Dibaca dari datanya, bukan ditulis tangan di tiap halaman. Kalimat "30 hari
+ * terakhir" yang diketik di enam tempat akan tetap berbunyi 30 hari lama
+ * setelah jendelanya diubah, dan tidak ada yang gagal saat itu terjadi — hanya
+ * enam layar yang berbohong dengan tenang.
+ */
+export function rentangKatalog(menus: EsbMenu[]): { dari: string; sampai: string } | null {
+  const isi = menus.find((m) => m.dari && m.sampai);
+  return isi ? { dari: isi.dari!, sampai: isi.sampai! } : null;
+}
 
 /** Whole catalog (paged past supabase's 1000-row cap). Never throws. */
 export async function listEsbMenus(): Promise<EsbMenu[]> {
@@ -75,67 +119,181 @@ export async function esbMenuSyncedAt(): Promise<string | null> {
 }
 
 const pad = (n: number) => String(n).padStart(2, "0");
-const ymd = (d: Date) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
 
 const CURSOR_KEY = "esb_menu_cursor";
-interface Cursor { url: string; from: string; to: string; totalItems: number; pageSize: number; nextPage: number; startedAt: string; windowDays: number }
 
-/** Upsert one batch of recap rows into the catalog (aggregating qty per menu
- *  across batches via read-modify-write on the touched menus). */
-async function applyRecapRows(rows: MenuRecapRow[], windowDays: number, resetQty: boolean): Promise<number> {
-  const agg = new Map<string, { menu: string; code: string; cat: string; detail: string; qty: number; price: number }>();
-  for (const r of rows) {
-    if (!r.menu) continue;
-    const cur = agg.get(r.menu) ?? { menu: r.menu, code: r.menuCode, cat: r.category, detail: r.categoryDetail, qty: 0, price: 0 };
-    cur.qty += r.qty;
-    if (r.unitPrice > 0) cur.price = r.unitPrice;
-    if (!cur.code && r.menuCode) cur.code = r.menuCode;
-    agg.set(r.menu, cur);
-  }
-  if (agg.size === 0) return 0;
+interface Cursor {
+  url: string;
+  from: string;
+  to: string;
+  totalItems: number;
+  pageSize: number;
+  nextPage: number;
+  startedAt: string;
+  windowDays: number;
+  /** Penanda satu penarikan; jadi kunci baris singgahannya. */
+  runId: string;
+}
 
-  // Read existing qty for these menus (unless this is a fresh export → reset).
-  const existing = new Map<string, { qty: number; price: number }>();
-  if (!resetQty) {
-    const names = [...agg.keys()];
-    for (let i = 0; i < names.length; i += 200) {
-      const { data } = await db().from("esb_menu").select("menu,qty_30d,unit_price").in("menu", names.slice(i, i + 200));
-      for (const r of (data ?? []) as { menu: string; qty_30d: number | string; unit_price: number | string }[]) existing.set(r.menu, { qty: Number(r.qty_30d) || 0, price: Number(r.unit_price) || 0 });
+/**
+ * Tiga bulan kalender LENGKAP terakhir, dihitung dari hari ini (WIB).
+ *
+ * Bulan berjalan sengaja tidak ikut: angkanya masih bertambah tiap hari, dan
+ * katalog yang jendelanya bergerak sendiri tidak bisa dicocokkan dengan
+ * laporan ESB mana pun. Pada 12 September 2026 hasilnya 1 Juni – 31 Agustus.
+ */
+export function rentangTigaBulan(hariIni = new Date(Date.now() + 7 * 3_600_000)): { from: string; to: string; days: number } {
+  const th = hariIni.getUTCFullYear();
+  const bl = hariIni.getUTCMonth(); // 0-based; bulan berjalan
+  // Akhir = hari terakhir bulan SEBELUM bulan berjalan.
+  const akhir = new Date(Date.UTC(th, bl, 0));
+  const awal = new Date(Date.UTC(akhir.getUTCFullYear(), akhir.getUTCMonth() - (BULAN_KATALOG - 1), 1));
+  const days = Math.round((akhir.getTime() - awal.getTime()) / 86_400_000) + 1;
+  return { from: ymdUtc(awal), to: ymdUtc(akhir), days };
+}
+
+const ymdUtc = (d: Date) => `${d.getUTCFullYear()}-${pad(d.getUTCMonth() + 1)}-${pad(d.getUTCDate())}`;
+
+interface BarisSinggah {
+  run_id: string;
+  page: number;
+  menu: string;
+  menu_code: string;
+  category: string;
+  category_detail: string;
+  qty: number;
+  amount: number;
+  harga_qty: number;
+}
+
+/**
+ * Tulis satu halaman ekspor ke tabel singgahan.
+ *
+ * BERKUNCI NOMOR HALAMAN, dan itulah inti perbaikannya. Sebelumnya tiap batch
+ * menambahkan qty ke baris katalog yang sudah ada; satu halaman yang terbaca
+ * dua kali — jalannya cron mati setelah menulis tapi sebelum menyimpan
+ * kursornya — menambah qty-nya dua kali tanpa satu pun tanda. Di sini halaman
+ * yang sama menimpa dirinya sendiri.
+ */
+async function simpanHalaman(runId: string, halaman: HalamanMenuRecap[]): Promise<number> {
+  const payload: BarisSinggah[] = [];
+  for (const h of halaman) {
+    const agg = new Map<string, BarisSinggah>();
+    for (const r of h.rows) {
+      if (!r.menu) continue;
+      const cur =
+        agg.get(r.menu) ??
+        ({
+          run_id: runId,
+          page: h.page,
+          menu: r.menu,
+          menu_code: r.menuCode,
+          category: r.category,
+          category_detail: r.categoryDetail,
+          qty: 0,
+          amount: 0,
+          harga_qty: 0,
+        } satisfies BarisSinggah);
+      cur.qty += r.qty;
+      // Nilai penjualan DIBACA dari ESB, bukan dikalikan sendiri. Satu menu
+      // bisa terjual pada beberapa harga dalam satu jendela, dan perkalian
+      // apa pun akan meleset pada menu seperti itu.
+      cur.amount += r.grandTotal;
+      cur.harga_qty += r.unitPrice * r.qty;
+      if (!cur.menu_code && r.menuCode) cur.menu_code = r.menuCode;
+      agg.set(r.menu, cur);
     }
+    payload.push(...agg.values());
   }
+  if (payload.length === 0) return 0;
 
-  const nowIso = new Date().toISOString();
-  const payload = [...agg.values()].map((m) => {
-    const prev = existing.get(m.menu);
-    return {
-      menu: m.menu,
-      menu_code: m.code,
-      category: m.cat,
-      category_detail: m.detail,
-      food_bev: classifyMenuCategory(m.cat, m.detail),
-      qty_30d: (prev?.qty ?? 0) + m.qty,
-      unit_price: m.price || prev?.price || 0,
-      window_days: windowDays,
-      synced_at: nowIso,
-    };
-  });
   const CHUNK = 500;
   for (let i = 0; i < payload.length; i += CHUNK) {
-    const up = await db().from("esb_menu").upsert(payload.slice(i, i + CHUNK));
-    if (up.error) throw new Error(`DB esb_menu upsert: ${up.error.message}`);
+    const up = await db().from("esb_menu_stage").upsert(payload.slice(i, i + CHUNK));
+    if (up.error) throw new Error(`DB esb_menu_stage upsert: ${up.error.message}`);
   }
   return payload.length;
 }
 
 /**
- * Sync the catalog from ESB — RESUMABLE. The menu-recap export is ~2.5k rows
- * (~124 pages of 20) and takes ~45s just to generate, so one invocation can't
- * finish. A cursor (app_config `esb_menu_cursor`) holds the current OSS export
- * URL + next page; each run reads ~as many pages as `budgetMs` allows and
- * advances the cursor. A fresh export is generated when there's no active
- * cursor, it's finished, or it's older than 2h. Fully server-side + hourly cron.
+ * Pindahkan hasil satu penarikan yang SUDAH LENGKAP ke katalog.
+ *
+ * Baru di sini katalognya berubah. Selama ekspornya belum habis terbaca,
+ * katalog tetap memuat angka penarikan sebelumnya secara utuh — bukan campuran
+ * separuh ekspor baru dan separuh ekspor lama, yang justru tidak bisa
+ * dikenali sebagai salah oleh siapa pun yang membacanya.
  */
-export async function syncEsbMenus(windowDays = 30, budgetMs = 48_000): Promise<{ menus: number; complete?: boolean; nextPage?: number; totalPages?: number; skipped?: string }> {
+async function pindahkanKeKatalog(c: Cursor): Promise<number> {
+  const rows = await selectAll<BarisSinggah>("esb_menu_stage", (a, b) =>
+    db().from("esb_menu_stage").select("*").eq("run_id", c.runId).order("menu").range(a, b),
+  );
+
+  const agg = new Map<string, { code: string; cat: string; detail: string; qty: number; amount: number; hargaQty: number }>();
+  for (const r of rows) {
+    const cur = agg.get(r.menu) ?? { code: r.menu_code, cat: r.category, detail: r.category_detail, qty: 0, amount: 0, hargaQty: 0 };
+    cur.qty += Number(r.qty) || 0;
+    cur.amount += Number(r.amount) || 0;
+    cur.hargaQty += Number(r.harga_qty) || 0;
+    if (!cur.code && r.menu_code) cur.code = r.menu_code;
+    agg.set(r.menu, cur);
+  }
+  // Ekspor yang pulang kosong TIDAK dipakai mengosongkan katalog: jauh lebih
+  // mungkin ESB sedang bermasalah daripada seluruh perusahaan berhenti
+  // berjualan tiga bulan.
+  if (agg.size === 0) return 0;
+
+  const nowIso = new Date().toISOString();
+  const payload = [...agg.entries()].map(([menu, m]) => ({
+    menu,
+    menu_code: m.code,
+    category: m.cat,
+    category_detail: m.detail,
+    food_bev: classifyMenuCategory(m.cat, m.detail),
+    qty_30d: m.qty,
+    amount: m.amount,
+    // Rata-rata TERTIMBANG qty. Rata-rata biasa memberi bobot sama kepada satu
+    // cangkir di harga promo dan seribu cangkir di harga normal.
+    unit_price: m.qty > 0 ? m.hargaQty / m.qty : 0,
+    window_days: c.windowDays,
+    periode_dari: c.from,
+    periode_sampai: c.to,
+    synced_at: nowIso,
+  }));
+
+  const CHUNK = 500;
+  for (let i = 0; i < payload.length; i += CHUNK) {
+    const up = await db().from("esb_menu").upsert(payload.slice(i, i + CHUNK));
+    if (up.error) throw new Error(`DB esb_menu upsert: ${up.error.message}`);
+  }
+  // Menu yang tidak muncul sama sekali pada ekspor ini memang sudah tidak ada.
+  await db().from("esb_menu").delete().lt("synced_at", nowIso);
+  await db().from("esb_menu_stage").delete().eq("run_id", c.runId);
+  return payload.length;
+}
+
+export interface HasilSyncMenu {
+  menus: number;
+  complete?: boolean;
+  nextPage?: number;
+  totalPages?: number;
+  dari?: string;
+  sampai?: string;
+  skipped?: string;
+}
+
+/**
+ * Tarik katalog dari ESB — BISA DILANJUTKAN.
+ *
+ * Ekspornya ratusan halaman dan butuh ~45 detik hanya untuk dibangkitkan, jadi
+ * satu jalannya cron tidak akan selesai. Kursor (`app_config esb_menu_cursor`)
+ * menyimpan URL ekspor, penanda penarikan, dan halaman berikutnya; tiap jalan
+ * membaca sebanyak yang muat di anggaran waktunya.
+ *
+ * Barisnya masuk ke TABEL SINGGAHAN dulu dan baru dipindahkan ke katalog
+ * setelah seluruh halaman terbaca — lihat `simpanHalaman` dan
+ * `pindahkanKeKatalog` untuk alasannya.
+ */
+export async function syncEsbMenus(budgetMs = 48_000): Promise<HasilSyncMenu> {
   if (!dbEnabled || !esbConfigured()) return { menus: 0, skipped: "not configured" };
   const started = Date.now();
   esbEnsureDeadline(budgetMs); // batas waktu ikut berlaku di dalam klien ESB
@@ -144,40 +302,52 @@ export async function syncEsbMenus(windowDays = 30, budgetMs = 48_000): Promise<
   try {
     const raw = await getAppConfig(CURSOR_KEY);
     if (raw) cursor = JSON.parse(raw) as Cursor;
-  } catch { cursor = null; }
+  } catch {
+    cursor = null;
+  }
 
-  const stale = cursor && Date.now() - Date.parse(cursor.startedAt) > 2 * 3_600_000;
-  const fresh = !cursor || stale;
+  const rentang = rentangTigaBulan();
+  // Ekspor dibuat ulang bila belum ada, sudah basi, atau rentangnya bukan lagi
+  // tiga bulan yang berlaku sekarang — pergantian bulan menggeser jendelanya.
+  const basi = cursor && Date.now() - Date.parse(cursor.startedAt) > 2 * 3_600_000;
+  const bedaRentang = cursor && (cursor.from !== rentang.from || cursor.to !== rentang.to);
+  const fresh = !cursor || basi || bedaRentang || !cursor.runId;
 
   if (fresh) {
-    const now = new Date(Date.now() + 7 * 3_600_000); // WIB
-    const to = ymd(now);
-    const from = ymd(new Date(now.getTime() - (windowDays - 1) * 86_400_000));
-    const startedAtIso = new Date().toISOString(); // BEFORE writing rows, so page-0 rows aren't pruned
-    const ex = await esbGenerateMenuRecap(from, to); // waits ~45s for generation + reads page 0
-    await applyRecapRows(ex.firstRows, windowDays, true); // page 0 resets qty (new export)
-    cursor = { url: ex.url, from, to, totalItems: ex.totalItems, pageSize: ex.pageSize, nextPage: 1, startedAt: startedAtIso, windowDays };
+    if (cursor?.runId) await db().from("esb_menu_stage").delete().eq("run_id", cursor.runId);
+    const runId = `run_${randomUUID()}`;
+    const ex = await esbGenerateMenuRecap(rentang.from, rentang.to); // menunggu ~45 detik + membaca halaman 0
+    cursor = {
+      url: ex.url,
+      from: rentang.from,
+      to: rentang.to,
+      totalItems: ex.totalItems,
+      pageSize: Math.max(1, ex.pageSize),
+      nextPage: 1,
+      startedAt: new Date().toISOString(),
+      windowDays: rentang.days,
+      runId,
+    };
+    await simpanHalaman(runId, [{ page: 0, rows: ex.firstRows }]);
     await setAppConfig(CURSOR_KEY, JSON.stringify(cursor));
   }
 
   const c = cursor!;
   const totalPages = Math.max(1, Math.ceil(c.totalItems / c.pageSize));
-  let menusTouched = 0;
 
-  // Read further pages with the remaining budget, advancing the cursor.
   if (c.nextPage < totalPages && Date.now() - started < budgetMs - 4000) {
     const read = await esbReadMenuPages(c.url, c.nextPage, totalPages, budgetMs - (Date.now() - started) - 2000);
-    menusTouched = await applyRecapRows(read.rows, c.windowDays, false);
+    await simpanHalaman(c.runId, read.pages);
     c.nextPage = read.nextPage;
     await setAppConfig(CURSOR_KEY, JSON.stringify(c));
   }
 
   const complete = c.nextPage >= totalPages;
+  let menus = 0;
   if (complete) {
-    // Whole export consumed — prune menus not seen in this pass, then clear the
-    // cursor so the next run generates a fresh export.
-    await db().from("esb_menu").delete().lt("synced_at", c.startedAt);
+    menus = await pindahkanKeKatalog(c);
     await setAppConfig(CURSOR_KEY, "");
   }
-  return { menus: menusTouched, complete, nextPage: c.nextPage, totalPages };
+  return { menus, complete, nextPage: c.nextPage, totalPages, dari: c.from, sampai: c.to };
 }
+

@@ -106,7 +106,7 @@ export default async function AnalysisReportPage({
           <Sec title="Product Analysis" breakBefore>
             <p className="mb-2 text-xs font-semibold text-muted-foreground">Best Seller</p>
             <Table head={["#", "Produk", "Kategori", "Qty", "Kontribusi"]} rows={data.bestSellers.map((p, i) => [String(i + 1), p.menu, p.category, formatNumber(p.qty), `${p.share}%`])} />
-            {data.deadProducts.length > 0 && <p className="mt-3 text-sm text-foreground/80"><strong>{data.deadProducts.length}</strong> produk tanpa penjualan dalam 30 hari terakhir (kandidat evaluasi).</p>}
+            {data.deadProducts.length > 0 && <p className="mt-3 text-sm text-foreground/80"><strong>{data.deadProducts.length}</strong> produk tanpa penjualan{data.esbRentang ? ` pada ${data.esbRentang}` : ""} (kandidat evaluasi).</p>}
           </Sec>
         )}
 

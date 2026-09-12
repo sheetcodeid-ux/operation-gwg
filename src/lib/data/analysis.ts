@@ -6,6 +6,7 @@ import { esbConfigured } from "@/lib/integrations/esb-client";
 import { listEsbMenus, type EsbMenu } from "./esb-menu";
 import { getSeasonalBranches } from "./seasonal";
 import { listHpp } from "./hpp";
+import { formatRentang } from "@/lib/utils";
 
 /**
  * Outlet list (ESB branch id ↔ name) for the analysis filter, cached in module
@@ -81,6 +82,8 @@ export interface AnalysisData {
   bestSellers: ProductRow[];
   worstSellers: ProductRow[];
   deadProducts: ProductRow[];
+  /** Rentang katalog ESB yang dipakai tabel produk, "1 Jun – 31 Agu 2026". */
+  esbRentang: string | null;
   categoriesRows: CategoryRow[];
   priceStats: { avg: number; highest: ProductRow | null; lowest: ProductRow | null } | null;
   margins: MarginRow[];
@@ -156,6 +159,7 @@ export async function getOperationAnalysis(from: string, to: string, branch = ""
     bestSellers: [],
     worstSellers: [],
     deadProducts: [],
+    esbRentang: null,
     categoriesRows: [],
     priceStats: null,
     margins: [],
@@ -228,14 +232,19 @@ export async function getOperationAnalysis(from: string, to: string, branch = ""
   } catch {
     menus = [];
   }
-  const totalQty = menus.reduce((a, m) => a + m.qty30d, 0);
+  const totalQty = menus.reduce((a, m) => a + m.qty, 0);
   const products: ProductRow[] = menus
-    .map((m) => ({ menu: m.menu, category: m.category || "Lainnya", qty: m.qty30d, amount: money(m.qty30d * (m.unitPrice || 0)), unitPrice: money(m.unitPrice || 0), share: totalQty ? +((m.qty30d / totalQty) * 100).toFixed(1) : 0 }))
+    // `amount` DIBACA dari ESB (jumlah Grand Total), bukan qty × harga satuan.
+    .map((m) => ({ menu: m.menu, category: m.category || "Lainnya", qty: m.qty, amount: money(m.amount), unitPrice: money(m.unitPrice || 0), share: totalQty ? +((m.qty / totalQty) * 100).toFixed(1) : 0 }))
     .sort((a, b) => b.qty - a.qty);
   const sellers = products.filter((p) => p.qty > 0);
   const bestSellers = sellers.slice(0, 10);
   const worstSellers = sellers.slice(-10).reverse();
   const deadProducts = products.filter((p) => p.qty === 0).slice(0, 20);
+  // Rentangnya dibaca dari datanya, bukan ditulis "30 hari" di layar — lihat
+  // `formatRentang`.
+  const esbSumber = menus.find((m) => m.dari && m.sampai);
+  const esbRentang = esbSumber ? formatRentang(esbSumber.dari, esbSumber.sampai) : null;
 
   const catAgg = new Map<string, { qty: number; amount: number }>();
   for (const p of products) {
@@ -279,7 +288,7 @@ export async function getOperationAnalysis(from: string, to: string, branch = ""
   if (growthPct !== null && growthPct <= -10) alerts.push({ level: "high", title: "Penjualan turun", detail: `Net sales turun ${Math.abs(growthPct)}% dibanding periode sebelumnya.` });
   if (achievementPct !== null && achievementPct < 80) alerts.push({ level: "high", title: "Target tidak tercapai", detail: `Pencapaian baru ${achievementPct}% dari target periode ini.` });
   if (lowMargins.length > 0) alerts.push({ level: "medium", title: "Margin tipis", detail: `${lowMargins.length} produk bermargin < 30% (terendah: ${lowMargins[0].name} ${lowMargins[0].marginPct}%).` });
-  if (deadProducts.length > 0) alerts.push({ level: "medium", title: "Produk mati", detail: `${deadProducts.length} produk tanpa penjualan dalam 30 hari terakhir.` });
+  if (deadProducts.length > 0) alerts.push({ level: "medium", title: "Produk mati", detail: `${deadProducts.length} produk tanpa penjualan${esbRentang ? ` pada ${esbRentang}` : ""}.` });
   const slow = sellers.slice(-5);
   if (slow.length > 0) alerts.push({ level: "low", title: "Produk slow moving", detail: `${slow.length} produk dengan penjualan terendah — pertimbangkan promo atau evaluasi.` });
 
@@ -330,6 +339,7 @@ export async function getOperationAnalysis(from: string, to: string, branch = ""
     bestSellers,
     worstSellers,
     deadProducts,
+    esbRentang,
     categoriesRows,
     priceStats,
     margins,

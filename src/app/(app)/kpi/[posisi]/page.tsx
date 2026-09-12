@@ -113,7 +113,12 @@ export default async function KpiPosisiPage({
         menuEsb={menuEsb.map((m) => ({
           menu: m.menu,
           kategori: m.categoryDetail || m.category,
-          estimasi: m.qty30d * m.unitPrice,
+          // NILAI PENJUALAN DARI ESB, bukan qty × harga satuan. Perkalian itu
+          // tidak mungkin benar untuk menu yang terjual pada lebih dari satu
+          // harga, dan ia memakai "harga terakhir yang kebetulan terbaca".
+          penjualan: m.amount,
+          dari: m.dari,
+          sampai: m.sampai,
         }))}
       />
     </div>
