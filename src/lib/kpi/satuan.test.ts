@@ -21,8 +21,13 @@ describe("actualBersatuan", () => {
     expect(actualBersatuan(0)).toBe(actualBersatuan(null));
   });
 
-  it("angka yang ada tetap ditulis apa adanya", () => {
-    expect(actualBersatuan(83.87, "persen")).toBe("84%");
+  it("angka yang ada tetap ditulis apa adanya — desimalnya tidak dibulatkan hilang", () => {
+    // Dibulatkan ke bilangan bulat, Manajemen Kinerja 18,18% muncul sebagai
+    // "18%" dan tidak lagi cocok dengan laporan Human Capital yang menulis dua
+    // angka di belakang koma. Yang bulat tetap ditulis bulat.
+    expect(actualBersatuan(83.87, "persen")).toBe("83,87%");
+    expect(actualBersatuan(18.18, "persen")).toBe("18,18%");
+    expect(actualBersatuan(100, "persen")).toBe("100%");
     expect(actualBersatuan(4)).toBe("4");
   });
 

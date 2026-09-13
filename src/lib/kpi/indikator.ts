@@ -68,12 +68,8 @@ export type JenisEntri =
 export type KodeOtomatis =
   | "design_request"
   | "ketepatan_design"
-  | "hc_pemenuhan_rekrutmen"
-  | "hc_kecepatan_rekrutmen"
-  | "hc_kepatuhan_kontrak"
-  | "hc_kepatuhan_laporan"
-  | "hc_penyelesaian_onboarding"
-  | "hc_turnover"
+  | "hc_manajemen_kinerja"
+  | "hc_administrasi"
   | "net_sales_korporat"
   | "komplain_food_quality"
   | "efisiensi_operasional"
@@ -558,60 +554,62 @@ const coordinatorArea: Indikator[] = [
  */
 const humanCapital: Indikator[] = [
   {
-    key: "hc_pemenuhan_rekrutmen",
-    label: "Pemenuhan Permintaan Pegawai",
-    bobot: 15,
-    target: { jenis: "tetap", nilai: 90 },
-    actual: { sumber: "otomatis", kode: "hc_pemenuhan_rekrutmen" },
-    satuan: "persen",
-    penjelasan: "Otomatis dari Permintaan Karyawan: jumlah direkrut dibanding jumlah diminta. Target 90%.",
+    key: "hc_jumlah_rekrutmen",
+    label: "Jumlah Rekrutmen",
+    bobot: 10,
+    target: { jenis: "tetap", nilai: 10 },
+    actual: { sumber: "manual" },
+    satuan: "angka",
+    penjelasan: "Jumlah pegawai yang berhasil direkrut dalam bulan ini. Targetnya jumlah yang diminta — tercapai bila sama.",
   },
   {
-    key: "hc_kecepatan_rekrutmen",
-    label: "Kecepatan Pemenuhan",
+    key: "hc_waktu_rekrutmen",
+    label: "Waktu Rekrutmen",
     bobot: 10,
-    target: { jenis: "tetap", nilai: 30 },
-    actual: { sumber: "otomatis", kode: "hc_kecepatan_rekrutmen" },
+    target: { jenis: "tetap", nilai: 21 },
+    actual: { sumber: "manual" },
+    // Batas atas, bukan sasaran yang dikejar. Tanpa ini, rekrut 10 hari dari
+    // batas 21 hari dinilai 47% — makin cepat kerjanya, makin jelek nilainya.
     penilaian: "batas_maks",
     satuan: "angka",
-    penjelasan: "Rata-rata HARI dari permintaan diajukan sampai terlaksana. Batas 30 hari — makin cepat makin baik.",
+    penjelasan: "Rata-rata HARI dari lowongan dipasang sampai kandidat diterima. Batas 21 hari — makin cepat makin baik.",
   },
   {
-    key: "hc_kepatuhan_kontrak",
-    label: "Kepatuhan Kontrak Kerja",
-    bobot: 25,
-    target: { jenis: "tetap", nilai: 95 },
-    actual: { sumber: "otomatis", kode: "hc_kepatuhan_kontrak" },
-    satuan: "persen",
-    penjelasan: "Otomatis dari Kontrak Tracker: karyawan outlet yang kontraknya masih berlaku. Target 95%.",
-  },
-  {
-    key: "hc_kepatuhan_laporan",
-    label: "Kepatuhan Update Bulanan",
-    bobot: 15,
-    target: { jenis: "tetap", nilai: 90 },
-    actual: { sumber: "otomatis", kode: "hc_kepatuhan_laporan" },
-    satuan: "persen",
-    penjelasan: "Otomatis dari Kontrak Tracker: outlet yang mengirim laporan bulan berjalan. Target 90%.",
-  },
-  {
-    key: "hc_penyelesaian_onboarding",
-    label: "Penyelesaian Onboarding",
-    bobot: 15,
-    target: { jenis: "tetap", nilai: 85 },
-    actual: { sumber: "otomatis", kode: "hc_penyelesaian_onboarding" },
-    satuan: "persen",
-    penjelasan: "Otomatis dari modul Onboarding: rata-rata butir ceklis yang sudah tuntas. Target 85%.",
-  },
-  {
-    key: "hc_turnover",
-    label: "Turnover Karyawan Outlet",
+    key: "hc_kualitas_rekrutmen",
+    label: "Keberhasilan / Kualitas Rekrutmen",
     bobot: 20,
     target: { jenis: "tetap", nilai: 10 },
-    actual: { sumber: "otomatis", kode: "hc_turnover" },
-    penilaian: "batas_maks",
+    actual: { sumber: "manual" },
+    satuan: "angka",
+    penjelasan: "Jumlah pegawai baru yang lulus masa percobaan dengan nilai minimal BAIK, atau resign sesuai prosedur.",
+  },
+  {
+    key: "hc_development",
+    label: "Development / Pelatihan",
+    bobot: 20,
+    target: { jenis: "tetap", nilai: 4 },
+    actual: { sumber: "manual" },
+    satuan: "angka",
+    penjelasan: "Jumlah program pelatihan yang terlaksana bulan ini. Target 4 program per bulan.",
+  },
+  {
+    key: "hc_manajemen_kinerja",
+    label: "Manajemen Kinerja",
+    bobot: 20,
+    target: { jenis: "tetap", nilai: 20 },
+    actual: { sumber: "otomatis", kode: "hc_manajemen_kinerja" },
     satuan: "persen",
-    penjelasan: "Otomatis dari Kontrak Tracker: karyawan keluar dibanding jumlah karyawan. Batas 10% — makin kecil makin baik.",
+    penjelasan:
+      "Otomatis dari KPI Manajemen: rata-rata capaian seluruh departemen selain Human Capital, dinyatakan terhadap bobot 20%.",
+  },
+  {
+    key: "hc_administrasi",
+    label: "Administrasi Personalia",
+    bobot: 20,
+    target: { jenis: "tetap", nilai: 20 },
+    actual: { sumber: "otomatis", kode: "hc_administrasi" },
+    satuan: "angka",
+    penjelasan: "Otomatis dari Antrian Dokumen: jumlah dokumen yang SELESAI di bulan ini. Target 20 dokumen.",
   },
 ];
 

@@ -9,7 +9,6 @@ import { nilaiKetepatanDesign } from "./design-rapor";
 import { rincianMinggu, type DetailMinggu } from "./minggu-outlet";
 import { hariBulan } from "@/lib/kpi/minggu";
 import { WORK_BRANDS } from "@/lib/constants";
-import type { UserProfile } from "@/lib/types";
 import {
   actualLulus,
   actualPengurang,
@@ -1207,8 +1206,8 @@ export async function laporanKpi(posisi: KodePosisi, periode: string, pic = ""):
   const perluKetepatan = daftar.some((i) => i.actual.sumber === "otomatis" && i.actual.kode === "ketepatan_design");
   const perluKomplain = daftar.some((i) => i.actual.sumber === "otomatis" && i.actual.kode === "komplain_food_quality");
   const perluFee = daftar.some((i) => i.actual.sumber === "otomatis" && i.actual.kode === "management_fee");
-  // Keenam angka Human Capital datang dari SATU perhitungan — menariknya enam
-  // kali berarti enam kali membaca Kontrak Tracker untuk hasil yang sama.
+  // Kedua angka Human Capital datang dari SATU perhitungan — menariknya dua
+  // kali berarti dua kali membaca seluruh KPI departemen untuk hasil yang sama.
   const perluHc = daftar.some((i) => i.actual.sumber === "otomatis" && i.actual.kode.startsWith("hc_"));
 
   const [design, ketepatan, komplain, netBulan, average, netPerusahaan, omsetTigaBulan, averageTrx, hc] = await Promise.all([
@@ -1362,34 +1361,36 @@ interface KonteksBaris {
   averageTrx: AverageTrx | null;
   /** Angka se-area untuk Coordinator Area. Null untuk posisi lain. */
   ca: AngkaCa | null;
-  /** Keenam angka Human Capital, dikunci nama indikatornya. */
+  /** Kedua angka Human Capital yang otomatis, dikunci nama indikatornya. */
   hc: Map<string, number | null> | null;
 }
 
 
 /**
- * Keenam angka KPI Human Capital, DIBACA DARI PERHITUNGAN YANG SUDAH ADA.
+ * Dua angka KPI Human Capital yang dihitung sistem.
  *
- * Bukan dihitung ulang di sini. Rumusnya tinggal di modul HC-MOS bersama data
- * yang dibacanya, dan halaman KPI hanya meminjam hasilnya — kalau dihitung dua
- * kali, dua halaman akan menyebut skor berbeda untuk departemen yang sama dan
- * tidak ada cara tahu mana yang benar.
+ * Manajemen Kinerja dinyatakan TERHADAP BOBOTNYA, bukan sebagai persentase
+ * mentah: rata-rata departemen 90,9% menjadi actual 18,18 terhadap target 20 —
+ * bentuk yang sama dengan dasbor yang sudah dipakai Human Capital, sehingga
+ * angka di layar bisa langsung dicocokkan dengan laporan mereka.
  *
- * Dilihat sebagai SUPER ADMIN, bukan sebagai yang membuka halamannya. Kepatuhan
- * kontrak dan turnover dihitung dari seluruh outlet; kalau dibatasi outlet
- * milik pembacanya, dua orang HC akan melihat skor departemen yang berbeda.
+ * Empat indikator lainnya diketik manual dan tidak lewat sini sama sekali.
  */
 async function angkaHc(periode: string): Promise<Map<string, number | null>> {
   const peta = new Map<string, number | null>();
   try {
-    const { hitungKpiHc } = await import("./hcmos-kpi");
-    const hasil = await hitungKpiHc({ role: "super_admin" } as UserProfile, periode);
-    for (const b of hasil.baris) peta.set(`hc_${b.key}`, b.realisasi);
+    const { rataDepartemenLain, dokumenSelesai } = await import("./kpi-hc");
+    const [rata, dokumen] = await Promise.all([rataDepartemenLain(periode), dokumenSelesai(periode)]);
+    peta.set("hc_manajemen_kinerja", rata === null ? null : Math.round((rata / 100) * BOBOT_KINERJA * 100) / 100);
+    peta.set("hc_administrasi", dokumen);
   } catch (e) {
     console.error("[kpi] gagal membaca angka Human Capital:", e);
   }
   return peta;
 }
+
+/** Bobot indikator Manajemen Kinerja — skala tempat actual-nya dinyatakan. */
+const BOBOT_KINERJA = 20;
 
 /**
  * Satu indikator menjadi satu baris tabel.
@@ -1486,19 +1487,20 @@ function susunBaris(i: Indikator, k: KonteksBaris): BarisKpi {
           actual = k.problemSolver;
           if (actual === null) alasan = "Nama PIC posisi ini belum cocok dengan pengguna mana pun di User Management.";
           break;
-        case "hc_pemenuhan_rekrutmen":
-        case "hc_kecepatan_rekrutmen":
-        case "hc_kepatuhan_kontrak":
-        case "hc_kepatuhan_laporan":
-        case "hc_penyelesaian_onboarding":
-        case "hc_turnover": {
+        case "hc_manajemen_kinerja":
+        case "hc_administrasi": {
           // `undefined` berarti perhitungannya gagal dibaca; `null` berarti
           // datanya memang belum ada. Keduanya sama-sama kosong di layar, tapi
           // hanya yang kedua yang punya kalimat penjelas — yang pertama sudah
           // tercatat di log server sebagai kesalahan.
           const nilai = k.hc?.get(i.actual.kode);
           actual = nilai ?? null;
-          if (actual === null) alasan = "Datanya belum ada di modul Human Capital untuk bulan ini.";
+          if (actual === null) {
+            alasan =
+              i.actual.kode === "hc_manajemen_kinerja"
+                ? "Belum ada satu pun departemen lain yang capaiannya terukur bulan ini."
+                : "Belum ada dokumen yang selesai di Antrian Dokumen bulan ini.";
+          }
           break;
         }
         case "efisiensi_operasional":

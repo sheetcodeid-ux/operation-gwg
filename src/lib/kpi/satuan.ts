@@ -27,7 +27,11 @@ export type Satuan = "angka" | "rupiah" | "persen";
 export function bersatuan(n: number | null, satuan?: Satuan): string {
   if (n === null) return "—";
   if (satuan === "rupiah") return formatIDR(n);
-  if (satuan === "persen") return persen(n, 0);
+  // Desimal ditulis kalau memang ada, dibuang kalau tidak: 100% tetap "100%",
+  // tapi 18,18% tidak boleh muncul sebagai "18%". Angka otomatis seperti
+  // Manajemen Kinerja hampir selalu berdesimal, dan yang membacanya akan
+  // mencocokkannya dengan laporan yang menulis dua angka di belakang koma.
+  if (satuan === "persen") return `${angka(n)}%`;
   return angka(n);
 }
 
