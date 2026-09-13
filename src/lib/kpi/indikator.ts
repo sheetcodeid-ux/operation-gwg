@@ -62,7 +62,17 @@ export type JenisEntri =
   | "pos_sla"
   | "pos_refresh"
   | "pos_uptime"
-  | "laporan_owner";
+  | "laporan_owner"
+  | "do_monitor"
+  | "do_menu"
+  | "do_issue"
+  | "do_merchant"
+  | "do_gagal"
+  | "os_uptime"
+  | "os_masterdata"
+  | "os_menu"
+  | "os_issue"
+  | "os_improve";
 
 /** Perhitungan otomatis dari modul/data lain. */
 export type KodeOtomatis =
@@ -712,10 +722,159 @@ const coordinatorPos: Indikator[] = [
   },
 ];
 
+/**
+ * Online Delivery Officer.
+ *
+ * Keenam indikatornya diambil apa adanya dari halaman "How Do We Measure
+ * Success?" pada dokumen Online Delivery & Operating System. BOBOT DAN
+ * TARGETNYA TIDAK ADA DI DOKUMEN ITU — angka di bawah ini usulan yang bisa
+ * diubah lewat Pengaturan, bukan keputusan. Dicantumkan supaya halamannya bisa
+ * dipakai sekarang dan angkanya bisa diperdebatkan, bukan supaya dianggap
+ * final.
+ *
+ * Yang dijaga peran ini SALURAN LUAR: ShopeeFood, GrabFood, GoFood — sampai
+ * pesanan pelanggan masuk. Sistem dalamnya milik Operating System Officer.
+ */
+const onlineDelivery: Indikator[] = [
+  {
+    key: "do_monitor",
+    label: "Outlet Online Accuracy",
+    bobot: 25,
+    target: { jenis: "tetap", nilai: 100 },
+    actual: { sumber: "harian", entri: "do_monitor" },
+    satuan: "persen",
+    penjelasan:
+      "Target 100%. Pengecekan outlet online tiap hari — satu hari yang tercatat bernilai satu per jumlah hari bulan itu.",
+  },
+  {
+    key: "do_menu",
+    label: "Menu & Price Accuracy",
+    bobot: 20,
+    target: { jenis: "tetap", nilai: 5 },
+    actual: { sumber: "entri", entri: "do_menu" },
+    penjelasan: "Satu penyetelan menu atau harga delivery yang tercatat bernilai satu poin. Target 5 sebulan.",
+  },
+  {
+    key: "do_issue",
+    label: "Issue Resolution Time",
+    bobot: 15,
+    target: { jenis: "tetap", nilai: 5 },
+    // PENGURANG, bukan penambah. Yang dinilai bukan berapa banyak gangguan yang
+    // ditangani — gangguan yang banyak bukan prestasi — melainkan berapa yang
+    // selesai melewati tenggatnya.
+    actual: { sumber: "pengurang", entri: "do_issue" },
+    penjelasan: "Target 5. Tiap gangguan yang selesai melewati tanggal targetnya mengurangi satu poin.",
+  },
+  {
+    key: "do_merchant",
+    label: "Merchant Registration Success",
+    bobot: 15,
+    target: { jenis: "tetap", nilai: 3 },
+    actual: { sumber: "entri", entri: "do_merchant" },
+    penjelasan: "Satu pendaftaran merchant yang tuntas bernilai satu poin. Target 3 sebulan.",
+  },
+  {
+    key: "do_tersedia",
+    label: "Delivery Menu Availability",
+    bobot: 15,
+    target: { jenis: "tetap", nilai: 100 },
+    actual: { sumber: "manual" },
+    satuan: "persen",
+    penjelasan: "Persentase menu delivery yang tersedia dan bisa dipesan. Target 100%.",
+  },
+  {
+    key: "do_gagal",
+    label: "Order Failure by System / Menu",
+    bobot: 10,
+    target: { jenis: "tetap", nilai: 5 },
+    actual: { sumber: "pengurang", entri: "do_gagal" },
+    penjelasan: "Target 5. Tiap pesanan yang gagal karena sistem atau menu mengurangi satu poin.",
+  },
+];
+
+/**
+ * Operating System Officer.
+ *
+ * Ketujuh indikatornya diambil apa adanya dari dokumen yang sama. Bobot dan
+ * targetnya juga USULAN, sama seperti Online Delivery.
+ *
+ * Yang dijaga peran ini SISTEM DALAM: kasir, back office, master menu — sampai
+ * transaksinya selesai. Bersinggungan dengan Coordinator POS pada urusan master
+ * data menu, dan itu memang perlu diputuskan pemiliknya: dua orang yang dinilai
+ * atas pekerjaan yang sama akan saling menunggu, atau mengerjakannya dua kali.
+ */
+const operatingSystem: Indikator[] = [
+  {
+    key: "os_uptime",
+    label: "POS Availability",
+    bobot: 20,
+    target: { jenis: "tetap", nilai: 100 },
+    actual: { sumber: "harian", entri: "os_uptime" },
+    satuan: "persen",
+    penjelasan: "Target 100%. Satu hari POS kasir siap dipakai bernilai satu per jumlah hari bulan itu.",
+  },
+  {
+    key: "os_masterdata",
+    label: "Master Data Accuracy",
+    bobot: 15,
+    target: { jenis: "tetap", nilai: 5 },
+    actual: { sumber: "entri", entri: "os_masterdata" },
+    penjelasan: "Satu pekerjaan master data back office yang tercatat bernilai satu poin. Target 5 sebulan.",
+  },
+  {
+    key: "os_menu",
+    label: "Menu Configuration Accuracy",
+    bobot: 15,
+    target: { jenis: "tetap", nilai: 5 },
+    actual: { sumber: "entri", entri: "os_menu" },
+    penjelasan: "Satu konfigurasi menu, varian, atau modifier di POS bernilai satu poin. Target 5 sebulan.",
+  },
+  {
+    key: "os_issue",
+    label: "Issue Resolution Time",
+    bobot: 15,
+    target: { jenis: "tetap", nilai: 5 },
+    actual: { sumber: "pengurang", entri: "os_issue" },
+    penjelasan: "Target 5. Tiap gangguan POS yang selesai melewati tanggal targetnya mengurangi satu poin.",
+  },
+  {
+    key: "os_error",
+    label: "Transaction Error Rate",
+    bobot: 15,
+    target: { jenis: "tetap", nilai: 1 },
+    actual: { sumber: "manual" },
+    // BATAS ATAS. Tanpa ini, error 5% dari batas 1% menghasilkan 500% lalu
+    // dipotong jadi 100% — yang paling banyak transaksinya gagal justru
+    // mendapat nilai penuh.
+    penilaian: "batas_maks",
+    satuan: "persen",
+    penjelasan: "Persentase transaksi yang gagal atau error. Batas 1% — makin kecil makin baik.",
+  },
+  {
+    key: "os_improve",
+    label: "System Improvement",
+    bobot: 10,
+    target: { jenis: "tetap", nilai: 2 },
+    actual: { sumber: "entri", entri: "os_improve" },
+    penjelasan: "Satu perbaikan sistem yang benar-benar diterapkan bernilai satu poin. Target 2 sebulan.",
+  },
+  {
+    key: "os_puas",
+    label: "Outlet / User Satisfaction",
+    bobot: 10,
+    target: { jenis: "tetap", nilai: 90 },
+    actual: { sumber: "manual" },
+    satuan: "persen",
+    penjelasan: "Kepuasan outlet dan kasir atas dukungan sistem. Target 90%.",
+  },
+];
+
 export const INDIKATOR: Record<KodePosisi, Indikator[]> = {
   operational_ca: coordinatorArea,
   operational_software: coordinatorSoftware,
   operational_pos: coordinatorPos,
+  operational_do: onlineDelivery,
+  operational_os: operatingSystem,
   hc: humanCapital,
   creative_content: contentCreator,
   creative_sosmed: sosialMedia,

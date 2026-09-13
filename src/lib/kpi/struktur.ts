@@ -14,6 +14,8 @@ export type KodePosisi =
   | "operational_ca"
   | "operational_software"
   | "operational_pos"
+  | "operational_do"
+  | "operational_os"
   | "creative_content"
   | "creative_sosmed"
   | "finance_accounting"
@@ -81,11 +83,8 @@ export const DEPARTEMEN: Departemen[] = [
     nama: "Operational",
     singkat: "Operational",
     ikon: "Store",
-    posisi: ["operational_ca", "operational_software", "operational_pos"],
-    // Yang tersisa menyusul tinggal System Support-nya sendiri — indikatornya
-    // belum ditentukan, dan mendaftarkannya sebagai posisi berarti membuka
-    // halaman KPI yang seluruh barisnya kosong.
-    menyusul: ["System Support (Pricil, Adinda Latifah)"],
+    posisi: ["operational_ca", "operational_software", "operational_pos", "operational_do", "operational_os"],
+    // Lengkap: tidak ada lagi posisi Operational yang indikatornya menyusul.
   },
   { kode: "creative", nama: "Creative", singkat: "Creative", ikon: "Palette", posisi: ["creative_content"] },
   { kode: "finance", nama: "Finance", singkat: "Finance", ikon: "Wallet", posisi: ["finance_accounting", "finance_finance", "finance_tax"] },
@@ -115,6 +114,19 @@ export const POSISI: Posisi[] = [
   // bukan atas omzet satu area.
   { kode: "operational_software", departemen: "operational", nama: "Coordinator Software", pic: ["Fikri"] },
   { kode: "operational_pos", departemen: "operational", nama: "Coordinator POS", pic: ["Evan Wijaya"] },
+  // DUA PERAN DARI SATU DOKUMEN, "Online Delivery & Operating System".
+  //
+  // Dokumennya menyingkatnya DO dan OS; singkatan itu TIDAK dipakai sebagai
+  // nama posisi. Yang membaca daftar KPI belum tentu pernah membaca dokumennya,
+  // dan "OS" sama saja artinya dengan tidak ada namanya. Nama panjangnya diambil
+  // apa adanya dari judul dokumen itu sendiri.
+  //
+  // Batasnya juga dari dokumen itu: Online Delivery menjaga SALURAN LUAR
+  // (ShopeeFood, GrabFood, GoFood) sampai pesanan pelanggan masuk; Operating
+  // System menjaga SISTEM DALAM — kasir, back office, master menu — sampai
+  // transaksinya selesai.
+  { kode: "operational_do", departemen: "operational", nama: "Online Delivery Officer", pic: ["Adinda Latifah"] },
+  { kode: "operational_os", departemen: "operational", nama: "Operating System Officer", pic: ["Pricil"] },
   { kode: "creative_content", departemen: "creative", nama: "Content Creator", pic: ["Via", "Dhimas", "Seka", "Ricky"], perPic: true },
   // Sosial Media pindah ke Marketing Communication — sejak tim ini tidak lagi
   // bergabung dengan Creative. KODE POSISINYA SENGAJA TIDAK DIUBAH: seluruh
@@ -155,6 +167,8 @@ export const MENU_POSISI: Record<KodePosisi, string> = {
   operational_ca: "kpi_op_ca",
   operational_software: "kpi_op_software",
   operational_pos: "kpi_op_pos",
+  operational_do: "kpi_op_do",
+  operational_os: "kpi_op_os",
   creative_content: "kpi_creative_content",
   creative_sosmed: "kpi_creative_sosmed",
   finance_accounting: "kpi_fin_accounting",

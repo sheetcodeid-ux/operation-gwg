@@ -65,6 +65,8 @@ export type MenuKey =
   | "kpi_op_ca"
   | "kpi_op_software"
   | "kpi_op_pos"
+  | "kpi_op_do"
+  | "kpi_op_os"
   | "kpi_creative_content"
   | "kpi_creative_sosmed"
   | "kpi_fin_accounting"
@@ -219,6 +221,8 @@ export const NAV_MENUS: Omit<NavItem, "section" | "group" | "groupIcon">[] = [
   { key: "kpi_op_ca", label: "Coordinator Area", href: "/kpi/operational_ca", icon: "Store" },
   { key: "kpi_op_software", label: "Coordinator Software", href: "/kpi/operational_software", icon: "DatabaseZap" },
   { key: "kpi_op_pos", label: "Coordinator POS", href: "/kpi/operational_pos", icon: "ScanBarcode" },
+  { key: "kpi_op_do", label: "Online Delivery Officer", href: "/kpi/operational_do", icon: "Truck" },
+  { key: "kpi_op_os", label: "Operating System Officer", href: "/kpi/operational_os", icon: "MonitorCog" },
   { key: "kpi_creative_content", label: "Content Creator", href: "/kpi/creative_content", icon: "Clapperboard" },
   { key: "kpi_creative_sosmed", label: "Sosial Media", href: "/kpi/creative_sosmed", icon: "Share2" },
   { key: "kpi_fin_accounting", label: "Accounting", href: "/kpi/finance_accounting", icon: "Calculator" },
@@ -569,7 +573,7 @@ export const DIVISION_GROUPS: Partial<Record<Division, NavGroupDef[]>> = {
     // satu posisi melainkan PERUSAHAAN, dan menaruhnya di dalam salah satu
     // departemen membuatnya terbaca seolah milik departemen itu.
     { name: "Korporat", icon: "Briefcase", urutan: 0, menus: ["kpi_manajemen"] },
-    { name: "Operational", icon: "Store", urutan: 1, menus: ["kpi_op_ca", "kpi_op_software", "kpi_op_pos"] },
+    { name: "Operational", icon: "Store", urutan: 1, menus: ["kpi_op_ca", "kpi_op_software", "kpi_op_pos", "kpi_op_do", "kpi_op_os"] },
     { name: "Creative", icon: "Palette", urutan: 2, menus: ["kpi_creative_content"] },
     { name: "Finance", icon: "Wallet", urutan: 3, menus: ["kpi_fin_accounting", "kpi_fin_finance", "kpi_fin_tax"] },
     {
@@ -604,6 +608,8 @@ export const DIVISION_MENUS: { division: Division; menus: MenuKey[] }[] = [
       "kpi_op_ca",
       "kpi_op_software",
       "kpi_op_pos",
+      "kpi_op_do",
+      "kpi_op_os",
       "kpi_creative_content",
       "kpi_creative_sosmed",
       "kpi_fin_accounting",

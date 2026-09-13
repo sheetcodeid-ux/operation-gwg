@@ -156,14 +156,24 @@ describe("skema kolom isian", () => {
     expect(SKEMA_ENTRI.pos_masterdata?.kategori).toEqual(KATEGORI_MENU_PROMO);
   });
 
-  it("hanya SLA yang punya tanggal selesai dan hari terlewat", () => {
+  it("tanggal selesai dan hari terlewat hanya pada isian yang memang ber-tenggat", () => {
     const berSla = Object.entries(SKEMA_ENTRI).filter(([, v]) => v?.sla).map(([k]) => k);
-    expect(berSla).toEqual(["pos_sla"]);
+    expect(berSla).toEqual(["pos_sla", "do_issue", "os_issue"]);
+    // Yang ber-SLA WAJIB punya kategori: laporan keterlambatan tanpa jenisnya
+    // cuma sebuah angka, dan tidak menunjukkan apa yang harus diperbaiki.
+    for (const jenis of berSla) {
+      expect(SKEMA_ENTRI[jenis as keyof typeof SKEMA_ENTRI]?.kategori, jenis).toBeTruthy();
+    }
   });
 
-  it("hanya uptime yang dinilai per hari", () => {
+  it("yang dinilai per hari harus barisnya dibuatkan harian, bukan diketik", () => {
     const perHari = Object.entries(SKEMA_ENTRI).filter(([, v]) => v?.persenHari).map(([k]) => k);
-    expect(perHari).toEqual(["pos_uptime"]);
+    expect(perHari).toEqual(["pos_uptime", "do_monitor", "os_uptime"]);
+    // Kalau barisnya diketik sendiri, jumlah barisnya bisa melebihi jumlah hari
+    // dalam bulan itu — dan capaiannya menembus 100% tanpa ada yang tahu.
+    for (const [jenis, skema] of Object.entries(SKEMA_ENTRI)) {
+      if (skema?.persenHari) expect(skema.otomatis?.tanggal, jenis).toBe("harian");
+    }
   });
 
   it("setiap baris otomatis punya penanda bahwa kejadiannya benar terjadi", () => {
