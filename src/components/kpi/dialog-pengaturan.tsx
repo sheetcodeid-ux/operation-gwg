@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { simpanPengaturanAction } from "@/lib/actions/kpi";
+import { cn } from "@/lib/utils";
 import type { BarisKpi } from "@/lib/kpi/hitung";
 import type { Indikator } from "@/lib/kpi/indikator";
 
@@ -33,6 +34,7 @@ interface Baris {
   targetTerkunci: boolean;
   pakaiPertumbuhan: boolean;
   keterangan: string;
+  aktif: boolean;
 }
 
 const teks = (n: number | null | undefined) => (n === null || n === undefined ? "" : String(n));
@@ -43,6 +45,9 @@ export function DialogPengaturan({
   baris,
 }: {
   posisi: string;
+  /** SELURUH indikator posisi ini, termasuk yang sedang dimatikan — kalau yang
+   *  dikirim cuma yang aktif, yang sudah dimatikan tidak akan pernah bisa
+   *  dinyalakan lagi dari mana pun. */
   indikator: Indikator[];
   /** Baris hasil hitung — dipakai mengisi nilai yang sedang berlaku. */
   baris: BarisKpi[];
@@ -59,6 +64,9 @@ export function DialogPengaturan({
       return {
         key: i.key,
         label: i.label,
+        // Indikator yang tidak punya baris hasil hitung berarti dikeluarkan
+        // dari penilaian — itulah tanda ia sedang dimatikan.
+        aktif: !!b,
         bobot: teks(b?.bobot ?? i.bobot),
         target: dihitung ? "" : teks(i.target.jenis === "tetap" || i.target.jenis === "rasio" ? (b?.target ?? i.target.nilai) : null),
         pertumbuhan: i.target.jenis === "tumbuh" ? String(i.target.pertumbuhan) : "",
@@ -92,7 +100,13 @@ export function DialogPengaturan({
   const ubah = (key: string, kolom: "bobot" | "target" | "pertumbuhan", v: string) =>
     setIsi((rows) => rows.map((r) => (r.key === key ? { ...r, [kolom]: v } : r)));
 
-  const totalBobot = isi.reduce((a, r) => a + (Number(r.bobot) || 0), 0);
+  const ubahAktif = (key: string) =>
+    setIsi((rows) => rows.map((r) => (r.key === key ? { ...r, aktif: !r.aktif } : r)));
+
+  // HANYA YANG AKTIF yang dijumlahkan. Indikator yang dimatikan tidak ikut
+  // dinilai, jadi bobotnya juga tidak boleh ikut menghitung apakah sudah 100%.
+  const totalBobot = isi.reduce((a, r) => a + (r.aktif ? Number(r.bobot) || 0 : 0), 0);
+  const dimatikan = isi.filter((r) => !r.aktif).length;
   const pas = Math.abs(totalBobot - 100) < 0.001;
 
   async function simpan() {
@@ -104,11 +118,12 @@ export function DialogPengaturan({
         bobot: r.bobot === "" ? null : Number(r.bobot),
         target: r.targetTerkunci || r.target === "" ? null : Number(r.target),
         pertumbuhan: r.pakaiPertumbuhan && r.pertumbuhan !== "" ? Number(r.pertumbuhan) : null,
+        aktif: r.aktif,
       })),
     });
     setSibuk(false);
     if (res.error) return toast.error(res.error);
-    toast.success("Bobot dan target tersimpan");
+    toast.success("Pengaturan indikator tersimpan");
     setBuka(false);
     router.refresh();
   }
@@ -120,12 +135,18 @@ export function DialogPengaturan({
       </Button>
 
       <Dialog open={buka} onOpenChange={setBuka}>
-        <DialogContent title="Pengaturan Bobot & Target" description="Berlaku untuk semua bulan sampai diubah lagi" align="center" className="max-w-3xl">
+        <DialogContent
+          title="Pengaturan Indikator"
+          description="Status, bobot, dan target — berlaku untuk semua bulan sampai diubah lagi"
+          align="center"
+          className="max-w-3xl"
+        >
           <div className="max-h-[70vh] space-y-3 overflow-y-auto p-5">
             <div className="overflow-x-auto rounded-xl border border-border">
               <table className="w-full min-w-[620px] border-collapse text-sm">
                 <thead>
                   <tr className="border-b border-border bg-muted/40 text-left">
+                    <th className="w-20 px-3 py-2 text-[10.5px] font-semibold uppercase tracking-wide text-muted-foreground">Status</th>
                     <th className="px-3 py-2 text-[10.5px] font-semibold uppercase tracking-wide text-muted-foreground">Indikator</th>
                     <th className="w-24 px-3 py-2 text-[10.5px] font-semibold uppercase tracking-wide text-muted-foreground">Bobot %</th>
                     <th className="w-28 px-3 py-2 text-[10.5px] font-semibold uppercase tracking-wide text-muted-foreground">Target</th>
@@ -134,24 +155,47 @@ export function DialogPengaturan({
                 </thead>
                 <tbody>
                   {isi.map((r) => (
-                    <tr key={r.key} className="border-b border-border/60 last:border-0">
+                    <tr key={r.key} className={cn("border-b border-border/60 last:border-0", !r.aktif && "opacity-55")}>
+                      <td className="px-3 py-2">
+                        {/* Sakelarnya, bukan kotak centang: yang diubah di sini
+                            berlaku seketika untuk seluruh penilaian posisi ini,
+                            dan sakelar membaca keadaan sekarang lebih jelas. */}
+                        <button
+                          type="button"
+                          role="switch"
+                          aria-checked={r.aktif}
+                          aria-label={`${r.aktif ? "Matikan" : "Nyalakan"} ${r.label}`}
+                          onClick={() => ubahAktif(r.key)}
+                          className={cn(
+                            "relative h-5 w-9 rounded-full transition-colors",
+                            r.aktif ? "bg-brand-500" : "bg-muted-foreground/35",
+                          )}
+                        >
+                          <span
+                            className={cn(
+                              "absolute top-0.5 size-4 rounded-full bg-white transition-all",
+                              r.aktif ? "left-[1.125rem]" : "left-0.5",
+                            )}
+                          />
+                        </button>
+                      </td>
                       <td className="px-3 py-2">
                         <p className="font-medium text-foreground">{r.label}</p>
                         <p className="text-[11px] text-muted-foreground">{r.keterangan}</p>
                       </td>
                       <td className="px-3 py-2">
-                        <Input inputMode="decimal" value={r.bobot} onChange={(e) => ubah(r.key, "bobot", e.target.value)} className="h-8" />
+                        <Input inputMode="decimal" value={r.bobot} onChange={(e) => ubah(r.key, "bobot", e.target.value)} className="h-8" disabled={!r.aktif} />
                       </td>
                       <td className="px-3 py-2">
                         {r.targetTerkunci ? (
                           <span className="text-[11px] text-muted-foreground">otomatis</span>
                         ) : (
-                          <Input inputMode="decimal" value={r.target} onChange={(e) => ubah(r.key, "target", e.target.value)} className="h-8" />
+                          <Input inputMode="decimal" value={r.target} onChange={(e) => ubah(r.key, "target", e.target.value)} className="h-8" disabled={!r.aktif} />
                         )}
                       </td>
                       <td className="px-3 py-2">
                         {r.pakaiPertumbuhan ? (
-                          <Input inputMode="decimal" value={r.pertumbuhan} onChange={(e) => ubah(r.key, "pertumbuhan", e.target.value)} className="h-8" />
+                          <Input inputMode="decimal" value={r.pertumbuhan} onChange={(e) => ubah(r.key, "pertumbuhan", e.target.value)} className="h-8" disabled={!r.aktif} />
                         ) : (
                           <span className="text-[11px] text-muted-foreground">—</span>
                         )}
@@ -170,7 +214,14 @@ export function DialogPengaturan({
               }
             >
               Jumlah bobot <b>{totalBobot.toLocaleString("id-ID", { maximumFractionDigits: 2 })}%</b>
-              {pas ? " — pas 100%." : ` — belum 100%. Skor tertinggi posisi ini akan berhenti di angka itu.`}
+              {pas ? " — pas 100%." : " — belum 100%. Skor tertinggi posisi ini akan berhenti di angka itu."}
+              {dimatikan > 0 && (
+                <>
+                  {" "}
+                  {dimatikan} indikator dimatikan — tidak ikut dinilai, dan bobotnya tidak ikut dijumlah. Datanya
+                  tetap tersimpan dan kembali apa adanya begitu dinyalakan lagi.
+                </>
+              )}
             </div>
 
             <div className="flex flex-wrap justify-end gap-2">

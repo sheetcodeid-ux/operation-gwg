@@ -582,11 +582,14 @@ export async function hapusMenuPasarAction(input: { posisi: string; periode: str
  */
 export async function simpanPengaturanAction(input: {
   posisi: string;
-  ubahan: { indikator: string; bobot: number | null; target: number | null; pertumbuhan: number | null }[];
+  ubahan: { indikator: string; bobot: number | null; target: number | null; pertumbuhan: number | null; aktif: boolean }[];
 }): Promise<{ ok?: true; error?: string }> {
   const user = await getSessionUser();
   if (!user || !dbEnabled) return { error: "Tidak punya akses." };
-  if (!bolehAturKpi(user)) return { error: "Hanya super admin yang boleh mengubah bobot dan target." };
+  // SATU PINTU untuk seluruh isi dialog ini, termasuk menyalakan dan mematikan
+  // indikator. Mematikan satu indikator mengubah skor seluruh posisi itu —
+  // kewenangan yang sama besarnya dengan mengubah bobotnya.
+  if (!bolehAturKpi(user)) return { error: "Hanya super admin yang boleh mengubah bobot, target, dan status indikator." };
   if (!posisiDari(input.posisi)) return { error: "Posisi tidak dikenali." };
 
   for (const u of input.ubahan) {
@@ -598,6 +601,7 @@ export async function simpanPengaturanAction(input: {
       bobot: u.bobot,
       target: u.target,
       pertumbuhan: u.pertumbuhan,
+      aktif: u.aktif,
       olehId: user.id,
       olehNama: user.name,
     });

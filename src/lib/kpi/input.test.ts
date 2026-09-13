@@ -125,7 +125,7 @@ describe("penulisan dijaga di server", () => {
   it("hanya super admin yang boleh mengubah bobot", () => {
     // Kalau orang yang dinilai bisa mengubah bobotnya sendiri, angkanya
     // berhenti berarti apa pun.
-    expect(aksi).toContain("Hanya super admin yang boleh mengubah bobot dan target.");
+    expect(aksi).toContain("Hanya super admin yang boleh mengubah bobot, target, dan status indikator.");
   });
 });
 

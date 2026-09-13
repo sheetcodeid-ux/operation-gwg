@@ -405,7 +405,7 @@ export function PapanKpi({
               jadi tetap bisa diisi sambil melihat gabungan seluruh Coordinator
               Area. Yang tidak bisa hanya catatan kegiatan — itu memang milik
               seseorang. */}
-          <DialogPanduan indikator={indikator} perOutlet={!!laporan.ca} />
+          <DialogPanduan indikator={indikator.filter((i) => baris.some((b) => b.key === i.key))} perOutlet={!!laporan.ca} />
           {/* Tanpa satu pun indikator yang boleh diisi orang ini, tombolnya
               tidak ditampilkan sama sekali — dialog berisi dropdown kosong
               lebih membingungkan daripada tombol yang memang tidak ada. */}

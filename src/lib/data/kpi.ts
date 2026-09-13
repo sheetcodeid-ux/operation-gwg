@@ -66,6 +66,15 @@ export interface PengaturanIndikator {
   bobot: number | null;
   target: number | null;
   pertumbuhan: number | null;
+  /**
+   * Indikator yang dimatikan tidak ikut dinilai.
+   *
+   * BUKAN dihapus. Kebijakan KPI berubah — satu indikator berhenti dipakai
+   * satu periode lalu dipakai lagi — dan menghapusnya dari kode membuat
+   * riwayat bulan-bulan sebelumnya kehilangan barisnya. Ditandai nonaktif,
+   * definisinya tetap ada dan angka yang pernah dinilai tetap bisa dibaca.
+   */
+  aktif: boolean;
 }
 
 export interface DetailPasar {
@@ -144,6 +153,9 @@ export async function pengaturanPosisi(posisi: string): Promise<Map<string, Peng
       bobot: angka(r.bobot),
       target: angka(r.target),
       pertumbuhan: angka(r.pertumbuhan),
+      // Tanpa baris pengaturan, indikator dianggap AKTIF — itu keadaan
+      // bawaannya, dan baris pengaturan lama dibuat sebelum kolom ini ada.
+      aktif: r.aktif !== false,
     });
   }
   return peta;
@@ -155,6 +167,7 @@ export async function simpanPengaturan(input: {
   bobot: number | null;
   target: number | null;
   pertumbuhan: number | null;
+  aktif: boolean;
   olehId: string;
   olehNama: string;
 }): Promise<{ error?: string }> {
@@ -165,6 +178,7 @@ export async function simpanPengaturan(input: {
     bobot: input.bobot,
     target: input.target,
     pertumbuhan: input.pertumbuhan,
+    aktif: input.aktif,
     diubah_oleh: input.olehId,
     diubah_nama: input.olehNama,
     diubah_pada: new Date().toISOString(),
@@ -1115,7 +1129,7 @@ const PAKAI_PASAR: KodePosisi[] = ["pdq_food", "pdq_beverage", "pdq_head_food", 
  * gabungan. Itu disengaja: gabungan capaian tiga orang bukan capaian siapa pun.
  */
 export async function laporanKpi(posisi: KodePosisi, periode: string, pic = ""): Promise<LaporanKpi> {
-  const daftar = indikatorPosisi(posisi);
+  const semuaIndikator = indikatorPosisi(posisi);
   const outletAktif = getOutlets().filter((o) => o.active);
 
   const [pengaturan, entriRows, actualRows, kunciRow] = await Promise.all([
@@ -1126,6 +1140,20 @@ export async function laporanKpi(posisi: KodePosisi, periode: string, pic = ""):
       ? db().from("kpi_periode").select("dikunci").eq("posisi", posisi).eq("periode", periode).eq("pic", pic).maybeSingle()
       : Promise.resolve({ data: null }),
   ]);
+
+  /**
+   * Indikator yang DIMATIKAN super admin dikeluarkan sejak awal.
+   *
+   * Bukan disembunyikan di layar saja: kalau hanya barisnya yang hilang, bobot
+   * dan skornya tetap ikut terhitung diam-diam, dan dua orang yang membaca
+   * halaman yang sama akan menyebut angka yang berbeda. Dikeluarkan di sini,
+   * seluruh hitungan di bawahnya — bobot, skor, grafik, PDF — mengikuti satu
+   * daftar yang sama.
+   *
+   * Data bulan-bulan sebelumnya tidak dihapus; begitu dinyalakan lagi, angkanya
+   * kembali apa adanya.
+   */
+  const daftar = semuaIndikator.filter((i) => pengaturan.get(i.key)?.aktif !== false);
 
   const entri = ((entriRows.data ?? []) as Record<string, unknown>[]).map(entriDari);
   const jumlahEntri = (jenis: JenisEntri) => entri.filter((e) => e.jenis === jenis).length;
