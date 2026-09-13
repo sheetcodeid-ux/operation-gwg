@@ -37,26 +37,29 @@ describe("kedua posisi berdiri di Operational", () => {
 
 describe("indikatornya persis daftar di dokumen", () => {
   it("Online Delivery punya keenam indikatornya, bobot berjumlah 100", () => {
+    // Judulnya BERBAHASA INDONESIA walau dokumen aslinya Inggris — yang membaca
+    // dan mengisinya orang Indonesia, dan istilah yang tidak dimengerti akan
+    // diisi asal.
     expect(doo.map((i) => i.label)).toEqual([
-      "Outlet Online Accuracy",
-      "Menu & Price Accuracy",
-      "Issue Resolution Time",
-      "Merchant Registration Success",
-      "Delivery Menu Availability",
-      "Order Failure by System / Menu",
+      "Keakuratan Status Outlet Online",
+      "Keakuratan Menu & Harga",
+      "Kecepatan Penyelesaian Gangguan",
+      "Keberhasilan Pendaftaran Merchant",
+      "Ketersediaan Menu Delivery",
+      "Pesanan Gagal karena Sistem / Menu",
     ]);
     expect(doo.reduce((a, i) => a + i.bobot, 0)).toBe(100);
   });
 
   it("Operating System punya ketujuh indikatornya, bobot berjumlah 100", () => {
     expect(os.map((i) => i.label)).toEqual([
-      "POS Availability",
-      "Master Data Accuracy",
-      "Menu Configuration Accuracy",
-      "Issue Resolution Time",
-      "Transaction Error Rate",
-      "System Improvement",
-      "Outlet / User Satisfaction",
+      "Kesiapan POS Kasir",
+      "Keakuratan Master Data",
+      "Keakuratan Konfigurasi Menu",
+      "Kecepatan Penyelesaian Gangguan",
+      "Tingkat Transaksi Gagal",
+      "Perbaikan Sistem",
+      "Kepuasan Outlet & Kasir",
     ]);
     expect(os.reduce((a, i) => a + i.bobot, 0)).toBe(100);
   });
@@ -93,5 +96,22 @@ describe("setiap indikator berbentuk catatan punya bentuk isiannya", () => {
         expect(SKEMA_ENTRI[i.actual.entri], i.key).toBeTruthy();
       }
     }
+  });
+});
+
+describe("Content Creator dinilai atas satu hal saja", () => {
+  const cc = indikatorPosisi("creative_content");
+
+  it("hanya Ketepatan Waktu, berbobot penuh", () => {
+    // Impact — Engagement dihapus atas keputusan pemiliknya: angkanya diketik
+    // sendiri oleh yang dinilai dan digerakkan hal-hal di luar kendalinya —
+    // algoritma, musim, anggaran iklan — sehingga naik-turunnya tidak mengukur
+    // pekerjaannya.
+    expect(cc.map((i) => i.label)).toEqual(["Ketepatan Waktu"]);
+    expect(cc[0].bobot).toBe(100);
+  });
+
+  it("angkanya DIKETIK, tidak lagi ditarik dari Antrian Design", () => {
+    expect(cc[0].actual.sumber).toBe("manual");
   });
 });

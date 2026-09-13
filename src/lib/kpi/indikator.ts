@@ -163,24 +163,19 @@ const contentCreator: Indikator[] = [
   {
     key: "ketepatan_design",
     label: "Ketepatan Waktu",
-    bobot: 80,
-    // Targetnya 100% dan capaiannya dihitung dari nilai tiap permintaan:
-    // tenggat longgar yang terlambat MENGURANGI, tenggat mendesak yang
-    // ditepati MENAMBAH. Yang meminta ikut menanggung akibat pilihannya.
+    // SATU-SATUNYA indikator, jadi bobotnya penuh. Impact — Engagement dihapus
+    // atas keputusan pemiliknya: angkanya diketik sendiri oleh yang dinilai dan
+    // dipengaruhi hal-hal di luar kendalinya — algoritma, musim, dan anggaran
+    // iklan — sehingga naik-turunnya tidak mengukur pekerjaannya.
+    bobot: 100,
     target: { jenis: "tetap", nilai: 100 },
-    actual: { sumber: "otomatis", kode: "ketepatan_design" },
-    penjelasan:
-      "Otomatis dari Antrian Design. Terlambat pada tenggat longgar (Sebelum H-5, H-5) mengurangi; tepat waktu pada tenggat mendesak (H-3, H-1) menambah.",
-  },
-  {
-    key: "interaksi",
-    label: "Impact — Engagement",
-    bobot: 20,
-    target: { jenis: "tumbuh", pertumbuhan: TUMBUH_CREATIVE },
+    // DIKETIK, bukan ditarik dari Antrian Design. Diputuskan pemiliknya.
     actual: { sumber: "manual" },
-    penjelasan: `Like + komentar + share + save. Target = capaian bulan lalu + ${TUMBUH_CREATIVE}%.`,
+    satuan: "persen",
+    penjelasan: "Persentase pekerjaan design yang selesai tepat waktu bulan ini. Target 100%.",
   },
 ];
+
 
 const sosialMedia: Indikator[] = [
   {
@@ -738,7 +733,7 @@ const coordinatorPos: Indikator[] = [
 const onlineDelivery: Indikator[] = [
   {
     key: "do_monitor",
-    label: "Outlet Online Accuracy",
+    label: "Keakuratan Status Outlet Online",
     bobot: 25,
     target: { jenis: "tetap", nilai: 100 },
     actual: { sumber: "harian", entri: "do_monitor" },
@@ -748,7 +743,7 @@ const onlineDelivery: Indikator[] = [
   },
   {
     key: "do_menu",
-    label: "Menu & Price Accuracy",
+    label: "Keakuratan Menu & Harga",
     bobot: 20,
     target: { jenis: "tetap", nilai: 5 },
     actual: { sumber: "entri", entri: "do_menu" },
@@ -756,7 +751,7 @@ const onlineDelivery: Indikator[] = [
   },
   {
     key: "do_issue",
-    label: "Issue Resolution Time",
+    label: "Kecepatan Penyelesaian Gangguan",
     bobot: 15,
     target: { jenis: "tetap", nilai: 5 },
     // PENGURANG, bukan penambah. Yang dinilai bukan berapa banyak gangguan yang
@@ -767,7 +762,7 @@ const onlineDelivery: Indikator[] = [
   },
   {
     key: "do_merchant",
-    label: "Merchant Registration Success",
+    label: "Keberhasilan Pendaftaran Merchant",
     bobot: 15,
     target: { jenis: "tetap", nilai: 3 },
     actual: { sumber: "entri", entri: "do_merchant" },
@@ -775,7 +770,7 @@ const onlineDelivery: Indikator[] = [
   },
   {
     key: "do_tersedia",
-    label: "Delivery Menu Availability",
+    label: "Ketersediaan Menu Delivery",
     bobot: 15,
     target: { jenis: "tetap", nilai: 100 },
     actual: { sumber: "manual" },
@@ -784,7 +779,7 @@ const onlineDelivery: Indikator[] = [
   },
   {
     key: "do_gagal",
-    label: "Order Failure by System / Menu",
+    label: "Pesanan Gagal karena Sistem / Menu",
     bobot: 10,
     target: { jenis: "tetap", nilai: 5 },
     actual: { sumber: "pengurang", entri: "do_gagal" },
@@ -806,7 +801,7 @@ const onlineDelivery: Indikator[] = [
 const operatingSystem: Indikator[] = [
   {
     key: "os_uptime",
-    label: "POS Availability",
+    label: "Kesiapan POS Kasir",
     bobot: 20,
     target: { jenis: "tetap", nilai: 100 },
     actual: { sumber: "harian", entri: "os_uptime" },
@@ -815,7 +810,7 @@ const operatingSystem: Indikator[] = [
   },
   {
     key: "os_masterdata",
-    label: "Master Data Accuracy",
+    label: "Keakuratan Master Data",
     bobot: 15,
     target: { jenis: "tetap", nilai: 5 },
     actual: { sumber: "entri", entri: "os_masterdata" },
@@ -823,7 +818,7 @@ const operatingSystem: Indikator[] = [
   },
   {
     key: "os_menu",
-    label: "Menu Configuration Accuracy",
+    label: "Keakuratan Konfigurasi Menu",
     bobot: 15,
     target: { jenis: "tetap", nilai: 5 },
     actual: { sumber: "entri", entri: "os_menu" },
@@ -831,7 +826,7 @@ const operatingSystem: Indikator[] = [
   },
   {
     key: "os_issue",
-    label: "Issue Resolution Time",
+    label: "Kecepatan Penyelesaian Gangguan",
     bobot: 15,
     target: { jenis: "tetap", nilai: 5 },
     actual: { sumber: "pengurang", entri: "os_issue" },
@@ -839,7 +834,7 @@ const operatingSystem: Indikator[] = [
   },
   {
     key: "os_error",
-    label: "Transaction Error Rate",
+    label: "Tingkat Transaksi Gagal",
     bobot: 15,
     target: { jenis: "tetap", nilai: 1 },
     actual: { sumber: "manual" },
@@ -852,7 +847,7 @@ const operatingSystem: Indikator[] = [
   },
   {
     key: "os_improve",
-    label: "System Improvement",
+    label: "Perbaikan Sistem",
     bobot: 10,
     target: { jenis: "tetap", nilai: 2 },
     actual: { sumber: "entri", entri: "os_improve" },
@@ -860,7 +855,7 @@ const operatingSystem: Indikator[] = [
   },
   {
     key: "os_puas",
-    label: "Outlet / User Satisfaction",
+    label: "Kepuasan Outlet & Kasir",
     bobot: 10,
     target: { jenis: "tetap", nilai: 90 },
     actual: { sumber: "manual" },
