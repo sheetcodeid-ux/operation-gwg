@@ -74,3 +74,15 @@ describe("hanya super admin yang boleh mengubahnya", () => {
     expect(blok).toContain('revalidatePath("/kpi/manajemen")');
   });
 });
+
+describe("tipe kolom penyimpanannya", () => {
+  const migrasi = readFileSync(join(process.cwd(), "supabase/migrations/0101_kpi_posisi_berlaku.sql"), "utf8");
+
+  it("diubah_oleh disimpan sebagai TEXT, bukan uuid", () => {
+    // Id pengguna di aplikasi ini berbentuk "usr_001". Dibuat uuid, setiap
+    // penyimpanan gagal dengan pesan Postgres apa adanya di layar pengguna:
+    // invalid input syntax for type uuid: "usr_001".
+    expect(migrasi).toContain("diubah_oleh text");
+    expect(migrasi).not.toMatch(/diubah_oleh\s+uuid/);
+  });
+});

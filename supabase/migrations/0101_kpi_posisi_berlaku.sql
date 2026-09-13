@@ -19,7 +19,11 @@ create table if not exists public.kpi_posisi_setelan (
   posisi text primary key,
   aktif boolean not null default true,
   berlaku_mulai text,
-  diubah_oleh uuid,
+  -- TEXT, bukan uuid. Id pengguna di aplikasi ini berbentuk "usr_001"; tujuh
+  -- tabel KPI lainnya sudah menyimpannya sebagai text. Dibuat uuid, setiap
+  -- penyimpanan gagal dengan pesan Postgres apa adanya di layar pengguna:
+  -- invalid input syntax for type uuid: "usr_001".
+  diubah_oleh text,
   diubah_nama text,
   diubah_pada timestamptz not null default now()
 );

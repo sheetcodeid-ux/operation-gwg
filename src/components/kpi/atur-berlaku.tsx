@@ -85,59 +85,62 @@ export function AturBerlaku({ baris }: { baris: BarisBerlaku[] }) {
           className="max-w-3xl"
         >
           <div className="max-h-[70vh] space-y-3 overflow-y-auto p-5">
-            <div className="overflow-x-auto rounded-xl border border-border">
-              <table className="w-full min-w-[640px] border-collapse text-sm">
-                <thead>
-                  <tr className="border-b border-border bg-muted/40 text-left">
-                    <th className="w-20 px-3 py-2 text-[10.5px] font-semibold uppercase tracking-wide text-muted-foreground">Dinilai</th>
-                    <th className="px-3 py-2 text-[10.5px] font-semibold uppercase tracking-wide text-muted-foreground">Posisi</th>
-                    <th className="w-40 px-3 py-2 text-[10.5px] font-semibold uppercase tracking-wide text-muted-foreground">Berlaku Mulai</th>
-                    <th className="w-24 px-3 py-2" />
-                  </tr>
-                </thead>
-                <tbody>
-                  {isi.map((r) => {
-                    const info = baris.find((b) => b.kode === r.kode)!;
-                    return (
-                      <tr key={r.kode} className={cn("border-b border-border/60 last:border-0", !r.aktif && "opacity-55")}>
-                        <td className="px-3 py-2">
-                          <button
-                            type="button"
-                            role="switch"
-                            aria-checked={r.aktif}
-                            aria-label={`${r.aktif ? "Matikan" : "Nyalakan"} KPI ${info.nama}`}
-                            onClick={() => ubah(r.kode, { aktif: !r.aktif })}
-                            className={cn("relative h-5 w-9 rounded-full transition-colors", r.aktif ? "bg-brand-500" : "bg-muted-foreground/35")}
-                          >
-                            <span className={cn("absolute top-0.5 size-4 rounded-full bg-white transition-all", r.aktif ? "left-[1.125rem]" : "left-0.5")} />
-                          </button>
-                        </td>
-                        <td className="px-3 py-2">
-                          <p className="font-medium text-foreground">{info.nama}</p>
-                          <p className="text-[11px] text-muted-foreground">{info.departemen}</p>
-                        </td>
-                        <td className="px-3 py-2">
-                          <Input
-                            value={r.berlakuMulai}
-                            onChange={(e) => ubah(r.kode, { berlakuMulai: e.target.value })}
-                            placeholder="2026-09"
-                            className="h-8"
-                            disabled={!r.aktif}
-                          />
-                          <p className="mt-1 text-[10.5px] text-muted-foreground">
-                            {r.berlakuMulai ? `Sejak ${labelBulan(r.berlakuMulai)}` : "Sejak kapan pun"}
-                          </p>
-                        </td>
-                        <td className="px-3 py-2 text-right">
-                          <Button size="sm" variant="outline" onClick={() => simpan(r.kode)} disabled={sibuk !== null}>
-                            {sibuk === r.kode ? <Loader2 className="size-3.5 animate-spin" /> : "Simpan"}
-                          </Button>
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
+            {/* DAFTAR, BUKAN TABEL. Tabel dengan lebar minimum menggeser kolom
+                nama keluar layar di ponsel — yang tersisa cuma kotak bulan dan
+                tombol Simpan, tanpa satu pun petunjuk itu posisi apa. Dengan
+                daftar yang membungkus, nama posisinya selalu terlihat. */}
+            <div className="divide-y divide-border/60 rounded-xl border border-border">
+              {isi.map((r) => {
+                const info = baris.find((b) => b.kode === r.kode)!;
+                return (
+                  <div
+                    key={r.kode}
+                    className={cn("flex flex-wrap items-center gap-x-3 gap-y-2 px-3 py-2.5", !r.aktif && "opacity-55")}
+                  >
+                    <button
+                      type="button"
+                      role="switch"
+                      aria-checked={r.aktif}
+                      aria-label={`${r.aktif ? "Matikan" : "Nyalakan"} KPI ${info.nama}`}
+                      onClick={() => ubah(r.kode, { aktif: !r.aktif })}
+                      className={cn(
+                        "relative h-5 w-9 shrink-0 rounded-full transition-colors",
+                        r.aktif ? "bg-brand-500" : "bg-muted-foreground/35",
+                      )}
+                    >
+                      <span
+                        className={cn(
+                          "absolute top-0.5 size-4 rounded-full bg-white transition-all",
+                          r.aktif ? "left-[1.125rem]" : "left-0.5",
+                        )}
+                      />
+                    </button>
+
+                    <div className="min-w-0 flex-1 basis-40">
+                      <p className="truncate font-medium text-foreground">{info.nama}</p>
+                      <p className="truncate text-[11px] text-muted-foreground">{info.departemen}</p>
+                    </div>
+
+                    <div className="w-32 shrink-0">
+                      <Input
+                        value={r.berlakuMulai}
+                        onChange={(e) => ubah(r.kode, { berlakuMulai: e.target.value })}
+                        placeholder="2026-09"
+                        className="h-8"
+                        disabled={!r.aktif}
+                        aria-label={`Berlaku mulai ${info.nama}`}
+                      />
+                      <p className="mt-1 truncate text-[10.5px] text-muted-foreground">
+                        {r.berlakuMulai ? `Sejak ${labelBulan(r.berlakuMulai)}` : "Sejak kapan pun"}
+                      </p>
+                    </div>
+
+                    <Button size="sm" variant="outline" className="shrink-0" onClick={() => simpan(r.kode)} disabled={sibuk !== null}>
+                      {sibuk === r.kode ? <Loader2 className="size-3.5 animate-spin" /> : "Simpan"}
+                    </Button>
+                  </div>
+                );
+              })}
             </div>
 
             <p className="rounded-xl border border-border bg-muted/30 px-3.5 py-2.5 text-[12px] text-muted-foreground">
