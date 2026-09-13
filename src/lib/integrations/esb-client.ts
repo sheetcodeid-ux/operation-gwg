@@ -508,21 +508,46 @@ export async function esbListBranches(): Promise<EsbBranch[]> {
 
 /** Seluruh kotak Sales Dashboard untuk satu rentang tanggal, satu cabang atau semua. */
 export async function esbFetchHighlight(dateFromYmd: string, dateToYmd: string, branchId = ""): Promise<EsbHighlight> {
-  const s = await ensureSession();
-  const body = new URLSearchParams();
-  body.append("branchID", branchId);
-  body.append("brandID", "");
-  body.append("reportDateStart", toEsbDate(dateFromYmd));
-  body.append("reportDateEnd", toEsbDate(dateToYmd));
-  for (const c of await getCompanyIds()) body.append("companyID[]", c);
-  const res = await esbFetch(`${BASE}/sales-dashboard/get-today-highlight`, {
-    method: "POST",
-    headers: { "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8", "X-Requested-With": "XMLHttpRequest", "X-Csrf-Token": s.csrf, Cookie: s.cookie, Referer: `${BASE}/sales-dashboard` },
-    body,
-    cache: "no-store",
-  });
+  /**
+   * Satu panggilan utuh, dibangun ULANG dari sesi yang sedang berlaku.
+   *
+   * Bukan sekadar mengulang permintaan yang sama: CSRF dan cookie melekat pada
+   * sesi, jadi mengirim badan yang lama dengan sesi yang baru sama saja
+   * ditolak lagi.
+   */
+  const panggil = async (): Promise<{ res: Response; teks: string }> => {
+    const s = await ensureSession();
+    const body = new URLSearchParams();
+    body.append("branchID", branchId);
+    body.append("brandID", "");
+    body.append("reportDateStart", toEsbDate(dateFromYmd));
+    body.append("reportDateEnd", toEsbDate(dateToYmd));
+    for (const c of await getCompanyIds()) body.append("companyID[]", c);
+    const res = await esbFetch(`${BASE}/sales-dashboard/get-today-highlight`, {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8", "X-Requested-With": "XMLHttpRequest", "X-Csrf-Token": s.csrf, Cookie: s.cookie, Referer: `${BASE}/sales-dashboard` },
+      body,
+      cache: "no-store",
+    });
+    return { res, teks: await res.text() };
+  };
+
+  let { res, teks } = await panggil();
+
+  // SESI HABIS DICOBA SEKALI LAGI, tidak langsung dianggap gagal.
+  //
+  // ESB membalas 200 berisi halaman login utuh saat sesinya habis — `res.ok`
+  // bernilai benar, dan tanpa pemeriksaan ini halaman itu diteruskan seolah
+  // data lalu gagal diuraikan. Jalur POST yang lain sudah lama menanganinya;
+  // highlight terlewat, dan itu terlihat di penarikan panjang: puluhan cabang
+  // pertama berhasil, sisanya gagal berturut-turut sampai penarikannya
+  // menyerah — lalu diulang dari awal jam berikutnya, gagal di titik yang sama.
+  if (res.status === 401 || res.status === 403 || res.status === 302 || (res.ok && BERBAU_LOGIN.test(teks))) {
+    session = null;
+    ({ res, teks } = await panggil());
+  }
+
   if (!res.ok) throw new Error(`ESB highlight failed (${res.status})`);
-  const teks = await res.text();
   const j = decodeAjax<Record<string, unknown>>(teks);
   if (!j || typeof j !== "object") {
     // Balasan berupa halaman HTML punya SATU sebab yang jauh lebih sering dari
@@ -532,7 +557,7 @@ export async function esbFetchHighlight(dateFromYmd: string, dateToYmd: string, 
     const html = teks.trimStart().startsWith("<");
     throw new Error(
       html
-        ? "ESB highlight: dibalas halaman HTML, bukan data — sesi habis atau companyID tidak terbaca"
+        ? "ESB highlight: dibalas halaman HTML walau sesi sudah diperbarui — kemungkinan besar ESB sedang membatasi permintaan"
         : "ESB highlight: respons tidak terbaca",
     );
   }

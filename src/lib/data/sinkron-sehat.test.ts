@@ -121,6 +121,15 @@ describe("companyID ESB tidak boleh terkunci kosong", () => {
   });
 
   it("balasan HTML disebut apa adanya, bukan sekadar tidak terbaca", () => {
-    expect(klien).toContain("dibalas halaman HTML, bukan data");
+    expect(klien).toContain("dibalas halaman HTML walau sesi sudah diperbarui");
+  });
+
+  it("highlight mencoba LOGIN ULANG dulu sebelum menyerah", () => {
+    // ESB membalas 200 berisi halaman login saat sesinya habis. Jalur POST yang
+    // lain sudah lama menanganinya; highlight terlewat — terlihat di penarikan
+    // panjang: puluhan cabang pertama berhasil, sisanya gagal berturut-turut.
+    const bagian = klien.slice(klien.indexOf("export async function esbFetchHighlight"));
+    expect(bagian).toContain("BERBAU_LOGIN.test(teks)");
+    expect(bagian).toContain("session = null;");
   });
 });
