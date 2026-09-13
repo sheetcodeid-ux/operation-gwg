@@ -103,12 +103,16 @@ describe("tampilan Detail KPI Divisi", () => {
     expect(papan).toContain("(b.rata ?? 0) - (a.rata ?? 0)");
   });
 
-  it("Total Skor KPI Manajemen dibulatkan, halaman posisi tidak", () => {
-    // Di KPI Manajemen angkanya rata-rata dari rata-rata; dua desimal memberi
-    // kesan ketelitian yang tidak dimilikinya. Di halaman posisi desimalnya
-    // tetap, karena di sana angkanya dicocokkan dengan laporan bertanda tangan.
-    expect(papan).toContain("<KpiIndicatorDonut baris={baris} bulat />");
-    const posisi = readFileSync(join(process.cwd(), "src/components/kpi/papan-kpi.tsx"), "utf8");
-    expect(posisi).toContain("<KpiIndicatorDonut baris={baris} />");
+  it("Total Skor dibulatkan di mana pun, termasuk di PDF", () => {
+    // Diputuskan pemiliknya: angka ringkasan dibulatkan. Rincian per indikator
+    // tetap berdesimal — di situlah angkanya dicocokkan baris demi baris
+    // dengan laporan yang ditandatangani.
+    const grafik = readFileSync(join(process.cwd(), "src/components/kpi/kpi-charts.tsx"), "utf8");
+    expect(grafik).toContain('total.toLocaleString("id-ID", { maximumFractionDigits: 0 })');
+    const pdf = readFileSync(join(process.cwd(), "src/components/kpi/laporan-pdf.tsx"), "utf8");
+    expect(pdf).toContain("persen(ringkas.skor, 0)");
+    expect(pdf).toContain("persen(ringkas.skorSetara, 0)");
+    // Rinciannya TIDAK ikut dibulatkan.
+    expect(pdf).toContain("persen(b.persenActual)");
   });
 });

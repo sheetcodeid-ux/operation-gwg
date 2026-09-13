@@ -548,7 +548,7 @@ export function PapanManajemen({ detail, bolehAtur }: { detail: DetailManajemen;
         ) : (
           <KpiPerformanceChart judul={grafik.judul} baris={grafik.baris} lalu={grafik.lalu} />
         )}
-        <KpiIndicatorDonut baris={baris} bulat />
+        <KpiIndicatorDonut baris={baris} />
       </div>
 
       {tampilan === "komponen" && (
