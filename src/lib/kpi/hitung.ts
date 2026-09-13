@@ -122,7 +122,17 @@ export function barisKpi(input: {
   actualNominal?: number | null;
   targetNominal?: number | null;
 }): BarisKpi {
-  const persentase = persentaseCapaian(input.actual, input.target, input.indikator.penilaian);
+  // TARGET YANG MENGIKUTI PEKERJAAN YANG MASUK punya satu keadaan yang tidak
+  // bisa ditangani rumus umum: bulan tanpa satu pun pekerjaan. Target nol di
+  // tempat lain berarti "belum ditetapkan" — di sini artinya "tidak ada yang
+  // perlu dikerjakan", dan mengerjakan habis tidak-ada-apa-apa berarti selesai
+  // seluruhnya. Tanpa ini, bulan yang bersih terbaca "Belum terukur" dan
+  // indikatornya justru keluar dari skor.
+  const pekerjaan = input.indikator.target.jenis === "pekerjaan";
+  const persentase =
+    pekerjaan && input.target === 0 && (input.actual ?? 0) === 0
+      ? BATAS_PERSENTASE
+      : persentaseCapaian(input.actual, input.target, input.indikator.penilaian);
   return {
     key: input.indikator.key,
     label: input.indikator.label,
@@ -202,7 +212,14 @@ export function hitungTarget(t: JenisTarget, k: KonteksTarget): number | null {
     case "tetap":
       return t.perBrand ? t.nilai * Math.max(0, k.jumlahBrand) : t.nilai;
     case "tumbuh":
-      return k.actualBulanLalu === null ? null : k.actualBulanLalu * (1 + t.pertumbuhan / 100);
+      // Bulan lalu NOL ATAU MINUS tidak bisa jadi dasar pertumbuhan. Dikalikan
+      // 1,1 hasilnya tetap nol atau justru makin minus — target minus lalu
+      // membuat capaian terbaca terbalik: makin buruk actual-nya, makin besar
+      // persentasenya. Dilaporkan sebagai target yang belum bisa dihitung,
+      // dengan alasannya ditulis di layar.
+      return k.actualBulanLalu === null || k.actualBulanLalu <= 0
+        ? null
+        : k.actualBulanLalu * (1 + t.pertumbuhan / 100);
     case "pekerjaan":
       return k.jumlahPekerjaan;
     case "outlet":

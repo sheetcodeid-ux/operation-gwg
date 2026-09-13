@@ -568,7 +568,6 @@ export function HppIngredients({
         columns={columns as ColumnDef<HppIngredient, unknown>[]}
         data={rows}
         tableId="hpp-bahan"
-        pageSize={15}
         searchPlaceholder="Cari bahan…"
         toolbar={
           <>

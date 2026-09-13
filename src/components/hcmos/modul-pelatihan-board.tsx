@@ -197,7 +197,6 @@ export function ModulPelatihanBoard({ rekaman }: { rekaman: RekamanPelatihan[] }
           tableId={`hcmos-modul-${scope}`}
           showSearch={false}
           maxHeight="none"
-          pageSize={10}
         />
       </div>
 

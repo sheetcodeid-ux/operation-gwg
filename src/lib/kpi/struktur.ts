@@ -127,15 +127,18 @@ export const POSISI: Posisi[] = [
   // transaksinya selesai.
   { kode: "operational_do", departemen: "operational", nama: "Online Delivery Officer", pic: ["Adinda Latifah"] },
   { kode: "operational_os", departemen: "operational", nama: "Operating System Officer", pic: ["Pricil"] },
-  { kode: "creative_content", departemen: "creative", nama: "Content Creator", pic: ["Via", "Dhimas", "Seka", "Ricky"], perPic: true },
+  // SATU KESATUAN, bukan satu penilaian per orang. Diputuskan pemiliknya:
+  // yang dinilai hasil kerja tim, dan memecahnya per nama menuntut pembagian
+  // pekerjaan yang tidak ada di datanya.
+  { kode: "creative_content", departemen: "creative", nama: "Content Creator", pic: ["Dhimas", "Ricky", "Seka", "Via"] },
   // Sosial Media pindah ke Marketing Communication — sejak tim ini tidak lagi
   // bergabung dengan Creative. KODE POSISINYA SENGAJA TIDAK DIUBAH: seluruh
   // catatan kegiatan dan angka bulanannya menempel pada kode itu, dan
   // menggantinya akan memutus riwayat yang sudah terkumpul tanpa satu pun
   // pesan.
-  { kode: "creative_sosmed", departemen: "marcomm", nama: "Sosial Media", pic: ["Zia"] },
+  { kode: "creative_sosmed", departemen: "marcomm", nama: "Sosial Media", pic: ["Zia", "Dita", "Marta"] },
   { kode: "finance_accounting", departemen: "finance", nama: "Accounting", pic: ["Bella"] },
-  { kode: "finance_finance", departemen: "finance", nama: "Finance", pic: ["Nisa", "Fatin", "Fetty"], perPic: true },
+  { kode: "finance_finance", departemen: "finance", nama: "Finance", pic: ["Nisa", "Fatin", "Fetty", "Sri"], perPic: true },
   { kode: "finance_tax", departemen: "finance", nama: "Tax", pic: ["Samsul"] },
   { kode: "marcomm", departemen: "marcomm", nama: "Marketing Communication", pic: ["Amanda", "Dita", "Marta"] },
   { kode: "pdq_qc", departemen: "pdq", nama: "Quality Assurance & Control", pic: ["Radika"] },

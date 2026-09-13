@@ -244,7 +244,7 @@ export function DataAnalysis({ data, branches, rangeLabel }: { data: AnalysisDat
           {data.products.length > 0 && (
             <Card className="p-5">
               <SectionTitle title="Product Analysis" desc={`Semua produk · ${data.products.length} item · katalog ESB${data.esbRentang ? ` ${data.esbRentang}` : ""} (semua outlet)`} />
-              <DataTable tableId="an-produk" columns={productCols} data={data.products} searchPlaceholder="Cari produk / kategori…" pageSize={12} />
+              <DataTable tableId="an-produk" columns={productCols} data={data.products} searchPlaceholder="Cari produk / kategori…" />
               {data.deadProducts.length > 0 && <p className="mt-2 text-[11px] text-red-600 dark:text-red-400"><b>{data.deadProducts.length}</b> produk mati (tanpa penjualan{data.esbRentang ? ` pada ${data.esbRentang}` : ""}).</p>}
             </Card>
           )}
@@ -272,7 +272,7 @@ export function DataAnalysis({ data, branches, rangeLabel }: { data: AnalysisDat
               <Card className="p-5 lg:col-span-3">
                 <SectionTitle title="Outlet Performance" desc="Ranking net sales · periode ini" />
                 {data.outletPerformance.length > 0 ? (
-                  <DataTable tableId="an-outlet" columns={outletCols} data={data.outletPerformance} searchPlaceholder="Cari outlet…" pageSize={8} />
+                  <DataTable tableId="an-outlet" columns={outletCols} data={data.outletPerformance} searchPlaceholder="Cari outlet…" />
                 ) : (
                   <p className="rounded-lg border border-dashed border-border bg-muted/20 px-3 py-6 text-center text-xs text-muted-foreground">Data per-outlet sedang disinkron bertahap (1 outlet/jam). Tampilan Semua Outlet sudah lengkap.</p>
                 )}
@@ -284,7 +284,7 @@ export function DataAnalysis({ data, branches, rangeLabel }: { data: AnalysisDat
           {data.categoriesRows.length > 0 && (
             <Card className="p-5">
               <SectionTitle title="Kategori — Rincian" desc={`${data.categoriesRows.length} kategori`} />
-              <DataTable tableId="an-kategori" columns={catCols} data={data.categoriesRows} searchPlaceholder="Cari kategori…" pageSize={8} showExport={false} />
+              <DataTable tableId="an-kategori" columns={catCols} data={data.categoriesRows} searchPlaceholder="Cari kategori…" showExport={false} />
             </Card>
           )}
 
@@ -295,7 +295,7 @@ export function DataAnalysis({ data, branches, rangeLabel }: { data: AnalysisDat
                 title="Price & Margin"
                 desc={data.priceStats ? `Rata-rata harga ${rp(data.priceStats.avg)} · ${data.margins.length} produk ber-HPP` : `${data.margins.length} produk`}
               />
-              <DataTable tableId="an-margin" columns={marginCols} data={data.margins} searchPlaceholder="Cari produk…" pageSize={10} />
+              <DataTable tableId="an-margin" columns={marginCols} data={data.margins} searchPlaceholder="Cari produk…" />
             </Card>
           )}
 

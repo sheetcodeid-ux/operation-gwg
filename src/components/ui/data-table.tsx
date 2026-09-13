@@ -24,6 +24,16 @@ interface DataTableProps<TData, TValue> {
   data: TData[];
   searchPlaceholder?: string;
   toolbar?: React.ReactNode;
+  /**
+   * Baris per halaman. `0` — dan itu bawaannya — berarti TANPA BATAS: seluruh
+   * baris ditampilkan sekaligus, tabelnya digulir, dan navigasi halaman tidak
+   * muncul sama sekali.
+   *
+   * Diputuskan pemiliknya, dan alasannya kuat: memecah 54 baris jadi enam
+   * halaman berarti membandingkan baris pertama dengan baris terakhir menuntut
+   * mengingat angka sambil berpindah halaman — dan yang diingat orang sambil
+   * berpindah halaman hampir selalu meleset.
+   */
   pageSize?: number;
   /** Stable id to persist column visibility + density to localStorage. */
   tableId?: string;
@@ -47,7 +57,7 @@ export function DataTable<TData, TValue>({
   data,
   searchPlaceholder = "Search…",
   toolbar,
-  pageSize = 10,
+  pageSize = 0,
   tableId,
   stickyHeader = true,
   maxHeight = "62vh",
@@ -87,8 +97,12 @@ export function DataTable<TData, TValue>({
     getCoreRowModel: getCoreRowModel(),
     getSortedRowModel: getSortedRowModel(),
     getFilteredRowModel: getFilteredRowModel(),
-    getPaginationRowModel: getPaginationRowModel(),
-    initialState: { pagination: { pageSize } },
+    // Tanpa model paginasi, tabel mengembalikan SELURUH baris — itulah yang
+    // membuat "tanpa batas" benar-benar tanpa batas, bukan satu halaman raksasa
+    // yang jumlahnya masih dihitung diam-diam.
+    ...(pageSize > 0
+      ? { getPaginationRowModel: getPaginationRowModel(), initialState: { pagination: { pageSize } } }
+      : {}),
   });
 
   const cellPad = "px-3 py-2"; // always compact
@@ -117,7 +131,7 @@ export function DataTable<TData, TValue>({
   const total = table.getFilteredRowModel().rows.length;
   const pageIndex = table.getState().pagination.pageIndex;
   const curPageSize = table.getState().pagination.pageSize;
-  const pageCount = table.getPageCount() || 1;
+  const pageCount = pageSize > 0 ? table.getPageCount() || 1 : 1;
   const from = total ? pageIndex * curPageSize + 1 : 0;
   const to = pageIndex * curPageSize + table.getRowModel().rows.length;
 

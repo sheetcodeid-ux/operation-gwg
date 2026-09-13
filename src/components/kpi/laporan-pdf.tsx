@@ -96,7 +96,11 @@ function grafikCapaian(baris: BarisKpi[], lalu: Record<string, LaluIndikator>, t
   const A = 14;
   const B = 24;
   const W = 720;
-  const H = 260;
+  // LEBIH TINGGI daripada sebelumnya, dan selebar halaman. Pada tinggi 260
+  // dengan donat berdampingan, selisih 78% dan 85% hanya berjarak beberapa
+  // piksel — dua capaian yang berbeda terbaca sama, dan grafik yang tidak bisa
+  // dibedakan tidak menjelaskan apa pun.
+  const H = 380;
   const n = baris.length;
   const lebar = W - L - R;
   const tinggi = H - A - B;
@@ -119,31 +123,40 @@ function grafikCapaian(baris: BarisKpi[], lalu: Record<string, LaluIndikator>, t
     )
     .join("");
 
-  // Bidang grafiknya diberi ALAS dan KISI, sama seperti di layar. Grafik yang
-  // melayang di atas kertas kosong membuat tinggi tiap titik hanya bisa
-  // ditebak; kisi mendatarlah yang membuatnya bisa dibaca sebagai angka.
+  // HANYA GARIS MENDATAR. Kisi silang dibuang atas permintaan pemiliknya, dan
+  // memang yang dibuang itu yang tidak bekerja: garis tegak tidak menolong
+  // membaca ketinggian titik — itu tugas garis mendatar — sementara keduanya
+  // bersama membuat halaman terlihat seperti kertas milimeter.
   const alas =
-    `<rect x="${L}" y="${A}" width="${W - L - R}" height="${tinggi}" rx="6" fill="${t.card}" stroke="${t.grid}" stroke-width="1"/>` +
-    [0, 25, 50, 75, 100]
-      .map((v) => `<line x1="${L}" y1="${py(v)}" x2="${W - R}" y2="${py(v)}" stroke="${t.grid}" stroke-width="1" stroke-dasharray="3 3"/>`)
+    `<rect x="${L}" y="${A}" width="${W - L - R}" height="${tinggi}" rx="8" fill="${t.card}" stroke="${t.border}" stroke-width="1"/>` +
+    [25, 50, 75]
+      .map((v) => `<line x1="${L}" y1="${py(v)}" x2="${W - R}" y2="${py(v)}" stroke="${t.grid}" stroke-width="1" stroke-opacity="0.55"/>`)
       .join("") +
-    baris
-      .map((_, i) => `<line x1="${px(i)}" y1="${A}" x2="${px(i)}" y2="${A + tinggi}" stroke="${t.grid}" stroke-width="1" stroke-dasharray="2 4" stroke-opacity="0.6"/>`)
-      .join("");
+    `<line x1="${L}" y1="${py(0)}" x2="${W - R}" y2="${py(0)}" stroke="${t.border}" stroke-width="1"/>`;
 
   const garisSumbu = [0, 25, 50, 75, 100]
-    .map((v) => `<text x="${L - 8}" y="${py(v) + 4}" text-anchor="end" fill="${t.sub}" font-size="10" font-weight="600">${v}%</text>`)
+    .map((v) => `<text x="${L - 8}" y="${py(v) + 4}" text-anchor="end" fill="${t.sub}" font-size="11" font-weight="600">${v}%</text>`)
     .join("");
 
   // Nama indikator ditulis PENUH, sama seperti di layar; yang tidak muat pada
   // jatah lebarnya dipotong dengan elipsis. Titik paling pinggir dirapatkan ke
   // dalam supaya tidak menjorok keluar kartunya.
-  const muat = Math.max(6, Math.floor((lebar / Math.max(1, n) - 10) / 4.9));
+  const muat = Math.max(8, Math.floor((lebar / Math.max(1, n) - 8) / 5.6));
   const label = baris
     .map((b, i) => {
       const anchor = i === 0 ? "start" : i === n - 1 ? "end" : "middle";
-      return `<text x="${px(i)}" y="${H - 8}" text-anchor="${anchor}" fill="${t.text}" font-size="9" font-weight="700">${aman(potong(b.label, muat))}</text>`;
+      return `<text x="${px(i)}" y="${H - 8}" text-anchor="${anchor}" fill="${t.text}" font-size="10.5" font-weight="700">${aman(potong(b.label, muat))}</text>`;
     })
+    .join("");
+
+  // Angkanya ditulis DI ATAS titiknya. Grafik memberi bentuk, angka memberi
+  // kepastian — dan laporan yang dicetak tidak bisa di-hover untuk melihatnya.
+  const nilaiTitik = baris
+    .map((b, i) =>
+      b.persentase === null
+        ? ""
+        : `<text x="${ini[i].x.toFixed(1)}" y="${(ini[i].y - 9).toFixed(1)}" text-anchor="middle" fill="${t.text}" font-size="10" font-weight="700">${Math.round(b.persentase)}%</text>`,
+    )
     .join("");
 
   const area = `${garis(ini)} L${(ini[ini.length - 1]?.x ?? L).toFixed(1)},${py(0)} L${(ini[0]?.x ?? L).toFixed(1)},${py(0)} Z`;
@@ -160,7 +173,8 @@ function grafikCapaian(baris: BarisKpi[], lalu: Record<string, LaluIndikator>, t
     <path d="${area}" fill="url(#isiBiru)" stroke="none"/>
     <path d="${garis(tgt)}" fill="none" stroke="${TARGET}" stroke-width="2" stroke-dasharray="6 5"/>
     <path d="${garis(ini)}" fill="none" stroke="${BIRU}" stroke-width="2.75"/>
-    ${titik(ini, BIRU, 3)}
+    ${titik(ini, BIRU, 3.5)}
+    ${nilaiTitik}
     ${label}
   </svg>`;
 }
@@ -241,13 +255,16 @@ export function buatLaporanHtml({
   const { baris, ringkas, ca } = laporan;
   const adaKategori = baris.some((b) => b.kategori);
 
-  const sel = (isi: string, gaya = "") => `<td style="padding:8px 10px;border-bottom:1px solid ${t.border};font-size:11.5px;${gaya}">${isi}</td>`;
+  // Baris berselang-seling. Delapan kolom angka tanpa pembeda membuat mata
+  // berpindah baris di tengah jalan — dan angka yang terbaca dari baris lain
+  // adalah kesalahan yang tidak akan pernah ketahuan.
+  const sel = (isi: string, gaya = "") => `<td style="padding:9px 10px;border-bottom:1px solid ${t.border};font-size:11.5px;${gaya}">${isi}</td>`;
   const kepala = (isi: string, gaya = "") =>
     `<th style="padding:8px 10px;border-bottom:1px solid ${t.border};font-size:10px;text-transform:uppercase;letter-spacing:0.05em;color:${t.sub};text-align:left;${gaya}">${isi}</th>`;
 
   const barisIndikator = baris
     .map(
-      (b) => `<tr>
+      (b, n) => `<tr style="background:${n % 2 ? t.box : "transparent"}">
       ${sel(`<b style="color:${t.text}">${aman(b.label)}</b>${b.alasan ? `<div style="color:${t.sub};font-size:10px">${aman(b.alasan)}</div>` : ""}`)}
       ${adaKategori ? sel(aman(b.kategori ?? "—"), `color:${t.sub}`) : ""}
       ${sel(persen(b.bobot, 0), "text-align:right")}
@@ -321,21 +338,19 @@ export function buatLaporanHtml({
   .grid2 { display:grid; grid-template-columns:1fr 1fr; gap:0 32px; }
   .scorebox { display:flex; align-items:center; justify-content:space-between; gap:16px; background:${t.box}; border:1px solid ${t.border}; border-radius:12px; padding:18px 20px; }
   .score { font-size:40px; font-weight:800; color:${t.text}; line-height:1; }
-  .charts { display:grid; grid-template-columns:1fr 330px; gap:14px; align-items:stretch; }
+  /* GRAFIK CAPAIAN BERDIRI SENDIRI SELEBAR HALAMAN, donat di bawahnya.
+     Berdampingan, grafik hanya kebagian dua pertiga lebar dan tingginya ikut
+     terkunci pada tinggi donat — persis yang membuatnya terlalu kecil untuk
+     dibaca. */
+  .charts { display:block; }
   .chartbox {
     background:${t.box};
-    /* Kisi tipis di latar kartunya — bentuk yang sama dipakai seluruh kartu
-       grafik di aplikasi, dan dokumen yang latarnya polos terlihat seperti
-       tangkapan layar yang gagal dimuat. */
-    background-image:
-      linear-gradient(${t.grid} 1px, transparent 1px),
-      linear-gradient(90deg, ${t.grid} 1px, transparent 1px);
-    background-size:22px 22px;
     border:1px solid ${t.border};
-    border-radius:12px;
-    padding:14px 16px;
+    border-radius:14px;
+    padding:16px 18px;
   }
-  .chartbox h3 { font-size:12px; font-weight:700; color:${t.text}; margin-bottom:2px; }
+  .chartbox + .chartbox { margin-top:14px; }
+  .chartbox h3 { font-size:13px; font-weight:700; color:${t.text}; margin-bottom:2px; }
   .chartbox .sub { font-size:10.5px; color:${t.sub}; margin-bottom:8px; }
   .legend { display:flex; gap:14px; flex-wrap:wrap; margin-bottom:6px; font-size:10.5px; color:${t.sub}; align-items:center; }
   .foot { margin-top:26px; padding-top:14px; border-top:1px solid ${t.border}; color:${t.sub}; font-size:11px; display:flex; justify-content:space-between; }
@@ -347,7 +362,13 @@ export function buatLaporanHtml({
   <div class="sheet">
     <div class="band">
       <div style="display:flex;align-items:center;gap:14px">${logo()}<div><h1>Laporan Key Performance Indicator</h1><p>Good Will Grow · ${aman(namaDepartemen)}</p></div></div>
-      <div style="text-align:right"><p style="opacity:0.85;font-size:12px">${aman(namaPosisi)}</p><p>${aman(labelPeriode(laporan.periode))}</p></div>
+      <div style="text-align:right">
+        <p style="opacity:0.85;font-size:12px">${aman(namaPosisi)}</p>
+        <p>${aman(labelPeriode(laporan.periode))}</p>
+        <!-- Skornya ikut di kepala: laporan yang ditumpuk di meja dibaca dari
+             halaman pertama, dan angka yang dicari duluan selalu angka ini. -->
+        <p style="margin-top:8px;font-size:22px;font-weight:800;opacity:1">${persen(ringkas.skor)}</p>
+      </div>
     </div>
     <div class="body">
       <div class="sec-title">Identitas Penilaian</div>

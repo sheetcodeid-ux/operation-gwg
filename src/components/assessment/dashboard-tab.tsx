@@ -947,7 +947,7 @@ function AllAssessmentsTable({
         />
       </ScrollRow>
 
-      <DataTable columns={columns} data={rows} tableId="assessment-records" searchPlaceholder="Cari nama / NIK…" pageSize={8} />
+      <DataTable columns={columns} data={rows} tableId="assessment-records" searchPlaceholder="Cari nama / NIK…" />
       <ReportModal record={reportRec} open={!!reportRec} onOpenChange={(v) => !v && setReportRec(null)} />
     </div>
   );

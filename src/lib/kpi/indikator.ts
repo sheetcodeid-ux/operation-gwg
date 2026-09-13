@@ -221,7 +221,8 @@ const sosialMedia: Indikator[] = [
     bobot: 15,
     target: { jenis: "tumbuh", pertumbuhan: TUMBUH_CREATIVE },
     actual: { sumber: "manual" },
-    penjelasan: `Target = capaian bulan lalu + ${TUMBUH_CREATIVE}%.`,
+    satuan: "persen",
+    penjelasan: `Pertumbuhan pengikut dalam persen. Target = capaian bulan lalu + ${TUMBUH_CREATIVE}%.`,
   },
   {
     key: "views",
@@ -248,7 +249,8 @@ const sosialMedia: Indikator[] = [
     bobot: 15,
     target: { jenis: "tetap", nilai: 100 },
     actual: { sumber: "manual" },
-    penjelasan: "Penilaian atasan dalam persen, 0–100.",
+    satuan: "persen",
+    penjelasan: "Penilaian atasan dalam persen. Target 100%.",
   },
 ];
 
@@ -376,6 +378,7 @@ const stafPdq: Indikator[] = [
   },
   {
     key: "keberhasilan_pasar",
+    satuan: "persen",
     label: "Keberhasilan Pasar",
     bobot: 15,
     target: { jenis: "rasio", nilai: 1.5 },

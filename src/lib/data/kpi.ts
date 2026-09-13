@@ -1430,7 +1430,16 @@ function susunBaris(i: Indikator, k: KonteksBaris): BarisKpi {
     jumlahBrand: k.jumlahBrand,
     jumlahOutlet: k.jumlahOutlet,
     actualBulanLalu: k.lalu,
-    jumlahPekerjaan: i.actual.sumber === "otomatis" && i.actual.kode === "design_request" ? (k.design?.masuk ?? null) : null,
+    // Target "sebanyak pekerjaan yang masuk" punya dua sumber: antrian design,
+    // dan jumlah catatan yang diisi sendiri. Sebelumnya hanya yang pertama
+    // terisi — akibatnya Input Pelunasan tidak pernah punya target, dan
+    // seluruh barisnya terbaca "Belum terukur" berapa pun yang sudah dikerjakan.
+    jumlahPekerjaan:
+      i.actual.sumber === "otomatis" && i.actual.kode === "design_request"
+        ? (k.design?.masuk ?? null)
+        : i.actual.sumber === "entri" || i.actual.sumber === "pengurang" || i.actual.sumber === "lulus"
+          ? k.jumlahEntri(i.actual.entri)
+          : null,
     rataTigaBulan: k.ca?.rataTiga ?? null,
     // Target Net Profit berdiri di atas Gross Sales yang BENAR-BENAR tercapai.
     dasarPorsi: k.ca?.grossSales ?? null,
@@ -1507,6 +1516,9 @@ function susunBaris(i: Indikator, k: KonteksBaris): BarisKpi {
           actual = k.efisiensi?.ringkas.capaian ?? null;
           if (actual === null) alasan = "Realisasi beban operasional belum diisi untuk satu outlet pun.";
           break;
+        // Nominalnya ikut dibawa di bawah, bersama HPP — capaian 92% tidak
+        // memberi tahu siapa pun berapa rupiah yang dibelanjakan, dan rupiah
+        // itulah yang dibicarakan saat angkanya dipertanyakan.
         case "keberhasilan_pasar":
           actual = k.pasar?.bagianTotal ?? null;
           if (actual === null) {
@@ -1571,14 +1583,33 @@ function susunBaris(i: Indikator, k: KonteksBaris): BarisKpi {
   }
 
   if (target === null && !alasan) {
-    alasan = i.target.jenis === "tumbuh" ? "Belum ada capaian bulan lalu sebagai dasar target." : "Targetnya belum ditetapkan.";
+    if (i.target.jenis === "tumbuh") {
+      // Dua sebab yang berbeda, dan tindakannya juga berbeda: yang satu tinggal
+      // menunggu sebulan, yang lain harus ditetapkan targetnya sendiri.
+      alasan =
+        (k.lalu ?? 0) <= 0 && k.lalu !== null
+          ? "Capaian bulan lalu nol atau minus, jadi target pertumbuhan tidak bisa dihitung — tetapkan target tetap lewat Pengaturan."
+          : "Belum ada capaian bulan lalu sebagai dasar target.";
+    } else {
+      alasan = "Targetnya belum ditetapkan.";
+    }
+  }
+
+  // ACTUAL MINUS disebut apa adanya. Capaiannya memang nol — angka minus tidak
+  // boleh menarik turun indikator lain lewat penjumlahan — tapi "0%" berdiri
+  // sendiri di sebelah actual "-178,5%" terbaca seperti salah hitung, bukan
+  // seperti keterangan.
+  if (actual !== null && actual < 0 && (targetAkhir ?? 0) > 0 && !alasan) {
+    alasan = "Actual-nya minus, jadi capaiannya dihitung nol — angka minus tidak ikut menarik turun indikator lain.";
   }
 
   // Harga Pokok Penjualan dinilai dalam persen, tapi yang diisi orang dan yang
   // tertulis di laporan keuangan adalah rupiahnya — dibawa serta supaya grafik
   // mode Angka punya angka yang benar-benar angka.
   const nominal =
-    i.key === "hpp" && k.ca
+    i.key === "efisiensi" && k.efisiensi
+      ? { actualNominal: k.efisiensi.ringkas.totalActual, targetNominal: k.efisiensi.ringkas.totalBudget }
+      : i.key === "hpp" && k.ca
       ? {
           actualNominal: k.ca.hppNominal,
           targetNominal:
@@ -1667,5 +1698,24 @@ export function picDinamis(posisi: KodePosisi): { value: string; label: string }
     .sort((a, b) => a.label.localeCompare(b.label, "id"));
 }
 
-export const periodeSekarang = (): string => new Date().toISOString().slice(0, 7);
+/** Tanggal penutupan penilaian KPI tiap bulan. */
+export const TANGGAL_TUTUP_KPI = 15;
+
+/**
+ * Bulan yang dibuka pertama kali di halaman KPI.
+ *
+ * BUKAN selalu bulan berjalan. Penilaian satu bulan baru ditutup tanggal 15
+ * bulan berikutnya, jadi sepanjang tanggal 1–14 yang sedang dikerjakan orang
+ * masih bulan LALU — angkanya dilengkapi, bukti diunggah, capaiannya diperiksa.
+ * Membuka bulan berjalan pada tanggal-tanggal itu menyodorkan halaman yang
+ * hampir seluruhnya kosong, dan yang membukanya mengira datanya hilang.
+ *
+ * Memakai waktu WIB, bukan UTC: tanggal 15 pukul 06.00 di Pontianak masih
+ * tanggal 14 menurut UTC, dan penilaian akan terlambat terbuka setengah hari.
+ */
+export const periodeSekarang = (): string => {
+  const wib = new Date(Date.now() + 7 * 3_600_000);
+  const bulan = wib.toISOString().slice(0, 7);
+  return wib.getUTCDate() >= TANGGAL_TUTUP_KPI ? bulan : bulanSebelum(bulan);
+};
 export { bulanSebelum, posisiDari };
