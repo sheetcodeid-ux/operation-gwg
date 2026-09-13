@@ -4,7 +4,8 @@ import { db, dbEnabled } from "./db";
 import { getOutlets } from "./store";
 import { netBulananPerCabang } from "./esb-bulanan";
 import { rincianMinggu, type DetailMinggu } from "./minggu-outlet";
-import { bulanMulaiBerjalan, bulanSebelum, grossDiketik, grossKetikBulan, laporanKpi } from "./kpi";
+import { bulanMulaiBerjalan, bulanSebelum, grossDiketik, grossKetikBulan, laporanKpi, setelanPosisi } from "./kpi";
+import { posisiDinilai, type SetelanPosisi } from "@/lib/kpi/berlaku";
 import { DEPARTEMEN, POSISI, posisiDari } from "@/lib/kpi/struktur";
 import { SEMUA_PIC } from "@/lib/kpi/semua-pic";
 import {
@@ -226,14 +227,25 @@ async function labaOutlet(periode: string, outletIds: string[]): Promise<Map<str
  */
 async function skorPosisi(periode: string): Promise<Map<string, number>> {
   const hasil = new Map<string, number>();
+
+  // POSISI YANG BELUM BERLAKU BULAN ITU TIDAK IKUT DIBACA SAMA SEKALI.
+  //
+  // Online Delivery Officer KPI-nya berlaku mulai September; pada Agustus
+  // posisi itu belum punya data apa pun. Kalau tetap ikut, rata-rata
+  // departemennya turun — dan KPI Manajemen ikut turun — gara-gara orang yang
+  // bulan itu memang belum dinilai. Dikeluarkan di sini, bukan dinolkan:
+  // dinolkan berarti dianggap gagal, dan itu tuduhan yang berbeda.
+  const setelan = await setelanPosisi().catch(() => new Map<string, SetelanPosisi>());
+  const dipakai = POSISI.filter((p) => posisiDinilai(setelan.get(p.kode), periode));
+
   // Satu posisi yang gagal dibaca TIDAK boleh menjatuhkan seluruh halaman —
   // tiga komponen lainnya tetap bisa dihitung tanpa dia.
   const laporan = await Promise.all(
-    POSISI.map((p) => laporanKpi(p.kode, periode, p.perPic ? SEMUA_PIC : "").catch(() => null)),
+    dipakai.map((p) => laporanKpi(p.kode, periode, p.perPic ? SEMUA_PIC : "").catch(() => null)),
   );
   laporan.forEach((l, i) => {
     const nilai = l?.ringkas.skorSetara ?? null;
-    if (nilai !== null) hasil.set(POSISI[i].kode, Math.round(nilai * 100) / 100);
+    if (nilai !== null) hasil.set(dipakai[i].kode, Math.round(nilai * 100) / 100);
   });
   return hasil;
 }

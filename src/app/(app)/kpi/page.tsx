@@ -7,7 +7,10 @@ import { NAV_ICONS } from "@/components/layout/icons";
 import { PageHeader } from "@/components/ui/page-header";
 import { DEPARTEMEN, POSISI } from "@/lib/kpi/struktur";
 import { indikatorPosisi } from "@/lib/kpi/indikator";
-import { MENU_POSISI } from "@/lib/kpi/akses";
+import { MENU_POSISI, bolehAturKpi } from "@/lib/kpi/akses";
+import { periodeSekarang, setelanPosisi } from "@/lib/data/kpi";
+import { alasanBelumDinilai, posisiDinilai } from "@/lib/kpi/berlaku";
+import { AturBerlaku, type BarisBerlaku } from "@/components/kpi/atur-berlaku";
 
 export const metadata: Metadata = { title: "Key Performance Indicator" };
 
@@ -25,6 +28,18 @@ export default async function KpiPage({ searchParams }: { searchParams: Promise<
 
   // Saringan departemen di halaman posisi mengarah ke sini; yang dituju
   // sebenarnya posisi pertama departemen itu, bukan daftar ini.
+  // Setelan berlakunya KPI tiap posisi — dibaca sekali untuk seluruh halaman.
+  const setelan = await setelanPosisi().catch(() => new Map());
+  const periode = periodeSekarang();
+  const aturBaris: BarisBerlaku[] = DEPARTEMEN.flatMap((d) =>
+    POSISI.filter((p) => d.posisi.includes(p.kode)).map((p) => ({
+      kode: p.kode,
+      nama: p.nama,
+      departemen: d.nama,
+      setelan: setelan.get(p.kode) ?? { aktif: true, berlakuMulai: null },
+    })),
+  );
+
   const { dep } = await searchParams;
   const tujuan = dep ? DEPARTEMEN.find((d) => d.kode === dep)?.posisi[0] : undefined;
   if (tujuan) redirect(`/kpi/${tujuan}`);
@@ -35,6 +50,7 @@ export default async function KpiPage({ searchParams }: { searchParams: Promise<
         icon={NAV_ICONS.Target}
         title="Key Performance Indicator"
         description="Capaian bulanan tiap posisi — indikator, bobot, dan targetnya dihitung dari data yang sudah masuk."
+        actions={bolehAturKpi(user) ? <AturBerlaku baris={aturBaris} /> : undefined}
       />
 
       <div className="flex flex-col gap-5">
@@ -57,6 +73,12 @@ export default async function KpiPage({ searchParams }: { searchParams: Promise<
                 <div className="grid gap-2.5 sm:grid-cols-2 lg:grid-cols-3">
                   {posisi.map((p) => {
                     const boleh = canReachMenu(user, MENU_POSISI[p.kode] as MenuKey);
+                    // Posisi yang belum berlaku bulan ini TETAP DITAMPILKAN,
+                    // dengan sebabnya tertulis. Menyembunyikannya membuat orang
+                    // mengira posisinya terhapus, dan yang mencarinya tidak akan
+                    // pernah tahu bahwa ia hanya belum waktunya dinilai.
+                    const dinilai = posisiDinilai(setelan.get(p.kode), periode);
+                    const alasan = alasanBelumDinilai(setelan.get(p.kode), periode);
                     const isi = (
                       <>
                         <p className="truncate text-[14px] font-medium text-foreground">{p.nama}</p>
@@ -64,7 +86,7 @@ export default async function KpiPage({ searchParams }: { searchParams: Promise<
                           {p.pic.length ? p.pic.join(", ") : "PIC belum ditentukan"}
                         </p>
                         <p className="mt-2 text-[11px] text-muted-foreground">
-                          {indikatorPosisi(p.kode).length} indikator
+                          {dinilai ? `${indikatorPosisi(p.kode).length} indikator` : alasan}
                         </p>
                       </>
                     );
@@ -72,7 +94,7 @@ export default async function KpiPage({ searchParams }: { searchParams: Promise<
                       <Link
                         key={p.kode}
                         href={`/kpi/${p.kode}`}
-                        className="rounded-2xl border border-border bg-card p-3.5 transition-colors hover:border-ring hover:bg-muted/30"
+                        className={`rounded-2xl border border-border bg-card p-3.5 transition-colors hover:border-ring hover:bg-muted/30${dinilai ? "" : " opacity-60"}`}
                       >
                         {isi}
                       </Link>

@@ -20,6 +20,7 @@ import {
   simpanFee,
   simpanMenuPasar,
   simpanPengaturan,
+  simpanSetelanPosisi,
 } from "@/lib/data/kpi";
 import { MENU_POSISI, bolehAngkaOutlet, bolehAturKpi, picTerkunci } from "@/lib/kpi/akses";
 import { indikatorPosisi } from "@/lib/kpi/indikator";
@@ -580,6 +581,43 @@ export async function hapusMenuPasarAction(input: { posisi: string; periode: str
  * perusahaan. Kalau orang yang dinilai bisa mengubahnya sendiri, angkanya
  * berhenti berarti apa pun.
  */
+/**
+ * Sejak kapan sebuah posisi mulai dinilai.
+ *
+ * Kewenangan yang besar: posisi yang dikeluarkan dari satu bulan ikut
+ * mengubah rata-rata departemennya dan skor KPI Manajemen bulan itu. Dijaga
+ * pintu yang sama dengan bobot dan target.
+ */
+export async function simpanSetelanPosisiAction(input: {
+  posisi: string;
+  aktif: boolean;
+  berlakuMulai: string | null;
+}): Promise<{ ok?: true; error?: string }> {
+  const user = await getSessionUser();
+  if (!user || !dbEnabled) return { error: "Tidak punya akses." };
+  if (!bolehAturKpi(user)) return { error: "Hanya super admin yang boleh mengatur berlakunya KPI posisi." };
+  if (!posisiDari(input.posisi)) return { error: "Posisi tidak dikenali." };
+  if (input.berlakuMulai !== null && !/^\d{4}-\d{2}$/.test(input.berlakuMulai)) {
+    return { error: "Bulan mulai tidak dikenali." };
+  }
+
+  const res = await simpanSetelanPosisi({
+    posisi: input.posisi,
+    aktif: input.aktif,
+    berlakuMulai: input.berlakuMulai,
+    olehId: user.id,
+    olehNama: user.name,
+  });
+  if (res.error) return { error: res.error };
+
+  // Halaman posisinya, daftar KPI, dan KPI Manajemen sama-sama berubah —
+  // ketiganya membaca setelan ini.
+  revalidatePath(RUTE(input.posisi));
+  revalidatePath("/kpi");
+  revalidatePath("/kpi/manajemen");
+  return { ok: true };
+}
+
 export async function simpanPengaturanAction(input: {
   posisi: string;
   ubahan: { indikator: string; bobot: number | null; target: number | null; pertumbuhan: number | null; aktif: boolean }[];

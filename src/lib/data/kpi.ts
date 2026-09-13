@@ -25,6 +25,7 @@ import {
 import { indikatorPosisi, type Indikator, type JenisEntri } from "@/lib/kpi/indikator";
 import { posisiDari, type KodePosisi } from "@/lib/kpi/struktur";
 import { SEMUA_PIC } from "@/lib/kpi/semua-pic";
+import type { SetelanPosisi } from "@/lib/kpi/berlaku";
 
 /**
  * Penyusun angka KPI satu posisi pada satu bulan.
@@ -141,6 +142,41 @@ const entriDari = (r: Record<string, unknown>): EntriKpi => ({
   lampiran: (Array.isArray(r.lampiran) ? r.lampiran : []) as { path: string; name: string }[],
   dibuatNama: String(r.dibuat_nama ?? ""),
 });
+
+/* ──────────────────────── setelan berlakunya posisi ──────────────────────── */
+
+/** Setelan seluruh posisi, dikunci kode posisinya. */
+export async function setelanPosisi(): Promise<Map<string, SetelanPosisi>> {
+  const peta = new Map<string, SetelanPosisi>();
+  if (!dbEnabled) return peta;
+  const { data } = await db().from("kpi_posisi_setelan").select("*");
+  for (const r of ((data ?? []) as Record<string, unknown>[])) {
+    peta.set(String(r.posisi), {
+      aktif: r.aktif !== false,
+      berlakuMulai: typeof r.berlaku_mulai === "string" && r.berlaku_mulai ? r.berlaku_mulai : null,
+    });
+  }
+  return peta;
+}
+
+export async function simpanSetelanPosisi(input: {
+  posisi: string;
+  aktif: boolean;
+  berlakuMulai: string | null;
+  olehId: string;
+  olehNama: string;
+}): Promise<{ error?: string }> {
+  if (!dbEnabled) return { error: "Penyimpanan belum aktif." };
+  const { error } = await db().from("kpi_posisi_setelan").upsert({
+    posisi: input.posisi,
+    aktif: input.aktif,
+    berlaku_mulai: input.berlakuMulai,
+    diubah_oleh: input.olehId,
+    diubah_nama: input.olehNama,
+    diubah_pada: new Date().toISOString(),
+  });
+  return error ? { error: error.message } : {};
+}
 
 /* ─────────────────────────── pengaturan bobot ─────────────────────────── */
 

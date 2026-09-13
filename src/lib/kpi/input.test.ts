@@ -74,13 +74,16 @@ describe("penulisan dijaga di server", () => {
       const fn = n.replace("export async function ", "");
       const blok = aksi.slice(aksi.indexOf(`export async function ${fn}`));
       const badan = blok.slice(0, blok.indexOf("\nexport async function", 1));
-      // Dua aksi punya gerbangnya sendiri, dan keduanya disebut di sini supaya
+      // Tiga aksi punya gerbangnya sendiri, dan semuanya disebut di sini supaya
       // pengecualian tidak pernah diam-diam bertambah:
       //  • pengaturan bobot — hanya super admin;
+      //  • berlakunya KPI posisi — juga hanya super admin, dan tidak terikat
+      //    pada satu bulan, jadi penguncian bulan tidak berlaku untuknya;
       //  • unggah bukti — tidak menyentuh bulan atau posisi mana pun, jadi yang
       //    diperiksa hak membuka menunya, bukan penguncian bulannya.
       const sendiri: Record<string, string> = {
         simpanPengaturanAction: "bolehAturKpi(user)",
+        simpanSetelanPosisiAction: "bolehAturKpi(user)",
         uploadKpiBuktiAction: 'canReachMenu(user, "kpi_op_ca" as MenuKey)',
       };
       const lewat = sendiri[fn] ? badan.includes(sendiri[fn]) : badan.includes("await gerbang(");
