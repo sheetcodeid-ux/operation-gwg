@@ -225,7 +225,10 @@ async function labaOutlet(periode: string, outletIds: string[]): Promise<Map<str
  * angka bulan lalu tidak lagi ketemu pasangannya dan seluruh perbandingan
  * berubah jadi "belum ada data" tanpa sebab yang terlihat.
  */
-async function skorPosisi(periode: string): Promise<Map<string, number>> {
+/** Hasil kosong untuk mode ringan — bentuknya sama supaya pemanggilnya tidak bercabang. */
+const kosongSkor = () => ({ skor: new Map<string, number>(), dinilai: new Set<string>() });
+
+async function skorPosisi(periode: string): Promise<{ skor: Map<string, number>; dinilai: Set<string> }> {
   const hasil = new Map<string, number>();
 
   // POSISI YANG BELUM BERLAKU BULAN ITU TIDAK IKUT DIBACA SAMA SEKALI.
@@ -247,7 +250,10 @@ async function skorPosisi(periode: string): Promise<Map<string, number>> {
     const nilai = l?.ringkas.skorSetara ?? null;
     if (nilai !== null) hasil.set(dipakai[i].kode, Math.round(nilai * 100) / 100);
   });
-  return hasil;
+  // Daftar posisi yang BERLAKU bulan itu dibawa serta — dipakai tabel Detail
+  // KPI Divisi supaya posisi yang belum berlaku tidak sekadar tampil kosong,
+  // melainkan tidak muncul sama sekali.
+  return { skor: hasil, dinilai: new Set(dipakai.map((p) => p.kode)) };
 }
 
 /**
@@ -258,9 +264,13 @@ async function skorPosisi(periode: string): Promise<Map<string, number>> {
  * bulan mengikuti kelengkapan data — dan yang membacanya akan mengira
  * departemennya dihapus, bukan bahwa modulnya belum ada.
  */
-function susunDepartemen(ini: Map<string, number>, lalu: Map<string, number>): DepartemenKpi[] {
+function susunDepartemen(ini: Map<string, number>, lalu: Map<string, number>, dinilai: Set<string>): DepartemenKpi[] {
   return DEPARTEMEN.map((d) => {
-    const posisi: PosisiKpi[] = d.posisi.map((kode) => ({
+    // POSISI YANG BELUM BERLAKU TIDAK DIDAFTAR SAMA SEKALI bulan itu. Ditulis
+    // "belum ada data", ia terbaca seperti pekerjaan yang belum dikerjakan —
+    // padahal memang belum waktunya dinilai. Begitu bulannya tiba, barisnya
+    // muncul sendiri.
+    const posisi: PosisiKpi[] = d.posisi.filter((kode) => dinilai.has(kode)).map((kode) => ({
       kode,
       nama: posisiDari(kode)?.nama ?? kode,
       nilai: ini.get(kode) ?? null,
@@ -384,8 +394,8 @@ export async function detailManajemen(
           })),
           jumlahHari(periode),
         ),
-    opsi.ringan ? Promise.resolve(new Map<string, number>()) : skorPosisi(periode),
-    opsi.ringan ? Promise.resolve(new Map<string, number>()) : skorPosisi(bulanSebelum(periode)),
+    opsi.ringan ? Promise.resolve(kosongSkor()) : skorPosisi(periode),
+    opsi.ringan ? Promise.resolve(kosongSkor()) : skorPosisi(bulanSebelum(periode)),
   ]);
 
   const ebitda: BarisEbitda[] = ikut.map((b) => {
@@ -407,7 +417,7 @@ export async function detailManajemen(
   // outlet yang belum diisi disebutkan di bawah tabelnya, bukan disembunyikan.
   const labaBersih = ebitda.reduce((s, b) => s + (b.labaBersih ?? 0), 0);
 
-  const departemen = susunDepartemen(skorIni, skorLalu);
+  const departemen = susunDepartemen(skorIni.skor, skorLalu.skor, skorIni.dinilai);
 
   const omzetLalu: [number, number, number] = [
     korporat(esbLalu[0], ketikLalu[0], bulanA[0]),

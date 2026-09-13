@@ -219,7 +219,15 @@ export function PapanManajemen({ detail, bolehAtur }: { detail: DetailManajemen;
         // Departemen tanpa nilai DIKELUARKAN dari grafik, bukan digambar nol —
         // garis yang jatuh ke dasar terbaca sebagai "gagal total", padahal
         // modulnya memang belum ada. Tabelnya tetap mendaftarnya.
-        baris: skor.d.departemen.filter((d) => d.rata !== null).map((d) => ({
+        // DIURUTKAN DARI TERTINGGI KE TERENDAH, bukan urutan daftar departemen.
+        // Yang dicari orang saat membuka grafik ini satu hal: siapa yang paling
+        // tertinggal. Dengan urutan tetap, pertanyaan itu dijawab dengan
+        // membandingkan tinggi batang satu per satu.
+        baris: skor.d.departemen
+          .filter((d) => d.rata !== null)
+          .slice()
+          .sort((a, b) => (b.rata ?? 0) - (a.rata ?? 0))
+          .map((d) => ({
           key: d.kode,
           label: d.singkat,
           labelPenuh: d.nama,
@@ -540,7 +548,7 @@ export function PapanManajemen({ detail, bolehAtur }: { detail: DetailManajemen;
         ) : (
           <KpiPerformanceChart judul={grafik.judul} baris={grafik.baris} lalu={grafik.lalu} />
         )}
-        <KpiIndicatorDonut baris={baris} />
+        <KpiIndicatorDonut baris={baris} bulat />
       </div>
 
       {tampilan === "komponen" && (

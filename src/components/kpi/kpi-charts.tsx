@@ -813,7 +813,22 @@ function TipMinggu({ active, payload }: { active?: boolean; payload?: { payload:
   );
 }
 
-export function KpiIndicatorDonut({ baris }: { baris: BarisKpi[] }) {
+export function KpiIndicatorDonut({
+  baris,
+  bulat = false,
+}: {
+  baris: BarisKpi[];
+  /**
+   * Total Skor dibulatkan ke bilangan bulat.
+   *
+   * Dipakai KPI Manajemen: yang dibaca di situ capaian SELURUH perusahaan, dan
+   * dua angka di belakang koma memberi kesan ketelitian yang tidak dimiliki
+   * angkanya — ia rata-rata dari rata-rata. Di halaman KPI posisi desimalnya
+   * TETAP, karena di sana angkanya dicocokkan baris demi baris dengan laporan
+   * yang ditandatangani.
+   */
+  bulat?: boolean;
+}) {
   const [mode, setMode] = React.useState<Mode>("hasil");
   const [aktif, setAktif] = React.useState<string | null>(null);
 
@@ -962,7 +977,7 @@ export function KpiIndicatorDonut({ baris }: { baris: BarisKpi[] }) {
                 ))}
               </div>
               <span className="text-sm font-semibold tabular-nums text-foreground">
-                {total.toLocaleString("id-ID", { maximumFractionDigits: 2 })}%
+                {total.toLocaleString("id-ID", { maximumFractionDigits: bulat ? 0 : 2 })}%
               </span>
             </div>
           </div>

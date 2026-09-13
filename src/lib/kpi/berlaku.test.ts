@@ -86,3 +86,29 @@ describe("tipe kolom penyimpanannya", () => {
     expect(migrasi).not.toMatch(/diubah_oleh\s+uuid/);
   });
 });
+
+describe("tampilan Detail KPI Divisi", () => {
+  const manajemen = readFileSync(join(process.cwd(), "src/lib/data/kpi-manajemen.ts"), "utf8");
+  const papan = readFileSync(join(process.cwd(), "src/components/kpi/papan-manajemen.tsx"), "utf8");
+
+  it("posisi yang belum berlaku TIDAK didaftar, bukan tampil kosong", () => {
+    // Ditulis "belum ada data", ia terbaca seperti pekerjaan yang belum
+    // dikerjakan — padahal memang belum waktunya dinilai. Begitu bulannya
+    // tiba, barisnya muncul sendiri.
+    expect(manajemen).toContain("d.posisi.filter((kode) => dinilai.has(kode))");
+    expect(manajemen).toContain("dinilai: new Set(dipakai.map((p) => p.kode))");
+  });
+
+  it("grafik departemen diurutkan dari tertinggi ke terendah", () => {
+    expect(papan).toContain("(b.rata ?? 0) - (a.rata ?? 0)");
+  });
+
+  it("Total Skor KPI Manajemen dibulatkan, halaman posisi tidak", () => {
+    // Di KPI Manajemen angkanya rata-rata dari rata-rata; dua desimal memberi
+    // kesan ketelitian yang tidak dimilikinya. Di halaman posisi desimalnya
+    // tetap, karena di sana angkanya dicocokkan dengan laporan bertanda tangan.
+    expect(papan).toContain("<KpiIndicatorDonut baris={baris} bulat />");
+    const posisi = readFileSync(join(process.cwd(), "src/components/kpi/papan-kpi.tsx"), "utf8");
+    expect(posisi).toContain("<KpiIndicatorDonut baris={baris} />");
+  });
+});
