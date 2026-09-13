@@ -121,23 +121,29 @@ export function AturBerlaku({ baris }: { baris: BarisBerlaku[] }) {
                       <p className="truncate text-[11px] text-muted-foreground">{info.departemen}</p>
                     </div>
 
-                    <div className="w-32 shrink-0">
-                      <Input
-                        value={r.berlakuMulai}
-                        onChange={(e) => ubah(r.kode, { berlakuMulai: e.target.value })}
-                        placeholder="2026-09"
-                        className="h-8"
-                        disabled={!r.aktif}
-                        aria-label={`Berlaku mulai ${info.nama}`}
-                      />
-                      <p className="mt-1 truncate text-[10.5px] text-muted-foreground">
-                        {r.berlakuMulai ? `Sejak ${labelBulan(r.berlakuMulai)}` : "Sejak kapan pun"}
-                      </p>
-                    </div>
+                    {/* Kotak bulan dan tombolnya DISEJAJARKAN DARI ATAS, bukan
+                        dari tengah. Kalau tombolnya dirata-tengahkan terhadap
+                        kotak beserta keterangan di bawahnya, ia turun beberapa
+                        piksel dan barisnya terlihat miring. */}
+                    <div className="flex shrink-0 items-start gap-2">
+                      <div className="w-32">
+                        <Input
+                          value={r.berlakuMulai}
+                          onChange={(e) => ubah(r.kode, { berlakuMulai: e.target.value })}
+                          placeholder="2026-09"
+                          className="h-8"
+                          disabled={!r.aktif}
+                          aria-label={`Berlaku mulai ${info.nama}`}
+                        />
+                        <p className="mt-1 truncate text-[10.5px] text-muted-foreground">
+                          {r.berlakuMulai ? `Sejak ${labelBulan(r.berlakuMulai)}` : "Sejak kapan pun"}
+                        </p>
+                      </div>
 
-                    <Button size="sm" variant="outline" className="shrink-0" onClick={() => simpan(r.kode)} disabled={sibuk !== null}>
-                      {sibuk === r.kode ? <Loader2 className="size-3.5 animate-spin" /> : "Simpan"}
-                    </Button>
+                      <Button size="sm" variant="outline" className="h-8 w-20" onClick={() => simpan(r.kode)} disabled={sibuk !== null}>
+                        {sibuk === r.kode ? <Loader2 className="size-3.5 animate-spin" /> : "Simpan"}
+                      </Button>
+                    </div>
                   </div>
                 );
               })}
