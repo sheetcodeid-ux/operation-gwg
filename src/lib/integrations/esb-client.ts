@@ -461,10 +461,20 @@ function decodeAjax<T>(text: string): T | null {
 }
 
 let companyIds: string[] | null = null;
-/** company IDs the dashboard posts with every highlight call — parsed once
- *  from the sales-dashboard page (e.g. companyID[]=12370). */
+/**
+ * company IDs yang ikut dikirim pada setiap panggilan highlight — dibaca dari
+ * halaman sales-dashboard (mis. companyID[]=12370).
+ *
+ * HASIL KOSONG TIDAK DISIMPAN. Sebelumnya daftar kosong ikut disimpan, dan
+ * karena senarai kosong bernilai "ada" di JavaScript, sekali pembacaannya gagal
+ * — jaringan tersendat, tenggat keburu habis — seluruh panggilan berikutnya
+ * pada instance yang sama berangkat TANPA companyID. ESB membalasnya dengan
+ * halaman biasa, bukan JSON, dan itu muncul sebagai "respons tidak terbaca"
+ * berulang-ulang sampai instance-nya diganti. Sekarang kegagalan dibiarkan
+ * kosong supaya dicoba lagi pada panggilan berikutnya.
+ */
 async function getCompanyIds(): Promise<string[]> {
-  if (companyIds) return companyIds;
+  if (companyIds?.length) return companyIds;
   try {
     const s = await ensureSession();
     const res = await esbFetch(`${BASE}/sales-dashboard`, { headers: { Accept: "text/html", Cookie: s.cookie }, cache: "no-store" });
@@ -473,9 +483,9 @@ async function getCompanyIds(): Promise<string[]> {
     for (const m of html.matchAll(/companyID(?:\[\]|%5B%5D)?["']?\s*(?:value=|[:=,]\s*)["']?(\d{3,10})/g)) ids.add(m[1]);
     companyIds = [...ids].slice(0, 5);
   } catch {
-    companyIds = [];
+    companyIds = null;
   }
-  return companyIds;
+  return companyIds ?? [];
 }
 
 export interface EsbBranch { id: string; name: string }
@@ -512,8 +522,20 @@ export async function esbFetchHighlight(dateFromYmd: string, dateToYmd: string, 
     cache: "no-store",
   });
   if (!res.ok) throw new Error(`ESB highlight failed (${res.status})`);
-  const j = decodeAjax<Record<string, unknown>>(await res.text());
-  if (!j || typeof j !== "object") throw new Error("ESB highlight: respons tidak terbaca");
+  const teks = await res.text();
+  const j = decodeAjax<Record<string, unknown>>(teks);
+  if (!j || typeof j !== "object") {
+    // Balasan berupa halaman HTML punya SATU sebab yang jauh lebih sering dari
+    // yang lain: sesinya habis, atau permintaannya berangkat tanpa companyID.
+    // Pesan "tidak terbaca" saja membuat penyebabnya harus ditebak tiap kali —
+    // dan tebakan pertama biasanya salah.
+    const html = teks.trimStart().startsWith("<");
+    throw new Error(
+      html
+        ? "ESB highlight: dibalas halaman HTML, bukan data — sesi habis atau companyID tidak terbaca"
+        : "ESB highlight: respons tidak terbaca",
+    );
+  }
   return bacaHighlight(j);
 }
 

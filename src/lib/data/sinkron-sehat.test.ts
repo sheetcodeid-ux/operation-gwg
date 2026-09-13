@@ -1,3 +1,5 @@
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { bacaHasil, statusBaris } from "./sinkron-sehat";
 
@@ -77,5 +79,48 @@ describe("status satu penarikan", () => {
   it("gagal beruntun tiga kali sudah bermasalah walau baru saja tuntas", () => {
     expect(statusBaris({ ...dasar, terakhirTuntas: jamLalu(1), gagalBeruntun: 3 })).toBe("bermasalah");
     expect(statusBaris({ ...dasar, terakhirTuntas: jamLalu(1), gagalBeruntun: 2 })).toBe("sehat");
+  });
+});
+
+describe("satu pintu keluar cron BENAR-BENAR mengembalikan jawaban", () => {
+  const rute = readFileSync(join(process.cwd(), "src/app/api/cron/fraud-sync/route.ts"), "utf8");
+  // Baris komentar dibuang dulu: catatan sejarah di dalamnya menyebut bentuk
+  // lama yang salah, dan uji yang ikut membacanya akan gagal karena penjelasan
+  // — bukan karena kodenya.
+  const badan = rute
+    .slice(rute.indexOf("const selesai = async"), rute.indexOf("const job = new URL"))
+    .split("\n")
+    .filter((b) => !b.trim().startsWith("//"))
+    .join("\n");
+
+  it("`selesai` tidak memanggil dirinya sendiri", () => {
+    // Pernah terjadi: penggantian massal `return NextResponse.json(...)` menjadi
+    // `return selesai()` ikut mengubah baris di DALAM definisi `selesai` sendiri.
+    // Akibatnya tiap cron berputar tanpa henti sampai Vercel mematikannya di
+    // detik ke-60 — pg_net mencatat balasan kosong tanpa status, dan penghitung
+    // gagal beruntun menggelembung karena kesehatan ditulis berkali-kali dalam
+    // satu permintaan.
+    expect(badan).not.toMatch(/return\s+selesai\(\)/);
+  });
+
+  it("`selesai` mencatat kesehatan lalu mengembalikan NextResponse", () => {
+    expect(badan).toContain("await catatHasilSinkron(results)");
+    expect(badan).toContain("return NextResponse.json(");
+  });
+});
+
+describe("companyID ESB tidak boleh terkunci kosong", () => {
+  const klien = readFileSync(join(process.cwd(), "src/lib/integrations/esb-client.ts"), "utf8");
+
+  it("daftar kosong tidak ikut disimpan, jadi dicoba lagi", () => {
+    // Senarai kosong bernilai "ada" di JavaScript. Sekali pembacaannya gagal,
+    // seluruh panggilan berikutnya pada instance yang sama berangkat tanpa
+    // companyID — dan ESB membalasnya dengan halaman HTML, bukan data.
+    expect(klien).toContain("if (companyIds?.length) return companyIds;");
+    expect(klien).not.toMatch(/catch\s*\{\s*companyIds = \[\];/);
+  });
+
+  it("balasan HTML disebut apa adanya, bukan sekadar tidak terbaca", () => {
+    expect(klien).toContain("dibalas halaman HTML, bukan data");
   });
 });

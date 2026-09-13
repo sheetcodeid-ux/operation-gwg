@@ -116,7 +116,12 @@ async function jalankan(req: Request): Promise<NextResponse> {
    */
   const selesai = async () => {
     await catatHasilSinkron(results);
-    return selesai();
+    // Jawabannya dirakit DI SINI, bukan dengan memanggil `selesai` lagi.
+    // Pernah tertulis `return selesai()` — fungsinya memanggil dirinya sendiri,
+    // berputar tanpa henti sampai Vercel mematikannya di detik ke-60, dan
+    // kesehatan sinkron ikut ditulis berulang kali dalam satu permintaan
+    // sehingga penghitung gagal beruntunnya menggelembung jauh dari kenyataan.
+    return NextResponse.json({ ok: true, tookMs: Date.now() - started, results });
   };
   const job = new URL(req.url).searchParams.get("job");
 
