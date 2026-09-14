@@ -987,6 +987,11 @@ export function kepalaDepartemen(user: { role: Role; jabatan?: string | null }):
  */
 const DIVISI_PEMILIK_KPI: Map<string, string> = new Map(
   POSISI.map((p) => {
+    // Divisi kerja orangnya menang atas nama departemennya — lihat
+    // `Posisi.divisiKerja`. Departemen hanya menentukan pengelompokan di tabel
+    // divisi; yang menentukan siapa boleh membuka halamannya adalah divisi
+    // tempat orangnya terdaftar.
+    if (p.divisiKerja) return [MENU_POSISI[p.kode], p.divisiKerja] as const;
     const nama = DEPARTEMEN.find((d) => d.kode === p.departemen)?.nama ?? "";
     return [MENU_POSISI[p.kode], divisiDari(nama) ?? nama] as const;
   }),

@@ -85,6 +85,9 @@ describe("penulisan dijaga di server", () => {
         simpanPengaturanAction: "bolehAturKpi(user)",
         simpanSetelanPosisiAction: "bolehAturKpi(user)",
         uploadKpiBuktiAction: 'canReachMenu(user, "kpi_op_ca" as MenuKey)',
+        // Membaca, bukan menulis: yang diperiksa hak membuka menunya. Bulan
+        // yang sudah dikunci tetap boleh dilihat isiannya.
+        actualTersimpanAction: "canReachMenu(user, menu as MenuKey)",
       };
       const lewat = sendiri[fn] ? badan.includes(sendiri[fn]) : badan.includes("await gerbang(");
       expect(lewat, `${fn} tidak melewati penjagaan`).toBe(true);

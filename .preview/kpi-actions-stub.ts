@@ -21,3 +21,7 @@ export const simpanFeeMassalAction = tolak;
 export const simpanMenuPasarMassalAction = tolak;
 export const uploadKpiBuktiAction = tolak;
 export const simpanOutletBulananAction = tolak;
+export const simpanSetelanPosisiAction = tolak;
+
+/** Membaca, bukan menulis — pratinjau memulainya dengan kotak kosong. */
+export const actualTersimpanAction = async (): Promise<Record<string, Record<string, number>>> => ({});

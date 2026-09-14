@@ -6,6 +6,7 @@ import { randomUUID } from "node:crypto";
 import { db, dbEnabled } from "@/lib/data/db";
 import { canReachMenu, type MenuKey } from "@/lib/nav";
 import {
+  actualTersimpan,
   hapusEntri,
   hapusMenuPasar,
   outletMilikPic,
@@ -89,8 +90,10 @@ async function gerbang(
   return { user };
 }
 
-const punyaIndikator = (posisi: string, indikator: string) =>
-  indikatorPosisi(posisi as KodePosisi).some((i) => i.key === indikator);
+const indikatorDari = (posisi: string, indikator: string) =>
+  indikatorPosisi(posisi as KodePosisi).find((i) => i.key === indikator);
+
+const punyaIndikator = (posisi: string, indikator: string) => !!indikatorDari(posisi, indikator);
 
 /** Angka yang diketik: metrik sosial media, capaian Marcomm, penilaian atasan. */
 export async function simpanActualAction(input: {
@@ -105,8 +108,22 @@ export async function simpanActualAction(input: {
 }): Promise<{ ok?: true; error?: string }> {
   const g = await gerbang(input.posisi, input.periode, input.pic);
   if ("error" in g) return { error: g.error };
-  if (!punyaIndikator(input.posisi, input.indikator)) return { error: "Indikator itu bukan milik posisi ini." };
-  if (!Number.isFinite(input.nilai) || input.nilai < 0) return { error: "Angkanya tidak masuk akal." };
+  const ind = indikatorDari(input.posisi, input.indikator);
+  if (!ind) return { error: "Indikator itu bukan milik posisi ini." };
+  if (!Number.isFinite(input.nilai)) return { error: "Angkanya tidak terbaca — periksa lagi yang diketik." };
+  // ANGKA MINUS DITERIMA untuk indikator yang dinyatakan dalam persen.
+  //
+  // Follower Growth memang bisa turun, dan bulan yang followernya berkurang
+  // adalah kenyataan yang harus bisa dicatat. Sebelumnya seluruh angka minus
+  // ditolak mentah-mentah dengan "Angkanya tidak masuk akal" — kalimat yang
+  // menyalahkan yang mengetik untuk aturan yang tidak pernah disebutkan di
+  // mana pun, dan yang mengetiknya menyimpulkan "tidak tersimpan".
+  //
+  // Yang menghitung JUMLAH tetap ditolak: jumlah konten, views, dan profile
+  // visit tidak bisa minus, dan minus di situ selalu salah ketik.
+  if (input.nilai < 0 && ind.satuan !== "persen") {
+    return { error: `${ind.label} menghitung jumlah — angkanya tidak bisa minus.` };
+  }
 
   const res = await simpanActual({
     periode: input.periode,
@@ -647,4 +664,26 @@ export async function simpanPengaturanAction(input: {
   }
   revalidatePath(RUTE(input.posisi));
   return { ok: true };
+}
+
+/**
+ * Angka manual yang SUDAH tersimpan — pengisi awal formnya.
+ *
+ * Tanpa ini, form per brand selalu terbuka kosong, dan kotak yang dibiarkan
+ * kosong tersimpan sebagai NOL: mengisi satu brand menghapus tiga brand lain
+ * yang sudah benar. Dari luar itu terlihat persis seperti "angkanya tidak
+ * tersimpan" — dan yang mengisinya mengetik ulang, lalu menghapus lagi.
+ *
+ * Membaca, bukan menulis, jadi penjagaannya cuma hak membuka menunya: bulan
+ * yang sudah dikunci tetap boleh DILIHAT isiannya.
+ */
+export async function actualTersimpanAction(input: {
+  posisi: string;
+  periode: string;
+}): Promise<Record<string, Record<string, number>>> {
+  const user = await getSessionUser();
+  const menu = MENU_POSISI[input.posisi as KodePosisi];
+  if (!user || !menu || !canReachMenu(user, menu as MenuKey)) return {};
+  if (!/^\d{4}-\d{2}$/.test(input.periode)) return {};
+  return actualTersimpan(input.periode, input.posisi);
 }

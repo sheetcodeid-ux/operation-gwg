@@ -51,6 +51,21 @@ export interface Departemen {
 export interface Posisi {
   kode: KodePosisi;
   departemen: KodeDepartemen;
+  /**
+   * DIVISI KERJA orang-orangnya, kalau berbeda dari nama departemen di atas.
+   *
+   * Departemen di sini menentukan bagaimana rapornya DIKELOMPOKKAN di Detail
+   * KPI Divisi. Hak membukanya ditentukan hal lain: divisi tempat orangnya
+   * benar-benar terdaftar di User Management. Dua-duanya biasanya satu nama,
+   * jadi tidak perlu ditulis — kecuali untuk Sosial Media, yang berdiri
+   * sendiri di tabel divisi tapi orangnya berdepartemen Marketing
+   * Communication.
+   *
+   * Tanpa pemisahan ini, memecah satu departemen jadi dua di tabel LANGSUNG
+   * mengunci halaman KPI-nya bagi orang yang mengisinya — persis yang terjadi
+   * pada Zia, Marta, dan Dita.
+   */
+  divisiKerja?: string;
   nama: string;
   /** Nama PIC apa adanya — dipakai sebagai keterangan, bukan penentu akses. */
   pic: string[];
@@ -144,7 +159,7 @@ export const POSISI: Posisi[] = [
   // catatan kegiatan dan angka bulanannya menempel pada kode itu, dan
   // menggantinya akan memutus riwayat yang sudah terkumpul tanpa satu pun
   // pesan.
-  { kode: "creative_sosmed", departemen: "sosmed", nama: "Sosial Media", pic: ["Zia", "Dita", "Marta"] },
+  { kode: "creative_sosmed", departemen: "sosmed", divisiKerja: "Marketing Communication", nama: "Sosial Media", pic: ["Zia", "Dita", "Marta"] },
   { kode: "finance_accounting", departemen: "finance", nama: "Accounting", pic: ["Bella"] },
   { kode: "finance_finance", departemen: "finance", nama: "Finance", pic: ["Nisa", "Fatin", "Fetty", "Sri"], perPic: true },
   { kode: "finance_tax", departemen: "finance", nama: "Tax", pic: ["Samsul"] },

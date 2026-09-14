@@ -13,6 +13,7 @@ import { InputSatuan, angkaKetikNol } from "./input-satuan";
 import { WORK_BRANDS } from "@/lib/constants";
 import { uploadMany } from "@/lib/upload-client";
 import {
+  actualTersimpanAction,
   simpanActualAction,
   simpanEfisiensiAction,
   simpanEntriAction,
@@ -70,7 +71,7 @@ export function bentukIsian(i: Indikator): Bentuk {
 
 const KETERANGAN: Record<Bentuk, string> = {
   angka: "Isi capaian bulan ini dalam satu angka.",
-  brand: "Isi per brand — sistem yang menjumlahkannya.",
+  brand: "Isi per brand — sistem yang menjumlahkannya. Brand yang dikosongkan tidak diubah.",
   kegiatan: "Satu baris yang tercatat bernilai satu poin.",
   temuan: "Satu temuan mengurangi satu poin dari target.",
   tenggat: "Catat pengirimannya. Yang telat mengurangi poin.",
@@ -120,6 +121,19 @@ export function DialogInput({
   // tidak ikut terkirim, jadi tidak perlu satu state per bentuk.
   const [nilai, setNilai] = React.useState("");
   const [perBrand, setPerBrand] = React.useState<Record<string, string>>({});
+  /**
+   * Angka yang sudah tersimpan, beserta BULAN dan NOMOR MUATANNYA.
+   *
+   * Ketiganya disimpan bersama karena isian hanya boleh diisi ulang ketika
+   * datanya benar-benar datang. Kalau hanya isinya yang disimpan, pengisian
+   * ulang terjadi sekali di render pertama — saat datanya masih kosong — lalu
+   * data yang menyusul tidak pernah terpakai.
+   */
+  const [tersimpan, setTersimpan] = React.useState<{
+    periode: string;
+    muatan: number;
+    data: Record<string, Record<string, number>>;
+  } | null>(null);
   const [tanggal, setTanggal] = React.useState(`${periodeDipilih}-01`);
   const [picNama, setPicNama] = React.useState(picAktif || pic[0] || "");
   const [outletId, setOutletId] = React.useState("");
@@ -144,7 +158,47 @@ export function DialogInput({
   // sebelumnya membalik keduanya, dan "27.908" tersimpan jadi 27,908.
   const num = angkaKetikNol;
 
+  /**
+   * Angka yang sudah tersimpan ditarik saat dialognya dibuka dan setiap kali
+   * bulannya diganti — lalu dipakai mengisi kotaknya.
+   *
+   * Bukan sekadar kenyamanan. Form yang selalu terbuka kosong membuat orang
+   * mengira belum ada apa-apa di sana, dan kotak kosong yang tersimpan sebagai
+   * nol menghapus angka brand lain yang sudah benar.
+   */
+  const [muatan, setMuatan] = React.useState(0);
+  React.useEffect(() => {
+    if (!buka) return;
+    let batal = false;
+    actualTersimpanAction({ posisi, periode: periodeDipilih })
+      .then((data) => {
+        if (!batal) setTersimpan({ periode: periodeDipilih, muatan, data });
+      })
+      .catch(() => {});
+    return () => {
+      batal = true;
+    };
+  }, [buka, posisi, periodeDipilih, muatan]);
+
+  /**
+   * Isian mengikuti indikator, bulan, dan muatan yang terbaru — disetel saat
+   * render, bukan lewat efek: efek berjalan SESUDAH render, jadi kotaknya
+   * sempat tampil kosong lebih dulu dan yang melihatnya menyimpulkan datanya
+   * memang belum ada.
+   */
+  const siap = tersimpan?.periode === periodeDipilih;
+  const kunciIsian = `${dipilih?.key ?? ""}|${periodeDipilih}|${siap ? tersimpan.muatan : "menunggu"}`;
+  const [kunciTerpasang, setKunciTerpasang] = React.useState("");
+  if (buka && kunciTerpasang !== kunciIsian) {
+    const ada = (siap ? tersimpan.data[dipilih?.key ?? ""] : undefined) ?? {};
+    const teks = (v: number | undefined) => (v === undefined ? "" : String(v));
+    setKunciTerpasang(kunciIsian);
+    setNilai(teks(ada[""]));
+    setPerBrand(Object.fromEntries(WORK_BRANDS.map((b) => [b, teks(ada[b])])));
+  }
+
   function reset() {
+    setKunciTerpasang("");
     setNilai("");
     setPerBrand({});
     setJudul("");
@@ -164,12 +218,26 @@ export function DialogInput({
     let res: { ok?: true; error?: string } = { error: "Bentuk isian tidak dikenali." };
 
     if (bentuk === "angka") {
+      if (nilai.trim() === "") {
+        setSibuk(false);
+        return toast.error("Isi dulu angkanya.");
+      }
       res = await simpanActualAction({ ...dasar, indikator: dipilih.key, nilai: num(nilai), catatan: deskripsi });
     } else if (bentuk === "brand") {
       // Satu baris per brand — supaya bisa dilihat brand mana yang tertinggal,
       // bukan cuma totalnya.
-      for (const b of WORK_BRANDS) {
-        res = await simpanActualAction({ ...dasar, indikator: dipilih.key, brand: b, nilai: num(perBrand[b] ?? "0") });
+      //
+      // BRAND YANG DIKOSONGKAN TIDAK DITULIS. Sebelumnya kotak kosong dikirim
+      // sebagai nol, jadi mengisi satu brand menghapus tiga brand lain yang
+      // sudah benar — dan dari luar itu terlihat persis seperti angkanya tidak
+      // tersimpan. Nol yang memang dimaksud tetap bisa ditulis: ketik 0.
+      const diisi = WORK_BRANDS.filter((b) => (perBrand[b] ?? "").trim() !== "");
+      if (diisi.length === 0) {
+        setSibuk(false);
+        return toast.error("Isi dulu minimal satu brand.");
+      }
+      for (const b of diisi) {
+        res = await simpanActualAction({ ...dasar, indikator: dipilih.key, brand: b, nilai: num(perBrand[b]) });
         if (res.error) break;
       }
     } else if (bentuk === "kegiatan") {
@@ -229,6 +297,9 @@ export function DialogInput({
     setSibuk(false);
     if (res.error) return toast.error(res.error);
     toast.success(`Tersimpan — ${dipilih.label}`);
+    // Ditarik ulang, bukan dikosongkan: yang terlihat di kotaknya sesudah ini
+    // adalah yang benar-benar tersimpan di basis data.
+    setMuatan((m) => m + 1);
     reset();
     router.refresh();
   }
