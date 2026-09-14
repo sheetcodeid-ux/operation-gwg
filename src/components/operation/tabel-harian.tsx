@@ -259,21 +259,22 @@ function Lambang({ merek, ukuran = 22 }: { merek: string | null; ukuran?: number
 }
 
 /**
- * Bar capaian — dengan penanda seratus persen yang tetap di tempatnya.
+ * Bar capaian — WARNANYA yang bercerita, bukan garis penandanya.
  *
- * Di KARTU penandanya dimatikan: di sana yang dibaca perbandingan antarmerek
- * sekilas, dan satu garis tipis di tengah tiap bar justru memecah deretan yang
- * seharusnya terbaca sebagai satu barisan. Di TABEL penandanya dipakai, karena
- * di situ yang dibaca satu outlet terhadap targetnya sendiri.
+ * Dulu ada garis tipis di posisi 100%. Garis itu dihapus: angka persennya
+ * selalu berdiri tepat di sebelah bar, jadi garisnya menjawab pertanyaan yang
+ * sudah dijawab — sementara di satu tabel berisi puluhan bar, puluhan garis
+ * tipis itu terbaca sebagai kisi yang tidak disengaja.
+ *
+ * Yang membedakan tercapai dan belum sekarang warnanya: hijau mulai 100%,
+ * kuning mulai 80%, merah di bawahnya.
  */
 function BarCapaian({
   capaian,
   tinggi = "h-1.5",
-  penanda = true,
 }: {
   capaian: number | null;
   tinggi?: string;
-  penanda?: boolean;
 }) {
   const SKALA = 120;
   const c = capaian ?? 0;
@@ -290,11 +291,6 @@ function BarCapaian({
         )}
         style={{ width: `${Math.min(100, (Math.max(0, c) / SKALA) * 100)}%` }}
       />
-      {/* Penanda target — tetap di 100% berapa pun capaiannya, supaya yang
-          101% dan yang 180% tidak terlihat sama persis. */}
-      {penanda && (
-        <span className="absolute inset-y-0 w-px bg-foreground/25" style={{ left: `${(BATAS_TERCAPAI / SKALA) * 100}%` }} />
-      )}
     </div>
   );
 }
@@ -359,7 +355,7 @@ function KartuBrand({ kartu, aktif, onPilih }: { kartu: KartuMerek; aktif: boole
       </div>
 
       <div className="mt-2 flex items-center gap-2">
-        <BarCapaian capaian={kartu.capaian} penanda={false} />
+        <BarCapaian capaian={kartu.capaian} />
         <span
           className={cn(
             "shrink-0 text-[11px] tabular-nums",
@@ -437,6 +433,40 @@ function DeretMerek({
 }
 
 /**
+ * SATU TINGGI UNTUK SELURUH BILAH SARINGAN.
+ *
+ * Tiap kendali di sini dulunya menghitung tingginya sendiri dari padding dan
+ * ukuran hurufnya, jadi tidak ada dua yang sama persis — satu bilah berisi
+ * tujuh kendali dengan tujuh tinggi berbeda, dan garis bawahnya bergerigi.
+ * Angkanya 36 piksel, diambil dari tinggi Combobox yang memang sudah `h-9`,
+ * supaya yang menyesuaikan yang lain, bukan yang satu itu.
+ */
+const TINGGI = "h-9";
+
+/** Wadah kendali tunggal — sebaris dengan Combobox di sebelahnya. */
+const KOTAK = `inline-flex ${TINGGI} shrink-0 items-center rounded-lg border border-border bg-card p-0.5`;
+
+/** Lintasan pilihan tersegmen — cekung, isinya yang menonjol. */
+const LINTASAN = `inline-flex ${TINGGI} shrink-0 items-center gap-0.5 rounded-lg bg-muted p-0.5`;
+
+/**
+ * YANG TERPILIH TIDAK PUNYA WARNA — ia TERANGKAT.
+ *
+ * Sebelumnya hijau: warna merek aplikasi ini. Persoalannya tabel di bawahnya
+ * memakai hijau untuk arti yang lain — naik, dan tercapai. Jadi satu layar
+ * memuat dua hijau yang artinya berbeda, dan yang membaca sekilas tidak punya
+ * cara tahu yang mana yang mana.
+ *
+ * Penggantinya permukaan, bukan warna: lintasannya cekung, yang terpilih naik
+ * ke atasnya dengan bayangan tipis. Cara ini tidak meminjam satu pun warna
+ * yang sudah punya arti di tabel, dan tetap terbaca di kedua tema — di terang
+ * putih di atas kelabu, di gelap gelap di atas terang. Nada mana pun yang
+ * dipakai temanya, yang terpilih tetap satu-satunya yang bertepi.
+ */
+const TERPILIH = "bg-card font-medium text-foreground shadow-sm ring-1 ring-border";
+const TIDAK_TERPILIH = "text-muted-foreground hover:text-foreground";
+
+/**
  * AVATAR MEREK DI BILAH SARINGAN — menyaring per merek tanpa membuka apa pun.
  *
  * Kartunya bisa disembunyikan, dan begitu disembunyikan satu-satunya jalan
@@ -459,7 +489,24 @@ function AvatarMerek({
 }) {
   if (kartu.length === 0) return null;
   return (
-    <div className="inline-flex shrink-0 items-center gap-0.5 rounded-lg border border-border bg-card p-0.5">
+    <div className={LINTASAN}>
+      {/* "Semua" ikut masuk ke dalam lintasan, bukan berdiri sebagai tombol
+          lepas di sebelahnya: tanpa merek terpilih itu memang salah satu
+          keadaan pilihan ini, bukan ketiadaan pilihan. */}
+      <button
+        type="button"
+        aria-pressed={dipilih === null}
+        onClick={() => onPilih(null)}
+        className={cn(
+          "h-8 whitespace-nowrap rounded-md px-2.5 text-[12px] transition-colors",
+          dipilih === null ? TERPILIH : TIDAK_TERPILIH,
+        )}
+      >
+        {/* "Semua merek", bukan "Semua": saringan status di sebelahnya juga
+            berawalan "Semua", dan dua pil sebunyi bersebelahan tidak memberi
+            tahu yang mana menyaring apa. */}
+        Semua merek
+      </button>
       {kartu.map((k) => {
         const aktif = dipilih === k.merek;
         return (
@@ -472,10 +519,15 @@ function AvatarMerek({
             onClick={() => onPilih(aktif ? null : k.merek)}
             className={cn(
               "grid size-8 place-items-center rounded-md transition",
-              // DIREDUPKAN, BUKAN DIABUKAN. `grayscale` membuat keempatnya jadi
-              // piringan kelabu yang serupa — persis yang dipakai orang untuk
-              // membedakannya hilang. Yang dikurangi cuma terangnya.
-              aktif ? "bg-brand-500/15 ring-1 ring-brand-500" : "opacity-70 hover:opacity-100",
+              // TERANGKAT, BUKAN DIWARNAI. Logonya sendiri sudah berwarna;
+              // memberi warna lagi di belakangnya membuat dua warna bertabrakan
+              // di ruang selebar 32 piksel. Yang membedakan di sini permukaan:
+              // yang terpilih naik ke atas lintasan yang cekung.
+              //
+              // Yang tidak terpilih diredupkan, bukan diabukan — `grayscale`
+              // membuat keempatnya jadi piringan kelabu yang serupa, persis
+              // yang dipakai orang untuk membedakannya.
+              aktif ? "bg-card shadow-sm ring-1 ring-border" : "opacity-70 hover:opacity-100",
             )}
           >
             <Lambang merek={k.merek} ukuran={22} />
@@ -511,17 +563,16 @@ function Segmen<T extends string>({
   onNilai: (v: T) => void;
 }) {
   return (
-    <div className="inline-flex shrink-0 items-center rounded-lg border border-border bg-card p-0.5">
+    <div className={LINTASAN}>
       {pilihan.map((p) => (
         <button
           key={p.nilai}
           type="button"
+          aria-pressed={nilai === p.nilai}
           onClick={() => onNilai(p.nilai)}
           className={cn(
-            "whitespace-nowrap rounded-md px-2.5 py-1 text-[12px] transition-colors",
-            nilai === p.nilai
-              ? "bg-brand-500 font-medium text-white"
-              : "text-muted-foreground hover:text-foreground",
+            "h-8 whitespace-nowrap rounded-md px-2.5 text-[12px] transition-colors",
+            nilai === p.nilai ? TERPILIH : TIDAK_TERPILIH,
           )}
         >
           {p.label}
@@ -855,14 +906,21 @@ export function TabelHarian({
 
       {/* Bilah saringan yang MENYESUAIKAN LEBAR, bukan menumpuk ke bawah. Tiga
           baris tombol di atas tabel memakan tinggi yang justru dibutuhkan
-          barisnya. */}
-      <div className="flex flex-nowrap items-center gap-1.5 overflow-x-auto pb-0.5">
-        <div className="inline-flex shrink-0 items-center gap-0.5 rounded-lg border border-border bg-card p-0.5">
+          barisnya.
+          Saringannya sendiri yang bergeser, sementara Saringan dan Kartu
+          dipisah ke wadahnya sendiri di kanan. Sebelumnya keduanya ikut di
+          dalam satu baris yang bergeser dengan `ml-auto`, jadi begitu
+          saringannya melebihi layar keduanya terdorong keluar — tombol
+          membatalkan saringan yang hilang justru ketika saringannya paling
+          banyak dipakai. */}
+      <div className="flex items-center gap-1.5">
+        <div className="flex min-w-0 flex-1 flex-nowrap items-center gap-1.5 overflow-x-auto pb-0.5">
+        <div className={cn(KOTAK, "gap-0.5")}>
           <button
             type="button"
             aria-label="Bulan sebelumnya"
             onClick={() => pindah({ bulan: geserBulan(detail.periode, -1) })}
-            className="grid size-7 place-items-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground"
+            className="grid size-8 place-items-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground"
           >
             <ChevronLeft className="size-4" />
           </button>
@@ -874,7 +932,7 @@ export function TabelHarian({
             type="button"
             aria-label="Bulan berikutnya"
             onClick={() => pindah({ bulan: geserBulan(detail.periode, 1) })}
-            className="grid size-7 place-items-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground"
+            className="grid size-8 place-items-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground"
           >
             <ChevronRight className="size-4" />
           </button>
@@ -898,8 +956,10 @@ export function TabelHarian({
             <Combobox
               value={areaTerpilih ?? ""}
               onChange={(v) => pindah({ area: v })}
+              // Isinya nama orang — Deo, Wika, Roby — bukan nama wilayah, jadi
+              // "Semua area" menjanjikan daftar yang berbeda dari yang muncul.
               options={[
-                { value: "", label: "Semua area" },
+                { value: "", label: "Semua coordinator" },
                 ...area.map((a) => ({ value: a.value, label: `${a.label} · ${a.outlet} outlet` })),
               ]}
               searchPlaceholder="Cari coordinator…"
@@ -908,7 +968,9 @@ export function TabelHarian({
           </div>
         )}
 
-        <div className="ml-auto flex shrink-0 items-center gap-1.5">
+        </div>
+
+        <div className="flex shrink-0 items-center gap-1.5">
           {jumlahSaringan > 0 && (
             <button
               type="button"
@@ -916,11 +978,14 @@ export function TabelHarian({
                 setStatus("semua");
                 setMerek(null);
               }}
-              className="inline-flex items-center gap-1 rounded-lg border border-brand-500/40 bg-brand-500/10 px-2 py-1.5 text-[12px] font-medium text-brand-700 hover:bg-brand-500/15 dark:text-brand-300"
+              className={cn(
+                TINGGI,
+                "inline-flex items-center gap-1.5 rounded-lg border border-border bg-card px-2.5 text-[12px] font-medium text-foreground hover:bg-muted",
+              )}
             >
               <SlidersHorizontal className="size-3.5" />
               <span className="hidden sm:inline">Saringan</span>
-              <span className="grid size-4 place-items-center rounded-full bg-brand-500 text-[9.5px] font-bold text-white">
+              <span className="grid size-4 place-items-center rounded-full bg-primary text-[9.5px] font-bold text-primary-foreground">
                 {jumlahSaringan}
               </span>
               <X className="size-3" />
@@ -932,10 +997,9 @@ export function TabelHarian({
             aria-pressed={kartuTampil}
             title={kartuTampil ? "Sembunyikan kartu merek" : "Tampilkan kartu merek"}
             className={cn(
-              "inline-flex items-center gap-1.5 rounded-lg border px-2 py-1.5 text-[12px] font-medium",
-              kartuTampil
-                ? "border-border bg-card text-foreground"
-                : "border-border bg-card text-muted-foreground hover:text-foreground",
+              TINGGI,
+              "inline-flex items-center gap-1.5 rounded-lg border border-border bg-card px-2.5 text-[12px] font-medium hover:bg-muted",
+              kartuTampil ? "text-foreground" : "text-muted-foreground",
             )}
           >
             <LayoutGrid className="size-3.5" />
