@@ -52,6 +52,22 @@ export function daftarArea(): PilihanArea[] {
     .sort((a, b) => a.label.localeCompare(b.label, "id"));
 }
 
+/**
+ * Berapa hari dari `periode` yang sudah lewat menurut jam Jakarta.
+ *
+ * Bulan yang sudah selesai: seluruh harinya. Bulan yang belum datang: nol.
+ * Bulan berjalan: tanggal hari ini. Dipakai menghitung sisa hari mengejar
+ * target — dan itu harus hari yang belum lewat, bukan hari yang datanya belum
+ * masuk.
+ */
+function hariBerjalan(periode: string): number {
+  const kini = new Date(Date.now() + 7 * 3_600_000);
+  const sekarang = `${kini.getUTCFullYear()}-${String(kini.getUTCMonth() + 1).padStart(2, "0")}`;
+  if (periode < sekarang) return jumlahHari(periode);
+  if (periode > sekarang) return 0;
+  return kini.getUTCDate();
+}
+
 /** Bulan sebelum `periode` ("2026-09" → "2026-08"). */
 const bulanSebelum = (periode: string): string => {
   const [th, bl] = periode.split("-").map(Number);
@@ -110,6 +126,7 @@ export async function harianOutlet(periode: string, outletIds?: readonly string[
   const dipakai = outlet.filter((o) => !!o.esbBranchId);
   const cabang = [...new Set(dipakai.map((o) => o.esbBranchId as string))];
 
+  const berjalan = hariBerjalan(periode);
   const sebelum = bulanSebelum(periode);
   const [ini, lalu, target] = await Promise.all([
     netHarian(periode, cabang),
@@ -131,6 +148,7 @@ export async function harianOutlet(periode: string, outletIds?: readonly string[
         hariLalu: kolom.map((h) => (h.tanggal > hariLalu ? null : (lalu.get(`${c}|${h.tanggal}`) ?? null))),
         akhirBulanLalu: lalu.get(`${c}|${hariLalu}`) ?? null,
         targetBulan: target.get(o.id) ?? null,
+        hariBerjalan: berjalan,
       });
     }),
   );

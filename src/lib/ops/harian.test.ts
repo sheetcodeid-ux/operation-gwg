@@ -237,3 +237,66 @@ describe("capaian sebulan", () => {
     expect(buat([100], null).capaianBulan).toBeNull();
   });
 });
+
+/* ─────────────── lubang data: tiga kesalahan yang pernah lolos ─────────────── */
+
+describe("barisHarian saat datanya berlubang", () => {
+  const kosong = (n: number) => Array.from({ length: n }, () => null);
+
+  it("membandingkan bulan lalu pada tanggal yang sama persis, bukan sepanjang tanggal terakhir", () => {
+    // Bulan ini cuma tanggal 3 dan 14 yang tertarik. Bulan lalu lengkap.
+    // Yang benar: 200 dilawan 200 → 0%. Yang dulu: 200 dilawan 1.400 → −85,7%.
+    const hari = kosong(30);
+    hari[2] = 100;
+    hari[13] = 100;
+    const b = barisHarian({
+      outletId: "o", nama: "N", area: "A",
+      hari,
+      hariLalu: Array.from({ length: 30 }, () => 100),
+    });
+    expect(b.bulanIni).toBe(200);
+    expect(b.bulanLalu).toBe(200);
+    expect(b.mom).toBe(0);
+  });
+
+  it("deret berhenti di lubang tengah, tapi tetap melewati ekor yang belum ditarik", () => {
+    // target 3.000 sebulan atas 30 hari → 100/hari.
+    // tanggal 1-2 tercapai, 3 belum ditarik, 4-5 tercapai, 6-30 belum ditarik.
+    // Deret yang jujur = 2 (tanggal 4 dan 5), bukan 4.
+    const hari = kosong(30);
+    hari[0] = 150; hari[1] = 150; hari[3] = 150; hari[4] = 150;
+    const b = barisHarian({
+      outletId: "o", nama: "N", area: "A", targetBulan: 3_000,
+      hari, hariLalu: kosong(30),
+    });
+    expect(b.hariTercapai).toBe(4);
+    expect(b.deret).toBe(2);
+  });
+
+  it("sisa hari mengejar dihitung dari hari yang belum lewat, bukan yang belum ada angkanya", () => {
+    const hari = kosong(30);
+    hari[0] = 100; // baru 1 hari yang tertarik
+    const dasar = { outletId: "o", nama: "N", area: "A", targetBulan: 3_000, hari, hariLalu: kosong(30) };
+
+    // Tanggal 14: yang tersisa 16 hari, bukan 29.
+    const berjalan = barisHarian({ ...dasar, hariBerjalan: 14 });
+    expect(berjalan.sisaHari).toBe(16);
+    expect(berjalan.kurang).toBe(2_900);
+    expect(berjalan.perHariSisa).toBeCloseTo(2_900 / 16);
+
+    // Bulan yang sudah habis: tidak ada satu hari pun tersisa untuk mengejar.
+    const selesai = barisHarian({ ...dasar, hariBerjalan: 30 });
+    expect(selesai.sisaHari).toBe(0);
+    expect(selesai.perHariSisa).toBeNull();
+  });
+
+  it("totalHarian meneruskan hari berjalan ke baris gabungannya", () => {
+    const buat = (id: string) =>
+      barisHarian({
+        outletId: id, nama: id, area: "A", targetBulan: 3_000,
+        hari: [100, ...kosong(29)], hariLalu: kosong(30), hariBerjalan: 14,
+      });
+    const t = totalHarian([buat("a"), buat("b")]);
+    expect(t?.sisaHari).toBe(16);
+  });
+});

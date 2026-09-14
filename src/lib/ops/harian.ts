@@ -65,18 +65,29 @@ export interface SumberHarian {
    * mulai lebih baik daripada akhir bulan lalu.
    */
   akhirBulanLalu?: number | null;
+  /**
+   * Berapa hari bulan ini yang SUDAH LEWAT — penentu sisa hari mengejar.
+   *
+   * Bulan yang sudah selesai mengisinya dengan jumlah hari bulan itu; bulan
+   * berjalan mengisinya dengan tanggal hari ini. Kosong berarti tidak
+   * diketahui, dan sisa harinya jatuh kembali ke cara lama.
+   */
+  hariBerjalan?: number | null;
 }
 
 export interface BarisHarian extends SumberHarian {
   /** Jumlah seluruh hari yang sudah ada angkanya. */
   bulanIni: number | null;
   /**
-   * Jumlah bulan lalu SEPANJANG HARI YANG SAMA.
+   * Jumlah bulan lalu PADA TANGGAL-TANGGAL YANG SAMA PERSIS.
    *
-   * Bukan bulan lalu penuh. Tanggal 14 dibandingkan dengan sebulan penuh selalu
+   * Bukan bulan lalu penuh: tanggal 14 dibandingkan dengan sebulan penuh selalu
    * menghasilkan minus delapan puluh persen, untuk SETIAP outlet, setiap bulan
-   * — angka yang tidak pernah salah dan tidak pernah berguna. Yang dibandingkan
-   * tanggal 1–14 bulan ini dengan tanggal 1–14 bulan lalu.
+   * — angka yang tidak pernah salah dan tidak pernah berguna.
+   *
+   * Dan bukan pula "tanggal 1 sampai tanggal terakhir yang terisi": kalau bulan
+   * ini berlubang di tengah, itu menjumlah hari bulan lalu yang tidak ada
+   * lawannya. Yang dijumlah hanya tanggal yang bulan ini punya angkanya.
    */
   bulanLalu: number | null;
   /** Perubahan terhadap `bulanLalu`, dalam persen. */
@@ -155,9 +166,20 @@ const jumlahAda = (v: (number | null)[]): number | null => {
  */
 export function barisHarian(s: SumberHarian): BarisHarian {
   const bulanIni = jumlahAda(s.hari);
-  // Pembandingnya dipotong sepanjang hari yang SUDAH ada angkanya bulan ini.
-  const sejauhIni = s.hari.reduce<number>((n, v, i) => (v === null ? n : i + 1), 0);
-  const bulanLalu = jumlahAda(s.hariLalu.slice(0, sejauhIni));
+  /*
+   * PEMBANDINGNYA HARI YANG SAMA PERSIS, bukan sepanjang tanggal terakhir yang
+   * terisi.
+   *
+   * Dulu dipotong `slice(0, tanggal terakhir yang ada angkanya)`. Itu benar
+   * selama lubangnya cuma di ujung. Begitu ada lubang di TENGAH — dan sekarang
+   * banyak, karena penarikan ESB belum selesai — hasilnya menyesatkan berat:
+   * bulan ini terisi dua hari, tanggal 3 dan 14, tapi pembandingnya dijumlah
+   * tanggal 1–14 bulan lalu. Empat belas hari dilawan dua hari, dan tabelnya
+   * mengumumkan outlet itu turun 85% padahal tidak ada yang turun.
+   *
+   * Yang dijumlah sekarang hanya tanggal yang bulan ini PUNYA angkanya.
+   */
+  const bulanLalu = jumlahAda(s.hari.map((v, i) => (v === null ? null : (s.hariLalu[i] ?? null))));
 
   const ubah = s.hari.map((v, i) =>
     i === 0 ? bandingHarian(s.akhirBulanLalu ?? null, v) : bandingHarian(s.hari[i - 1], v),
@@ -171,20 +193,50 @@ export function barisHarian(s: SumberHarian): BarisHarian {
   const hariTerisi = s.hari.filter((v) => v !== null).length;
   const hariTercapai = capaian.filter((c) => c !== null && c >= BATAS_TERCAPAI).length;
 
-  // Dihitung mundur dari hari TERAKHIR yang ada angkanya, bukan dari akhir
-  // bulan: hari yang belum ditarik ESB bukan hari yang gagal, dan memutus
-  // deretnya di situ menghukum outlet atas penarikan yang belum sampai.
+  /*
+   * DERETNYA HARUS BENAR-BENAR BERURUTAN.
+   *
+   * Dihitung mundur dari hari terakhir yang ada angkanya — hari di ujung yang
+   * belum ditarik ESB memang bukan hari yang gagal, jadi itu dilewati.
+   *
+   * Tapi lubang di TENGAH tidak boleh ikut dilewati. Dulu dilewati semua, dan
+   * akibatnya roket bertuliskan "5" untuk lima hari tercapai yang sebenarnya
+   * tersebar di sepanjang bulan dengan hari-hari tak diketahui di antaranya —
+   * lencana yang menjanjikan sesuatu yang tidak pernah diperiksa. Begitu
+   * ketemu hari yang tidak diketahui, deretnya berhenti: yang tidak diketahui
+   * bukan keberhasilan.
+   */
   let deret = 0;
+  let mulai = false;
   for (let i = capaian.length - 1; i >= 0; i -= 1) {
-    if (s.hari[i] === null) continue;
+    if (s.hari[i] === null) {
+      if (!mulai) continue; // ekor yang belum ditarik — belum masuk hitungan
+      break; // lubang di tengah — sesudah sini tidak diketahui
+    }
+    mulai = true;
     if (capaian[i] !== null && (capaian[i] as number) >= BATAS_TERCAPAI) deret += 1;
     else break;
   }
 
-  // Sisa hari dihitung dari hari yang BELUM ada angkanya, bukan dari tanggal
-  // hari ini: penarikan ESB berjalan bertahap, dan memakai tanggal membuat
-  // "kurang berapa per hari" melonjak setiap kali ada hari yang belum masuk.
-  const sisaHari = s.hari.length - hariTerisi;
+  /*
+   * SISA HARI ITU HARI YANG BELUM LEWAT, bukan hari yang belum ada angkanya.
+   *
+   * Dulu `jumlah hari − hari terisi`, dengan alasan penarikan ESB bertahap.
+   * Alasan itu keliru, dan akibatnya dua-duanya salah arah:
+   *
+   *   – Bulan yang SUDAH SELESAI masih mengumumkan "Rp sekian/hari × 5 hari
+   *     tersisa" padahal bulannya habis dan tidak ada satu hari pun tersisa.
+   *   – Bulan berjalan menghitung hari yang sudah lewat tapi datanya belum
+   *     masuk sebagai hari yang masih bisa dipakai mengejar. Tanggal 14 dengan
+   *     5 hari terisi membaginya ke 25 hari, padahal yang tersisa 16 —
+   *     kekurangan per harinya terbaca 36% lebih ringan daripada sebenarnya.
+   *
+   * Hari yang sudah lewat tidak bisa dikejar lagi, ditarik atau belum.
+   */
+  const sisaHari =
+    s.hariBerjalan == null
+      ? s.hari.length - hariTerisi
+      : Math.max(0, s.hari.length - s.hariBerjalan);
   const kurang = target === null ? null : Math.max(0, target - (bulanIni ?? 0));
   const perHariSisa = kurang === null || sisaHari <= 0 ? null : kurang / sisaHari;
 
@@ -254,6 +306,8 @@ export function totalHarian(baris: BarisHarian[], nama = "Seluruh outlet"): Bari
     hari: jumlahKolom((b) => b.hari),
     hariLalu: jumlahKolom((b) => b.hariLalu),
     akhirBulanLalu: akhir.length ? akhir.reduce((a, b) => a + b, 0) : null,
+    // Sama untuk seluruh baris — ini sifat BULANNYA, bukan sifat outletnya.
+    hariBerjalan: ikut[0].hariBerjalan ?? null,
   });
 }
 

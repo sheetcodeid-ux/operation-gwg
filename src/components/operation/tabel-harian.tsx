@@ -10,7 +10,6 @@ import {
   ChevronRight,
   LayoutGrid,
   Rocket,
-  SlidersHorizontal,
   TrendingDown,
   TrendingUp,
   X,
@@ -75,12 +74,26 @@ const geserBulan = (periode: string, arah: number) => {
  * Selisihnya jadi celah, dan di celah itu tanggal yang sedang bergeser
  * terlihat menyembul di antara kolom yang seharusnya diam.
  */
+/*
+ * TEPI BEKU MEMAKAN JATAH TANGGAL, dan tanggallah isi tabel ini.
+ *
+ * Angka lama berjumlah 562 piksel. Di layar 1440 dengan sidebar, yang tersisa
+ * untuk tanggal cuma enam kolom — tabel harian yang memperlihatkan enam hari
+ * dari tiga puluh. Yang sekarang 474, dan tiap kolom tanggal juga diciutkan
+ * dari 5,4rem ke 5rem: dua hari lebih banyak terlihat tanpa menggeser apa pun.
+ *
+ * `kurang` DIPASKAN KE NOMINALNYA, diukur bukan dikira: teks terpanjang yang
+ * mungkin muncul di sana ("Rp 1.636.725.042") memakan 113 piksel pada 12,5px
+ * tabular, ditambah padding 24 menjadi 137. Diberi 146 supaya total seluruh
+ * outlet yang sampai belasan miliar — satu angka lebih panjang — tetap utuh;
+ * dipaskan pas 137 membuat baris jumlahnya terpotong jadi "Rp 8.589.883…".
+ */
 const LEBAR = {
-  lega: { no: 38, nama: 200, bulan: 166, kurang: 158 },
+  lega: { no: 30, nama: 176, bulan: 136, kurang: 146 },
   // Di layar sempit tepi beku memakan hampir seluruh lebar, dan yang tersisa
   // untuk tanggal tinggal dua kolom. Kolom Kurang ditarik masuk ke sel Bulan
   // Ini — angkanya tetap terbaca, tempatnya saja yang berpindah.
-  sempit: { no: 28, nama: 148, bulan: 128, kurang: 0 },
+  sempit: { no: 26, nama: 136, bulan: 116, kurang: 0 },
 } as const;
 
 type Lebar = (typeof LEBAR)[keyof typeof LEBAR];
@@ -110,6 +123,44 @@ function useSempit(): boolean {
     () => window.matchMedia("(max-width: 900px)").matches,
     () => false,
   );
+}
+
+/**
+ * GESER SATU SUMBU SAJA.
+ *
+ * Tabel 31 kolom di dalam kotak yang juga bergulir ke bawah bisa digeser
+ * MIRING dengan touchpad — dan dalam tabel, miring berarti tersesat: barisnya
+ * berpindah pada saat yang sama dengan kolomnya, jadi yang sedang dibaca
+ * hilang dua arah sekaligus dan harus dicari lagi dari awal.
+ *
+ * Yang lebih besar yang menang. Isyarat yang dominannya mendatar digeser
+ * mendatar saja, yang dominannya menegak digeser menegak saja.
+ *
+ * Pendengarnya dipasang NON-PASIF — `preventDefault` tidak berlaku pada
+ * pendengar pasif, dan React memasang `onWheel` sebagai pasif.
+ */
+function useSatuSumbu(ref: React.RefObject<HTMLDivElement | null>) {
+  React.useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    const roda = (e: WheelEvent) => {
+      const mendatar = Math.abs(e.deltaX) > Math.abs(e.deltaY);
+      if (mendatar) {
+        el.scrollLeft += e.deltaX;
+      } else {
+        // Kalau menegaknya sudah mentok, biarkan halaman yang menggulir —
+        // menahannya di sini membuat halaman terasa macet di atas tabel.
+        const habis =
+          (e.deltaY < 0 && el.scrollTop <= 0) ||
+          (e.deltaY > 0 && el.scrollTop + el.clientHeight >= el.scrollHeight - 1);
+        if (habis) return;
+        el.scrollTop += e.deltaY;
+      }
+      e.preventDefault();
+    };
+    el.addEventListener("wheel", roda, { passive: false });
+    return () => el.removeEventListener("wheel", roda);
+  }, [ref]);
 }
 
 /**
@@ -761,8 +812,13 @@ function Baris({
           // TARGETNYA BAR, bukan angka yang harus dibandingkan sendiri di
           // kepala. Yang dicari orang bukan "targetnya berapa" melainkan
           // "sudah sejauh mana" — dan itu satu tatapan, bukan satu hitungan.
-          <span className="mt-1 flex items-center gap-1.5">
-            <BarCapaian capaian={baris.capaianBulan} tinggi="h-1" />
+          <span className="mt-1 flex items-center justify-end gap-1.5">
+            {/* Barnya dibatasi. Dibiarkan `w-full`, ia ikut melebar mengikuti
+                kolomnya — dan justru itu yang membuat kolom ini menuntut lebar
+                yang tidak dibutuhkannya. */}
+            <span className="w-[68px] shrink-0">
+              <BarCapaian capaian={baris.capaianBulan} tinggi="h-1" />
+            </span>
             <span
               className={cn(
                 "shrink-0 text-[10px] tabular-nums",
@@ -846,6 +902,7 @@ export function TabelHarian({
   const [arah, setArah] = React.useState<Arah2>("turun");
   const [kartuTampil, setKartuTampil] = React.useState(true);
   const [wadah, tepi] = useTepiGeser(detail.kolom.length + (sempit ? 1000 : 0));
+  useSatuSumbu(wadah);
 
   const pindah = (p: { bulan?: string; area?: string }) => {
     const q = new URLSearchParams();
@@ -901,7 +958,15 @@ export function TabelHarian({
   return (
     <div className="flex h-[calc(100dvh-8.5rem)] flex-col gap-2.5">
       <style>{`
-        @keyframes jalan{0%,12%{transform:translateX(0)}88%,100%{transform:translateX(calc(-100% + ${L.nama - 46}px))}}
+        /* -100% di sini harus berarti LEBAR TEKS, bukan lebar kolom. Itu
+           sebabnya yang bergerak dibuat inline-block di bawah: elemen block
+           selebar induknya, jadi geserannya dulu tetap 46 piksel berapa pun
+           panjang namanya — dan nama sepanjang "Nordu Coffee Palangkaraya"
+           tidak pernah sampai ke ujungnya.
+           min(0px, ...) menjaga nama yang ternyata muat tidak malah bergeser
+           ke kanan. */
+        @keyframes jalan{0%,12%{transform:translateX(0)}88%,100%{transform:translateX(min(0px,calc(-100% + ${L.nama - 46}px)))}}
+        .baris-harian:hover .nama-panjang>span{display:inline-block}
         .nama-panjang{-webkit-mask-image:linear-gradient(to right,#000 82%,transparent);mask-image:linear-gradient(to right,#000 82%,transparent)}
         .baris-harian:hover .sel-tempel{background-color:var(--muted)}
         .baris-harian:hover .nama-panjang{-webkit-mask-image:none;mask-image:none}
@@ -927,8 +992,14 @@ export function TabelHarian({
           saringannya melebihi layar keduanya terdorong keluar — tombol
           membatalkan saringan yang hilang justru ketika saringannya paling
           banyak dipakai. */}
-      <div className="flex items-center gap-1.5">
-        <div className="flex min-w-0 flex-1 flex-nowrap items-center gap-1.5 overflow-x-auto pb-0.5">
+      {/* `pb-0.5` DI WADAH LUAR, bukan di kelompok kiri saja.
+          Ruang untuk bilah gulir itu memang cuma 2 piksel, tapi ia membuat
+          kelompok kiri setinggi 38 sementara kelompok kanan 36 — dan dengan
+          `items-center`, Hapus dan Kartu duduk satu piksel lebih rendah
+          daripada seluruh kendali di sebelah kirinya. Satu piksel tidak
+          terbaca sebagai satu piksel; terbacanya sebagai "tidak sejajar". */}
+      <div className="flex items-center gap-1.5 pb-0.5">
+        <div className="flex min-w-0 flex-1 flex-nowrap items-center gap-1.5 overflow-x-auto">
         <div className={cn(KOTAK, "gap-0.5")}>
           <button
             type="button"
@@ -966,7 +1037,7 @@ export function TabelHarian({
         />
 
         {bisaPilihArea && area && area.length > 0 && (
-          <div className="w-36 shrink-0 sm:w-52">
+          <div className="w-28 shrink-0 sm:w-36">
             <Combobox
               value={areaTerpilih ?? ""}
               onChange={(v) => pindah({ area: v })}
@@ -983,9 +1054,18 @@ export function TabelHarian({
         </div>
 
         <div className="flex shrink-0 items-center gap-1.5">
+          {/* Tombolnya MENYEBUT APA YANG DIKERJAKANNYA, dan itu memperbaiki
+              laporan "kok hilang saat diklik". Dulu tertulis "Saringan" dengan
+              lencana angka — terbaca seperti pintu menuju panel saringan,
+              padahal kerjanya membatalkan saringan. Jadi yang diklik bukan
+              hilang, melainkan sudah selesai bekerja: saringannya nol, tidak
+              ada lagi yang perlu dibatalkan. Sekarang tertulis "Hapus", ada
+              ikon silang, dan jumlah yang akan dihapus — hilangnya jadi
+              jawaban, bukan teka-teki. */}
           {jumlahSaringan > 0 && (
             <button
               type="button"
+              title={`Hapus ${jumlahSaringan} saringan yang sedang aktif`}
               onClick={() => {
                 setStatus("semua");
                 setMerek(null);
@@ -995,12 +1075,11 @@ export function TabelHarian({
                 "inline-flex items-center gap-1.5 rounded-lg border border-border bg-card px-2.5 text-[12px] font-medium text-foreground hover:bg-muted",
               )}
             >
-              <SlidersHorizontal className="size-3.5" />
-              <span className="hidden sm:inline">Saringan</span>
+              <X className="size-3.5" />
+              <span className="hidden sm:inline">Hapus</span>
               <span className={cn(HIJAU, "grid size-4 place-items-center rounded-full text-[9.5px] font-bold text-white")}>
                 {jumlahSaringan}
               </span>
-              <X className="size-3" />
             </button>
           )}
           <button
@@ -1063,7 +1142,7 @@ export function TabelHarian({
                 <th
                   key={h.tanggal}
                   className={cn(
-                    "min-w-[5.4rem] snap-start border-l border-border/50 bg-muted px-2 py-2 text-center text-[10px] font-semibold uppercase tracking-wide",
+                    "min-w-[5rem] snap-start border-l border-border/50 bg-muted px-2 py-2 text-center text-[10px] font-semibold uppercase tracking-wide",
                     // Akhir pekan ditandai: pola naik-turun penjualan F&B hampir
                     // selalu mengikuti hari, dan tanpa penanda ini setiap Sabtu
                     // terbaca sebagai lonjakan yang tak dijelaskan.
