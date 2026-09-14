@@ -8,7 +8,7 @@
  * antar-bulan itu yang membuat KPI berguna.
  */
 
-export type KodeDepartemen = "operational" | "creative" | "finance" | "pdq" | "marcomm" | "hrd";
+export type KodeDepartemen = "operational" | "creative" | "finance" | "pdq" | "marcomm" | "sosmed" | "hrd";
 
 export type KodePosisi =
   | "operational_ca"
@@ -96,7 +96,15 @@ export const DEPARTEMEN: Departemen[] = [
     posisi: ["pdq_qc", "pdq_food", "pdq_beverage", "pdq_head_food", "pdq_head_pdq"],
     menyusul: ["Quality Assurance & Control (Radika)"],
   },
-  { kode: "marcomm", nama: "Marketing Communication", singkat: "MarComm", ikon: "Megaphone", posisi: ["marcomm", "creative_sosmed"] },
+  { kode: "marcomm", nama: "Marketing Communication", singkat: "MarComm", ikon: "Megaphone", posisi: ["marcomm"] },
+  // SOSIAL MEDIA BERDIRI SENDIRI, bukan bagian Marketing Communication.
+  //
+  // Digabung, capaian keduanya melebur jadi satu rata-rata: bulan yang bagus di
+  // satu sisi menutupi bulan yang buruk di sisi lain, dan yang membaca tabel
+  // divisi tidak bisa tahu sisi mana yang perlu dibenahi. KODE POSISINYA tetap
+  // `creative_sosmed` — seluruh catatan dan angka bulanannya menempel pada kode
+  // itu, dan menggantinya memutus riwayat yang sudah terkumpul.
+  { kode: "sosmed", nama: "Sosial Media", singkat: "Sosial Media", ikon: "AtSign", posisi: ["creative_sosmed"] },
   // Namanya "Human Capital" — itu yang dipakai perusahaan, dan itu pula yang
   // tertulis di departemen tiap orangnya di basis data. KODE DEPARTEMENNYA
   // sengaja tetap "hrd": nilai bulanan dan riwayat KPI menempel pada kode itu,
@@ -136,7 +144,7 @@ export const POSISI: Posisi[] = [
   // catatan kegiatan dan angka bulanannya menempel pada kode itu, dan
   // menggantinya akan memutus riwayat yang sudah terkumpul tanpa satu pun
   // pesan.
-  { kode: "creative_sosmed", departemen: "marcomm", nama: "Sosial Media", pic: ["Zia", "Dita", "Marta"] },
+  { kode: "creative_sosmed", departemen: "sosmed", nama: "Sosial Media", pic: ["Zia", "Dita", "Marta"] },
   { kode: "finance_accounting", departemen: "finance", nama: "Accounting", pic: ["Bella"] },
   { kode: "finance_finance", departemen: "finance", nama: "Finance", pic: ["Nisa", "Fatin", "Fetty", "Sri"], perPic: true },
   { kode: "finance_tax", departemen: "finance", nama: "Tax", pic: ["Samsul"] },

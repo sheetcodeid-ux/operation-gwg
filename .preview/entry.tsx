@@ -17,14 +17,15 @@ import { indikatorPosisi } from "@/lib/kpi/indikator";
 import { posisiDari, posisiDepartemen, type KodePosisi } from "@/lib/kpi/struktur";
 import { TENGGAT, indikatorPosisi as daftarIndikator } from "@/lib/kpi/indikator";
 import type { LaporanKpi } from "@/lib/data/kpi";
+import { bersatuan } from "@/lib/kpi/satuan";
 
 const ANGKA: Record<string, [number | null, number | null, number | null]> = {
   gross_sales: [4_186_500_000, 3_942_180_000, 88], net_profit: [1_182_654_000, 1_010_400_000, 74],
   hygiene_cctv: [40, 31, 62], komplain_area: [20, 6, 80], hpp: [40, 37.4, 100],
-  konten_post: [40, 31, 64], konten_reels: [40, 22, 71], konten_story: [20, 20, 88],
+  konten_post: [80, 62, 64], konten_reels: [80, 44, 71], konten_story: [80, 63, 88],
   design_request: [118, 104, 82], produksi_media: [66, 58, 74], interaksi: [24200, 19880, 91],
   views: [341000, 402500, 66], profile_visit: [null, null, null], kecepatan: [100, 85, 80],
-  follower_growth: [1200, 940, 77],
+  follower_growth: [12, -25, 77],
   quality_control: [5, 4, 60], efisiensi: [100, 96, 88], keberhasilan_pasar: [1.5, null, 11],
   qc_quality: [95, 91, 88], qc_hygiene: [95, 96, 90], qc_sop: [95, 89, 84],
   qc_complaint: [20, 14, 92], qc_cctv: [40, 33, 78], qc_reporting: [100, 100, 96],
@@ -96,7 +97,14 @@ function buat(kode: KodePosisi) {
     return barisKpi({
       indikator: i, bobot: i.bobot, target: t, actual: a,
       ...(i.key === "hpp" ? { actualNominal: 261_900_000, targetNominal: 280_256_000 } : {}),
-      alasan: a === null ? (i.key === "keberhasilan_pasar" ? "Menunggu sambungan penjualan menu dari ESB." : "Belum ada capaian bulan lalu sebagai dasar target.") : undefined,
+      alasan:
+        a === null
+          ? i.key === "keberhasilan_pasar"
+            ? "Menunggu sambungan penjualan menu dari ESB."
+            : "Belum ada capaian bulan lalu sebagai dasar target."
+          : a < 0 && (t ?? 0) > 0
+            ? `Actual-nya minus (${bersatuan(a, i.satuan)}) — capaiannya dihitung 0%. Periksa lagi angkanya kalau seharusnya positif.`
+            : undefined,
     });
   });
   const lalu = Object.fromEntries(daftar.map((i) => [i.key, { persen: ANGKA[i.key]?.[2] ?? null, actual: ANGKA[i.key]?.[1] ?? null }]));
@@ -169,7 +177,6 @@ const DEPT_MJ = [
   ]),
   departemenKpi("creative", "Creative", "Creative", [
     { kode: "creative_content", nama: "Content Creator", nilai: 82.1, lalu: 79.4 },
-    { kode: "creative_sosmed", nama: "Sosial Media", nilai: 76.8, lalu: 80.1 },
   ]),
   departemenKpi("finance", "Finance", "Finance", [
     { kode: "finance_accounting", nama: "Accounting", nilai: 91, lalu: 88 },
@@ -184,6 +191,7 @@ const DEPT_MJ = [
     { kode: "pdq_head_pdq", nama: "Head Product Development & Quality", nilai: null, lalu: null },
   ]),
   departemenKpi("marcomm", "Marketing Communication", "MarComm", [{ kode: "marcomm", nama: "Marketing Communication", nilai: 78.3, lalu: 74.9 }]),
+  departemenKpi("sosmed", "Sosial Media", "Sosial Media", [{ kode: "creative_sosmed", nama: "Sosial Media", nilai: 76.8, lalu: 80.1 }]),
   departemenKpi("hrd", "Human Resource Development", "HRD", []),
 ];
 const SKOR_MJ = hitungManajemen({

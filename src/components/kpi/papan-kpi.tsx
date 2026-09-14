@@ -274,7 +274,13 @@ export function PapanKpi({
         cell: ({ row }) => (
           <div className="min-w-0 max-w-[20rem]">
             <p className="truncate font-medium text-foreground">{row.original.label}</p>
-            {row.original.alasan && <p className="truncate text-[11px] text-muted-foreground">{row.original.alasan}</p>}
+            {/* Keterangan TIDAK dipotong. Kalimat yang putus di tengah ("Actual-nya
+                minus (-25%) — capaiannya dihitu…") justru terbaca ngawur: yang
+                membacanya kehilangan bagian yang menjelaskan apa yang harus
+                dilakukan, dan itu satu-satunya alasan kalimat itu ada. */}
+            {row.original.alasan && (
+              <p className="text-[11px] leading-relaxed text-muted-foreground">{row.original.alasan}</p>
+            )}
           </div>
         ),
       },

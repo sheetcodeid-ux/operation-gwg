@@ -54,7 +54,10 @@ describe("dialognya tetap bisa menyalakan yang sudah dimatikan", () => {
   const dialog = readFileSync(join(process.cwd(), "src/components/kpi/dialog-pengaturan.tsx"), "utf8");
 
   it("bobot yang dimatikan tidak ikut dijumlah 100%", () => {
-    expect(dialog).toContain("r.aktif ? Number(r.bobot) || 0 : 0");
+    // Yang diperiksa syaratnya, bukan cara menulis angkanya: pembacaan
+    // angkanya sudah pernah berganti (Number → angkaKetik) dan tes yang
+    // mengunci teks persisnya ikut merah tanpa ada yang rusak.
+    expect(dialog).toMatch(/r\.aktif \?.*r\.bobot/);
   });
 
   it("statusnya dibaca dari ada-tidaknya baris hasil hitung", () => {

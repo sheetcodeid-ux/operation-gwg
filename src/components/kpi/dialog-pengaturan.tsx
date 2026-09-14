@@ -6,11 +6,12 @@ import { Loader2, SlidersHorizontal } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
-import { Input } from "@/components/ui/input";
 import { simpanPengaturanAction } from "@/lib/actions/kpi";
 import { cn } from "@/lib/utils";
 import type { BarisKpi } from "@/lib/kpi/hitung";
 import type { Indikator } from "@/lib/kpi/indikator";
+import type { Satuan } from "@/lib/kpi/satuan";
+import { InputSatuan, angkaKetik } from "./input-satuan";
 
 /**
  * Pengaturan bobot dan target.
@@ -33,6 +34,8 @@ interface Baris {
   /** Target yang memang dihitung sendiri tidak bisa diketik. */
   targetTerkunci: boolean;
   pakaiPertumbuhan: boolean;
+  /** Satuan targetnya — kotak isiannya yang menuliskannya, bukan kepala kolom. */
+  satuan?: Satuan;
   keterangan: string;
   aktif: boolean;
 }
@@ -72,6 +75,7 @@ export function DialogPengaturan({
         pertumbuhan: i.target.jenis === "tumbuh" ? String(i.target.pertumbuhan) : "",
         targetTerkunci: dihitung,
         pakaiPertumbuhan: i.target.jenis === "tumbuh",
+        satuan: i.satuan,
         keterangan:
           i.target.jenis === "pekerjaan"
             ? "Target = jumlah pekerjaan yang masuk"
@@ -105,7 +109,7 @@ export function DialogPengaturan({
 
   // HANYA YANG AKTIF yang dijumlahkan. Indikator yang dimatikan tidak ikut
   // dinilai, jadi bobotnya juga tidak boleh ikut menghitung apakah sudah 100%.
-  const totalBobot = isi.reduce((a, r) => a + (r.aktif ? Number(r.bobot) || 0 : 0), 0);
+  const totalBobot = isi.reduce((a, r) => a + (r.aktif ? (angkaKetik(r.bobot) ?? 0) : 0), 0);
   const dimatikan = isi.filter((r) => !r.aktif).length;
   const pas = Math.abs(totalBobot - 100) < 0.001;
 
@@ -115,9 +119,9 @@ export function DialogPengaturan({
       posisi,
       ubahan: isi.map((r) => ({
         indikator: r.key,
-        bobot: r.bobot === "" ? null : Number(r.bobot),
-        target: r.targetTerkunci || r.target === "" ? null : Number(r.target),
-        pertumbuhan: r.pakaiPertumbuhan && r.pertumbuhan !== "" ? Number(r.pertumbuhan) : null,
+        bobot: r.bobot === "" ? null : angkaKetik(r.bobot),
+        target: r.targetTerkunci || r.target === "" ? null : angkaKetik(r.target),
+        pertumbuhan: r.pakaiPertumbuhan && r.pertumbuhan !== "" ? angkaKetik(r.pertumbuhan) : null,
         aktif: r.aktif,
       })),
     });
@@ -184,18 +188,18 @@ export function DialogPengaturan({
                         <p className="text-[11px] text-muted-foreground">{r.keterangan}</p>
                       </td>
                       <td className="px-3 py-2">
-                        <Input inputMode="decimal" value={r.bobot} onChange={(e) => ubah(r.key, "bobot", e.target.value)} className="h-8" disabled={!r.aktif} />
+                        <InputSatuan satuan="persen" izinkanMinus={false} tinggi="h-8" nilai={r.bobot} onUbah={(v) => ubah(r.key, "bobot", v)} disabled={!r.aktif} />
                       </td>
                       <td className="px-3 py-2">
                         {r.targetTerkunci ? (
                           <span className="text-[11px] text-muted-foreground">otomatis</span>
                         ) : (
-                          <Input inputMode="decimal" value={r.target} onChange={(e) => ubah(r.key, "target", e.target.value)} className="h-8" disabled={!r.aktif} />
+                          <InputSatuan satuan={r.satuan} tinggi="h-8" nilai={r.target} onUbah={(v) => ubah(r.key, "target", v)} disabled={!r.aktif} />
                         )}
                       </td>
                       <td className="px-3 py-2">
                         {r.pakaiPertumbuhan ? (
-                          <Input inputMode="decimal" value={r.pertumbuhan} onChange={(e) => ubah(r.key, "pertumbuhan", e.target.value)} className="h-8" disabled={!r.aktif} />
+                          <InputSatuan satuan="persen" tinggi="h-8" nilai={r.pertumbuhan} onUbah={(v) => ubah(r.key, "pertumbuhan", v)} disabled={!r.aktif} />
                         ) : (
                           <span className="text-[11px] text-muted-foreground">—</span>
                         )}

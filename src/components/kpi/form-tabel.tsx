@@ -9,6 +9,7 @@ import { Combobox } from "@/components/ui/combobox";
 import { DatePicker } from "@/components/ui/date-picker";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
+import { InputSatuan, angkaKetik } from "./input-satuan";
 import {
   simpanEfisiensiMassalAction,
   simpanEntriMassalAction,
@@ -42,12 +43,8 @@ import { cn, formatDate, formatIDR, formatNumber, formatRentang } from "@/lib/ut
  * outlet ke-58, dan hanya baris yang benar-benar diubah yang dikirim.
  */
 
-const num = (v: string): number | null => {
-  const t = String(v).replace(/[^\d.-]/g, "");
-  if (t === "") return null;
-  const n = Number(t);
-  return Number.isFinite(n) ? n : null;
-};
+// Titik ribuan, koma desimal — aturan yang sama dengan seluruh isian KPI.
+const num = angkaKetik;
 
 function Kepala({ children, className = "" }: { children: React.ReactNode; className?: string }) {
   return (
@@ -217,22 +214,10 @@ export function FormEfisiensi({
                         {b.budget === null ? "—" : formatIDR(b.budget)}
                       </td>
                       <td className="px-3 py-1.5">
-                        <Input
-                          inputMode="numeric"
-                          className="h-8"
-                          placeholder="0"
-                          value={isi[b.outletId]?.wh ?? ""}
-                          onChange={(e) => ubah(b.outletId, "wh", e.target.value)}
-                        />
+                        <InputRupiah nilai={isi[b.outletId]?.wh ?? ""} onUbah={(v) => ubah(b.outletId, "wh", v)} />
                       </td>
                       <td className="px-3 py-1.5">
-                        <Input
-                          inputMode="numeric"
-                          className="h-8"
-                          placeholder="0"
-                          value={isi[b.outletId]?.nonWh ?? ""}
-                          onChange={(e) => ubah(b.outletId, "nonWh", e.target.value)}
-                        />
+                        <InputRupiah nilai={isi[b.outletId]?.nonWh ?? ""} onUbah={(v) => ubah(b.outletId, "nonWh", v)} />
                       </td>
                     </tr>
                   ))}
@@ -518,24 +503,17 @@ export function InputRupiah({
   className?: string;
   placeholder?: string;
 }) {
-  const angka = num(nilai);
-  const minus = izinkanMinus && nilai.trim().startsWith("-");
   return (
-    <div className="relative">
-      <span className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-[12px] text-muted-foreground">Rp</span>
-      <Input
-        inputMode="numeric"
-        className={`h-8 pl-8 text-right tabular-nums ${angka !== null && angka < 0 ? "text-rose-600 dark:text-rose-400" : ""} ${className ?? ""}`}
-        placeholder={placeholder ?? "0"}
-        disabled={disabled}
-        value={angka === null ? (minus ? "-" : "") : formatNumber(angka)}
-        onChange={(e) => {
-          const bersih = e.target.value.replace(/[^\d-]/g, "");
-          // Minus hanya berarti di depan, dan hanya satu.
-          onUbah(izinkanMinus && bersih.startsWith("-") ? `-${bersih.replace(/-/g, "")}` : bersih.replace(/-/g, ""));
-        }}
-      />
-    </div>
+    <InputSatuan
+      satuan="rupiah"
+      tinggi="h-8"
+      nilai={nilai}
+      onUbah={onUbah}
+      izinkanMinus={izinkanMinus ?? false}
+      disabled={disabled}
+      className={className}
+      placeholder={placeholder}
+    />
   );
 }
 

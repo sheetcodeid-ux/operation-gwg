@@ -9,6 +9,7 @@ import { Combobox } from "@/components/ui/combobox";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { DatePicker } from "@/components/ui/date-picker";
 import { Field, Input, Textarea } from "@/components/ui/input";
+import { InputSatuan, angkaKetikNol } from "./input-satuan";
 import { WORK_BRANDS } from "@/lib/constants";
 import { uploadMany } from "@/lib/upload-client";
 import {
@@ -139,10 +140,9 @@ export function DialogInput({
   const [penjualan, setPenjualan] = React.useState("");
   const [omset, setOmset] = React.useState("");
 
-  const num = (v: string) => {
-    const n = Number(String(v).replace(/[^\d.-]/g, ""));
-    return Number.isFinite(n) ? n : 0;
-  };
+  // Dibaca dengan aturan Indonesia — titik ribuan, koma desimal. Pembacaan
+  // sebelumnya membalik keduanya, dan "27.908" tersimpan jadi 27,908.
+  const num = angkaKetikNol;
 
   function reset() {
     setNilai("");
@@ -271,7 +271,7 @@ export function DialogInput({
             {bentuk === "angka" && (
               <>
                 <Field label="Capaian bulan ini">
-                  <Input inputMode="numeric" value={nilai} onChange={(e) => setNilai(e.target.value)} placeholder="0" />
+                  <InputSatuan satuan={dipilih?.satuan} nilai={nilai} onUbah={setNilai} />
                 </Field>
                 <Field label="Catatan (opsional)">
                   <Textarea rows={2} value={deskripsi} onChange={(e) => setDeskripsi(e.target.value)} placeholder="Sumber angkanya, tangkapan layar, dan sebagainya…" />
@@ -283,11 +283,10 @@ export function DialogInput({
               <div className="grid grid-cols-2 gap-3">
                 {WORK_BRANDS.map((b) => (
                   <Field key={b} label={b}>
-                    <Input
-                      inputMode="numeric"
-                      value={perBrand[b] ?? ""}
-                      onChange={(e) => setPerBrand((v) => ({ ...v, [b]: e.target.value }))}
-                      placeholder="0"
+                    <InputSatuan
+                      satuan={dipilih?.satuan}
+                      nilai={perBrand[b] ?? ""}
+                      onUbah={(v) => setPerBrand((x) => ({ ...x, [b]: v }))}
                     />
                   </Field>
                 ))}
@@ -368,10 +367,10 @@ export function DialogInput({
                     {dipilih?.key === "faktur_pajak" && (
                       <div className="grid grid-cols-2 gap-3">
                         <Field label="Nominal">
-                          <Input inputMode="numeric" value={nominal} onChange={(e) => setNominal(e.target.value)} placeholder="0" />
+                          <InputSatuan satuan="rupiah" nilai={nominal} onUbah={setNominal} />
                         </Field>
                         <Field label="Nominal seharusnya">
-                          <Input inputMode="numeric" value={nominalSeharusnya} onChange={(e) => setNominalSeharusnya(e.target.value)} placeholder="0" />
+                          <InputSatuan satuan="rupiah" nilai={nominalSeharusnya} onUbah={setNominalSeharusnya} />
                         </Field>
                       </div>
                     )}
@@ -414,10 +413,10 @@ export function DialogInput({
                 </Field>
                 <div className="grid grid-cols-2 gap-3">
                   <Field label="Actual Warehouse">
-                    <Input inputMode="numeric" value={wh} onChange={(e) => setWh(e.target.value)} placeholder="0" />
+                    <InputSatuan satuan="rupiah" izinkanMinus={false} nilai={wh} onUbah={setWh} />
                   </Field>
                   <Field label="Actual Non-Warehouse">
-                    <Input inputMode="numeric" value={nonWh} onChange={(e) => setNonWh(e.target.value)} placeholder="0" />
+                    <InputSatuan satuan="rupiah" izinkanMinus={false} nilai={nonWh} onUbah={setNonWh} />
                   </Field>
                 </div>
                 <p className="text-[11.5px] leading-relaxed text-muted-foreground">
@@ -453,10 +452,10 @@ export function DialogInput({
                 </Field>
                 <div className="grid grid-cols-2 gap-3">
                   <Field label="Penjualan menu (3 bulan)">
-                    <Input inputMode="numeric" value={penjualan} onChange={(e) => setPenjualan(e.target.value)} placeholder="0" />
+                    <InputSatuan satuan="rupiah" izinkanMinus={false} nilai={penjualan} onUbah={setPenjualan} />
                   </Field>
                   <Field label="Omset (3 bulan)">
-                    <Input inputMode="numeric" value={omset} onChange={(e) => setOmset(e.target.value)} placeholder="0" />
+                    <InputSatuan satuan="rupiah" izinkanMinus={false} nilai={omset} onUbah={setOmset} />
                   </Field>
                 </div>
                 <p className="text-[11.5px] leading-relaxed text-muted-foreground">

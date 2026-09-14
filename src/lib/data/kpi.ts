@@ -25,6 +25,7 @@ import {
 import { indikatorPosisi, type Indikator, type JenisEntri } from "@/lib/kpi/indikator";
 import { posisiDari, type KodePosisi } from "@/lib/kpi/struktur";
 import { SEMUA_PIC } from "@/lib/kpi/semua-pic";
+import { bersatuan } from "@/lib/kpi/satuan";
 import type { SetelanPosisi } from "@/lib/kpi/berlaku";
 
 /**
@@ -1652,19 +1653,20 @@ function susunBaris(i: Indikator, k: KonteksBaris): BarisKpi {
       // menunggu sebulan, yang lain harus ditetapkan targetnya sendiri.
       alasan =
         (k.lalu ?? 0) <= 0 && k.lalu !== null
-          ? "Capaian bulan lalu nol atau minus, jadi target pertumbuhan tidak bisa dihitung — tetapkan target tetap lewat Pengaturan."
+          ? `Capaian bulan lalu ${bersatuan(k.lalu, i.satuan)} — nol atau minus tidak bisa dipakai sebagai dasar pertumbuhan, jadi targetnya baru terhitung lagi begitu ada bulan yang capaiannya positif.`
           : "Belum ada capaian bulan lalu sebagai dasar target.";
     } else {
       alasan = "Targetnya belum ditetapkan.";
     }
   }
 
-  // ACTUAL MINUS disebut apa adanya. Capaiannya memang nol — angka minus tidak
-  // boleh menarik turun indikator lain lewat penjumlahan — tapi "0%" berdiri
-  // sendiri di sebelah actual "-178,5%" terbaca seperti salah hitung, bukan
-  // seperti keterangan.
+  // ACTUAL MINUS disebut apa adanya, LENGKAP DENGAN SATUANNYA. Capaiannya
+  // memang nol — angka minus tidak boleh menarik turun indikator lain lewat
+  // penjumlahan — tapi "0%" berdiri sendiri di sebelah actual "-178,5" terbaca
+  // seperti salah hitung, bukan seperti keterangan. Angkanya ditulis ulang di
+  // kalimatnya supaya yang salah ketik langsung melihat salahnya di mana.
   if (actual !== null && actual < 0 && (targetAkhir ?? 0) > 0 && !alasan) {
-    alasan = "Actual-nya minus, jadi capaiannya dihitung nol — angka minus tidak ikut menarik turun indikator lain.";
+    alasan = `Actual-nya minus (${bersatuan(actual, i.satuan)}) — capaiannya dihitung 0%. Periksa lagi angkanya kalau seharusnya positif.`;
   }
 
   // Harga Pokok Penjualan dinilai dalam persen, tapi yang diisi orang dan yang
