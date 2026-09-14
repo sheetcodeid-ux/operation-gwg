@@ -323,7 +323,7 @@ if (kode === "daily") {
   const periode = "2026-09";
   const kolom = kolomHari(periode);
   const acak = (n: number) => {
-    let x = Math.sin(n) * 10000;
+    const x = Math.sin(n) * 10000;
     return x - Math.floor(x);
   };
   const outlet: [string, string, number][] = [
