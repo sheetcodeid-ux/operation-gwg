@@ -332,10 +332,12 @@ function KartuBrand({ kartu, aktif, onPilih }: { kartu: KartuMerek; aktif: boole
         // seperti ada kartu kelima yang gagal dimuat. `flex-[1_0_…]` membuatnya
         // tumbuh sampai barisnya habis, tapi tidak pernah menyusut — jadi di
         // layar sempit kartunya tetap seukuran itu dan barisnya bergeser.
-        "min-w-[14.5rem] flex-[1_0_14.5rem] snap-start rounded-xl border bg-card px-3 py-2.5 text-left transition-colors",
-        aktif
-          ? "border-brand-600 ring-1 ring-brand-600/30 dark:border-brand-500"
-          : "border-border hover:border-foreground/20",
+        //
+        // KARTUNYA TIDAK MENANDAI DIRINYA SENDIRI saat terpilih. Yang terpilih
+        // sudah terbaca di dua tempat lain — logonya bercincin di bilah
+        // saringan, dan lencana Saringan muncul — jadi garis tepi di sini cuma
+        // menambah ramai pada deretan yang justru dibaca sebagai satu barisan.
+        "min-w-[14.5rem] flex-[1_0_14.5rem] snap-start rounded-xl border border-border bg-card px-3 py-2.5 text-left transition-colors hover:border-foreground/20",
       )}
     >
       <div className="flex items-center gap-2">
