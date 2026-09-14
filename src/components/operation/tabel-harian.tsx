@@ -239,7 +239,9 @@ function Lambang({ merek, ukuran = 22 }: { merek: string | null; ukuran?: number
         src={logo}
         alt={merek ?? ""}
         style={{ width: ukuran, height: ukuran }}
-        className="shrink-0 rounded-full bg-white object-contain ring-1 ring-border"
+        // Tanpa latar putih dan tanpa cincin: berkasnya sudah piringan penuh,
+        // dan latar di baliknya hanya menyisakan tepi putih di layar gelap.
+        className="shrink-0 rounded-full object-contain"
       />
     );
   }
@@ -339,7 +341,7 @@ function KartuBrand({ kartu, aktif, onPilih }: { kartu: KartuMerek; aktif: boole
       )}
     >
       <div className="flex items-center gap-2">
-        <Lambang merek={kartu.merek} ukuran={22} />
+        <Lambang merek={kartu.merek} ukuran={26} />
         <span className="truncate text-[13px] font-semibold text-foreground">{kartu.merek}</span>
         <span className="ml-auto shrink-0 rounded-full bg-muted px-1.5 py-px text-[10px] tabular-nums text-muted-foreground">
           {kartu.outlet} outlet
@@ -469,14 +471,14 @@ function AvatarMerek({
             aria-label={`Saring merek ${k.merek}`}
             onClick={() => onPilih(aktif ? null : k.merek)}
             className={cn(
-              "grid size-7 place-items-center rounded-md transition",
+              "grid size-8 place-items-center rounded-md transition",
               // DIREDUPKAN, BUKAN DIABUKAN. `grayscale` membuat keempatnya jadi
               // piringan kelabu yang serupa — persis yang dipakai orang untuk
               // membedakannya hilang. Yang dikurangi cuma terangnya.
-              aktif ? "bg-brand-500/15 ring-1 ring-brand-500" : "opacity-55 hover:opacity-100",
+              aktif ? "bg-brand-500/15 ring-1 ring-brand-500" : "opacity-70 hover:opacity-100",
             )}
           >
-            <Lambang merek={k.merek} ukuran={20} />
+            <Lambang merek={k.merek} ukuran={22} />
           </button>
         );
       })}
