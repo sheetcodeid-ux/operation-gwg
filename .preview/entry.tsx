@@ -20,6 +20,8 @@ import type { LaporanKpi } from "@/lib/data/kpi";
 import { bersatuan } from "@/lib/kpi/satuan";
 import { TabelHarian } from "@/components/operation/tabel-harian";
 import { KelengkapanDailyPanel } from "@/components/admin/kelengkapan-daily";
+import { PapanSupervisor } from "@/components/kpi/papan-supervisor";
+import { peringkat } from "@/lib/kpi/manajemen";
 import { barisHarian, kolomHari, totalHarian, urutHarian } from "@/lib/ops/harian";
 
 const ANGKA: Record<string, [number | null, number | null, number | null]> = {
@@ -314,6 +316,43 @@ if (kode === "sinkron") {
   createRoot(document.getElementById("root")!).render(
     <I18nProvider initialLang="id">
       <div className="p-6"><TabelSinkronSehat baris={contoh} /></div>
+    </I18nProvider>,
+  );
+  throw new Error("__stop__");
+}
+if (kode === "supervisor") {
+  // Angka CONTOH yang bentuknya seperti keadaan sungguhan.
+  const acak = (n: number) => { const x = Math.sin(n) * 10000; return x - Math.floor(x); };
+  const NAMA = ["Abdullah","Adam Fauzan","Aditya Hartaya","Arie Rizky Maulana","Eddo","Eva Suryani","Henry Fonda Satria","Ival","Ivna Mahardika","Muhammad Rizky Saputra","Ringki Widodo","Sudarti","Tian Mahardika","Tommy Wijaya","Zulfikar Rahim"];
+  const KPK = new Set(["Eddo","Eva Suryani","Henry Fonda Satria","Ival","Muhammad Rizky Saputra","Ringki Widodo","Sudarti","Tian Mahardika"]);
+  const baris = NAMA.map((nama, i) => {
+    const kpk = KPK.has(nama);
+    const belum = i === 3 || i === 11;
+    const nilai = belum ? null : 42 + acak(i * 17) * 55;
+    return {
+      userId: `u${i}`, nama,
+      posisi: (kpk ? "supervisor_kpk" : "supervisor_umum") as never,
+      jenis: (kpk ? "KPK" : "Umum") as "KPK" | "Umum",
+      outlet: [kpk ? `Nordu Coffee ${nama.split(" ")[0]}` : `Cattu ${nama.split(" ")[0]}`],
+      nilai,
+      peringkat: nilai === null ? null : peringkat(nilai),
+      alasan: belum ? "Outlet ini belum genap tiga bulan berjalan, jadi belum dinilai." : null,
+    };
+  }).sort((a, b) => (b.nilai ?? -1) - (a.nilai ?? -1));
+  const ada = baris.map((b) => b.nilai).filter((n): n is number => n !== null);
+  createRoot(document.getElementById("root")!).render(
+    <I18nProvider initialLang="id">
+      <div className="p-6">
+        <PapanSupervisor
+          bisaLihatSemua
+          rekap={{
+            periode: "2026-09",
+            baris,
+            rata: ada.reduce((x, y) => x + y, 0) / ada.length,
+            belumDinilai: baris.length - ada.length,
+          }}
+        />
+      </div>
     </I18nProvider>,
   );
   throw new Error("__stop__");

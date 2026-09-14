@@ -1,5 +1,7 @@
 import "server-only";
 
+import { cache } from "react";
+
 import { db, dbEnabled } from "./db";
 import { selectAll } from "./paged";
 import { esbConfigured, esbFetchHighlight, esbEnsureDeadline } from "@/lib/integrations/esb-client";
@@ -63,7 +65,17 @@ interface Row {
 }
 
 /** Angka bulanan seluruh cabang untuk satu bulan. Kosong = belum ditarik. */
-export async function netBulananPerCabang(periode: string): Promise<Map<string, NetBulanan>> {
+/**
+ * DIBUNGKUS `cache()` — satu bulan dibaca SEKALI per permintaan.
+ *
+ * Halaman KPI Supervisor menghitung lima puluh tiga rapor, dan tiap rapor
+ * membaca empat bulan yang sama persis. Tanpa memo ini satu halaman menembak
+ * ratusan kueri yang jawabannya identik. `cache` dari React hanya berlaku di
+ * dalam satu permintaan, jadi angkanya tidak pernah basi antar-pembaca.
+ */
+export const netBulananPerCabang = cache(async function netBulananPerCabang(
+  periode: string,
+): Promise<Map<string, NetBulanan>> {
   const peta = new Map<string, NetBulanan>();
   if (!dbEnabled) return peta;
   const rows = await selectAll<Row>("esb_net_bulanan", (a, b) =>
@@ -73,7 +85,7 @@ export async function netBulananPerCabang(periode: string): Promise<Map<string, 
     peta.set(r.branch, { net: Number(r.net) || 0, bills: r.bills, pax: r.pax, sampai: r.sampai, syncedAt: r.synced_at });
   }
   return peta;
-}
+});
 
 /** Jeda sebelum bulan yang baru berakhir dianggap benar-benar final. */
 const JEDA_FINAL_HARI = 2;

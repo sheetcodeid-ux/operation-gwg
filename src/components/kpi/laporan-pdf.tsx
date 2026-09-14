@@ -36,9 +36,9 @@ import { actualBersatuan, bersatuan, persen } from "@/lib/kpi/satuan";
  * membuat hasil cetaknya tetap tajam pada ukuran berapa pun.
  */
 
-type Mode = "terang" | "gelap";
+export type Mode = "terang" | "gelap";
 
-const THEME: Record<Mode, { bg: string; card: string; text: string; sub: string; border: string; band: string; bandText: string; box: string; grid: string }> = {
+export const THEME: Record<Mode, { bg: string; card: string; text: string; sub: string; border: string; band: string; bandText: string; box: string; grid: string }> = {
   terang: { bg: "#f5f6f8", card: "#ffffff", text: "#1a1d21", sub: "#6b7280", border: "#e5e7eb", band: "#111827", bandText: "#ffffff", box: "#f9fafb", grid: "#e5e7eb" },
   gelap: { bg: "#0f1115", card: "#181b20", text: "#f3f4f6", sub: "#9ca3af", border: "#2a2e35", band: "#0b0d10", bandText: "#f3f4f6", box: "#12151a", grid: "#2a2e35" },
 };
@@ -51,7 +51,7 @@ const WARNA = ["#3b82f6", "#f59e0b", "#06b6d4", "#8b5cf6", "#10b981", "#f43f5e",
 
 /** Teks apa pun yang masuk dokumen dilewatkan sini — nama outlet dan keterangan
  *  diketik orang, dan satu tanda "<" cukup untuk merusak seluruh halamannya. */
-function aman(s: string): string {
+export function aman(s: string): string {
   return String(s).replace(/[<>&"]/g, (c) => ({ "<": "&lt;", ">": "&gt;", "&": "&amp;", '"': "&quot;" })[c]!);
 }
 
@@ -230,7 +230,7 @@ function donatSebaran(baris: BarisKpi[], skor: number, t: (typeof THEME)[Mode]):
 
 /* ─────────────────────────────── dokumennya ─────────────────────────────── */
 
-function logo(): string {
+export function logo(): string {
   const asal = typeof window !== "undefined" ? window.location.origin : "";
   return `<img src="${asal}/gwg.svg" alt="GWG" style="height:40px;width:auto;filter:brightness(0) invert(1)"/>`;
 }

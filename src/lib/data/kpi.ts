@@ -1,6 +1,7 @@
 import "server-only";
 
 import { randomUUID } from "node:crypto";
+import { cache } from "react";
 import { db, dbEnabled } from "./db";
 import { getOutlets, getUser, getUsers, semuaTugas } from "./store";
 import { listHcRequests } from "./hc-requests";
@@ -310,7 +311,9 @@ export async function simpanEfisiensi(input: {
  * dalam berkas daripada id acak. Pemetaannya dikerjakan di sini, satu kali,
  * supaya sisi KPI tetap bicara dalam id seperti seluruh bagian lain.
  */
-export async function pembelianPerOutlet(periode: string): Promise<Map<string, { wh: number | null; nonWh: number | null }>> {
+export const pembelianPerOutlet = cache(async function pembelianPerOutlet(
+  periode: string,
+): Promise<Map<string, { wh: number | null; nonWh: number | null }>> {
   const peta = new Map<string, { wh: number | null; nonWh: number | null }>();
   if (!dbEnabled) return peta;
   const { data } = await db().from("op_purchases").select("outlet_code,warehouse,non_warehouse").eq("month", periode);
@@ -325,7 +328,7 @@ export async function pembelianPerOutlet(periode: string): Promise<Map<string, {
     peta.set(id, { wh: angka(r.warehouse), nonWh: angka(r.non_warehouse) });
   }
   return peta;
-}
+});
 
 export async function simpanFee(input: {
   periode: string;
@@ -479,7 +482,9 @@ export interface OutletBulanan {
 }
 
 /** Isian tangan seluruh outlet pada satu bulan. */
-async function outletBulanan(periode: string): Promise<Map<string, OutletBulanan>> {
+// Dibungkus `cache()` dengan alasan yang sama dengan `netBulananPerCabang`:
+// lima puluh tiga rapor supervisor membaca empat bulan yang sama persis.
+const outletBulanan = cache(async function outletBulanan(periode: string): Promise<Map<string, OutletBulanan>> {
   const peta = new Map<string, OutletBulanan>();
   if (!dbEnabled) return peta;
   const { data } = await db().from("kpi_outlet_bulanan").select("outlet_id,gross,net_profit,hpp_nominal").eq("periode", periode);
@@ -492,7 +497,7 @@ async function outletBulanan(periode: string): Promise<Map<string, OutletBulanan
     });
   }
   return peta;
-}
+});
 
 /**
  * Gross yang DIKETIK per outlet pada satu bulan.
