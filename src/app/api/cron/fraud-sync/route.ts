@@ -223,37 +223,21 @@ async function jalankan(req: Request): Promise<NextResponse> {
   }
 
   /*
-   * Pekerjaan khusus: KEBUT pengisian Daily per cabang.
+   * Pekerjaan khusus: KEBUT pengisian Daily.
    *
    * `?job=seasonal-branch` memakai SELURUH anggaran satu permintaan untuk
    * mengisi tabel Daily, tanpa berbagi dengan fraud dan yang lain. Dipanggil
-   * berulang — tiap panggilan meneruskan dari kursor yang tersimpan — sampai
-   * `terisi` pulang nol, yang berarti tidak ada lagi yang kurang.
+   * berulang sampai `terisi` pulang nol, yang berarti tidak ada lagi yang
+   * kurang.
    *
-   * Ada karena cron per jam terikat batas 60 detik Vercel dan harus berbagi
-   * waktu dengan empat pekerjaan lain. Kalau lubangnya ribuan dan harus penuh
-   * hari ini juga, pintu ini yang dipakai, bukan menunggu giliran.
+   * Ada karena cron biasa terikat batas 60 detik Vercel dan harus berbagi waktu
+   * dengan empat pekerjaan lain. Kalau lubangnya ribuan dan harus penuh hari
+   * ini juga, pintu ini yang dipakai, bukan menunggu giliran.
    */
   if (job === "seasonal-branch") {
     try {
-      const { getSeasonalBranches } = await import("@/lib/data/seasonal");
-      const { getAppConfig, setAppConfig } = await import("@/lib/data/app-config");
-      const branches = await getSeasonalBranches();
-      let cur = Number((await getAppConfig("seasonal_branch_cursor")) ?? "0") || 0;
-      const y = new Date(Date.now() + 7 * 3_600_000).getUTCFullYear();
-      let sentuh = 0;
-      let terisi = 0;
-      let error: string | undefined;
-      while (left() > 6_000 && sentuh < branches.length) {
-        const b = branches[cur % branches.length];
-        const r = await syncSeasonalDays(`${y}-01-01`, ymdWib(0), b.id, Math.min(left() - 4_000, 24_000));
-        cur += 1;
-        sentuh += 1;
-        terisi += r.synced;
-        if (r.error) { error = r.error; break; }
-      }
-      await setAppConfig("seasonal_branch_cursor", String(cur));
-      results["seasonal-branch"] = { cabang: sentuh, terisi, dariTotal: branches.length, error };
+      const { kejarLubangDaily } = await import("@/lib/data/kejar-seasonal");
+      results["seasonal-branch"] = await kejarLubangDaily(Math.max(4_000, left() - 4_000));
     } catch (e) {
       results["seasonal-branch"] = { error: e instanceof Error ? e.message : "failed" };
     }
@@ -346,48 +330,23 @@ async function jalankan(req: Request): Promise<NextResponse> {
   }
 
   /*
-   * Phase 5 — seasonal per cabang, PENGISI TABEL DAILY.
+   * Phase 5 — PENGISI TABEL DAILY.
    *
-   * Dulu SATU cabang per jalan, bergiliran. Dengan 57 cabang, tiap cabang
-   * dapat giliran sekali per 57 jalan — dan karena satu jalan cuma sanggup
-   * belasan hari, setahun penuh satu cabang butuh puluhan giliran. Lajunya
-   * terukur ~150 baris sehari, sementara yang belum ada 11.059 pasangan
-   * cabang×tanggal: dua setengah bulan lagi baru penuh. Itu sebabnya Daily
-   * terlihat bolong dan Januari cuma punya tiga cabang.
+   * Dulu satu cabang per jalan, bergiliran lewat kursor tersimpan. Dengan 57
+   * cabang tiap cabang dapat giliran sekali per 57 jalan, dan satu giliran cuma
+   * sanggup belasan hari: terukur ~150 baris sehari, sementara yang belum ada
+   * 11.059 pasangan. Itu sebabnya Daily terlihat bolong dan Januari cuma punya
+   * tiga cabang.
    *
-   * Sekarang BERPUTAR TERUS sampai anggaran waktunya habis. Yang membatasi
-   * jadi waktu, bukan jumlah cabang — dan itu batas yang benar, karena ESB
-   * memang cuma melayani satu panggilan pada satu waktu.
-   *
-   * Kursornya tetap disimpan tiap cabang selesai, jadi jalan berikutnya
-   * meneruskan dari tempat yang belum tersentuh, bukan mengulang dari depan.
+   * Sekarang memakai penarik yang sama dengan tombol di layar: lubangnya dicari
+   * langsung, bulan yang paling berlubang dulu, dan panggilan ESB-nya berjalan
+   * beberapa sekaligus. Tidak ada kursor yang perlu dijaga — lubangnya sendiri
+   * yang jadi penunjuk tempat.
    */
   if (left() > 6_000) {
     try {
-      const { getSeasonalBranches } = await import("@/lib/data/seasonal");
-      const { getAppConfig, setAppConfig } = await import("@/lib/data/app-config");
-      const branches = await getSeasonalBranches();
-      if (branches.length) {
-        let cur = Number((await getAppConfig("seasonal_branch_cursor")) ?? "0") || 0;
-        const y = new Date(Date.now() + 7 * 3_600_000).getUTCFullYear();
-        let sentuh = 0;
-        let terisi = 0;
-        // Berhenti sesudah satu putaran penuh walau waktunya masih ada:
-        // kalau semuanya sudah lengkap, memutar lagi cuma membaca ulang.
-        while (left() > 6_000 && sentuh < branches.length) {
-          const b = branches[cur % branches.length];
-          const r = await syncSeasonalDays(`${y}-01-01`, ymdWib(0), b.id, Math.min(left() - 4_000, 20_000));
-          cur += 1;
-          sentuh += 1;
-          terisi += r.synced;
-          if (r.error) {
-            results["seasonal:branch"] = { error: r.error, cabang: sentuh, terisi };
-            break;
-          }
-        }
-        await setAppConfig("seasonal_branch_cursor", String(cur));
-        results["seasonal:branch"] ??= { cabang: sentuh, terisi };
-      }
+      const { kejarLubangDaily } = await import("@/lib/data/kejar-seasonal");
+      results["seasonal:branch"] = await kejarLubangDaily(Math.max(4_000, left() - 4_000));
     } catch (e) {
       results["seasonal:branch"] = { error: e instanceof Error ? e.message : "failed" };
     }

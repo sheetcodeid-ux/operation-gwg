@@ -388,10 +388,10 @@ if (kode === "kelengkapan") {
       <div className="max-w-4xl p-6">
         <KelengkapanDailyPanel
           awal={{
-            wajib: 14_649,
-            ada: 3_720,
-            kurang: 11_059,
-            persen: (3_720 / 14_649) * 100,
+            wajib: 14_706,
+            ada: 3_861,
+            kurang: 10_845,
+            persen: (3_861 / 14_706) * 100,
             cabang: 57,
             bulan: [
               { periode: "2026-01", ada: 93, wajib: 1_767 },

@@ -202,10 +202,43 @@ async function login(): Promise<Session> {
   return { cookie: cookieHeader(jar), csrf: csrf2, postUserSession, typeVoidOptions, at: Date.now() };
 }
 
+/**
+ * Login yang sedang berjalan, kalau ada.
+ *
+ * SATU LOGIN SAJA WALAU DIPANGGIL BERSAMAAN. ESB melayani satu sesi per akun:
+ * login kedua mematikan cookie login pertama. Selama semua panggilan ESB
+ * berurutan hal itu tidak pernah terlihat, tapi penarikan Daily kini menembak
+ * beberapa hari sekaligus — dan tanpa penjaga ini, jalan pertama yang dingin
+ * akan memulai sebanyak itu login berbarengan, lalu semuanya kecuali yang
+ * terakhir dibalas halaman login. Bukan cuma lambat: yang gagal itu dicatat
+ * sebagai hari yang tidak bisa ditarik.
+ */
+let sedangLogin: Promise<Session> | null = null;
+
 async function ensureSession(): Promise<Session> {
   if (session && Date.now() - session.at < TTL_MS) return session;
-  session = await login();
-  return session;
+  sedangLogin ??= login()
+    .then((s) => {
+      session = s;
+      return s;
+    })
+    .finally(() => {
+      sedangLogin = null;
+    });
+  return sedangLogin;
+}
+
+/**
+ * Buang sesi yang sudah kedaluwarsa — TAPI HANYA KALAU MASIH SESI ITU.
+ *
+ * Yang lama ditulis `session = null`. Saat panggilannya paralel, pemanggil yang
+ * lambat bisa membuang sesi BARU yang baru saja dibuat pemanggil lain, dan
+ * rombongan berikutnya login lagi dari nol — berulang, sampai anggaran waktunya
+ * habis tanpa satu hari pun bertambah. Dengan pembanding ini, yang terbuang
+ * hanya sesi yang memang dipakai saat gagal.
+ */
+function buangSesi(dipakai: Session | null): void {
+  if (!dipakai || session === dipakai) session = null;
 }
 
 /**
@@ -244,7 +277,8 @@ async function postForm(path: string, build: (s: Session) => Record<string, stri
   const bungkus = async (r: Response) =>
     new Response(await r.text().catch(() => ""), { status: r.status, headers: r.headers });
 
-  let res = await bungkus(await call(await ensureSession()));
+  const dipakai = await ensureSession();
+  let res = await bungkus(await call(dipakai));
   const kedaluwarsa = async (r: Response) => {
     if (r.status === 401 || r.status === 403 || r.status === 302) return true;
     // 200 tapi isinya halaman login — inilah bentuk kedaluwarsa yang dulu lolos
@@ -252,7 +286,7 @@ async function postForm(path: string, build: (s: Session) => Record<string, stri
     return r.ok && BERBAU_LOGIN.test(await r.clone().text().catch(() => ""));
   };
   if (await kedaluwarsa(res)) {
-    session = null; // expired → re-login once
+    buangSesi(dipakai); // expired → re-login once
     res = await bungkus(await call(await ensureSession()));
   }
   return res;
@@ -515,8 +549,10 @@ export async function esbFetchHighlight(dateFromYmd: string, dateToYmd: string, 
    * sesi, jadi mengirim badan yang lama dengan sesi yang baru sama saja
    * ditolak lagi.
    */
+  let dipakai: Session | null = null;
   const panggil = async (): Promise<{ res: Response; teks: string }> => {
     const s = await ensureSession();
+    dipakai = s;
     const body = new URLSearchParams();
     body.append("branchID", branchId);
     body.append("brandID", "");
@@ -543,7 +579,7 @@ export async function esbFetchHighlight(dateFromYmd: string, dateToYmd: string, 
   // pertama berhasil, sisanya gagal berturut-turut sampai penarikannya
   // menyerah — lalu diulang dari awal jam berikutnya, gagal di titik yang sama.
   if (res.status === 401 || res.status === 403 || res.status === 302 || (res.ok && BERBAU_LOGIN.test(teks))) {
-    session = null;
+    buangSesi(dipakai);
     ({ res, teks } = await panggil());
   }
 

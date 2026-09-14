@@ -47,13 +47,7 @@ function bulanSampaiKini(hariIni: string): { periode: string; hari: number }[] {
 
 export async function kelengkapanDaily(): Promise<KelengkapanDaily> {
   const hariIni = ymdWib();
-  const cabang = [
-    ...new Set(
-      getOutlets()
-        .filter((o) => o.active && !!o.esbBranchId)
-        .map((o) => o.esbBranchId as string),
-    ),
-  ];
+  const cabang = cabangDaily();
   const bulan = bulanSampaiKini(hariIni);
   const kosong: KelengkapanDaily = {
     wajib: 0, ada: 0, kurang: 0, persen: 100, cabang: cabang.length, bulan: [],
@@ -92,4 +86,21 @@ export async function kelengkapanDaily(): Promise<KelengkapanDaily> {
       .filter((b) => b.ada < b.wajib)
       .sort((x, y) => x.ada / x.wajib - y.ada / y.wajib),
   };
+}
+
+/**
+ * Cabang ESB yang datanya WAJIB ada di Daily.
+ *
+ * Bukan seluruh daftar cabang milik ESB: daftar itu berisi 60 cabang, sedangkan
+ * yang dipakai Daily 57. Menarik tiga cabang yang tidak pernah dibaca siapa pun
+ * berarti membuang tiga per enam puluh anggaran waktu tiap putaran.
+ */
+export function cabangDaily(): string[] {
+  return [
+    ...new Set(
+      getOutlets()
+        .filter((o) => o.active && !!o.esbBranchId)
+        .map((o) => o.esbBranchId as string),
+    ),
+  ];
 }

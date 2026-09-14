@@ -161,3 +161,150 @@ export async function syncSeasonalDays(from: string, to: string, branch = "", bu
   }
   return { synced, remaining: pending.length - synced, error };
 }
+
+/* ------------------------- Penarikan borongan (kejar) ------------------------- */
+
+/** Satu pekerjaan tarik: satu cabang, satu tanggal. Itulah satuan terkecil yang
+ *  dilayani ESB — tidak ada panggilan yang memulangkan rincian per hari. */
+export interface TugasTarik { branch: string; day: string }
+
+/**
+ * Pasangan cabang×tanggal yang MASIH kurang di rentang ini.
+ *
+ * Dibaca sekali untuk seluruh cabang, bukan sekali per cabang. Yang lama
+ * membaca ulang tiap cabang — 57 perjalanan bolak-balik ke basis data hanya
+ * untuk menyusun daftar kerjanya, dan itu terjadi di dalam anggaran waktu yang
+ * sama dengan penarikannya sendiri.
+ *
+ * URUTANNYA TANGGAL DULU, BARU CABANG. Dengan begitu panggilan-panggilan yang
+ * berjalan berbarengan selalu mengenai cabang yang berbeda, bukan menumpuk di
+ * satu cabang yang sama.
+ */
+export async function lubangSeasonal(from: string, to: string, cabang: readonly string[]): Promise<TugasTarik[]> {
+  if (!dbEnabled || cabang.length === 0) return [];
+  const rows = await selectAll<{ day: string; branch: string; synced_at: string }>("seasonal_daily", (a, b) =>
+    db().from("seasonal_daily").select("day,branch,synced_at").in("branch", cabang as string[])
+      .gte("day", from).lte("day", to).order("day").order("branch").range(a, b),
+  );
+  const punya = new Map(rows.map((r) => [`${r.day}|${r.branch}`, r.synced_at]));
+  const today = todayWib();
+  const out: TugasTarik[] = [];
+  for (const day of eachDay(from, to)) {
+    if (day > today) continue;
+    for (const branch of cabang) {
+      const s = punya.get(`${day}|${branch}`);
+      if (!s || !fresh(s, day)) out.push({ branch, day });
+    }
+  }
+  return out;
+}
+
+export interface HasilTarik {
+  /** Baris yang benar-benar masuk ke basis data. */
+  terisi: number;
+  /** Panggilan ESB yang gagal — hari itu tetap kosong dan akan dicoba lagi. */
+  gagal: number;
+  /** Berapa banyak panggilan yang jalan berbarengan di akhir jalan ini. */
+  konkuren: number;
+  error?: string;
+}
+
+/** Berapa panggilan ESB yang boleh jalan berbarengan saat mulai. */
+export const KONKUREN_AWAL = 6;
+/** Batas atas yang tidak pernah dilewati, berapa pun yang diminta pemanggil. */
+export const KONKUREN_MAKS = 10;
+/** Berapa baris dikumpulkan sebelum ditulis sekaligus ke basis data. */
+const BORONGAN = 25;
+
+/**
+ * TARIK BANYAK PASANGAN SEKALIGUS, dengan beberapa panggilan berjalan bersamaan.
+ *
+ * Inilah yang membuat penarikan Januari–hari ini selesai dalam hitungan menit
+ * alih-alih hari. Satu panggilan highlight ke ESB memakan 0,6–1 detik, dan
+ * hampir seluruhnya adalah MENUNGGU JARINGAN — bukan pekerjaan kita. Menunggu
+ * satu per satu berarti 11.000 panggilan × 1 detik ≈ tiga jam murni menunggu,
+ * dipotong-potong jadi ratusan jendela 40 detik.
+ *
+ * Yang DULU menghalangi bukan aturan ESB melainkan salah paham: "ESB melayani
+ * satu panggilan pada satu waktu" itu berlaku untuk EKSPOR (berkas yang
+ * dibangkitkan di sisi ESB lalu diambil per halaman — dan memang pernah
+ * tertukar antar hari). Highlight bukan ekspor: satu permintaan, satu balasan,
+ * di sambungan yang sama. Tidak ada yang bisa tertukar.
+ *
+ * Yang tetap harus dijaga ada dua, dan keduanya dijaga di sini:
+ *  - SESI. ESB satu sesi per akun, jadi login dibuat tunggal di klien ESB;
+ *    tanpa itu rombongan pertama saling mematikan sesi masing-masing.
+ *  - REM ESB. Sesudah puluhan permintaan beruntun ESB berhenti menjawab
+ *    sebentar. Maka jumlah panggilan berbarengan MENGECIL SENDIRI setiap kali
+ *    ada kegagalan beruntun, sampai serendah satu — jadi keadaan terburuknya
+ *    sama dengan cara lama, bukan lebih buruk.
+ */
+export async function tarikPasangan(
+  tugas: readonly TugasTarik[],
+  opts: { budgetMs: number; konkuren?: number },
+): Promise<HasilTarik> {
+  if (!dbEnabled || !esbConfigured() || tugas.length === 0) {
+    return { terisi: 0, gagal: 0, konkuren: 0 };
+  }
+  const mulai = Date.now();
+  const habis = () => Date.now() - mulai > opts.budgetMs;
+  esbEnsureDeadline(opts.budgetMs);
+
+  let berikut = 0;
+  let terisi = 0;
+  let gagal = 0;
+  let gagalBeruntun = 0;
+  let hidup = Math.max(1, Math.min(KONKUREN_MAKS, opts.konkuren ?? KONKUREN_AWAL));
+  let berhenti = false;
+  let error: string | undefined;
+
+  interface Baris { day: string; branch: string; gross: number; net: number; pax: number; bills: number; synced_at: string }
+  let tampung: Baris[] = [];
+
+  /** Tulis yang sudah terkumpul. Satu perjalanan untuk 25 baris, bukan 25. */
+  const tuang = async () => {
+    if (tampung.length === 0) return;
+    const kirim = tampung;
+    tampung = [];
+    const up = await db().from("seasonal_daily").upsert(kirim);
+    if (up.error) {
+      // Baris yang gagal ditulis BUKAN baris yang terisi. Menghitungnya sebagai
+      // terisi membuat layar melaporkan kemajuan yang tidak ada di basis data.
+      gagal += kirim.length;
+      error = up.error.message;
+      return;
+    }
+    terisi += kirim.length;
+  };
+
+  const pekerja = async () => {
+    for (;;) {
+      if (berhenti || habis() || berikut >= tugas.length) break;
+      const t = tugas[berikut];
+      berikut += 1;
+      try {
+        const sales = await esbFetchSales(t.day, t.day, t.branch);
+        gagalBeruntun = 0;
+        tampung.push({
+          day: t.day, branch: t.branch,
+          gross: sales.gross, net: sales.net, pax: sales.pax, bills: sales.bills,
+          synced_at: new Date().toISOString(),
+        });
+        if (tampung.length >= BORONGAN) await tuang();
+      } catch (e) {
+        gagal += 1;
+        gagalBeruntun += 1;
+        error = e instanceof Error ? e.message : "Gagal memuat data ESB.";
+        // Rem ESB: mengecil dulu, menyerah belakangan. Yang pertama dikorbankan
+        // adalah jumlah panggilan berbarengan — sesudah itu jedanya memanjang.
+        if (gagalBeruntun >= 3 && hidup > 1) { hidup -= 1; break; }
+        if (gagalBeruntun >= 8) { berhenti = true; break; }
+        await new Promise((r) => setTimeout(r, Math.min(gagalBeruntun, 4) * 750));
+      }
+    }
+  };
+
+  await Promise.all(Array.from({ length: hidup }, () => pekerja()));
+  await tuang();
+  return { terisi, gagal, konkuren: hidup, error };
+}

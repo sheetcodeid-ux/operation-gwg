@@ -130,6 +130,9 @@ describe("companyID ESB tidak boleh terkunci kosong", () => {
     // panjang: puluhan cabang pertama berhasil, sisanya gagal berturut-turut.
     const bagian = klien.slice(klien.indexOf("export async function esbFetchHighlight"));
     expect(bagian).toContain("BERBAU_LOGIN.test(teks)");
-    expect(bagian).toContain("session = null;");
+    // Sesinya dibuang lewat `buangSesi`, bukan `session = null` polos: sejak
+    // penarikan Daily membarengkan panggilannya, pembuangan polos bisa mengenai
+    // sesi BARU milik pemanggil lain.
+    expect(bagian).toContain("buangSesi(dipakai);");
   });
 });
