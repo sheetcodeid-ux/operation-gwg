@@ -1737,6 +1737,49 @@ export { SEMUA_PIC } from "@/lib/kpi/semua-pic";
  * yang dikirim peramban bisa diubah siapa saja, dan satu id outlet yang
  * ditukar berarti laba bersih area orang lain ikut tertimpa.
  */
+/**
+ * TARGET BULANAN TIAP OUTLET — aturan yang sama persis dengan KPI Coordinator
+ * Area: rata-rata tiga bulan penuh sebelumnya, ditambah laju pertumbuhan yang
+ * dibaca dari indikator Gross Sales-nya sendiri.
+ *
+ * Diekspor supaya halaman Daily memakai angka yang sama. Menghitungnya ulang
+ * di sana berarti dua rumus yang bisa berbeda diam-diam, dan satu outlet akan
+ * terbaca tercapai di satu halaman dan gagal di halaman sebelahnya — tanpa ada
+ * cara tahu mana yang benar.
+ *
+ * Outlet yang belum genap tiga bulan TIDAK diberi target: ia memang belum
+ * dinilai, dan memberinya target berarti menghukum outlet yang baru buka.
+ */
+export async function targetBulananOutlet(periode: string): Promise<Map<string, number>> {
+  const semua: OutletCa[] = getOutlets()
+    .filter((o) => o.active)
+    .map((o) => ({
+      id: o.id,
+      nama: o.name,
+      branch: o.esbBranchId ?? null,
+      grossManual: !!o.grossManual,
+      esbMulai: o.esbMulai ?? null,
+      bukaTanggal: o.bukaTanggal ?? null,
+      esbAbaikan: o.esbAbaikan ?? [],
+    }));
+
+  const bulanLalu = tigaBulanSebelum(periode);
+  const riwayat = await Promise.all(
+    bulanLalu.map((b) => Promise.all([netBulananPerCabang(b), outletBulanan(b)])),
+  );
+
+  const tumbuh = tumbuhCa();
+  const out = new Map<string, number>();
+  for (const o of semua) {
+    const tiga = [0, 1, 2].map((n) => grossOutlet(o, bulanLalu[n], riwayat[n][0], riwayat[n][1]));
+    if (!sudahTigaBulan(o, periode, tiga)) continue;
+    const ada = tiga.filter((v): v is number => v !== null && v > 0);
+    if (ada.length === 0) continue;
+    out.set(o.id, (ada.reduce((a, b) => a + b, 0) / ada.length) * (1 + tumbuh / 100));
+  }
+  return out;
+}
+
 export function outletMilikPic(pic: string): Set<string> {
   return new Set(outletCa([pic]).map((o) => o.id));
 }

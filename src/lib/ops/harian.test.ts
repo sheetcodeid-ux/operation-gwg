@@ -94,3 +94,66 @@ describe("urutan dan total", () => {
     expect(totalHarian([])).toBeNull();
   });
 });
+
+describe("pencapaian target harian", () => {
+  const buat = (hari: (number | null)[], targetBulan: number | null) =>
+    barisHarian({ outletId: "o1", nama: "A", area: "", targetBulan, hari, hariLalu: hari.map(() => 10) });
+
+  it("target sehari = target sebulan dibagi jumlah hari", () => {
+    const b = buat([100, 100, 100, 100], 400);
+    expect(b.targetHarian).toBe(100);
+    expect(b.capaian).toEqual([100, 100, 100, 100]);
+    expect(b.hariTercapai).toBe(4);
+  });
+
+  it("hari yang di bawah target tidak dihitung tercapai", () => {
+    const b = buat([120, 80, null, null], 400);
+    expect(b.hariTercapai).toBe(1);
+    expect(b.hariTerisi).toBe(2);
+    expect(b.capaian[1]).toBeCloseTo(80, 6);
+  });
+
+  it("kekurangan omset = target sebulan dikurangi yang sudah masuk", () => {
+    const b = buat([120, 80, null, null], 400);
+    expect(b.bulanIni).toBe(200);
+    expect(b.kurang).toBe(200);
+    // Dua hari tersisa, jadi 100 per hari.
+    expect(b.sisaHari).toBe(2);
+    expect(b.perHariSisa).toBe(100);
+  });
+
+  it("target yang sudah terlampaui bukan kekurangan minus", () => {
+    // Minus di kolom "kurang berapa lagi" terbaca seperti salah hitung.
+    const b = buat([500, 200], 400);
+    expect(b.kurang).toBe(0);
+  });
+
+  it("outlet tanpa target tidak dipaksa punya capaian", () => {
+    // Outlet yang belum genap tiga bulan memang belum dinilai.
+    const b = buat([100, 100], null);
+    expect(b.targetHarian).toBeNull();
+    expect(b.capaian).toEqual([null, null]);
+    expect(b.kurang).toBeNull();
+    expect(b.hariTercapai).toBe(0);
+  });
+});
+
+describe("baris gabungan", () => {
+  const buat = (id: string, hari: (number | null)[], targetBulan: number | null) =>
+    barisHarian({ outletId: id, nama: id, area: "", targetBulan, hari, hariLalu: hari.map(() => 5) });
+
+  it("hanya outlet bertarget yang ikut", () => {
+    // Outlet baru menyumbang omzet tanpa menyumbang target — kalau ikut, baris
+    // gabungan selalu terlihat melampaui target tanpa satu pun tanda.
+    const t = totalHarian([buat("a", [100, 100], 400), buat("baru", [900, 900], null)]);
+    expect(t?.hari).toEqual([100, 100]);
+    expect(t?.targetBulan).toBe(400);
+    expect(t?.area).toContain("1 dari 2 outlet");
+  });
+
+  it("tanpa satu pun outlet bertarget, seluruhnya tetap dijumlah", () => {
+    const t = totalHarian([buat("a", [10, 10], null), buat("b", [20, 20], null)]);
+    expect(t?.hari).toEqual([30, 30]);
+    expect(t?.targetBulan).toBeNull();
+  });
+});

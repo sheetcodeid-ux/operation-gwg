@@ -112,6 +112,7 @@ export type Division =
   | "Production"
   | "Marketing Communication"
   | "Sosial Media"
+  | "Operational V.1"
   | "Key Performance Indicator";
 
 export interface NavItem {
@@ -154,7 +155,7 @@ export const NAV_MENUS: Omit<NavItem, "section" | "group" | "groupIcon">[] = [
   { key: "op_seasonal", label: "Musiman", href: "/operation/musiman", icon: "Waves" },
   { key: "op_analysis", label: "Data Analysis", href: "/operation/analysis", icon: "ChartColumnBig" },
   { key: "op_pnl", label: "Laba Rugi", href: "/operation/laba-rugi", icon: "Banknote" },
-  { key: "op_daily", label: "Daily", href: "/operation/daily", icon: "CalendarDays" },
+  { key: "op_daily", label: "Daily", href: "/operational/daily", icon: "CalendarDays" },
   { key: "sys_review", label: "Antrian POS", href: "/system/antrian", icon: "Headset" },
   { key: "it_review", label: "Antrian IT", href: "/it-helpdesk/antrian", icon: "CodeXml" },
   // Kedua "pengajuan" ini kini menjadi kategori DI DALAM halaman Pengajuan —
@@ -280,6 +281,8 @@ export const DIVISION_ICON: Record<Division, string> = {
   // dengan ikon yang sama membuat keduanya terbaca sebagai satu bidang yang
   // tercetak dua kali.
   "Sosial Media": "AtSign",
+  // Bidang tempat modul Operational versi satu berkumpul — Daily yang pertama.
+  "Operational V.1": "CalendarDays",
   "Key Performance Indicator": "Target",
 };
 
@@ -319,7 +322,6 @@ const OPERATION_FULL: MenuKey[] = [
   "op_seasonal",
   "op_analysis",
   "op_pnl",
-  "op_daily",
   "reports",
 ];
 
@@ -328,7 +330,7 @@ const OPERATION_FULL: MenuKey[] = [
  *  supervisor (field staff at the branches) gets it. */
 export const ROLE_MENUS: Record<Role, MenuKey[]> = {
   super_admin: NAV_MENUS.map((m) => m.key), // everything, incl. admin menus
-  head_operation: [...OPERATION_FULL, "elearning", "elearning_admin", "assessment"], // manages E-Learning + monitors every branch
+  head_operation: [...OPERATION_FULL, "op_daily", "elearning", "elearning_admin", "assessment"], // manages E-Learning + monitors every branch
   // Coordinator Area ikut memegang Pengajuan Dokumen. Ia membawahi beberapa
   // cabang dan sering mengurus berkas karyawan cabang yang supervisornya baru,
   // berhalangan, atau justru sedang diurus dokumennya; tanpa menu ini ia harus
@@ -336,7 +338,9 @@ export const ROLE_MENUS: Record<Role, MenuKey[]> = {
   // salah. Cakupan cabangnya sudah dibatasi `visibleOutlets`, jadi ia tetap
   // hanya bisa mengajukan untuk cabang yang memang dipegangnya.
   // KPI-nya sendiri ikut dibuka, TAPI hanya areanya — lihat `picTerkunci`.
-  area_coordinator: [...OPERATION_FULL, "elearning", "assessment", "hc_submit", "creative_penilaian", "kpi_op_ca"], // learner (E-Learning), menus scoped to their area
+  // `op_daily` — Daily dibuka Coordinator Area, TAPI hanya areanya sendiri;
+  // pembatasannya di halamannya, bukan di sini (lihat `/operational/daily`).
+  area_coordinator: [...OPERATION_FULL, "op_daily", "elearning", "assessment", "hc_submit", "creative_penilaian", "kpi_op_ca"], // learner (E-Learning), menus scoped to their area
   // Keduanya boleh membaca rapornya sendiri — halaman yang sama yang dibaca
   // atasannya, bukan salinan yang lebih ramah.
   data_operation: ["work", "op_analysis", "assessment", "kpi_op_software"],
@@ -459,7 +463,7 @@ export const DIVISION_GROUPS: Partial<Record<Division, NavGroupDef[]>> = {
   Operation: [
     { name: "Monitoring Outlet", icon: "Store", menus: ["outlets", "hospitality", "hygiene", "complaints"] },
     { name: "Keuangan Operasional", icon: "Wallet", menus: ["op_beban", "op_pembelian", "op_pnl", "op_settings"] },
-    { name: "Analisis & Laporan", icon: "ChartColumnBig", menus: ["analytics", "op_daily", "op_analysis", "op_fraud", "op_seasonal", "reports", "creative_penilaian"] },
+    { name: "Analisis & Laporan", icon: "ChartColumnBig", menus: ["analytics", "op_analysis", "op_fraud", "op_seasonal", "reports", "creative_penilaian"] },
     { name: "Pembelajaran", icon: "GraduationCap", menus: ["elearning", "elearning_admin"] },
     { name: "System Support", icon: "Headset", menus: ["sys_review", "it_review"] },
   ],
@@ -641,6 +645,21 @@ export const DIVISION_MENUS: { division: Division; menus: MenuKey[] }[] = [
   // dinilai tetap bisa membaca capaiannya sendiri di sana, lewat aturan akses
   // yang sama.
   { division: "Operation", menus: [...OPERATION_FULL, "sys_review", "it_review", "elearning", "elearning_admin"] },
+  /**
+   * OPERATIONAL V.1 — bidang tersendiri, bukan satu kelompok di dalam
+   * Operation.
+   *
+   * Diminta pemiliknya, dan alasannya terbaca dari isinya: yang berkumpul di
+   * sini modul-modul baru yang dibangun bertahap, bukan menu operasional
+   * harian. Ditaruh di dalam Operation, fitur pertamanya langsung tenggelam di
+   * antara tujuh menu Analisis & Laporan yang sudah ada, dan fitur kedua serta
+   * ketiga akan tersebar entah ke kelompok mana.
+   *
+   * Aksesnya mengikuti Operation: siapa yang boleh membaca angka operasional,
+   * boleh membaca modul ini — dengan cakupan outlet yang tetap dibatasi per
+   * orang di halamannya sendiri.
+   */
+  { division: "Operational V.1", menus: ["op_daily"] },
   { division: "Supervisor", menus: ["events", "hospitality", "hygiene", "complaints", "hc_kontrak", "hc_submit", "sys_submit"] },
   // Complaints ikut di sini, tapi PDQ hanya melihat kategori Food Quality —
   // penyaringnya di `complaintCategoryScope`, dan memasukkan komplain tetap
@@ -1031,7 +1050,7 @@ export function divisionHasMenu(division: string, key: MenuKey): boolean {
  * Creative, dan rapor KPI Creative kehilangan satu anggotanya tanpa satu pun
  * pesan.
  */
-export const DIVISI_TANPA_ANGGOTA: readonly string[] = [DIVISI_KPI, "Sosial Media"];
+export const DIVISI_TANPA_ANGGOTA: readonly string[] = [DIVISI_KPI, "Sosial Media", "Operational V.1"];
 
 /** Nama divisi yang benar-benar bisa dipakai sebagai departemen seseorang. */
 export const divisiBerdepartemen = (): string[] =>
@@ -1121,12 +1140,13 @@ export function navOpenPredicate(a: NavAccess): (item: { section: string; key: M
     // Divisi Sosial Media dibuka JABATAN, bukan departemen: departemennya
     // Creative, tapi menunya bukan menu seluruh Creative.
     (item.section === "Sosial Media" && timSosialMedia({ jabatan: a.jabatan })) ||
-    // Divisi Key Performance Indicator TIDAK punya anggota: ia berisi rapor
-    // milik seluruh departemen. Karena itu haknya diperiksa per BARIS, bukan
-    // per divisi — kalau tidak, seluruh isinya terkunci bagi semua orang
+    // Divisi yang TIDAK punya anggota — Key Performance Indicator dan
+    // Operational V.1 — haknya diperiksa per BARIS, bukan per divisi. Tak
+    // seorang pun berdepartemen di situ, jadi aturan "departemennya sama"
+    // tidak akan pernah cocok: seluruh isinya terkunci bagi semua orang
     // kecuali admin, dan Coordinator Area yang perannya sudah memuat
     // "kpi_op_ca" tetap disambut "Anda tidak dapat membuka divisi ini".
-    (item.section === DIVISI_KPI &&
+    (DIVISI_TANPA_ANGGOTA.includes(item.section) &&
       (allowed.has(item.key) || divisionHasMenu(a.department as Division, item.key))) ||
     grants.has(`${item.section}:${item.key}`);
 }

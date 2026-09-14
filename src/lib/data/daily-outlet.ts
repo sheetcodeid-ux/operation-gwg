@@ -3,6 +3,7 @@ import "server-only";
 import { db, dbEnabled } from "./db";
 import { selectAll } from "./paged";
 import { getOutlets, getUsers } from "./store";
+import { targetBulananOutlet } from "./kpi";
 import { barisHarian, jumlahHari, kolomHari, totalHarian, urutHarian, type BarisHarian, type HariKolom } from "@/lib/ops/harian";
 
 /**
@@ -25,6 +26,30 @@ export interface DetailHarian {
   total: BarisHarian | null;
   /** Outlet yang belum dipasangkan ke cabang ESB — disebut, tidak didiamkan. */
   tanpaCabang: string[];
+  /** Outlet yang belum genap tiga bulan, jadi belum punya target. */
+  tanpaTarget: string[];
+}
+
+/** Coordinator Area yang bisa dipilih — pengisi dropdown di halaman Daily. */
+export interface PilihanArea {
+  value: string;
+  label: string;
+  /** Berapa outlet yang dipegangnya — supaya yang memilih tahu isinya. */
+  outlet: number;
+}
+
+/**
+ * Seluruh Coordinator Area beserta jumlah outletnya.
+ *
+ * Yang belum dititipi satu outlet pun tetap ditampilkan, dengan angka nol di
+ * sebelahnya: menyembunyikannya membuat penugasan yang terlupa tidak pernah
+ * ketahuan dari mana pun.
+ */
+export function daftarArea(): PilihanArea[] {
+  return getUsers()
+    .filter((u) => u.role === "area_coordinator" && u.active !== false)
+    .map((u) => ({ value: u.id, label: u.name, outlet: (u.outletIds ?? []).length }))
+    .sort((a, b) => a.label.localeCompare(b.label, "id"));
 }
 
 /** Bulan sebelum `periode` ("2026-09" → "2026-08"). */
@@ -86,7 +111,11 @@ export async function harianOutlet(periode: string, outletIds?: readonly string[
   const cabang = [...new Set(dipakai.map((o) => o.esbBranchId as string))];
 
   const sebelum = bulanSebelum(periode);
-  const [ini, lalu] = await Promise.all([netHarian(periode, cabang), netHarian(sebelum, cabang)]);
+  const [ini, lalu, target] = await Promise.all([
+    netHarian(periode, cabang),
+    netHarian(sebelum, cabang),
+    targetBulananOutlet(periode),
+  ]);
   const hariLalu = jumlahHari(sebelum);
 
   const baris = urutHarian(
@@ -101,9 +130,17 @@ export async function harianOutlet(periode: string, outletIds?: readonly string[
         // sana memang tidak ada, bukan nol.
         hariLalu: kolom.map((h) => (h.tanggal > hariLalu ? null : (lalu.get(`${c}|${h.tanggal}`) ?? null))),
         akhirBulanLalu: lalu.get(`${c}|${hariLalu}`) ?? null,
+        targetBulan: target.get(o.id) ?? null,
       });
     }),
   );
 
-  return { periode, kolom, baris, total: totalHarian(baris), tanpaCabang };
+  return {
+    periode,
+    kolom,
+    baris,
+    total: totalHarian(baris),
+    tanpaCabang,
+    tanpaTarget: baris.filter((b) => (b.targetBulan ?? null) === null).map((b) => b.nama),
+  };
 }

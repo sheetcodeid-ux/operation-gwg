@@ -43,6 +43,15 @@ export interface SumberHarian {
   nama: string;
   /** Keterangan di bawah namanya — siapa yang memegang outlet ini. */
   area: string;
+  /**
+   * Target SEBULAN outlet ini — rata-rata tiga bulan + pertumbuhan.
+   *
+   * Angka yang sama dengan target KPI Coordinator Area, bukan hitungan
+   * tersendiri: satu outlet tidak boleh terbaca tercapai di halaman ini dan
+   * gagal di rapornya sendiri. Null = belum genap tiga bulan, jadi memang
+   * belum punya target.
+   */
+  targetBulan?: number | null;
   /** Penjualan tiap tanggal; null = belum ditarik dari ESB. */
   hari: (number | null)[];
   /** Penjualan tiap tanggal BULAN LALU — pembanding yang setara. */
@@ -74,6 +83,36 @@ export interface BarisHarian extends SumberHarian {
   mom: number | null;
   /** Perubahan tiap hari terhadap HARI SEBELUMNYA, dalam persen. */
   ubah: (number | null)[];
+
+  /* ───────────────────────── pencapaian target ───────────────────────── */
+
+  /**
+   * Target SEHARI — target sebulan dibagi rata jumlah hari bulan itu.
+   *
+   * Dibagi rata, bukan ditimbang akhir pekan. Pembobotan menuntut pola yang
+   * berbeda-beda tiap outlet dan tiap brand; yang dibagi rata bisa diperiksa
+   * siapa pun dengan kalkulator, dan itu lebih berguna daripada rumus yang
+   * lebih tepat tapi tidak bisa ditelusuri.
+   */
+  targetHarian: number | null;
+  /** Capaian tiap hari terhadap target harian, dalam persen. */
+  capaian: (number | null)[];
+  /** Berapa hari yang sudah ada angkanya MENCAPAI target harian. */
+  hariTercapai: number;
+  /** Berapa hari yang sudah ada angkanya sama sekali. */
+  hariTerisi: number;
+  /**
+   * Target sebulan dikurangi capaian sampai hari ini.
+   *
+   * Positif berarti masih kurang sekian; nol atau minus berarti targetnya sudah
+   * terlampaui. Inilah angka yang dicari orang di ujung tabel: bukan "sudah
+   * berapa", melainkan "kurang berapa lagi".
+   */
+  kurang: number | null;
+  /** Berapa per hari yang harus dikejar di sisa hari bulan itu. */
+  perHariSisa: number | null;
+  /** Sisa hari yang masih bisa dipakai mengejar. */
+  sisaHari: number;
 }
 
 /** Perubahan b terhadap a dalam persen; null bila salah satunya tidak ada. */
@@ -104,24 +143,83 @@ export function barisHarian(s: SumberHarian): BarisHarian {
   const ubah = s.hari.map((v, i) =>
     i === 0 ? bandingHarian(s.akhirBulanLalu ?? null, v) : bandingHarian(s.hari[i - 1], v),
   );
-  return { ...s, bulanIni, bulanLalu, mom: bandingHarian(bulanLalu, bulanIni), ubah };
+
+  const target = s.targetBulan ?? null;
+  const targetHarian = target === null || s.hari.length === 0 ? null : target / s.hari.length;
+  const capaian = s.hari.map((v) =>
+    v === null || targetHarian === null || targetHarian <= 0 ? null : (v / targetHarian) * 100,
+  );
+  const hariTerisi = s.hari.filter((v) => v !== null).length;
+  const hariTercapai = capaian.filter((c) => c !== null && c >= BATAS_TERCAPAI).length;
+
+  // Sisa hari dihitung dari hari yang BELUM ada angkanya, bukan dari tanggal
+  // hari ini: penarikan ESB berjalan bertahap, dan memakai tanggal membuat
+  // "kurang berapa per hari" melonjak setiap kali ada hari yang belum masuk.
+  const sisaHari = s.hari.length - hariTerisi;
+  const kurang = target === null ? null : Math.max(0, target - (bulanIni ?? 0));
+  const perHariSisa = kurang === null || sisaHari <= 0 ? null : kurang / sisaHari;
+
+  return {
+    ...s,
+    bulanIni,
+    bulanLalu,
+    mom: bandingHarian(bulanLalu, bulanIni),
+    ubah,
+    targetHarian,
+    capaian,
+    hariTercapai,
+    hariTerisi,
+    kurang,
+    perHariSisa,
+    sisaHari,
+  };
 }
+
+/**
+ * Sehari dihitung TERCAPAI mulai dari berapa persen target hariannya.
+ *
+ * Seratus persen pas hampir tidak pernah terjadi, dan menuntutnya membuat
+ * hampir seluruh hari terbaca merah — lalu warnanya berhenti dibaca. Target
+ * sebulan dibagi rata ke tiap hari juga bukan janji harian yang sebenarnya:
+ * Senin dan Sabtu tidak pernah sama. Batas ini menandai hari yang berada di
+ * jalurnya, bukan hari yang persis pas.
+ */
+export const BATAS_TERCAPAI = 100;
 
 /** Seluruh baris, terbesar lebih dulu — yang paling besar paling dulu dibaca. */
 export const urutHarian = (baris: BarisHarian[]): BarisHarian[] =>
   [...baris].sort((a, b) => (b.bulanIni ?? -1) - (a.bulanIni ?? -1));
 
-/** Baris gabungan seluruh outlet — dijumlah per tanggal, bukan dirata-rata. */
+/**
+ * Baris gabungan — dijumlah per tanggal, bukan dirata-rata.
+ *
+ * HANYA OUTLET YANG PUNYA TARGET yang ikut. Aturannya sama dengan KPI: outlet
+ * yang belum genap tiga bulan memang belum dinilai. Menjumlahkan penjualannya
+ * tapi tidak targetnya akan membuat baris gabungan selalu terlihat melampaui
+ * target — outlet baru menyumbang omzet tanpa menyumbang beban targetnya, dan
+ * tidak ada satu pun tanda di layar bahwa angkanya tidak setara.
+ *
+ * Kalau belum ada satu pun outlet bertarget, seluruhnya tetap dijumlah supaya
+ * tabelnya tidak kehilangan barisnya sama sekali — hanya tanpa target.
+ */
 export function totalHarian(baris: BarisHarian[], nama = "Seluruh outlet"): BarisHarian | null {
   if (baris.length === 0) return null;
-  const panjang = baris[0].hari.length;
+  const bertarget = baris.filter((b) => (b.targetBulan ?? null) !== null);
+  const ikut = bertarget.length ? bertarget : baris;
+  const panjang = ikut[0].hari.length;
   const jumlahKolom = (ambil: (b: BarisHarian) => (number | null)[]) =>
-    Array.from({ length: panjang }, (_, i) => jumlahAda(baris.map((b) => ambil(b)[i] ?? null)));
-  const akhir = baris.map((b) => b.akhirBulanLalu ?? null).filter((n): n is number => n !== null);
+    Array.from({ length: panjang }, (_, i) => jumlahAda(ikut.map((b) => ambil(b)[i] ?? null)));
+
+  const akhir = ikut.map((b) => b.akhirBulanLalu ?? null).filter((n): n is number => n !== null);
+  const target = ikut.map((b) => b.targetBulan ?? null).filter((n): n is number => n !== null);
   return barisHarian({
     outletId: "__total__",
     nama,
-    area: `${baris.length} outlet`,
+    area:
+      bertarget.length && bertarget.length < baris.length
+        ? `${ikut.length} dari ${baris.length} outlet — yang sudah bertarget`
+        : `${ikut.length} outlet`,
+    targetBulan: target.length ? target.reduce((a, b) => a + b, 0) : null,
     hari: jumlahKolom((b) => b.hari),
     hariLalu: jumlahKolom((b) => b.hariLalu),
     akhirBulanLalu: akhir.length ? akhir.reduce((a, b) => a + b, 0) : null,

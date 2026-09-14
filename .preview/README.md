@@ -15,8 +15,19 @@ npx vite build --config vite.preview.config.mts
 ```
 
 Hasilnya `.preview/dist/preview.js`. Buat satu berkas HTML yang memuat CSS
-aplikasi (`.next/static/chunks/*.css`, ambil yang paling besar), sebuah
-`<div id="root">`, dan `preview.js`. Posisi yang dirender diambil dari
+aplikasi, sebuah `<div id="root">`, dan `preview.js`.
+
+CSS-nya **digabung dari SELURUH potongan**, bukan diambil yang paling besar:
+
+```bash
+cat .next/static/chunks/*.css > .preview/dist/app.css
+```
+
+Potongan terbesar memuat kelas-kelasnya tapi TIDAK memuat warna dasarnya
+(`--color-card`, `--color-muted`). Akibatnya seluruh latar yang memakai warna
+itu tampil bening di pratinjau — dan tangkapan layarnya memperlihatkan sel
+yang saling tembus, kerusakan yang tidak pernah ada di aplikasi
+sesungguhnya. Posisi yang dirender diambil dari
 `location.hash`, misalnya `#pdq_food`.
 
 Ganti `.preview/entry.tsx` untuk mempratinjau komponen lain. Data di dalamnya

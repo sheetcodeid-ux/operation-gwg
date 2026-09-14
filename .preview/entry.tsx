@@ -327,7 +327,7 @@ if (kode === "daily") {
     return x - Math.floor(x);
   };
   const outlet: [string, string, number][] = [
-    ["Nordu Bakes Samarinda", "Deo", 85_000_000],
+    ["Nordu Coffee Singkawang Diponegoro", "Deo", 85_000_000],
     ["Nordu Banjarbaru 2", "Wika", 78_000_000],
     ["Nordu Tebas", "Roby", 74_000_000],
     ["Nordu Coffee Putussibau", "Deo", 68_000_000],
@@ -342,6 +342,9 @@ if (kode === "daily") {
         outletId: `o${i}`,
         nama,
         area,
+        // Satu outlet sengaja tanpa target — seperti outlet yang belum genap
+        // tiga bulan berjalan.
+        targetBulan: i === 6 ? null : Math.round(dasar * 30 * 1.15),
         hari: kolom.map((h, j) =>
           j > 12 ? null : Math.round(dasar * (0.7 + acak(i * 31 + j) * 0.7) * (h.pekan ? 1.25 : 1)),
         ),
@@ -354,7 +357,24 @@ if (kode === "daily") {
   createRoot(document.getElementById("root")!).render(
     <I18nProvider initialLang="id">
       <div className="p-6">
-        <TabelHarian detail={{ periode, kolom, baris, total: totalHarian(baris), tanpaCabang: ["Nordu Kemang"] }} />
+        <TabelHarian
+          detail={{
+            periode,
+            kolom,
+            baris,
+            total: totalHarian(baris),
+            tanpaCabang: ["Nordu Kemang"],
+            tanpaTarget: baris.filter((b) => b.targetBulan == null).map((b) => b.nama),
+          }}
+          area={[
+            { value: "u1", label: "Deo", outlet: 12 },
+            { value: "u2", label: "Wika", outlet: 11 },
+            { value: "u3", label: "Roby", outlet: 9 },
+            { value: "u4", label: "Aldi", outlet: 8 },
+          ]}
+          areaTerpilih=""
+          bisaPilihArea
+        />
       </div>
     </I18nProvider>,
   );
