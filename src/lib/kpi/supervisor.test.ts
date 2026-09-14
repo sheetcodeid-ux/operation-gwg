@@ -9,6 +9,7 @@ import {
   outletKpk,
 } from "./struktur";
 import { indikatorPosisi } from "./indikator";
+import { hppKpkPersen } from "./hitung";
 
 describe("KPI Supervisor — struktur", () => {
   it("berdiri di luar manajemen", () => {
@@ -108,5 +109,52 @@ describe("Supervisor dikeluarkan dari manajemen", () => {
     for (const kode of ["operational_ca", "creative_content", "finance_finance", "hc", "marcomm"]) {
       expect(POSISI_MANAJEMEN.some((p) => p.kode === kode)).toBe(true);
     }
+  });
+});
+
+describe("HPP KPK — belanja dibagi penjualan", () => {
+  it("menjumlah dulu baru membagi, bukan merata-ratakan persennya", () => {
+    // Outlet besar 30%, outlet kecil 50%. Rata-rata persen = 40%; yang benar
+    // 31,8% karena outlet besar memang menentukan sebagian besar belanjanya.
+    const h = hppKpkPersen([
+      { warehouse: 250, nonWarehouse: 50, gross: 1_000 },
+      { warehouse: 40, nonWarehouse: 10, gross: 100 },
+    ]);
+    expect(h).toBeCloseTo((350 / 1100) * 100, 6);
+    expect(h).not.toBeCloseTo(40, 1);
+  });
+
+  it("NOL DI KEDUA KOLOM berarti belum diunggah — outletnya dikeluarkan, bukan dihadiahi", () => {
+    // Kalau nol diperlakukan apa adanya, hasilnya 350/2100 = 16,7% — HPP yang
+    // jauh lebih baik daripada kenyataan, semata karena datanya belum masuk.
+    const h = hppKpkPersen([
+      { warehouse: 250, nonWarehouse: 50, gross: 1_000 },
+      { warehouse: 0, nonWarehouse: 0, gross: 1_000 },
+    ]);
+    expect(h).toBeCloseTo(30, 6);
+  });
+
+  it("outlet yang sama sekali tidak punya baris pembelian juga dikeluarkan", () => {
+    const h = hppKpkPersen([
+      { warehouse: 250, nonWarehouse: 50, gross: 1_000 },
+      { warehouse: null, nonWarehouse: null, gross: 1_000 },
+    ]);
+    expect(h).toBeCloseTo(30, 6);
+  });
+
+  it("outlet tanpa penjualan dikeluarkan — pembaginya tidak boleh nol", () => {
+    expect(hppKpkPersen([{ warehouse: 100, nonWarehouse: 0, gross: 0 }])).toBeNull();
+    expect(hppKpkPersen([{ warehouse: 100, nonWarehouse: 0, gross: null }])).toBeNull();
+  });
+
+  it("tidak ada satu pun yang bisa dihitung berarti null, bukan nol", () => {
+    expect(hppKpkPersen([])).toBeNull();
+    expect(hppKpkPersen([{ warehouse: 0, nonWarehouse: 0, gross: 1_000 }])).toBeNull();
+  });
+
+  it("angka sungguhan Agustus tetap masuk akal terhadap batas 35%", () => {
+    // Penibung dan Sandai — dua ujung sebaran yang sebenarnya.
+    expect(hppKpkPersen([{ warehouse: 145_554_400, nonWarehouse: 0, gross: 423_942_377 }])).toBeCloseTo(34.3, 1);
+    expect(hppKpkPersen([{ warehouse: 97_277_330, nonWarehouse: 0, gross: 198_110_035 }])).toBeCloseTo(49.1, 1);
   });
 });

@@ -18,6 +18,7 @@ import {
   hitungTarget,
   keberhasilanPasar,
   ringkasEfisiensi,
+  hppKpkPersen,
   ringkasKpi,
   type BarisEfisiensi,
   type BarisKpi,
@@ -878,20 +879,15 @@ async function angkaCa(periode: string, picIds: string[], jumlahPic: number): Pr
    * membuat outlet terkecil sama beratnya dengan outlet terbesar, dan angkanya
    * tidak pernah cocok dengan laporan keuangan.
    */
+  // Aturannya di `hppKpkPersen` — termasuk yang paling mudah salah: nol di
+  // kedua kolom berarti BELUM DIUNGGAH, bukan belanja nol.
   const pembelian = await pembelianPerOutlet(periode);
-  let belanjaKpk = 0;
-  let dasarKpk = 0;
-  let adaKpk = false;
-  lolos.forEach((o, n) => {
-    const b = pembelian.get(o.id);
-    if (!b || (b.wh === null && b.nonWh === null)) return;
-    const g = grossPerOutlet[n];
-    if (g === null || g <= 0) return;
-    adaKpk = true;
-    belanjaKpk += (b.wh ?? 0) + (b.nonWh ?? 0);
-    dasarKpk += g;
-  });
-  const hppKpk = adaKpk && dasarKpk > 0 ? (belanjaKpk / dasarKpk) * 100 : null;
+  const hppKpk = hppKpkPersen(
+    lolos.map((o, n) => {
+      const b = pembelian.get(o.id);
+      return { warehouse: b?.wh ?? null, nonWarehouse: b?.nonWh ?? null, gross: grossPerOutlet[n] };
+    }),
+  );
 
   const detail: DetailOutletCa[] = semua.map((o) => {
     // "Dari ESB" berarti ESB punya angka yang BUKAN nol. Nol berarti cabangnya
@@ -1683,7 +1679,7 @@ function susunBaris(i: Indikator, k: KonteksBaris): BarisKpi {
           if (actual === null) {
             alasan = k.ca && k.ca.outlet.length === 0
               ? areaKosong(k.ca)
-              : "Pembelian warehouse dan non-warehouse bulan ini belum diisi untuk outlet ini — lihat Operation → Pembelian.";
+              : "Pembelian warehouse dan non-warehouse bulan ini belum diunggah untuk outlet ini — lihat Admin → Unggah Data.";
           }
           break;
         case "ketepatan_design": {

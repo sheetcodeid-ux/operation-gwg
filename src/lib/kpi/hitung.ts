@@ -409,3 +409,44 @@ export function keberhasilanPasar(menu: { menu: string; penjualan: number }[], o
     capaian: bagianTotal === null || targetRasio <= 0 ? null : Math.min(100, (bagianTotal / targetRasio) * 100),
   };
 }
+
+
+/* ─────────────────────── Harga Pokok Penjualan KPK ─────────────────────── */
+
+/** Satu outlet: pembelian warehouse + non-warehouse, dan penjualannya. */
+export interface BelanjaOutlet {
+  warehouse: number | null;
+  nonWarehouse: number | null;
+  /** Penjualan BULAN INI. Null atau nol berarti outletnya belum bisa dinilai. */
+  gross: number | null;
+}
+
+/**
+ * HPP versi Supervisor KPK — belanja dibagi penjualan, dalam persen.
+ *
+ * DIJUMLAH DULU BARU DIBAGI, bukan dirata-ratakan persennya: rata-rata persen
+ * membuat outlet terkecil sama beratnya dengan outlet terbesar, dan angkanya
+ * tidak pernah cocok dengan laporan keuangan.
+ *
+ * NOL DI KEDUA KOLOM BERARTI BELUM DIUNGGAH, bukan belanja nol. Barisnya
+ * selalu ada untuk seluruh outlet begitu templatenya diunggah — yang belum
+ * diisi tersimpan sebagai 0, bukan kosong. Diperlakukan apa adanya, outlet
+ * yang datanya belum masuk menghasilkan HPP 0% dan karenanya nilai SEMPURNA:
+ * yang paling terlambat mengunggah justru paling diuntungkan. Outlet
+ * makanan-minuman yang berjualan sebulan penuh tanpa satu rupiah pembelian
+ * tidak ada, jadi nol dibaca sebagai "belum diisi" dan outletnya dikeluarkan.
+ *
+ * Null = tidak ada satu pun outlet yang bisa dihitung.
+ */
+export function hppKpkPersen(outlet: readonly BelanjaOutlet[]): number | null {
+  let belanja = 0;
+  let dasar = 0;
+  for (const o of outlet) {
+    const b = (o.warehouse ?? 0) + (o.nonWarehouse ?? 0);
+    if (b <= 0) continue;
+    if (o.gross === null || o.gross <= 0) continue;
+    belanja += b;
+    dasar += o.gross;
+  }
+  return dasar > 0 ? (belanja / dasar) * 100 : null;
+}
