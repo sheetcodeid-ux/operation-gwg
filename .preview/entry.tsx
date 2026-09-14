@@ -18,6 +18,8 @@ import { posisiDari, posisiDepartemen, type KodePosisi } from "@/lib/kpi/struktu
 import { TENGGAT, indikatorPosisi as daftarIndikator } from "@/lib/kpi/indikator";
 import type { LaporanKpi } from "@/lib/data/kpi";
 import { bersatuan } from "@/lib/kpi/satuan";
+import { TabelHarian } from "@/components/operation/tabel-harian";
+import { barisHarian, kolomHari, totalHarian, urutHarian } from "@/lib/ops/harian";
 
 const ANGKA: Record<string, [number | null, number | null, number | null]> = {
   gross_sales: [4_186_500_000, 3_942_180_000, 88], net_profit: [1_182_654_000, 1_010_400_000, 74],
@@ -311,6 +313,49 @@ if (kode === "sinkron") {
   createRoot(document.getElementById("root")!).render(
     <I18nProvider initialLang="id">
       <div className="p-6"><TabelSinkronSehat baris={contoh} /></div>
+    </I18nProvider>,
+  );
+  throw new Error("__stop__");
+}
+if (kode === "daily") {
+  // Contoh Daily: angka harian yang bentuknya seperti aslinya — sebagian
+  // tanggal sengaja dibiarkan kosong, seperti hari yang belum ditarik ESB.
+  const periode = "2026-09";
+  const kolom = kolomHari(periode);
+  const acak = (n: number) => {
+    let x = Math.sin(n) * 10000;
+    return x - Math.floor(x);
+  };
+  const outlet: [string, string, number][] = [
+    ["Nordu Bakes Samarinda", "Deo", 85_000_000],
+    ["Nordu Banjarbaru 2", "Wika", 78_000_000],
+    ["Nordu Tebas", "Roby", 74_000_000],
+    ["Nordu Coffee Putussibau", "Deo", 68_000_000],
+    ["Nordu Coffee Ketapang", "Aldi", 57_000_000],
+    ["Cattu A. Yani", "Wika", 48_000_000],
+    ["Ayam Goreng Busari Depok", "Roby", 36_000_000],
+    ["Lesung Pipi Bogor", "Aldi", 28_000_000],
+  ];
+  const baris = urutHarian(
+    outlet.map(([nama, area, dasar], i) =>
+      barisHarian({
+        outletId: `o${i}`,
+        nama,
+        area,
+        hari: kolom.map((h, j) =>
+          j > 12 ? null : Math.round(dasar * (0.7 + acak(i * 31 + j) * 0.7) * (h.pekan ? 1.25 : 1)),
+        ),
+        hariLalu: kolom.map((h, j) =>
+          j > 29 ? null : Math.round(dasar * (0.65 + acak(i * 77 + j) * 0.7) * (h.pekan ? 1.2 : 1)),
+        ),
+      }),
+    ),
+  );
+  createRoot(document.getElementById("root")!).render(
+    <I18nProvider initialLang="id">
+      <div className="p-6">
+        <TabelHarian detail={{ periode, kolom, baris, total: totalHarian(baris), tanpaCabang: ["Nordu Kemang"] }} />
+      </div>
     </I18nProvider>,
   );
   throw new Error("__stop__");

@@ -31,6 +31,12 @@ const SALES_HORIZON_DAYS = 60;
 const WINDOW_DAYS = 58;
 
 const ymdWib = (offsetDays: number) => new Date(Date.now() + 7 * 3_600_000 - offsetDays * 86_400_000).toISOString().slice(0, 10);
+
+/** Bulan sebelum `periode` ("2026-09" → "2026-08"). */
+const bulanSebelumnya = (periode: string): string => {
+  const [th, bl] = periode.split("-").map(Number);
+  return bl === 1 ? `${th - 1}-12` : `${th}-${String(bl - 1).padStart(2, "0")}`;
+};
 /** Shift a YYYY-MM-DD by whole days (UTC math — dates are date-only). */
 const addDays = (day: string, delta: number) => new Date(Date.parse(`${day}T00:00:00Z`) + delta * 86_400_000).toISOString().slice(0, 10);
 /** The earliest fraud day we keep synced: 1 January of the current WIB year. */
@@ -278,11 +284,24 @@ async function jalankan(req: Request): Promise<NextResponse> {
     try {
       const { cabangTerpasang } = await import("@/lib/data/esb-bulanan");
       const { syncNetMingguan } = await import("@/lib/data/esb-mingguan");
-      results["net-mingguan"] = await syncNetMingguan(
-        await cabangTerpasang(),
-        ymdWib(0).slice(0, 7),
-        Math.min(left() - 3_000, 16_000),
-      );
+      const cabang = await cabangTerpasang();
+      const bulanIni = ymdWib(0).slice(0, 7);
+      const hasil = await syncNetMingguan(cabang, bulanIni, Math.min(left() - 3_000, 16_000));
+      results["net-mingguan"] = hasil;
+
+      // BULAN LALU IKUT DIKEJAR. Penilaian KPI satu bulan baru ditutup tanggal
+      // 15 bulan berikutnya, jadi sepanjang tanggal 1–14 yang sedang dibaca
+      // orang justru bulan lalu — dan tab Detail Mingguan-nya kosong sama
+      // sekali karena penarikan ini cuma pernah menyentuh bulan berjalan.
+      //
+      // Dikerjakan hanya SESUDAH bulan berjalan tidak menyisakan pekerjaan,
+      // supaya angka yang masih berubah tiap hari tetap didahulukan. Minggu
+      // yang sudah lewat ditarik sekali lalu dianggap final, jadi bulan lama
+      // berhenti memakan biaya begitu terkejar.
+      if (hasil.ditarik === 0 && hasil.sisa === 0 && left() > 6_000) {
+        const lalu = bulanSebelumnya(bulanIni);
+        results["net-mingguan:lalu"] = await syncNetMingguan(cabang, lalu, Math.min(left() - 3_000, 16_000));
+      }
     } catch (e) {
       results["net-mingguan"] = { error: e instanceof Error ? e.message : "failed" };
     }

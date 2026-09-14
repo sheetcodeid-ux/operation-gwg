@@ -331,6 +331,8 @@ export function PapanManajemen({ detail, bolehAtur }: { detail: DetailManajemen;
       ini: (b: T) => number | null;
       satuanNilai: "rupiah" | "persen";
       status: (b: T) => { label: string; tone: "success" | "warning" | "danger" | "neutral" | "brand" };
+      /** Kolom khas tab ini, disisipkan sesudah "Bulan Ini". */
+      tambahan?: ColumnDef<T>[];
     }): ColumnDef<T>[] => [
       kolomNo(),
       {
@@ -360,6 +362,7 @@ export function PapanManajemen({ detail, bolehAtur }: { detail: DetailManajemen;
         accessorFn: (b: T) => opsi.ini(b),
         cell: ({ getValue }) => <span className="tabular-nums text-foreground/80">{bersatuan(getValue<number | null>(), opsi.satuanNilai)}</span>,
       },
+      ...(opsi.tambahan ?? []),
       {
         id: "banding",
         header: "Perbandingan",
@@ -406,6 +409,31 @@ export function PapanManajemen({ detail, bolehAtur }: { detail: DetailManajemen;
         lalu: (e) => e.labaLalu,
         ini: (e) => e.labaBersih,
         satuanNilai: "rupiah",
+        // GROSS SALES IKUT DITAMPILKAN, beserta bagian laba terhadapnya.
+        //
+        // Laba Rp 74 juta tidak berarti apa-apa sendirian: bagus untuk outlet
+        // beromset 250 juta, buruk untuk outlet beromset satu miliar. Angka
+        // pembaginya sudah ada di baris yang sama — hanya belum pernah
+        // ditampilkan — dan tanpanya status "Belum tercapai" tidak bisa
+        // ditelusuri sampai ke sebabnya.
+        tambahan: [
+          {
+            id: "sales",
+            header: "Gross Sales",
+            accessorFn: (e) => e.sales,
+            cell: ({ getValue }) => (
+              <span className="tabular-nums text-muted-foreground">{bersatuan(getValue<number | null>(), "rupiah")}</span>
+            ),
+          },
+          {
+            id: "margin",
+            header: "% thd Gross Sales",
+            accessorFn: (e) => e.margin,
+            cell: ({ getValue }) => (
+              <span className="tabular-nums font-medium text-foreground">{bersatuan(getValue<number | null>(), "persen")}</span>
+            ),
+          },
+        ],
         // Ambangnya 85% DARI TARGET, bukan target penuh. Margin adalah hasil
         // puluhan keputusan kecil sepanjang bulan; menuntut 30% persis membuat
         // outlet yang meleset setengah persen dinilai sama dengan yang meleset
@@ -432,7 +460,9 @@ export function PapanManajemen({ detail, bolehAtur }: { detail: DetailManajemen;
     () =>
       skor.d.departemen.flatMap((d) => {
         const induk: BarisDivisi = { id: d.kode, jenis: "dept", nama: d.nama, dept: d, lalu: d.lalu, ini: d.rata };
-        if (!buka.has(d.kode)) return [induk];
+        // Satu posisi = tidak ada yang bisa dirinci; barisnya sendiri sudah
+        // angka posisi itu.
+        if (d.posisi.length <= 1 || !buka.has(d.kode)) return [induk];
         return [
           induk,
           ...d.posisi.map<BarisDivisi>((pos) => ({
@@ -461,16 +491,27 @@ export function PapanManajemen({ detail, bolehAtur }: { detail: DetailManajemen;
             );
           }
           const kosong = b.dept.posisi.length === 0;
+          // DEPARTEMEN BERPOSISI SATU TIDAK PUNYA TOMBOL BUKA. Membukanya
+          // hanya memunculkan satu baris berisi angka yang sama persis dengan
+          // barisnya sendiri — tanda ">" yang menjanjikan rincian lalu tidak
+          // memberi apa-apa, dan yang menekannya menyimpulkan ada yang rusak.
+          const takBisaDibuka = b.dept.posisi.length <= 1;
           const terbuka = buka.has(b.dept.kode);
           return (
             <button
               type="button"
-              disabled={kosong}
+              disabled={takBisaDibuka}
               onClick={() => alih(b.dept.kode)}
               aria-expanded={terbuka}
               className="flex min-w-0 items-center gap-2 text-left disabled:cursor-default"
             >
-              <ChevronRight className={cn("size-4 shrink-0 text-muted-foreground transition-transform", terbuka && "rotate-90", kosong && "opacity-0")} />
+              <ChevronRight
+                className={cn(
+                  "size-4 shrink-0 text-muted-foreground transition-transform",
+                  terbuka && "rotate-90",
+                  takBisaDibuka && "opacity-0",
+                )}
+              />
               <span className="min-w-0">
                 <span className="block truncate font-medium text-foreground">{b.nama}</span>
                 <span className="block truncate text-[11px] text-muted-foreground">

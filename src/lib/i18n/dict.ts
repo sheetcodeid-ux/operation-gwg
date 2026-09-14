@@ -86,6 +86,7 @@ export const DICT: Record<Lang, Record<string, string>> = {
     "group.Creative": "Creative",
     "group.Finance": "Finance",
     "group.Marketing Communication": "Marketing Communication",
+    "group.Sosial Media": "Social Media",
     "group.Human Capital": "Human Capital",
     "group.Product Development & Quality": "Product Development & Quality",
     "nav.Ringkasan KPI": "KPI Overview",
@@ -129,6 +130,7 @@ export const DICT: Record<Lang, Record<string, string>> = {
     "nav.Analytics Harga Kompetitor": "Competitor Price Analytics",
     "nav.Data Analysis": "Data Analysis",
     "nav.Laba Rugi": "Profit & Loss",
+    "nav.Daily": "Daily",
 
     "nav.Kalkulator HPP Produksi": "Production Cost Calculator",
     "nav.Database Produksi": "Production Database",
@@ -383,6 +385,7 @@ export const DICT: Record<Lang, Record<string, string>> = {
     "group.Creative": "Creative",
     "group.Finance": "Finance",
     "group.Marketing Communication": "Marketing Communication",
+    "group.Sosial Media": "Sosial Media",
     "group.Human Capital": "Human Capital",
     "group.Product Development & Quality": "Product Development & Quality",
     "nav.Ringkasan KPI": "Ringkasan KPI",
@@ -424,6 +427,7 @@ export const DICT: Record<Lang, Record<string, string>> = {
     "nav.Analytics Harga Kompetitor": "Analytics Harga Kompetitor",
     "nav.Data Analysis": "Analisis Data",
     "nav.Laba Rugi": "Laba Rugi",
+    "nav.Daily": "Daily",
 
     "nav.Kalkulator HPP Produksi": "Kalkulator HPP Produksi",
     "nav.Database Produksi": "Database Produksi",

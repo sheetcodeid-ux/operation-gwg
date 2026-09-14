@@ -20,6 +20,7 @@ export type MenuKey =
   | "op_seasonal"
   | "op_analysis"
   | "op_pnl"
+  | "op_daily"
   | "sys_review"
   | "it_review"
   | "hc_submit"
@@ -153,6 +154,7 @@ export const NAV_MENUS: Omit<NavItem, "section" | "group" | "groupIcon">[] = [
   { key: "op_seasonal", label: "Musiman", href: "/operation/musiman", icon: "Waves" },
   { key: "op_analysis", label: "Data Analysis", href: "/operation/analysis", icon: "ChartColumnBig" },
   { key: "op_pnl", label: "Laba Rugi", href: "/operation/laba-rugi", icon: "Banknote" },
+  { key: "op_daily", label: "Daily", href: "/operation/daily", icon: "CalendarDays" },
   { key: "sys_review", label: "Antrian POS", href: "/system/antrian", icon: "Headset" },
   { key: "it_review", label: "Antrian IT", href: "/it-helpdesk/antrian", icon: "CodeXml" },
   // Kedua "pengajuan" ini kini menjadi kategori DI DALAM halaman Pengajuan —
@@ -317,6 +319,7 @@ const OPERATION_FULL: MenuKey[] = [
   "op_seasonal",
   "op_analysis",
   "op_pnl",
+  "op_daily",
   "reports",
 ];
 
@@ -456,7 +459,7 @@ export const DIVISION_GROUPS: Partial<Record<Division, NavGroupDef[]>> = {
   Operation: [
     { name: "Monitoring Outlet", icon: "Store", menus: ["outlets", "hospitality", "hygiene", "complaints"] },
     { name: "Keuangan Operasional", icon: "Wallet", menus: ["op_beban", "op_pembelian", "op_pnl", "op_settings"] },
-    { name: "Analisis & Laporan", icon: "ChartColumnBig", menus: ["analytics", "op_analysis", "op_fraud", "op_seasonal", "reports", "creative_penilaian"] },
+    { name: "Analisis & Laporan", icon: "ChartColumnBig", menus: ["analytics", "op_daily", "op_analysis", "op_fraud", "op_seasonal", "reports", "creative_penilaian"] },
     { name: "Pembelajaran", icon: "GraduationCap", menus: ["elearning", "elearning_admin"] },
     { name: "System Support", icon: "Headset", menus: ["sys_review", "it_review"] },
   ],
@@ -582,8 +585,12 @@ export const DIVISION_GROUPS: Partial<Record<Division, NavGroupDef[]>> = {
       urutan: 4,
       menus: ["kpi_pdq_qc", "kpi_pdq_food", "kpi_pdq_beverage", "kpi_pdq_head_food", "kpi_pdq_head_pdq"],
     },
-    { name: "Marketing Communication", icon: "Megaphone", urutan: 5, menus: ["kpi_marcomm", "kpi_creative_sosmed"] },
-    { name: "Human Capital", icon: "UsersRound", urutan: 6, menus: ["kpi_hc"] },
+    { name: "Marketing Communication", icon: "Megaphone", urutan: 5, menus: ["kpi_marcomm"] },
+    // Sosial Media berdiri sendiri di sidebar, sama seperti di tabel divisi —
+    // pekerjaannya lain, dan yang mencarinya mencari namanya sendiri, bukan
+    // membuka Marketing Communication lebih dulu untuk menemukannya.
+    { name: "Sosial Media", icon: "AtSign", urutan: 6, menus: ["kpi_creative_sosmed"] },
+    { name: "Human Capital", icon: "UsersRound", urutan: 7, menus: ["kpi_hc"] },
   ],
   Creative: [
     { name: "Permintaan Masuk", icon: "Palette", menus: ["creative_design", "creative_konten"] },

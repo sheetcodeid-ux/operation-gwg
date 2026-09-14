@@ -228,28 +228,21 @@ export function TabelHygiene({
           row.original.lampiran.length === 0 ? (
             <Badge tone="danger">tanpa bukti</Badge>
           ) : (
-            <div className="flex flex-wrap gap-1.5">
-              {row.original.lampiran.map((l, i) => (
-                <button
-                  key={l.path}
-                  type="button"
-                  title={l.name}
-                  onClick={() =>
-                    setPratinjau({
-                      berkas: row.original.lampiran.map((x) => ({
-                        nama: x.name,
-                        url: tautanBukti({ entriId: row.original.id, path: x.path, name: x.name }),
-                      })),
-                      ke: i,
-                    })
-                  }
-                  className="inline-flex max-w-[12rem] items-center gap-1 rounded-md border border-border px-1.5 py-0.5 text-[11px] text-muted-foreground hover:bg-muted hover:text-foreground"
-                >
-                  <FileText className="size-3 shrink-0" />
-                  <span className="truncate">{l.name}</span>
-                </button>
-              ))}
-            </div>
+            <TumpukanBukti
+              berkas={row.original.lampiran.map((x) => ({
+                nama: x.name,
+                url: tautanBukti({ entriId: row.original.id, path: x.path, name: x.name }),
+              }))}
+              onBuka={(ke) =>
+                setPratinjau({
+                  berkas: row.original.lampiran.map((x) => ({
+                    nama: x.name,
+                    url: tautanBukti({ entriId: row.original.id, path: x.path, name: x.name }),
+                  })),
+                  ke,
+                })
+              }
+            />
           ),
       },
       {
@@ -312,6 +305,64 @@ export function TabelHygiene({
         />
       )}
     </>
+  );
+}
+
+/**
+ * Bukti submit tampil sebagai FOTONYA, bukan nama berkasnya.
+ *
+ * "WhatsApp Image 2026-09-12 at 14.22.31.jpeg" tidak memberi tahu satu pun hal
+ * yang dicari orang saat menyisir bukti hygiene: yang dicari rak yang
+ * berantakan, tanaman yang kering, showcase yang kotor — semuanya terlihat
+ * dalam seperempat detik dari gambarnya, dan tidak pernah dari namanya.
+ *
+ * Beberapa foto ditumpuk, bukan dijejer. Satu baris tabel yang memuat sebelas
+ * kotak nama berkas mendorong kolom Keterangan keluar layar; setumpuk foto
+ * dengan angka di sebelahnya memakan lebar yang sama berapa pun jumlahnya.
+ */
+function TumpukanBukti({
+  berkas,
+  onBuka,
+}: {
+  berkas: { nama: string; url: string }[];
+  onBuka: (ke: number) => void;
+}) {
+  // Tiga saja yang benar-benar digambar. Tumpukan kesebelas tidak terlihat
+  // berbeda dari tumpukan ketiga, sementara sebelas gambar yang diambil untuk
+  // satu baris tabel membuat halaman yang berisi empat puluh baris menarik
+  // ratusan berkas sekaligus.
+  const tampil = berkas.slice(0, 3);
+  return (
+    <button
+      type="button"
+      onClick={() => onBuka(0)}
+      title={berkas.map((b) => b.nama).join("\n")}
+      className="group flex items-center gap-2"
+    >
+      <span className="relative block h-11 w-[3.4rem] shrink-0">
+        {tampil.map((b, i) => (
+          <span
+            key={b.url}
+            className="absolute left-0 top-0 block h-11 w-11 overflow-hidden rounded-md border border-border bg-muted shadow-sm transition-transform group-hover:-translate-y-0.5"
+            style={{ transform: `translateX(${(tampil.length - 1 - i) * 6}px)`, zIndex: tampil.length - i }}
+          >
+            {/\.pdf($|\?)/i.test(b.nama) ? (
+              <span className="grid h-full w-full place-items-center text-muted-foreground">
+                <FileText className="size-4" />
+              </span>
+            ) : (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img src={b.url} alt={b.nama} loading="lazy" className="h-full w-full object-cover" />
+            )}
+          </span>
+        ))}
+      </span>
+      {berkas.length > 1 && (
+        <span className="text-[11.5px] font-semibold tabular-nums text-muted-foreground group-hover:text-foreground">
+          {berkas.length}
+        </span>
+      )}
+    </button>
   );
 }
 

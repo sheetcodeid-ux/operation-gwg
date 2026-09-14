@@ -1169,10 +1169,33 @@ export async function laporanKpi(posisi: KodePosisi, periode: string, pic = ""):
   const semuaIndikator = indikatorPosisi(posisi);
   const outletAktif = getOutlets().filter((o) => o.active);
 
+  /**
+   * "SEMUA" BUKAN SEBUAH NAMA PIC — ia gabungan seluruh nama.
+   *
+   * Catatan kegiatan disimpan dengan `pic` berisi id orangnya. Menyaring
+   * `pic = "__semua__"` karena itu tidak pernah cocok dengan satu baris pun,
+   * dan tab Detail Hygiene Audit/CCTV tampil KOSONG justru saat seluruh
+   * coordinator dipilih — padahal di situlah isinya paling banyak. Target
+   * per orang sudah dikalikan jumlah orangnya (lihat `jumlahPic`), jadi
+   * gabungan barisnya memang yang diharapkan di sini.
+   */
+  const semuaPicPosisi = picDinamis(posisi);
+  const gabunganPic = pic === SEMUA_PIC;
+  /*
+   * Hanya berlaku untuk posisi yang daftar PIC-nya datang dari basis data —
+   * Coordinator Area. Di situ "Semua" berarti SELURUH AREA, dan targetnya
+   * memang sudah dikalikan jumlah orangnya. Posisi lain yang dinilai per orang
+   * targetnya berdiri untuk SATU orang; menjumlahkan empat orang di situ
+   * menghasilkan angka yang terlihat masuk akal padahal empat kali lipat.
+   */
+  const daftarPicGabungan = gabunganPic && semuaPicPosisi.length > 0 ? semuaPicPosisi.map((o) => o.value) : null;
+  const saring = <T extends { eq: (k: string, v: string) => T; in: (k: string, v: string[]) => T }>(q: T): T =>
+    daftarPicGabungan ? q.in("pic", daftarPicGabungan) : q.eq("pic", pic);
+
   const [pengaturan, entriRows, actualRows, kunciRow] = await Promise.all([
     pengaturanPosisi(posisi),
-    dbEnabled ? db().from("kpi_entri").select("*").eq("posisi", posisi).eq("periode", periode).eq("pic", pic) : Promise.resolve({ data: [] }),
-    dbEnabled ? db().from("kpi_actual").select("*").eq("posisi", posisi).eq("periode", periode).eq("pic", pic) : Promise.resolve({ data: [] }),
+    dbEnabled ? saring(db().from("kpi_entri").select("*").eq("posisi", posisi).eq("periode", periode)) : Promise.resolve({ data: [] }),
+    dbEnabled ? saring(db().from("kpi_actual").select("*").eq("posisi", posisi).eq("periode", periode)) : Promise.resolve({ data: [] }),
     dbEnabled
       ? db().from("kpi_periode").select("dikunci").eq("posisi", posisi).eq("periode", periode).eq("pic", pic).maybeSingle()
       : Promise.resolve({ data: null }),
@@ -1225,8 +1248,8 @@ export async function laporanKpi(posisi: KodePosisi, periode: string, pic = ""):
   // sekali per area, bukan per orang. Tiga orang yang memegang satu area yang
   // sama akan menjumlahkan penjualan area itu tiga kali kalau dihitung per
   // orang, dan totalnya tidak pernah cocok dengan angka perusahaan.
-  const semuaPic = picDinamis(posisi);
-  const gabungan = pic === SEMUA_PIC;
+  const semuaPic = semuaPicPosisi;
+  const gabungan = gabunganPic;
   // Penugasan outlet tidak pernah bertumpuk — halaman User Management menyembunyikan
   // outlet yang sudah dipegang koordinator lain — jadi gabungannya cukup
   // disatukan tanpa takut terhitung dua kali.

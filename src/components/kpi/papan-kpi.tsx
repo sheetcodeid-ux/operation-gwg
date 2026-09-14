@@ -150,9 +150,14 @@ export function PapanKpi({
       });
     }
     // Detail Mingguan — bentuk yang sama persis dengan KPI Manajemen, hanya
-    // outletnya dibatasi ke area orang ini. Muncul hanya bila ESB sudah menarik
-    // minggunya; tombol menuju tabel kosong lebih buruk daripada tidak ada.
-    if (laporan.ca?.minggu) {
+    // outletnya dibatasi ke area orang ini.
+    //
+    // TABNYA SELALU ADA, sama seperti di KPI Manajemen. Dulu ia disembunyikan
+    // ketika ESB belum menarik minggunya, dan akibatnya deretan tab berbeda
+    // dari satu bulan ke bulan lain: yang mencarinya di bulan Agustus mengira
+    // fiturnya belum dibuat, padahal yang belum ada cuma datanya — dan itu
+    // keterangan yang bisa ditulis.
+    if (laporan.ca) {
       out.push({ id: "minggu", label: "Detail Mingguan", icon: CalendarRange });
     }
     if (laporan.ca && indikator.some((i) => i.key === "net_profit")) {
@@ -542,15 +547,26 @@ export function PapanKpi({
           toolbar={toolbar}
         />
       )}
-      {tampilan === "minggu" && laporan.ca?.minggu && (
-        <TabMinggu
-          detail={laporan.ca.minggu}
-          tableId="kpi-ca-minggu"
-          judul="Seluruh outlet area"
-          toolbar={toolbar}
-          onExport={() => setLaporanTerbuka(true)}
-        />
-      )}
+      {tampilan === "minggu" &&
+        laporan.ca &&
+        (laporan.ca.minggu ? (
+          <TabMinggu
+            detail={laporan.ca.minggu}
+            tableId="kpi-ca-minggu"
+            judul="Seluruh outlet area"
+            toolbar={toolbar}
+            onExport={() => setLaporanTerbuka(true)}
+          />
+        ) : (
+          <div className="rounded-2xl border border-border bg-card p-6">
+            <div className="mb-3">{toolbar}</div>
+            <p className="text-[13px] leading-relaxed text-muted-foreground">
+              Rincian mingguan bulan ini belum ditarik dari ESB. Penarikannya berjalan sendiri tiap jam — satu panggilan
+              per outlet per minggu — dan tabel ini terisi begitu minggu pertama selesai. Bulan yang sudah lewat ikut
+              dikejar sesudah bulan berjalan selesai.
+            </p>
+          </div>
+        ))}
       {tampilan === "netprofit" && laporan.ca && <TabelNetProfit detail={laporan.ca.detail} rasio={rasioNetProfit} toolbar={toolbar} />}
       {tampilan === "hpp" && laporan.ca && <TabelHpp detail={laporan.ca.detail} rasio={rasioHpp} toolbar={toolbar} />}
       {tampilan === "riwayat" && (
