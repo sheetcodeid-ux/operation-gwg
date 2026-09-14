@@ -11,15 +11,18 @@ import type { Tone } from "@/lib/constants";
  * kejauhan, halamannya utuh sejak hari pertama, dan begitu logonya masuk yang
  * berubah hanya berkas ini.
  *
- * Ukuran yang dipakai 20–28 piksel dan dipotong bulat, jadi logo persegi
- * dengan sedikit ruang di tepinya paling rapi. SVG lebih disukai: tajam di
- * semua ukuran, dan satu berkas untuk layar biasa maupun layar tajam.
+ * Ukuran yang dipakai 20–28 piksel dan dipotong bulat, jadi logo yang SUDAH
+ * bulat (lambang di atas piringan warna) paling rapi — persis bentuk PNG yang
+ * dikirim. Simpan minimal 128×128 supaya tetap tajam di layar retina.
+ *
+ * Nama berkas yang ditunggu, tinggal ditaruh lalu barisnya dibuka:
+ *   public/merek/nordu.png · cattu.png · busari.png · lesung-pipi.png
  */
 export const LOGO_MEREK: Record<string, string> = {
-  // Nordu: "/merek/nordu.svg",
-  // Cattu: "/merek/cattu.svg",
-  // Busari: "/merek/busari.svg",
-  // "Lesung Pipi": "/merek/lesung-pipi.svg",
+  // Nordu: "/merek/nordu.png",
+  // Cattu: "/merek/cattu.png",
+  // Busari: "/merek/busari.png",
+  // "Lesung Pipi": "/merek/lesung-pipi.png",
 };
 
 /** Warna dasar tiap nada merek — dipakai lambang cadangan dan penanda brand. */

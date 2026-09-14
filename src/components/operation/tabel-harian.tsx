@@ -11,6 +11,8 @@ import {
   LayoutGrid,
   Rocket,
   SlidersHorizontal,
+  TrendingDown,
+  TrendingUp,
   X,
 } from "lucide-react";
 import { Combobox } from "@/components/ui/combobox";
@@ -37,7 +39,7 @@ import { cn, formatIDR, formatIDRShort, formatNumber } from "@/lib/utils";
  *
  * ANGKANYA TIDAK DITEBALKAN. Tabel yang seluruh isinya tebal tidak menonjolkan
  * apa pun — yang menonjol justru tidak ada. Yang membedakan di sini warna dan
- * bentuk: segitiga naik-turun, bar capaian, dan satu baris jumlah di bawah.
+ * bentuk: panah tren, bar capaian, dan satu baris jumlah di bawah.
  */
 
 /* ──────────────────────────────── bulan ──────────────────────────────── */
@@ -110,24 +112,77 @@ function useSempit(): boolean {
   );
 }
 
+/**
+ * SISI MANA YANG SEDANG MENYEMBUNYIKAN ISI.
+ *
+ * Bayangan di tepi kolom yang diam bukan hiasan — ia memberi tahu bahwa DI
+ * BALIK tepi itu masih ada tanggal yang belum terlihat. Kalau bayangannya
+ * selalu ada, ia berbohong: di posisi paling kiri tidak ada apa pun yang
+ * tersembunyi di sebelah kiri, tapi garis gelapnya tetap menyatakan ada.
+ *
+ * Jadi yang dilaporkan di sini keadaan yang sebenarnya: kiri menyala hanya
+ * kalau sudah digeser, kanan padam begitu ujung kanannya tercapai.
+ *
+ * Bayangannya sendiri GRADASI, bukan `box-shadow`, dan arahnya berbalik di
+ * mode gelap. Bayangan hitam di atas latar yang memang sudah hampir hitam
+ * tidak terlihat sama sekali — yang membedakan tepi di layar gelap justru
+ * cahaya tipis, bukan gelap tambahan.
+ */
+function useTepiGeser(
+  bergantung: unknown,
+): [React.RefObject<HTMLDivElement | null>, { kiri: boolean; kanan: boolean }] {
+  const ref = React.useRef<HTMLDivElement>(null);
+  const [tepi, setTepi] = React.useState({ kiri: false, kanan: false });
+
+  const periksa = React.useCallback(() => {
+    const el = ref.current;
+    if (!el) return;
+    const kiri = el.scrollLeft > 1;
+    const kanan = el.scrollWidth - el.clientWidth - el.scrollLeft > 1;
+    setTepi((t) => (t.kiri === kiri && t.kanan === kanan ? t : { kiri, kanan }));
+  }, []);
+
+  React.useEffect(() => {
+    periksa();
+    const el = ref.current;
+    if (!el) return;
+    const ro = new ResizeObserver(periksa);
+    ro.observe(el);
+    el.addEventListener("scroll", periksa, { passive: true });
+    return () => {
+      ro.disconnect();
+      el.removeEventListener("scroll", periksa);
+    };
+  }, [periksa, bergantung]);
+
+  return [ref, tepi];
+}
+
 /* ───────────────────────────── potongan kecil ───────────────────────────── */
 
-/** Segitiga naik-turun — penanda arah yang tidak bergantung pada warna saja. */
-function Arah({ naik, nada = true }: { naik: boolean; nada?: boolean }) {
+/**
+ * PANAH TREN — penanda arah yang tidak bergantung pada warna saja.
+ *
+ * Panah menyerong, bukan segitiga. Segitiga cuma menyatakan "lebih besar" atau
+ * "lebih kecil"; panah menyerong menyatakan GERAKAN — dan yang dibaca orang di
+ * tabel ini memang gerakan, bukan perbandingan dua angka yang berdiri sendiri.
+ * Bentuknya juga tetap terbaca oleh yang tidak membedakan merah dan hijau.
+ */
+function Arah({ naik, nada = true, kelas }: { naik: boolean; nada?: boolean; kelas?: string }) {
+  const Ikon = naik ? TrendingUp : TrendingDown;
   return (
-    <span
+    <Ikon
       aria-hidden
       className={cn(
-        "text-[8px] leading-none",
+        "size-3 shrink-0",
         !nada ? "" : naik ? "text-emerald-600 dark:text-emerald-400" : "text-rose-600 dark:text-rose-400",
+        kelas,
       )}
-    >
-      {naik ? "▲" : "▼"}
-    </span>
+    />
   );
 }
 
-/** Persentase bersegitiga — bentuk yang sama di kartu maupun di tabel. */
+/** Persentase berpanah — bentuk yang sama di kartu maupun di tabel. */
 function Persen({ nilai, kelas }: { nilai: number | null; kelas?: string }) {
   if (nilai === null) return <span className="text-[11px] text-muted-foreground">—</span>;
   const naik = nilai >= 0;
@@ -201,13 +256,22 @@ function Lambang({ merek, ukuran = 22 }: { merek: string | null; ukuran?: number
   );
 }
 
-/** Bar capaian — dengan penanda seratus persen yang tetap di tempatnya. */
+/**
+ * Bar capaian — dengan penanda seratus persen yang tetap di tempatnya.
+ *
+ * Di KARTU penandanya dimatikan: di sana yang dibaca perbandingan antarmerek
+ * sekilas, dan satu garis tipis di tengah tiap bar justru memecah deretan yang
+ * seharusnya terbaca sebagai satu barisan. Di TABEL penandanya dipakai, karena
+ * di situ yang dibaca satu outlet terhadap targetnya sendiri.
+ */
 function BarCapaian({
   capaian,
   tinggi = "h-1.5",
+  penanda = true,
 }: {
   capaian: number | null;
   tinggi?: string;
+  penanda?: boolean;
 }) {
   const SKALA = 120;
   const c = capaian ?? 0;
@@ -226,7 +290,9 @@ function BarCapaian({
       />
       {/* Penanda target — tetap di 100% berapa pun capaiannya, supaya yang
           101% dan yang 180% tidak terlihat sama persis. */}
-      <span className="absolute inset-y-0 w-px bg-foreground/25" style={{ left: `${(BATAS_TERCAPAI / SKALA) * 100}%` }} />
+      {penanda && (
+        <span className="absolute inset-y-0 w-px bg-foreground/25" style={{ left: `${(BATAS_TERCAPAI / SKALA) * 100}%` }} />
+      )}
     </div>
   );
 }
@@ -263,7 +329,12 @@ function KartuBrand({ kartu, aktif, onPilih }: { kartu: KartuMerek; aktif: boole
       onClick={onPilih}
       aria-pressed={aktif}
       className={cn(
-        "w-[15.5rem] shrink-0 snap-start rounded-xl border bg-card px-3 py-2.5 text-left transition-colors",
+        // MELEBAR MENGISI BARIS, bukan lebar tetap. Empat kartu selebar 15rem
+        // di layar 1440 menyisakan ruang kosong di ujung kanan yang terbaca
+        // seperti ada kartu kelima yang gagal dimuat. `flex-[1_0_…]` membuatnya
+        // tumbuh sampai barisnya habis, tapi tidak pernah menyusut — jadi di
+        // layar sempit kartunya tetap seukuran itu dan barisnya bergeser.
+        "min-w-[14.5rem] flex-[1_0_14.5rem] snap-start rounded-xl border bg-card px-3 py-2.5 text-left transition-colors",
         aktif ? "border-brand-500 ring-1 ring-brand-500/30" : "border-border hover:border-foreground/20",
       )}
     >
@@ -286,7 +357,7 @@ function KartuBrand({ kartu, aktif, onPilih }: { kartu: KartuMerek; aktif: boole
       </div>
 
       <div className="mt-2 flex items-center gap-2">
-        <BarCapaian capaian={kartu.capaian} />
+        <BarCapaian capaian={kartu.capaian} penanda={false} />
         <span
           className={cn(
             "shrink-0 text-[11px] tabular-nums",
@@ -359,6 +430,56 @@ function DeretMerek({
           </button>
         ) : null,
       )}
+    </div>
+  );
+}
+
+/**
+ * AVATAR MEREK DI BILAH SARINGAN — menyaring per merek tanpa membuka apa pun.
+ *
+ * Kartunya bisa disembunyikan, dan begitu disembunyikan satu-satunya jalan
+ * menyaring per merek ikut hilang bersamanya. Deretan logo bulat ini yang
+ * menggantikannya: selalu ada, selebar satu baris tombol, dan menyimpan
+ * pilihan yang sama dengan kartunya — mengklik logo yang sedang aktif
+ * melepasnya lagi.
+ *
+ * Yang tidak aktif diredupkan, bukan dihitamkan: logo merek yang diubah
+ * warnanya berhenti terbaca sebagai logo merek itu.
+ */
+function AvatarMerek({
+  kartu,
+  dipilih,
+  onPilih,
+}: {
+  kartu: KartuMerek[];
+  dipilih: string | null;
+  onPilih: (m: string | null) => void;
+}) {
+  if (kartu.length === 0) return null;
+  return (
+    <div className="inline-flex shrink-0 items-center gap-0.5 rounded-lg border border-border bg-card p-0.5">
+      {kartu.map((k) => {
+        const aktif = dipilih === k.merek;
+        return (
+          <button
+            key={k.merek}
+            type="button"
+            aria-pressed={aktif}
+            title={`${k.merek} · ${k.outlet} outlet`}
+            aria-label={`Saring merek ${k.merek}`}
+            onClick={() => onPilih(aktif ? null : k.merek)}
+            className={cn(
+              "grid size-7 place-items-center rounded-md transition",
+              // DIREDUPKAN, BUKAN DIABUKAN. `grayscale` membuat keempatnya jadi
+              // piringan kelabu yang serupa — persis yang dipakai orang untuk
+              // membedakannya hilang. Yang dikurangi cuma terangnya.
+              aktif ? "bg-brand-500/15 ring-1 ring-brand-500" : "opacity-55 hover:opacity-100",
+            )}
+          >
+            <Lambang merek={k.merek} ukuran={20} />
+          </button>
+        );
+      })}
     </div>
   );
 }
@@ -657,6 +778,7 @@ export function TabelHarian({
   const [urut, setUrut] = React.useState<Urut>("omzet");
   const [arah, setArah] = React.useState<Arah2>("turun");
   const [kartuTampil, setKartuTampil] = React.useState(true);
+  const [wadah, tepi] = useTepiGeser(detail.kolom.length + (sempit ? 1000 : 0));
 
   const pindah = (p: { bulan?: string; area?: string }) => {
     const q = new URLSearchParams();
@@ -717,8 +839,12 @@ export function TabelHarian({
         .baris-harian:hover .sel-tempel{background-color:var(--muted)}
         .baris-harian:hover .nama-panjang{-webkit-mask-image:none;mask-image:none}
         .baris-harian:hover .nama-panjang>span{animation:jalan 7s linear infinite}
-        .tepi-kiri{box-shadow:6px 0 8px -6px rgb(0 0 0/.14)}
-        .tepi-kanan{box-shadow:-6px 0 8px -6px rgb(0 0 0/.14)}
+        .tepi-kiri::after,.tepi-kanan::before{content:"";position:absolute;top:0;bottom:0;width:16px;pointer-events:none;opacity:0;transition:opacity .18s ease}
+        .tepi-kiri::after{left:100%;background:linear-gradient(to right,rgb(0 0 0/.20),transparent)}
+        .tepi-kanan::before{right:100%;background:linear-gradient(to left,rgb(0 0 0/.20),transparent)}
+        .dark .tepi-kiri::after{background:linear-gradient(to right,rgb(255 255 255/.075),transparent)}
+        .dark .tepi-kanan::before{background:linear-gradient(to left,rgb(255 255 255/.075),transparent)}
+        .geser-kiri .tepi-kiri::after,.geser-kanan .tepi-kanan::before{opacity:1}
       `}</style>
 
       {kartuTampil && (
@@ -753,6 +879,8 @@ export function TabelHarian({
         </div>
 
         <Segmen pilihan={STATUS} nilai={status} onNilai={setStatus} />
+
+        <AvatarMerek kartu={kartu} dipilih={merek} onPilih={setMerek} />
 
         <Segmen
           pilihan={[
@@ -818,7 +946,12 @@ export function TabelHarian({
           daerah yang bergeser selalu berhenti separuh — yang terbaca di sebelah
           tepi beku cuma potongan huruf. */}
       <div
-        className="min-h-0 flex-1 snap-x snap-mandatory overflow-auto rounded-xl border border-border bg-card"
+        ref={wadah}
+        className={cn(
+          "min-h-0 flex-1 snap-x snap-mandatory overflow-auto rounded-xl border border-border bg-card",
+          tepi.kiri && "geser-kiri",
+          tepi.kanan && "geser-kanan",
+        )}
         style={{ scrollPaddingLeft: L.no + L.nama + L.bulan, scrollPaddingRight: L.kurang }}
       >
         <table className="w-max min-w-full border-collapse text-left">
