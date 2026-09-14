@@ -331,6 +331,52 @@ export const pembelianPerOutlet = cache(async function pembelianPerOutlet(
   return peta;
 });
 
+/**
+ * Problem Solver per outlet pada satu bulan.
+ *
+ * Dibungkus `cache()` dengan alasan yang sama dengan pembaca bulanan lain:
+ * satu halaman menghitung puluhan rapor yang membaca bulan yang sama.
+ */
+export const problemSolverPerOutlet = cache(async function problemSolverPerOutlet(
+  periode: string,
+): Promise<Map<string, number>> {
+  const peta = new Map<string, number>();
+  if (!dbEnabled) return peta;
+  const { data } = await db().from("kpi_problem_solver").select("outlet_id,jumlah").eq("periode", periode);
+  for (const r of ((data ?? []) as Record<string, unknown>[])) {
+    peta.set(String(r.outlet_id), Number(r.jumlah) || 0);
+  }
+  return peta;
+});
+
+/** Simpan Problem Solver banyak outlet sekaligus. */
+export async function simpanProblemSolver(input: {
+  periode: string;
+  baris: { outletId: string; jumlah: number }[];
+  olehId: string;
+  olehNama: string;
+}): Promise<{ error?: string; tersimpan: number }> {
+  if (!dbEnabled) return { error: "Penyimpanan belum aktif.", tersimpan: 0 };
+  if (input.baris.length === 0) return { tersimpan: 0 };
+  const sekarang = new Date().toISOString();
+  const { error } = await db()
+    .from("kpi_problem_solver")
+    .upsert(
+      input.baris.map((b) => ({
+        outlet_id: b.outletId,
+        periode: input.periode,
+        // Dibulatkan dan tidak boleh minus — angkanya jumlah kejadian.
+        jumlah: Math.max(0, Math.round(b.jumlah)),
+        diubah_oleh: input.olehId,
+        diubah_nama: input.olehNama,
+        diubah_pada: sekarang,
+      })),
+      { onConflict: "outlet_id,periode" },
+    );
+  if (error) return { error: `Gagal menyimpan: ${error.message}`, tersimpan: 0 };
+  return { tersimpan: input.baris.length };
+}
+
 export async function simpanFee(input: {
   periode: string;
   outletId: string;
@@ -762,6 +808,13 @@ export interface AngkaCa {
    */
   hppKpk: number | null;
   /**
+   * Jumlah Problem Solver seluruh outlet yang dinilai.
+   *
+   * Null berarti belum ada satu outlet pun yang angkanya diisi — bukan nol.
+   * Nol berarti "sudah diisi, hasilnya nihil", dan itu tuduhan yang berbeda.
+   */
+  problemSolver: number | null;
+  /**
    * Rincian minggu demi minggu outlet-outlet area ini.
    *
    * Persis bentuk yang dipakai KPI Manajemen, hanya outletnya yang dibatasi ke
@@ -787,8 +840,13 @@ export interface AngkaCa {
  * tidak pernah ada di basis data ini, dan yang diketik belakangan hampir selalu
  * tanggal yang diingat, bukan tanggal yang benar.
  */
-async function angkaCa(periode: string, picIds: string[], jumlahPic: number): Promise<AngkaCa> {
-  const semua = outletCa(picIds);
+async function angkaCa(
+  periode: string,
+  picIds: string[],
+  jumlahPic: number,
+  basisOutlet = false,
+): Promise<AngkaCa> {
+  const semua = outletCa(picIds, basisOutlet);
 
   const bulanLalu = tigaBulanSebelum(periode);
   const [esbIni, tanganIni, ...riwayat] = await Promise.all([
@@ -881,6 +939,10 @@ async function angkaCa(periode: string, picIds: string[], jumlahPic: number): Pr
    */
   // Aturannya di `hppKpkPersen` — termasuk yang paling mudah salah: nol di
   // kedua kolom berarti BELUM DIUNGGAH, bukan belanja nol.
+  const psPeta = await problemSolverPerOutlet(periode);
+  const psAda = lolos.filter((o) => psPeta.has(o.id));
+  const problemSolver = psAda.length ? psAda.reduce((n, o) => n + (psPeta.get(o.id) ?? 0), 0) : null;
+
   const pembelian = await pembelianPerOutlet(periode);
   const hppKpk = hppKpkPersen(
     lolos.map((o, n) => {
@@ -927,7 +989,7 @@ async function angkaCa(periode: string, picIds: string[], jumlahPic: number): Pr
     hariBulan(periode),
   );
 
-  return { outlet: lolos, detail, belumTigaBulan: belum, bulanKosong, tanpaGross, grossSales, rataTiga, komplain, netProfit, hpp, hppNominal, hppDasar, hppKpk, jumlahPic, minggu };
+  return { outlet: lolos, detail, belumTigaBulan: belum, bulanKosong, tanpaGross, grossSales, rataTiga, komplain, netProfit, hpp, hppNominal, hppDasar, hppKpk, problemSolver, jumlahPic, minggu };
 }
 
 /**
@@ -1281,7 +1343,11 @@ export async function laporanKpi(posisi: KodePosisi, periode: string, pic = ""):
   // pada orangnya — bukan pada posisinya. Tanpa PIC terpilih tidak ada area,
   // dan tanpa area tidak ada satu pun angka yang bisa dihitung.
   const perluArea = daftar.some(
-    (i) => i.actual.sumber === "otomatis" && (i.actual.kode === "gross_sales_area" || i.actual.kode === "hpp_kpk"),
+    (i) =>
+      i.actual.sumber === "otomatis" &&
+      (i.actual.kode === "gross_sales_area" ||
+        i.actual.kode === "hpp_kpk" ||
+        i.actual.kode === "problem_solver_outlet"),
   );
   // "Semua" mencakup SELURUH area yang dipegang Coordinator Area — dihitung
   // sekali per area, bukan per orang. Tiga orang yang memegang satu area yang
@@ -1296,9 +1362,15 @@ export async function laporanKpi(posisi: KodePosisi, periode: string, pic = ""):
   // Yang dihitung hanya Coordinator Area yang benar-benar memegang outlet.
   // Menyertakan yang belum ditugaskan menaikkan target per orang tanpa
   // menambah satu pun outlet yang dinilai.
-  const jumlahPic = gabungan
-    ? Math.max(1, semuaPic.filter((o) => (getUser(o.value)?.outletIds ?? []).length > 0).length)
-    : 1;
+  // Yang dihitung hanya PIC yang benar-benar punya outlet. Menyertakan yang
+  // belum ditugaskan menaikkan target per orang tanpa menambah satu pun outlet
+  // yang dinilai. Pada posisi berbasis outlet, tiap PIC MEMANG satu outlet,
+  // jadi tidak ada yang perlu disaring.
+  const jumlahPic = !gabungan
+    ? 1
+    : (posisiDari(posisi)?.picDinamis ?? "").startsWith("outlet_")
+      ? Math.max(1, semuaPic.length)
+      : Math.max(1, semuaPic.filter((o) => (getUser(o.value)?.outletIds ?? []).length > 0).length);
 
   const lalu = new Map<string, number>();
   if (perluAverage) {
@@ -1357,7 +1429,10 @@ export async function laporanKpi(posisi: KodePosisi, periode: string, pic = ""):
   ]);
 
   /* --- angka se-area (Coordinator Area) --- */
-  const ca = perluArea ? await angkaCa(periode, picIds, jumlahPic) : null;
+  // Posisi yang PIC-nya outlet menghitung dengan basis outlet — lihat
+  // `Posisi.picDinamis`.
+  const basisOutlet = (posisiDari(posisi)?.picDinamis ?? "").startsWith("outlet_");
+  const ca = perluArea ? await angkaCa(periode, picIds, jumlahPic, basisOutlet) : null;
 
   /* --- panel efisiensi --- */
   let efisiensi: LaporanKpi["efisiensi"] = null;
@@ -1673,6 +1748,14 @@ function susunBaris(i: Indikator, k: KonteksBaris): BarisKpi {
           actual = k.ca?.hpp ?? null;
           if (actual === null) alasan = alasanAngkaOutlet(k.ca, "Harga pokok penjualan");
           break;
+        case "problem_solver_outlet":
+          actual = k.ca?.problemSolver ?? null;
+          if (actual === null) {
+            alasan = k.ca && k.ca.outlet.length === 0
+              ? areaKosong(k.ca)
+              : "Problem Solver bulan ini belum diisi untuk outlet ini — lihat KPI Supervisor → Isi Problem Solver.";
+          }
+          break;
         case "hpp_kpk":
           // PEMBELIAN, bukan harga pokok yang diketik di lembar bulanan.
           actual = k.ca?.hppKpk ?? null;
@@ -1853,9 +1936,21 @@ export function outletSeluruhPic(posisi: string): Set<string> {
  * `outlets.area_id` dibiarkan untuk modul lain yang memakainya; yang berubah
  * hanya dari mana KPI mengambilnya.
  */
-function outletCa(picIds: string[]): OutletCa[] {
+/**
+ * Outlet yang masuk lingkup perhitungan.
+ *
+ * `basisOutlet` membedakan dua cara memilih: Coordinator Area dinilai atas
+ * ORANG, jadi id yang masuk id pengguna dan outletnya dicari dari penugasannya;
+ * Supervisor dinilai atas OUTLET, jadi id yang masuk sudah id outlet.
+ *
+ * Dibedakan lewat penanda, bukan ditebak dari bentuk id-nya. Menebak berarti
+ * satu id yang kebetulan cocok di kedua sisi memilih jalan yang salah tanpa
+ * satu pun pesan — dan yang dihitung lalu outlet orang lain.
+ */
+function outletCa(picIds: string[], basisOutlet = false): OutletCa[] {
   const ditugaskan = new Set<string>();
-  for (const p of picIds) for (const id of getUser(p)?.outletIds ?? []) ditugaskan.add(id);
+  if (basisOutlet) for (const id of picIds) ditugaskan.add(id);
+  else for (const p of picIds) for (const id of getUser(p)?.outletIds ?? []) ditugaskan.add(id);
   return getOutlets()
     .filter((o) => o.active && ditugaskan.has(o.id))
     .map((o) => ({
@@ -1895,18 +1990,13 @@ export function picDinamis(posisi: KodePosisi): { value: string; label: string }
       .sort(urut);
   }
 
-  const kpk = p.picDinamis === "supervisor_kpk";
-  const namaOutlet = new Map(getOutlets().map((o) => [o.id, o.name]));
-  return getUsers()
-    .filter((u) => u.role === "supervisor" && u.active !== false)
-    .filter((u) => {
-      const punya = u.outletIds ?? [];
-      if (punya.length === 0) return false;
-      // Satu outlet KPK sudah cukup membuatnya dinilai sebagai Supervisor KPK.
-      const adaKpk = punya.some((id) => outletKpk(namaOutlet.get(id) ?? ""));
-      return kpk ? adaKpk : !adaKpk;
-    })
-    .map((u) => ({ value: u.id, label: u.name }))
+  // YANG DIDAFTAR OUTLETNYA, bukan supervisornya — lihat `Posisi.picDinamis`.
+  // Nama supervisornya ikut sebagai keterangan, bukan sebagai kunci: outlet
+  // yang berpindah tangan tetap satu baris yang sama.
+  const kpk = p.picDinamis === "outlet_kpk";
+  return getOutlets()
+    .filter((o) => o.active && outletKpk(o.name) === kpk)
+    .map((o) => ({ value: o.id, label: o.name }))
     .sort(urut);
 }
 

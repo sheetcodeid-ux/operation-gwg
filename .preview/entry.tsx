@@ -321,22 +321,43 @@ if (kode === "sinkron") {
   throw new Error("__stop__");
 }
 if (kode === "supervisor") {
-  // Angka CONTOH yang bentuknya seperti keadaan sungguhan.
+  // Angka CONTOH berbasis OUTLET, seperti keadaan sungguhannya.
   const acak = (n: number) => { const x = Math.sin(n) * 10000; return x - Math.floor(x); };
-  const NAMA = ["Abdullah","Adam Fauzan","Aditya Hartaya","Arie Rizky Maulana","Eddo","Eva Suryani","Henry Fonda Satria","Ival","Ivna Mahardika","Muhammad Rizky Saputra","Ringki Widodo","Sudarti","Tian Mahardika","Tommy Wijaya","Zulfikar Rahim"];
-  const KPK = new Set(["Eddo","Eva Suryani","Henry Fonda Satria","Ival","Muhammad Rizky Saputra","Ringki Widodo","Sudarti","Tian Mahardika"]);
-  const baris = NAMA.map((nama, i) => {
-    const kpk = KPK.has(nama);
-    const belum = i === 3 || i === 11;
-    const nilai = belum ? null : 42 + acak(i * 17) * 55;
+  const OUTLET: [string, string, boolean][] = [
+    ["Nordu Coffee Putussibau", "Henry Fonda Satria", true],
+    ["Nordu Coffee Ketapang", "Ringki Widodo", true],
+    ["Nordu Coffee Penibung", "Abdullah", true],
+    ["Nordu Coffee Palangkaraya", "Eddo", true],
+    ["Nordu Coffee Banjarmasin", "Muhammad Rizky Saputra", true],
+    ["Nordu Garden Sintang", "Sudarti", true],
+    ["Nordu Coffee Sandai", "Ival", true],
+    ["Cattu A. Yani", "Arie Rizky Maulana", false],
+    ["Cattu Sintang", "Aldalia", false],
+    ["Ayam Goreng Busari Serdam", "Ivna Mahardika", false],
+    ["Nordu Coffee Tebas", "Tommy Wijaya", false],
+    ["Lesung Pipi Bogor", "Zulfikar Rahim", false],
+  ];
+  const KOL = (kpk: boolean) => [
+    { key: "gross_sales", label: "Gross Sales", bobot: 40, persen: null },
+    { key: "net_profit", label: "Net Profit", bobot: 30, persen: null },
+    { key: "komplain_area", label: "Complaint", bobot: 20, persen: null },
+    kpk
+      ? { key: "hpp_kpk", label: "Harga Pokok Penjualan", bobot: 10, persen: null }
+      : { key: "problem_solver_outlet", label: "Problem Solver", bobot: 10, persen: null },
+  ];
+  const baris = OUTLET.map(([nama, supervisor, kpk], i) => {
+    const belum = i === 8;
+    const ind = KOL(kpk).map((k, j) => ({ ...k, persen: belum ? null : 45 + acak(i * 13 + j * 7) * 60 }));
+    const nilai = belum
+      ? null
+      : ind.reduce((s, k) => s + ((k.persen ?? 0) * k.bobot) / 100, 0);
     return {
-      userId: `u${i}`, nama,
+      outletId: `o${i}`, nama, supervisor,
       posisi: (kpk ? "supervisor_kpk" : "supervisor_umum") as never,
       jenis: (kpk ? "KPK" : "Umum") as "KPK" | "Umum",
-      outlet: [kpk ? `Nordu Coffee ${nama.split(" ")[0]}` : `Cattu ${nama.split(" ")[0]}`],
-      nilai,
-      peringkat: nilai === null ? null : peringkat(nilai),
-      alasan: belum ? "Outlet ini belum genap tiga bulan berjalan, jadi belum dinilai." : null,
+      nilai, peringkat: nilai === null ? null : peringkat(nilai),
+      indikator: ind,
+      alasan: belum ? "Problem Solver bulan ini belum diisi untuk outlet ini." : null,
     };
   }).sort((a, b) => (b.nilai ?? -1) - (a.nilai ?? -1));
   const ada = baris.map((b) => b.nilai).filter((n): n is number => n !== null);
@@ -345,11 +366,14 @@ if (kode === "supervisor") {
       <div className="p-6">
         <PapanSupervisor
           bisaLihatSemua
+          bisaIsi
           rekap={{
             periode: "2026-09",
             baris,
             rata: ada.reduce((x, y) => x + y, 0) / ada.length,
             belumDinilai: baris.length - ada.length,
+            belumTigaBulan: ["Nordu Coffee Serdam II", "Nordu Coffee Simpang Ampar"],
+            kolom: { Umum: KOL(false), KPK: KOL(true) },
           }}
         />
       </div>

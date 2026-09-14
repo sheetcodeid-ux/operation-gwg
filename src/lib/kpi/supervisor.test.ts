@@ -20,12 +20,15 @@ describe("KPI Supervisor — struktur", () => {
     expect(DEPARTEMEN.filter((x) => x.diluarManajemen)).toHaveLength(1);
   });
 
-  it("dua posisi, keduanya dinilai per orang dari daftar basis data", () => {
+  it("dua posisi, keduanya dinilai PER OUTLET dari daftar basis data", () => {
+    const harap = { supervisor_umum: "outlet_umum", supervisor_kpk: "outlet_kpk" } as const;
     for (const kode of ["supervisor_umum", "supervisor_kpk"] as const) {
       const p = POSISI.find((x) => x.kode === kode);
       expect(p?.departemen).toBe("supervisor");
       expect(p?.perPic).toBe(true);
-      expect(p?.picDinamis).toBe(kode);
+      // Yang dinilai OUTLET, bukan orangnya — outlet yang berpindah tangan
+      // tetap satu rapor utuh.
+      expect(p?.picDinamis).toBe(harap[kode]);
       expect(MENU_POSISI[kode]).toBeTruthy();
     }
   });
@@ -37,7 +40,7 @@ describe("KPI Supervisor — indikator", () => {
 
   it("Supervisor Umum: 40/30/20/10 dan totalnya seratus", () => {
     const b = bobot("supervisor_umum");
-    expect(b).toEqual({ gross_sales: 40, net_profit: 30, komplain_area: 20, problem_solver_sup: 10 });
+    expect(b).toEqual({ gross_sales: 40, net_profit: 30, komplain_area: 20, problem_solver_outlet: 10 });
     expect(Object.values(b).reduce((x, y) => x + y, 0)).toBe(100);
   });
 
@@ -57,7 +60,14 @@ describe("KPI Supervisor — indikator", () => {
     const cari = (kode: "supervisor_umum" | "supervisor_kpk", key: string) =>
       indikatorPosisi(kode).find((i) => i.key === key);
     expect(cari("supervisor_umum", "komplain_area")?.target).toEqual({ jenis: "tetap", nilai: 20 });
-    expect(cari("supervisor_umum", "problem_solver_sup")?.target).toEqual({ jenis: "tetap", nilai: 10 });
+    expect(cari("supervisor_umum", "problem_solver_outlet")?.target).toEqual({ jenis: "tetap", nilai: 10 });
+    // Otomatis dari angka per outlet — BUKAN catatan kegiatan. Kalau kembali
+    // jadi entri, Head Coordinator Area harus mencatat satu per satu untuk
+    // puluhan outlet, dan indikator ini tidak akan pernah terisi.
+    expect(cari("supervisor_umum", "problem_solver_outlet")?.actual).toEqual({
+      sumber: "otomatis",
+      kode: "problem_solver_outlet",
+    });
     expect(cari("supervisor_kpk", "hpp_kpk")?.target).toEqual({ jenis: "tetap", nilai: 35 });
     // Lewat batas tidak langsung nol — sama dengan HPP Coordinator Area.
     expect(cari("supervisor_kpk", "hpp_kpk")?.penilaian).toBe("batas_linear");
@@ -156,5 +166,15 @@ describe("HPP KPK — belanja dibagi penjualan", () => {
     // Penibung dan Sandai — dua ujung sebaran yang sebenarnya.
     expect(hppKpkPersen([{ warehouse: 145_554_400, nonWarehouse: 0, gross: 423_942_377 }])).toBeCloseTo(34.3, 1);
     expect(hppKpkPersen([{ warehouse: 97_277_330, nonWarehouse: 0, gross: 198_110_035 }])).toBeCloseTo(49.1, 1);
+  });
+});
+
+describe("Supervisor tidak punya indikator berbentuk catatan kegiatan", () => {
+  it("seluruh indikatornya otomatis — tidak ada yang perlu dicatat satu per satu", () => {
+    for (const kode of ["supervisor_umum", "supervisor_kpk"] as const) {
+      for (const i of indikatorPosisi(kode)) {
+        expect(i.actual.sumber, `${kode}/${i.key}`).toBe("otomatis");
+      }
+    }
   });
 });

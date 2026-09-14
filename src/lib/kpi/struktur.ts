@@ -99,7 +99,18 @@ export interface Posisi {
    * pergantian staf butuh deploy, dan sampai deploy itu terjadi orangnya tidak
    * punya rapor sama sekali.
    */
-  picDinamis?: "area_coordinator" | "supervisor_umum" | "supervisor_kpk";
+  /**
+   * Daftar PIC-nya datang dari basis data, dan APA yang dinilai.
+   *
+   * `area_coordinator` menilai ORANG — areanya menempel pada orangnya, dan
+   * satu orang bisa memegang banyak outlet.
+   *
+   * `outlet_*` menilai OUTLET. Supervisor dinilai lewat outlet yang
+   * dipegangnya, bukan lewat namanya: outlet yang berpindah tangan di tengah
+   * bulan tetap punya satu rapor utuh, sementara rapor bernama orang akan
+   * terbelah dua tanpa ada yang bisa menjumlahkannya kembali.
+   */
+  picDinamis?: "area_coordinator" | "outlet_umum" | "outlet_kpk";
   /**
    * Dinilai PER ORANG, bukan sebagai satu tim.
    *
@@ -251,10 +262,16 @@ export const POSISI: Posisi[] = [
   // bobot dan rumusnya berbeda, dan indikator yang berubah-ubah tergantung
   // siapa yang membukanya tidak bisa diperiksa siapa pun dari daftarnya.
   //
-  // PIC-nya dari basis data, seperti Coordinator Area: lima puluh tiga orang
-  // yang berganti jauh lebih sering daripada posisinya.
-  { kode: "supervisor_umum", departemen: "supervisor", nama: "Supervisor Umum", pic: [], perPic: true, picDinamis: "supervisor_umum" },
-  { kode: "supervisor_kpk", departemen: "supervisor", nama: "Supervisor KPK", pic: [], perPic: true, picDinamis: "supervisor_kpk" },
+  // YANG DINILAI OUTLETNYA, bukan supervisornya. Supervisor berganti,
+  // outletnya tidak — dan angka yang dinilai (penjualan, laba, komplain,
+  // pembelian) seluruhnya milik outlet. Menempelkannya pada nama orang
+  // membuat satu outlet yang berpindah tangan punya dua rapor separuh bulan
+  // yang tidak bisa dijumlahkan kembali.
+  //
+  // Hanya outlet yang sudah berjalan DI ATAS TIGA BULAN yang dinilai; aturan
+  // itu sudah berlaku di dalam `angkaCa` dan dipakai juga menyaring daftarnya.
+  { kode: "supervisor_umum", departemen: "supervisor", nama: "Supervisor Umum", pic: [], perPic: true, picDinamis: "outlet_umum" },
+  { kode: "supervisor_kpk", departemen: "supervisor", nama: "Supervisor KPK", pic: [], perPic: true, picDinamis: "outlet_kpk" },
 ];
 
 /**

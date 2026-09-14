@@ -40,6 +40,15 @@ export interface OrangKpi {
   nilai: number | null;
   /** Kenapa kosong. Ikut dicetak supaya yang membagikan tahu ini bukan nol. */
   alasan?: string | null;
+  /**
+   * Capaian tiap indikator, urut seperti di rapornya.
+   *
+   * Kalau ada, dokumennya berubah bentuk: bukan lagi daftar nama beserta satu
+   * angka, melainkan MATRIKS — satu baris per nama, satu kolom per indikator,
+   * dan kolom Total di ujung. Bentuk itu menjawab pertanyaan berikutnya yang
+   * selalu muncul setelah "berapa": indikator mana yang menjatuhkannya.
+   */
+  indikator?: { key: string; label: string; bobot: number; persen: number | null }[];
 }
 
 export interface KelompokKpi {
@@ -139,12 +148,17 @@ export function buatDaftarKpiHtml({
   periode,
   kelompok,
   mode,
+  /** Apa yang dihitung — "orang" atau "outlet". Dokumen KPI Supervisor
+   *  menghitung outlet, dan menyebutnya "orang" membuat jumlahnya terbaca
+   *  seperti jumlah pegawai yang akan dibayar. */
+  satuan = "orang",
 }: {
   judul: string;
   subjudul: string;
   periode: string;
   kelompok: KelompokKpi[];
   mode: Mode;
+  satuan?: string;
 }): string {
   const t = THEME[mode];
   const isi = kelompok.filter((k) => k.orang.length > 0);
@@ -160,6 +174,10 @@ export function buatDaftarKpiHtml({
 
   const bagian = isi
     .map((k) => {
+      // Kolom indikator diambil dari baris PERTAMA yang punya rinciannya —
+      // dalam satu kelompok seluruh anggotanya dinilai dengan indikator yang
+      // sama, jadi satu contoh sudah menentukan judul kolomnya.
+      const kolom = k.orang.find((o) => o.indikator?.length)?.indikator ?? [];
       // DIURUTKAN DARI YANG TERTINGGI di dalam kelompoknya, dan yang belum
       // dinilai selalu di bawah — bukan tersebar di tengah daftar tempat ia
       // mudah terbaca sebagai nilai yang rendah.
@@ -167,22 +185,35 @@ export function buatDaftarKpiHtml({
         (a, b) => (b.nilai ?? -1) - (a.nilai ?? -1) || a.nama.localeCompare(b.nama, "id"),
       );
       const baris = orang
-        .map(
-          (o, n) => `<tr style="background:${n % 2 ? t.box : "transparent"}">
+        .map((o, n) => {
+          const awal = `<tr style="background:${n % 2 ? t.box : "transparent"}">
         ${sel(`<span style="color:${t.sub};font-size:10.5px">${n + 1}</span>`, "width:26px;text-align:right")}
         ${sel(
           `<b style="color:${t.text}">${aman(o.nama)}</b>${o.keterangan ? `<div style="color:${t.sub};font-size:10px;font-weight:400">${aman(o.keterangan)}</div>` : ""}`,
-        )}
-        ${sel(bar(o.nilai, t), "width:120px")}
-        ${sel(
+        )}`;
+          const tengah = kolom.length
+            ? kolom
+                .map((kk) => {
+                  const v = o.indikator?.find((x) => x.key === kk.key)?.persen ?? null;
+                  return sel(
+                    v === null
+                      ? `<span style="color:${t.sub}">—</span>`
+                      : `<span style="color:${t.text}">${angka(v, 0)}</span>`,
+                    "text-align:right;white-space:nowrap",
+                  );
+                })
+                .join("")
+            : sel(bar(o.nilai, t), "width:120px");
+          const akhir = `${sel(
           o.nilai === null
             ? `<span style="color:${t.sub}">—</span>`
             : `<b style="color:${t.text};font-size:13.5px">${angka(o.nilai)}</b>`,
           "text-align:right;width:74px;white-space:nowrap",
         )}
-        ${sel(`${lencana(o.nilai, t)}${o.nilai === null && o.alasan ? `<div style="color:${t.sub};font-size:9.5px;margin-top:3px;max-width:190px">${aman(o.alasan)}</div>` : ""}`, "text-align:right;width:200px")}
-      </tr>`,
-        )
+        ${sel(`${lencana(o.nilai, t)}${o.nilai === null && o.alasan ? `<div style="color:${t.sub};font-size:9.5px;margin-top:3px;max-width:170px">${aman(o.alasan)}</div>` : ""}`, "text-align:right;width:160px")}
+      </tr>`;
+          return awal + tengah + akhir;
+        })
         .join("");
       const nilaiK = orang.map((o) => o.nilai).filter((n): n is number => n !== null);
       const rataK = nilaiK.length ? nilaiK.reduce((x, y) => x + y, 0) / nilaiK.length : null;
@@ -193,10 +224,21 @@ export function buatDaftarKpiHtml({
                bukan dari daftar aslinya. Dengan pemilih orang, dua-duanya
                berubah begitu ada nama yang dikeluarkan — dan keterangan yang
                dititipkan pemanggil akan tetap menyebut jumlah lama. -->
-          <span class="grup-catatan">${orang.length} orang · rata-rata <b style="color:${t.text}">${angka(rataK)}</b></span>
+          <span class="grup-catatan">${orang.length} ${aman(satuan)} · rata-rata <b style="color:${t.text}">${angka(rataK)}</b></span>
         </div>
         <table style="width:100%;border-collapse:collapse">
-          <thead><tr>${kepala("", "width:26px")}${kepala("Nama")}${kepala("", "width:120px")}${kepala("Skor", "text-align:right;width:74px")}${kepala("Peringkat", "text-align:right;width:200px")}</tr></thead>
+          <thead><tr>${kepala("", "width:26px")}${kepala("Nama")}${
+            kolom.length
+              ? kolom
+                  .map((kk) =>
+                    kepala(
+                      `${aman(kk.label)}<div style="font-weight:400;text-transform:none;letter-spacing:0;color:${t.sub}">bobot ${kk.bobot}%</div>`,
+                      "text-align:right",
+                    ),
+                  )
+                  .join("")
+              : kepala("", "width:120px")
+          }${kepala("Total", "text-align:right;width:74px")}${kepala("Peringkat", "text-align:right;width:160px")}</tr></thead>
           <tbody>${baris}</tbody>
         </table>
       </div>`;
@@ -241,7 +283,7 @@ export function buatDaftarKpiHtml({
     </div>
     <div class="body">
       <div class="ringkas">
-        ${kotak("Tercantum", String(semua.length), t, "orang")}
+        ${kotak("Tercantum", String(semua.length), t, satuan)}
         ${kotak("Sudah dinilai", String(ada.length), t, ada.length === semua.length ? "lengkap" : `dari ${semua.length}`)}
         ${kotak("Belum dinilai", String(belum), t, belum > 0 ? "bukan nol" : "tidak ada")}
         ${kotak("Rata-rata", angka(rata), t, "yang sudah ada angkanya")}
@@ -281,6 +323,7 @@ export function DialogDaftarKpi({
   kelompok,
   /** Pemilih orang ditampilkan. Matikan untuk daftar yang memang utuh. */
   bisaPilih = true,
+  satuan = "orang",
 }: {
   open: boolean;
   onOpenChange: (v: boolean) => void;
@@ -289,6 +332,7 @@ export function DialogDaftarKpi({
   periode: string;
   kelompok: KelompokKpi[];
   bisaPilih?: boolean;
+  satuan?: string;
 }) {
   const [mode, setMode] = React.useState<Mode | null>(null);
   /**
@@ -339,7 +383,7 @@ export function DialogDaftarKpi({
       return baru;
     });
 
-  const html = mode ? buatDaftarKpiHtml({ judul, subjudul, periode, kelompok: dipakai, mode }) : "";
+  const html = mode ? buatDaftarKpiHtml({ judul, subjudul, periode, kelompok: dipakai, mode, satuan }) : "";
 
   function cetak() {
     if (!html) return;
@@ -353,7 +397,7 @@ export function DialogDaftarKpi({
 
   return (
     <Dialog open={open} onOpenChange={ubahBuka}>
-      <DialogContent title={judul} description={`${subjudul} · ${labelPeriode(periode)}`} className="max-w-5xl">
+      <DialogContent title={judul} description={`${subjudul} · ${labelPeriode(periode)}`} className="max-w-6xl">
         {!mode ? (
           <div className="p-6">
             <p className="mb-4 text-sm text-muted-foreground">Pilih mode tampilan laporan:</p>
@@ -386,7 +430,7 @@ export function DialogDaftarKpi({
               <div className="flex items-center gap-2">
                 {bisaPilih && (
                   <span className="text-[12px] tabular-nums text-muted-foreground">
-                    {ikut} dari {total} orang
+                    {ikut} dari {total} {satuan}
                   </span>
                 )}
                 <Button onClick={cetak} disabled={ikut === 0}>

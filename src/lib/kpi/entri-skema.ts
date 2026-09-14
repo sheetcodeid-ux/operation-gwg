@@ -134,39 +134,7 @@ export const KATEGORI_OS_ISSUE = [
   "Lainnya",
 ] as const;
 
-/**
- * Jenis masalah yang ditangani supervisor outlet.
- *
- * Ditutup, bukan ketikan bebas: kategori yang diketik sendiri melahirkan
- * "Mesin rusak", "mesin rusak", dan "Mesin Rusak" sebagai tiga kelompok
- * berbeda, dan sebarannya berhenti bisa dibaca justru ketika mulai banyak.
- */
-export const KATEGORI_PROBLEM_SOLVER = [
-  "Operasional Outlet",
-  "Peralatan & Mesin",
-  "Stok & Bahan Baku",
-  "Karyawan",
-  "Komplain Pelanggan",
-  "Kebersihan & Fasilitas",
-  "Sistem & Kasir",
-  "Lainnya",
-] as const;
-
 export const SKEMA_ENTRI: Partial<Record<JenisEntri, SkemaEntri>> = {
-  /*
-   * Problem Solver Supervisor — satu baris satu masalah yang diselesaikan.
-   *
-   * TANPA pilihan "Semua Outlet": supervisor memegang satu outlet, dan baris
-   * yang berlaku untuk seluruh cabang tidak punya arti di sini. Keterangannya
-   * wajib dibaca — angka "10" tanpa daftar masalahnya tidak bisa diperiksa
-   * siapa pun, dan indikator yang tidak bisa diperiksa adalah indikator yang
-   * bisa diisi sesuka hati.
-   */
-  problem_solver_sup: {
-    kategori: KATEGORI_PROBLEM_SOLVER,
-    labelKategori: "Jenis Masalah",
-    keterangan: "Masalah yang diselesaikan",
-  },
   pos_masterdata: {
     kategori: KATEGORI_MENU_PROMO,
     semuaOutlet: true,

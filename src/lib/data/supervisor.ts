@@ -3,105 +3,149 @@ import "server-only";
 import { laporanKpi, picDinamis } from "./kpi";
 import { getOutlets, getUsers } from "./store";
 import { outletKpk, type KodePosisi } from "@/lib/kpi/struktur";
+import { indikatorPosisi } from "@/lib/kpi/indikator";
 import { peringkat, type LabelPeringkat } from "@/lib/kpi/manajemen";
 
 /**
- * Rapor SELURUH supervisor dalam satu bulan.
+ * Rapor KPI SELURUH OUTLET yang disupervisi, dalam satu bulan.
  *
- * Halaman ini menjawab pertanyaan yang tidak bisa dijawab rapor per orang:
- * siapa yang tertinggal di antara lima puluh tiga orang. Dan ia juga yang jadi
- * dasar PDF pencairan — yang membagikan perlu satu daftar bernama, bukan lima
- * puluh tiga berkas yang harus dibuka satu per satu.
+ * YANG DINILAI OUTLETNYA, bukan supervisornya. Seluruh angka yang masuk
+ * hitungan — penjualan, laba bersih, komplain, pembelian — melekat pada
+ * outlet; supervisor yang memegangnya bisa berganti di tengah bulan. Rapor
+ * bernama orang akan terbelah dua tanpa ada yang bisa menjumlahkannya kembali,
+ * sementara rapor bernama outlet tetap satu dan utuh. Nama supervisornya ikut
+ * sebagai keterangan, bukan sebagai kunci.
+ *
+ * HANYA OUTLET YANG SUDAH BERJALAN DI ATAS TIGA BULAN. Aturan itu sudah
+ * berlaku di dalam mesin hitungnya; di sini ia dipakai juga untuk MENYARING
+ * daftarnya, supaya outlet yang memang belum waktunya dinilai tidak berjajar
+ * dengan angka kosong di antara yang sudah.
  *
  * DIHITUNG DENGAN MESIN YANG SAMA, `laporanKpi`, bukan rumus singkat yang
- * ditulis ulang di sini. Angka di daftar ini dan angka di halaman rincian
- * orangnya harus berasal dari satu perhitungan; kalau ditulis dua kali, suatu
- * hari yang satu diperbaiki dan yang lain tidak, lalu tidak ada cara
- * memutuskan mana yang benar saat keduanya dipertanyakan.
- *
- * Yang membuatnya tetap cepat bukan jalan pintas melainkan memo per-permintaan
- * di pembaca bulanannya — lihat `netBulananPerCabang`. Tanpa itu daftar ini
- * membaca empat bulan yang sama sebanyak lima puluh tiga kali.
+ * ditulis ulang di sini — angka di daftar ini dan di halaman rincian outletnya
+ * harus berasal dari satu perhitungan.
  */
 
+/** Satu indikator dalam rapor outlet — dipakai kolom PDF dan layar. */
+export interface IndikatorOutlet {
+  key: string;
+  label: string;
+  bobot: number;
+  /** Capaian indikator itu, 0–100+. Null = belum bisa dihitung. */
+  persen: number | null;
+}
+
 export interface BarisSupervisor {
-  userId: string;
+  outletId: string;
   nama: string;
-  /** Posisi yang menilainya — penentu indikator mana yang dipakai. */
+  /** Supervisor yang memegangnya — keterangan, bukan kunci. */
+  supervisor: string;
   posisi: KodePosisi;
   jenis: "Umum" | "KPK";
-  /** Outlet yang dipegang. Hampir selalu satu. */
-  outlet: string[];
   /** 0–100. Null = belum ada satu pun angka yang bisa dihitung bulan itu. */
   nilai: number | null;
   peringkat: LabelPeringkat | null;
-  /** Kenapa nilainya kosong — dibawa apa adanya dari laporan. */
+  indikator: IndikatorOutlet[];
   alasan: string | null;
 }
 
 export interface RekapSupervisor {
   periode: string;
   baris: BarisSupervisor[];
-  /** Rata-rata yang ADA nilainya. Null bila belum satu pun terisi. */
   rata: number | null;
-  /** Berapa yang belum bisa dinilai — dipakai memberi tahu, bukan disembunyikan. */
+  /** Sudah lolos tiga bulan tapi angkanya belum lengkap. */
   belumDinilai: number;
+  /** Outlet yang DIKELUARKAN karena belum genap tiga bulan berjalan. */
+  belumTigaBulan: string[];
+  /** Label indikator tiap jenis — penyusun kolom tabel dan PDF. */
+  kolom: Record<"Umum" | "KPK", IndikatorOutlet[]>;
 }
 
-/** Nama outlet tiap supervisor, untuk keterangan di bawah namanya. */
-function outletMilik(userId: string): string[] {
-  const nama = new Map(getOutlets().map((o) => [o.id, o.name]));
-  const u = getUsers().find((x) => x.id === userId);
-  return (u?.outletIds ?? []).map((id) => nama.get(id) ?? "").filter(Boolean);
+/** Siapa supervisor tiap outlet. Kosong berarti belum ada yang memegang. */
+function supervisorOutlet(): Map<string, string> {
+  const peta = new Map<string, string>();
+  for (const u of getUsers()) {
+    if (u.role !== "supervisor" || u.active === false) continue;
+    for (const id of u.outletIds ?? []) peta.set(id, u.name);
+  }
+  return peta;
 }
 
-export async function rekapSupervisor(periode: string, hanyaUserId?: string): Promise<RekapSupervisor> {
-  const daftar: { userId: string; nama: string; posisi: KodePosisi }[] = [];
+const kerangka = (posisi: KodePosisi): IndikatorOutlet[] =>
+  indikatorPosisi(posisi).map((i) => ({ key: i.key, label: i.label, bobot: i.bobot, persen: null }));
+
+export async function rekapSupervisor(periode: string, hanyaOutlet?: readonly string[]): Promise<RekapSupervisor> {
+  const pemegang = supervisorOutlet();
+  const daftar: { outletId: string; nama: string; posisi: KodePosisi }[] = [];
   for (const posisi of ["supervisor_umum", "supervisor_kpk"] as const) {
-    for (const p of picDinamis(posisi)) daftar.push({ userId: p.value, nama: p.label, posisi });
+    for (const p of picDinamis(posisi)) daftar.push({ outletId: p.value, nama: p.label, posisi });
   }
 
-  // Supervisor hanya melihat barisnya sendiri. Disaring DI SINI, bukan di
-  // komponennya: baris yang disaring di layar tetap terkirim ke peramban, dan
-  // siapa pun bisa membacanya dari sana.
-  const dipakai = hanyaUserId ? daftar.filter((d) => d.userId === hanyaUserId) : daftar;
+  // Coordinator Area hanya melihat outletnya sendiri, supervisor hanya
+  // outletnya. Disaring DI SINI, bukan di komponennya: baris yang disaring di
+  // layar tetap terkirim ke peramban dan bisa dibaca dari sana.
+  const boleh = hanyaOutlet ? new Set(hanyaOutlet) : null;
+  const dipakai = boleh ? daftar.filter((d) => boleh.has(d.outletId)) : daftar;
 
-  const baris = await Promise.all(
-    dipakai.map(async (d): Promise<BarisSupervisor> => {
-      const outlet = outletMilik(d.userId);
-      const l = await laporanKpi(d.posisi, periode, d.userId).catch(() => null);
+  const belumTigaBulan: string[] = [];
+  const hasil = await Promise.all(
+    dipakai.map(async (d) => {
+      const l = await laporanKpi(d.posisi, periode, d.outletId).catch(() => null);
+      // Outlet yang tidak lolos aturan tiga bulan sama sekali tidak punya
+      // outlet yang dinilai — itu penandanya, dan ia dikeluarkan dari daftar.
+      const lolosTiga = (l?.ca?.outlet.length ?? 0) > 0;
+      if (!lolosTiga) {
+        belumTigaBulan.push(d.nama);
+        return null;
+      }
       const nilai = l?.ringkas.skorSetara ?? null;
-      return {
-        userId: d.userId,
+      const baris: BarisSupervisor = {
+        outletId: d.outletId,
         nama: d.nama,
+        supervisor: pemegang.get(d.outletId) ?? "belum ada supervisor",
         posisi: d.posisi,
         jenis: d.posisi === "supervisor_kpk" ? "KPK" : "Umum",
-        outlet,
         nilai,
         peringkat: nilai === null ? null : peringkat(nilai),
-        // Alasan dari baris pertama yang kosong — hampir selalu sama untuk
-        // seluruh indikator orang itu (outlet belum tiga bulan, dan seterusnya).
+        indikator: (l?.baris ?? []).map((b) => ({
+          key: b.key,
+          label: b.label,
+          bobot: b.bobot,
+          persen: b.persentase,
+        })),
         alasan: nilai !== null ? null : (l?.baris.find((b) => b.alasan)?.alasan ?? null),
       };
+      return baris;
     }),
   );
 
+  const baris = hasil.filter((b): b is BarisSupervisor => b !== null);
   baris.sort((a, b) => (b.nilai ?? -1) - (a.nilai ?? -1) || a.nama.localeCompare(b.nama, "id"));
   const ada = baris.map((b) => b.nilai).filter((n): n is number => n !== null);
+
   return {
     periode,
     baris,
     rata: ada.length ? ada.reduce((x, y) => x + y, 0) / ada.length : null,
     belumDinilai: baris.length - ada.length,
+    belumTigaBulan: belumTigaBulan.sort((a, b) => a.localeCompare(b, "id")),
+    kolom: { Umum: kerangka("supervisor_umum"), KPK: kerangka("supervisor_kpk") },
   };
 }
 
-/** Jenis supervisor seseorang, dari outlet yang dipegangnya. Null = bukan supervisor. */
-export function jenisSupervisor(userId: string): KodePosisi | null {
-  const u = getUsers().find((x) => x.id === userId);
-  if (!u || u.role !== "supervisor") return null;
-  const nama = new Map(getOutlets().map((o) => [o.id, o.name]));
-  const punya = u.outletIds ?? [];
-  if (punya.length === 0) return null;
-  return punya.some((id) => outletKpk(nama.get(id) ?? "")) ? "supervisor_kpk" : "supervisor_umum";
+/** Outlet mana yang boleh dilihat seseorang. Null = semuanya. */
+export function outletTerlihat(user: { role: string; id: string; outletIds?: string[] }): readonly string[] | null {
+  if (user.role === "supervisor" || user.role === "area_coordinator") return user.outletIds ?? [];
+  return null;
+}
+
+/** Jenis penilaian sebuah outlet, dari namanya. */
+export const posisiOutlet = (nama: string): KodePosisi => (outletKpk(nama) ? "supervisor_kpk" : "supervisor_umum");
+
+/** Seluruh outlet aktif beserta jenisnya — pengisi tabel Problem Solver. */
+export function daftarOutletSupervisor(): { id: string; nama: string; kode: string; jenis: "Umum" | "KPK" }[] {
+  return getOutlets()
+    .filter((o) => o.active)
+    .map((o) => ({ id: o.id, nama: o.name, kode: o.code, jenis: outletKpk(o.name) ? ("KPK" as const) : ("Umum" as const) }))
+    .sort((a, b) => a.nama.localeCompare(b.nama, "id"));
 }

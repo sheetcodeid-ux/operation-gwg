@@ -72,8 +72,7 @@ export type JenisEntri =
   | "os_masterdata"
   | "os_menu"
   | "os_issue"
-  | "os_improve"
-  | "problem_solver_sup";
+  | "os_improve";
 
 /** Perhitungan otomatis dari modul/data lain. */
 export type KodeOtomatis =
@@ -92,7 +91,8 @@ export type KodeOtomatis =
   | "komplain_area"
   | "net_profit_area"
   | "hpp_area"
-  | "hpp_kpk";
+  | "hpp_kpk"
+  | "problem_solver_outlet";
 
 /** Dari mana actual-nya datang. */
 export type SumberActual =
@@ -603,12 +603,19 @@ const supervisorDasar: Indikator[] = [
 const supervisorUmum: Indikator[] = [
   ...supervisorDasar,
   {
-    key: "problem_solver_sup",
+    key: "problem_solver_outlet",
     label: "Problem Solver",
     bobot: 10,
     target: { jenis: "tetap", nilai: 10 },
-    actual: { sumber: "entri", entri: "problem_solver_sup" },
-    penjelasan: "Dicatat Head Coordinator Area: satu baris satu masalah yang diselesaikan. Target 10 per bulan.",
+    actual: { sumber: "otomatis", kode: "problem_solver_outlet" },
+    // SATU ANGKA PER OUTLET, bukan daftar catatan kegiatan.
+    //
+    // Dulu berbentuk catatan: satu baris satu masalah. Bentuk itu benar untuk
+    // indikator yang diisi orang yang dinilai, tapi ini diisi Head Coordinator
+    // Area untuk PULUHAN outlet sekaligus — dan mencatat satu per satu untuk
+    // lima puluh outlet berarti indikator ini tidak akan pernah terisi.
+    // Angkanya diunggah sekali lewat template.
+    penjelasan: "Diisi Head Coordinator Area per outlet — satu angka sebulan, bisa diunggah massal lewat template. Target 10.",
   },
 ];
 
