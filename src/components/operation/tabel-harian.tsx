@@ -502,10 +502,10 @@ function AvatarMerek({
           dipilih === null ? TERPILIH : TIDAK_TERPILIH,
         )}
       >
-        {/* "Semua merek", bukan "Semua": saringan status di sebelahnya juga
-            berawalan "Semua", dan dua pil sebunyi bersebelahan tidak memberi
-            tahu yang mana menyaring apa. */}
-        Semua merek
+        {/* "Semua" saja — pilihan tanpa saringan diberi nama yang sama di
+            seluruh bilah ini, jadi yang membacanya tidak perlu menghafal kata
+            berbeda untuk maksud yang sama di tiap kendali. */}
+        Semua
       </button>
       {kartu.map((k) => {
         const aktif = dipilih === k.merek;
@@ -956,10 +956,8 @@ export function TabelHarian({
             <Combobox
               value={areaTerpilih ?? ""}
               onChange={(v) => pindah({ area: v })}
-              // Isinya nama orang — Deo, Wika, Roby — bukan nama wilayah, jadi
-              // "Semua area" menjanjikan daftar yang berbeda dari yang muncul.
               options={[
-                { value: "", label: "Semua coordinator" },
+                { value: "", label: "Semua" },
                 ...area.map((a) => ({ value: a.value, label: `${a.label} · ${a.outlet} outlet` })),
               ]}
               searchPlaceholder="Cari coordinator…"
