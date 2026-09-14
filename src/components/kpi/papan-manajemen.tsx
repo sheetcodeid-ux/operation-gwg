@@ -541,10 +541,6 @@ export function PapanManajemen({ detail, bolehAtur }: { detail: DetailManajemen;
       skor.d.departemen
         .map((d) => ({
           nama: d.nama,
-          catatan:
-            d.rata === null
-              ? "belum ada angka"
-              : `rata-rata ${formatNumber(d.rata, { maximumFractionDigits: 1 })}%`,
           orang: d.posisi.flatMap((pos) =>
             pos.orang.map((o) => ({
               nama: o.nama,

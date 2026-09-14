@@ -57,7 +57,6 @@ export function PapanSupervisor({
     () =>
       (["Umum", "KPK"] as const).map((j) => ({
         nama: `Supervisor ${j}`,
-        catatan: `${rekap.baris.filter((b) => b.jenis === j).length} orang`,
         orang: rekap.baris
           .filter((b) => b.jenis === j)
           .map((b) => ({

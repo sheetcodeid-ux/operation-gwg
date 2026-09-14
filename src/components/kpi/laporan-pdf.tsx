@@ -418,7 +418,7 @@ export function buatLaporanHtml({
 
 /* ──────────────────────────────── dialognya ──────────────────────────────── */
 
-function ChipMode({ aktif, onClick, ikon, label }: { aktif: boolean; onClick: () => void; ikon: React.ReactNode; label: string }) {
+export function ChipMode({ aktif, onClick, ikon, label }: { aktif: boolean; onClick: () => void; ikon: React.ReactNode; label: string }) {
   return (
     <button
       type="button"
