@@ -102,10 +102,10 @@ describe("rem ESB", () => {
     // menyerah, karena menyerah berarti jendela itu pulang dengan tangan
     // kosong.
     esb.gagalSampai = 30;
-    const r = await tarikPasangan(tugas(60), { budgetMs: 10_000, konkuren: 6 });
+    const r = await tarikPasangan(tugas(60), { budgetMs: 2_500, konkuren: 6 });
     expect(r.konkuren).toBeLessThan(6);
     expect(r.gagal).toBeGreaterThan(0);
-  });
+  }, 15_000);
 
   it("keadaan terburuknya sama dengan cara lama, bukan lebih buruk", async () => {
     // Serendah-rendahnya tetap satu pekerja yang jalan, jadi penarikan tidak
@@ -114,6 +114,25 @@ describe("rem ESB", () => {
     const r = await tarikPasangan(tugas(300), { budgetMs: 3_000, konkuren: 6 });
     expect(r.konkuren).toBe(1);
     expect(r.error).toBeTruthy();
+  }, 25_000);
+
+  it("TIDAK mati di rem pertama — sisa jendelanya tetap dipakai", async () => {
+    // Inilah yang dulu terjadi di produksi: rem datang di detik ke-12, lalu
+    // tiga puluh detik sisanya terbuang tanpa satu baris pun bertambah.
+    // Sesudah remnya lewat, penarikan harus jalan lagi sendiri.
+    esb.gagalSampai = 14; // 14 panggilan pertama ditolak, sesudahnya normal
+    const r = await tarikPasangan(tugas(120), { budgetMs: 12_000, konkuren: 4 });
+    expect(r.gagal).toBeGreaterThan(0);
+    expect(r.terisi).toBeGreaterThan(50);
+    expect(r.jeda).toBeGreaterThan(0);
+  }, 25_000);
+
+  it("mencatat berapa kali ESB dipanggil, bukan cuma yang berhasil", async () => {
+    // Bentuk rem ESB hanya bisa dibaca dari jumlah panggilan; tanpa angka ini
+    // letak batasnya cuma bisa ditebak.
+    const r = await tarikPasangan(tugas(20), { budgetMs: 10_000, konkuren: 4 });
+    expect(r.panggilan).toBe(20);
+    expect(r.konkurenAwal).toBe(4);
   });
 });
 

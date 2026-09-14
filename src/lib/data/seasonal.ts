@@ -206,15 +206,29 @@ export interface HasilTarik {
   gagal: number;
   /** Berapa banyak panggilan yang jalan berbarengan di akhir jalan ini. */
   konkuren: number;
+  /** Berapa yang dipakai saat mulai — pembandingnya, supaya terlihat apakah
+   *  ESB memaksa turun. */
+  konkurenAwal: number;
+  /** Berapa kali ESB dipanggil, berhasil maupun tidak. Angka inilah yang
+   *  menentukan kapan remnya datang, jadi tanpa mencatatnya bentuk remnya cuma
+   *  bisa ditebak. */
+  panggilan: number;
+  /** Berapa kali harus menunggu rem lepas. */
+  jeda: number;
   error?: string;
 }
 
 /** Berapa panggilan ESB yang boleh jalan berbarengan saat mulai. */
-export const KONKUREN_AWAL = 6;
+export const KONKUREN_AWAL = 4;
 /** Batas atas yang tidak pernah dilewati, berapa pun yang diminta pemanggil. */
 export const KONKUREN_MAKS = 10;
 /** Berapa baris dikumpulkan sebelum ditulis sekaligus ke basis data. */
 const BORONGAN = 25;
+/** Jeda terpanjang saat menunggu rem ESB lepas. */
+const JEDA_MAKS_MS = 8_000;
+/** Kegagalan beruntun pada kecepatan terendah yang berarti ESB benar-benar
+ *  sedang menutup pintu — bukan sekadar mengerem. */
+const BATAS_MENYERAH = 12;
 
 /**
  * TARIK BANYAK PASANGAN SEKALIGUS, dengan beberapa panggilan berjalan bersamaan.
@@ -234,17 +248,23 @@ const BORONGAN = 25;
  * Yang tetap harus dijaga ada dua, dan keduanya dijaga di sini:
  *  - SESI. ESB satu sesi per akun, jadi login dibuat tunggal di klien ESB;
  *    tanpa itu rombongan pertama saling mematikan sesi masing-masing.
- *  - REM ESB. Sesudah puluhan permintaan beruntun ESB berhenti menjawab
- *    sebentar. Maka jumlah panggilan berbarengan MENGECIL SENDIRI setiap kali
- *    ada kegagalan beruntun, sampai serendah satu — jadi keadaan terburuknya
- *    sama dengan cara lama, bukan lebih buruk.
+ *  - REM ESB. Sesudah beberapa puluh permintaan, ESB berhenti menjawab data dan
+ *    membalas halaman HTML. TERUKUR dari catatan cron: penarikan bulanan yang
+ *    masih satu-satu pun kena di tarikan ke-49 dan ke-39. Jadi yang dibatasi
+ *    JUMLAH PERMINTAAN, bukan kebersamaannya — dan menyerah saat kena rem
+ *    berarti membuang sisa jendela waktunya percuma.
+ *
+ * Maka saat kena rem, yang dilakukan BUKAN berhenti: jumlah panggilan
+ * berbarengan langsung turun ke satu, ditunggu sebentar, lalu diteruskan. Satu
+ * jendela dengan demikian bisa melewati beberapa kali rem, bukan mati di rem
+ * yang pertama.
  */
 export async function tarikPasangan(
   tugas: readonly TugasTarik[],
   opts: { budgetMs: number; konkuren?: number },
 ): Promise<HasilTarik> {
   if (!dbEnabled || !esbConfigured() || tugas.length === 0) {
-    return { terisi: 0, gagal: 0, konkuren: 0 };
+    return { terisi: 0, gagal: 0, konkuren: 0, konkurenAwal: 0, panggilan: 0, jeda: 0 };
   }
   const mulai = Date.now();
   const habis = () => Date.now() - mulai > opts.budgetMs;
@@ -254,7 +274,10 @@ export async function tarikPasangan(
   let terisi = 0;
   let gagal = 0;
   let gagalBeruntun = 0;
-  let hidup = Math.max(1, Math.min(KONKUREN_MAKS, opts.konkuren ?? KONKUREN_AWAL));
+  let panggilan = 0;
+  let jeda = 0;
+  const konkurenAwal = Math.max(1, Math.min(KONKUREN_MAKS, opts.konkuren ?? KONKUREN_AWAL));
+  let hidup = konkurenAwal;
   let berhenti = false;
   let error: string | undefined;
 
@@ -282,6 +305,7 @@ export async function tarikPasangan(
       if (berhenti || habis() || berikut >= tugas.length) break;
       const t = tugas[berikut];
       berikut += 1;
+      panggilan += 1;
       try {
         const sales = await esbFetchSales(t.day, t.day, t.branch);
         gagalBeruntun = 0;
@@ -295,16 +319,40 @@ export async function tarikPasangan(
         gagal += 1;
         gagalBeruntun += 1;
         error = e instanceof Error ? e.message : "Gagal memuat data ESB.";
-        // Rem ESB: mengecil dulu, menyerah belakangan. Yang pertama dikorbankan
-        // adalah jumlah panggilan berbarengan — sesudah itu jedanya memanjang.
-        if (gagalBeruntun >= 3 && hidup > 1) { hidup -= 1; break; }
-        if (gagalBeruntun >= 8) { berhenti = true; break; }
-        await new Promise((r) => setTimeout(r, Math.min(gagalBeruntun, 4) * 750));
+
+        // Hari yang gagal SENGAJA TIDAK diulang di jendela ini. Lubangnya akan
+        // ditemukan lagi oleh jendela berikutnya, jadi tidak ada yang hilang —
+        // sedangkan mengulanginya di sini berisiko berputar selamanya pada hari
+        // yang memang tidak bisa ditarik.
+
+        // Pekerja yang berlebih mundur dulu — tapi yang terakhir TIDAK pernah
+        // mundur, supaya jendelanya tidak mati di rem yang pertama.
+        if (gagalBeruntun >= 3 && hidup > 1) {
+          hidup -= 1;
+          gagalBeruntun = 0; // beri jatah baru pada kecepatan yang lebih rendah
+          break;
+        }
+        if (gagalBeruntun >= BATAS_MENYERAH) { berhenti = true; break; }
+
+        // Jedanya memanjang, dan di sinilah rem ESB benar-benar ditunggu.
+        // Anggaran waktu tetap yang menentukan: percuma tidur melewati batas.
+        jeda += 1;
+        const tidur = Math.min(gagalBeruntun * 1_500, JEDA_MAKS_MS);
+        const sisa = opts.budgetMs - (Date.now() - mulai);
+        if (sisa <= tidur + 1_000) break;
+        await new Promise((r) => setTimeout(r, tidur));
       }
     }
   };
 
+  // Pekerja yang mundur karena rem tidak boleh meninggalkan antreannya begitu
+  // saja: selama masih ada waktu dan masih ada yang kurang, yang tersisa
+  // diteruskan. Tanpa putaran ini, satu rem di detik ke-12 menyisakan tiga
+  // puluh detik yang tidak dipakai — persis yang terjadi pada jalan pertama.
   await Promise.all(Array.from({ length: hidup }, () => pekerja()));
+  while (!berhenti && !habis() && berikut < tugas.length) {
+    await Promise.all(Array.from({ length: hidup }, () => pekerja()));
+  }
   await tuang();
-  return { terisi, gagal, konkuren: hidup, error };
+  return { terisi, gagal, konkuren: hidup, konkurenAwal, panggilan, jeda, error };
 }

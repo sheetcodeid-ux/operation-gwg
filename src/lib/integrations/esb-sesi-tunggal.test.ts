@@ -59,6 +59,15 @@ describe("batas yang tetap dijaga", () => {
 
   it("jumlah panggilan berbarengan berbatas, dan mengecil saat ESB mengerem", () => {
     expect(seasonal).toContain("export const KONKUREN_MAKS = 10;");
-    expect(seasonal).toContain("if (gagalBeruntun >= 3 && hidup > 1) { hidup -= 1; break; }");
+    expect(seasonal).toContain("if (gagalBeruntun >= 3 && hidup > 1) {");
+    expect(seasonal).toContain("hidup -= 1;");
+  });
+
+  it("kena rem BUKAN berarti berhenti — jendelanya diteruskan", () => {
+    // Terukur dari catatan cron: rem datang di tarikan ke-26 sampai ke-49,
+    // pada kode yang satu-satu maupun yang berbarengan. Menyerah di situ
+    // membuang sisa jendelanya percuma.
+    expect(seasonal).toContain("while (!berhenti && !habis() && berikut < tugas.length)");
+    expect(seasonal).toContain("const BATAS_MENYERAH = 12;");
   });
 });
