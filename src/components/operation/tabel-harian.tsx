@@ -2,9 +2,8 @@
 
 import * as React from "react";
 import { useRouter } from "next/navigation";
-import { ChevronLeft, ChevronRight, Info, Target, TrendingDown, TrendingUp } from "lucide-react";
+import { ChevronDown, ChevronLeft, ChevronRight, ChevronUp, Flame, TrendingDown, TrendingUp } from "lucide-react";
 import { Combobox } from "@/components/ui/combobox";
-import { Popover } from "@/components/ui/popover";
 import { WORK_BRANDS } from "@/lib/constants";
 import type { DetailHarian, PilihanArea } from "@/lib/data/daily-outlet";
 import { merekOutlet } from "@/lib/kpi/merek";
@@ -39,6 +38,12 @@ const labelBulan = (periode: string) => {
   return `${BULAN[bl - 1]} ${th}`;
 };
 
+/** Nama bulan pendek — untuk layar yang tidak muat nama panjangnya. */
+const labelBulanPendek = (periode: string) => {
+  const [th, bl] = periode.split("-").map(Number);
+  return `${BULAN[bl - 1].slice(0, 3)} ${String(th).slice(2)}`;
+};
+
 const geserBulan = (periode: string, arah: number) => {
   const [th, bl] = periode.split("-").map(Number);
   const t = new Date(Date.UTC(th, bl - 1 + arah, 1));
@@ -53,13 +58,33 @@ const geserBulan = (periode: string, arah: number) => {
  * dari angka di bawah ini. Selisihnya jadi celah, dan di celah itu tanggal yang
  * sedang bergeser terlihat menyembul di antara kolom yang seharusnya diam.
  */
-const L_NO = 40;
-const L_NAMA = 156;
-const L_BULAN = 158;
-const L_KURANG = 156;
+const LEBAR = {
+  lega: { no: 40, nama: 156, bulan: 158, kurang: 156 },
+  // Di layar sempit tepi beku memakan hampir seluruh lebar, dan yang tersisa
+  // untuk tanggal tinggal dua kolom. Kolom Kurang ditarik masuk ke sel Bulan
+  // Ini — angkanya tetap terbaca, tempatnya saja yang berpindah.
+  sempit: { no: 30, nama: 124, bulan: 126, kurang: 0 },
+} as const;
 
-/** Lebar seluruh tepi kiri yang membeku. */
-const L_KIRI = L_NO + L_NAMA + L_BULAN;
+/**
+ * Apakah layarnya sempit.
+ *
+ * `useSyncExternalStore`, bukan efek yang memanggil setState: efek semacam itu
+ * berjalan sesudah render, jadi tabelnya sempat digambar dengan lebar yang
+ * salah lebih dulu — dan pada tabel selebar ini kesalahan itu terlihat sebagai
+ * kolom yang melompat begitu halaman selesai dimuat.
+ */
+function useSempit(): boolean {
+  return React.useSyncExternalStore(
+    (ubah) => {
+      const m = window.matchMedia("(max-width: 900px)");
+      m.addEventListener("change", ubah);
+      return () => m.removeEventListener("change", ubah);
+    },
+    () => window.matchMedia("(max-width: 900px)").matches,
+    () => false,
+  );
+}
 
 /** Lebar yang tidak bisa ditawar isinya. */
 const kunci = (w: number, kiri?: number) => ({
@@ -70,23 +95,6 @@ const kunci = (w: number, kiri?: number) => ({
 });
 
 /* ───────────────────────────── potongan kecil ───────────────────────────── */
-
-/**
- * Keterangan yang hanya muncul saat ditunjuk.
- *
- * Kalimat penjelas yang dicetak permanen di tajuk kolom memakan dua baris
- * tinggi untuk seluruh tabel — dibaca sekali, lalu menghalangi selamanya.
- */
-function Info1({ teks }: { teks: string }) {
-  return (
-    <span className="group/i relative inline-flex align-middle">
-      <Info className="size-3.5 cursor-help text-muted-foreground/70" />
-      <span className="pointer-events-none absolute right-0 top-5 z-50 hidden w-56 rounded-lg border border-border bg-popover p-2 text-left text-[11px] font-normal normal-case leading-relaxed tracking-normal text-popover-foreground shadow-lg group-hover/i:block">
-        {teks}
-      </span>
-    </span>
-  );
-}
 
 function Ubah({ nilai, besar = false }: { nilai: number | null; besar?: boolean }) {
   if (nilai === null) return null;
@@ -121,6 +129,33 @@ function NamaBerjalan({ nama }: { nama: string }) {
   return (
     <span className={cn("block overflow-hidden", panjang && "nama-panjang")} title={nama}>
       <span className="block whitespace-nowrap text-[12.5px] font-medium text-foreground">{nama}</span>
+    </span>
+  );
+}
+
+/**
+ * DERET HARI TERCAPAI — api, dan angkanya.
+ *
+ * Yang dijawabnya bukan "berapa hari tercapai bulan ini" (itu sudah ada di
+ * kolom Kurang), melainkan "apakah outlet ini SEDANG jalan". Sepuluh hari
+ * tercapai yang tersebar sepanjang bulan dan lima hari berturut-turut sampai
+ * kemarin adalah dua keadaan yang berbeda jauh, dan cuma yang kedua yang
+ * berarti besok kemungkinan besar tercapai juga.
+ *
+ * Apinya membesar mengikuti deretnya: tiga hari sudah pola, tujuh hari sudah
+ * kebiasaan. Yang deretnya putus tidak diberi apa-apa — tanda "0 hari" hanya
+ * ramai tanpa memberi tahu apa pun.
+ */
+function Api({ deret }: { deret: number }) {
+  if (deret <= 0) return null;
+  const nada = deret >= 7 ? "text-rose-500" : deret >= 3 ? "text-amber-500" : "text-amber-400";
+  return (
+    <span
+      className={cn("inline-flex shrink-0 items-center gap-0.5 font-semibold tabular-nums", nada)}
+      title={`${deret} hari berturut-turut mencapai target harian`}
+    >
+      <Flame className={cn("size-3", deret >= 7 && "fill-rose-500/20")} />
+      {deret}×
     </span>
   );
 }
@@ -166,8 +201,18 @@ function SelHari({
         {formatIDRShort(nilai)}
       </span>
       {mode === "target" ? (
-        <span className={cn("block text-[10.5px] font-semibold tabular-nums", nadaCapaian(capaian))}>
-          {capaian === null ? "—" : `${formatNumber(capaian, { maximumFractionDigits: 0 })}%`}
+        // Angkanya saja sudah berwarna, TAPI warna bukan satu-satunya
+        // penanda: yang buta warna membaca tabel yang sama, dan panahnya
+        // menyebut arah tanpa bergantung pada merah-hijau.
+        <span className={cn("flex items-center justify-end gap-0.5 text-[10.5px] font-semibold tabular-nums", nadaCapaian(capaian))}>
+          {capaian === null ? (
+            "—"
+          ) : (
+            <>
+              {capaian >= BATAS_TERCAPAI ? <ChevronUp className="size-3" /> : <ChevronDown className="size-3" />}
+              {formatNumber(capaian, { maximumFractionDigits: 0 })}%
+            </>
+          )}
         </span>
       ) : (
         <Ubah nilai={ubah} />
@@ -243,6 +288,61 @@ function Sekelumit({ nilai, naik }: { nilai: (number | null)[]; naik: boolean })
   );
 }
 
+/**
+ * Bar capaian — dengan PENANDA SERATUS PERSEN yang tetap di tempatnya.
+ *
+ * Bar yang penuh di ujung kanan berarti "seratus persen" hanya kalau
+ * seratus persen memang ujungnya. Begitu ada merek yang melampaui target,
+ * bar yang dipotong di 100% membuat yang 101% dan yang 180% terlihat sama
+ * persis. Di sini skalanya sampai 120%, garis putus-putus menandai target,
+ * dan yang melewatinya benar-benar terlihat melewatinya.
+ */
+function BarCapaian({ capaian, target }: { capaian: number | null; target: number | null }) {
+  const SKALA = 120;
+  const c = capaian ?? 0;
+  const lampaui = c >= BATAS_TERCAPAI;
+  return (
+    <div className="mt-3">
+      <div className="flex items-baseline justify-between">
+        <span className="text-[11px] uppercase tracking-wide text-muted-foreground">Capaian target</span>
+        <span
+          className={cn(
+            "text-[13px] font-bold tabular-nums",
+            capaian === null
+              ? "text-muted-foreground"
+              : lampaui
+                ? "text-emerald-600 dark:text-emerald-400"
+                : "text-foreground",
+          )}
+        >
+          {capaian === null ? "belum bertarget" : `${formatNumber(capaian, { maximumFractionDigits: 0 })}%`}
+        </span>
+      </div>
+      <div className="relative mt-1.5 h-2 overflow-hidden rounded-full bg-muted">
+        <div
+          className={cn(
+            "h-full rounded-full transition-[width] duration-500",
+            lampaui
+              ? "bg-gradient-to-r from-emerald-400 to-emerald-600"
+              : c >= 80
+                ? "bg-gradient-to-r from-amber-400 to-amber-500"
+                : "bg-gradient-to-r from-brand-400 to-brand-600",
+          )}
+          style={{ width: `${Math.min(100, (Math.max(0, c) / SKALA) * 100)}%` }}
+        />
+        {/* Penanda target — tetap di 100% berapa pun capaiannya. */}
+        <span
+          className="absolute inset-y-0 w-px bg-foreground/25"
+          style={{ left: `${(BATAS_TERCAPAI / SKALA) * 100}%` }}
+        />
+      </div>
+      <p className="mt-1.5 text-[11px] tabular-nums text-muted-foreground">
+        Target {target == null ? "—" : formatIDR(target)}
+      </p>
+    </div>
+  );
+}
+
 function KartuBrand({ kartu, logo }: { kartu: KartuMerek; logo?: string }) {
   const naik = (kartu.mom ?? 0) >= 0;
   return (
@@ -250,7 +350,9 @@ function KartuBrand({ kartu, logo }: { kartu: KartuMerek; logo?: string }) {
       <div className="flex items-center gap-2">
         <LambangMerek merek={kartu.merek} logo={logo} />
         <span className="truncate text-[15px] font-semibold text-foreground">{kartu.merek}</span>
-        <span className="ml-auto shrink-0 text-[11px] text-muted-foreground">{kartu.outlet} outlet</span>
+        <span className="ml-auto shrink-0 rounded-full bg-muted px-2 py-0.5 text-[11px] font-medium tabular-nums text-muted-foreground">
+          {kartu.outlet} outlet
+        </span>
       </div>
       <div className="mt-2 flex items-end justify-between gap-3">
         <div className="min-w-0">
@@ -282,23 +384,7 @@ function KartuBrand({ kartu, logo }: { kartu: KartuMerek; logo?: string }) {
       </div>
       {/* Capaian terhadap targetnya sendiri — angka yang membedakan merek yang
           tumbuh dari merek yang sekadar besar. */}
-      <div className="mt-2.5">
-        <div className="flex items-center justify-between text-[11px] text-muted-foreground">
-          <span>Capaian target</span>
-          <span className="tabular-nums">
-            {kartu.capaian === null ? "belum bertarget" : `${formatNumber(kartu.capaian, { maximumFractionDigits: 0 })}%`}
-          </span>
-        </div>
-        <div className="mt-1 h-1.5 overflow-hidden rounded-full bg-muted">
-          <div
-            className={cn(
-              "h-full rounded-full",
-              (kartu.capaian ?? 0) >= BATAS_TERCAPAI ? "bg-emerald-500" : "bg-brand-500",
-            )}
-            style={{ width: `${Math.min(100, Math.max(0, kartu.capaian ?? 0))}%` }}
-          />
-        </div>
-      </div>
+      <BarCapaian capaian={kartu.capaian} target={kartu.targetBulan} />
     </div>
   );
 }
@@ -366,12 +452,15 @@ function Baris({
   mode,
   tebal = false,
   lapis = "z-20",
+  L,
 }: {
   baris: BarisHarian;
   nomor: number | null;
   kolom: HariKolom[];
   mode: Mode;
   tebal?: boolean;
+  /** Lebar kolom beku yang sedang berlaku — lega atau sempit. */
+  L: (typeof LEBAR)[keyof typeof LEBAR];
   /**
    * Lapisan sel yang menempel.
    *
@@ -381,31 +470,62 @@ function Baris({
    */
   lapis?: string;
 }) {
+  // LATARNYA PEKAT, bukan warna tipis di atas latar lain. Sel yang menempel
+  // dengan latar tembus pandang membuat tanggal yang bergeser di belakangnya
+  // terbaca menumpuk dengan angkanya — persis kerusakan yang baru diperbaiki.
+  // Baris gabungan dibedakan lewat huruf tebal, lambang Σ, dan garis atasnya.
   const dasar = tebal ? "bg-muted" : "bg-card";
   const lunas = baris.kurang !== null && baris.kurang <= 0;
   return (
     <tr className={cn("baris-harian border-t border-border", tebal && "bg-muted font-semibold")}>
-      <td className={cn("sel-tempel sticky px-2 py-1.5 text-center text-[11px] tabular-nums text-muted-foreground", lapis, dasar)} style={kunci(L_NO, 0)}>
-        {nomor ?? ""}
+      <td className={cn("sel-tempel sticky px-2 py-1.5 text-center text-[11px] tabular-nums text-muted-foreground", lapis, dasar)} style={kunci(L.no, 0)}>
+        {nomor ?? <span className="text-[12px] font-bold text-brand-600">Σ</span>}
       </td>
-      <td className={cn("sel-tempel sticky px-2 py-1.5", lapis, dasar)} style={kunci(L_NAMA, L_NO)}>
+      <td className={cn("sel-tempel sticky px-2 py-1.5", lapis, dasar)} style={kunci(L.nama, L.no)}>
         <NamaBerjalan nama={baris.nama} />
-        <span className="block truncate text-[10.5px] text-muted-foreground">{baris.area}</span>
+        <span className="flex items-center gap-1.5 text-[10.5px] text-muted-foreground">
+          <span className="min-w-0 truncate">{baris.area}</span>
+          <Api deret={baris.deret} />
+        </span>
       </td>
       <td
         className={cn("sel-tempel tepi-kiri sticky border-r border-border px-2 py-1.5 text-right", lapis, dasar)}
-        style={kunci(L_BULAN, L_NO + L_NAMA)}
+        style={kunci(L.bulan, L.no + L.nama)}
       >
-        <span className="block truncate text-[12.5px] font-semibold tabular-nums text-foreground">
-          {baris.bulanIni === null ? "—" : formatIDR(baris.bulanIni)}
+        {/* Di layar sempit angkanya dipendekkan, bukan dipotong titik-titik:
+            "Rp 1.295.774…" menyembunyikan justru digit yang menentukan
+            besarnya, sementara "Rp 1,3 M" tetap memberi tahu ukurannya. */}
+        <span
+          className="block truncate text-[12.5px] font-semibold tabular-nums text-foreground"
+          title={baris.bulanIni === null ? undefined : formatIDR(baris.bulanIni)}
+        >
+          {baris.bulanIni === null ? "—" : L.kurang === 0 ? formatIDRShort(baris.bulanIni) : formatIDR(baris.bulanIni)}
         </span>
-        {mode === "target" ? (
-          <span className="flex items-center justify-end gap-1 text-[10.5px] tabular-nums text-muted-foreground">
-            <Target className="size-3" />
-            {baris.targetBulan == null ? "tanpa target" : formatIDRShort(baris.targetBulan)}
-          </span>
-        ) : (
+        {mode !== "target" ? (
           <Ubah nilai={baris.mom} besar />
+        ) : (
+          // TEKS, bukan ikon. Lambang sasaran ◎ harus dihafal artinya lebih
+          // dulu; "Target Rp 2,9 M" tidak perlu dihafal siapa pun.
+          //
+          // Di layar sempit kolom Kurang tidak ikut tampil, jadi angkanya
+          // pindah ke sini — yang hilang cuma tempatnya, bukan angkanya.
+          <span className="block truncate text-[10.5px] tabular-nums text-muted-foreground">
+            {baris.targetBulan == null ? (
+              "Belum bertarget"
+            ) : L.kurang === 0 && baris.kurang !== null ? (
+              <>
+                <span className="font-medium uppercase tracking-wide">{lunas ? "Lebih" : "Kurang"}</span>{" "}
+                <span className={cn("font-semibold", lunas ? "text-emerald-600 dark:text-emerald-400" : "text-foreground/70")}>
+                  {formatIDRShort(lunas ? (baris.bulanIni ?? 0) - baris.targetBulan : baris.kurang)}
+                </span>
+              </>
+            ) : (
+              <>
+                <span className="font-medium uppercase tracking-wide">Target</span>{" "}
+                <span className="font-semibold text-foreground/70">{formatIDRShort(baris.targetBulan)}</span>
+              </>
+            )}
+          </span>
         )}
       </td>
 
@@ -422,34 +542,37 @@ function Baris({
       {/* Tepi kanan yang menempel: kekurangan omset. Ditaruh di ujung karena
           itu ujung ceritanya — sesudah membaca hari demi hari, yang dicari
           orang bukan "sudah berapa" melainkan "kurang berapa lagi". */}
+      {L.kurang > 0 && (
       <td
         className={cn("sel-tempel tepi-kanan sticky right-0 border-l border-border px-3 py-1.5 text-right", lapis, dasar)}
-        style={kunci(L_KURANG)}
+        style={kunci(L.kurang)}
       >
         {baris.kurang === null ? (
-          <span className="text-[11px] text-muted-foreground">belum bertarget</span>
+          <span className="text-[11px] text-muted-foreground">Belum bertarget</span>
         ) : lunas ? (
           <>
-            <span className="block whitespace-nowrap text-[12.5px] font-semibold tabular-nums text-emerald-600 dark:text-emerald-400">
-              Tercapai
+            <span className="flex items-center justify-end gap-1 text-[12.5px] font-bold text-emerald-600 dark:text-emerald-400">
+              <ChevronUp className="size-3.5" />
+              Target tercapai
             </span>
-            <span className="block text-[10.5px] tabular-nums text-muted-foreground">
-              {baris.hariTercapai}/{baris.hariTerisi} hari di jalur
+            <span className="block truncate text-[10.5px] tabular-nums text-muted-foreground">
+              lebih {formatIDRShort((baris.bulanIni ?? 0) - (baris.targetBulan ?? 0))}
             </span>
           </>
         ) : (
           <>
-            <span className="block truncate text-[12.5px] font-semibold tabular-nums text-foreground">
+            <span className="block truncate text-[12.5px] font-bold tabular-nums text-foreground">
               {formatIDR(baris.kurang)}
             </span>
             <span className="block truncate text-[10.5px] tabular-nums text-muted-foreground">
               {baris.perHariSisa === null
-                ? `${baris.hariTercapai}/${baris.hariTerisi} hari di jalur`
+                ? `${baris.sisaHari} hari tersisa`
                 : `${formatIDRShort(baris.perHariSisa)}/hari × ${baris.sisaHari} hari`}
             </span>
           </>
         )}
       </td>
+      )}
     </tr>
   );
 }
@@ -470,6 +593,8 @@ export function TabelHarian({
 }) {
   const router = useRouter();
   const [mode, setMode] = React.useState<Mode>("target");
+  const sempit = useSempit();
+  const L = sempit ? LEBAR.sempit : LEBAR.lega;
 
   const pindah = (p: { bulan?: string; area?: string }) => {
     const q = new URLSearchParams();
@@ -479,7 +604,6 @@ export function TabelHarian({
     router.push(`/operational/daily?${q.toString()}`);
   };
 
-  const ringkas = detail.total;
   const merek = React.useMemo(
     () => kartuMerek(detail.baris, (n) => merekOutlet(n)?.label ?? null, WORK_BRANDS),
     [detail.baris],
@@ -505,7 +629,7 @@ export function TabelHarian({
           tepi yang memudar memberi tahu bahwa masih ada lanjutannya — dan
           lanjutannya ditunjukkan sendiri begitu kursor berhenti di barisnya. */}
       <style>{`
-        @keyframes jalan{0%,12%{transform:translateX(0)}88%,100%{transform:translateX(calc(-100% + ${L_NAMA - 20}px))}}
+        @keyframes jalan{0%,12%{transform:translateX(0)}88%,100%{transform:translateX(calc(-100% + ${L.nama - 20}px))}}
         .nama-panjang{-webkit-mask-image:linear-gradient(to right,#000 78%,transparent);mask-image:linear-gradient(to right,#000 78%,transparent)}
         .baris-harian:hover .sel-tempel{background-color:var(--muted)}
         .tepi-kiri{box-shadow:6px 0 8px -6px rgb(0 0 0/.14)}
@@ -518,8 +642,12 @@ export function TabelHarian({
           yang sedang jalan, sebelum satu baris outlet pun dibaca. */}
       <DeretMerek kartu={merek} logo={LOGO_MEREK} />
 
-      <div className="flex flex-wrap items-center gap-2">
-        <div className="inline-flex items-center gap-1 rounded-lg border border-border bg-card p-0.5">
+      {/* Bilah saringan yang MENYESUAIKAN LEBAR, bukan menumpuk ke bawah.
+          Pada layar sempit pemilih bulan menyusut, nama bulan dipendekkan,
+          dan pengalih tampilan tinggal ikonnya — tiga baris tombol di atas
+          tabel memakan tinggi yang justru dibutuhkan barisnya. */}
+      <div className="flex flex-nowrap items-center gap-1.5 overflow-x-auto sm:gap-2">
+        <div className="inline-flex shrink-0 items-center gap-1 rounded-lg border border-border bg-card p-0.5">
           <button
             type="button"
             aria-label="Bulan sebelumnya"
@@ -528,8 +656,9 @@ export function TabelHarian({
           >
             <ChevronLeft className="size-4" />
           </button>
-          <span className="min-w-[8.5rem] px-2 text-center text-[13px] font-medium text-foreground">
-            {labelBulan(detail.periode)}
+          <span className="px-1.5 text-center text-[13px] font-medium text-foreground sm:min-w-[8.5rem] sm:px-2">
+            <span className="hidden sm:inline">{labelBulan(detail.periode)}</span>
+            <span className="sm:hidden">{labelBulanPendek(detail.periode)}</span>
           </span>
           <button
             type="button"
@@ -542,7 +671,7 @@ export function TabelHarian({
         </div>
 
         {bisaPilihArea && area && area.length > 0 && (
-          <div className="w-56">
+          <div className="w-36 shrink-0 sm:w-56">
             <Combobox
               value={areaTerpilih ?? ""}
               onChange={(v) => pindah({ area: v })}
@@ -556,39 +685,24 @@ export function TabelHarian({
           </div>
         )}
 
-        <div className="inline-flex rounded-lg border border-border bg-card p-0.5">
+        <div className="inline-flex shrink-0 rounded-lg border border-border bg-card p-0.5">
           {(["target", "banding"] as const).map((m) => (
             <button
               key={m}
               type="button"
               onClick={() => setMode(m)}
+              title={m === "target" ? "Capaian target harian" : "Perbandingan dengan hari sebelumnya"}
               className={cn(
-                "rounded-md px-2.5 py-1 text-[12px] font-medium",
+                "flex items-center gap-1.5 whitespace-nowrap rounded-md px-2.5 py-1 text-[12px] font-medium",
                 mode === m ? "bg-brand-500 text-white" : "text-muted-foreground hover:text-foreground",
               )}
             >
-              {m === "target" ? "Capaian target" : "Banding hari lalu"}
+              {m === "target" ? <Flame className="size-3.5" /> : <TrendingUp className="size-3.5" />}
+              <span className="hidden md:inline">{m === "target" ? "Capaian target" : "Banding hari lalu"}</span>
             </button>
           ))}
         </div>
 
-        <div className="ml-auto flex items-center gap-2">
-          {ringkas && (
-            <span className="hidden items-center gap-3 rounded-lg border border-border bg-card px-3 py-1.5 text-[12px] lg:inline-flex">
-              <span className="text-muted-foreground">
-                Kurang{" "}
-                <b className={cn("tabular-nums", ringkas.kurang !== null && ringkas.kurang <= 0 ? "text-emerald-600 dark:text-emerald-400" : "text-foreground")}>
-                  {ringkas.kurang === null ? "—" : formatIDR(ringkas.kurang)}
-                </b>
-              </span>
-              <span className="h-3.5 w-px bg-border" />
-              <span className="text-muted-foreground">
-                Hari di jalur <b className="tabular-nums text-foreground">{ringkas.hariTercapai}/{ringkas.hariTerisi}</b>
-              </span>
-            </span>
-          )}
-          <Catatan detail={detail} />
-        </div>
       </div>
 
       {/* GESERNYA BERHENTI PAS DI BATAS KOLOM. Tanpa ini, kolom paling kiri di
@@ -597,30 +711,24 @@ export function TabelHarian({
           seperti dua kolom yang saling tembus. */}
       <div
         className="min-h-0 flex-1 snap-x snap-mandatory overflow-auto rounded-2xl border border-border bg-card"
-        style={{ scrollPaddingLeft: L_KIRI, scrollPaddingRight: L_KURANG }}
+        style={{ scrollPaddingLeft: L.no + L.nama + L.bulan, scrollPaddingRight: L.kurang }}
       >
         <table className="w-max min-w-full border-collapse text-left">
           <thead className="sticky top-0 z-30">
             <tr className="bg-muted">
-              <th className="sticky z-40 bg-muted px-2 py-2 text-center text-[10px] font-semibold uppercase tracking-wide text-muted-foreground" style={kunci(L_NO, 0)}>
+              <th className="sticky z-40 bg-muted px-2 py-2 text-center text-[10px] font-semibold uppercase tracking-wide text-muted-foreground" style={kunci(L.no, 0)}>
                 #
               </th>
-              <th className="sticky z-40 bg-muted px-2 py-2 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground" style={kunci(L_NAMA, L_NO)}>
+              <th className="sticky z-40 bg-muted px-2 py-2 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground" style={kunci(L.nama, L.no)}>
                 Nama Outlet
               </th>
               <th
                 className="tepi-kiri sticky z-40 border-r border-border bg-muted px-2 py-2 text-right text-[10px] font-semibold uppercase tracking-wide text-muted-foreground"
-                style={kunci(L_BULAN, L_NO + L_NAMA)}
+                style={kunci(L.bulan, L.no + L.nama)}
               >
-                <span className="inline-flex items-center gap-1">
-                  Bulan Ini
-                  <Info1
-                    teks={
-                      mode === "target"
-                        ? "Omzet yang sudah masuk bulan ini, dengan target sebulan outlet itu di bawahnya — rata-rata tiga bulan penuh sebelumnya ditambah pertumbuhan, sama persis dengan target KPI-nya."
-                        : "Omzet yang sudah masuk bulan ini, dibandingkan dengan TANGGAL YANG SAMA bulan lalu — bukan dengan sebulan penuh, yang akan membuat setiap outlet selalu terbaca minus sepanjang bulan berjalan."
-                    }
-                  />
+                Bulan Ini
+                <span className="block text-[9px] font-normal normal-case tracking-normal">
+                  {mode === "target" ? "dengan targetnya" : "vs tanggal sama bulan lalu"}
                 </span>
               </th>
               {detail.kolom.map((h) => (
@@ -638,92 +746,36 @@ export function TabelHarian({
                   <span className="block text-[9px] font-normal">{h.hari}</span>
                 </th>
               ))}
+              {L.kurang > 0 && (
               <th
                 className="tepi-kanan sticky right-0 z-40 border-l border-border bg-muted px-3 py-2 text-right text-[10px] font-semibold uppercase tracking-wide text-muted-foreground"
-                style={kunci(L_KURANG)}
+                style={kunci(L.kurang)}
               >
-                <span className="inline-flex items-center gap-1">
-                  Kurang
-                  <Info1 teks="Target sebulan dikurangi omzet yang sudah masuk, beserta berapa per hari yang harus dikejar di sisa hari bulan ini." />
-                </span>
+                Kurang
+                <span className="block text-[9px] font-normal normal-case tracking-normal">untuk capai target</span>
               </th>
+              )}
             </tr>
           </thead>
           <tbody>
             {detail.baris.map((b, i) => (
-              <Baris key={b.outletId} baris={b} nomor={i + 1} kolom={detail.kolom} mode={mode} />
+              <Baris key={b.outletId} baris={b} nomor={i + 1} kolom={detail.kolom} mode={mode} L={L} />
             ))}
             {detail.baris.length === 0 && (
               <tr>
-                <td colSpan={4 + detail.kolom.length} className="px-4 py-8 text-center text-[13px] text-muted-foreground">
+                <td colSpan={(L.kurang > 0 ? 4 : 3) + detail.kolom.length} className="px-4 py-8 text-center text-[13px] text-muted-foreground">
                   Belum ada outlet yang bisa ditampilkan di sini.
                 </td>
               </tr>
             )}
           </tbody>
           {detail.total && (
-            <tfoot className="sticky bottom-0 z-30 shadow-[0_-1px_0_0_var(--border)]">
-              <Baris baris={detail.total} nomor={null} kolom={detail.kolom} mode={mode} tebal lapis="z-30" />
+            <tfoot className="sticky bottom-0 z-30 shadow-[0_-2px_6px_-2px_rgb(0_0_0/.12)]">
+              <Baris baris={detail.total} nomor={null} kolom={detail.kolom} mode={mode} tebal lapis="z-30" L={L} />
             </tfoot>
           )}
         </table>
       </div>
     </div>
-  );
-}
-
-/**
- * Catatan tentang datanya — DI BALIK SATU TOMBOL, bukan dicetak di bawah tabel.
- *
- * Tiga paragraf permanen di bawah tabel dibaca sekali lalu menghalangi
- * selamanya: ia mendorong tabelnya naik, memakan tinggi layar yang justru
- * dibutuhkan barisnya, dan tidak berubah dari hari ke hari. Di sini isinya
- * sama persis, hanya muncul saat diminta.
- */
-function Catatan({ detail }: { detail: DetailHarian }) {
-  const jumlah = (detail.tanpaCabang.length > 0 ? 1 : 0) + (detail.tanpaTarget.length > 0 ? 1 : 0);
-  return (
-    <Popover
-      align="end"
-      contentClassName="w-80 p-3"
-      trigger={({ toggle }) => (
-        <button
-          type="button"
-          onClick={toggle}
-          className="inline-flex items-center gap-1.5 rounded-lg border border-border bg-card px-2.5 py-1.5 text-[12px] font-medium text-muted-foreground hover:text-foreground"
-        >
-          <Info className="size-3.5" />
-          Tentang angka ini
-          {jumlah > 0 && (
-            <span className="grid size-4 place-items-center rounded-full bg-amber-500 text-[9.5px] font-bold text-white">
-              {jumlah}
-            </span>
-          )}
-        </button>
-      )}
-    >
-      <div className="space-y-2 text-[11.5px] leading-relaxed text-muted-foreground">
-        <p>
-          Angkanya <b className="text-foreground">net sales dari ESB</b>, ditarik sendiri oleh sistem hari demi hari.
-          Tanggal bertanda “—” belum sampai penarikannya — itu bukan nol, dan bukan outlet yang tidak berjualan.
-        </p>
-        <p>
-          Targetnya rata-rata tiga bulan penuh sebelumnya ditambah pertumbuhan — angka yang sama dengan target KPI
-          Coordinator Area. Target sehari = target sebulan dibagi jumlah hari.
-        </p>
-        {detail.tanpaCabang.length > 0 && (
-          <p>
-            <b className="text-foreground">{detail.tanpaCabang.length} outlet</b> belum dipasangkan ke cabang ESB, jadi
-            belum punya angka harian: {detail.tanpaCabang.join(", ")}.
-          </p>
-        )}
-        {detail.tanpaTarget.length > 0 && (
-          <p>
-            <b className="text-foreground">{detail.tanpaTarget.length} outlet</b> belum genap tiga bulan berjalan, jadi
-            belum punya target dan tidak ikut baris gabungan: {detail.tanpaTarget.join(", ")}.
-          </p>
-        )}
-      </div>
-    </Popover>
   );
 }

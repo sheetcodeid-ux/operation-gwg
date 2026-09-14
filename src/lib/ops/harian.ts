@@ -102,6 +102,17 @@ export interface BarisHarian extends SumberHarian {
   /** Berapa hari yang sudah ada angkanya sama sekali. */
   hariTerisi: number;
   /**
+   * DERET HARI TERCAPAI YANG MASIH BERJALAN — dihitung mundur dari hari
+   * terakhir yang ada angkanya.
+   *
+   * Berbeda dari `hariTercapai`, dan bedanya penting. Sepuluh hari tercapai
+   * yang tersebar sepanjang bulan menggambarkan outlet yang naik-turun; lima
+   * hari tercapai berturut-turut sampai kemarin menggambarkan outlet yang
+   * sedang jalan. Yang pertama sudah terbaca dari jumlahnya; yang kedua tidak
+   * terbaca dari mana pun sebelum ini.
+   */
+  deret: number;
+  /**
    * Target sebulan dikurangi capaian sampai hari ini.
    *
    * Positif berarti masih kurang sekian; nol atau minus berarti targetnya sudah
@@ -152,6 +163,16 @@ export function barisHarian(s: SumberHarian): BarisHarian {
   const hariTerisi = s.hari.filter((v) => v !== null).length;
   const hariTercapai = capaian.filter((c) => c !== null && c >= BATAS_TERCAPAI).length;
 
+  // Dihitung mundur dari hari TERAKHIR yang ada angkanya, bukan dari akhir
+  // bulan: hari yang belum ditarik ESB bukan hari yang gagal, dan memutus
+  // deretnya di situ menghukum outlet atas penarikan yang belum sampai.
+  let deret = 0;
+  for (let i = capaian.length - 1; i >= 0; i -= 1) {
+    if (s.hari[i] === null) continue;
+    if (capaian[i] !== null && (capaian[i] as number) >= BATAS_TERCAPAI) deret += 1;
+    else break;
+  }
+
   // Sisa hari dihitung dari hari yang BELUM ada angkanya, bukan dari tanggal
   // hari ini: penarikan ESB berjalan bertahap, dan memakai tanggal membuat
   // "kurang berapa per hari" melonjak setiap kali ada hari yang belum masuk.
@@ -169,6 +190,7 @@ export function barisHarian(s: SumberHarian): BarisHarian {
     capaian,
     hariTercapai,
     hariTerisi,
+    deret,
     kurang,
     perHariSisa,
     sisaHari,

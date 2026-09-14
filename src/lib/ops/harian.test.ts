@@ -192,3 +192,32 @@ describe("kartu per merek", () => {
     expect(k).toEqual([]);
   });
 });
+
+describe("deret hari tercapai", () => {
+  const buat = (hari: (number | null)[], targetBulan: number | null) =>
+    barisHarian({ outletId: "o", nama: "o", area: "", targetBulan, hari, hariLalu: hari.map(() => 10) });
+
+  it("dihitung mundur dari hari terakhir yang ada angkanya", () => {
+    // target sehari = 100
+    const b = buat([50, 120, 130, 140], 400);
+    expect(b.deret).toBe(3);
+    expect(b.hariTercapai).toBe(3);
+  });
+
+  it("putus begitu ada hari yang tidak tercapai", () => {
+    const b = buat([120, 130, 50, 140], 400);
+    expect(b.deret).toBe(1);
+    expect(b.hariTercapai).toBe(3);
+  });
+
+  it("hari yang belum ditarik tidak memutus deretnya", () => {
+    // Hari yang belum ditarik ESB bukan hari yang gagal; memutus deretnya di
+    // situ menghukum outlet atas penarikan yang belum sampai.
+    const b = buat([120, 130, null, null], 400);
+    expect(b.deret).toBe(2);
+  });
+
+  it("outlet tanpa target tidak punya deret", () => {
+    expect(buat([120, 130], null).deret).toBe(0);
+  });
+});
