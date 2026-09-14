@@ -68,16 +68,22 @@ export const BATAS_PERSENTASE = 100;
  * Seberapa jauh sebuah batas atas boleh dilewati sebelum capaiannya habis —
  * dalam PERSEN DARI TARGETNYA, bukan dalam poin.
  *
- * Dipakai `batas_linear`. Untuk Harga Pokok Penjualan bertarget 40%, 25% dari
- * target berarti capaiannya habis di 50%: tiap satu poin HPP di atas target
- * memotong sepuluh persen capaian indikator itu.
+ * Dipakai `batas_linear`. Untuk Harga Pokok Penjualan bertarget 40%, 50% dari
+ * target berarti capaiannya habis di 60%: tiap satu poin HPP di atas target
+ * memotong lima persen capaian indikator itu.
+ *
+ * ANGKANYA DIPERLEBAR dari 25% sesudah melihat datanya sendiri. Batas habis di
+ * 50% terdengar masuk akal di atas kertas, tapi HPP yang berjalan justru
+ * 50,81% — persis melewatinya. Hasilnya sama saja dengan aturan lulus-atau-
+ * tidak yang baru diganti: nol, tanpa ada yang bisa dikejar. Batas yang
+ * membuat seluruh outletnya bernilai nol tidak sedang mengukur apa pun.
  *
  * DINYATAKAN RELATIF supaya tetap sama kerasnya kalau targetnya diubah lewat
  * Pengaturan. Kalau ditulis "sepuluh poin", target 20% akan punya toleransi
  * setengah dari seluruh targetnya sendiri, dan indikator yang sama jadi jauh
  * lebih longgar tanpa ada yang memutuskan begitu.
  */
-export const TOLERANSI_BATAS = 25;
+export const TOLERANSI_BATAS = 50;
 
 /**
  * Capaian satu indikator. Target nol atau kosong = belum terukur.

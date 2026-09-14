@@ -124,27 +124,34 @@ describe("Harga Pokok Penjualan — lewat batas turun bertahap", () => {
     // Aturan lama menyamakan 40,1% dengan 80%: dua keadaan yang jaraknya
     // berbulan-bulan kerja, dinilai sama. Sesudah itu tidak ada lagi bedanya
     // antara memperbaiki sedikit dan tidak memperbaiki sama sekali.
-    expect(persentaseCapaian(40.1, 40, "batas_linear")).toBeCloseTo(99, 6);
-    expect(persentaseCapaian(41, 40, "batas_linear")).toBeCloseTo(90, 6);
-    expect(persentaseCapaian(45, 40, "batas_linear")).toBeCloseTo(50, 6);
-    expect(persentaseCapaian(48, 40, "batas_linear")).toBeCloseTo(20, 6);
+    expect(persentaseCapaian(40.1, 40, "batas_linear")).toBeCloseTo(99.5, 6);
+    expect(persentaseCapaian(42, 40, "batas_linear")).toBeCloseTo(90, 6);
+    expect(persentaseCapaian(45, 40, "batas_linear")).toBeCloseTo(75, 6);
+    expect(persentaseCapaian(50, 40, "batas_linear")).toBeCloseTo(50, 6);
   });
 
-  it("habis di 50% — sepuluh poin di atas target", () => {
-    expect(persentaseCapaian(50, 40, "batas_linear")).toBe(0);
+  it("HPP yang benar-benar berjalan tidak jatuh ke nol", () => {
+    // 50,81% adalah angka yang sedang berjalan waktu aturan ini dibuat. Batas
+    // yang membuat angka sesungguhnya bernilai nol tidak sedang mengukur apa
+    // pun — itu aturan lulus-atau-tidak dengan nama baru.
+    expect(persentaseCapaian(50.81, 40, "batas_linear")).toBeGreaterThan(40);
+  });
+
+  it("habis di 60% — dua puluh poin di atas target", () => {
     expect(persentaseCapaian(60, 40, "batas_linear")).toBe(0);
+    expect(persentaseCapaian(75, 40, "batas_linear")).toBe(0);
   });
 
-  it("toleransinya relatif terhadap target, bukan sepuluh poin tetap", () => {
-    // Kalau ditulis "sepuluh poin", target 20% akan punya toleransi setengah
-    // dari seluruh targetnya sendiri — jauh lebih longgar tanpa ada yang
+  it("toleransinya relatif terhadap target, bukan sekian poin tetap", () => {
+    // Kalau ditulis dalam poin, target 20% akan punya toleransi sebesar
+    // seluruh targetnya sendiri — jauh lebih longgar tanpa ada yang
     // memutuskan begitu.
-    expect(persentaseCapaian(25, 20, "batas_linear")).toBe(0);
-    expect(persentaseCapaian(22.5, 20, "batas_linear")).toBeCloseTo(50, 6);
+    expect(persentaseCapaian(30, 20, "batas_linear")).toBe(0);
+    expect(persentaseCapaian(25, 20, "batas_linear")).toBeCloseTo(50, 6);
   });
 
   it("indikator HPP memakai aturan itu, dan bobotnya ikut turun bertahap", () => {
-    const b = barisKpi({ indikator: ind("hpp"), bobot: 20, target: 40, actual: 45 });
+    const b = barisKpi({ indikator: ind("hpp"), bobot: 20, target: 40, actual: 50 });
     expect(b.persentase).toBeCloseTo(50, 6);
     expect(b.persenActual).toBeCloseTo(10, 6);
   });

@@ -545,7 +545,7 @@ const coordinatorArea: Indikator[] = [
     penilaian: "batas_linear",
     satuan: "persen",
     penjelasan:
-      "Maksimal 40%. Tepat 40% atau kurang bernilai penuh; di atasnya capaian turun bertahap — tiap 1% memotong 10% capaian indikator ini, dan habis di 50%. Ditimbang penjualan tiap outlet, bukan dirata-rata begitu saja.",
+      "Maksimal 40%. Tepat 40% atau kurang bernilai penuh; di atasnya capaian turun bertahap — tiap 1% memotong 5% capaian indikator ini, dan habis di 60%. Ditimbang penjualan tiap outlet, bukan dirata-rata begitu saja.",
   },
 ];
 
