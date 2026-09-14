@@ -333,7 +333,9 @@ function KartuBrand({ kartu, aktif, onPilih }: { kartu: KartuMerek; aktif: boole
         // tumbuh sampai barisnya habis, tapi tidak pernah menyusut — jadi di
         // layar sempit kartunya tetap seukuran itu dan barisnya bergeser.
         "min-w-[14.5rem] flex-[1_0_14.5rem] snap-start rounded-xl border bg-card px-3 py-2.5 text-left transition-colors",
-        aktif ? "border-brand-500 ring-1 ring-brand-500/30" : "border-border hover:border-foreground/20",
+        aktif
+          ? "border-blue-600 ring-1 ring-blue-600/30 dark:border-blue-500"
+          : "border-border hover:border-foreground/20",
       )}
     >
       <div className="flex items-center gap-2">
@@ -450,20 +452,22 @@ const KOTAK = `inline-flex ${TINGGI} shrink-0 items-center rounded-lg border bor
 const LINTASAN = `inline-flex ${TINGGI} shrink-0 items-center gap-0.5 rounded-lg bg-muted p-0.5`;
 
 /**
- * YANG TERPILIH TIDAK PUNYA WARNA — ia TERANGKAT.
+ * BIRU — satu-satunya warna yang belum punya arti di halaman ini.
  *
- * Sebelumnya hijau: warna merek aplikasi ini. Persoalannya tabel di bawahnya
- * memakai hijau untuk arti yang lain — naik, dan tercapai. Jadi satu layar
- * memuat dua hijau yang artinya berbeda, dan yang membaca sekilas tidak punya
- * cara tahu yang mana yang mana.
+ * Sebelumnya hijau, dan itu bermasalah: tabel di bawahnya memakai hijau untuk
+ * arti yang lain — naik, dan tercapai. Satu layar memuat dua hijau yang
+ * artinya berbeda. Merah sudah berarti turun, kuning berarti akhir pekan dan
+ * capaian 80–99%, oranye dipakai deret roket. Yang tersisa biru, jadi biru
+ * tidak bisa disalahartikan sebagai kabar tentang angkanya.
  *
- * Penggantinya permukaan, bukan warna: lintasannya cekung, yang terpilih naik
- * ke atasnya dengan bayangan tipis. Cara ini tidak meminjam satu pun warna
- * yang sudah punya arti di tabel, dan tetap terbaca di kedua tema — di terang
- * putih di atas kelabu, di gelap gelap di atas terang. Nada mana pun yang
- * dipakai temanya, yang terpilih tetap satu-satunya yang bertepi.
+ * NADANYA SATU UNTUK KEDUA TEMA, `blue-600`. Biasanya tema gelap diberi biru
+ * yang lebih terang supaya lebih hidup, tapi `blue-500` dengan tulisan putih
+ * cuma sampai 3,7:1 — di bawah ambang keterbacaan untuk huruf sekecil ini.
+ * `blue-600` mencapai 5,2:1 di kedua tema, dan di latar gelap pun masih jelas
+ * menonjol dari lintasannya.
  */
-const TERPILIH = "bg-card font-medium text-foreground shadow-sm ring-1 ring-border";
+const BIRU = "bg-blue-600";
+const TERPILIH = `${BIRU} font-medium text-white shadow-sm`;
 const TIDAK_TERPILIH = "text-muted-foreground hover:text-foreground";
 
 /**
@@ -527,7 +531,11 @@ function AvatarMerek({
               // Yang tidak terpilih diredupkan, bukan diabukan — `grayscale`
               // membuat keempatnya jadi piringan kelabu yang serupa, persis
               // yang dipakai orang untuk membedakannya.
-              aktif ? "bg-card shadow-sm ring-1 ring-border" : "opacity-70 hover:opacity-100",
+              // CINCIN biru, bukan LATAR biru: logo Cattu sendiri berupa
+              // piringan biru, dan biru di belakangnya membuat keduanya lebur
+              // jadi satu bulatan tanpa bentuk. Latarnya tetap kartu terangkat,
+              // jadi ada jarak sewarna kartu antara cincin dan logonya.
+              aktif ? "bg-card shadow-sm ring-2 ring-blue-600" : "opacity-70 hover:opacity-100",
             )}
           >
             <Lambang merek={k.merek} ukuran={22} />
@@ -608,7 +616,12 @@ function Kepala({
     <>
       {label}
       {urut && (
-        <span className={cn("ml-1 inline-block align-middle", aktif ? "text-brand-600" : "text-muted-foreground/50")}>
+        <span
+          className={cn(
+            "ml-1 inline-block align-middle",
+            aktif ? "text-blue-600 dark:text-blue-400" : "text-muted-foreground/50",
+          )}
+        >
           {!aktif ? (
             <ArrowUpDown className="size-3" />
           ) : arah === "naik" ? (
@@ -709,7 +722,7 @@ function Baris({
         className={cn("sel-tempel sticky px-1 py-1.5 text-center text-[11px] tabular-nums text-muted-foreground", lapis, dasar)}
         style={kunci(L.no, 0)}
       >
-        {nomor ?? <span className="text-[12px] font-semibold text-brand-600">Σ</span>}
+        {nomor ?? <span className="text-[12px] font-semibold text-blue-600 dark:text-blue-400">Σ</span>}
       </td>
 
       <td className={cn("sel-tempel sticky px-2 py-1.5", lapis, dasar)} style={kunci(L.nama, L.no)}>
@@ -983,7 +996,7 @@ export function TabelHarian({
             >
               <SlidersHorizontal className="size-3.5" />
               <span className="hidden sm:inline">Saringan</span>
-              <span className="grid size-4 place-items-center rounded-full bg-primary text-[9.5px] font-bold text-primary-foreground">
+              <span className={cn(BIRU, "grid size-4 place-items-center rounded-full text-[9.5px] font-bold text-white")}>
                 {jumlahSaringan}
               </span>
               <X className="size-3" />
