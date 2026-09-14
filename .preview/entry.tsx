@@ -176,27 +176,27 @@ const OUTLET_MJ = [
 ];
 const DEPT_MJ = [
   departemenKpi("operational", "Operational", "Operational", [
-    { kode: "operational_ca", nama: "Coordinator Area", nilai: 89.46, lalu: 86.2 },
-    { kode: "operational_software", nama: "Coordinator Software", nilai: 91.2, lalu: 88.7 },
-    { kode: "operational_pos", nama: "Coordinator POS", nilai: 84.3, lalu: 80.5 },
+    { kode: "operational_ca", nama: "Coordinator Area", nilai: 89.46, lalu: 86.2, orang: [{ nama: "Deo", nilai: 91.2, bersama: false }, { nama: "Wika", nilai: 88.4, bersama: false }, { nama: "Roby", nilai: 86.1, bersama: false }, { nama: "Aldi", nilai: 92.0, bersama: false }, { nama: "Maya", nilai: 89.1, bersama: false }] },
+    { kode: "operational_software", nama: "Coordinator Software", nilai: 91.2, lalu: 88.7, orang: [{ nama: "Fikri", nilai: 91.2, bersama: false }] },
+    { kode: "operational_pos", nama: "Coordinator POS", nilai: 84.3, lalu: 80.5, orang: [{ nama: "Evan Wijaya", nilai: 84.3, bersama: false }] },
   ]),
   departemenKpi("creative", "Creative", "Creative", [
-    { kode: "creative_content", nama: "Content Creator", nilai: 82.1, lalu: 79.4 },
+    { kode: "creative_content", nama: "Content Creator", nilai: 82.1, lalu: 79.4, orang: [{ nama: "Dhimas", nilai: 82.1, bersama: true }, { nama: "Ricky", nilai: 82.1, bersama: true }, { nama: "Seka", nilai: 82.1, bersama: true }, { nama: "Via", nilai: 82.1, bersama: true }] },
   ]),
   departemenKpi("finance", "Finance", "Finance", [
-    { kode: "finance_accounting", nama: "Accounting", nilai: 91, lalu: 88 },
-    { kode: "finance_finance", nama: "Finance", nilai: 94, lalu: 92 },
-    { kode: "finance_tax", nama: "Tax", nilai: 88, lalu: 90 },
+    { kode: "finance_accounting", nama: "Accounting", nilai: 91, lalu: 88, orang: [{ nama: "Bella", nilai: 91.0, bersama: false }] },
+    { kode: "finance_finance", nama: "Finance", nilai: 94, lalu: 92, orang: [{ nama: "Nisa", nilai: 96.0, bersama: false }, { nama: "Fatin", nilai: 93.5, bersama: false }, { nama: "Fetty", nilai: 92.0, bersama: false }, { nama: "Sri", nilai: 94.5, bersama: false }] },
+    { kode: "finance_tax", nama: "Tax", nilai: 88, lalu: 90, orang: [{ nama: "Samsul", nilai: 88.0, bersama: false }] },
   ]),
   departemenKpi("pdq", "Product Development & Quality", "PDQ", [
-    { kode: "pdq_qc", nama: "Quality Assurance & Control", nilai: 87.5, lalu: null },
-    { kode: "pdq_food", nama: "Food Staff", nilai: 80, lalu: 81 },
-    { kode: "pdq_beverage", nama: "Beverage Staff", nilai: 84, lalu: 82 },
-    { kode: "pdq_head_food", nama: "Head Food Development", nilai: null, lalu: null },
-    { kode: "pdq_head_pdq", nama: "Head Product Development & Quality", nilai: null, lalu: null },
+    { kode: "pdq_qc", nama: "Quality Assurance & Control", nilai: 87.5, lalu: null, orang: [{ nama: "Radika", nilai: 87.5, bersama: false }] },
+    { kode: "pdq_food", nama: "Food Staff", nilai: 80, lalu: 81, orang: [{ nama: "Mustadi", nilai: 78.0, bersama: false }, { nama: "Bagas", nilai: 82.0, bersama: false }] },
+    { kode: "pdq_beverage", nama: "Beverage Staff", nilai: 84, lalu: 82, orang: [{ nama: "Adam", nilai: 85.0, bersama: false }, { nama: "Abil", nilai: 83.0, bersama: false }] },
+    { kode: "pdq_head_food", nama: "Head Food Development", nilai: null, lalu: null, orang: [{ nama: "Nanda", nilai: null, bersama: false }] },
+    { kode: "pdq_head_pdq", nama: "Head Product Development & Quality", nilai: null, lalu: null, orang: [] },
   ]),
-  departemenKpi("marcomm", "Marketing Communication", "MarComm", [{ kode: "marcomm", nama: "Marketing Communication", nilai: 78.3, lalu: 74.9 }]),
-  departemenKpi("sosmed", "Sosial Media", "Sosial Media", [{ kode: "creative_sosmed", nama: "Sosial Media", nilai: 76.8, lalu: 80.1 }]),
+  departemenKpi("marcomm", "Marketing Communication", "MarComm", [{ kode: "marcomm", nama: "Marketing Communication", nilai: 78.3, lalu: 74.9, orang: [{ nama: "Amanda", nilai: 78.3, bersama: true }, { nama: "Dita", nilai: 78.3, bersama: true }, { nama: "Marta", nilai: 78.3, bersama: true }] }]),
+  departemenKpi("sosmed", "Sosial Media", "Sosial Media", [{ kode: "creative_sosmed", nama: "Sosial Media", nilai: 76.8, lalu: 80.1, orang: [{ nama: "Zia", nilai: 76.8, bersama: true }, { nama: "Dita", nilai: 76.8, bersama: true }, { nama: "Marta", nilai: 76.8, bersama: true }] }]),
   departemenKpi("hrd", "Human Resource Development", "HRD", []),
 ];
 const SKOR_MJ = hitungManajemen({

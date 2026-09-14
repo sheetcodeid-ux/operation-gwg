@@ -201,6 +201,28 @@ export function hitungC(labaBersih: number, sales: number, st: SetelanManajemen 
 
 /* ─────────────────────────── D. KPI All Division ─────────────────────────── */
 
+/**
+ * Satu ORANG di bawah sebuah posisi.
+ *
+ * Ada karena KPI dibayarkan ke orang, bukan ke posisi. Seluruh aplikasi ini
+ * sengaja menilai posisi — riwayat angkanya menempel di situ supaya pergantian
+ * staf tidak memutusnya — tapi yang memegang uangnya perlu daftar bernama, dan
+ * selama ini daftar itu dirakit tangan dari halaman-halaman terpisah.
+ */
+export interface OrangKpiPosisi {
+  nama: string;
+  /**
+   * 0–100. Null = belum ada angkanya bulan itu.
+   *
+   * Pada posisi SATU KESATUAN angkanya sama untuk semua nama, dan itu memang
+   * yang benar: yang dinilai hasil kerja tim, dan memecahnya per nama menuntut
+   * pembagian pekerjaan yang tidak ada di datanya.
+   */
+  nilai: number | null;
+  /** Nilainya milik seluruh tim, bukan miliknya sendiri. */
+  bersama: boolean;
+}
+
 /** Satu posisi yang KPI-nya sudah punya modul, beserta capaian bulan lalunya. */
 export interface PosisiKpi {
   kode: string;
@@ -208,6 +230,8 @@ export interface PosisiKpi {
   /** 0–100. Null = modulnya belum menghasilkan angka bulan itu. */
   nilai: number | null;
   lalu: number | null;
+  /** Orang-orang yang menempati posisi ini bulan itu. */
+  orang: OrangKpiPosisi[];
 }
 
 export interface DepartemenKpi {

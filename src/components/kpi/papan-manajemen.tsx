@@ -16,6 +16,7 @@ import { DataTable } from "@/components/ui/data-table";
 import { Progress } from "@/components/ui/progress";
 import { GrafikHarian, KpiIndicatorDonut, KpiPerformanceChart, type LaluIndikator } from "./kpi-charts";
 import { DialogLaporanKpi } from "./laporan-pdf";
+import { DialogDaftarKpi, type KelompokKpi } from "./daftar-pdf";
 import { PilihTabel, statusCapaian } from "./papan-kpi";
 import { TabMinggu } from "./tabel-minggu";
 import { DialogPanduanManajemen } from "./panduan";
@@ -48,14 +49,26 @@ import { actualBersatuan, angka, bersatuan, persen } from "@/lib/kpi/satuan";
 /** Satu outlet dalam tabel Same Store — dipakai juga tabel Gross Sales. */
 type BarisOutlet = BarisOutletB;
 
-/** Satu baris tabel KPI Divisi: departemennya sendiri, atau posisi di bawahnya. */
+/**
+ * Satu baris tabel KPI Divisi — TIGA TINGKAT.
+ *
+ * Departemen, posisi di bawahnya, dan ORANG di bawah posisi. Tingkat ketiga
+ * ada karena KPI dibayarkan ke orang: yang membagikan perlu tahu nama, dan
+ * sebelum ini nama itu tidak muncul di mana pun pada halaman ini.
+ */
 interface BarisDivisi {
   id: string;
-  jenis: "dept" | "posisi";
+  jenis: "dept" | "posisi" | "orang";
   nama: string;
   dept: DepartemenKpi;
   lalu: number | null;
   ini: number | null;
+  /** Kunci posisi yang memuatnya — dipakai membuka-tutup daftar orangnya. */
+  posKode?: string;
+  /** Berapa orang di bawahnya. Nol berarti tidak ada yang bisa dibuka. */
+  jumlahOrang?: number;
+  /** Nilainya milik seluruh tim, bukan miliknya sendiri. */
+  bersama?: boolean;
 }
 
 /** Ambang batas warna persentase: di atas ini hijau, di bawahnya merah. */
@@ -105,6 +118,7 @@ export function PapanManajemen({ detail, bolehAtur }: { detail: DetailManajemen;
   const [tampilan, setTampilan] = React.useState<Tampilan>("komponen");
   const [satuan, setSatuan] = React.useState<Satuan>("persen");
   const [pdf, setPdf] = React.useState(false);
+  const [pdfDivisi, setPdfDivisi] = React.useState(false);
   const [buka, setBuka] = React.useState<Set<string>>(new Set());
   const alih = React.useCallback(
     (kode: string) =>
@@ -459,23 +473,88 @@ export function PapanManajemen({ detail, bolehAtur }: { detail: DetailManajemen;
   const barisDivisi = React.useMemo<BarisDivisi[]>(
     () =>
       skor.d.departemen.flatMap((d) => {
-        const induk: BarisDivisi = { id: d.kode, jenis: "dept", nama: d.nama, dept: d, lalu: d.lalu, ini: d.rata };
-        // Satu posisi = tidak ada yang bisa dirinci; barisnya sendiri sudah
-        // angka posisi itu.
-        if (d.posisi.length <= 1 || !buka.has(d.kode)) return [induk];
+        const orangDept = d.posisi.reduce((n, p) => n + p.orang.length, 0);
+        const induk: BarisDivisi = {
+          id: d.kode,
+          jenis: "dept",
+          nama: d.nama,
+          dept: d,
+          lalu: d.lalu,
+          ini: d.rata,
+          jumlahOrang: orangDept,
+        };
+        if (!buka.has(d.kode)) return [induk];
+
+        const orangDari = (pos: (typeof d.posisi)[number], indukId: string): BarisDivisi[] =>
+          pos.orang.map((o) => ({
+            id: `${indukId}/${o.nama}`,
+            jenis: "orang",
+            nama: o.nama,
+            dept: d,
+            // Orang tidak punya pembanding bulan lalu tersendiri — yang
+            // tersimpan angka POSISINYA. Dikosongkan, bukan disalin dari
+            // posisinya: angka yang disalin terbaca seperti miliknya sendiri.
+            lalu: null,
+            ini: o.nilai,
+            bersama: o.bersama,
+          }));
+
+        // DEPARTEMEN BERPOSISI SATU melompati tingkat tengahnya. Barisnya
+        // sendiri sudah angka posisi itu, jadi menyisipkan satu baris posisi
+        // yang angkanya sama persis hanya menambah tinggi tanpa menambah apa
+        // pun yang bisa dibaca.
+        if (d.posisi.length === 1) return [induk, ...orangDari(d.posisi[0], d.kode)];
+
         return [
           induk,
-          ...d.posisi.map<BarisDivisi>((pos) => ({
-            id: `${d.kode}/${pos.kode}`,
-            jenis: "posisi",
-            nama: pos.nama,
-            dept: d,
-            lalu: pos.lalu,
-            ini: pos.nilai,
-          })),
+          ...d.posisi.flatMap<BarisDivisi>((pos) => {
+            const idPos = `${d.kode}/${pos.kode}`;
+            const barisPos: BarisDivisi = {
+              id: idPos,
+              jenis: "posisi",
+              nama: pos.nama,
+              dept: d,
+              lalu: pos.lalu,
+              ini: pos.nilai,
+              posKode: idPos,
+              jumlahOrang: pos.orang.length,
+            };
+            if (!buka.has(idPos)) return [barisPos];
+            return [barisPos, ...orangDari(pos, idPos)];
+          }),
         ];
       }),
     [skor.d.departemen, buka],
+  );
+
+  /**
+   * Isi dokumen pencairan: seluruh nama, dikelompokkan per departemen.
+   *
+   * Disusun dari SELURUH departemen, bukan dari baris yang sedang tampil di
+   * layar. Yang di layar bergantung pada apa yang sedang dibuka dan apa yang
+   * sedang dicari — dan dokumen pembayaran yang isinya bergantung pada keadaan
+   * layar adalah dokumen yang suatu hari kehilangan satu orang tanpa ada yang
+   * menyadarinya.
+   */
+  const kelompokDivisi = React.useMemo<KelompokKpi[]>(
+    () =>
+      skor.d.departemen
+        .map((d) => ({
+          nama: d.nama,
+          catatan:
+            d.rata === null
+              ? "belum ada angka"
+              : `rata-rata ${formatNumber(d.rata, { maximumFractionDigits: 1 })}%`,
+          orang: d.posisi.flatMap((pos) =>
+            pos.orang.map((o) => ({
+              nama: o.nama,
+              keterangan: o.bersama ? `${pos.nama} · dinilai satu tim` : pos.nama,
+              nilai: o.nilai,
+            })),
+          ),
+        }))
+        .filter((k) => k.orang.length > 0),
+    [skor.d.departemen],
   );
 
   const kolomDivisi = React.useMemo<ColumnDef<BarisDivisi>[]>(
@@ -485,17 +564,67 @@ export function PapanManajemen({ detail, bolehAtur }: { detail: DetailManajemen;
         header: "Departemen",
         cell: ({ row }) => {
           const b = row.original;
-          if (b.jenis === "posisi") {
+
+          // ORANG — tingkat terdalam, tanpa tombol buka.
+          if (b.jenis === "orang") {
             return (
-              <span className="block truncate pl-9 text-foreground/80">{b.nama}</span>
+              <span className="flex min-w-0 items-center gap-1.5 pl-14">
+                <span className="truncate text-[13px] text-foreground/75">{b.nama}</span>
+                {b.bersama && (
+                  <span
+                    title="Posisi ini dinilai sebagai satu tim — nilainya sama untuk semua nama di dalamnya"
+                    className="shrink-0 rounded bg-muted px-1.5 py-px text-[10px] text-muted-foreground"
+                  >
+                    satu tim
+                  </span>
+                )}
+              </span>
+            );
+          }
+
+          if (b.jenis === "posisi") {
+            const bisa = (b.jumlahOrang ?? 0) > 0;
+            const dibuka = !!b.posKode && buka.has(b.posKode);
+            return (
+              <button
+                type="button"
+                disabled={!bisa}
+                onClick={() => b.posKode && alih(b.posKode)}
+                aria-expanded={dibuka}
+                className="flex min-w-0 items-center gap-2 pl-7 text-left disabled:cursor-default"
+              >
+                <ChevronRight
+                  className={cn(
+                    "size-3.5 shrink-0 text-muted-foreground transition-transform",
+                    dibuka && "rotate-90",
+                    !bisa && "opacity-0",
+                  )}
+                />
+                <span className="min-w-0">
+                  <span className="block truncate text-foreground/80">{b.nama}</span>
+                  <span className="block truncate text-[11px] text-muted-foreground">
+                    {bisa ? `${b.jumlahOrang} orang` : "belum ada nama terdaftar"}
+                  </span>
+                </span>
+              </button>
             );
           }
           const kosong = b.dept.posisi.length === 0;
-          // DEPARTEMEN BERPOSISI SATU TIDAK PUNYA TOMBOL BUKA. Membukanya
-          // hanya memunculkan satu baris berisi angka yang sama persis dengan
-          // barisnya sendiri — tanda ">" yang menjanjikan rincian lalu tidak
-          // memberi apa-apa, dan yang menekannya menyimpulkan ada yang rusak.
-          const takBisaDibuka = b.dept.posisi.length <= 1;
+          /*
+           * DEPARTEMEN BERPOSISI SATU SEKARANG BISA DIBUKA — dan itu
+           * membalik aturan sebelumnya, dengan alasan.
+           *
+           * Dulu ditutup karena membukanya hanya memunculkan satu baris
+           * berisi angka yang sama persis dengan barisnya sendiri: tanda ">"
+           * yang menjanjikan rincian lalu tidak memberi apa-apa. Sekarang ada
+           * yang diberikan — NAMA orang-orangnya — jadi alasan itu sudah
+           * tidak berlaku. Baris posisinya sendiri tetap dilewati; yang
+           * muncul langsung namanya.
+           *
+           * Yang tetap tidak bisa dibuka: departemen yang tidak punya satu
+           * nama pun untuk ditampilkan.
+           */
+          const takBisaDibuka = (b.jumlahOrang ?? 0) === 0 && b.dept.posisi.length <= 1;
           const terbuka = buka.has(b.dept.kode);
           return (
             <button
@@ -515,7 +644,11 @@ export function PapanManajemen({ detail, bolehAtur }: { detail: DetailManajemen;
               <span className="min-w-0">
                 <span className="block truncate font-medium text-foreground">{b.nama}</span>
                 <span className="block truncate text-[11px] text-muted-foreground">
-                  {kosong ? "belum ada posisi ber-modul" : `${b.dept.posisi.length} posisi`}
+                  {kosong
+                    ? "belum ada posisi ber-modul"
+                    : b.dept.posisi.length === 1
+                      ? `${b.jumlahOrang ?? 0} orang`
+                      : `${b.dept.posisi.length} posisi · ${b.jumlahOrang ?? 0} orang`}
                 </span>
               </span>
             </button>
@@ -526,7 +659,18 @@ export function PapanManajemen({ detail, bolehAtur }: { detail: DetailManajemen;
         id: "lalu",
         header: "Bulan Lalu",
         accessorFn: (b) => b.lalu,
-        cell: ({ row }) => <Nilai n={row.original.lalu} tebal={false} />,
+        cell: ({ row }) =>
+          // Baris ORANG tidak punya pembanding bulan lalu, dan itu bukan
+          // "belum terukur" melainkan "tidak disimpan": riwayat KPI menempel
+          // pada POSISI, supaya pergantian staf tidak memutusnya. Menulis
+          // "belum terukur" di sini menuduh ada pengukuran yang terlewat.
+          row.original.jenis === "orang" ? (
+            <span className="text-[12px] text-muted-foreground/60" title="Riwayat bulanan tersimpan per posisi, bukan per orang">
+              —
+            </span>
+          ) : (
+            <Nilai n={row.original.lalu} tebal={false} />
+          ),
       },
       {
         id: "ini",
@@ -617,7 +761,19 @@ export function PapanManajemen({ detail, bolehAtur }: { detail: DetailManajemen;
           </div>
         ))}
       {tampilan === "divisi" && (
-        <DataTable tableId="kpi-manajemen-divisi" columns={kolomDivisi} data={barisDivisi} searchPlaceholder="Cari departemen…" stickyHeader={false} toolbar={toolbar} onExport={() => setPdf(true)} exportTitle="Unduh laporan PDF" />
+        <DataTable
+          tableId="kpi-manajemen-divisi"
+          columns={kolomDivisi}
+          data={barisDivisi}
+          searchPlaceholder="Cari departemen atau nama…"
+          stickyHeader={false}
+          toolbar={toolbar}
+          // Tab ini mengunduh DAFTAR BERNAMA, bukan laporan KPI Manajemen.
+          // Yang dicari orang di tab ini siapa dapat berapa; laporan korporat
+          // menjawab pertanyaan yang lain dan tidak memuat satu nama pun.
+          onExport={() => setPdfDivisi(true)}
+          exportTitle="Unduh daftar KPI per nama"
+        />
       )}
 
       <Ringkasan tampilan={tampilan} detail={detail} />
@@ -630,6 +786,15 @@ export function PapanManajemen({ detail, bolehAtur }: { detail: DetailManajemen;
         namaPosisi="KPI Manajemen"
         namaDepartemen="Korporat"
         namaPic=""
+      />
+
+      <DialogDaftarKpi
+        open={pdfDivisi}
+        onOpenChange={setPdfDivisi}
+        judul="Daftar KPI per Divisi"
+        subjudul="Seluruh Departemen"
+        periode={detail.periode}
+        kelompok={kelompokDivisi}
       />
     </div>
   );

@@ -4,7 +4,7 @@ import { db, dbEnabled } from "./db";
 import { getOutlets } from "./store";
 import { netBulananPerCabang } from "./esb-bulanan";
 import { rincianMinggu, type DetailMinggu } from "./minggu-outlet";
-import { bulanMulaiBerjalan, bulanSebelum, grossDiketik, grossKetikBulan, laporanKpi, setelanPosisi } from "./kpi";
+import { bulanMulaiBerjalan, bulanSebelum, grossDiketik, grossKetikBulan, laporanKpi, picDinamis, setelanPosisi } from "./kpi";
 import { posisiDinilai, type SetelanPosisi } from "@/lib/kpi/berlaku";
 import { DEPARTEMEN_MANAJEMEN, POSISI_MANAJEMEN, posisiDari } from "@/lib/kpi/struktur";
 import { SEMUA_PIC } from "@/lib/kpi/semua-pic";
@@ -13,6 +13,7 @@ import {
   departemenKpi,
   hitungManajemen,
   type DepartemenKpi,
+  type OrangKpiPosisi,
   type OutletManajemen,
   type PosisiKpi,
   type SetelanManajemen,
@@ -226,10 +227,13 @@ async function labaOutlet(periode: string, outletIds: string[]): Promise<Map<str
  * berubah jadi "belum ada data" tanpa sebab yang terlihat.
  */
 /** Hasil kosong untuk mode ringan — bentuknya sama supaya pemanggilnya tidak bercabang. */
-const kosongSkor = () => ({ skor: new Map<string, number>(), dinilai: new Set<string>() });
+const kosongSkor = () => ({ skor: new Map<string, number>(), dinilai: new Set<string>(), orang: new Map<string, OrangKpiPosisi[]>() });
 
-async function skorPosisi(periode: string): Promise<{ skor: Map<string, number>; dinilai: Set<string> }> {
+async function skorPosisi(
+  periode: string,
+): Promise<{ skor: Map<string, number>; dinilai: Set<string>; orang: Map<string, OrangKpiPosisi[]> }> {
   const hasil = new Map<string, number>();
+  const orang = new Map<string, OrangKpiPosisi[]>();
 
   // POSISI YANG BELUM BERLAKU BULAN ITU TIDAK IKUT DIBACA SAMA SEKALI.
   //
@@ -277,10 +281,43 @@ async function skorPosisi(periode: string): Promise<{ skor: Map<string, number>;
   laporan.forEach((nilai, i) => {
     if (nilai !== null) hasil.set(dipakai[i].kode, Math.round(nilai * 100) / 100);
   });
+
+  /*
+   * SIAPA saja di tiap posisi, beserta angkanya masing-masing.
+   *
+   * Tiga bentuk, dan ketiganya harus dibedakan atau daftarnya berbohong:
+   *
+   *  – DINILAI PER ORANG dengan daftar tetap (Finance, Food Staff): tiap orang
+   *    punya rapornya sendiri, dan angkanya memang berbeda-beda.
+   *  – DINILAI PER ORANG dengan daftar dari basis data (Coordinator Area):
+   *    sama, hanya namanya datang dari User Management.
+   *  – SATU KESATUAN (Content Creator, Human Capital): angkanya sama untuk
+   *    semua nama, dan itu ditandai `bersama` supaya yang membaca tahu ini
+   *    bukan kebetulan empat orang bernilai identik.
+   */
+  const perOrang = await Promise.all(
+    dipakai.map(async (p): Promise<OrangKpiPosisi[]> => {
+      const skorPosisiIni = hasil.get(p.kode) ?? null;
+      const nama = p.picDinamis ? picDinamis(p.kode).map((o) => o.label) : p.pic;
+      if (nama.length === 0) return [];
+      if (!p.perPic) return nama.map((n) => ({ nama: n, nilai: skorPosisiIni, bersama: true }));
+
+      const kunci = p.picDinamis ? picDinamis(p.kode).map((o) => o.value) : p.pic;
+      const tiap = await Promise.all(
+        kunci.map((k) => laporanKpi(p.kode, periode, k).catch(() => null)),
+      );
+      return nama.map((n, i) => ({
+        nama: n,
+        nilai: tiap[i]?.ringkas.skorSetara ?? null,
+        bersama: false,
+      }));
+    }),
+  );
+  perOrang.forEach((daftar, i) => orang.set(dipakai[i].kode, daftar));
   // Daftar posisi yang BERLAKU bulan itu dibawa serta — dipakai tabel Detail
   // KPI Divisi supaya posisi yang belum berlaku tidak sekadar tampil kosong,
   // melainkan tidak muncul sama sekali.
-  return { skor: hasil, dinilai: new Set(dipakai.map((p) => p.kode)) };
+  return { skor: hasil, dinilai: new Set(dipakai.map((p) => p.kode)), orang };
 }
 
 /**
@@ -291,7 +328,12 @@ async function skorPosisi(periode: string): Promise<{ skor: Map<string, number>;
  * bulan mengikuti kelengkapan data — dan yang membacanya akan mengira
  * departemennya dihapus, bukan bahwa modulnya belum ada.
  */
-function susunDepartemen(ini: Map<string, number>, lalu: Map<string, number>, dinilai: Set<string>): DepartemenKpi[] {
+function susunDepartemen(
+  ini: Map<string, number>,
+  lalu: Map<string, number>,
+  dinilai: Set<string>,
+  orang: Map<string, OrangKpiPosisi[]>,
+): DepartemenKpi[] {
   return DEPARTEMEN_MANAJEMEN.map((d) => {
     // POSISI YANG BELUM BERLAKU TIDAK DIDAFTAR SAMA SEKALI bulan itu. Ditulis
     // "belum ada data", ia terbaca seperti pekerjaan yang belum dikerjakan —
@@ -302,6 +344,7 @@ function susunDepartemen(ini: Map<string, number>, lalu: Map<string, number>, di
       nama: posisiDari(kode)?.nama ?? kode,
       nilai: ini.get(kode) ?? null,
       lalu: lalu.get(kode) ?? null,
+      orang: orang.get(kode) ?? [],
     }));
     return departemenKpi(d.kode, d.nama, d.singkat, posisi);
   });
@@ -444,7 +487,7 @@ export async function detailManajemen(
   // outlet yang belum diisi disebutkan di bawah tabelnya, bukan disembunyikan.
   const labaBersih = ebitda.reduce((s, b) => s + (b.labaBersih ?? 0), 0);
 
-  const departemen = susunDepartemen(skorIni.skor, skorLalu.skor, skorIni.dinilai);
+  const departemen = susunDepartemen(skorIni.skor, skorLalu.skor, skorIni.dinilai, skorIni.orang);
 
   const omzetLalu: [number, number, number] = [
     korporat(esbLalu[0], ketikLalu[0], bulanA[0]),
