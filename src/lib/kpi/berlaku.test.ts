@@ -50,7 +50,7 @@ describe("pengaruhnya ke KPI Manajemen dan rata-rata departemen", () => {
     // Dinolkan berarti dianggap gagal — tuduhan yang berbeda dari belum
     // waktunya dinilai, dan yang satu menarik turun rata-rata departemennya.
     expect(manajemen).toContain("posisiDinilai(setelan.get(p.kode), periode)");
-    expect(manajemen).toContain("dipakai.map((p) => laporanKpi(");
+    expect(manajemen).toContain("dipakai.map(capaian)");
   });
 
   it("gagal membaca setelannya tidak menjatuhkan halaman", () => {
@@ -114,5 +114,25 @@ describe("tampilan Detail KPI Divisi", () => {
     expect(pdf).toContain("persen(ringkas.skorSetara, 0)");
     // Rinciannya TIDAK ikut dibulatkan.
     expect(pdf).toContain("persen(b.persenActual)");
+  });
+});
+
+describe("capaian posisi yang dinilai per orang", () => {
+  const manajemen = readFileSync(join(process.cwd(), "src/lib/data/kpi-manajemen.ts"), "utf8");
+
+  it("dirata-ratakan dari tiap orangnya, bukan dibaca sekali sebagai 'semua'", () => {
+    // Catatan kegiatan dan angka manual tersimpan atas NAMA masing-masing —
+    // tidak ada satu baris pun bernama "semua". Dibaca begitu, yang kembali
+    // hanya indikator otomatis: Food Staff dan Beverage Staff sempat sama-sama
+    // terbaca 36,05% padahal di halamannya 77% dan 83%. Dua posisi berbeda
+    // yang angkanya sama persis adalah tandanya.
+    expect(manajemen).toContain("p.perPic && !p.picDinamis && p.pic.length > 0");
+    expect(manajemen).toContain("p.pic.map((nama) => laporanKpi(p.kode, periode, nama)");
+  });
+
+  it("Coordinator Area tetap dibaca sebagai gabungan area", () => {
+    // PIC-nya dinamis dan angkanya milik AREA, bukan milik orang. Dirata-rata
+    // per orang, penjualan satu area terhitung sebanyak orang yang memegangnya.
+    expect(manajemen).toContain("laporanKpi(p.kode, periode, p.perPic ? SEMUA_PIC : \"\")");
   });
 });

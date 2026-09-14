@@ -241,13 +241,36 @@ async function skorPosisi(periode: string): Promise<{ skor: Map<string, number>;
   const setelan = await setelanPosisi().catch(() => new Map<string, SetelanPosisi>());
   const dipakai = POSISI.filter((p) => posisiDinilai(setelan.get(p.kode), periode));
 
+  /**
+   * Capaian satu posisi untuk tabel departemen.
+   *
+   * POSISI YANG DINILAI PER ORANG DIRATA-RATAKAN DARI TIAP ORANGNYA, bukan
+   * dibaca sekali sebagai "semua". Catatan kegiatan dan angka manual tersimpan
+   * atas NAMA masing-masing — tidak ada satu baris pun bernama "semua" — jadi
+   * membacanya begitu hanya mengembalikan indikator otomatis, dan skornya
+   * jatuh jauh di bawah kenyataan. Food Staff dan Beverage Staff sempat
+   * sama-sama terbaca 36,05% di sini padahal di halamannya 77% dan 83%;
+   * dua posisi berbeda yang angkanya sama persis adalah tandanya.
+   *
+   * Coordinator Area DIKECUALIKAN: PIC-nya dinamis dan angkanya milik AREA,
+   * bukan milik orang. Tiga orang yang memegang satu area yang sama akan
+   * menjumlahkan penjualan area itu tiga kali kalau dirata-ratakan per orang,
+   * dan laporan gabungannya memang sudah menangani itu.
+   */
+  const capaian = async (p: (typeof POSISI)[number]): Promise<number | null> => {
+    if (p.perPic && !p.picDinamis && p.pic.length > 0) {
+      const tiap = await Promise.all(p.pic.map((nama) => laporanKpi(p.kode, periode, nama).catch(() => null)));
+      const nilai = tiap.map((l) => l?.ringkas.skorSetara ?? null).filter((n): n is number => n !== null);
+      return nilai.length ? nilai.reduce((a, b) => a + b, 0) / nilai.length : null;
+    }
+    const l = await laporanKpi(p.kode, periode, p.perPic ? SEMUA_PIC : "").catch(() => null);
+    return l?.ringkas.skorSetara ?? null;
+  };
+
   // Satu posisi yang gagal dibaca TIDAK boleh menjatuhkan seluruh halaman —
   // tiga komponen lainnya tetap bisa dihitung tanpa dia.
-  const laporan = await Promise.all(
-    dipakai.map((p) => laporanKpi(p.kode, periode, p.perPic ? SEMUA_PIC : "").catch(() => null)),
-  );
-  laporan.forEach((l, i) => {
-    const nilai = l?.ringkas.skorSetara ?? null;
+  const laporan = await Promise.all(dipakai.map(capaian));
+  laporan.forEach((nilai, i) => {
     if (nilai !== null) hasil.set(dipakai[i].kode, Math.round(nilai * 100) / 100);
   });
   // Daftar posisi yang BERLAKU bulan itu dibawa serta — dipakai tabel Detail
