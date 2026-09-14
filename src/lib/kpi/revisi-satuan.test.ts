@@ -128,31 +128,23 @@ describe("tampilan PDF", () => {
 describe("Sosial Media: keempat indikator kualitas diisi per brand", () => {
   const sm = (key: string) => cari("creative_sosmed", key);
 
-  it("interaksi, views, dan profile visit dijumlah antar-brand", () => {
-    // Ketiganya hitungan: like, tayangan, kunjungan profil. Empat brand yang
-    // masing-masing 1.000 tayangan memang 4.000 tayangan.
-    for (const k of ["interaksi", "views", "profile_visit"]) {
-      expect(sm(k).actual.sumber, k).toBe("manual_brand");
+  it("keempatnya diisi per brand lalu dijumlah", () => {
+    // Termasuk Follower Growth — diputuskan pemiliknya. Angka tiap brand
+    // dijumlahkan menjadi satu capaian posisi, sama seperti tiga indikator
+    // jumlah konten di atasnya.
+    for (const k of ["interaksi", "follower_growth", "views", "profile_visit"]) {
+      expect(sm(k).actual, k).toEqual({ sumber: "manual_brand" });
     }
   });
 
-  it("follower growth DIRATA-RATA, bukan dijumlah", () => {
-    // Satuannya persen. 5% + 4% + 6% + 5% bukan 20% — itu angka yang tidak
-    // pernah terjadi di brand mana pun, dan naik sendiri tiap ada brand baru.
-    expect(sm("follower_growth").actual.sumber).toBe("manual_brand_rata");
+  it("satuannya tidak berubah: Follower Growth tetap persen", () => {
     expect(sm("follower_growth").satuan).toBe("persen");
   });
 
-  it("rata-ratanya dibagi brand yang DIISI, bukan seluruh brand aktif", () => {
-    // Dibagi jumlah brand aktif, brand yang belum diisi ikut jadi penyebut dan
-    // rata-ratanya jatuh tanpa sebab yang terlihat.
-    const mesin = readFileSync(join(process.cwd(), "src/lib/data/kpi.ts"), "utf8");
-    expect(mesin).toContain("manualBanyak.set(key,");
-    expect(mesin).toContain("actual = n > 0 && k.manual !== null ? k.manual / n : null;");
-  });
-
-  it("formnya memakai bentuk per-brand yang sama", () => {
-    const form = readFileSync(join(process.cwd(), "src/components/kpi/dialog-input.tsx"), "utf8");
-    expect(form).toContain('i.actual.sumber === "manual_brand" || i.actual.sumber === "manual_brand_rata"');
+  it("hanya ada SATU sumber per-brand, tidak ada varian yang menganggur", () => {
+    // Sumber yang tidak dipakai siapa pun hanya menambah cabang yang harus
+    // ikut diperiksa tiap kali mesin hitungnya disentuh.
+    const daftar = readFileSync(join(process.cwd(), "src/lib/kpi/indikator.ts"), "utf8");
+    expect(daftar).not.toContain("manual_brand_rata");
   });
 });

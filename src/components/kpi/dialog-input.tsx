@@ -48,7 +48,7 @@ type Bentuk = "angka" | "brand" | "kegiatan" | "temuan" | "tenggat" | "efisiensi
 /** Bentuk isian untuk sebuah indikator. */
 export function bentukIsian(i: Indikator): Bentuk {
   if (i.actual.sumber === "manual") return "angka";
-  if (i.actual.sumber === "manual_brand" || i.actual.sumber === "manual_brand_rata") return "brand";
+  if (i.actual.sumber === "manual_brand") return "brand";
   if (i.actual.sumber === "entri") return "kegiatan";
   if (i.actual.sumber === "pengurang") return i.actual.entri === "penyampaian" ? "tenggat" : "temuan";
   if (i.actual.sumber === "lulus") return "tenggat";
