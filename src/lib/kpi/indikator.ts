@@ -72,7 +72,8 @@ export type JenisEntri =
   | "os_masterdata"
   | "os_menu"
   | "os_issue"
-  | "os_improve";
+  | "os_improve"
+  | "problem_solver_sup";
 
 /** Perhitungan otomatis dari modul/data lain. */
 export type KodeOtomatis =
@@ -90,7 +91,8 @@ export type KodeOtomatis =
   | "gross_sales_area"
   | "komplain_area"
   | "net_profit_area"
-  | "hpp_area";
+  | "hpp_area"
+  | "hpp_kpk";
 
 /** Dari mana actual-nya datang. */
 export type SumberActual =
@@ -551,6 +553,94 @@ const coordinatorArea: Indikator[] = [
 
 
 /**
+ * SUPERVISOR — dinilai atas OUTLET YANG DIPEGANGNYA, satu orang satu outlet.
+ *
+ * Tiga indikator pertama memakai sumber yang SAMA PERSIS dengan Coordinator
+ * Area, bukan salinan yang bunyinya mirip. Alasannya bukan hemat kode: Gross
+ * Sales seorang supervisor dan Gross Sales area yang memuatnya harus berasal
+ * dari satu perhitungan, kalau tidak dua halaman akan menyebut angka berbeda
+ * untuk outlet yang sama dan tidak ada cara memutuskan mana yang benar.
+ * `gross_sales_area` sudah berlingkup outlet milik orang yang dipilih — dan
+ * supervisor punya outletnya sendiri, jadi lingkupnya jatuh dengan sendirinya.
+ *
+ * ATURAN TIGA BULAN IKUT BERLAKU. Supervisor yang outletnya belum genap tiga
+ * bulan tidak punya angka sama sekali — sama seperti Coordinator Area. Itu
+ * disengaja: outlet baru selalu menyeret angkanya ke bawah, dan menilainya
+ * berarti menghukum orang atas outlet yang memang belum jalan.
+ */
+const supervisorDasar: Indikator[] = [
+  {
+    key: "gross_sales",
+    label: "Gross Sales",
+    bobot: 40,
+    target: { jenis: "avg3", pertumbuhan: 15 },
+    actual: { sumber: "otomatis", kode: "gross_sales_area" },
+    satuan: "rupiah",
+    penjelasan: "Rata-rata 3 bulan terakhir + 15%, aturan yang sama dengan Coordinator Area. Actual otomatis dari ESB untuk outlet yang dipegang.",
+  },
+  {
+    key: "net_profit",
+    label: "Net Profit",
+    bobot: 30,
+    target: { jenis: "porsi", dari: "gross_sales", rasio: 30 },
+    actual: { sumber: "otomatis", kode: "net_profit_area" },
+    satuan: "rupiah",
+    penjelasan: "Target 30% dari Gross Sales yang tercapai, aturan yang sama dengan Coordinator Area.",
+  },
+  {
+    key: "komplain_area",
+    label: "Complaint",
+    bobot: 20,
+    target: { jenis: "tetap", nilai: 20 },
+    actual: { sumber: "otomatis", kode: "komplain_area" },
+    penilaian: "kurang_linear",
+    penjelasan:
+      "Komplain outlet yang dipegang, di luar kategori kualitas makanan. Batas 20 per bulan; tiap komplain memotong 5% capaian indikator ini (1% dari skor total), dan 20 komplain membuatnya nol.",
+  },
+];
+
+/** Supervisor Umum — indikator keempatnya Problem Solver. */
+const supervisorUmum: Indikator[] = [
+  ...supervisorDasar,
+  {
+    key: "problem_solver_sup",
+    label: "Problem Solver",
+    bobot: 10,
+    target: { jenis: "tetap", nilai: 10 },
+    actual: { sumber: "entri", entri: "problem_solver_sup" },
+    penjelasan: "Dicatat Head Coordinator Area: satu baris satu masalah yang diselesaikan. Target 10 per bulan.",
+  },
+];
+
+/**
+ * Supervisor KPK — indikator keempatnya Harga Pokok Penjualan.
+ *
+ * ANGKANYA PEMBELIAN, bukan harga pokok yang diketik di lembar bulanan.
+ * Warehouse ditambah non-warehouse dibagi penjualan outlet itu — dan batas 35%
+ * di sini bukan angka baru melainkan batas yang SUDAH berlaku di Pengaturan
+ * Operational (warehouse 30% + non-warehouse 5%). Menetapkan batas kedua yang
+ * berbeda akan membuat satu outlet lolos di satu halaman dan gagal di halaman
+ * lain, dengan angka yang sama.
+ */
+const supervisorKpk: Indikator[] = [
+  ...supervisorDasar,
+  {
+    key: "hpp_kpk",
+    label: "Harga Pokok Penjualan",
+    bobot: 10,
+    target: { jenis: "tetap", nilai: 35 },
+    actual: { sumber: "otomatis", kode: "hpp_kpk" },
+    // Lewat batas TIDAK langsung nol — aturan yang sama dengan HPP Coordinator
+    // Area. Menyamakan 35,1% dengan 70% membuat indikatornya berhenti mengukur
+    // apa pun begitu batasnya terlewat.
+    penilaian: "batas_linear",
+    satuan: "persen",
+    penjelasan:
+      "Pembelian warehouse + non-warehouse dibagi penjualan outlet. Maksimal 35% — batas yang sama dengan Pengaturan Operational. Tepat 35% atau kurang bernilai penuh; di atasnya capaian turun bertahap dan habis di 52,5%.",
+  },
+];
+
+/**
  * Human Capital.
  *
  * KEENAM ANGKANYA SUDAH ADA dan sudah otomatis — dihitung modul HC-MOS dari
@@ -891,6 +981,8 @@ export const INDIKATOR: Record<KodePosisi, Indikator[]> = {
   pdq_beverage: stafPdq,
   pdq_head_food: headPdq,
   pdq_head_pdq: headPdq,
+  supervisor_umum: supervisorUmum,
+  supervisor_kpk: supervisorKpk,
 };
 
 export const indikatorPosisi = (kode: KodePosisi): Indikator[] => INDIKATOR[kode] ?? [];

@@ -8,7 +8,15 @@
  * antar-bulan itu yang membuat KPI berguna.
  */
 
-export type KodeDepartemen = "operational" | "creative" | "finance" | "pdq" | "marcomm" | "sosmed" | "hrd";
+export type KodeDepartemen =
+  | "operational"
+  | "creative"
+  | "finance"
+  | "pdq"
+  | "marcomm"
+  | "sosmed"
+  | "hrd"
+  | "supervisor";
 
 export type KodePosisi =
   | "operational_ca"
@@ -27,7 +35,9 @@ export type KodePosisi =
   | "pdq_beverage"
   | "pdq_head_food"
   | "pdq_head_pdq"
-  | "hc";
+  | "hc"
+  | "supervisor_umum"
+  | "supervisor_kpk";
 
 export interface Departemen {
   kode: KodeDepartemen;
@@ -46,6 +56,18 @@ export interface Departemen {
   posisi: KodePosisi[];
   /** Posisi yang sudah didaftar tapi indikatornya belum ditentukan. */
   menyusul?: string[];
+  /**
+   * DI LUAR MANAJEMEN — tidak ikut dinilai di Detail KPI Divisi.
+   *
+   * Supervisor outlet bukan bagian manajemen: rapornya berdiri sendiri, dan
+   * memasukkannya ke rata-rata divisi akan menggeser skor KPI Manajemen dengan
+   * lima puluh tiga orang yang memang tidak termasuk di dalamnya.
+   *
+   * Ditandai di sini, bukan disaring di tempat yang memakainya: daftar
+   * departemen dibaca lebih dari satu halaman, dan penyaringan yang disalin
+   * ke tiap halaman pasti terlewat di salah satunya suatu hari.
+   */
+  diluarManajemen?: boolean;
 }
 
 export interface Posisi {
@@ -77,7 +99,7 @@ export interface Posisi {
    * pergantian staf butuh deploy, dan sampai deploy itu terjadi orangnya tidak
    * punya rapor sama sekali.
    */
-  picDinamis?: "area_coordinator";
+  picDinamis?: "area_coordinator" | "supervisor_umum" | "supervisor_kpk";
   /**
    * Dinilai PER ORANG, bukan sebagai satu tim.
    *
@@ -125,7 +147,50 @@ export const DEPARTEMEN: Departemen[] = [
   // sengaja tetap "hrd": nilai bulanan dan riwayat KPI menempel pada kode itu,
   // dan menggantinya memutus riwayat yang sudah terkumpul tanpa satu pun pesan.
   { kode: "hrd", nama: "Human Capital", singkat: "Human Capital", ikon: "UsersRound", posisi: ["hc"] },
+  // DI LUAR MANAJEMEN — lihat `diluarManajemen`. Didaftar di sini supaya
+  // seluruh mesin KPI yang sudah ada bisa dipakai apa adanya; yang membedakan
+  // hanya satu penanda, bukan modul kedua yang harus dijaga sejalan.
+  {
+    kode: "supervisor",
+    nama: "Supervisor",
+    singkat: "Supervisor",
+    ikon: "UserCog",
+    posisi: ["supervisor_umum", "supervisor_kpk"],
+    diluarManajemen: true,
+  },
 ];
+
+/**
+ * OUTLET YANG MASUK KPK.
+ *
+ * Pembeda satu-satunya antara kedua jenis Supervisor. Yang memegang salah satu
+ * outlet ini dinilai dengan Harga Pokok Penjualan; selain itu dinilai dengan
+ * Problem Solver.
+ *
+ * DICOCOKKAN LEWAT NAMA, dan itu memang rapuh — tapi id outlet berubah tiap
+ * kali datanya dibangun ulang sementara namanya tidak. Yang dijaga: pencocokan
+ * harus PERSIS, bukan "mengandung". "Serdam" saja akan ikut menangkap Ayam
+ * Goreng Busari Serdam, dan "Sintang" akan menangkap Cattu Sintang — dua outlet
+ * yang justru BUKAN KPK, dan keduanya akan dinilai dengan indikator yang salah
+ * tanpa satu pun tanda di layar.
+ */
+export const OUTLET_KPK: readonly string[] = [
+  "Nordu Coffee Putussibau",
+  "Nordu Coffee Ketapang",
+  "Nordu Coffee Penibung",
+  "Nordu Coffee Palangkaraya",
+  "Nordu Coffee Banjarmasin",
+  "Nordu Garden Sintang",
+  "Nordu Coffee Sandai",
+  "Nordu Coffee Simpang Ampar",
+  "Nordu Coffee Serdam II",
+];
+
+const rapikan = (s: string) => s.trim().toLowerCase().replace(/\s+/g, " ");
+const SET_KPK = new Set(OUTLET_KPK.map(rapikan));
+
+/** Apakah outlet bernama ini termasuk KPK. Pencocokannya persis, bukan berawalan. */
+export const outletKpk = (nama: string): boolean => SET_KPK.has(rapikan(nama));
 
 export const POSISI: Posisi[] = [
   // PIC-nya kosong di sini dengan sengaja — diisi dari daftar Coordinator Area
@@ -180,7 +245,30 @@ export const POSISI: Posisi[] = [
   // pembagian yang tidak ada di datanya, lalu menilai orang atas angka yang
   // bukan hasil pekerjaannya sendiri.
   { kode: "hc", departemen: "hrd", nama: "Human Capital", pic: ["MT Adrianto", "Dini Amalia", "Riva Asila", "Uswatun Khasanah"] },
+  // DUA POSISI, SATU JABATAN. Bedanya cuma indikator keempat — Problem Solver
+  // untuk yang umum, Harga Pokok Penjualan untuk yang memegang outlet KPK.
+  // Dipisah jadi dua posisi, bukan satu posisi dengan indikator bersyarat:
+  // bobot dan rumusnya berbeda, dan indikator yang berubah-ubah tergantung
+  // siapa yang membukanya tidak bisa diperiksa siapa pun dari daftarnya.
+  //
+  // PIC-nya dari basis data, seperti Coordinator Area: lima puluh tiga orang
+  // yang berganti jauh lebih sering daripada posisinya.
+  { kode: "supervisor_umum", departemen: "supervisor", nama: "Supervisor Umum", pic: [], perPic: true, picDinamis: "supervisor_umum" },
+  { kode: "supervisor_kpk", departemen: "supervisor", nama: "Supervisor KPK", pic: [], perPic: true, picDinamis: "supervisor_kpk" },
 ];
+
+/**
+ * Departemen yang IKUT dinilai manajemen, dan posisi-posisinya.
+ *
+ * Disediakan sebagai daftar jadi, bukan diserahkan ke pemanggilnya untuk
+ * menyaring sendiri: penyaringan yang disalin ke tiap pemakai pasti terlewat
+ * di salah satunya, dan yang terlewat di sini berarti lima puluh tiga rapor
+ * supervisor ikut masuk rata-rata divisi tanpa ada yang menyadarinya.
+ */
+export const DEPARTEMEN_MANAJEMEN: Departemen[] = DEPARTEMEN.filter((d) => !d.diluarManajemen);
+export const POSISI_MANAJEMEN: Posisi[] = POSISI.filter(
+  (p) => !DEPARTEMEN.find((d) => d.kode === p.departemen)?.diluarManajemen,
+);
 
 /**
  * Menu sidebar untuk tiap posisi.
@@ -190,6 +278,8 @@ export const POSISI: Posisi[] = [
  * berarti mengubah SATU berkas, bukan dua yang harus diubah serempak.
  */
 export const MENU_POSISI: Record<KodePosisi, string> = {
+  supervisor_umum: "kpi_supervisor_umum",
+  supervisor_kpk: "kpi_supervisor_kpk",
   operational_ca: "kpi_op_ca",
   operational_software: "kpi_op_software",
   operational_pos: "kpi_op_pos",

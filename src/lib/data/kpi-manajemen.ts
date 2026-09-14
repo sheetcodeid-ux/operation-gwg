@@ -6,7 +6,7 @@ import { netBulananPerCabang } from "./esb-bulanan";
 import { rincianMinggu, type DetailMinggu } from "./minggu-outlet";
 import { bulanMulaiBerjalan, bulanSebelum, grossDiketik, grossKetikBulan, laporanKpi, setelanPosisi } from "./kpi";
 import { posisiDinilai, type SetelanPosisi } from "@/lib/kpi/berlaku";
-import { DEPARTEMEN, POSISI, posisiDari } from "@/lib/kpi/struktur";
+import { DEPARTEMEN_MANAJEMEN, POSISI_MANAJEMEN, posisiDari } from "@/lib/kpi/struktur";
 import { SEMUA_PIC } from "@/lib/kpi/semua-pic";
 import {
   SETELAN_BAWAAN,
@@ -239,7 +239,11 @@ async function skorPosisi(periode: string): Promise<{ skor: Map<string, number>;
   // bulan itu memang belum dinilai. Dikeluarkan di sini, bukan dinolkan:
   // dinolkan berarti dianggap gagal, dan itu tuduhan yang berbeda.
   const setelan = await setelanPosisi().catch(() => new Map<string, SetelanPosisi>());
-  const dipakai = POSISI.filter((p) => posisiDinilai(setelan.get(p.kode), periode));
+  // POSISI_MANAJEMEN, bukan POSISI: supervisor berdiri di luar manajemen.
+  // Ikut di sini berarti lima puluh tiga rapor ditarik tiap kali halaman ini
+  // dibuka — dan rata-rata divisinya bergeser oleh orang yang memang bukan
+  // bagian manajemen.
+  const dipakai = POSISI_MANAJEMEN.filter((p) => posisiDinilai(setelan.get(p.kode), periode));
 
   /**
    * Capaian satu posisi untuk tabel departemen.
@@ -257,7 +261,7 @@ async function skorPosisi(periode: string): Promise<{ skor: Map<string, number>;
    * menjumlahkan penjualan area itu tiga kali kalau dirata-ratakan per orang,
    * dan laporan gabungannya memang sudah menangani itu.
    */
-  const capaian = async (p: (typeof POSISI)[number]): Promise<number | null> => {
+  const capaian = async (p: (typeof POSISI_MANAJEMEN)[number]): Promise<number | null> => {
     if (p.perPic && !p.picDinamis && p.pic.length > 0) {
       const tiap = await Promise.all(p.pic.map((nama) => laporanKpi(p.kode, periode, nama).catch(() => null)));
       const nilai = tiap.map((l) => l?.ringkas.skorSetara ?? null).filter((n): n is number => n !== null);
@@ -288,7 +292,7 @@ async function skorPosisi(periode: string): Promise<{ skor: Map<string, number>;
  * departemennya dihapus, bukan bahwa modulnya belum ada.
  */
 function susunDepartemen(ini: Map<string, number>, lalu: Map<string, number>, dinilai: Set<string>): DepartemenKpi[] {
-  return DEPARTEMEN.map((d) => {
+  return DEPARTEMEN_MANAJEMEN.map((d) => {
     // POSISI YANG BELUM BERLAKU TIDAK DIDAFTAR SAMA SEKALI bulan itu. Ditulis
     // "belum ada data", ia terbaca seperti pekerjaan yang belum dikerjakan —
     // padahal memang belum waktunya dinilai. Begitu bulannya tiba, barisnya

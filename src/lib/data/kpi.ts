@@ -23,7 +23,7 @@ import {
   type RingkasKpi,
 } from "@/lib/kpi/hitung";
 import { indikatorPosisi, type Indikator, type JenisEntri } from "@/lib/kpi/indikator";
-import { posisiDari, type KodePosisi } from "@/lib/kpi/struktur";
+import { outletKpk, posisiDari, type KodePosisi } from "@/lib/kpi/struktur";
 import { SEMUA_PIC } from "@/lib/kpi/semua-pic";
 import { bersatuan } from "@/lib/kpi/satuan";
 import type { SetelanPosisi } from "@/lib/kpi/berlaku";
@@ -747,6 +747,15 @@ export interface AngkaCa {
   hppNominal: number | null;
   hppDasar: number | null;
   /**
+   * HPP versi KPK — pembelian warehouse + non-warehouse dibagi penjualan.
+   *
+   * Bukan `hpp` di atasnya: yang itu harga pokok yang diketik di lembar
+   * bulanan, yang ini pembelian yang dicatat halaman Operation. Dua angka
+   * berbeda dari dua sumber berbeda, dan menyamakannya berarti satu outlet
+   * dinilai dengan angka yang bukan miliknya.
+   */
+  hppKpk: number | null;
+  /**
    * Rincian minggu demi minggu outlet-outlet area ini.
    *
    * Persis bentuk yang dipakai KPI Manajemen, hanya outletnya yang dibatasi ke
@@ -852,6 +861,33 @@ async function angkaCa(periode: string, picIds: string[], jumlahPic: number): Pr
 
   const komplain = await komplainOutlet(periode, lolos.map((o) => o.id));
 
+  /*
+   * HPP KPK — pembelian warehouse + non-warehouse dibagi PENJUALAN BULAN INI.
+   *
+   * Pembaginya `grossPerOutlet`, bukan rata-rata tiga bulan: yang ditanyakan
+   * "berapa persen dari yang dijual bulan ini dibelanjakan bulan ini". Dibagi
+   * rata-rata tiga bulan, outlet yang sedang naik akan terlihat boros dan yang
+   * sedang turun terlihat hemat — dua-duanya terbalik dari keadaannya.
+   *
+   * Dijumlah dulu baru dibagi, bukan dirata-ratakan persennya: rata-rata persen
+   * membuat outlet terkecil sama beratnya dengan outlet terbesar, dan angkanya
+   * tidak pernah cocok dengan laporan keuangan.
+   */
+  const pembelian = await pembelianPerOutlet(periode);
+  let belanjaKpk = 0;
+  let dasarKpk = 0;
+  let adaKpk = false;
+  lolos.forEach((o, n) => {
+    const b = pembelian.get(o.id);
+    if (!b || (b.wh === null && b.nonWh === null)) return;
+    const g = grossPerOutlet[n];
+    if (g === null || g <= 0) return;
+    adaKpk = true;
+    belanjaKpk += (b.wh ?? 0) + (b.nonWh ?? 0);
+    dasarKpk += g;
+  });
+  const hppKpk = adaKpk && dasarKpk > 0 ? (belanjaKpk / dasarKpk) * 100 : null;
+
   const detail: DetailOutletCa[] = semua.map((o) => {
     // "Dari ESB" berarti ESB punya angka yang BUKAN nol. Nol berarti cabangnya
     // belum ada di sana, dan justru itulah yang perlu diisi tangan.
@@ -890,7 +926,7 @@ async function angkaCa(periode: string, picIds: string[], jumlahPic: number): Pr
     hariBulan(periode),
   );
 
-  return { outlet: lolos, detail, belumTigaBulan: belum, bulanKosong, tanpaGross, grossSales, rataTiga, komplain, netProfit, hpp, hppNominal, hppDasar, jumlahPic, minggu };
+  return { outlet: lolos, detail, belumTigaBulan: belum, bulanKosong, tanpaGross, grossSales, rataTiga, komplain, netProfit, hpp, hppNominal, hppDasar, hppKpk, jumlahPic, minggu };
 }
 
 /**
@@ -1243,7 +1279,9 @@ export async function laporanKpi(posisi: KodePosisi, periode: string, pic = ""):
   // Coordinator Area dinilai atas AREA yang dipegangnya, dan area itu menempel
   // pada orangnya — bukan pada posisinya. Tanpa PIC terpilih tidak ada area,
   // dan tanpa area tidak ada satu pun angka yang bisa dihitung.
-  const perluArea = daftar.some((i) => i.actual.sumber === "otomatis" && i.actual.kode === "gross_sales_area");
+  const perluArea = daftar.some(
+    (i) => i.actual.sumber === "otomatis" && (i.actual.kode === "gross_sales_area" || i.actual.kode === "hpp_kpk"),
+  );
   // "Semua" mencakup SELURUH area yang dipegang Coordinator Area — dihitung
   // sekali per area, bukan per orang. Tiga orang yang memegang satu area yang
   // sama akan menjumlahkan penjualan area itu tiga kali kalau dihitung per
@@ -1634,6 +1672,15 @@ function susunBaris(i: Indikator, k: KonteksBaris): BarisKpi {
           actual = k.ca?.hpp ?? null;
           if (actual === null) alasan = alasanAngkaOutlet(k.ca, "Harga pokok penjualan");
           break;
+        case "hpp_kpk":
+          // PEMBELIAN, bukan harga pokok yang diketik di lembar bulanan.
+          actual = k.ca?.hppKpk ?? null;
+          if (actual === null) {
+            alasan = k.ca && k.ca.outlet.length === 0
+              ? areaKosong(k.ca)
+              : "Pembelian warehouse dan non-warehouse bulan ini belum diisi untuk outlet ini — lihat Operation → Pembelian.";
+          }
+          break;
         case "ketepatan_design": {
           // Skala 0–100 dari nilai rata-rata tiap permintaan. Nol berarti
           // "seimbang": tidak ada yang terlambat pada tenggat longgar, dan
@@ -1821,13 +1868,45 @@ function outletCa(picIds: string[]): OutletCa[] {
     }));
 }
 
+/**
+ * Daftar PIC yang datang dari basis data, bukan dari berkas struktur.
+ *
+ * SUPERVISOR DIPILAH DI SINI, bukan di halamannya. Yang memegang outlet KPK
+ * masuk daftar Supervisor KPK, selain itu masuk Supervisor Umum — dan
+ * pemilahan itu harus terjadi di satu tempat saja. Kalau halamannya yang
+ * memilah, laporan gabungan "Semua" akan memakai daftar yang berbeda dari
+ * yang tampil di dropdown, dan skor departemennya ikut salah tanpa satu pun
+ * tanda.
+ *
+ * Yang belum dititipi outlet TIDAK ikut: tanpa outlet tidak ada satu pun
+ * angka yang bisa dihitung, dan namanya di dropdown hanya menjanjikan rapor
+ * yang selalu kosong.
+ */
 export function picDinamis(posisi: KodePosisi): { value: string; label: string }[] {
   const p = posisiDari(posisi);
-  if (p?.picDinamis !== "area_coordinator") return [];
+  if (!p?.picDinamis) return [];
+  const urut = (a: { label: string }, b: { label: string }) => a.label.localeCompare(b.label, "id");
+
+  if (p.picDinamis === "area_coordinator") {
+    return getUsers()
+      .filter((u) => u.role === "area_coordinator" && u.active !== false)
+      .map((u) => ({ value: u.id, label: u.name }))
+      .sort(urut);
+  }
+
+  const kpk = p.picDinamis === "supervisor_kpk";
+  const namaOutlet = new Map(getOutlets().map((o) => [o.id, o.name]));
   return getUsers()
-    .filter((u) => u.role === "area_coordinator" && u.active !== false)
+    .filter((u) => u.role === "supervisor" && u.active !== false)
+    .filter((u) => {
+      const punya = u.outletIds ?? [];
+      if (punya.length === 0) return false;
+      // Satu outlet KPK sudah cukup membuatnya dinilai sebagai Supervisor KPK.
+      const adaKpk = punya.some((id) => outletKpk(namaOutlet.get(id) ?? ""));
+      return kpk ? adaKpk : !adaKpk;
+    })
     .map((u) => ({ value: u.id, label: u.name }))
-    .sort((a, b) => a.label.localeCompare(b.label, "id"));
+    .sort(urut);
 }
 
 /** Tanggal penutupan penilaian KPI tiap bulan. */
