@@ -98,6 +98,15 @@ export type SumberActual =
   | { sumber: "manual" }
   /** Diketik per brand, lalu dijumlah. */
   | { sumber: "manual_brand" }
+  /**
+   * Diketik per brand, lalu DIRATA-RATA — bukan dijumlah.
+   *
+   * Dipakai indikator yang satuannya persen. Menjumlahkan pertumbuhan pengikut
+   * empat brand — 5% + 4% + 6% + 5% — menghasilkan 20%, angka yang tidak
+   * pernah terjadi di brand mana pun dan naik sendiri tiap kali ada brand baru.
+   * Yang benar rata-ratanya.
+   */
+  | { sumber: "manual_brand_rata" }
   /** Jumlah entri form. */
   | { sumber: "entri"; entri: JenisEntri }
   /** Target dikurangi jumlah entri — indikator berbentuk pengurang. */
@@ -211,8 +220,8 @@ const sosialMedia: Indikator[] = [
     kategori: KUALITAS,
     bobot: 15,
     target: { jenis: "tumbuh", pertumbuhan: TUMBUH_CREATIVE },
-    actual: { sumber: "manual" },
-    penjelasan: `Target = capaian bulan lalu + ${TUMBUH_CREATIVE}%.`,
+    actual: { sumber: "manual_brand" },
+    penjelasan: `Diisi per brand, lalu dijumlah. Target = capaian bulan lalu + ${TUMBUH_CREATIVE}%.`,
   },
   {
     key: "follower_growth",
@@ -220,9 +229,11 @@ const sosialMedia: Indikator[] = [
     kategori: KUALITAS,
     bobot: 15,
     target: { jenis: "tumbuh", pertumbuhan: TUMBUH_CREATIVE },
-    actual: { sumber: "manual" },
+    // DIRATA-RATA, bukan dijumlah: satuannya persen, dan 5% + 4% + 6% + 5%
+    // bukan 20% — itu angka yang tidak pernah terjadi di brand mana pun.
+    actual: { sumber: "manual_brand_rata" },
     satuan: "persen",
-    penjelasan: `Pertumbuhan pengikut dalam persen. Target = capaian bulan lalu + ${TUMBUH_CREATIVE}%.`,
+    penjelasan: `Diisi per brand, lalu dirata-rata. Target = capaian bulan lalu + ${TUMBUH_CREATIVE}%.`,
   },
   {
     key: "views",
@@ -230,8 +241,8 @@ const sosialMedia: Indikator[] = [
     kategori: KUALITAS,
     bobot: 10,
     target: { jenis: "tumbuh", pertumbuhan: TUMBUH_CREATIVE },
-    actual: { sumber: "manual" },
-    penjelasan: `Target = capaian bulan lalu + ${TUMBUH_CREATIVE}%.`,
+    actual: { sumber: "manual_brand" },
+    penjelasan: `Diisi per brand, lalu dijumlah. Target = capaian bulan lalu + ${TUMBUH_CREATIVE}%.`,
   },
   {
     key: "profile_visit",
@@ -239,8 +250,8 @@ const sosialMedia: Indikator[] = [
     kategori: KUALITAS,
     bobot: 10,
     target: { jenis: "tumbuh", pertumbuhan: TUMBUH_CREATIVE },
-    actual: { sumber: "manual" },
-    penjelasan: `Target = capaian bulan lalu + ${TUMBUH_CREATIVE}%.`,
+    actual: { sumber: "manual_brand" },
+    penjelasan: `Diisi per brand, lalu dijumlah. Target = capaian bulan lalu + ${TUMBUH_CREATIVE}%.`,
   },
   {
     key: "kecepatan",

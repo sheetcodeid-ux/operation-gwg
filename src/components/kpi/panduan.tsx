@@ -195,7 +195,7 @@ function langkahUmum(indikator: Indikator[]): Langkah[] {
     (i) => i.actual.sumber === "entri" || i.actual.sumber === "pengurang" || i.actual.sumber === "harian",
   );
   const otomatis = indikator.filter((i) => i.actual.sumber === "otomatis");
-  const manual = indikator.filter((i) => i.actual.sumber === "manual" || i.actual.sumber === "manual_brand");
+  const manual = indikator.filter((i) => i.actual.sumber === "manual" || i.actual.sumber === "manual_brand" || i.actual.sumber === "manual_brand_rata");
   const daftar = (d: Indikator[]) => d.map((i) => i.label).join(", ");
 
   return [

@@ -1206,9 +1206,14 @@ export async function laporanKpi(posisi: KodePosisi, periode: string, pic = ""):
   // Angka manual: dijumlah lintas brand, karena indikator per brand disimpan
   // satu baris per brand.
   const manual = new Map<string, number>();
+  // Berapa BRAND yang benar-benar diisi untuk tiap indikator — dipakai
+  // indikator yang dirata-rata. Dibagi jumlah brand aktif, brand yang belum
+  // diisi ikut menjadi penyebut dan rata-ratanya jatuh tanpa sebab.
+  const manualBanyak = new Map<string, number>();
   for (const r of ((actualRows.data ?? []) as Record<string, unknown>[])) {
     const key = String(r.indikator);
     manual.set(key, (manual.get(key) ?? 0) + (Number(r.nilai) || 0));
+    manualBanyak.set(key, (manualBanyak.get(key) ?? 0) + 1);
   }
 
   // Capaian bulan lalu untuk indikator pertumbuhan — dibaca dari angka manual
@@ -1367,6 +1372,7 @@ export async function laporanKpi(posisi: KodePosisi, periode: string, pic = ""):
     hc,
     pengaturan: pengaturan.get(i.key),
     manual: manual.get(i.key) ?? null,
+    manualBanyak: manualBanyak.get(i.key) ?? 0,
     lalu: lalu.get(i.key) ?? null,
     jumlahEntri,
     jumlahGagal,
@@ -1404,6 +1410,8 @@ export async function laporanKpi(posisi: KodePosisi, periode: string, pic = ""):
 interface KonteksBaris {
   pengaturan?: PengaturanIndikator;
   manual: number | null;
+  /** Berapa brand yang benar-benar diisi — penyebut indikator yang dirata-rata. */
+  manualBanyak: number;
   lalu: number | null;
   jumlahEntri: (j: JenisEntri) => number;
   jumlahGagal: (j: JenisEntri) => number;
@@ -1514,6 +1522,15 @@ function susunBaris(i: Indikator, k: KonteksBaris): BarisKpi {
   let alasan: string | undefined;
 
   switch (i.actual.sumber) {
+    case "manual_brand_rata": {
+      // DIRATA-RATA, bukan dijumlah. Menjumlahkan pertumbuhan pengikut empat
+      // brand menghasilkan angka yang tidak pernah terjadi di brand mana pun,
+      // dan naik sendiri tiap kali ada brand baru.
+      const n = k.manualBanyak;
+      actual = n > 0 && k.manual !== null ? k.manual / n : null;
+      if (actual === null) alasan = "Angkanya belum diisi untuk bulan ini.";
+      break;
+    }
     case "manual":
     case "manual_brand":
       actual = k.manual;
