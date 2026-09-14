@@ -225,3 +225,67 @@ export function totalHarian(baris: BarisHarian[], nama = "Seluruh outlet"): Bari
     akhirBulanLalu: akhir.length ? akhir.reduce((a, b) => a + b, 0) : null,
   });
 }
+
+/* ─────────────────────────────── per merek ─────────────────────────────── */
+
+/**
+ * Satu kartu merek — gabungan seluruh outlet bermerek itu.
+ *
+ * KENAPA PER MEREK, bukan cuma per outlet. Lima puluh delapan baris menjawab
+ * "outlet mana yang tertinggal"; yang belum dijawab siapa pun adalah
+ * pertanyaan satu tingkat di atasnya — MEREK mana yang sedang jalan. Empat
+ * angka di atas tabel menjawabnya sebelum satu baris pun dibaca.
+ */
+export interface KartuMerek {
+  merek: string;
+  outlet: number;
+  bulanIni: number | null;
+  mom: number | null;
+  targetBulan: number | null;
+  /** Capaian terhadap target sebulan, dalam persen. */
+  capaian: number | null;
+  /** Angka tiap hari — pengisi grafik kecil di kartunya. */
+  hari: (number | null)[];
+}
+
+/**
+ * Kelompokkan baris harian menjadi kartu per merek.
+ *
+ * `merekDari` diserahkan pemanggil supaya berkas ini tetap tidak tahu apa-apa
+ * soal penamaan outlet — aturannya tinggal di satu tempat, `lib/kpi/merek`.
+ */
+export function kartuMerek(
+  baris: BarisHarian[],
+  merekDari: (nama: string) => string | null,
+  urutan: readonly string[],
+): KartuMerek[] {
+  const peta = new Map<string, BarisHarian[]>();
+  for (const b of baris) {
+    const m = merekDari(b.nama);
+    if (!m) continue;
+    peta.set(m, [...(peta.get(m) ?? []), b]);
+  }
+
+  const kartu: KartuMerek[] = [];
+  for (const [merek, isi] of peta) {
+    const gabung = totalHarian(isi, merek);
+    if (!gabung) continue;
+    kartu.push({
+      merek,
+      outlet: isi.length,
+      bulanIni: gabung.bulanIni,
+      mom: gabung.mom,
+      targetBulan: gabung.targetBulan ?? null,
+      capaian:
+        gabung.targetBulan == null || gabung.targetBulan <= 0 || gabung.bulanIni === null
+          ? null
+          : (gabung.bulanIni / gabung.targetBulan) * 100,
+      hari: gabung.hari,
+    });
+  }
+
+  // Urutannya mengikuti daftar merek perusahaan, bukan besar-kecilnya angka:
+  // kartu yang berpindah tempat tiap bulan memaksa orang mencarinya lagi
+  // setiap kali membuka halaman.
+  return kartu.sort((a, b) => urutan.indexOf(a.merek) - urutan.indexOf(b.merek));
+}

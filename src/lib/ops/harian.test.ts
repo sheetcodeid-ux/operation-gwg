@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { barisHarian, bandingHarian, jumlahHari, kolomHari, totalHarian, urutHarian } from "./harian";
+import { barisHarian, bandingHarian, jumlahHari, kartuMerek, kolomHari, totalHarian, urutHarian } from "./harian";
 
 describe("kolom hari", () => {
   it("menghitung panjang bulannya, termasuk Februari kabisat", () => {
@@ -155,5 +155,40 @@ describe("baris gabungan", () => {
     const t = totalHarian([buat("a", [10, 10], null), buat("b", [20, 20], null)]);
     expect(t?.hari).toEqual([30, 30]);
     expect(t?.targetBulan).toBeNull();
+  });
+});
+
+describe("kartu per merek", () => {
+  const buat = (nama: string, hari: (number | null)[], targetBulan: number | null) =>
+    barisHarian({ outletId: nama, nama, area: "", targetBulan, hari, hariLalu: hari.map(() => 50) });
+
+  const merekDari = (n: string) => (n.startsWith("Nordu") ? "Nordu" : n.startsWith("Cattu") ? "Cattu" : null);
+  const urutan = ["Nordu", "Cattu"];
+
+  it("menjumlah seluruh outlet satu merek", () => {
+    const k = kartuMerek(
+      [buat("Nordu A", [100, 100], 400), buat("Nordu B", [50, 50], 200), buat("Cattu A", [10, 10], 40)],
+      merekDari,
+      urutan,
+    );
+    expect(k.map((x) => x.merek)).toEqual(["Nordu", "Cattu"]);
+    expect(k[0].outlet).toBe(2);
+    expect(k[0].bulanIni).toBe(300);
+    expect(k[0].targetBulan).toBe(600);
+    expect(k[0].capaian).toBeCloseTo(50, 6);
+    expect(k[0].hari).toEqual([150, 150]);
+  });
+
+  it("urutannya tetap, tidak mengikuti besar-kecilnya angka", () => {
+    // Kartu yang berpindah tempat tiap bulan memaksa orang mencarinya lagi
+    // setiap kali membuka halaman.
+    const k = kartuMerek([buat("Cattu A", [900], 100), buat("Nordu A", [1], 100)], merekDari, urutan);
+    expect(k.map((x) => x.merek)).toEqual(["Nordu", "Cattu"]);
+  });
+
+  it("outlet yang mereknya tidak dikenali tidak dipaksa masuk kartu mana pun", () => {
+    // Merek yang salah lebih buruk daripada merek yang tidak ditulis.
+    const k = kartuMerek([buat("Warung Entah", [100], 100)], merekDari, urutan);
+    expect(k).toEqual([]);
   });
 });
