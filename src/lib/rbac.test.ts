@@ -81,7 +81,13 @@ describe("menu access matrix", () => {
   });
 
   it("gives supervisor Hospitality + Hygiene + Complaints + HC Document Requests (field SPV, no dashboard/assessment)", () => {
-    expect(ROLE_MENUS.supervisor).toEqual(["events", "hospitality", "hygiene", "complaints", "hc_kontrak", "hc_submit", "sys_submit"]);
+    expect(ROLE_MENUS.supervisor).toEqual([
+      "events", "hospitality", "hygiene", "complaints", "hc_kontrak", "hc_submit", "sys_submit",
+      // Rapornya sendiri — halaman yang sama yang dibaca atasannya. Yang
+      // membatasinya ke barisnya sendiri halamannya, bukan daftar ini.
+      "kpi_supervisor", "kpi_supervisor_umum", "kpi_supervisor_kpk",
+    ]);
+    expect(canSeeMenu("supervisor", "kpi_supervisor")).toBe(true);
     expect(canSeeMenu("supervisor", "hc_submit")).toBe(true);
     expect(canSeeMenu("supervisor", "hygiene")).toBe(true);
     expect(canSeeMenu("supervisor", "hospitality")).toBe(true);

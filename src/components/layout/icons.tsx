@@ -17,6 +17,7 @@ import {
   PieChart,
   Star,
   UserPlus,
+  UserCog,
   UsersRound,
   Award,
   Banknote,
@@ -168,5 +169,6 @@ export const NAV_ICONS: Record<string, LucideIcon> = {
   PieChart,
   Star,
   UserPlus,
+  UserCog,
   UsersRound,
 };

@@ -278,6 +278,14 @@ export const POSISI_MANAJEMEN: Posisi[] = POSISI.filter(
  * berarti mengubah SATU berkas, bukan dua yang harus diubah serempak.
  */
 export const MENU_POSISI: Record<KodePosisi, string> = {
+  // SATU KUNCI PER POSISI, seperti posisi lain — dua posisi yang berbagi satu
+  // kunci berarti satu halaman bisa menampilkan indikator posisi lain.
+  //
+  // Yang tampil di sidebar cuma SATU pintu, `kpi_supervisor`: supervisor tidak
+  // tahu — dan tidak perlu tahu — dirinya masuk Umum atau KPK, itu ditentukan
+  // outlet yang dipegangnya. Dua pintu berarti lima puluh tiga orang harus
+  // menebak yang mana memuat namanya, dan yang salah pintu menemukan daftar
+  // tanpa dirinya.
   supervisor_umum: "kpi_supervisor_umum",
   supervisor_kpk: "kpi_supervisor_kpk",
   operational_ca: "kpi_op_ca",

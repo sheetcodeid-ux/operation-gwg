@@ -63,6 +63,9 @@ export type MenuKey =
   | "creative_penilaian"
   | "kpi"
   | "kpi_manajemen"
+  | "kpi_supervisor"
+  | "kpi_supervisor_umum"
+  | "kpi_supervisor_kpk"
   | "kpi_op_ca"
   | "kpi_op_software"
   | "kpi_op_pos"
@@ -221,6 +224,11 @@ export const NAV_MENUS: Omit<NavItem, "section" | "group" | "groupIcon">[] = [
   // balik tab membuat setiap kunjungan butuh dua klik yang sama berulang kali.
   { key: "kpi", label: "Ringkasan KPI", href: "/kpi", icon: "Target" },
   { key: "kpi_manajemen", label: "Manajemen", href: "/kpi/manajemen", icon: "Briefcase" },
+  // Satu-satunya yang tampil di sidebar. Dua di bawahnya halaman rincian per
+  // orang, dibuka DARI daftar ini — bukan dicari sendiri di sidebar.
+  { key: "kpi_supervisor", label: "Supervisor", href: "/kpi/supervisor", icon: "UserCog" },
+  { key: "kpi_supervisor_umum", label: "Supervisor Umum", href: "/kpi/supervisor_umum", icon: "UserCog" },
+  { key: "kpi_supervisor_kpk", label: "Supervisor KPK", href: "/kpi/supervisor_kpk", icon: "UserCog" },
   { key: "kpi_op_ca", label: "Coordinator Area", href: "/kpi/operational_ca", icon: "Store" },
   { key: "kpi_op_software", label: "Coordinator Software", href: "/kpi/operational_software", icon: "DatabaseZap" },
   { key: "kpi_op_pos", label: "Coordinator POS", href: "/kpi/operational_pos", icon: "ScanBarcode" },
@@ -330,7 +338,9 @@ const OPERATION_FULL: MenuKey[] = [
  *  supervisor (field staff at the branches) gets it. */
 export const ROLE_MENUS: Record<Role, MenuKey[]> = {
   super_admin: NAV_MENUS.map((m) => m.key), // everything, incl. admin menus
-  head_operation: [...OPERATION_FULL, "op_daily", "elearning", "elearning_admin", "assessment"], // manages E-Learning + monitors every branch
+  // `kpi_supervisor` — Head Operation yang mencatat Problem Solver tiap
+  // supervisor, jadi ia harus bisa membuka rapornya.
+  head_operation: [...OPERATION_FULL, "op_daily", "elearning", "elearning_admin", "assessment", "kpi_supervisor", "kpi_supervisor_umum", "kpi_supervisor_kpk"], // manages E-Learning + monitors every branch
   // Coordinator Area ikut memegang Pengajuan Dokumen. Ia membawahi beberapa
   // cabang dan sering mengurus berkas karyawan cabang yang supervisornya baru,
   // berhalangan, atau justru sedang diurus dokumennya; tanpa menu ini ia harus
@@ -346,7 +356,10 @@ export const ROLE_MENUS: Record<Role, MenuKey[]> = {
   data_operation: ["work", "op_analysis", "assessment", "kpi_op_software"],
   pos_operation: ["work", "op_analysis", "assessment", "kpi_op_pos"],
   admin_operation: ["work", "complaints", "op_analysis", "assessment"],
-  supervisor: ["events", "hospitality", "hygiene", "complaints", "hc_kontrak", "hc_submit", "sys_submit"], // field SPV — event/promo proposals + visits + HC docs + system requests
+  // `kpi_supervisor` — rapornya sendiri, halaman yang sama yang dibaca
+  // atasannya. Pembatasannya di halamannya: yang berperan supervisor hanya
+  // melihat barisnya sendiri, bukan lima puluh dua orang lainnya.
+  supervisor: ["events", "hospitality", "hygiene", "complaints", "hc_kontrak", "hc_submit", "sys_submit", "kpi_supervisor", "kpi_supervisor_umum", "kpi_supervisor_kpk"], // field SPV — event/promo proposals + visits + HC docs + system requests
   head_bar_rnd: ["hpp_dash", "work", "hpp", "hpp_db", "hpp_bahan", "hpp_price", "hpp_comp", "assessment"],
   bar_rnd: ["hpp_dash", "work", "hpp", "hpp_db", "hpp_bahan", "hpp_price", "hpp_comp", "assessment"],
   kitchen_rnd: ["hpp_dash", "work", "hpp", "hpp_db", "hpp_bahan", "hpp_price", "hpp_comp", "assessment"],
@@ -595,6 +608,9 @@ export const DIVISION_GROUPS: Partial<Record<Division, NavGroupDef[]>> = {
     // membuka Marketing Communication lebih dulu untuk menemukannya.
     { name: "Sosial Media", icon: "AtSign", urutan: 6, menus: ["kpi_creative_sosmed"] },
     { name: "Human Capital", icon: "UsersRound", urutan: 7, menus: ["kpi_hc"] },
+    // DI LUAR MANAJEMEN, dan ditaruh paling bawah karena itu: yang di atasnya
+    // seluruhnya departemen yang ikut dinilai KPI Manajemen.
+    { name: "Supervisor", icon: "UserCog", urutan: 8, menus: ["kpi_supervisor"] },
   ],
   Creative: [
     { name: "Permintaan Masuk", icon: "Palette", menus: ["creative_design", "creative_konten"] },
@@ -633,6 +649,9 @@ export const DIVISION_MENUS: { division: Division; menus: MenuKey[] }[] = [
       "kpi_pdq_head_pdq",
       "kpi_marcomm",
       "kpi_hc",
+      "kpi_supervisor",
+      "kpi_supervisor_umum",
+      "kpi_supervisor_kpk",
     ],
   },
   // sys_review sits under Operation for placement, but access is jabatan-gated
@@ -660,7 +679,7 @@ export const DIVISION_MENUS: { division: Division; menus: MenuKey[] }[] = [
    * orang di halamannya sendiri.
    */
   { division: "Operational V.1", menus: ["op_daily"] },
-  { division: "Supervisor", menus: ["events", "hospitality", "hygiene", "complaints", "hc_kontrak", "hc_submit", "sys_submit"] },
+  { division: "Supervisor", menus: ["events", "hospitality", "hygiene", "complaints", "hc_kontrak", "hc_submit", "sys_submit", "kpi_supervisor", "kpi_supervisor_umum", "kpi_supervisor_kpk"] },
   // Complaints ikut di sini, tapi PDQ hanya melihat kategori Food Quality —
   // penyaringnya di `complaintCategoryScope`, dan memasukkan komplain tetap
   // milik Marketing Communication.
