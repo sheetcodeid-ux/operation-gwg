@@ -138,7 +138,7 @@ export interface Indikator {
    * komplain dari batas 20 menghasilkan 150% lalu dipotong jadi 100%, dan yang
    * paling banyak dikomplain justru mendapat nilai penuh.
    */
-  penilaian?: "batas_maks" | "lulus_maks" | "kurang_linear";
+  penilaian?: "batas_maks" | "lulus_maks" | "kurang_linear" | "batas_linear";
   /** Satuan tampilan; ikut dipakai tabel dan grafik. */
   satuan?: "angka" | "rupiah" | "persen";
 }
@@ -537,9 +537,15 @@ const coordinatorArea: Indikator[] = [
     bobot: 20,
     target: { jenis: "tetap", nilai: 40 },
     actual: { sumber: "otomatis", kode: "hpp_area" },
-    penilaian: "lulus_maks",
+    // LEWAT BATAS TIDAK LANGSUNG NOL. Aturan lama menyamakan 40,1% dengan
+    // 80%: dua keadaan yang jaraknya berbulan-bulan kerja, dinilai sama.
+    // Akibatnya indikator ini berhenti mengukur apa pun begitu batasnya
+    // terlewat — tidak ada lagi yang bisa diperbaiki bulan itu, dan tidak ada
+    // bedanya antara memperbaiki sedikit dan tidak memperbaiki sama sekali.
+    penilaian: "batas_linear",
     satuan: "persen",
-    penjelasan: "Maksimal 40%. Ditimbang penjualan tiap outlet, bukan dirata-rata begitu saja.",
+    penjelasan:
+      "Maksimal 40%. Tepat 40% atau kurang bernilai penuh; di atasnya capaian turun bertahap — tiap 1% memotong 10% capaian indikator ini, dan habis di 50%. Ditimbang penjualan tiap outlet, bukan dirata-rata begitu saja.",
   },
 ];
 

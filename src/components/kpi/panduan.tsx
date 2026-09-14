@@ -98,8 +98,9 @@ function langkahCa(): Langkah[] {
       isi: (
         <>
           Juga diinput master admin, dalam <b>nominal rupiah</b>; persentasenya terhadap gross sales dihitung otomatis.
-          Batasnya 40%: di bawah atau tepat 40% bernilai penuh, lewat sedikit pun bernilai nol — tidak ada nilai
-          separuh. Lihat rinciannya di <b>Detail Harga Pokok Penjualan</b>.
+          Batasnya 40%: di bawah atau tepat 40% bernilai penuh. Di atasnya capaiannya <b>turun bertahap</b>, bukan
+          langsung nol — tiap 1% memotong 10% capaian indikator ini, jadi 41% bernilai 90%, 45% bernilai 50%, dan
+          habis di 50%. Lihat rinciannya di <b>Detail Harga Pokok Penjualan</b>.
         </>
       ),
     },

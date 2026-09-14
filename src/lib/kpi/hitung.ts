@@ -65,6 +65,21 @@ export interface BarisKpi {
 export const BATAS_PERSENTASE = 100;
 
 /**
+ * Seberapa jauh sebuah batas atas boleh dilewati sebelum capaiannya habis —
+ * dalam PERSEN DARI TARGETNYA, bukan dalam poin.
+ *
+ * Dipakai `batas_linear`. Untuk Harga Pokok Penjualan bertarget 40%, 25% dari
+ * target berarti capaiannya habis di 50%: tiap satu poin HPP di atas target
+ * memotong sepuluh persen capaian indikator itu.
+ *
+ * DINYATAKAN RELATIF supaya tetap sama kerasnya kalau targetnya diubah lewat
+ * Pengaturan. Kalau ditulis "sepuluh poin", target 20% akan punya toleransi
+ * setengah dari seluruh targetnya sendiri, dan indikator yang sama jadi jauh
+ * lebih longgar tanpa ada yang memutuskan begitu.
+ */
+export const TOLERANSI_BATAS = 25;
+
+/**
  * Capaian satu indikator. Target nol atau kosong = belum terukur.
  *
  * `mode` menentukan arah penilaiannya:
@@ -72,8 +87,11 @@ export const BATAS_PERSENTASE = 100;
  *  • `batas_maks` — targetnya BATAS ATAS yang masih boleh (komplain). Tanpa
  *    mode ini, 30 komplain dari batas 20 menghasilkan 150% lalu dipotong jadi
  *    100%, dan yang paling banyak dikomplain justru bernilai penuh;
- *  • `lulus_maks` — batas atas yang tidak boleh dilewati sama sekali (HPP).
- *    Tidak ada nilai separuh: 40,1% sama nilainya dengan 80%.
+ *  • `lulus_maks` — batas atas yang tidak boleh dilewati sama sekali. Tidak ada
+ *    nilai separuh: satu angka di atas batas bernilai nol.
+ *  • `batas_linear` — batas atas yang capaiannya TURUN BERTAHAP sesudah
+ *    dilewati, bukan langsung nol. Dipakai Harga Pokok Penjualan; lihat
+ *    `TOLERANSI_BATAS`.
  *  • `kurang_linear` — SETIAP kejadian mengurangi capaian, dan targetnya adalah
  *    titik nol. Dipakai Complaint: dengan `batas_maks`, dua komplain dari batas
  *    dua puluh bernilai sama dengan nol komplain — yang membuat sepuluh
@@ -83,7 +101,7 @@ export const BATAS_PERSENTASE = 100;
 export function persentaseCapaian(
   actual: number | null,
   target: number | null,
-  mode?: "batas_maks" | "lulus_maks" | "kurang_linear",
+  mode?: "batas_maks" | "lulus_maks" | "kurang_linear" | "batas_linear",
 ): number | null {
   if (actual === null || target === null) return null;
   // Target nol bukan capaian sempurna, melainkan target yang belum ditetapkan.
@@ -92,6 +110,16 @@ export function persentaseCapaian(
   if (target <= 0) return null;
 
   if (mode === "lulus_maks") return actual <= target ? BATAS_PERSENTASE : 0;
+  // Lewat batas TIDAK langsung nol — capaiannya turun sebanding jauhnya lewat.
+  if (mode === "batas_linear") {
+    if (actual <= target) return BATAS_PERSENTASE;
+    const rentang = target * (TOLERANSI_BATAS / 100);
+    if (rentang <= 0) return 0;
+    // Ditulis (rentang − lewat) × 100 ÷ rentang, bukan (1 − lewat/rentang) ×
+    // 100: bentuk kedua menghasilkan sisa desimal seperti 87,49999999999999
+    // yang bocor ke layar sebagai persentase yang tampak keliru.
+    return Math.max(0, ((rentang - (actual - target)) * BATAS_PERSENTASE) / rentang);
+  }
   // Nol kejadian bernilai penuh, dan capaiannya habis TEPAT di batasnya —
   // satu komplain berharga 1/target dari indikator itu, jadi batas 20 berarti
   // tiap komplain memotong 5% capaian indikatornya.
