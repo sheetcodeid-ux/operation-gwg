@@ -290,6 +290,30 @@ describe("barisHarian saat datanya berlubang", () => {
     expect(selesai.perHariSisa).toBeNull();
   });
 
+  it("menghitung lubang: hari yang sudah lewat tapi angkanya belum ada", () => {
+    const hari = kosong(30);
+    hari[0] = 100;
+    hari[5] = 100; // dua hari terisi dari empat belas yang sudah lewat
+    const b = barisHarian({
+      outletId: "o", nama: "N", area: "A",
+      hari, hariLalu: kosong(30), hariBerjalan: 14,
+    });
+    expect(b.hariTerisi).toBe(2);
+    expect(b.lubang).toBe(12);
+
+    // Tanpa keterangan hari berjalan, lubangnya tidak diklaim ada.
+    const tanpa = barisHarian({ outletId: "o", nama: "N", area: "A", hari, hariLalu: kosong(30) });
+    expect(tanpa.lubang).toBe(0);
+
+    // Bulan yang datanya utuh tidak berlubang.
+    const utuh = barisHarian({
+      outletId: "o", nama: "N", area: "A",
+      hari: [...Array.from({ length: 14 }, () => 100), ...kosong(16)],
+      hariLalu: kosong(30), hariBerjalan: 14,
+    });
+    expect(utuh.lubang).toBe(0);
+  });
+
   it("totalHarian meneruskan hari berjalan ke baris gabungannya", () => {
     const buat = (id: string) =>
       barisHarian({

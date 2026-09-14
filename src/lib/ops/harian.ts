@@ -121,6 +121,19 @@ export interface BarisHarian extends SumberHarian {
   /** Berapa hari yang sudah ada angkanya sama sekali. */
   hariTerisi: number;
   /**
+   * BERAPA HARI YANG SUDAH LEWAT TAPI ANGKANYA BELUM ADA.
+   *
+   * Angka paling penting di baris ini, dan satu-satunya yang bercerita tentang
+   * angka-angka lain di sebelahnya. Hari yang belum ditarik ikut dihitung nol
+   * ke dalam "Bulan Ini" dan "Kurang" — jadi selama lubangnya ada, outlet itu
+   * TERBACA LEBIH BURUK daripada keadaannya. Tanpa angka ini di layar, yang
+   * membaca tidak punya cara membedakan outlet yang benar-benar turun dari
+   * outlet yang datanya belum sampai.
+   *
+   * Nol berarti seluruh hari yang sudah lewat sudah ada angkanya.
+   */
+  lubang: number;
+  /**
    * DERET HARI TERCAPAI YANG MASIH BERJALAN — dihitung mundur dari hari
    * terakhir yang ada angkanya.
    *
@@ -251,6 +264,7 @@ export function barisHarian(s: SumberHarian): BarisHarian {
     capaianBulan: target === null || target <= 0 || bulanIni === null ? null : (bulanIni / target) * 100,
     hariTercapai,
     hariTerisi,
+    lubang: s.hariBerjalan == null ? 0 : Math.max(0, Math.min(s.hariBerjalan, s.hari.length) - hariTerisi),
     deret,
     kurang,
     perHariSisa,

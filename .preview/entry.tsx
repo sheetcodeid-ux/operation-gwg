@@ -346,11 +346,17 @@ if (kode === "daily") {
         // tiga bulan berjalan.
         targetBulan: i === 6 ? null : Math.round(dasar * 30 * 1.15),
         hari: kolom.map((h, j) =>
-          j > 12 ? null : Math.round(dasar * (0.7 + acak(i * 31 + j) * 0.7) * (h.pekan ? 1.25 : 1)),
+          // Outlet ke-2 dan ke-4 sengaja berlubang di tengah: begitulah bentuk
+          // datanya sekarang, dan pratinjau yang mulus menyembunyikan justru
+          // keadaan yang paling perlu terlihat.
+          j > 12 || (i % 2 === 1 && (j === 4 || j === 9))
+            ? null
+            : Math.round(dasar * (0.7 + acak(i * 31 + j) * 0.7) * (h.pekan ? 1.25 : 1)),
         ),
         hariLalu: kolom.map((h, j) =>
           j > 29 ? null : Math.round(dasar * (0.65 + acak(i * 77 + j) * 0.7) * (h.pekan ? 1.2 : 1)),
         ),
+        hariBerjalan: 14,
       }),
     ),
   );
@@ -363,6 +369,9 @@ if (kode === "daily") {
             kolom,
             baris,
             total: totalHarian(baris),
+            hariBerjalan: 14,
+            lubang: baris.reduce((n, b) => n + b.lubang, 0),
+            lubangDari: baris.length * 14,
             tanpaCabang: ["Nordu Kemang"],
             tanpaTarget: baris.filter((b) => b.targetBulan == null).map((b) => b.nama),
           }}

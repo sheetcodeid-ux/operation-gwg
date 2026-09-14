@@ -28,6 +28,18 @@ export interface DetailHarian {
   tanpaCabang: string[];
   /** Outlet yang belum genap tiga bulan, jadi belum punya target. */
   tanpaTarget: string[];
+  /** Berapa hari bulan ini yang sudah lewat — pembagi kelengkapan data. */
+  hariBerjalan: number;
+  /**
+   * Berapa pasangan outlet×tanggal yang sudah lewat tapi angkanya belum ada.
+   *
+   * Dipakai memberi tahu pembacanya bahwa angka di layar MASIH KURANG, bukan
+   * sudah final. Selama ini lebih dari nol, "Bulan Ini" dan "Kurang" tiap
+   * outlet menghitung hari yang belum ditarik sebagai nol jualan.
+   */
+  lubang: number;
+  /** Berapa pasangan yang seharusnya ada. Nol kalau tidak ada outlet. */
+  lubangDari: number;
 }
 
 /** Coordinator Area yang bisa dipilih — pengisi dropdown di halaman Daily. */
@@ -158,6 +170,9 @@ export async function harianOutlet(periode: string, outletIds?: readonly string[
     kolom,
     baris,
     total: totalHarian(baris),
+    hariBerjalan: berjalan,
+    lubang: baris.reduce((n, b) => n + b.lubang, 0),
+    lubangDari: baris.length * Math.min(berjalan, kolom.length),
     tanpaCabang,
     tanpaTarget: baris.filter((b) => (b.targetBulan ?? null) === null).map((b) => b.nama),
   };

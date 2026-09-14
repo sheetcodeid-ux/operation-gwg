@@ -10,6 +10,7 @@ import {
   ChevronRight,
   LayoutGrid,
   Rocket,
+  TriangleAlert,
   TrendingDown,
   TrendingUp,
   X,
@@ -642,6 +643,55 @@ function Segmen<T extends string>({
   );
 }
 
+/**
+ * SEBERAPA LENGKAP ANGKA DI LAYAR INI.
+ *
+ * Halaman ini dipakai mengambil keputusan, dan selama penarikan ESB belum
+ * selesai, angkanya BELUM FINAL — hari yang belum ditarik ikut terhitung nol
+ * jualan ke dalam "Bulan Ini" dan "Kurang". Artinya outlet yang datanya
+ * tertinggal terbaca lebih buruk daripada keadaannya, dan tidak ada satu pun
+ * tanda yang membedakan keduanya.
+ *
+ * Itu sebabnya ini bukan hiasan melainkan pengaman: selama lubangnya ada,
+ * yang membaca harus tahu ia sedang membaca angka yang masih kurang. Begitu
+ * penuh, lencananya hilang sendiri dan tidak mengganggu siapa pun lagi.
+ */
+function Kelengkapan({
+  lubang,
+  dari,
+  tanpaCabang,
+}: {
+  lubang: number;
+  dari: number;
+  tanpaCabang: string[];
+}) {
+  if (lubang <= 0 && tanpaCabang.length === 0) return null;
+  const persen = dari > 0 ? ((dari - lubang) / dari) * 100 : 100;
+  const sebab = [
+    lubang > 0 ? `${formatNumber(lubang)} hari-outlet yang sudah lewat belum ditarik dari ESB` : null,
+    tanpaCabang.length > 0
+      ? `${tanpaCabang.length} outlet belum tersambung cabang ESB dan tidak muncul di tabel: ${tanpaCabang.join(", ")}`
+      : null,
+  ].filter(Boolean);
+  return (
+    <span
+      title={`Angka di tabel ini belum final. ${sebab.join(". ")}. Hari yang belum ditarik ikut terhitung nol, jadi Bulan Ini dan Kurang masih lebih buruk daripada keadaan sebenarnya.`}
+      className={cn(
+        TINGGI,
+        "inline-flex shrink-0 items-center gap-1.5 rounded-lg border border-amber-500/40 bg-amber-500/10 px-2.5 text-[12px] font-medium text-amber-700 dark:text-amber-400",
+      )}
+    >
+      <TriangleAlert className="size-3.5" />
+      <span className="whitespace-nowrap">
+        {/* Kata "Data" dilepas duluan di layar sempit, angkanya tidak pernah:
+            angka itu yang menjadi peringatannya. */}
+        <span className="hidden xl:inline">Data </span>
+        {formatNumber(persen, { maximumFractionDigits: 0 })}%
+      </span>
+    </span>
+  );
+}
+
 /* ──────────────────────────────── tabel ──────────────────────────────── */
 
 /** Tajuk yang bisa diklik untuk mengurutkan. */
@@ -789,6 +839,19 @@ function Baris({
             <span className="flex items-center gap-1.5 text-[10.5px] text-muted-foreground">
               <span className="min-w-0 truncate">{baris.area}</span>
               <Roket deret={baris.deret} />
+              {/* Baris INI yang angkanya masih kurang. Ditaruh di sebelah nama
+                  outletnya, bukan cuma diringkas di atas: yang membandingkan
+                  dua baris perlu tahu baris mana yang belum utuh, dan angka
+                  ringkas di bilah atas tidak bisa menjawab itu. */}
+              {baris.lubang > 0 && (
+                <span
+                  title={`${baris.lubang} hari yang sudah lewat belum ditarik dari ESB — Bulan Ini dan Kurang di baris ini masih lebih buruk daripada keadaan sebenarnya`}
+                  className="inline-flex shrink-0 items-center gap-0.5 rounded bg-amber-500/15 px-1 font-medium tabular-nums text-amber-700 dark:text-amber-400"
+                >
+                  <TriangleAlert className="size-2.5" />
+                  {baris.lubang}
+                </span>
+              )}
             </span>
           </span>
         </span>
@@ -1054,6 +1117,8 @@ export function TabelHarian({
         </div>
 
         <div className="flex shrink-0 items-center gap-1.5">
+          <Kelengkapan lubang={detail.lubang} dari={detail.lubangDari} tanpaCabang={detail.tanpaCabang} />
+
           {/* Tombolnya MENYEBUT APA YANG DIKERJAKANNYA, dan itu memperbaiki
               laporan "kok hilang saat diklik". Dulu tertulis "Saringan" dengan
               lencana angka — terbaca seperti pintu menuju panel saringan,
