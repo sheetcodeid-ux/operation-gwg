@@ -19,6 +19,7 @@ import { TENGGAT, indikatorPosisi as daftarIndikator } from "@/lib/kpi/indikator
 import type { LaporanKpi } from "@/lib/data/kpi";
 import { bersatuan } from "@/lib/kpi/satuan";
 import { TabelHarian } from "@/components/operation/tabel-harian";
+import { KelengkapanDailyPanel } from "@/components/admin/kelengkapan-daily";
 import { barisHarian, kolomHari, totalHarian, urutHarian } from "@/lib/ops/harian";
 
 const ANGKA: Record<string, [number | null, number | null, number | null]> = {
@@ -313,6 +314,36 @@ if (kode === "sinkron") {
   createRoot(document.getElementById("root")!).render(
     <I18nProvider initialLang="id">
       <div className="p-6"><TabelSinkronSehat baris={contoh} /></div>
+    </I18nProvider>,
+  );
+  throw new Error("__stop__");
+}
+if (kode === "kelengkapan") {
+  // Angka CONTOH yang bentuknya seperti keadaan sungguhan sekarang.
+  createRoot(document.getElementById("root")!).render(
+    <I18nProvider initialLang="id">
+      <div className="max-w-4xl p-6">
+        <KelengkapanDailyPanel
+          awal={{
+            wajib: 14_649,
+            ada: 3_720,
+            kurang: 11_059,
+            persen: (3_720 / 14_649) * 100,
+            cabang: 57,
+            bulan: [
+              { periode: "2026-01", ada: 93, wajib: 1_767 },
+              { periode: "2026-02", ada: 84, wajib: 1_596 },
+              { periode: "2026-03", ada: 93, wajib: 1_767 },
+              { periode: "2026-04", ada: 126, wajib: 1_710 },
+              { periode: "2026-05", ada: 214, wajib: 1_767 },
+              { periode: "2026-06", ada: 383, wajib: 1_710 },
+              { periode: "2026-07", ada: 872, wajib: 1_767 },
+              { periode: "2026-09", ada: 524, wajib: 798 },
+              { periode: "2026-08", ada: 1_588, wajib: 1_767 },
+            ],
+          }}
+        />
+      </div>
     </I18nProvider>,
   );
   throw new Error("__stop__");

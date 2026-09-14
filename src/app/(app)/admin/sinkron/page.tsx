@@ -7,9 +7,14 @@ import { statusSinkron } from "@/lib/data/sinkron-sehat";
 import { PageHeader } from "@/components/ui/page-header";
 import { StatTile } from "@/components/ui/stat";
 import { TabelSinkronSehat } from "@/components/admin/sinkron-sehat";
+import { KelengkapanDailyPanel } from "@/components/admin/kelengkapan-daily";
+import { kelengkapanDaily } from "@/lib/data/kelengkapan-daily";
 
 export const metadata: Metadata = { title: "Kesehatan Data" };
 export const dynamic = "force-dynamic";
+/** Penarikan yang dijalankan dari tombol memakai satu jendela 40 detik; batas
+ *  bawaan rute memutusnya jauh sebelum itu. */
+export const maxDuration = 60;
 
 /**
  * Kesehatan penarikan otomatis.
@@ -24,13 +29,15 @@ export default async function SinkronPage() {
   const user = await requireSessionUser();
   if (!canReachMenu(user, "sinkron" as MenuKey)) redirect("/dashboard");
 
-  const baris = await statusSinkron();
+  const [baris, lengkap] = await Promise.all([statusSinkron(), kelengkapanDaily()]);
   const hitung = (s: string) => baris.filter((b) => b.status === s).length;
   const bermasalah = hitung("bermasalah") + hitung("belum pernah");
 
   return (
     <div className="w-full">
       <PageHeader title="Kesehatan Data" />
+
+      <KelengkapanDailyPanel awal={lengkap} />
 
       <div className="mb-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
         <StatTile icon={RefreshCw} label="Penarikan Dipantau" value={baris.length} sub="Tercatat sejak jalan pertama" />

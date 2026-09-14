@@ -25,6 +25,7 @@ export default defineConfig({
       { find: "@/lib/actions/unggah-data", replacement: fileURLToPath(new URL("./.preview/unggah-actions-stub.ts", import.meta.url)) },
       { find: "@/lib/actions/kpi-manajemen", replacement: fileURLToPath(new URL("./.preview/kpi-manajemen-actions-stub.ts", import.meta.url)) },
       { find: "@/lib/actions/kpi", replacement: fileURLToPath(new URL("./.preview/kpi-actions-stub.ts", import.meta.url)) },
+      { find: "@/lib/actions/kejar-daily", replacement: fileURLToPath(new URL("./.preview/kejar-daily-stub.ts", import.meta.url)) },
       { find: "@/lib/data/kpi", replacement: fileURLToPath(new URL("./.preview/data-kpi-stub.ts", import.meta.url)) },
       // Pengunggah menarik `node:crypto` lewat aksi presign. Tanpa tiruan ini
       // seluruh halaman berhenti dirender — kosong, tanpa petunjuk apa pun.
