@@ -2,12 +2,22 @@
 
 import * as React from "react";
 import { useRouter } from "next/navigation";
-import { ChevronDown, ChevronLeft, ChevronRight, ChevronUp, Flame, TrendingDown, TrendingUp } from "lucide-react";
+import {
+  ArrowDown,
+  ArrowUp,
+  ArrowUpDown,
+  ChevronLeft,
+  ChevronRight,
+  LayoutGrid,
+  Rocket,
+  SlidersHorizontal,
+  X,
+} from "lucide-react";
 import { Combobox } from "@/components/ui/combobox";
 import { WORK_BRANDS } from "@/lib/constants";
 import type { DetailHarian, PilihanArea } from "@/lib/data/daily-outlet";
 import { merekOutlet } from "@/lib/kpi/merek";
-import { LOGO_MEREK } from "@/lib/ops/logo-merek";
+import { LOGO_MEREK, WARNA_MEREK } from "@/lib/ops/logo-merek";
 import { BATAS_TERCAPAI, kartuMerek, type BarisHarian, type HariKolom, type KartuMerek } from "@/lib/ops/harian";
 import { cn, formatIDR, formatIDRShort, formatNumber } from "@/lib/utils";
 
@@ -19,14 +29,18 @@ import { cn, formatIDR, formatIDRShort, formatNumber } from "@/lib/utils";
  * berbeda: turun sedikit tiap hari, atau tutup empat hari. Keduanya terbaca
  * sama di laporan bulanan, dan yang harus dikerjakan berbeda jauh.
  *
- * TIGA PUluh SATU KOLOM tidak muat di layar mana pun, jadi yang dijaga bukan
+ * TIGA PULUH SATU KOLOM tidak muat di layar mana pun, jadi yang dijaga bukan
  * "semuanya terlihat sekaligus" melainkan "yang menggeser tidak pernah
- * kehilangan pegangannya":
- *  • kiri menempel — nomor, nama outlet, capaian bulan ini;
- *  • kanan menempel — kekurangan omset, angka yang justru paling dicari;
- *  • atas menempel — tanggal tetap terbaca sampai outlet ke-58.
- * Yang bergeser hanya tanggalnya, di antara dua tepi yang diam.
+ * kehilangan pegangannya": kiri menempel (nomor, outlet, capaian bulan ini),
+ * kanan menempel (kekurangan), atas menempel (tanggal). Yang bergeser hanya
+ * tanggalnya, di antara tepi-tepi yang diam.
+ *
+ * ANGKANYA TIDAK DITEBALKAN. Tabel yang seluruh isinya tebal tidak menonjolkan
+ * apa pun — yang menonjol justru tidak ada. Yang membedakan di sini warna dan
+ * bentuk: segitiga naik-turun, bar capaian, dan satu baris jumlah di bawah.
  */
+
+/* ──────────────────────────────── bulan ──────────────────────────────── */
 
 const BULAN = [
   "Januari", "Februari", "Maret", "April", "Mei", "Juni",
@@ -38,7 +52,6 @@ const labelBulan = (periode: string) => {
   return `${BULAN[bl - 1]} ${th}`;
 };
 
-/** Nama bulan pendek — untuk layar yang tidak muat nama panjangnya. */
 const labelBulanPendek = (periode: string) => {
   const [th, bl] = periode.split("-").map(Number);
   return `${BULAN[bl - 1].slice(0, 3)} ${String(th).slice(2)}`;
@@ -50,21 +63,32 @@ const geserBulan = (periode: string, arah: number) => {
   return `${t.getUTCFullYear()}-${String(t.getUTCMonth() + 1).padStart(2, "0")}`;
 };
 
+/* ─────────────────────────────── ukuran ─────────────────────────────── */
+
 /**
- * Lebar kolom yang menempel — dipakai tajuk dan isinya, jadi satu angka saja.
+ * Lebar kolom yang menempel — DIKUNCI, bukan disarankan.
  *
- * DIKUNCI, bukan disarankan. `width` pada sel tabel hanya usulan: kalau isinya
- * lebih lebar, kolomnya melar — sementara `left` sel berikutnya tetap dihitung
- * dari angka di bawah ini. Selisihnya jadi celah, dan di celah itu tanggal yang
- * sedang bergeser terlihat menyembul di antara kolom yang seharusnya diam.
+ * `width` pada sel tabel hanya usulan: kalau isinya lebih lebar, kolomnya
+ * melar, sementara `left` sel berikutnya tetap dihitung dari angka di sini.
+ * Selisihnya jadi celah, dan di celah itu tanggal yang sedang bergeser
+ * terlihat menyembul di antara kolom yang seharusnya diam.
  */
 const LEBAR = {
-  lega: { no: 40, nama: 156, bulan: 158, kurang: 156 },
+  lega: { no: 38, nama: 200, bulan: 166, kurang: 158 },
   // Di layar sempit tepi beku memakan hampir seluruh lebar, dan yang tersisa
   // untuk tanggal tinggal dua kolom. Kolom Kurang ditarik masuk ke sel Bulan
   // Ini — angkanya tetap terbaca, tempatnya saja yang berpindah.
-  sempit: { no: 30, nama: 124, bulan: 126, kurang: 0 },
+  sempit: { no: 28, nama: 148, bulan: 128, kurang: 0 },
 } as const;
+
+type Lebar = (typeof LEBAR)[keyof typeof LEBAR];
+
+const kunci = (w: number, kiri?: number) => ({
+  width: w,
+  minWidth: w,
+  maxWidth: w,
+  ...(kiri === undefined ? {} : { left: kiri }),
+});
 
 /**
  * Apakah layarnya sempit.
@@ -86,86 +110,354 @@ function useSempit(): boolean {
   );
 }
 
-/** Lebar yang tidak bisa ditawar isinya. */
-const kunci = (w: number, kiri?: number) => ({
-  width: w,
-  minWidth: w,
-  maxWidth: w,
-  ...(kiri === undefined ? {} : { left: kiri }),
-});
-
 /* ───────────────────────────── potongan kecil ───────────────────────────── */
 
-function Ubah({ nilai, besar = false }: { nilai: number | null; besar?: boolean }) {
-  if (nilai === null) return null;
+/** Segitiga naik-turun — penanda arah yang tidak bergantung pada warna saja. */
+function Arah({ naik, nada = true }: { naik: boolean; nada?: boolean }) {
+  return (
+    <span
+      aria-hidden
+      className={cn(
+        "text-[8px] leading-none",
+        !nada ? "" : naik ? "text-emerald-600 dark:text-emerald-400" : "text-rose-600 dark:text-rose-400",
+      )}
+    >
+      {naik ? "▲" : "▼"}
+    </span>
+  );
+}
+
+/** Persentase bersegitiga — bentuk yang sama di kartu maupun di tabel. */
+function Persen({ nilai, kelas }: { nilai: number | null; kelas?: string }) {
+  if (nilai === null) return <span className="text-[11px] text-muted-foreground">—</span>;
   const naik = nilai >= 0;
-  const Ikon = naik ? TrendingUp : TrendingDown;
   return (
     <span
       className={cn(
         "inline-flex items-center gap-0.5 tabular-nums",
-        besar ? "text-[11.5px] font-semibold" : "text-[10.5px]",
         naik ? "text-emerald-600 dark:text-emerald-400" : "text-rose-600 dark:text-rose-400",
+        kelas,
       )}
     >
-      <Ikon className={besar ? "size-3.5" : "size-3"} />
-      {formatNumber(Math.abs(nilai), { maximumFractionDigits: 0 })}%
+      <Arah naik={naik} nada={false} />
+      {formatNumber(Math.abs(nilai), { maximumFractionDigits: nilai % 1 === 0 ? 0 : 2 })}%
     </span>
   );
 }
 
 /**
- * Nama outlet pada lebar yang sempit — BERJALAN saat ditunjuk.
+ * DERET HARI TERCAPAI — roket, dan kelipatannya.
  *
- * Dipotong dengan titik-titik, "Nordu Coffee Singkawang Diponegoro" dan "Nordu
- * Coffee Singkawang Sudirman" terbaca persis sama. Melebarkan kolomnya memakan
- * tempat tanggal, yang jumlahnya tiga puluh satu; jadi namanya dibiarkan
- * sempit dan digeser sendiri begitu kursor berhenti di atasnya.
- */
-function NamaBerjalan({ nama }: { nama: string }) {
-  // Nama yang muat tidak diberi apa-apa: tepi yang memudar pada nama pendek
-  // membuatnya terbaca seakan terpotong padahal utuh.
-  const panjang = nama.length > 20;
-  return (
-    <span className={cn("block overflow-hidden", panjang && "nama-panjang")} title={nama}>
-      <span className="block whitespace-nowrap text-[12.5px] font-medium text-foreground">{nama}</span>
-    </span>
-  );
-}
-
-/**
- * DERET HARI TERCAPAI — api, dan angkanya.
- *
- * Yang dijawabnya bukan "berapa hari tercapai bulan ini" (itu sudah ada di
- * kolom Kurang), melainkan "apakah outlet ini SEDANG jalan". Sepuluh hari
+ * Yang dijawabnya bukan "berapa hari tercapai bulan ini" — itu sudah terbaca
+ * dari kolom Kurang — melainkan "apakah outlet ini SEDANG jalan". Sepuluh hari
  * tercapai yang tersebar sepanjang bulan dan lima hari berturut-turut sampai
  * kemarin adalah dua keadaan yang berbeda jauh, dan cuma yang kedua yang
  * berarti besok kemungkinan besar tercapai juga.
  *
- * Apinya membesar mengikuti deretnya: tiga hari sudah pola, tujuh hari sudah
- * kebiasaan. Yang deretnya putus tidak diberi apa-apa — tanda "0 hari" hanya
- * ramai tanpa memberi tahu apa pun.
+ * Yang deretnya putus tidak diberi apa-apa: tanda "0" hanya ramai tanpa
+ * memberi tahu apa pun.
  */
-function Api({ deret }: { deret: number }) {
+function Roket({ deret, besar = false }: { deret: number; besar?: boolean }) {
   if (deret <= 0) return null;
-  const nada = deret >= 7 ? "text-rose-500" : deret >= 3 ? "text-amber-500" : "text-amber-400";
   return (
     <span
-      className={cn("inline-flex shrink-0 items-center gap-0.5 font-semibold tabular-nums", nada)}
+      className={cn(
+        "inline-flex shrink-0 items-center gap-0.5 rounded-md bg-orange-500/10 px-1 py-px font-semibold tabular-nums text-orange-600 dark:text-orange-400",
+        besar ? "text-[12px]" : "text-[10.5px]",
+      )}
       title={`${deret} hari berturut-turut mencapai target harian`}
     >
-      <Flame className={cn("size-3", deret >= 7 && "fill-rose-500/20")} />
-      {deret}×
+      <Rocket className={besar ? "size-3.5" : "size-3"} />
+      {deret}
     </span>
   );
 }
 
-/** Warna capaian sehari — hijau tercapai, kuning mendekati, merah tertinggal. */
-function nadaCapaian(c: number | null): string {
-  if (c === null) return "text-muted-foreground";
-  if (c >= BATAS_TERCAPAI) return "text-emerald-600 dark:text-emerald-400";
-  if (c >= 80) return "text-amber-600 dark:text-amber-400";
-  return "text-rose-600 dark:text-rose-400";
+/** Lambang merek — logonya kalau ada, huruf depan berwarna merek kalau belum. */
+function Lambang({ merek, ukuran = 22 }: { merek: string | null; ukuran?: number }) {
+  const m = merek ? merekOutlet(merek) : null;
+  const logo = merek ? LOGO_MEREK[merek] : undefined;
+  if (logo) {
+    return (
+      // eslint-disable-next-line @next/next/no-img-element
+      <img
+        src={logo}
+        alt={merek ?? ""}
+        style={{ width: ukuran, height: ukuran }}
+        className="shrink-0 rounded-full bg-white object-contain ring-1 ring-border"
+      />
+    );
+  }
+  return (
+    <span
+      style={{ width: ukuran, height: ukuran, fontSize: ukuran * 0.5 }}
+      className={cn(
+        "grid shrink-0 place-items-center rounded-full font-bold text-white",
+        m ? WARNA_MEREK[m.tone] : "bg-slate-300 dark:bg-slate-600",
+      )}
+    >
+      {(merek ?? "?").slice(0, 1)}
+    </span>
+  );
+}
+
+/** Bar capaian — dengan penanda seratus persen yang tetap di tempatnya. */
+function BarCapaian({
+  capaian,
+  tinggi = "h-1.5",
+}: {
+  capaian: number | null;
+  tinggi?: string;
+}) {
+  const SKALA = 120;
+  const c = capaian ?? 0;
+  return (
+    <div className={cn("relative w-full overflow-hidden rounded-full bg-muted", tinggi)}>
+      <div
+        className={cn(
+          "h-full rounded-full transition-[width] duration-500",
+          c >= BATAS_TERCAPAI
+            ? "bg-emerald-500"
+            : c >= 80
+              ? "bg-amber-500"
+              : "bg-rose-400",
+        )}
+        style={{ width: `${Math.min(100, (Math.max(0, c) / SKALA) * 100)}%` }}
+      />
+      {/* Penanda target — tetap di 100% berapa pun capaiannya, supaya yang
+          101% dan yang 180% tidak terlihat sama persis. */}
+      <span className="absolute inset-y-0 w-px bg-foreground/25" style={{ left: `${(BATAS_TERCAPAI / SKALA) * 100}%` }} />
+    </div>
+  );
+}
+
+/* ───────────────────────────── kartu per merek ───────────────────────────── */
+
+/** Grafik sekelumit — bentuk pergerakan sebulan, bukan angkanya. */
+function Sekelumit({ nilai, naik }: { nilai: (number | null)[]; naik: boolean }) {
+  const ada = nilai.map((v, i) => ({ v, i })).filter((t): t is { v: number; i: number } => t.v !== null);
+  if (ada.length < 2) return <span className="h-6 w-14" />;
+  const min = Math.min(...ada.map((t) => t.v));
+  const max = Math.max(...ada.map((t) => t.v));
+  const rentang = max - min || 1;
+  const titik = ada.map((t, n) => `${(n / (ada.length - 1)) * 56},${22 - ((t.v - min) / rentang) * 18}`).join(" ");
+  return (
+    <svg viewBox="0 0 56 24" className="h-6 w-14 shrink-0" aria-hidden>
+      <polyline
+        points={titik}
+        fill="none"
+        strokeWidth="1.6"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        className={naik ? "stroke-emerald-500" : "stroke-rose-500"}
+      />
+    </svg>
+  );
+}
+
+function KartuBrand({ kartu, aktif, onPilih }: { kartu: KartuMerek; aktif: boolean; onPilih: () => void }) {
+  const naik = (kartu.mom ?? 0) >= 0;
+  return (
+    <button
+      type="button"
+      onClick={onPilih}
+      aria-pressed={aktif}
+      className={cn(
+        "w-[15.5rem] shrink-0 snap-start rounded-xl border bg-card px-3 py-2.5 text-left transition-colors",
+        aktif ? "border-brand-500 ring-1 ring-brand-500/30" : "border-border hover:border-foreground/20",
+      )}
+    >
+      <div className="flex items-center gap-2">
+        <Lambang merek={kartu.merek} ukuran={22} />
+        <span className="truncate text-[13px] font-semibold text-foreground">{kartu.merek}</span>
+        <span className="ml-auto shrink-0 rounded-full bg-muted px-1.5 py-px text-[10px] tabular-nums text-muted-foreground">
+          {kartu.outlet} outlet
+        </span>
+      </div>
+
+      <div className="mt-1.5 flex items-end justify-between gap-2">
+        <div className="min-w-0">
+          <p className="truncate text-[15px] tabular-nums text-foreground">
+            {kartu.bulanIni === null ? "—" : formatIDR(kartu.bulanIni)}
+          </p>
+          <Persen nilai={kartu.mom} kelas="text-[11.5px]" />
+        </div>
+        <Sekelumit nilai={kartu.hari} naik={naik} />
+      </div>
+
+      <div className="mt-2 flex items-center gap-2">
+        <BarCapaian capaian={kartu.capaian} />
+        <span
+          className={cn(
+            "shrink-0 text-[11px] tabular-nums",
+            (kartu.capaian ?? 0) >= BATAS_TERCAPAI ? "text-emerald-600 dark:text-emerald-400" : "text-muted-foreground",
+          )}
+        >
+          {kartu.capaian === null ? "—" : `${formatNumber(kartu.capaian, { maximumFractionDigits: 0 })}%`}
+        </span>
+      </div>
+    </button>
+  );
+}
+
+/** Deret kartu yang bisa digeser — panahnya muncul hanya kalau ada yang tersembunyi. */
+function DeretMerek({
+  kartu,
+  dipilih,
+  onPilih,
+}: {
+  kartu: KartuMerek[];
+  dipilih: string | null;
+  onPilih: (m: string | null) => void;
+}) {
+  const ref = React.useRef<HTMLDivElement>(null);
+  const [arah, setArah] = React.useState({ kiri: false, kanan: false });
+
+  const periksa = React.useCallback(() => {
+    const el = ref.current;
+    if (!el) return;
+    setArah({ kiri: el.scrollLeft > 4, kanan: el.scrollWidth - el.clientWidth - el.scrollLeft > 4 });
+  }, []);
+
+  React.useEffect(() => {
+    periksa();
+    const el = ref.current;
+    if (!el) return;
+    const ro = new ResizeObserver(periksa);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [periksa, kartu.length]);
+
+  if (kartu.length === 0) return null;
+  const geser = (n: number) => ref.current?.scrollBy({ left: n * 280, behavior: "smooth" });
+
+  return (
+    <div className="relative">
+      <div ref={ref} onScroll={periksa} className="scroll-fade-x flex snap-x gap-2 overflow-x-auto pb-0.5">
+        {kartu.map((k) => (
+          <KartuBrand
+            key={k.merek}
+            kartu={k}
+            aktif={dipilih === k.merek}
+            onPilih={() => onPilih(dipilih === k.merek ? null : k.merek)}
+          />
+        ))}
+      </div>
+      {(["kiri", "kanan"] as const).map((sisi) =>
+        arah[sisi] ? (
+          <button
+            key={sisi}
+            type="button"
+            aria-label={sisi === "kiri" ? "Kartu sebelumnya" : "Kartu berikutnya"}
+            onClick={() => geser(sisi === "kiri" ? -1 : 1)}
+            className={cn(
+              "absolute top-1/2 grid size-7 -translate-y-1/2 place-items-center rounded-full border border-border bg-card text-muted-foreground shadow-md hover:text-foreground",
+              sisi === "kiri" ? "left-1" : "right-1",
+            )}
+          >
+            {sisi === "kiri" ? <ChevronLeft className="size-4" /> : <ChevronRight className="size-4" />}
+          </button>
+        ) : null,
+      )}
+    </div>
+  );
+}
+
+/* ─────────────────────────────── saringan ─────────────────────────────── */
+
+type Status = "semua" | "tercapai" | "tertinggal" | "tanpa";
+type Urut = "omzet" | "capaian" | "deret" | "kurang" | "nama";
+type Arah2 = "naik" | "turun";
+type Mode = "banding" | "target";
+
+const STATUS: { nilai: Status; label: string }[] = [
+  { nilai: "semua", label: "Semua" },
+  { nilai: "tercapai", label: "Tercapai" },
+  { nilai: "tertinggal", label: "Tertinggal" },
+  { nilai: "tanpa", label: "Belum bertarget" },
+];
+
+/** Pil tersegmen — satu pilihan dari beberapa, tanpa membuka apa pun. */
+function Segmen<T extends string>({
+  pilihan,
+  nilai,
+  onNilai,
+}: {
+  pilihan: { nilai: T; label: string }[];
+  nilai: T;
+  onNilai: (v: T) => void;
+}) {
+  return (
+    <div className="inline-flex shrink-0 items-center rounded-lg border border-border bg-card p-0.5">
+      {pilihan.map((p) => (
+        <button
+          key={p.nilai}
+          type="button"
+          onClick={() => onNilai(p.nilai)}
+          className={cn(
+            "whitespace-nowrap rounded-md px-2.5 py-1 text-[12px] transition-colors",
+            nilai === p.nilai
+              ? "bg-brand-500 font-medium text-white"
+              : "text-muted-foreground hover:text-foreground",
+          )}
+        >
+          {p.label}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+/* ──────────────────────────────── tabel ──────────────────────────────── */
+
+/** Tajuk yang bisa diklik untuk mengurutkan. */
+function Kepala({
+  label,
+  bawah,
+  urut,
+  aktif,
+  arah,
+  onUrut,
+  className,
+  style,
+}: {
+  label: string;
+  bawah?: string;
+  urut?: Urut;
+  aktif?: boolean;
+  arah?: Arah2;
+  onUrut?: (u: Urut) => void;
+  className?: string;
+  style?: React.CSSProperties;
+}) {
+  const isi = (
+    <>
+      {label}
+      {urut && (
+        <span className={cn("ml-1 inline-block align-middle", aktif ? "text-brand-600" : "text-muted-foreground/50")}>
+          {!aktif ? (
+            <ArrowUpDown className="size-3" />
+          ) : arah === "naik" ? (
+            <ArrowUp className="size-3" />
+          ) : (
+            <ArrowDown className="size-3" />
+          )}
+        </span>
+      )}
+      {bawah && <span className="block text-[9px] font-normal normal-case tracking-normal">{bawah}</span>}
+    </>
+  );
+  return (
+    <th className={className} style={style}>
+      {urut && onUrut ? (
+        <button type="button" onClick={() => onUrut(urut)} className="w-full text-inherit hover:text-foreground">
+          {isi}
+        </button>
+      ) : (
+        isi
+      )}
+    </th>
+  );
 }
 
 function SelHari({
@@ -181,350 +473,118 @@ function SelHari({
 }) {
   if (nilai === null) {
     return (
-      <td className="snap-start border-l border-border/60 px-2 py-1.5 text-center align-middle">
+      <td className="snap-start border-l border-border/50 px-2 py-1.5 text-center align-middle">
         {/* Belum ditarik dari ESB — BUKAN nol. Nol berarti outletnya tidak
             berjualan sehari penuh, dan itu tuduhan yang berbeda jauh. */}
         <span className="text-[11px] text-muted-foreground/50">—</span>
       </td>
     );
   }
-  const tercapai = capaian !== null && capaian >= BATAS_TERCAPAI;
+  const p = mode === "target" ? capaian : ubah;
   return (
-    <td
-      className={cn(
-        "snap-start border-l border-border/60 px-2 py-1.5 text-right align-middle",
-        mode === "target" && tercapai && "bg-emerald-500/10",
-        mode === "target" && capaian !== null && !tercapai && "bg-rose-500/[0.07]",
-      )}
-    >
-      <span className="block whitespace-nowrap text-[11.5px] font-medium tabular-nums text-foreground">
-        {formatIDRShort(nilai)}
-      </span>
+    <td className="snap-start border-l border-border/50 px-2 py-1.5 text-right align-middle">
+      <span className="block whitespace-nowrap text-[11.5px] tabular-nums text-foreground">{formatIDRShort(nilai)}</span>
       {mode === "target" ? (
-        // Angkanya saja sudah berwarna, TAPI warna bukan satu-satunya
-        // penanda: yang buta warna membaca tabel yang sama, dan panahnya
-        // menyebut arah tanpa bergantung pada merah-hijau.
-        <span className={cn("flex items-center justify-end gap-0.5 text-[10.5px] font-semibold tabular-nums", nadaCapaian(capaian))}>
-          {capaian === null ? (
-            "—"
-          ) : (
-            <>
-              {capaian >= BATAS_TERCAPAI ? <ChevronUp className="size-3" /> : <ChevronDown className="size-3" />}
-              {formatNumber(capaian, { maximumFractionDigits: 0 })}%
-            </>
-          )}
-        </span>
+        p === null ? (
+          <span className="text-[10.5px] text-muted-foreground">—</span>
+        ) : (
+          <span
+            className={cn(
+              "inline-flex items-center gap-0.5 text-[10.5px] tabular-nums",
+              p >= BATAS_TERCAPAI ? "text-emerald-600 dark:text-emerald-400" : "text-rose-600 dark:text-rose-400",
+            )}
+          >
+            <Arah naik={p >= BATAS_TERCAPAI} nada={false} />
+            {formatNumber(p, { maximumFractionDigits: 0 })}%
+          </span>
+        )
       ) : (
-        <Ubah nilai={ubah} />
+        <Persen nilai={p} kelas="text-[10.5px]" />
       )}
     </td>
   );
 }
-
-/* ───────────────────────────── kartu per merek ───────────────────────────── */
-
-/**
- * Warna merek — DIPAKAI BERSAMA lencana merek di seluruh aplikasi.
- *
- * Diambil dari `merekOutlet`, bukan ditulis ulang di sini: dua daftar warna
- * untuk empat merek yang sama akan berbeda begitu salah satunya diubah, dan
- * satu merek tampil biru di satu halaman dan hijau di halaman sebelahnya.
- */
-const NADA_MEREK: Record<string, string> = {
-  danger: "bg-rose-500",
-  cyan: "bg-cyan-500",
-  amber: "bg-amber-500",
-  success: "bg-emerald-500",
-  brand: "bg-brand-500",
-};
-
-/**
- * Lambang merek — HURUF DEPANNYA, sampai berkas logonya ada.
- *
- * Ditulis begini dengan sengaja, bukan kotak kosong menunggu gambar: huruf
- * berwarna tetap membedakan keempat kartu dari kejauhan, dan begitu logonya
- * masuk, yang berubah hanya isi kotak ini.
- */
-function LambangMerek({ merek, logo }: { merek: string; logo?: string }) {
-  const nada = NADA_MEREK[merekOutlet(merek)?.tone ?? "brand"] ?? "bg-brand-500";
-  if (logo) {
-    // eslint-disable-next-line @next/next/no-img-element
-    return <img src={logo} alt={merek} className="size-7 shrink-0 rounded-full object-cover" />;
-  }
-  return (
-    <span className={cn("grid size-7 shrink-0 place-items-center rounded-full text-[12px] font-bold text-white", nada)}>
-      {merek.slice(0, 1)}
-    </span>
-  );
-}
-
-/**
- * Grafik sekelumit — bentuk pergerakan sebulan, bukan angkanya.
- *
- * Tanpa sumbu dan tanpa angka dengan sengaja: yang dijawabnya cuma satu
- * pertanyaan, "naik atau turun", dan menambahkan sumbu pada gambar selebar
- * tujuh puluh piksel hanya membuat keduanya tidak terbaca.
- */
-function Sekelumit({ nilai, naik }: { nilai: (number | null)[]; naik: boolean }) {
-  const ada = nilai.map((v, i) => ({ v, i })).filter((t): t is { v: number; i: number } => t.v !== null);
-  if (ada.length < 2) return <span className="h-7 w-[72px]" />;
-  const min = Math.min(...ada.map((t) => t.v));
-  const max = Math.max(...ada.map((t) => t.v));
-  const rentang = max - min || 1;
-  const titik = ada
-    .map((t, n) => `${(n / (ada.length - 1)) * 70},${26 - ((t.v - min) / rentang) * 22}`)
-    .join(" ");
-  return (
-    <svg viewBox="0 0 70 28" className="h-7 w-[72px] shrink-0" aria-hidden>
-      <polyline
-        points={titik}
-        fill="none"
-        strokeWidth="1.8"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        className={naik ? "stroke-emerald-500" : "stroke-rose-500"}
-      />
-    </svg>
-  );
-}
-
-/**
- * Bar capaian — dengan PENANDA SERATUS PERSEN yang tetap di tempatnya.
- *
- * Bar yang penuh di ujung kanan berarti "seratus persen" hanya kalau
- * seratus persen memang ujungnya. Begitu ada merek yang melampaui target,
- * bar yang dipotong di 100% membuat yang 101% dan yang 180% terlihat sama
- * persis. Di sini skalanya sampai 120%, garis putus-putus menandai target,
- * dan yang melewatinya benar-benar terlihat melewatinya.
- */
-function BarCapaian({ capaian, target }: { capaian: number | null; target: number | null }) {
-  const SKALA = 120;
-  const c = capaian ?? 0;
-  const lampaui = c >= BATAS_TERCAPAI;
-  return (
-    <div className="mt-3">
-      <div className="flex items-baseline justify-between">
-        <span className="text-[11px] uppercase tracking-wide text-muted-foreground">Capaian target</span>
-        <span
-          className={cn(
-            "text-[13px] font-bold tabular-nums",
-            capaian === null
-              ? "text-muted-foreground"
-              : lampaui
-                ? "text-emerald-600 dark:text-emerald-400"
-                : "text-foreground",
-          )}
-        >
-          {capaian === null ? "belum bertarget" : `${formatNumber(capaian, { maximumFractionDigits: 0 })}%`}
-        </span>
-      </div>
-      <div className="relative mt-1.5 h-2 overflow-hidden rounded-full bg-muted">
-        <div
-          className={cn(
-            "h-full rounded-full transition-[width] duration-500",
-            lampaui
-              ? "bg-gradient-to-r from-emerald-400 to-emerald-600"
-              : c >= 80
-                ? "bg-gradient-to-r from-amber-400 to-amber-500"
-                : "bg-gradient-to-r from-brand-400 to-brand-600",
-          )}
-          style={{ width: `${Math.min(100, (Math.max(0, c) / SKALA) * 100)}%` }}
-        />
-        {/* Penanda target — tetap di 100% berapa pun capaiannya. */}
-        <span
-          className="absolute inset-y-0 w-px bg-foreground/25"
-          style={{ left: `${(BATAS_TERCAPAI / SKALA) * 100}%` }}
-        />
-      </div>
-      <p className="mt-1.5 text-[11px] tabular-nums text-muted-foreground">
-        Target {target == null ? "—" : formatIDR(target)}
-      </p>
-    </div>
-  );
-}
-
-function KartuBrand({ kartu, logo }: { kartu: KartuMerek; logo?: string }) {
-  const naik = (kartu.mom ?? 0) >= 0;
-  return (
-    <div className="w-[19rem] shrink-0 snap-start rounded-2xl border border-border bg-card px-4 py-3 shadow-sm">
-      <div className="flex items-center gap-2">
-        <LambangMerek merek={kartu.merek} logo={logo} />
-        <span className="truncate text-[15px] font-semibold text-foreground">{kartu.merek}</span>
-        <span className="ml-auto shrink-0 rounded-full bg-muted px-2 py-0.5 text-[11px] font-medium tabular-nums text-muted-foreground">
-          {kartu.outlet} outlet
-        </span>
-      </div>
-      <div className="mt-2 flex items-end justify-between gap-3">
-        <div className="min-w-0">
-          <p className="truncate text-[17px] font-semibold tabular-nums text-foreground">
-            {kartu.bulanIni === null ? "—" : formatIDR(kartu.bulanIni)}
-          </p>
-          <p
-            className={cn(
-              "mt-0.5 flex items-center gap-1 text-[12.5px] font-semibold tabular-nums",
-              kartu.mom === null
-                ? "text-muted-foreground"
-                : naik
-                  ? "text-emerald-600 dark:text-emerald-400"
-                  : "text-rose-600 dark:text-rose-400",
-            )}
-          >
-            {kartu.mom === null ? (
-              "—"
-            ) : (
-              <>
-                {naik ? <TrendingUp className="size-3.5" /> : <TrendingDown className="size-3.5" />}
-                {formatNumber(Math.abs(kartu.mom), { maximumFractionDigits: 2 })}%
-              </>
-            )}
-            <span className="font-normal text-muted-foreground">vs bulan lalu</span>
-          </p>
-        </div>
-        <Sekelumit nilai={kartu.hari} naik={naik} />
-      </div>
-      {/* Capaian terhadap targetnya sendiri — angka yang membedakan merek yang
-          tumbuh dari merek yang sekadar besar. */}
-      <BarCapaian capaian={kartu.capaian} target={kartu.targetBulan} />
-    </div>
-  );
-}
-
-/** Deret kartu yang bisa digeser — empat merek belum tentu muat di satu layar. */
-function DeretMerek({ kartu, logo }: { kartu: KartuMerek[]; logo?: Record<string, string> }) {
-  const ref = React.useRef<HTMLDivElement>(null);
-  const [arah, setArah] = React.useState<{ kiri: boolean; kanan: boolean }>({ kiri: false, kanan: false });
-
-  // Panahnya muncul hanya kalau memang ADA yang tersembunyi — panah yang tidak
-  // menggeser apa-apa mengajari orang untuk mengabaikannya, termasuk saat ia
-  // benar-benar berarti.
-  const periksa = React.useCallback(() => {
-    const el = ref.current;
-    if (!el) return;
-    const sisa = el.scrollWidth - el.clientWidth - el.scrollLeft;
-    setArah({ kiri: el.scrollLeft > 4, kanan: sisa > 4 });
-  }, []);
-
-  React.useEffect(() => {
-    periksa();
-    const el = ref.current;
-    if (!el) return;
-    const ro = new ResizeObserver(periksa);
-    ro.observe(el);
-    return () => ro.disconnect();
-  }, [periksa, kartu.length]);
-
-  if (kartu.length === 0) return null;
-  const geser = (n: number) => ref.current?.scrollBy({ left: n * 320, behavior: "smooth" });
-
-  return (
-    <div className="relative">
-      <div ref={ref} onScroll={periksa} className="scroll-fade-x flex snap-x gap-2.5 overflow-x-auto pb-1">
-        {kartu.map((k) => (
-          <KartuBrand key={k.merek} kartu={k} logo={logo?.[k.merek]} />
-        ))}
-      </div>
-      {(["kiri", "kanan"] as const).map((sisi) =>
-        arah[sisi] ? (
-          <button
-            key={sisi}
-            type="button"
-            aria-label={sisi === "kiri" ? "Kartu sebelumnya" : "Kartu berikutnya"}
-            onClick={() => geser(sisi === "kiri" ? -1 : 1)}
-            className={cn(
-              "absolute top-1/2 grid size-8 -translate-y-1/2 place-items-center rounded-full border border-border bg-card text-muted-foreground shadow-md hover:text-foreground",
-              sisi === "kiri" ? "left-1" : "right-1",
-            )}
-          >
-            {sisi === "kiri" ? <ChevronLeft className="size-4" /> : <ChevronRight className="size-4" />}
-          </button>
-        ) : null,
-      )}
-    </div>
-  );
-}
-
-type Mode = "banding" | "target";
 
 function Baris({
   baris,
   nomor,
   kolom,
   mode,
+  L,
   tebal = false,
   lapis = "z-20",
-  L,
 }: {
   baris: BarisHarian;
   nomor: number | null;
   kolom: HariKolom[];
   mode: Mode;
+  L: Lebar;
   tebal?: boolean;
-  /** Lebar kolom beku yang sedang berlaku — lega atau sempit. */
-  L: (typeof LEBAR)[keyof typeof LEBAR];
-  /**
-   * Lapisan sel yang menempel.
-   *
-   * Baris gabungan menempel di BAWAH layar, jadi sel-sel tepinya harus berada
-   * di atas sel tepi baris biasa — kalau sama, keduanya saling menembus persis
-   * di titik silangnya, dan yang terbaca di pojok adalah dua angka bertumpuk.
-   */
   lapis?: string;
 }) {
   // LATARNYA PEKAT, bukan warna tipis di atas latar lain. Sel yang menempel
   // dengan latar tembus pandang membuat tanggal yang bergeser di belakangnya
-  // terbaca menumpuk dengan angkanya — persis kerusakan yang baru diperbaiki.
-  // Baris gabungan dibedakan lewat huruf tebal, lambang Σ, dan garis atasnya.
+  // terbaca menumpuk dengan angkanya.
   const dasar = tebal ? "bg-muted" : "bg-card";
   const lunas = baris.kurang !== null && baris.kurang <= 0;
+  const merek = tebal ? null : merekOutlet(baris.nama)?.label ?? null;
+
   return (
-    <tr className={cn("baris-harian border-t border-border", tebal && "bg-muted font-semibold")}>
-      <td className={cn("sel-tempel sticky px-2 py-1.5 text-center text-[11px] tabular-nums text-muted-foreground", lapis, dasar)} style={kunci(L.no, 0)}>
-        {nomor ?? <span className="text-[12px] font-bold text-brand-600">Σ</span>}
+    <tr className={cn("baris-harian border-t border-border/70", tebal && "bg-muted")}>
+      <td
+        className={cn("sel-tempel sticky px-1 py-1.5 text-center text-[11px] tabular-nums text-muted-foreground", lapis, dasar)}
+        style={kunci(L.no, 0)}
+      >
+        {nomor ?? <span className="text-[12px] font-semibold text-brand-600">Σ</span>}
       </td>
+
       <td className={cn("sel-tempel sticky px-2 py-1.5", lapis, dasar)} style={kunci(L.nama, L.no)}>
-        <NamaBerjalan nama={baris.nama} />
-        <span className="flex items-center gap-1.5 text-[10.5px] text-muted-foreground">
-          <span className="min-w-0 truncate">{baris.area}</span>
-          <Api deret={baris.deret} />
+        <span className="flex items-center gap-2">
+          {!tebal && <Lambang merek={merek} ukuran={22} />}
+          <span className="min-w-0 flex-1">
+            <span className={cn("block overflow-hidden", baris.nama.length > 18 && "nama-panjang")} title={baris.nama}>
+              <span className={cn("block whitespace-nowrap text-[12.5px] text-foreground", tebal && "font-semibold")}>
+                {baris.nama}
+              </span>
+            </span>
+            <span className="flex items-center gap-1.5 text-[10.5px] text-muted-foreground">
+              <span className="min-w-0 truncate">{baris.area}</span>
+              <Roket deret={baris.deret} />
+            </span>
+          </span>
         </span>
       </td>
+
       <td
         className={cn("sel-tempel tepi-kiri sticky border-r border-border px-2 py-1.5 text-right", lapis, dasar)}
         style={kunci(L.bulan, L.no + L.nama)}
       >
-        {/* Di layar sempit angkanya dipendekkan, bukan dipotong titik-titik:
-            "Rp 1.295.774…" menyembunyikan justru digit yang menentukan
-            besarnya, sementara "Rp 1,3 M" tetap memberi tahu ukurannya. */}
         <span
-          className="block truncate text-[12.5px] font-semibold tabular-nums text-foreground"
+          className="block truncate text-[12.5px] tabular-nums text-foreground"
           title={baris.bulanIni === null ? undefined : formatIDR(baris.bulanIni)}
         >
           {baris.bulanIni === null ? "—" : L.kurang === 0 ? formatIDRShort(baris.bulanIni) : formatIDR(baris.bulanIni)}
         </span>
-        {mode !== "target" ? (
-          <Ubah nilai={baris.mom} besar />
+        {mode === "banding" ? (
+          <Persen nilai={baris.mom} kelas="text-[10.5px]" />
+        ) : baris.targetBulan == null ? (
+          <span className="block text-[10.5px] text-muted-foreground">Belum bertarget</span>
         ) : (
-          // TEKS, bukan ikon. Lambang sasaran ◎ harus dihafal artinya lebih
-          // dulu; "Target Rp 2,9 M" tidak perlu dihafal siapa pun.
-          //
-          // Di layar sempit kolom Kurang tidak ikut tampil, jadi angkanya
-          // pindah ke sini — yang hilang cuma tempatnya, bukan angkanya.
-          <span className="block truncate text-[10.5px] tabular-nums text-muted-foreground">
-            {baris.targetBulan == null ? (
-              "Belum bertarget"
-            ) : L.kurang === 0 && baris.kurang !== null ? (
-              <>
-                <span className="font-medium uppercase tracking-wide">{lunas ? "Lebih" : "Kurang"}</span>{" "}
-                <span className={cn("font-semibold", lunas ? "text-emerald-600 dark:text-emerald-400" : "text-foreground/70")}>
-                  {formatIDRShort(lunas ? (baris.bulanIni ?? 0) - baris.targetBulan : baris.kurang)}
-                </span>
-              </>
-            ) : (
-              <>
-                <span className="font-medium uppercase tracking-wide">Target</span>{" "}
-                <span className="font-semibold text-foreground/70">{formatIDRShort(baris.targetBulan)}</span>
-              </>
-            )}
+          // TARGETNYA BAR, bukan angka yang harus dibandingkan sendiri di
+          // kepala. Yang dicari orang bukan "targetnya berapa" melainkan
+          // "sudah sejauh mana" — dan itu satu tatapan, bukan satu hitungan.
+          <span className="mt-1 flex items-center gap-1.5">
+            <BarCapaian capaian={baris.capaianBulan} tinggi="h-1" />
+            <span
+              className={cn(
+                "shrink-0 text-[10px] tabular-nums",
+                (baris.capaianBulan ?? 0) >= BATAS_TERCAPAI
+                  ? "text-emerald-600 dark:text-emerald-400"
+                  : "text-muted-foreground",
+              )}
+            >
+              {baris.capaianBulan === null ? "—" : `${formatNumber(baris.capaianBulan, { maximumFractionDigits: 0 })}%`}
+            </span>
           </span>
         )}
       </td>
@@ -543,41 +603,38 @@ function Baris({
           itu ujung ceritanya — sesudah membaca hari demi hari, yang dicari
           orang bukan "sudah berapa" melainkan "kurang berapa lagi". */}
       {L.kurang > 0 && (
-      <td
-        className={cn("sel-tempel tepi-kanan sticky right-0 border-l border-border px-3 py-1.5 text-right", lapis, dasar)}
-        style={kunci(L.kurang)}
-      >
-        {baris.kurang === null ? (
-          <span className="text-[11px] text-muted-foreground">Belum bertarget</span>
-        ) : lunas ? (
-          <>
-            <span className="flex items-center justify-end gap-1 text-[12.5px] font-bold text-emerald-600 dark:text-emerald-400">
-              <ChevronUp className="size-3.5" />
-              Target tercapai
-            </span>
-            <span className="block truncate text-[10.5px] tabular-nums text-muted-foreground">
-              lebih {formatIDRShort((baris.bulanIni ?? 0) - (baris.targetBulan ?? 0))}
-            </span>
-          </>
-        ) : (
-          <>
-            <span className="block truncate text-[12.5px] font-bold tabular-nums text-foreground">
-              {formatIDR(baris.kurang)}
-            </span>
-            <span className="block truncate text-[10.5px] tabular-nums text-muted-foreground">
-              {baris.perHariSisa === null
-                ? `${baris.sisaHari} hari tersisa`
-                : `${formatIDRShort(baris.perHariSisa)}/hari × ${baris.sisaHari} hari`}
-            </span>
-          </>
-        )}
-      </td>
+        <td
+          className={cn("sel-tempel tepi-kanan sticky right-0 border-l border-border px-3 py-1.5 text-right", lapis, dasar)}
+          style={kunci(L.kurang)}
+        >
+          {baris.kurang === null ? (
+            <span className="text-[11px] text-muted-foreground">Belum bertarget</span>
+          ) : lunas ? (
+            <>
+              <span className="flex items-center justify-end gap-1 text-[12px] text-emerald-600 dark:text-emerald-400">
+                <Arah naik nada={false} /> Tercapai
+              </span>
+              <span className="block truncate text-[10.5px] tabular-nums text-muted-foreground">
+                lebih {formatIDRShort((baris.bulanIni ?? 0) - (baris.targetBulan ?? 0))}
+              </span>
+            </>
+          ) : (
+            <>
+              <span className="block truncate text-[12.5px] tabular-nums text-foreground">{formatIDR(baris.kurang)}</span>
+              <span className="block truncate text-[10.5px] tabular-nums text-muted-foreground">
+                {baris.perHariSisa === null
+                  ? `${baris.sisaHari} hari tersisa`
+                  : `${formatIDRShort(baris.perHariSisa)}/hari × ${baris.sisaHari}`}
+              </span>
+            </>
+          )}
+        </td>
       )}
     </tr>
   );
 }
 
-/* ────────────────────────────── tabel utuh ────────────────────────────── */
+/* ──────────────────────────────── halaman ──────────────────────────────── */
 
 export function TabelHarian({
   detail,
@@ -586,15 +643,20 @@ export function TabelHarian({
   bisaPilihArea,
 }: {
   detail: DetailHarian;
-  /** Pilihan Coordinator Area; kosong berarti yang membuka tidak boleh memilih. */
   area?: PilihanArea[];
   areaTerpilih?: string;
   bisaPilihArea?: boolean;
 }) {
   const router = useRouter();
-  const [mode, setMode] = React.useState<Mode>("target");
   const sempit = useSempit();
   const L = sempit ? LEBAR.sempit : LEBAR.lega;
+
+  const [mode, setMode] = React.useState<Mode>("target");
+  const [status, setStatus] = React.useState<Status>("semua");
+  const [merek, setMerek] = React.useState<string | null>(null);
+  const [urut, setUrut] = React.useState<Urut>("omzet");
+  const [arah, setArah] = React.useState<Arah2>("turun");
+  const [kartuTampil, setKartuTampil] = React.useState(true);
 
   const pindah = (p: { bulan?: string; area?: string }) => {
     const q = new URLSearchParams();
@@ -604,50 +666,70 @@ export function TabelHarian({
     router.push(`/operational/daily?${q.toString()}`);
   };
 
-  const merek = React.useMemo(
+  const kartu = React.useMemo(
     () => kartuMerek(detail.baris, (n) => merekOutlet(n)?.label ?? null, WORK_BRANDS),
     [detail.baris],
   );
 
-  /**
-   * SATU LAYAR PENUH, sejak dibuka.
-   *
-   * Tabel setinggi 70% layar menyisakan ruang kosong di bawahnya dan tetap
-   * memaksa menggulir halaman DI LUAR tabel untuk melihat baris terakhir — dua
-   * gulungan untuk satu tabel. Tingginya sekarang mengisi sisa layar apa pun
-   * yang ada di atasnya, dan yang bergulir hanya isi tabelnya.
-   */
-  return (
-    <div className="flex h-[calc(100dvh-8.5rem)] flex-col gap-3">
-      {/* Nama animasinya ditulis di sini, bukan di berkas gaya global: satu-
-          satunya yang memakainya adalah nama outlet di tabel ini. */}
-      {/* Ditulis di sini, bukan di berkas gaya global: satu-satunya yang
-          memakainya adalah nama outlet di tabel ini.
+  /** Urutkan; klik tajuk yang sama membalik arahnya. */
+  const gantiUrut = (u: Urut) => {
+    if (u === urut) setArah((a) => (a === "turun" ? "naik" : "turun"));
+    else {
+      setUrut(u);
+      setArah(u === "nama" ? "naik" : "turun");
+    }
+  };
 
-          TEPINYA MEMUDAR, bukan dipotong titik-titik. "Nordu Coffee Singkaw"
-          yang berhenti mendadak terbaca seperti nama yang memang begitu;
-          tepi yang memudar memberi tahu bahwa masih ada lanjutannya — dan
-          lanjutannya ditunjukkan sendiri begitu kursor berhenti di barisnya. */}
+  const baris = React.useMemo(() => {
+    const cocok = detail.baris.filter((b) => {
+      if (merek && (merekOutlet(b.nama)?.label ?? null) !== merek) return false;
+      if (status === "tercapai") return b.kurang !== null && b.kurang <= 0;
+      if (status === "tertinggal") return b.kurang !== null && b.kurang > 0;
+      if (status === "tanpa") return b.kurang === null;
+      return true;
+    });
+    const nilai = (b: BarisHarian): number | string =>
+      urut === "nama"
+        ? b.nama.toLowerCase()
+        : urut === "capaian"
+          ? (b.capaianBulan ?? -1)
+          : urut === "deret"
+            ? b.deret
+            : urut === "kurang"
+              ? (b.kurang ?? -1)
+              : (b.bulanIni ?? -1);
+    const arahnya = arah === "naik" ? 1 : -1;
+    return [...cocok].sort((a, b) => {
+      const x = nilai(a);
+      const y = nilai(b);
+      if (typeof x === "string" || typeof y === "string") return String(x).localeCompare(String(y), "id") * arahnya;
+      return (x - y) * arahnya;
+    });
+  }, [detail.baris, merek, status, urut, arah]);
+
+  const jumlahSaringan = (status === "semua" ? 0 : 1) + (merek ? 1 : 0);
+
+  return (
+    <div className="flex h-[calc(100dvh-8.5rem)] flex-col gap-2.5">
       <style>{`
-        @keyframes jalan{0%,12%{transform:translateX(0)}88%,100%{transform:translateX(calc(-100% + ${L.nama - 20}px))}}
-        .nama-panjang{-webkit-mask-image:linear-gradient(to right,#000 78%,transparent);mask-image:linear-gradient(to right,#000 78%,transparent)}
+        @keyframes jalan{0%,12%{transform:translateX(0)}88%,100%{transform:translateX(calc(-100% + ${L.nama - 46}px))}}
+        .nama-panjang{-webkit-mask-image:linear-gradient(to right,#000 82%,transparent);mask-image:linear-gradient(to right,#000 82%,transparent)}
         .baris-harian:hover .sel-tempel{background-color:var(--muted)}
-        .tepi-kiri{box-shadow:6px 0 8px -6px rgb(0 0 0/.14)}
-        .tepi-kanan{box-shadow:-6px 0 8px -6px rgb(0 0 0/.14)}
         .baris-harian:hover .nama-panjang{-webkit-mask-image:none;mask-image:none}
         .baris-harian:hover .nama-panjang>span{animation:jalan 7s linear infinite}
+        .tepi-kiri{box-shadow:6px 0 8px -6px rgb(0 0 0/.14)}
+        .tepi-kanan{box-shadow:-6px 0 8px -6px rgb(0 0 0/.14)}
       `}</style>
 
-      {/* Kartu per merek — pertanyaan satu tingkat di atas tabelnya: merek mana
-          yang sedang jalan, sebelum satu baris outlet pun dibaca. */}
-      <DeretMerek kartu={merek} logo={LOGO_MEREK} />
+      {kartuTampil && (
+        <DeretMerek kartu={kartu} dipilih={merek} onPilih={setMerek} />
+      )}
 
-      {/* Bilah saringan yang MENYESUAIKAN LEBAR, bukan menumpuk ke bawah.
-          Pada layar sempit pemilih bulan menyusut, nama bulan dipendekkan,
-          dan pengalih tampilan tinggal ikonnya — tiga baris tombol di atas
-          tabel memakan tinggi yang justru dibutuhkan barisnya. */}
-      <div className="flex flex-nowrap items-center gap-1.5 overflow-x-auto sm:gap-2">
-        <div className="inline-flex shrink-0 items-center gap-1 rounded-lg border border-border bg-card p-0.5">
+      {/* Bilah saringan yang MENYESUAIKAN LEBAR, bukan menumpuk ke bawah. Tiga
+          baris tombol di atas tabel memakan tinggi yang justru dibutuhkan
+          barisnya. */}
+      <div className="flex flex-nowrap items-center gap-1.5 overflow-x-auto pb-0.5">
+        <div className="inline-flex shrink-0 items-center gap-0.5 rounded-lg border border-border bg-card p-0.5">
           <button
             type="button"
             aria-label="Bulan sebelumnya"
@@ -656,7 +738,7 @@ export function TabelHarian({
           >
             <ChevronLeft className="size-4" />
           </button>
-          <span className="px-1.5 text-center text-[13px] font-medium text-foreground sm:min-w-[8.5rem] sm:px-2">
+          <span className="px-1 text-center text-[12.5px] font-medium text-foreground sm:min-w-[7.5rem]">
             <span className="hidden sm:inline">{labelBulan(detail.periode)}</span>
             <span className="sm:hidden">{labelBulanPendek(detail.periode)}</span>
           </span>
@@ -670,8 +752,19 @@ export function TabelHarian({
           </button>
         </div>
 
+        <Segmen pilihan={STATUS} nilai={status} onNilai={setStatus} />
+
+        <Segmen
+          pilihan={[
+            { nilai: "target" as Mode, label: "Capaian target" },
+            { nilai: "banding" as Mode, label: "Banding hari lalu" },
+          ]}
+          nilai={mode}
+          onNilai={setMode}
+        />
+
         {bisaPilihArea && area && area.length > 0 && (
-          <div className="w-36 shrink-0 sm:w-56">
+          <div className="w-36 shrink-0 sm:w-52">
             <Combobox
               value={areaTerpilih ?? ""}
               onChange={(v) => pindah({ area: v })}
@@ -685,57 +778,81 @@ export function TabelHarian({
           </div>
         )}
 
-        <div className="inline-flex shrink-0 rounded-lg border border-border bg-card p-0.5">
-          {(["target", "banding"] as const).map((m) => (
+        <div className="ml-auto flex shrink-0 items-center gap-1.5">
+          {jumlahSaringan > 0 && (
             <button
-              key={m}
               type="button"
-              onClick={() => setMode(m)}
-              title={m === "target" ? "Capaian target harian" : "Perbandingan dengan hari sebelumnya"}
-              className={cn(
-                "flex items-center gap-1.5 whitespace-nowrap rounded-md px-2.5 py-1 text-[12px] font-medium",
-                mode === m ? "bg-brand-500 text-white" : "text-muted-foreground hover:text-foreground",
-              )}
+              onClick={() => {
+                setStatus("semua");
+                setMerek(null);
+              }}
+              className="inline-flex items-center gap-1 rounded-lg border border-brand-500/40 bg-brand-500/10 px-2 py-1.5 text-[12px] font-medium text-brand-700 hover:bg-brand-500/15 dark:text-brand-300"
             >
-              {m === "target" ? <Flame className="size-3.5" /> : <TrendingUp className="size-3.5" />}
-              <span className="hidden md:inline">{m === "target" ? "Capaian target" : "Banding hari lalu"}</span>
+              <SlidersHorizontal className="size-3.5" />
+              <span className="hidden sm:inline">Saringan</span>
+              <span className="grid size-4 place-items-center rounded-full bg-brand-500 text-[9.5px] font-bold text-white">
+                {jumlahSaringan}
+              </span>
+              <X className="size-3" />
             </button>
-          ))}
+          )}
+          <button
+            type="button"
+            onClick={() => setKartuTampil((v) => !v)}
+            aria-pressed={kartuTampil}
+            title={kartuTampil ? "Sembunyikan kartu merek" : "Tampilkan kartu merek"}
+            className={cn(
+              "inline-flex items-center gap-1.5 rounded-lg border px-2 py-1.5 text-[12px] font-medium",
+              kartuTampil
+                ? "border-border bg-card text-foreground"
+                : "border-border bg-card text-muted-foreground hover:text-foreground",
+            )}
+          >
+            <LayoutGrid className="size-3.5" />
+            <span className="hidden md:inline">Kartu</span>
+          </button>
         </div>
-
       </div>
 
       {/* GESERNYA BERHENTI PAS DI BATAS KOLOM. Tanpa ini, kolom paling kiri di
-          daerah yang bergeser selalu berhenti separuh — yang terbaca di
-          sebelah tepi beku cuma potongan huruf, dan itu terlihat persis
-          seperti dua kolom yang saling tembus. */}
+          daerah yang bergeser selalu berhenti separuh — yang terbaca di sebelah
+          tepi beku cuma potongan huruf. */}
       <div
-        className="min-h-0 flex-1 snap-x snap-mandatory overflow-auto rounded-2xl border border-border bg-card"
+        className="min-h-0 flex-1 snap-x snap-mandatory overflow-auto rounded-xl border border-border bg-card"
         style={{ scrollPaddingLeft: L.no + L.nama + L.bulan, scrollPaddingRight: L.kurang }}
       >
         <table className="w-max min-w-full border-collapse text-left">
           <thead className="sticky top-0 z-30">
             <tr className="bg-muted">
-              <th className="sticky z-40 bg-muted px-2 py-2 text-center text-[10px] font-semibold uppercase tracking-wide text-muted-foreground" style={kunci(L.no, 0)}>
-                #
-              </th>
-              <th className="sticky z-40 bg-muted px-2 py-2 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground" style={kunci(L.nama, L.no)}>
-                Nama Outlet
-              </th>
-              <th
+              <Kepala
+                label="#"
+                className="sticky z-40 bg-muted px-1 py-2 text-center text-[10px] font-semibold uppercase tracking-wide text-muted-foreground"
+                style={kunci(L.no, 0)}
+              />
+              <Kepala
+                label="Outlet"
+                urut="nama"
+                aktif={urut === "nama"}
+                arah={arah}
+                onUrut={gantiUrut}
+                className="sticky z-40 bg-muted px-2 py-2 text-left text-[10px] font-semibold uppercase tracking-wide text-muted-foreground"
+                style={kunci(L.nama, L.no)}
+              />
+              <Kepala
+                label="Bulan Ini"
+                bawah={mode === "target" ? "capaian terhadap target" : "vs tanggal sama bulan lalu"}
+                urut={mode === "target" ? "capaian" : "omzet"}
+                aktif={urut === (mode === "target" ? "capaian" : "omzet")}
+                arah={arah}
+                onUrut={gantiUrut}
                 className="tepi-kiri sticky z-40 border-r border-border bg-muted px-2 py-2 text-right text-[10px] font-semibold uppercase tracking-wide text-muted-foreground"
                 style={kunci(L.bulan, L.no + L.nama)}
-              >
-                Bulan Ini
-                <span className="block text-[9px] font-normal normal-case tracking-normal">
-                  {mode === "target" ? "dengan targetnya" : "vs tanggal sama bulan lalu"}
-                </span>
-              </th>
+              />
               {detail.kolom.map((h) => (
                 <th
                   key={h.tanggal}
                   className={cn(
-                    "min-w-[5.4rem] snap-start border-l border-border/60 bg-muted px-2 py-2 text-center text-[10px] font-semibold uppercase tracking-wide",
+                    "min-w-[5.4rem] snap-start border-l border-border/50 bg-muted px-2 py-2 text-center text-[10px] font-semibold uppercase tracking-wide",
                     // Akhir pekan ditandai: pola naik-turun penjualan F&B hampir
                     // selalu mengikuti hari, dan tanpa penanda ini setiap Sabtu
                     // terbaca sebagai lonjakan yang tak dijelaskan.
@@ -747,31 +864,37 @@ export function TabelHarian({
                 </th>
               ))}
               {L.kurang > 0 && (
-              <th
-                className="tepi-kanan sticky right-0 z-40 border-l border-border bg-muted px-3 py-2 text-right text-[10px] font-semibold uppercase tracking-wide text-muted-foreground"
-                style={kunci(L.kurang)}
-              >
-                Kurang
-                <span className="block text-[9px] font-normal normal-case tracking-normal">untuk capai target</span>
-              </th>
+                <Kepala
+                  label="Kurang"
+                  bawah="untuk capai target"
+                  urut="kurang"
+                  aktif={urut === "kurang"}
+                  arah={arah}
+                  onUrut={gantiUrut}
+                  className="tepi-kanan sticky right-0 z-40 border-l border-border bg-muted px-3 py-2 text-right text-[10px] font-semibold uppercase tracking-wide text-muted-foreground"
+                  style={kunci(L.kurang)}
+                />
               )}
             </tr>
           </thead>
           <tbody>
-            {detail.baris.map((b, i) => (
+            {baris.map((b, i) => (
               <Baris key={b.outletId} baris={b} nomor={i + 1} kolom={detail.kolom} mode={mode} L={L} />
             ))}
-            {detail.baris.length === 0 && (
+            {baris.length === 0 && (
               <tr>
-                <td colSpan={(L.kurang > 0 ? 4 : 3) + detail.kolom.length} className="px-4 py-8 text-center text-[13px] text-muted-foreground">
-                  Belum ada outlet yang bisa ditampilkan di sini.
+                <td
+                  colSpan={(L.kurang > 0 ? 4 : 3) + detail.kolom.length}
+                  className="px-4 py-10 text-center text-[13px] text-muted-foreground"
+                >
+                  Tidak ada outlet yang cocok dengan saringan ini.
                 </td>
               </tr>
             )}
           </tbody>
           {detail.total && (
             <tfoot className="sticky bottom-0 z-30 shadow-[0_-2px_6px_-2px_rgb(0_0_0/.12)]">
-              <Baris baris={detail.total} nomor={null} kolom={detail.kolom} mode={mode} tebal lapis="z-30" L={L} />
+              <Baris baris={detail.total} nomor={null} kolom={detail.kolom} mode={mode} L={L} tebal lapis="z-30" />
             </tfoot>
           )}
         </table>

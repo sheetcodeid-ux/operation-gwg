@@ -97,6 +97,14 @@ export interface BarisHarian extends SumberHarian {
   targetHarian: number | null;
   /** Capaian tiap hari terhadap target harian, dalam persen. */
   capaian: (number | null)[];
+  /**
+   * Capaian SEBULAN terhadap targetnya, dalam persen.
+   *
+   * Dipakai bar di kolom Bulan Ini. Bukan rata-rata capaian harian: hari yang
+   * belum ditarik akan menyeret rata-rata itu turun, sementara yang sedang
+   * ditanyakan justru "dari target sebulan, sudah sejauh mana".
+   */
+  capaianBulan: number | null;
   /** Berapa hari yang sudah ada angkanya MENCAPAI target harian. */
   hariTercapai: number;
   /** Berapa hari yang sudah ada angkanya sama sekali. */
@@ -188,6 +196,7 @@ export function barisHarian(s: SumberHarian): BarisHarian {
     ubah,
     targetHarian,
     capaian,
+    capaianBulan: target === null || target <= 0 || bulanIni === null ? null : (bulanIni / target) * 100,
     hariTercapai,
     hariTerisi,
     deret,

@@ -1,13 +1,34 @@
+import type { Tone } from "@/lib/constants";
+
 /**
- * Berkas logo tiap merek — SATU TEMPAT, supaya menambahkannya satu baris.
+ * Lambang tiap merek — berkas logonya, dan warna cadangannya.
  *
- * Kosong berarti kartunya memakai huruf depan merek di atas warnanya sendiri.
- * Itu bukan tempat kosong menunggu gambar: huruf berwarna sudah membedakan
- * keempat kartu dari kejauhan, jadi halamannya utuh sejak hari pertama dan
- * logonya bisa menyusul kapan pun tanpa mengubah apa pun selain berkas ini.
+ * SATU TEMPAT, supaya memasang logo baru cukup satu baris. Taruh berkasnya di
+ * `public/merek/`, lalu tulis jalurnya di `LOGO_MEREK`.
  *
- * Cara menambah: taruh berkasnya di `public/merek/`, lalu tulis jalurnya di
- * sini, mis. `Nordu: "/merek/nordu.png"`. Ukuran yang dipakai 28×28 piksel dan
- * dipotong bulat, jadi logo persegi dengan ruang kosong di tepinya paling rapi.
+ * Selama berkasnya belum ada, yang tampil huruf depan merek di atas WARNA
+ * MEREKNYA SENDIRI — bukan warna acak. Keempat kartu tetap terbedakan dari
+ * kejauhan, halamannya utuh sejak hari pertama, dan begitu logonya masuk yang
+ * berubah hanya berkas ini.
+ *
+ * Ukuran yang dipakai 20–28 piksel dan dipotong bulat, jadi logo persegi
+ * dengan sedikit ruang di tepinya paling rapi. SVG lebih disukai: tajam di
+ * semua ukuran, dan satu berkas untuk layar biasa maupun layar tajam.
  */
-export const LOGO_MEREK: Record<string, string> = {};
+export const LOGO_MEREK: Record<string, string> = {
+  // Nordu: "/merek/nordu.svg",
+  // Cattu: "/merek/cattu.svg",
+  // Busari: "/merek/busari.svg",
+  // "Lesung Pipi": "/merek/lesung-pipi.svg",
+};
+
+/** Warna dasar tiap nada merek — dipakai lambang cadangan dan penanda brand. */
+export const WARNA_MEREK: Record<Tone, string> = {
+  brand: "bg-brand-500",
+  success: "bg-emerald-500",
+  warning: "bg-amber-500",
+  danger: "bg-rose-500",
+  neutral: "bg-slate-400",
+  amber: "bg-amber-500",
+  cyan: "bg-sky-500",
+};

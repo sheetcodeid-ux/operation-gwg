@@ -221,3 +221,19 @@ describe("deret hari tercapai", () => {
     expect(buat([120, 130], null).deret).toBe(0);
   });
 });
+
+describe("capaian sebulan", () => {
+  const buat = (hari: (number | null)[], targetBulan: number | null) =>
+    barisHarian({ outletId: "o", nama: "o", area: "", targetBulan, hari, hariLalu: hari.map(() => 10) });
+
+  it("dihitung dari target SEBULAN, bukan rata-rata capaian harian", () => {
+    // Rata-rata capaian harian akan tersedot turun oleh hari yang belum
+    // ditarik; yang ditanyakan justru "dari target sebulan, sudah sejauh mana".
+    const b = buat([100, 100, null, null], 400);
+    expect(b.capaianBulan).toBeCloseTo(50, 6);
+  });
+
+  it("tanpa target tidak ada capaiannya", () => {
+    expect(buat([100], null).capaianBulan).toBeNull();
+  });
+});

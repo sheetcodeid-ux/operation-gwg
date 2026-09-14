@@ -330,9 +330,9 @@ if (kode === "daily") {
     ["Nordu Coffee Singkawang Diponegoro", "Deo", 85_000_000],
     ["Nordu Banjarbaru 2", "Wika", 78_000_000],
     ["Nordu Tebas", "Roby", 74_000_000],
-    ["Nordu Coffee Putussibau", "Deo", 68_000_000],
-    ["Nordu Coffee Ketapang", "Aldi", 57_000_000],
-    ["Cattu A. Yani", "Wika", 48_000_000],
+    ["Cattu A. Yani", "Wika", 68_000_000],
+    ["Cattu M. Sohor", "Deo", 57_000_000],
+    ["Ayam Goreng Busari Siantan", "Roby", 48_000_000],
     ["Ayam Goreng Busari Depok", "Roby", 36_000_000],
     ["Lesung Pipi Bogor", "Aldi", 28_000_000],
   ];
