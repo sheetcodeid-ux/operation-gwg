@@ -2,6 +2,7 @@ import "server-only";
 
 import { lubangSeasonal, tarikPasangan, KONKUREN_AWAL, type TugasTarik } from "./seasonal";
 import { kelengkapanDaily, cabangDaily } from "./kelengkapan-daily";
+import { ensureHydrated, hidrasiPernahBerhasil } from "./hydrate";
 import { jumlahHari } from "@/lib/ops/harian";
 
 /**
@@ -44,6 +45,24 @@ const MAKS_TUGAS = 900;
 const ymdWib = () => new Date(Date.now() + 7 * 3_600_000).toISOString().slice(0, 10);
 
 export async function kejarLubangDaily(budgetMs: number, konkuren = KONKUREN_AWAL): Promise<HasilKejarLubang> {
+  // DAFTAR OUTLET HARUS DIMUAT DULU, dan di sini tempatnya.
+  //
+  // Lewat layar, hidrasi sudah terjadi sebelum halamannya dirender — sesi yang
+  // masuk memicunya. Lewat cron TIDAK ADA yang memicunya: rutenya tidak membaca
+  // sesi siapa pun. Tanpa baris ini `getOutlets()` memulangkan data contoh,
+  // yang satu pun tidak punya ID cabang ESB, dan penarikannya pulang dengan
+  // "tidak ada outlet ber-ID cabang ESB" tiap sepuluh menit — persis yang
+  // terjadi pada dua jalan pertama sesudah ini tayang.
+  //
+  // Penarik yang lama kebal karena daftar cabangnya diminta ke ESB, bukan dari
+  // outlet sendiri. Begitu sumbernya pindah ke outlet, ketergantungan ini ikut
+  // pindah — dan diam-diam, karena di layar semuanya tetap benar.
+  await ensureHydrated();
+  if (!hidrasiPernahBerhasil()) {
+    // Data contoh punya outlet juga. Menariknya berarti mengisi Daily dengan
+    // cabang yang tidak ada — lebih buruk daripada tidak menarik sama sekali.
+    return { terisi: 0, gagal: 0, cabang: 0, konkuren: 0, error: "Data outlet belum termuat dari basis data." };
+  }
   const cabang = cabangDaily();
   if (cabang.length === 0) return { terisi: 0, gagal: 0, cabang: 0, konkuren: 0, error: "Tidak ada outlet ber-ID cabang ESB." };
 
