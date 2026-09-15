@@ -10,16 +10,18 @@ import type { DepartemenKpi } from "./manajemen";
  * Tiga aturan yang menentukan seluruh isinya, dan ketiganya keputusan pemilik:
  *
  *  1. CAPAIAN PERSONAL adalah KPI orangnya sendiri. Abil 83% berarti 83%.
+ *     ANGKA INI TIDAK IKUT MENENTUKAN PENCAIRAN — dicetak sebagai gambaran
+ *     orangnya saja.
  *
  *  2. CAPAIAN DIVISI adalah rata-rata KPI orang-orang di divisi itu — dan itu
  *     pula KPI Head-nya. Head tidak dinilai dengan indikatornya sendiri:
  *     pekerjaannya memang hasil kerja timnya, jadi angkanya diambil dari sana.
  *
- *  3. YANG MENENTUKAN CAIR adalah rata-rata keduanya. Bukan salah satunya:
- *     capaian pribadi saja membuat orang di divisi yang berantakan tetap cair
- *     penuh, dan capaian divisi saja membuat yang bekerja keras di divisi yang
- *     tertinggal ikut tidak cair. Untuk Head kedua angkanya sama, jadi
- *     rata-ratanya angka itu juga.
+ *  3. YANG MENENTUKAN CAIR HANYA CAPAIAN DIVISI. Divisi 87% berarti seluruh
+ *     orang di divisi itu cair menurut 87%, berapa pun capaian personalnya.
+ *     KPI di sini memang dibayarkan atas hasil kerja tim, bukan atas peringkat
+ *     di dalam tim — dan satu divisi yang cair dengan angka berbeda-beda per
+ *     orang bukan itu yang dimaksud.
  */
 
 /** Ambang pencairan — keputusan pemilik, bukan turunan dari apa pun. */
@@ -101,10 +103,11 @@ export interface BarisCair {
   head: boolean;
   /** KPI orangnya sendiri. Untuk Head, sama dengan capaian divisi. */
   personal: number | null;
-  /** Rata-rata KPI orang-orang di divisinya. */
+  /**
+   * Rata-rata KPI orang-orang di divisinya — DAN INILAH YANG MENENTUKAN
+   * pencairannya, sendirian.
+   */
   divisi: number | null;
-  /** Rata-rata personal dan divisi — inilah yang menentukan pencairannya. */
-  dasar: number | null;
   hasil: HasilCair | null;
   /** Kenapa angkanya kosong, kalau kosong. Ikut dicetak supaya yang membayar
    *  tahu ini bukan nol. */
@@ -142,23 +145,17 @@ export function barisPencairan(departemen: readonly DepartemenKpi[], heads: read
     const nilaiDivisi = rataDept.get(d.kode) ?? null;
     for (const p of d.posisi) {
       for (const o of p.orang) {
-        // TANPA CAPAIAN PERSONAL, PENCAIRANNYA TIDAK DIPUTUSKAN DI SINI.
-        //
-        // Rata-rata di berkas ini memang mengabaikan yang kosong, tapi menerapkan
-        // itu pada satu orang tanpa angka berarti ia dibayar semata-mata atas
-        // hasil kerja timnya — keputusan yang harus diambil orang, bukan
-        // diam-diam oleh rumus. Barisnya tetap tercetak dengan alasannya supaya
-        // yang membayar melihatnya, bukan hilang dari daftar.
-        const dasar = o.nilai === null ? null : rata([o.nilai, nilaiDivisi]);
+        // Capaian personalnya tidak dipakai menghitung apa pun di sini — yang
+        // menentukan hanya capaian divisinya. Jadi orang yang KPI pribadinya
+        // belum terisi pun tetap punya hasil, sama dengan rekan sedivisinya.
         baris.push({
           nama: o.nama,
           departemen: d.nama,
           head: false,
           personal: o.nilai,
           divisi: nilaiDivisi,
-          dasar,
-          hasil: hasilCair(dasar),
-          alasan: o.nilai === null ? "Capaian personalnya belum ada — pencairannya perlu diputuskan manual." : undefined,
+          hasil: hasilCair(nilaiDivisi),
+          alasan: nilaiDivisi === null ? "Divisinya belum punya KPI yang bisa dirata-ratakan." : undefined,
         });
       }
     }
@@ -198,7 +195,6 @@ export function barisPencairan(departemen: readonly DepartemenKpi[], heads: read
       // kosong di baris Head akan terbaca sebagai data yang hilang.
       personal: nilai,
       divisi: nilai,
-      dasar: nilai,
       hasil: hasilCair(nilai),
       alasan:
         pinjam && !kode ? `Divisinya belum punya KPI — sementara mengikuti ${namaDept.get(pinjam) ?? pinjam}.` : undefined,

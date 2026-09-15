@@ -554,6 +554,16 @@ export function DialogDaftarKpi({
  *  yang ditanyakan di dokumen ini cair atau tidak, bukan bagus atau tidak. */
 const WARNA_CAIR: Record<string, string> = { penuh: "#10b981", separuh: "#f59e0b", tidak: "#f43f5e" };
 
+/**
+ * Warna penanda baris Head — ungu, SENGAJA bukan hijau/kuning/merah.
+ *
+ * Ketiga warna itu sudah dipakai menyatakan hasil pencairan di kolom terakhir.
+ * Memakai salah satunya untuk menandai jabatan membuat satu baris berwarna bisa
+ * berarti dua hal yang sama sekali berbeda, dan yang membaca cepat pasti
+ * membacanya sebagai status.
+ */
+const WARNA_HEAD = "#8b5cf6";
+
 function lencanaCair(c: BarisCair["hasil"], t: (typeof THEME)[Mode]): string {
   if (!c) {
     return `<span style="display:inline-block;padding:3px 10px;border-radius:999px;font-size:10px;background:${t.box};color:${t.sub};border:1px solid ${t.border};white-space:nowrap">Belum dinilai</span>`;
@@ -597,14 +607,14 @@ export function buatPencairanKpiHtml({
       (a, b) =>
         a.departemen.localeCompare(b.departemen, "id") ||
         Number(!!b.cair?.head) - Number(!!a.cair?.head) ||
-        (b.cair?.dasar ?? -1) - (a.cair?.dasar ?? -1) ||
+        (b.nilai ?? -1) - (a.nilai ?? -1) ||
         a.nama.localeCompare(b.nama, "id"),
     );
 
   const hitung = (j: string) => baris.filter((o) => o.cair?.hasil?.jenis === j).length;
   const belum = baris.filter((o) => !o.cair?.hasil).length;
-  const dasarAda = baris.map((o) => o.cair?.dasar ?? null).filter((n): n is number => n !== null);
-  const rataDasar = dasarAda.length ? dasarAda.reduce((x, y) => x + y, 0) / dasarAda.length : null;
+  const divisiAda = baris.map((o) => o.cair?.divisi ?? null).filter((n): n is number => n !== null);
+  const rataDivisi = divisiAda.length ? divisiAda.reduce((x, y) => x + y, 0) / divisiAda.length : null;
 
   const sel = (i: string, g = "") =>
     `<td style="padding:8px 10px;border-bottom:1px solid ${t.border};font-size:11.5px;${g}">${i}</td>`;
@@ -618,11 +628,18 @@ export function buatPencairanKpiHtml({
         v === null || v === undefined
           ? `<span style="color:${t.sub}">—</span>`
           : `<span style="color:${t.text};${tebal ? "font-weight:700;font-size:13px" : ""}">${angka(v)}</span>`;
-      return `<tr style="background:${n % 2 ? t.box : "transparent"}">
-      ${sel(`<span style="color:${t.sub};font-size:10.5px">${n + 1}</span>`, "width:30px;text-align:right")}
+      // BARIS HEAD DIBERI WARNA. Daftarnya tiga puluh baris lebih dan
+      // Head-nya tersebar di antara anak buahnya; tanpa penanda warna,
+      // menemukan siapa Head divisi tertentu berarti membaca satu per satu.
+      const kepalaDivisi = !!c?.head;
+      return `<tr style="background:${kepalaDivisi ? `${WARNA_HEAD}14` : n % 2 ? t.box : "transparent"}">
+      ${sel(
+        `<span style="color:${kepalaDivisi ? WARNA_HEAD : t.sub};font-size:10.5px;font-weight:${kepalaDivisi ? 700 : 400}">${n + 1}</span>`,
+        `width:30px;text-align:right;border-left:3px solid ${kepalaDivisi ? WARNA_HEAD : "transparent"}`,
+      )}
       ${sel(
         `<b style="color:${t.text}">${aman(o.nama)}</b>${
-          c?.head ? ` <span style="display:inline-block;padding:1px 6px;border-radius:999px;font-size:9px;font-weight:700;background:${t.text}14;color:${t.sub};vertical-align:middle">HEAD</span>` : ""
+          kepalaDivisi ? ` <span style="display:inline-block;padding:1px 6px;border-radius:999px;font-size:9px;font-weight:700;background:${WARNA_HEAD}2b;color:${WARNA_HEAD};vertical-align:middle">HEAD</span>` : ""
         }${o.keterangan ? `<div style="color:${t.sub};font-size:10px;font-weight:400">${aman(o.keterangan)}</div>` : ""}`,
       )}
       ${sel(`<span style="color:${t.sub}">${aman(o.departemen)}</span>`)}
@@ -631,12 +648,9 @@ export function buatPencairanKpiHtml({
       ${sel(
         [
           lencanaCair(c?.hasil ?? null, t),
-          c?.dasar !== null && c?.dasar !== undefined
-            ? `<div style="color:${t.sub};font-size:9.5px;margin-top:3px">dasar ${angka(c.dasar)}</div>`
-            : "",
-          // Keterangannya ikut walau angkanya ADA — untuk Head yang divisinya
-          // meminjam, angka tanpa keterangan terbaca seolah divisinya sendiri
-          // yang dinilai.
+          // TIDAK ADA lagi baris "dasar" di sini: dasarnya persis kolom Capaian
+          // Divisi di sebelahnya, dan angka yang sama dicetak dua kali menuntut
+          // pembacanya mencari bedanya — yang tidak ada.
           c?.alasan ? `<div style="color:${t.sub};font-size:9.5px;margin-top:3px;max-width:190px">${aman(c.alasan)}</div>` : "",
         ].join(""),
         "text-align:right;width:170px",
@@ -673,8 +687,8 @@ export function buatPencairanKpiHtml({
       <div style="display:flex;align-items:center;gap:14px;min-width:0">${logo()}<div style="min-width:0"><h1>${aman(judul)}</h1><p>Good Will Grow · ${aman(subjudul)}</p></div></div>
       <div style="text-align:right;flex-shrink:0">
         <p style="font-size:12px;opacity:0.85">${aman(labelPeriode(periode))}</p>
-        <p style="margin-top:6px;font-size:26px;font-weight:800;opacity:1;line-height:1">${angka(rataDasar, 0)}</p>
-        <p style="font-size:10px;opacity:0.7;margin-top:2px">rata-rata dasar</p>
+        <p style="margin-top:6px;font-size:26px;font-weight:800;opacity:1;line-height:1">${angka(rataDivisi, 0)}</p>
+        <p style="font-size:10px;opacity:0.7;margin-top:2px">rata-rata divisi</p>
       </div>
     </div>
     <div class="body">
@@ -698,9 +712,9 @@ export function buatPencairanKpiHtml({
         <tbody>${isi}</tbody>
       </table>
       <div class="aturan">
-        <span><b style="color:${t.text}">Capaian Personal</b> — KPI orangnya sendiri.</span>
-        <span><b style="color:${t.text}">Capaian Divisi</b> — rata-rata KPI divisinya; ini pula KPI Head-nya.</span>
-        <span><b style="color:${t.text}">Dasar</b> — rata-rata keduanya, dan inilah yang menentukan pencairan.</span>
+        <span><b style="color:${WARNA_HEAD}">Baris berwarna</b> — Head divisi.</span>
+        <span><b style="color:${t.text}">Capaian Personal</b> — KPI orangnya sendiri, sebagai gambaran; <b>tidak</b> ikut menentukan pencairan.</span>
+        <span><b style="color:${t.text}">Capaian Divisi</b> — rata-rata KPI divisinya, sekaligus KPI Head-nya. <b>Inilah yang menentukan pencairan.</b></span>
         <span><b style="color:${WARNA_CAIR.penuh}">≥ ${AMBANG_PENUH}%</b> 100% cair · <b style="color:${WARNA_CAIR.separuh}">${AMBANG_SEPARUH}–${AMBANG_PENUH - 1}%</b> 50% cair · <b style="color:${WARNA_CAIR.tidak}">&lt; ${AMBANG_SEPARUH}%</b> tidak cair</span>
       </div>
       <div class="foot">

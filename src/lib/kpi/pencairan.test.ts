@@ -79,7 +79,6 @@ describe("baris pencairan", () => {
     expect(andi.head).toBe(true);
     expect(andi.personal).toBe(80);
     expect(andi.divisi).toBe(80);
-    expect(andi.dasar).toBe(80);
     expect(andi.hasil?.persen).toBe(50);
   });
 
@@ -89,46 +88,48 @@ describe("baris pencairan", () => {
     expect(abil.divisi).toBe(80);
   });
 
-  it("yang menentukan cair adalah RATA-RATA personal dan divisi", () => {
-    // Abil (83 + 80) / 2 = 81,5 → separuh. Kalau yang dipakai personalnya saja
-    // hasilnya sama; yang membedakan justru Adam di bawah ini.
+  it("yang menentukan cair HANYA capaian divisi, bukan capaian personal", () => {
+    // Keputusan pemilik: capaian personal cuma gambaran orangnya, tidak ikut
+    // hitungan. Divisi PDQ 80% → SELURUH isinya cair menurut 80%, walau
+    // personalnya 70 sampai 85.
     const b = barisPencairan([pdq], heads);
-    expect(b.find((x) => x.nama === "Abil")!.dasar).toBe(81.5);
-    // Adam 70 sendirian tidak cair (70 < 62? tidak — 70 separuh). Yang diuji
-    // di sini: angkanya memang gabungan, bukan salah satunya.
-    expect(b.find((x) => x.nama === "Adam")!.dasar).toBe(75);
+    for (const nama of ["Adam", "Abil", "Mustadi", "Bagas", "Andi"]) {
+      expect(b.find((x) => x.nama === nama)!.hasil!.persen, nama).toBe(50);
+    }
   });
 
-  it("divisi yang kuat MENARIK NAIK yang personalnya di bawah ambang", () => {
+  it("satu divisi cair dengan angka yang SAMA, berapa pun capaian personalnya", () => {
+    // Personal 58 dan 98 di satu divisi: kalau personalnya ikut hitungan,
+    // keduanya akan cair berbeda. Aturannya bukan itu.
     const kuat = dept("x", "X", [
       ["Lemah", 58],
       ["Kuat", 98],
       ["Kuat2", 98],
     ]);
     const b = barisPencairan([kuat], []);
-    const lemah = b.find((x) => x.nama === "Lemah")!;
-    // personal 58 sendirian tidak cair; dengan divisi 84,67 → (58+84,67)/2 = 71,3 → separuh
-    expect(hasilCair(58)!.persen).toBe(0);
-    expect(lemah.hasil!.persen).toBe(50);
+    // Divisi (58+98+98)/3 = 84,67 → separuh untuk semuanya.
+    expect(hasilCair(58)!.persen).toBe(0); // sendirian memang tidak cair…
+    expect(b.find((x) => x.nama === "Lemah")!.hasil!.persen).toBe(50); // …tapi yang dipakai divisinya
+    expect(b.find((x) => x.nama === "Kuat")!.hasil!.persen).toBe(50);
   });
 
-  it("tanpa capaian personal, pencairannya TIDAK diputuskan otomatis", () => {
-    // Memakai capaian divisi sendirian berarti membayar orang semata-mata atas
-    // hasil kerja timnya — keputusan yang harus diambil orang, bukan rumus.
+  it("capaian personal TETAP DICETAK walau tidak ikut hitungan", () => {
+    // Dihapus dari baris, yang membaca kehilangan gambaran orangnya — dan
+    // itulah satu-satunya gunanya kolom itu sekarang.
+    const b = barisPencairan([pdq], heads);
+    expect(b.find((x) => x.nama === "Adam")!.personal).toBe(70);
+    expect(b.find((x) => x.nama === "Mustadi")!.personal).toBe(85);
+  });
+
+  it("orang yang KPI pribadinya belum ada tetap ikut cair lewat divisinya", () => {
+    // Capaian personal tidak dipakai menghitung apa pun, jadi kosongnya tidak
+    // menghalangi pencairan.
     const sebagian = dept("y", "Y", [["Ada", 90], ["Belum", null]]);
     const b = barisPencairan([sebagian], []);
     const belum = b.find((x) => x.nama === "Belum")!;
     expect(belum.personal).toBeNull();
     expect(belum.divisi).toBe(90);
-    expect(belum.dasar).toBeNull();
-    expect(belum.hasil).toBeNull();
-    expect(belum.alasan).toBeTruthy();
-  });
-
-  it("baris orang itu TIDAK hilang dari daftar", () => {
-    // Hilang dari daftar berarti tidak dibayar tanpa ada yang memutuskan.
-    const sebagian = dept("y", "Y", [["Ada", 90], ["Belum", null]]);
-    expect(barisPencairan([sebagian], []).map((x) => x.nama).sort()).toEqual(["Ada", "Belum"]);
+    expect(belum.hasil!.persen).toBe(100);
   });
 });
 

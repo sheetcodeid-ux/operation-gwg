@@ -551,7 +551,7 @@ export function PapanManajemen({ detail, bolehAtur }: { detail: DetailManajemen;
         keterangan: b.head ? "Head divisi" : undefined,
         nilai: b.personal,
         alasan: b.alasan ?? null,
-        cair: { head: b.head, personal: b.personal, divisi: b.divisi, dasar: b.dasar, hasil: b.hasil, alasan: b.alasan },
+        cair: { head: b.head, personal: b.personal, divisi: b.divisi, hasil: b.hasil, alasan: b.alasan },
       });
       per.set(b.departemen, k);
     }
