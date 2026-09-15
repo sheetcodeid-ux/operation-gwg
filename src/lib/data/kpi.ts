@@ -1256,7 +1256,7 @@ function tugasSelesai(posisi: KodePosisi, periode: string): number | null {
 /* ──────────────────────────────── laporan ──────────────────────────────── */
 
 const PAKAI_EFISIENSI: KodePosisi[] = ["pdq_food", "pdq_beverage"];
-const PAKAI_PASAR: KodePosisi[] = ["pdq_food", "pdq_beverage", "pdq_head_food", "pdq_head_pdq"];
+const PAKAI_PASAR: KodePosisi[] = ["pdq_food", "pdq_beverage"];
 
 /**
  * `pic` kosong berarti posisi itu dinilai sebagai satu tim. Untuk posisi yang

@@ -17,6 +17,7 @@ import { Progress } from "@/components/ui/progress";
 import { GrafikHarian, KpiIndicatorDonut, KpiPerformanceChart, type LaluIndikator } from "./kpi-charts";
 import { DialogLaporanKpi } from "./laporan-pdf";
 import { DialogDaftarKpi, type KelompokKpi } from "./daftar-pdf";
+import { barisPencairan } from "@/lib/kpi/pencairan";
 import { PilihTabel, statusCapaian } from "./papan-kpi";
 import { TabMinggu } from "./tabel-minggu";
 import { DialogPanduanManajemen } from "./panduan";
@@ -536,22 +537,29 @@ export function PapanManajemen({ detail, bolehAtur }: { detail: DetailManajemen;
    * layar adalah dokumen yang suatu hari kehilangan satu orang tanpa ada yang
    * menyadarinya.
    */
-  const kelompokDivisi = React.useMemo<KelompokKpi[]>(
-    () =>
-      skor.d.departemen
-        .map((d) => ({
-          nama: d.nama,
-          orang: d.posisi.flatMap((pos) =>
-            pos.orang.map((o) => ({
-              nama: o.nama,
-              keterangan: o.bersama ? `${pos.nama} · dinilai satu tim` : pos.nama,
-              nilai: o.nilai,
-            })),
-          ),
-        }))
-        .filter((k) => k.orang.length > 0),
-    [skor.d.departemen],
-  );
+  const kelompokDivisi = React.useMemo<KelompokKpi[]>(() => {
+    const semua = barisPencairan(skor.d.departemen, detail.heads);
+    // Dikelompokkan per departemen HANYA untuk pemilih orangnya — kertasnya
+    // sendiri satu tabel datar berkolom Departemen. Pemilihnya perlu sekat
+    // supaya satu divisi bisa dicentang sekaligus; pembacanya tidak.
+    const urutDept = new Map(skor.d.departemen.map((d, i) => [d.nama, i]));
+    const per = new Map<string, KelompokKpi>();
+    for (const b of semua) {
+      const k = per.get(b.departemen) ?? { nama: b.departemen, orang: [] };
+      k.orang.push({
+        nama: b.nama,
+        keterangan: b.head ? "Head divisi" : undefined,
+        nilai: b.personal,
+        alasan: b.alasan ?? null,
+        cair: { head: b.head, personal: b.personal, divisi: b.divisi, dasar: b.dasar, hasil: b.hasil, alasan: b.alasan },
+      });
+      per.set(b.departemen, k);
+    }
+    return [...per.values()].sort(
+      (a, b) =>
+        (urutDept.get(a.nama) ?? 99) - (urutDept.get(b.nama) ?? 99) || a.nama.localeCompare(b.nama, "id"),
+    );
+  }, [skor.d.departemen, detail.heads]);
 
   const kolomDivisi = React.useMemo<ColumnDef<BarisDivisi>[]>(
     () => [
@@ -787,10 +795,11 @@ export function PapanManajemen({ detail, bolehAtur }: { detail: DetailManajemen;
       <DialogDaftarKpi
         open={pdfDivisi}
         onOpenChange={setPdfDivisi}
-        judul="Daftar KPI per Divisi"
+        judul="Daftar Pencairan KPI"
         subjudul="Seluruh Departemen"
         periode={detail.periode}
         kelompok={kelompokDivisi}
+        bentuk="pencairan"
       />
     </div>
   );

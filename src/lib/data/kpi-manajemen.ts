@@ -1,11 +1,12 @@
 import "server-only";
 
 import { db, dbEnabled } from "./db";
-import { getOutlets } from "./store";
+import { getOutlets, getUsers } from "./store";
 import { netBulananPerCabang } from "./esb-bulanan";
 import { rincianMinggu, type DetailMinggu } from "./minggu-outlet";
 import { bulanMulaiBerjalan, bulanSebelum, grossDiketik, grossKetikBulan, laporanKpi, picDinamis, setelanPosisi } from "./kpi";
 import { posisiDinilai, type SetelanPosisi } from "@/lib/kpi/berlaku";
+import type { HeadDivisi } from "@/lib/kpi/pencairan";
 import { DEPARTEMEN_MANAJEMEN, POSISI_MANAJEMEN, posisiDari } from "@/lib/kpi/struktur";
 import { SEMUA_PIC } from "@/lib/kpi/semua-pic";
 import {
@@ -77,9 +78,37 @@ export interface DetailManajemen {
   setelan: SetelanManajemen;
   /** Capaian bulan lalu per komponen — bahan grafik pembanding. */
   lalu: Record<string, LaluIndikator>;
+  /**
+   * Head tiap divisi, dari User Management.
+   *
+   * Dibawa dari sini, bukan dibaca ulang di layar: Head TIDAK punya posisi KPI
+   * sendiri lagi — capaiannya rata-rata KPI orang-orang divisinya — jadi
+   * satu-satunya tempat namanya diketahui adalah jabatan di User Management.
+   * Membacanya di komponen klien berarti daftar nama pegawai ikut terkirim ke
+   * peramban hanya untuk mengambil tujuh nama.
+   */
+  heads: HeadDivisi[];
 }
 
 const angka = (v: unknown): number => (v === null || v === undefined || v === "" ? 0 : Number(v) || 0);
+
+/**
+ * Siapa Head di tiap divisi, menurut User Management.
+ *
+ * DIAMBIL DARI JABATAN, bukan dari daftar tetap di kode. Head berganti tanpa
+ * deploy, dan daftar tetap berarti orang yang baru diangkat tidak muncul di
+ * daftar pencairan sampai ada yang ingat menuliskannya.
+ *
+ * Yang sudah tidak aktif tidak ikut: pegawai yang resign tetap tersimpan
+ * barisnya, dan mencantumkannya di dasar pembayaran adalah kesalahan yang
+ * paling mahal dari seluruh berkas ini.
+ */
+function daftarHead(): HeadDivisi[] {
+  return getUsers()
+    .filter((u) => u.active && (u.jabatan ?? "").trim().toLowerCase() === "head" && !!u.department)
+    .map((u) => ({ nama: u.name, divisi: (u.department as string).trim() }))
+    .sort((a, b) => a.divisi.localeCompare(b.divisi, "id") || a.nama.localeCompare(b.nama, "id"));
+}
 
 /** Tiga bulan sebelum `periode`, urut dari yang paling lama. */
 function tigaBulan(periode: string): [string, string, string] {
@@ -508,6 +537,7 @@ export async function detailManajemen(
 
   return {
     lalu,
+    heads: daftarHead(),
     periode,
     omzetLalu,
     skor,

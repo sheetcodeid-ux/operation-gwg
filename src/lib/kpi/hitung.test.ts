@@ -254,10 +254,12 @@ describe("struktur & bobot tiap posisi", () => {
     }
   });
 
-  it("Head Food Development dan Head PDQ tidak dinilai efisiensi operasional", () => {
-    for (const kode of ["pdq_head_food", "pdq_head_pdq"] as const) {
-      expect(indikatorPosisi(kode).map((i) => i.key)).not.toContain("efisiensi");
-    }
+  it("TIDAK ADA posisi Head — capaiannya rata-rata KPI divisinya", () => {
+    // Head dulu dinilai dengan indikatornya sendiri. Sejak daftar pencairan
+    // ada, capaian Head diambil dari rata-rata KPI orang-orang divisinya
+    // (keputusan pemilik); menilainya lagi di sini berarti dua angka untuk satu
+    // orang, dan yang membayar harus menebak mana yang dipakai.
+    expect(POSISI.filter((p) => /head/i.test(p.kode) || /^head/i.test(p.nama))).toEqual([]);
   });
 
   it("Food Staff dan Beverage Staff memakai indikator yang sama persis", () => {

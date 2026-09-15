@@ -20,6 +20,8 @@ import type { LaporanKpi } from "@/lib/data/kpi";
 import { bersatuan } from "@/lib/kpi/satuan";
 import { TabelHarian } from "@/components/operation/tabel-harian";
 import { KelengkapanDailyPanel } from "@/components/admin/kelengkapan-daily";
+import { buatPencairanKpiHtml, type OrangKpi } from "@/components/kpi/daftar-pdf";
+import { barisPencairan } from "@/lib/kpi/pencairan";
 import { PapanSupervisor } from "@/components/kpi/papan-supervisor";
 import { peringkat } from "@/lib/kpi/manajemen";
 import { barisHarian, kolomHari, totalHarian, urutHarian } from "@/lib/ops/harian";
@@ -381,7 +383,62 @@ if (kode === "supervisor") {
   );
   throw new Error("__stop__");
 }
-if (kode === "kelengkapan") {
+if (kode.startsWith("pencairan")) {
+  // Pratinjau DOKUMEN, bukan komponen: yang perlu dilihat bentuk kertasnya.
+  // Angkanya CONTOH, tapi susunannya persis seperti yang keluar dari layar.
+  const dep = (kode: string, nama: string, orang: [string, number | null][]) => ({
+    kode,
+    nama,
+    singkat: nama,
+    rata: null,
+    lalu: null,
+    posisi: [{ kode: "p", nama: `${nama} Staff`, nilai: null, lalu: null, orang: orang.map(([n, v]) => ({ nama: n, nilai: v, bersama: false })) }],
+  });
+  const departemen = [
+    dep("operational", "Operational", [["Fikri", 92], ["Evan Wijaya", 88], ["Adinda Latifah", 74], ["Pricil", 81], ["Maya", 68], ["Roby", 59]]),
+    dep("pdq", "Product Development & Quality", [["Adam", 70], ["Abil", 83], ["Mustadi", 85], ["Bagas", 82], ["Radika", 88]]),
+    dep("marcomm", "Marketing Communication", [["Amanda", 79]]),
+    dep("sosmed", "Sosial Media", [["Zia", 91], ["Dita", 91], ["Marta", 91]]),
+    dep("creative", "Creative", [["Ricky", 87], ["Seka", 87], ["Via", 87]]),
+    dep("finance", "Finance", [["Bella", 95], ["Nisa", 72], ["Fatin", 64], ["Fetty", 55], ["Sri", null], ["Samsul", 90]]),
+    dep("hrd", "Human Capital", [["Dini Amalia", 84], ["Riva Asila", 84], ["Uswatun Khasanah", 84]]),
+  ];
+  const heads = [
+    { nama: "Muhammad Andi Wahyudi", divisi: "Operational" },
+    { nama: "Andi", divisi: "Product Development & Quality" },
+    { nama: "Dhimas Satria", divisi: "Creative" },
+    { nama: "Indah", divisi: "Finance Accounting Tax" },
+    { nama: "MT Adrianto", divisi: "Human Capital" },
+    { nama: "Ilfiana", divisi: "Business Development" },
+    { nama: "Stevanie", divisi: "Supply Chain" },
+  ];
+  const semua = barisPencairan(departemen, heads);
+  const per = new Map<string, { nama: string; orang: OrangKpi[] }>();
+  for (const b of semua) {
+    const k = per.get(b.departemen) ?? { nama: b.departemen, orang: [] };
+    k.orang.push({
+      nama: b.nama,
+      keterangan: b.head ? "Head divisi" : undefined,
+      nilai: b.personal,
+      alasan: b.alasan ?? null,
+      cair: { head: b.head, personal: b.personal, divisi: b.divisi, dasar: b.dasar, hasil: b.hasil, alasan: b.alasan },
+    });
+    per.set(b.departemen, k);
+  }
+  const mode = (location.hash.includes("gelap") ? "gelap" : "terang") as "terang" | "gelap";
+  // Dokumennya ditulis UTUH, bukan disisipkan potongannya: yang perlu dilihat
+  // justru kertas apa adanya, termasuk latar dan gayanya sendiri.
+  const doc = buatPencairanKpiHtml({
+    judul: "Daftar Pencairan KPI",
+    subjudul: "Seluruh Departemen",
+    periode: "2026-08",
+    kelompok: [...per.values()],
+    mode,
+  });
+  document.open();
+  document.write(doc);
+  document.close();
+} else if (kode === "kelengkapan") {
   // Angka CONTOH yang bentuknya seperti keadaan sungguhan sekarang.
   createRoot(document.getElementById("root")!).render(
     <I18nProvider initialLang="id">

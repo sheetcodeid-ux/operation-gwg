@@ -81,8 +81,6 @@ export type MenuKey =
   | "kpi_pdq_qc"
   | "kpi_pdq_food"
   | "kpi_pdq_beverage"
-  | "kpi_pdq_head_food"
-  | "kpi_pdq_head_pdq"
   | "mc_events"
   | "assessment"
   | "hpp_dash"
@@ -244,8 +242,6 @@ export const NAV_MENUS: Omit<NavItem, "section" | "group" | "groupIcon">[] = [
   { key: "kpi_pdq_qc", label: "Quality Assurance & Control", href: "/kpi/pdq_qc", icon: "ShieldCheck" },
   { key: "kpi_pdq_food", label: "Food Staff", href: "/kpi/pdq_food", icon: "UtensilsCrossed" },
   { key: "kpi_pdq_beverage", label: "Beverage Staff", href: "/kpi/pdq_beverage", icon: "CupSoda" },
-  { key: "kpi_pdq_head_food", label: "Head Food Development", href: "/kpi/pdq_head_food", icon: "ChefHat" },
-  { key: "kpi_pdq_head_pdq", label: "Head Product Development & Quality", href: "/kpi/pdq_head_pdq", icon: "FlaskConical" },
   { key: "mc_events", label: "Event Tracker", href: "/marcomm/events", icon: "Megaphone" },
   { key: "reports", label: "Reports", href: "/reports", icon: "FileText" },
   { key: "assessment", label: "Assessment Golongan", href: "/assessment", icon: "Award" },
@@ -600,7 +596,7 @@ export const DIVISION_GROUPS: Partial<Record<Division, NavGroupDef[]>> = {
       name: "Product Development & Quality",
       icon: "FlaskConical",
       urutan: 4,
-      menus: ["kpi_pdq_qc", "kpi_pdq_food", "kpi_pdq_beverage", "kpi_pdq_head_food", "kpi_pdq_head_pdq"],
+      menus: ["kpi_pdq_qc", "kpi_pdq_food", "kpi_pdq_beverage"],
     },
     { name: "Marketing Communication", icon: "Megaphone", urutan: 5, menus: ["kpi_marcomm"] },
     // Sosial Media berdiri sendiri di sidebar, sama seperti di tabel divisi —
@@ -645,8 +641,6 @@ export const DIVISION_MENUS: { division: Division; menus: MenuKey[] }[] = [
       "kpi_pdq_qc",
       "kpi_pdq_food",
       "kpi_pdq_beverage",
-      "kpi_pdq_head_food",
-      "kpi_pdq_head_pdq",
       "kpi_marcomm",
       "kpi_hc",
       "kpi_supervisor",

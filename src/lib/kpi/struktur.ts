@@ -33,8 +33,6 @@ export type KodePosisi =
   | "pdq_qc"
   | "pdq_food"
   | "pdq_beverage"
-  | "pdq_head_food"
-  | "pdq_head_pdq"
   | "hc"
   | "supervisor_umum"
   | "supervisor_kpk";
@@ -141,7 +139,7 @@ export const DEPARTEMEN: Departemen[] = [
     nama: "Product Development & Quality",
     singkat: "PDQ",
     ikon: "FlaskConical",
-    posisi: ["pdq_qc", "pdq_food", "pdq_beverage", "pdq_head_food", "pdq_head_pdq"],
+    posisi: ["pdq_qc", "pdq_food", "pdq_beverage"],
     menyusul: ["Quality Assurance & Control (Radika)"],
   },
   { kode: "marcomm", nama: "Marketing Communication", singkat: "MarComm", ikon: "Megaphone", posisi: ["marcomm"] },
@@ -239,15 +237,20 @@ export const POSISI: Posisi[] = [
   { kode: "finance_accounting", departemen: "finance", nama: "Accounting", pic: ["Bella"] },
   { kode: "finance_finance", departemen: "finance", nama: "Finance", pic: ["Nisa", "Fatin", "Fetty", "Sri"], perPic: true },
   { kode: "finance_tax", departemen: "finance", nama: "Tax", pic: ["Samsul"] },
-  { kode: "marcomm", departemen: "marcomm", nama: "Marketing Communication", pic: ["Amanda", "Dita", "Marta"] },
+  // DITA DAN MARTA TIDAK DI SINI. Keduanya Social Media, dan sudah dinilai di
+  // posisi Sosial Media. Tercantum di dua posisi, satu orang muncul dua kali di
+  // daftar pencairan dengan angka yang berbeda — dan yang membayar tidak punya
+  // cara tahu mana yang benar.
+  { kode: "marcomm", departemen: "marcomm", nama: "Marketing Communication", pic: ["Amanda"] },
   { kode: "pdq_qc", departemen: "pdq", nama: "Quality Assurance & Control", pic: ["Radika"] },
-    // Nanda TIDAK ikut di sini: ia dinilai sebagai Head Food Development, dan
-  // satu orang yang muncul di dua daftar akan dinilai dua kali dengan indikator
-  // yang berbeda tanpa ada yang menyadarinya.
   { kode: "pdq_food", departemen: "pdq", nama: "Food Staff", pic: ["Mustadi", "Bagas"], perPic: true },
   { kode: "pdq_beverage", departemen: "pdq", nama: "Beverage Staff", pic: ["Adam", "Abil"], perPic: true },
-  { kode: "pdq_head_food", departemen: "pdq", nama: "Head Food Development", pic: ["Nanda"] },
-  { kode: "pdq_head_pdq", departemen: "pdq", nama: "Head Product Development & Quality", pic: [] },
+  // HEAD TIDAK PUNYA POSISI DI SINI, dan itu disengaja sejak daftar pencairan
+  // ada. Capaian Head adalah RATA-RATA KPI orang-orang divisinya — keputusan
+  // pemiliknya — jadi menilainya lagi dengan indikator sendiri berarti dua
+  // angka untuk satu orang, dan yang membayar harus menebak mana yang dipakai.
+  // Barisnya dibentuk di `src/lib/kpi/pencairan.ts` dari jabatan di User
+  // Management, bukan dari daftar ini.
   // SATU POSISI untuk seluruh departemen, bukan satu per orang.
   //
   // Keenam angkanya memang angka departemen: kepatuhan kontrak, kepatuhan
@@ -319,8 +322,6 @@ export const MENU_POSISI: Record<KodePosisi, string> = {
   pdq_qc: "kpi_pdq_qc",
   pdq_food: "kpi_pdq_food",
   pdq_beverage: "kpi_pdq_beverage",
-  pdq_head_food: "kpi_pdq_head_food",
-  pdq_head_pdq: "kpi_pdq_head_pdq",
   hc: "kpi_hc",
 };
 

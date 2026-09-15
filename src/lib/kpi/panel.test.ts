@@ -30,9 +30,11 @@ describe("panel hanya milik posisi yang memakainya", () => {
     expect(punya.sort()).toEqual(["pdq_beverage", "pdq_food"]);
   });
 
-  it("Keberhasilan Pasar hanya di empat posisi Product Development & Quality", () => {
+  it("Keberhasilan Pasar hanya di staf Product Development & Quality", () => {
+    // Dulu empat posisi; dua di antaranya posisi Head, dan Head tidak lagi
+    // dinilai dengan indikator sendiri — capaiannya rata-rata KPI divisinya.
     const punya = POSISI.filter((p) => punyaIndikator(p.kode, "keberhasilan_pasar")).map((p) => p.kode);
-    expect(punya.sort()).toEqual(["pdq_beverage", "pdq_food", "pdq_head_food", "pdq_head_pdq"]);
+    expect(punya.sort()).toEqual(["pdq_beverage", "pdq_food"]);
     // Semuanya di departemen yang sama — tidak ada yang bocor ke Creative.
     expect(new Set(POSISI.filter((p) => punya.includes(p.kode)).map((p) => p.departemen))).toEqual(new Set(["pdq"]));
   });

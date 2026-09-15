@@ -7,6 +7,7 @@ import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { ChipMode, THEME, aman, logo, type Mode } from "./laporan-pdf";
 import { labelPeriode } from "./periode";
 import { peringkat } from "@/lib/kpi/manajemen";
+import { AMBANG_PENUH, AMBANG_SEPARUH, type BarisCair } from "@/lib/kpi/pencairan";
 import { cn, formatNumber } from "@/lib/utils";
 
 /**
@@ -49,6 +50,11 @@ export interface OrangKpi {
    * selalu muncul setelah "berapa": indikator mana yang menjatuhkannya.
    */
   indikator?: { key: string; label: string; bobot: number; persen: number | null }[];
+  /**
+   * Bahan daftar pencairan: capaian divisinya, dasar pencairannya, dan cair
+   * berapa. Ada hanya pada dokumen Detail KPI Divisi.
+   */
+  cair?: Omit<BarisCair, "nama" | "departemen">;
 }
 
 export interface KelompokKpi {
@@ -324,6 +330,16 @@ export function DialogDaftarKpi({
   /** Pemilih orang ditampilkan. Matikan untuk daftar yang memang utuh. */
   bisaPilih = true,
   satuan = "orang",
+  /**
+   * Bentuk dokumennya. "pencairan" memakai tabel enam kolom milik Detail KPI
+   * Divisi; "daftar" memakai bentuk lama yang dipakai KPI Supervisor.
+   *
+   * SATU DIALOG UNTUK KEDUANYA, bukan dua. Yang di sekelilingnya — pemilih
+   * orang, pilihan terang/gelap, pratinjau, tombol cetak — sama persis, dan
+   * dua salinan berarti perbaikan pada satu dialog diam-diam tidak sampai ke
+   * yang lain.
+   */
+  bentuk = "daftar",
 }: {
   open: boolean;
   onOpenChange: (v: boolean) => void;
@@ -333,6 +349,7 @@ export function DialogDaftarKpi({
   kelompok: KelompokKpi[];
   bisaPilih?: boolean;
   satuan?: string;
+  bentuk?: "daftar" | "pencairan";
 }) {
   const [mode, setMode] = React.useState<Mode | null>(null);
   /**
@@ -383,7 +400,11 @@ export function DialogDaftarKpi({
       return baru;
     });
 
-  const html = mode ? buatDaftarKpiHtml({ judul, subjudul, periode, kelompok: dipakai, mode, satuan }) : "";
+  const html = !mode
+    ? ""
+    : bentuk === "pencairan"
+      ? buatPencairanKpiHtml({ judul, subjudul, periode, kelompok: dipakai, mode })
+      : buatDaftarKpiHtml({ judul, subjudul, periode, kelompok: dipakai, mode, satuan });
 
   function cetak() {
     if (!html) return;
@@ -525,4 +546,168 @@ export function DialogDaftarKpi({
       </DialogContent>
     </Dialog>
   );
+}
+
+/* ---------------------------- Daftar pencairan ---------------------------- */
+
+/** Warna tiap hasil pencairan. Hijau–kuning–merah, bukan peringkat KPI:
+ *  yang ditanyakan di dokumen ini cair atau tidak, bukan bagus atau tidak. */
+const WARNA_CAIR: Record<string, string> = { penuh: "#10b981", separuh: "#f59e0b", tidak: "#f43f5e" };
+
+function lencanaCair(c: BarisCair["hasil"], t: (typeof THEME)[Mode]): string {
+  if (!c) {
+    return `<span style="display:inline-block;padding:3px 10px;border-radius:999px;font-size:10px;background:${t.box};color:${t.sub};border:1px solid ${t.border};white-space:nowrap">Belum dinilai</span>`;
+  }
+  const w = WARNA_CAIR[c.jenis] ?? t.sub;
+  return `<span style="display:inline-block;padding:3px 10px;border-radius:999px;font-size:10.5px;font-weight:700;background:${w}1f;color:${w};border:1px solid ${w}55;white-space:nowrap">${aman(c.label)}</span>`;
+}
+
+/**
+ * DAFTAR PENCAIRAN KPI — satu tabel datar, bukan daftar per kelompok.
+ *
+ * Bentuknya ditentukan pemiliknya: No, Nama, Departemen, Capaian Personal,
+ * Capaian Divisi, Hasil. Datar dan berkolom Departemen, bukan bersekat per
+ * divisi — yang membayar membacanya sekali dari atas ke bawah dan mencentang
+ * nama, bukan melompat antar bagian.
+ *
+ * KEDUA CAPAIAN DICETAK, walau yang menentukan cuma rata-ratanya. Orang yang
+ * tidak cair akan bertanya kenapa, dan jawabannya ada di salah satu dari dua
+ * kolom itu — tanpa keduanya, dokumen ini menimbulkan pertanyaan yang tidak
+ * bisa dijawabnya sendiri.
+ */
+export function buatPencairanKpiHtml({
+  judul,
+  subjudul,
+  periode,
+  kelompok,
+  mode,
+}: {
+  judul: string;
+  subjudul: string;
+  periode: string;
+  kelompok: KelompokKpi[];
+  mode: Mode;
+}): string {
+  const t = THEME[mode];
+  // Datar, tapi URUTANNYA departemen dulu baru nama — supaya orang satu divisi
+  // tetap berdekatan tanpa perlu sekat.
+  const baris = kelompok
+    .flatMap((k) => k.orang.map((o) => ({ ...o, departemen: k.nama })))
+    .sort(
+      (a, b) =>
+        a.departemen.localeCompare(b.departemen, "id") ||
+        Number(!!b.cair?.head) - Number(!!a.cair?.head) ||
+        (b.cair?.dasar ?? -1) - (a.cair?.dasar ?? -1) ||
+        a.nama.localeCompare(b.nama, "id"),
+    );
+
+  const hitung = (j: string) => baris.filter((o) => o.cair?.hasil?.jenis === j).length;
+  const belum = baris.filter((o) => !o.cair?.hasil).length;
+  const dasarAda = baris.map((o) => o.cair?.dasar ?? null).filter((n): n is number => n !== null);
+  const rataDasar = dasarAda.length ? dasarAda.reduce((x, y) => x + y, 0) / dasarAda.length : null;
+
+  const sel = (i: string, g = "") =>
+    `<td style="padding:8px 10px;border-bottom:1px solid ${t.border};font-size:11.5px;${g}">${i}</td>`;
+  const kepala = (i: string, g = "") =>
+    `<th style="padding:7px 10px;border-bottom:1px solid ${t.border};font-size:9.5px;text-transform:uppercase;letter-spacing:0.05em;color:${t.sub};text-align:left;${g}">${i}</th>`;
+
+  const isi = baris
+    .map((o, n) => {
+      const c = o.cair;
+      const nilai = (v: number | null | undefined, tebal = false) =>
+        v === null || v === undefined
+          ? `<span style="color:${t.sub}">—</span>`
+          : `<span style="color:${t.text};${tebal ? "font-weight:700;font-size:13px" : ""}">${angka(v)}</span>`;
+      return `<tr style="background:${n % 2 ? t.box : "transparent"}">
+      ${sel(`<span style="color:${t.sub};font-size:10.5px">${n + 1}</span>`, "width:30px;text-align:right")}
+      ${sel(
+        `<b style="color:${t.text}">${aman(o.nama)}</b>${
+          c?.head ? ` <span style="display:inline-block;padding:1px 6px;border-radius:999px;font-size:9px;font-weight:700;background:${t.text}14;color:${t.sub};vertical-align:middle">HEAD</span>` : ""
+        }${o.keterangan ? `<div style="color:${t.sub};font-size:10px;font-weight:400">${aman(o.keterangan)}</div>` : ""}`,
+      )}
+      ${sel(`<span style="color:${t.sub}">${aman(o.departemen)}</span>`)}
+      ${sel(nilai(o.nilai), "text-align:right;width:92px;white-space:nowrap")}
+      ${sel(nilai(c?.divisi ?? null), "text-align:right;width:88px;white-space:nowrap")}
+      ${sel(
+        [
+          lencanaCair(c?.hasil ?? null, t),
+          c?.dasar !== null && c?.dasar !== undefined
+            ? `<div style="color:${t.sub};font-size:9.5px;margin-top:3px">dasar ${angka(c.dasar)}</div>`
+            : "",
+          // Keterangannya ikut walau angkanya ADA — untuk Head yang divisinya
+          // meminjam, angka tanpa keterangan terbaca seolah divisinya sendiri
+          // yang dinilai.
+          c?.alasan ? `<div style="color:${t.sub};font-size:9.5px;margin-top:3px;max-width:190px">${aman(c.alasan)}</div>` : "",
+        ].join(""),
+        "text-align:right;width:170px",
+      )}
+    </tr>`;
+    })
+    .join("");
+
+  return `<!doctype html><html lang="id"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>${aman(judul)} — ${aman(labelPeriode(periode))}</title>
+<style>
+  * { box-sizing:border-box; margin:0; padding:0; -webkit-print-color-adjust:exact; print-color-adjust:exact; }
+  body { font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif; background:${t.bg}; color:${t.text}; padding:24px; }
+  .sheet { max-width:880px; margin:0 auto; background:${t.card}; border:1px solid ${t.border}; border-radius:16px; overflow:hidden; }
+  .band { background:${t.band}; color:${t.bandText}; padding:22px 28px; display:flex; justify-content:space-between; align-items:center; gap:20px; }
+  .band h1 { font-size:18px; font-weight:700; letter-spacing:-0.01em; }
+  .band p { font-size:12px; opacity:0.7; margin-top:3px; }
+  .body { padding:22px 28px 24px; }
+  .sec-title { font-size:10.5px; font-weight:700; text-transform:uppercase; letter-spacing:0.06em; color:${t.sub}; margin:20px 0 8px; }
+  .ringkas { display:flex; gap:10px; }
+  .aturan { margin-top:18px; display:flex; flex-wrap:wrap; gap:8px; }
+  .aturan span { font-size:10.5px; color:${t.sub}; background:${t.box}; border:1px solid ${t.border}; border-radius:8px; padding:6px 10px; }
+  .foot { margin-top:22px; padding-top:14px; border-top:1px solid ${t.border}; color:${t.sub}; font-size:10.5px; display:flex; justify-content:space-between; gap:16px; }
+  /* Satu orang tidak boleh terbelah dua halaman — nama di halaman ini dan
+     angkanya di halaman berikutnya adalah cara paling mudah salah bayar. */
+  table { page-break-inside:auto; }
+  tr { page-break-inside:avoid; }
+  thead { display:table-header-group; }
+  @media print { body { background:#fff; padding:0; } .sheet { border:none; border-radius:0; max-width:none; } }
+</style></head><body>
+  <div class="sheet">
+    <div class="band">
+      <div style="display:flex;align-items:center;gap:14px;min-width:0">${logo()}<div style="min-width:0"><h1>${aman(judul)}</h1><p>Good Will Grow · ${aman(subjudul)}</p></div></div>
+      <div style="text-align:right;flex-shrink:0">
+        <p style="font-size:12px;opacity:0.85">${aman(labelPeriode(periode))}</p>
+        <p style="margin-top:6px;font-size:26px;font-weight:800;opacity:1;line-height:1">${angka(rataDasar, 0)}</p>
+        <p style="font-size:10px;opacity:0.7;margin-top:2px">rata-rata dasar</p>
+      </div>
+    </div>
+    <div class="body">
+      <div class="ringkas">
+        ${kotak("Tercantum", String(baris.length), t, "orang")}
+        ${kotak("100% cair", String(hitung("penuh")), t, `${AMBANG_PENUH}% ke atas`)}
+        ${kotak("50% cair", String(hitung("separuh")), t, `${AMBANG_SEPARUH}–${AMBANG_PENUH - 1}%`)}
+        ${kotak("Tidak cair", String(hitung("tidak")), t, `di bawah ${AMBANG_SEPARUH}%`)}
+        ${kotak("Belum dinilai", String(belum), t, belum > 0 ? "bukan nol" : "tidak ada")}
+      </div>
+      <div class="sec-title">Daftar Pencairan</div>
+      <table style="width:100%;border-collapse:collapse">
+        <thead><tr>
+          ${kepala("No", "width:30px;text-align:right")}
+          ${kepala("Nama")}
+          ${kepala("Departemen")}
+          ${kepala("Capaian Personal", "text-align:right;width:92px")}
+          ${kepala("Capaian Divisi", "text-align:right;width:88px")}
+          ${kepala("Hasil", "text-align:right;width:170px")}
+        </tr></thead>
+        <tbody>${isi}</tbody>
+      </table>
+      <div class="aturan">
+        <span><b style="color:${t.text}">Capaian Personal</b> — KPI orangnya sendiri.</span>
+        <span><b style="color:${t.text}">Capaian Divisi</b> — rata-rata KPI divisinya; ini pula KPI Head-nya.</span>
+        <span><b style="color:${t.text}">Dasar</b> — rata-rata keduanya, dan inilah yang menentukan pencairan.</span>
+        <span><b style="color:${WARNA_CAIR.penuh}">≥ ${AMBANG_PENUH}%</b> 100% cair · <b style="color:${WARNA_CAIR.separuh}">${AMBANG_SEPARUH}–${AMBANG_PENUH - 1}%</b> 50% cair · <b style="color:${WARNA_CAIR.tidak}">&lt; ${AMBANG_SEPARUH}%</b> tidak cair</span>
+      </div>
+      <div class="foot">
+        <span>Dasar pencairan KPI. Yang <b>belum dinilai</b> BUKAN nol — angkanya belum bisa dihitung, bukan gagal.</span>
+        <span style="white-space:nowrap">Dicetak ${aman(new Date().toLocaleDateString("id-ID", { day: "numeric", month: "long", year: "numeric" }))}</span>
+      </div>
+    </div>
+  </div>
+</body></html>`;
 }

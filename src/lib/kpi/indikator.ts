@@ -405,15 +405,6 @@ const stafPdq: Indikator[] = [
   },
 ];
 
-/** Head Food Development & Head PDQ — indikator sama, bobot dan target berbeda,
- *  tanpa Efisiensi Beban Operasional. */
-const headPdq: Indikator[] = [
-  { ...stafPdq[4], bobot: 40, target: { jenis: "tetap", nilai: 10 } },
-  { ...stafPdq[0], bobot: 30, target: { jenis: "tetap", nilai: 5 } },
-  { ...stafPdq[2], bobot: 20, target: { jenis: "rasio", nilai: 1.5 } },
-  { ...stafPdq[3], bobot: 10, target: { jenis: "tetap", nilai: 10 } },
-];
-
 /**
  * Quality Assurance & Control.
  *
@@ -986,8 +977,6 @@ export const INDIKATOR: Record<KodePosisi, Indikator[]> = {
   pdq_qc: qualityControl,
   pdq_food: stafPdq,
   pdq_beverage: stafPdq,
-  pdq_head_food: headPdq,
-  pdq_head_pdq: headPdq,
   supervisor_umum: supervisorUmum,
   supervisor_kpk: supervisorKpk,
 };
