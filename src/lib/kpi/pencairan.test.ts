@@ -157,14 +157,16 @@ describe("Head yang divisinya belum punya KPI", () => {
     expect(ilfi.alasan).toContain("Operational");
   });
 
-  it("divisi tanpa KPI dan tanpa pinjaman TIDAK dihitung nol", () => {
-    // Supply Chain belum punya modul KPI dan tidak meminjam dari mana pun.
-    // Menampilkannya nol berarti memutuskan tidak membayar atas angka yang
-    // tidak pernah dihitung.
+  it("divisi tanpa KPI dan tanpa pinjaman TIDAK ikut tercetak sama sekali", () => {
+    // Supply Chain belum punya modul KPI: anak buahnya pun tidak muncul di
+    // Detail KPI Divisi, jadi Head-nya akan berdiri sendirian di kertas sebagai
+    // baris kosong yang tidak bisa ditindaklanjuti siapa pun.
     const b = barisPencairan([operational], [{ nama: "Stevanie", divisi: "Supply Chain" }]);
-    const s = b.find((x) => x.nama === "Stevanie")!;
-    expect(s.personal).toBeNull();
-    expect(s.hasil).toBeNull();
-    expect(s.alasan).toBeTruthy();
+    expect(b.find((x) => x.nama === "Stevanie")).toBeUndefined();
+  });
+
+  it("yang punya pinjaman tetap ikut — angkanya ada dan asalnya disebut", () => {
+    const b = barisPencairan([operational], [{ nama: "Ilfiana", divisi: "Business Development" }]);
+    expect(b.find((x) => x.nama === "Ilfiana")).toBeTruthy();
   });
 });

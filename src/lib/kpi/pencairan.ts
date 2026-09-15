@@ -176,6 +176,15 @@ export function barisPencairan(departemen: readonly DepartemenKpi[], heads: read
     const kode = DEPT_DARI_DIVISI[h.divisi] ?? kodeDariNama.get(h.divisi);
     const dipakai = kode ?? pinjam;
     const nilai = dipakai ? rataDept.get(dipakai) ?? null : null;
+    // DIVISI YANG TIDAK ADA DI DETAIL KPI DIVISI TIDAK IKUT TERCETAK.
+    //
+    // Supply Chain belum punya modul KPI: anak buahnya pun tidak muncul di
+    // layar, jadi Head-nya muncul sendirian di kertas sebagai baris kosong yang
+    // tidak bisa ditindaklanjuti siapa pun. Keputusan pemilik: yang belum
+    // punya KPI jangan ditampilkan sama sekali.
+    //
+    // Yang punya pinjaman TETAP IKUT — angkanya ada, dan asalnya disebutkan.
+    if (nilai === null) continue;
     baris.push({
       nama: h.nama,
       // Divisinya ditulis dengan NAMA YANG SAMA dengan anak buahnya. "Finance
@@ -192,11 +201,7 @@ export function barisPencairan(departemen: readonly DepartemenKpi[], heads: read
       dasar: nilai,
       hasil: hasilCair(nilai),
       alasan:
-        nilai !== null
-          ? pinjam && !kode
-            ? `Divisinya belum punya KPI — sementara mengikuti ${namaDept.get(pinjam) ?? pinjam}.`
-            : undefined
-          : "Divisinya belum punya KPI yang bisa dirata-ratakan.",
+        pinjam && !kode ? `Divisinya belum punya KPI — sementara mengikuti ${namaDept.get(pinjam) ?? pinjam}.` : undefined,
     });
   }
 
