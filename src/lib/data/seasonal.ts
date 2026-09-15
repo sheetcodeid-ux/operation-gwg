@@ -218,8 +218,32 @@ export interface HasilTarik {
   error?: string;
 }
 
-/** Berapa panggilan ESB yang boleh jalan berbarengan saat mulai. */
-export const KONKUREN_AWAL = 4;
+/**
+ * Berapa panggilan ESB yang boleh jalan berbarengan saat mulai.
+ *
+ * ANGKA INI DIUKUR, BUKAN DIPILIH. Tiap setelan dijalankan tiga jendela cron
+ * 49 detik di produksi, lalu dibandingkan baris bersihnya:
+ *
+ *   konkurensi  1 → 62, 39, 44   (rata-rata  48, gagal  4)
+ *   konkurensi  4 → 82, 76, 84   (rata-rata  81, gagal 11-20)
+ *   konkurensi  6 → 96, 97, 83   (rata-rata  92, gagal 19-31)
+ *   konkurensi 10 → 108, 99, 109 (rata-rata 105, gagal 33-39)
+ *
+ * Dua hal yang dipelajari dari tabel itu, dan dua-duanya membantah dugaan awal:
+ *
+ * Pertama, pembarengan MEMANG menambah hasil — lebih dari dua kali lipat dari
+ * satu-satu. Dugaan "ESB cuma membatasi jumlah permintaan, jadi berbarengan
+ * tidak ada gunanya" ternyata keliru.
+ *
+ * Kedua, panggilan yang terbuang kena rem itu MURAH. Di konkurensi 10 hampir
+ * seperempat panggilan gagal, dan hasil bersihnya tetap yang terbanyak. Menilai
+ * setelan dari jumlah gagalnya akan memilih setelan yang paling lambat.
+ *
+ * Berhenti di 10 karena kenaikannya sudah melandai (6→10 cuma +14% untuk +67%
+ * panggilan) dan ESB ini ERP yang dipakai orang bekerja — bukan karena 10 itu
+ * batas yang terbukti.
+ */
+export const KONKUREN_AWAL = 10;
 /** Batas atas yang tidak pernah dilewati, berapa pun yang diminta pemanggil. */
 export const KONKUREN_MAKS = 10;
 /** Berapa baris dikumpulkan sebelum ditulis sekaligus ke basis data. */
@@ -233,11 +257,9 @@ const BATAS_MENYERAH = 12;
 /**
  * TARIK BANYAK PASANGAN SEKALIGUS, dengan beberapa panggilan berjalan bersamaan.
  *
- * Inilah yang membuat penarikan Januari–hari ini selesai dalam hitungan menit
- * alih-alih hari. Satu panggilan highlight ke ESB memakan 0,6–1 detik, dan
- * hampir seluruhnya adalah MENUNGGU JARINGAN — bukan pekerjaan kita. Menunggu
- * satu per satu berarti 11.000 panggilan × 1 detik ≈ tiga jam murni menunggu,
- * dipotong-potong jadi ratusan jendela 40 detik.
+ * Satu panggilan highlight ke ESB memakan 0,6–1 detik, dan hampir seluruhnya
+ * adalah MENUNGGU JARINGAN — bukan pekerjaan kita. Terukur di produksi:
+ * satu-satu memberi ±48 baris per jendela 49 detik, sepuluh berbarengan ±105.
  *
  * Yang DULU menghalangi bukan aturan ESB melainkan salah paham: "ESB melayani
  * satu panggilan pada satu waktu" itu berlaku untuk EKSPOR (berkas yang
@@ -249,10 +271,10 @@ const BATAS_MENYERAH = 12;
  *  - SESI. ESB satu sesi per akun, jadi login dibuat tunggal di klien ESB;
  *    tanpa itu rombongan pertama saling mematikan sesi masing-masing.
  *  - REM ESB. Sesudah beberapa puluh permintaan, ESB berhenti menjawab data dan
- *    membalas halaman HTML. TERUKUR dari catatan cron: penarikan bulanan yang
- *    masih satu-satu pun kena di tarikan ke-49 dan ke-39. Jadi yang dibatasi
- *    JUMLAH PERMINTAAN, bukan kebersamaannya — dan menyerah saat kena rem
- *    berarti membuang sisa jendela waktunya percuma.
+ *    membalas halaman HTML. Kena pada kode yang satu-satu maupun yang
+ *    berbarengan — penarikan bulanan yang masih satu-satu pun kena di tarikan
+ *    ke-49 dan ke-39 — jadi remnya bukan hukuman atas pembarengan, dan
+ *    menyerah saat kena berarti membuang sisa jendela waktunya percuma.
  *
  * Maka saat kena rem, yang dilakukan BUKAN berhenti: jumlah panggilan
  * berbarengan langsung turun ke satu, ditunggu sebentar, lalu diteruskan. Satu
