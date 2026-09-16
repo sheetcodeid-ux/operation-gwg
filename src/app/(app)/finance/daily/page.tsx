@@ -17,6 +17,7 @@ export default async function FinDailyPage({
         skala: "harian",
         menu: "fin_daily" as MenuKey,
         href: "/finance/daily",
+        bidang: "Finance V.1",
         ikon: CalendarDays,
         keterangan: "Net sales per hari",
       }}

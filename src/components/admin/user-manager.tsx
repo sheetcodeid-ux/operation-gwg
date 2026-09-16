@@ -41,6 +41,7 @@ import {
   updateUserAction,
 } from "@/lib/actions/users";
 import { deleteDepartmentAction, saveDepartmentAction } from "@/lib/actions/org-departments";
+import { bidangOrang } from "@/lib/ops/bidang";
 import { listAssignableOutlets, type AssignableOutlet } from "@/lib/actions/outlets";
 import { useI18n } from "@/lib/i18n/provider";
 import { Avatar } from "@/components/ui/avatar";
@@ -539,7 +540,18 @@ export function UserFormPanel({
         : isSupervisor
           ? "supervisor"
           : "member";
-  const needsOutletPicker = isCoordinator || isSupervisor;
+  /**
+   * WILAYAH UNTUK FINANCE DAN MARKETING.
+   *
+   * Perannya tetap `member` — yang membuka pemilih outletnya DEPARTEMEN, bukan
+   * peran. Aturannya di `@/lib/ops/bidang`; di sini cuma dipakai.
+   *
+   * Yang tidak ditugaskan satu outlet pun melihat SELURUH outlet di halaman
+   * Performance bidangnya. Jadi untuk "hanya yang berjabatan Finance yang
+   * punya wilayah", cukup kosongkan outlet Accounting dan Tax.
+   */
+  const bidang = bidangOrang({ department, jabatan });
+  const needsOutletPicker = isCoordinator || isSupervisor || !!bidang;
   // Local outlets as an instant fallback shown while the picker loads from POS.
   const fallbackOutlets = React.useMemo(() => outlets.map((o) => ({ id: o.id, name: o.name })), [outlets]);
 
@@ -679,6 +691,7 @@ export function UserFormPanel({
         {needsOutletPicker && (
           <OutletAssignPicker
             role={isSupervisor ? "supervisor" : "area_coordinator"}
+            bidang={!isCoordinator && !isSupervisor ? bidang ?? undefined : undefined}
             single={isSupervisor}
             userId={user?.id}
             fallback={fallbackOutlets}
@@ -1126,6 +1139,7 @@ const OutletRow = React.memo(function OutletRow({
  */
 const OutletAssignPicker = React.memo(function OutletAssignPicker({
   role,
+  bidang,
   single,
   userId,
   fallback,
@@ -1133,6 +1147,8 @@ const OutletAssignPicker = React.memo(function OutletAssignPicker({
   onSelectedChange,
 }: {
   role: "area_coordinator" | "supervisor";
+  /** Bidang Performance V.1, untuk wilayah yang datang dari departemen. */
+  bidang?: string;
   single: boolean;
   userId?: string;
   fallback: AssignableOutlet[];
@@ -1147,13 +1163,13 @@ const OutletAssignPicker = React.memo(function OutletAssignPicker({
   // Fetch the assignable POS outlets exactly once (per role).
   React.useEffect(() => {
     let live = true;
-    listAssignableOutlets(role, userId).then((res) => {
+    listAssignableOutlets(role, userId, bidang).then((res) => {
       if (live && "outlets" in res) setOutlets(res.outlets);
     });
     return () => {
       live = false;
     };
-  }, [role, userId]);
+  }, [role, userId, bidang]);
 
   // Report selection up (to the parent ref) whenever it changes.
   React.useEffect(() => {
@@ -1197,7 +1213,9 @@ const OutletAssignPicker = React.memo(function OutletAssignPicker({
   const label = single ? "Outlet Ditugaskan (1 outlet)" : `Wilayah / Outlet Ditugaskan (${selected.length})`;
   const hint = single
     ? "Supervisor hanya memegang 1 outlet. Outlet diambil dari sistem POS; yang sudah dipegang supervisor lain tidak ditampilkan."
-    : "Outlet diambil dari sistem POS. Yang sudah dipegang koordinator lain tidak ditampilkan. Pilih 1 atau lebih.";
+    : bidang
+      ? `Wilayah untuk halaman ${bidang}. Yang sudah dipegang orang lain di bidang yang sama tidak ditampilkan. Dibiarkan kosong berarti ia melihat SELURUH outlet.`
+      : "Outlet diambil dari sistem POS. Yang sudah dipegang koordinator lain tidak ditampilkan. Pilih 1 atau lebih.";
 
   return (
     <Field label={label}>

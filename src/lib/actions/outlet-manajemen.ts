@@ -6,6 +6,7 @@ import { can } from "@/lib/rbac";
 import { getOutlet, getUser, getUsers } from "@/lib/data/store";
 import { updateUser } from "@/lib/data/user-mutations";
 import { saveOutlet } from "@/lib/data/persist";
+import { bidangOrang } from "@/lib/ops/bidang";
 import { persistMessage } from "@/lib/data/persist";
 
 /**
@@ -39,7 +40,21 @@ export interface SimpanOutletInput {
   owner: string;
   /** Id coordinator area yang memegangnya. Kosong = tidak dipegang siapa pun. */
   coordinatorId: string;
+  /** Id orang Finance yang memegang wilayah ini. Kosong = tidak dipegang. */
+  financeId?: string;
+  /** Id orang Marketing yang memegang wilayah ini. Kosong = tidak dipegang. */
+  marketingId?: string;
 }
+
+/**
+ * TIGA WILAYAH DI ATAS SATU OUTLET, dan ketiganya berdiri sendiri.
+ *
+ * Satu outlet dipegang seorang Coordinator Area, seorang Finance, dan seorang
+ * Marketing sekaligus — tiga orang yang memantau outlet yang sama dari tiga
+ * sudut. Yang tidak boleh dua-duanya justru dua orang dari BIDANG yang sama.
+ */
+const BIDANG_FINANCE = "Finance V.1";
+const BIDANG_MARKETING = "Marketing V.1";
 
 export async function simpanOutletAction(input: SimpanOutletInput): Promise<HasilSimpanOutlet> {
   const admin = await getSessionUser();
@@ -56,6 +71,19 @@ export async function simpanOutletAction(input: SimpanOutletInput): Promise<Hasi
     if (c.active === false) return { ok: false, error: `${c.name} sudah tidak aktif.` };
   }
 
+  const financeId = (input.financeId ?? "").trim();
+  const marketingId = (input.marketingId ?? "").trim();
+  for (const [id, bidang] of [
+    [financeId, BIDANG_FINANCE],
+    [marketingId, BIDANG_MARKETING],
+  ] as const) {
+    if (!id) continue;
+    const u = getUser(id);
+    if (!u) return { ok: false, error: "Pemegang wilayah tidak ditemukan." };
+    if (bidangOrang(u) !== bidang) return { ok: false, error: `${u.name} bukan orang ${bidang}.` };
+    if (u.active === false) return { ok: false, error: `${u.name} sudah tidak aktif.` };
+  }
+
   try {
     const owner = input.owner.trim();
     outlet.owner = owner || null;
@@ -65,22 +93,37 @@ export async function simpanOutletAction(input: SimpanOutletInput): Promise<Hasi
     // yang memegangnya sekarang — kalau tidak, outlet yang dipindah akan
     // muncul di dua daftar dan penjualannya terhitung dua kali di halaman
     // Daily saat kedua coordinator dibuka.
-    for (const u of getUsers()) {
-      if (u.role !== "area_coordinator") continue;
-      const punya = (u.outletIds ?? []).includes(outlet.id);
-      const seharusnya = u.id === coordinatorId;
-      if (punya === seharusnya) continue;
-      updateUser(u.id, {
-        outletIds: seharusnya
-          ? [...(u.outletIds ?? []), outlet.id]
-          : (u.outletIds ?? []).filter((x) => x !== outlet.id),
-      });
-    }
+    //
+    // Aturan yang sama dipakai tiga kali, sekali per lingkup. Ditulis sebagai
+    // satu fungsi, bukan tiga salinan: yang ketiga selalu yang tertinggal saat
+    // yang pertama diperbaiki.
+    const pindahkan = (milik: (u: ReturnType<typeof getUsers>[number]) => boolean, kepada: string) => {
+      for (const u of getUsers()) {
+        if (!milik(u)) continue;
+        const punya = (u.outletIds ?? []).includes(outlet.id);
+        const seharusnya = u.id === kepada;
+        if (punya === seharusnya) continue;
+        updateUser(u.id, {
+          outletIds: seharusnya
+            ? [...(u.outletIds ?? []), outlet.id]
+            : (u.outletIds ?? []).filter((x) => x !== outlet.id),
+        });
+      }
+    };
+
+    // Coordinator Area yang KEBETULAN berdepartemen Finance tetap dihitung
+    // sebagai coordinator saja — kalau tidak, satu orang akan dicabut dari
+    // daftarnya sendiri oleh lingkup sebelahnya.
+    pindahkan((u) => u.role === "area_coordinator" && !bidangOrang(u), coordinatorId);
+    pindahkan((u) => u.role !== "area_coordinator" && bidangOrang(u) === BIDANG_FINANCE, financeId);
+    pindahkan((u) => u.role !== "area_coordinator" && bidangOrang(u) === BIDANG_MARKETING, marketingId);
   } catch (e) {
     return { ok: false, error: persistMessage(e) };
   }
 
   revalidatePath("/admin/outlets");
   revalidatePath("/operational/daily");
+  revalidatePath("/finance/daily");
+  revalidatePath("/marketing/daily");
   return { ok: true };
 }

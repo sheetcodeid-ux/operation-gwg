@@ -4,6 +4,8 @@ import { canReachMenu, type MenuKey } from "@/lib/nav";
 import { daftarArea } from "@/lib/data/daily-outlet";
 import { performaOutlet } from "@/lib/data/performa-outlet";
 import { outletMilikPic } from "@/lib/data/kpi";
+import { daftarPemegangBidang } from "@/lib/data/wilayah";
+import { wilayahOrang } from "@/lib/ops/bidang";
 import { jendela, NAMA_SKALA, TAHUN_TAMPIL, type Skala } from "@/lib/ops/periode";
 import { PageHeader } from "@/components/ui/page-header";
 import { TabelHarian } from "@/components/operation/tabel-harian";
@@ -51,6 +53,12 @@ export interface PropsPerforma {
   ikon: React.ComponentType<{ className?: string }>;
   /** Kalimat di bawah judul, tanpa keterangan area. */
   keterangan: string;
+  /**
+   * Bidang Performance V.1 pemilik halaman ini — "Finance V.1" atau
+   * "Marketing V.1". Dikosongkan untuk Operational V.1, yang wilayahnya tetap
+   * milik Coordinator Area.
+   */
+  bidang?: string;
 }
 
 export async function HalamanPerforma({
@@ -67,11 +75,39 @@ export async function HalamanPerforma({
   const param = props.skala === "harian" || props.skala === "mingguan" ? "bulan" : "tahun";
   const acuan = acuanDari(props.skala, param === "bulan" ? sp.bulan : sp.tahun);
 
-  const area = daftarArea();
-  const terkunci = user.role === "area_coordinator";
+  /**
+   * DUA SUMBER "AREA", tergantung bidangnya.
+   *
+   * Operational V.1 memakai daftar Coordinator Area — pembagian wilayah yang
+   * sudah dipakai halaman Daily sejak awal. Finance V.1 dan Marketing V.1
+   * memakai orang-orang bidangnya sendiri: Fetty memegang outletnya sendiri,
+   * dan menampilkannya di bawah nama Coordinator Area akan membuat wilayahnya
+   * terbaca sebagai wilayah orang lain.
+   */
+  const bidang = props.bidang ?? null;
+  const area = bidang ? daftarPemegangBidang(bidang) : daftarArea();
+
+  // TERKUNCI PADA WILAYAHNYA SENDIRI — dan itu diputuskan di server.
+  //
+  // Coordinator Area sudah begitu sejak Daily. Yang baru: orang Finance dan
+  // Marketing yang sudah dipegangi outlet. Yang BELUM dipegangi outlet tidak
+  // terkunci — ia melihat seluruh outlet, karena itulah keadaannya sebelum
+  // ada yang menugaskannya.
+  const milik = bidang ? wilayahOrang(user) : [];
+  const terkunci = user.role === "area_coordinator" || milik.length > 0;
   const dipilih = terkunci ? user.id : area.some((a) => a.value === sp.area) ? sp.area! : "";
 
-  const detail = await performaOutlet(props.skala, acuan, dipilih ? [...outletMilikPic(dipilih)] : undefined);
+  // `?area=` dari peramban diabaikan untuk yang terkunci: baris yang cuma
+  // disaring di layar tetap terkirim ke peramban.
+  const cakupan = terkunci
+    ? milik.length > 0
+      ? milik
+      : [...outletMilikPic(user.id)]
+    : dipilih
+      ? [...outletMilikPic(dipilih)]
+      : undefined;
+
+  const detail = await performaOutlet(props.skala, acuan, cakupan);
   const j = jendela(props.skala, acuan);
   const nama = area.find((a) => a.value === dipilih)?.label;
   const s = NAMA_SKALA[props.skala];

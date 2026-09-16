@@ -1181,9 +1181,14 @@ export function timSosialMedia(user: { jabatan?: string | null }): boolean {
  */
 export const DEPARTEMEN_PERFORMA: Record<string, readonly string[]> = {
   "Finance V.1": ["Finance", "Finance Accounting Tax"],
-  // Sosial Media ikut: departemennya Creative, tapi pekerjaannya milik
-  // Marketing Communication — dan yang dipantau di sini kampanye yang sama.
-  "Marketing V.1": ["Marketing Communication", "Sosial Media", "Creative"],
+  // Sosial Media ikut, TAPI bukan lewat "Creative".
+  //
+  // Orang Sosial Media berdepartemen Creative, jadi membuka bidang ini untuk
+  // "Creative" berarti membukanya untuk seluruh desainer juga — dan sejak
+  // wilayah ikut dipegang di sini, yang dibuka terlalu lebar bukan cuma satu
+  // menu melainkan omzet outlet orang lain. Yang dipakai jabatannya, lewat
+  // `timSosialMedia`, persis seperti bidang Sosial Media di sidebar.
+  "Marketing V.1": ["Marketing Communication", "Sosial Media"],
 };
 
 /** Menu tiap bidang Performance V.1 → nama bidangnya. */
@@ -1222,6 +1227,7 @@ export function canReachMenu(
   // Finance V.1 / Marketing V.1 — dibuka departemen, bukan peran.
   const bidang = BIDANG_PERFORMA.get(key);
   if (bidang && bolehPerforma(user.department, bidang)) return true;
+  if (bidang === "Marketing V.1" && timSosialMedia(user)) return true;
   if (MENU_DIGERBANGI_JABATAN.includes(key)) return false;
   const divisi = divisiDari(user.department);
   return !!divisi && divisionHasMenu(divisi, key);
@@ -1272,7 +1278,9 @@ export function navOpenPredicate(a: NavAccess): (item: { section: string; key: M
     // Bidang Performance V.1 milik Finance dan Marketing — lihat
     // `DEPARTEMEN_PERFORMA`. Tanpa baris ini seluruh isinya terkunci: tak
     // seorang pun berdepartemen "Finance V.1", dan peran `member` kosong.
-    (BIDANG_PERFORMA.has(item.key) && bolehPerforma(a.department, item.section)) ||
+    (BIDANG_PERFORMA.has(item.key) &&
+      (bolehPerforma(a.department, item.section) ||
+        (item.section === "Marketing V.1" && timSosialMedia({ jabatan: a.jabatan })))) ||
     // Divisi yang TIDAK punya anggota — Key Performance Indicator dan
     // Operational V.1 — haknya diperiksa per BARIS, bukan per divisi. Tak
     // seorang pun berdepartemen di situ, jadi aturan "departemennya sama"

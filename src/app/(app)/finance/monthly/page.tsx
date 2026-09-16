@@ -17,6 +17,7 @@ export default async function FinMonthlyPage({
         skala: "bulanan",
         menu: "fin_monthly" as MenuKey,
         href: "/finance/monthly",
+        bidang: "Finance V.1",
         ikon: CalendarCheck,
         keterangan: "Net sales per bulan",
       }}

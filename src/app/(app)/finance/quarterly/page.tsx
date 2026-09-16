@@ -17,6 +17,7 @@ export default async function FinQuarterlyPage({
         skala: "kuartalan",
         menu: "fin_quarterly" as MenuKey,
         href: "/finance/quarterly",
+        bidang: "Finance V.1",
         ikon: ChartColumnBig,
         keterangan: "Net sales per kuartal",
       }}

@@ -17,6 +17,7 @@ export default async function FinWeeklyPage({
         skala: "mingguan",
         menu: "fin_weekly" as MenuKey,
         href: "/finance/weekly",
+        bidang: "Finance V.1",
         ikon: CalendarRange,
         keterangan: "Net sales per minggu",
       }}

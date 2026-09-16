@@ -558,6 +558,10 @@ if (kode === "daily") {
 }
 if (kode === "outlets") {
   const CA = ["Deo", "Wika", "Roby", "Aldi", "Maya", "Mieraldy"];
+  // Wilayah Finance dan Marketing — dipegang orang yang berbeda dari
+  // coordinator, di atas outlet yang sama.
+  const FIN = ["Fetty", "Nisa", "Fatin", "Sri"];
+  const MKT = ["Amanda", "Zia", "Dita"];
   const OWNER = ["PT Nordu Nusantara", "Hendra Wijaya", "Koperasi Sejahtera", "", "Lim Tjoen Hok", ""];
   const contoh: BarisOutlet[] = [
     ["Nordu Coffee Singkawang Diponegoro", "NRD-SKW-01", "Nordu", "Singkawang"],
@@ -579,6 +583,10 @@ if (kode === "outlets") {
     owner: OWNER[i % OWNER.length] || null,
     coordinatorId: i % 4 === 3 ? null : `c${i % CA.length}`,
     coordinatorNama: i % 4 === 3 ? null : CA[i % CA.length],
+    financeId: i % 3 === 2 ? null : `f${i % FIN.length}`,
+    financeNama: i % 3 === 2 ? null : FIN[i % FIN.length],
+    marketingId: i % 5 === 4 ? null : `m${i % MKT.length}`,
+    marketingNama: i % 5 === 4 ? null : MKT[i % MKT.length],
     punyaCabang: i !== 2,
   }));
   createRoot(document.getElementById("root")!).render(
@@ -587,6 +595,8 @@ if (kode === "outlets") {
         <OutletManager
           outlets={contoh}
           coordinators={CA.map((n, i) => ({ value: `c${i}`, label: n, outlet: 12 - i }))}
+          financePic={FIN.map((n, i) => ({ value: `f${i}`, label: n, outlet: 6 - i }))}
+          marketingPic={MKT.map((n, i) => ({ value: `m${i}`, label: n, outlet: 5 - i }))}
         />
       </div>
     </I18nProvider>,

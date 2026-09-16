@@ -17,6 +17,7 @@ export default async function MktMonthlyPage({
         skala: "bulanan",
         menu: "mkt_monthly" as MenuKey,
         href: "/marketing/monthly",
+        bidang: "Marketing V.1",
         ikon: CalendarCheck,
         keterangan: "Net sales per bulan",
       }}

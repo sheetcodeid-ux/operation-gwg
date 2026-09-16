@@ -20,7 +20,8 @@ import { StatTile } from "@/components/ui/stat";
  * dua halaman administrasi yang bentuknya berbeda membuat yang kedua selalu
  * terasa seperti bagian yang belum selesai.
  *
- * YANG DIATUR DI SINI CUMA DUA KOLOM: pemilik dan coordinator area. Nama,
+ * YANG DIATUR DI SINI CUMA PENUGASANNYA: pemilik, coordinator area, dan PIC
+ * Finance/Marketing yang memegang wilayahnya. Nama,
  * kode, cabang ESB, dan tanggal buka datang dari sinkronisasi ESB, dan
  * membiarkannya diubah tangan di sini berarti perubahan itu tertimpa diam-diam
  * pada sinkronisasi berikutnya.
@@ -37,6 +38,12 @@ export interface BarisOutlet {
   /** Coordinator area yang memegangnya sekarang. */
   coordinatorId: string | null;
   coordinatorNama: string | null;
+  /** Orang Finance yang memegang wilayah ini. */
+  financeId: string | null;
+  financeNama: string | null;
+  /** Orang Marketing yang memegang wilayah ini. */
+  marketingId: string | null;
+  marketingNama: string | null;
   /** Sudah dipasangkan ke cabang ESB — penentu apakah angkanya bisa ditarik. */
   punyaCabang: boolean;
 }
@@ -50,9 +57,15 @@ export interface PilihanCoordinator {
 export function OutletManager({
   outlets,
   coordinators,
+  financePic,
+  marketingPic,
 }: {
   outlets: BarisOutlet[];
   coordinators: PilihanCoordinator[];
+  /** Orang Finance yang boleh dipegangi wilayah. */
+  financePic: PilihanCoordinator[];
+  /** Orang Marketing yang boleh dipegangi wilayah. */
+  marketingPic: PilihanCoordinator[];
 }) {
   const router = useRouter();
   const [q, setQ] = React.useState("");
@@ -69,7 +82,12 @@ export function OutletManager({
   const saring = React.useMemo(() => {
     const kata = q.trim().toLowerCase();
     return outlets.filter((o) => {
-      if (kata && ![o.nama, o.kode, o.owner ?? "", o.coordinatorNama ?? ""].some((t) => t.toLowerCase().includes(kata)))
+      if (
+        kata &&
+        ![o.nama, o.kode, o.owner ?? "", o.coordinatorNama ?? "", o.financeNama ?? "", o.marketingNama ?? ""].some((t) =>
+          t.toLowerCase().includes(kata),
+        )
+      )
         return false;
       if (brand && o.brand !== brand) return false;
       // "belum" menyaring yang BELUM punya coordinator — pertanyaan yang paling
@@ -99,7 +117,7 @@ export function OutletManager({
         <div>
           <h1 className="text-2xl font-semibold text-foreground">Manajemen Outlet</h1>
           <p className="mt-0.5 text-sm text-muted-foreground">
-            Tetapkan pemilik dan coordinator area tiap outlet
+            Tetapkan pemilik, coordinator area, dan PIC Finance/Marketing tiap outlet
           </p>
         </div>
       </div>
@@ -174,12 +192,14 @@ export function OutletManager({
 
       <div className="glass mt-4 overflow-hidden rounded-2xl border border-border">
         <div className="overflow-x-auto">
-          <table className="w-full min-w-[52rem] text-sm">
+          <table className="w-full min-w-[68rem] text-sm">
             <thead>
               <tr className="whitespace-nowrap border-b border-border text-left text-xs font-medium uppercase tracking-wide text-muted-foreground">
                 <th className="px-4 py-3">Outlet</th>
                 <th className="px-4 py-3">Owner</th>
                 <th className="px-4 py-3">Coordinator Area</th>
+                <th className="px-4 py-3">PIC Finance</th>
+                <th className="px-4 py-3">PIC Marketing</th>
                 <th className="px-4 py-3 text-center">Status</th>
                 <th className="px-4 py-3 text-right">Aksi</th>
               </tr>
@@ -217,6 +237,24 @@ export function OutletManager({
                       </span>
                     )}
                   </td>
+                  {/* BELUM DIPEGANG DI SINI BUKAN MASALAH, jadi tidak diberi
+                      warna peringatan seperti Coordinator Area. Yang tidak
+                      dipegangi wilayah memang melihat seluruh outlet — itu
+                      keadaan wajar, bukan penugasan yang terlewat. */}
+                  <td className="px-4 py-3">
+                    {o.financeNama ? (
+                      <span className="text-foreground">{o.financeNama}</span>
+                    ) : (
+                      <span className="text-muted-foreground">—</span>
+                    )}
+                  </td>
+                  <td className="px-4 py-3">
+                    {o.marketingNama ? (
+                      <span className="text-foreground">{o.marketingNama}</span>
+                    ) : (
+                      <span className="text-muted-foreground">—</span>
+                    )}
+                  </td>
                   <td className="px-4 py-3 text-center">
                     <Badge tone={o.aktif ? "success" : "danger"} dot>
                       {o.aktif ? "Aktif" : "Nonaktif"}
@@ -231,7 +269,7 @@ export function OutletManager({
               ))}
               {saring.length === 0 && (
                 <tr>
-                  <td colSpan={5} className="px-4 py-10 text-center text-sm text-muted-foreground">
+                  <td colSpan={7} className="px-4 py-10 text-center text-sm text-muted-foreground">
                     Tidak ada outlet yang cocok dengan saringan ini.
                   </td>
                 </tr>
@@ -245,6 +283,8 @@ export function OutletManager({
         <DialogOutlet
           outlet={sunting}
           coordinators={coordinators}
+          financePic={financePic}
+          marketingPic={marketingPic}
           onTutup={() => setSunting(null)}
           onSimpan={() => {
             setSunting(null);
@@ -260,16 +300,22 @@ export function OutletManager({
 function DialogOutlet({
   outlet,
   coordinators,
+  financePic,
+  marketingPic,
   onTutup,
   onSimpan,
 }: {
   outlet: BarisOutlet;
   coordinators: PilihanCoordinator[];
+  financePic: PilihanCoordinator[];
+  marketingPic: PilihanCoordinator[];
   onTutup: () => void;
   onSimpan: () => void;
 }) {
   const [owner, setOwner] = React.useState(outlet.owner ?? "");
   const [ca, setCa] = React.useState(outlet.coordinatorId ?? "");
+  const [fin, setFin] = React.useState(outlet.financeId ?? "");
+  const [mkt, setMkt] = React.useState(outlet.marketingId ?? "");
   const [simpan, setSimpan] = React.useState(false);
 
   React.useEffect(() => {
@@ -283,7 +329,7 @@ function DialogOutlet({
   const kirim = async () => {
     setSimpan(true);
     try {
-      const r = await simpanOutletAction({ id: outlet.id, owner, coordinatorId: ca });
+      const r = await simpanOutletAction({ id: outlet.id, owner, coordinatorId: ca, financeId: fin, marketingId: mkt });
       if (r.error) {
         toast.error(r.error);
         return;
@@ -340,6 +386,39 @@ function DialogOutlet({
               placeholder="Belum dipegang"
             />
           </Field>
+          <Field label="PIC Finance">
+            <Combobox
+              matchTriggerWidth
+              value={fin}
+              onChange={setFin}
+              options={[
+                { value: "", label: "Belum dipegang" },
+                ...financePic.map((c) => ({ value: c.value, label: `${c.label} (${c.outlet} outlet)` })),
+              ]}
+              placeholder="Belum dipegang"
+            />
+          </Field>
+          <Field label="PIC Marketing">
+            <Combobox
+              matchTriggerWidth
+              value={mkt}
+              onChange={setMkt}
+              options={[
+                { value: "", label: "Belum dipegang" },
+                ...marketingPic.map((c) => ({ value: c.value, label: `${c.label} (${c.outlet} outlet)` })),
+              ]}
+              placeholder="Belum dipegang"
+            />
+          </Field>
+          {/* KETIGANYA BERDIRI SENDIRI. Satu outlet memang dipegang tiga orang
+              sekaligus — coordinator, finance, marketing — yang memantaunya
+              dari tiga sudut. Disebut di sini supaya tidak ada yang mengira
+              mengisi yang satu mencabut yang lain. */}
+          <p className="text-[11.5px] leading-relaxed text-muted-foreground">
+            Coordinator Area, PIC Finance, dan PIC Marketing berdiri sendiri — satu outlet bisa dipegang ketiganya
+            sekaligus. Yang tidak dipegangi wilayah sama sekali akan melihat SELURUH outlet di halaman Performance
+            bidangnya.
+          </p>
           <p className="text-[11.5px] leading-relaxed text-muted-foreground">
             Nama, kode, dan cabang ESB datang dari sinkronisasi ESB, jadi tidak diubah dari sini — perubahan tangan
             akan tertimpa pada sinkronisasi berikutnya.

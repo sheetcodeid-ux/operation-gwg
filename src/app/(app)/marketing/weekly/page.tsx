@@ -17,6 +17,7 @@ export default async function MktWeeklyPage({
         skala: "mingguan",
         menu: "mkt_weekly" as MenuKey,
         href: "/marketing/weekly",
+        bidang: "Marketing V.1",
         ikon: CalendarRange,
         keterangan: "Net sales per minggu",
       }}

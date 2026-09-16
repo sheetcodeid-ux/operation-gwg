@@ -17,6 +17,7 @@ export default async function MktDailyPage({
         skala: "harian",
         menu: "mkt_daily" as MenuKey,
         href: "/marketing/daily",
+        bidang: "Marketing V.1",
         ikon: CalendarDays,
         keterangan: "Net sales per hari",
       }}

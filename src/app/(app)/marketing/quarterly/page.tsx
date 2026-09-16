@@ -17,6 +17,7 @@ export default async function MktQuarterlyPage({
         skala: "kuartalan",
         menu: "mkt_quarterly" as MenuKey,
         href: "/marketing/quarterly",
+        bidang: "Marketing V.1",
         ikon: ChartColumnBig,
         keterangan: "Net sales per kuartal",
       }}

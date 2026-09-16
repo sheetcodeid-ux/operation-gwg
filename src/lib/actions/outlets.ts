@@ -7,6 +7,7 @@ import { getAreas, getOutlets, getUsers } from "@/lib/data/store";
 import { createArea, createOutlet } from "@/lib/data/mutations";
 import { persistMessage } from "@/lib/data/persist";
 import { esbConfigured, esbListBranches } from "@/lib/integrations/esb-client";
+import { bidangOrang } from "@/lib/ops/bidang";
 
 /** Compare branch names loosely — ESB spacing/punctuation differs from what was
  *  typed into the app, and we must never create a duplicate of an existing one. */
@@ -43,6 +44,13 @@ export interface AssignableOutlet {
 export async function listAssignableOutlets(
   role: "area_coordinator" | "supervisor" = "area_coordinator",
   excludeUserId?: string,
+  /**
+   * Bidang Performance V.1, untuk yang wilayahnya datang dari DEPARTEMEN dan
+   * bukan dari peran (Finance, Marketing). Perannya `member` — sama dengan
+   * seluruh staf kantor — jadi menyaring "yang sudah dipegang peran yang sama"
+   * akan membandingkannya dengan ratusan orang yang tidak memegang apa pun.
+   */
+  bidang?: string,
 ): Promise<{ ok: true; outlets: AssignableOutlet[]; source: "pos" | "local" } | { error: string }> {
   const admin = await getSessionUser();
   if (!admin || !can(admin, "manage_users")) return { error: "Not authorized" };
@@ -93,9 +101,17 @@ export async function listAssignableOutlets(
   // Exclude outlets already assigned to another user of the same role. An
   // assignment may store the app id or the POS code, so normalise both to the
   // app id before comparing.
+  //
+  // DISARING PER LINGKUP, bukan lintas semuanya: satu outlet memang dipegang
+  // seorang Coordinator Area DAN seorang Finance sekaligus — dua wilayah yang
+  // berbeda di atas outlet yang sama. Yang tidak boleh dua-duanya justru dua
+  // orang dari lingkup yang SAMA.
+  const pengguna = getUsers();
+  const seLingkup = (u: (typeof pengguna)[number]) =>
+    bidang ? bidangOrang(u) === bidang : u.role === role && !bidangOrang(u);
   const taken = new Set<string>();
-  for (const u of getUsers()) {
-    if (u.role === role && u.id !== excludeUserId) {
+  for (const u of pengguna) {
+    if (seLingkup(u) && u.id !== excludeUserId) {
       for (const oid of u.outletIds ?? []) taken.add(codeToId.get(oid) ?? oid);
     }
   }
