@@ -802,11 +802,25 @@ function Baris({
   L,
   tebal = false,
   lapis = "z-20",
+  /** Satuan kolomnya: "hari" pada Daily, "minggu"/"bulan"/"kuartal"/"tahun"
+   *  pada skala lain. Dipakai di keterangan sisa pengejaran target. */
+  satuan = "hari",
+  /**
+   * Angka agregat ditulis ringkas ("Rp 25,3 M") alih-alih penuh.
+   *
+   * Dipakai skala setahun ke atas: total setahun tidak muat di kolom yang
+   * dilebarkan untuk total sebulan, dan yang terjadi bukan kolom melebar
+   * melainkan angkanya terpotong jadi "Rp 25.269.421.5…" — persis bagian yang
+   * dibaca orang, hilang.
+   */
+  ringkas = false,
 }: {
   baris: BarisHarian;
   nomor: number | null;
   kolom: HariKolom[];
   mode: Mode;
+  satuan?: string;
+  ringkas?: boolean;
   L: Lebar;
   tebal?: boolean;
   lapis?: string;
@@ -865,7 +879,11 @@ function Baris({
           className="block truncate text-[12.5px] tabular-nums text-foreground"
           title={baris.bulanIni === null ? undefined : formatIDR(baris.bulanIni)}
         >
-          {baris.bulanIni === null ? "—" : L.kurang === 0 ? formatIDRShort(baris.bulanIni) : formatIDR(baris.bulanIni)}
+          {baris.bulanIni === null
+            ? "—"
+            : L.kurang === 0 || ringkas
+              ? formatIDRShort(baris.bulanIni)
+              : formatIDR(baris.bulanIni)}
         </span>
         {mode === "banding" ? (
           <Persen nilai={baris.mom} kelas="text-[10.5px]" />
@@ -927,11 +945,13 @@ function Baris({
             </>
           ) : (
             <>
-              <span className="block truncate text-[12.5px] tabular-nums text-foreground">{formatIDR(baris.kurang)}</span>
+              <span className="block truncate text-[12.5px] tabular-nums text-foreground">
+                {ringkas ? formatIDRShort(baris.kurang) : formatIDR(baris.kurang)}
+              </span>
               <span className="block truncate text-[10.5px] tabular-nums text-muted-foreground">
                 {baris.perHariSisa === null
-                  ? `${baris.sisaHari} hari tersisa`
-                  : `${formatIDRShort(baris.perHariSisa)}/hari × ${baris.sisaHari}`}
+                  ? `${baris.sisaHari} ${satuan} tersisa`
+                  : `${formatIDRShort(baris.perHariSisa)}/${satuan} × ${baris.sisaHari}`}
               </span>
             </>
           )}
@@ -943,16 +963,59 @@ function Baris({
 
 /* ──────────────────────────────── halaman ──────────────────────────────── */
 
+/**
+ * Penavigasi periode — judul di tengah, satu langkah mundur dan maju.
+ *
+ * Diserahkan pemanggilnya karena hanya dia yang tahu periodenya berbentuk apa:
+ * Daily dan Weekly melangkah per bulan, Monthly dan Quarterly per tahun, Yearly
+ * menggeser jendela lima tahun. Menghitungnya di sini berarti komponen tabel
+ * harus tahu kelima skala — dan tiap skala baru menuntut satu cabang lagi di
+ * dalamnya.
+ */
+export interface NavPeriode {
+  /** "Agustus 2026", "2026", "2022–2026". */
+  judul: string;
+  /** Versi pendek untuk layar sempit. */
+  judulPendek: string;
+  /** Nilai acuan satu langkah mundur dan maju. */
+  sebelum: string;
+  sesudah: string;
+  /** Nama parameter alamat yang membawanya ("bulan" atau "tahun"). */
+  param: string;
+  /** Alamat halamannya. */
+  href: string;
+}
+
 export function TabelHarian({
   detail,
   area,
   areaTerpilih,
   bisaPilihArea,
+  /**
+   * Skala selain harian mengisi ketiganya. Kosong = Daily apa adanya, dan
+   * itulah yang menjaga halaman Daily tidak bergeser sedikit pun saat Weekly,
+   * Monthly, Quarterly, dan Yearly ditambahkan.
+   */
+  nav,
+  labelAgregat = "Bulan Ini",
+  /** Keterangan kecil di bawahnya saat mode pembanding. Bawaannya kalimat
+   *  Daily apa adanya — diubah hanya oleh skala lain. */
+  labelBanding = "vs tanggal sama bulan lalu",
+  /** Satuan kolom, untuk keterangan sisa pengejaran target. Bawaannya "hari"
+   *  — kalimat Daily apa adanya. */
+  satuan = "hari",
+  /** Angka agregat ditulis ringkas — dipakai skala setahun ke atas. */
+  ringkas = false,
 }: {
   detail: DetailHarian;
   area?: PilihanArea[];
   areaTerpilih?: string;
   bisaPilihArea?: boolean;
+  nav?: NavPeriode;
+  labelAgregat?: string;
+  labelBanding?: string;
+  satuan?: string;
+  ringkas?: boolean;
 }) {
   const router = useRouter();
   const sempit = useSempit();
@@ -967,12 +1030,15 @@ export function TabelHarian({
   const [wadah, tepi] = useTepiGeser(detail.kolom.length + (sempit ? 1000 : 0));
   useSatuSumbu(wadah);
 
+  const param = nav?.param ?? "bulan";
+  const href = nav?.href ?? "/operational/daily";
+
   const pindah = (p: { bulan?: string; area?: string }) => {
     const q = new URLSearchParams();
-    q.set("bulan", p.bulan ?? detail.periode);
+    q.set(param, p.bulan ?? detail.periode);
     const a = p.area ?? areaTerpilih ?? "";
     if (a) q.set("area", a);
-    router.push(`/operational/daily?${q.toString()}`);
+    router.push(`${href}?${q.toString()}`);
   };
 
   const kartu = React.useMemo(
@@ -1066,20 +1132,20 @@ export function TabelHarian({
         <div className={cn(KOTAK, "gap-0.5")}>
           <button
             type="button"
-            aria-label="Bulan sebelumnya"
-            onClick={() => pindah({ bulan: geserBulan(detail.periode, -1) })}
+            aria-label="Periode sebelumnya"
+            onClick={() => pindah({ bulan: nav ? nav.sebelum : geserBulan(detail.periode, -1) })}
             className="grid size-8 place-items-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground"
           >
             <ChevronLeft className="size-4" />
           </button>
           <span className="px-1 text-center text-[12.5px] font-medium text-foreground sm:min-w-[7.5rem]">
-            <span className="hidden sm:inline">{labelBulan(detail.periode)}</span>
-            <span className="sm:hidden">{labelBulanPendek(detail.periode)}</span>
+            <span className="hidden sm:inline">{nav ? nav.judul : labelBulan(detail.periode)}</span>
+            <span className="sm:hidden">{nav ? nav.judulPendek : labelBulanPendek(detail.periode)}</span>
           </span>
           <button
             type="button"
-            aria-label="Bulan berikutnya"
-            onClick={() => pindah({ bulan: geserBulan(detail.periode, 1) })}
+            aria-label="Periode berikutnya"
+            onClick={() => pindah({ bulan: nav ? nav.sesudah : geserBulan(detail.periode, 1) })}
             className="grid size-8 place-items-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground"
           >
             <ChevronRight className="size-4" />
@@ -1194,8 +1260,8 @@ export function TabelHarian({
                 style={kunci(L.nama, L.no)}
               />
               <Kepala
-                label="Bulan Ini"
-                bawah={mode === "target" ? "capaian terhadap target" : "vs tanggal sama bulan lalu"}
+                label={labelAgregat}
+                bawah={mode === "target" ? "capaian terhadap target" : labelBanding}
                 urut={mode === "target" ? "capaian" : "omzet"}
                 aktif={urut === (mode === "target" ? "capaian" : "omzet")}
                 arah={arah}
@@ -1214,7 +1280,7 @@ export function TabelHarian({
                     h.pekan ? "text-amber-600 dark:text-amber-400" : "text-muted-foreground",
                   )}
                 >
-                  {String(h.tanggal).padStart(2, "0")}
+                  {h.label ?? String(h.tanggal).padStart(2, "0")}
                   <span className="block text-[9px] font-normal">{h.hari}</span>
                 </th>
               ))}
@@ -1234,7 +1300,7 @@ export function TabelHarian({
           </thead>
           <tbody>
             {baris.map((b, i) => (
-              <Baris key={b.outletId} baris={b} nomor={i + 1} kolom={detail.kolom} mode={mode} L={L} />
+              <Baris key={b.outletId} baris={b} nomor={i + 1} kolom={detail.kolom} mode={mode} L={L} satuan={satuan} ringkas={ringkas} />
             ))}
             {baris.length === 0 && (
               <tr>
@@ -1249,7 +1315,7 @@ export function TabelHarian({
           </tbody>
           {detail.total && (
             <tfoot className="sticky bottom-0 z-30 shadow-[0_-2px_6px_-2px_rgb(0_0_0/.12)]">
-              <Baris baris={detail.total} nomor={null} kolom={detail.kolom} mode={mode} L={L} tebal lapis="z-30" />
+              <Baris baris={detail.total} nomor={null} kolom={detail.kolom} mode={mode} L={L} tebal lapis="z-30" satuan={satuan} ringkas={ringkas} />
             </tfoot>
           )}
         </table>

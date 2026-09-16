@@ -19,6 +19,7 @@ import { TENGGAT, indikatorPosisi as daftarIndikator } from "@/lib/kpi/indikator
 import type { LaporanKpi } from "@/lib/data/kpi";
 import { bersatuan } from "@/lib/kpi/satuan";
 import { TabelHarian } from "@/components/operation/tabel-harian";
+import { jendela, NAMA_SKALA, type Skala } from "@/lib/ops/periode";
 import { KelengkapanDailyPanel } from "@/components/admin/kelengkapan-daily";
 import { buatPencairanKpiHtml, type OrangKpi } from "@/components/kpi/daftar-pdf";
 import { barisPencairan } from "@/lib/kpi/pencairan";
@@ -534,6 +535,92 @@ if (kode === "daily") {
           ]}
           areaTerpilih=""
           bisaPilihArea
+        />
+      </div>
+    </I18nProvider>,
+  );
+  throw new Error("__stop__");
+}
+if (kode.startsWith("perf-")) {
+  // Pratinjau skala BARU — Weekly, Monthly, Quarterly, Yearly. Memakai model
+  // periode sungguhan, jadi kolom dan judulnya persis seperti nanti; hanya
+  // angkanya yang contoh.
+  const skala = kode.slice(5) as Skala;
+  const acuan = skala === "mingguan" ? "2026-09" : "2026";
+  const j = jendela(skala, acuan);
+  const s = NAMA_SKALA[skala];
+  const acakP = (n: number) => {
+    const x = Math.sin(n) * 10000;
+    return x - Math.floor(x);
+  };
+  const outletP: [string, string, number][] = [
+    ["Nordu Coffee Singkawang Diponegoro", "Deo", 85_000_000],
+    ["Nordu Banjarbaru 2", "Wika", 78_000_000],
+    ["Nordu Tebas", "Roby", 74_000_000],
+    ["Cattu A. Yani", "Wika", 68_000_000],
+    ["Cattu M. Sohor", "Deo", 57_000_000],
+    ["Ayam Goreng Busari Siantan", "Roby", 48_000_000],
+    ["Ayam Goreng Busari Depok", "Roby", 36_000_000],
+    ["Lesung Pipi Bogor", "Aldi", 28_000_000],
+  ];
+  // Berapa hari di tiap ember — dipakai menskalakan angka contohnya supaya
+  // kuartal tidak terbaca sama besar dengan satu minggu.
+  const hariEmber = j.ember.map(
+    (e) => (Date.parse(e.sampai) - Date.parse(e.dari)) / 86_400_000 + 1,
+  );
+  const berjalanP = j.berjalan;
+  const barisP = urutHarian(
+    outletP.map(([nama, area, dasar], i) =>
+      barisHarian({
+        outletId: `p${i}`,
+        nama,
+        area,
+        targetBulan: i === 6 ? null : Math.round(dasar * hariEmber.reduce((a, b) => a + b, 0) * 1.15),
+        hari: j.ember.map((_, k) =>
+          k >= berjalanP ? null : Math.round(dasar * hariEmber[k] * (0.75 + acakP(i * 31 + k) * 0.6)),
+        ),
+        hariLalu: j.ember.map((_, k) =>
+          Math.round(dasar * hariEmber[k] * (0.7 + acakP(i * 77 + k) * 0.6)),
+        ),
+        hariBerjalan: berjalanP,
+      }),
+    ),
+  );
+  createRoot(document.getElementById("root")!).render(
+    <I18nProvider initialLang="id">
+      <div className="p-6">
+        <TabelHarian
+          detail={{
+            periode: acuan,
+            kolom: j.ember.map((e) => e.kolom),
+            baris: barisP,
+            total: totalHarian(barisP),
+            hariBerjalan: berjalanP,
+            lubang: barisP.reduce((n, b) => n + b.lubang, 0),
+            lubangDari: barisP.length * berjalanP,
+            tanpaCabang: [],
+            tanpaTarget: barisP.filter((b) => b.targetBulan == null).map((b) => b.nama),
+          }}
+          area={[
+            { value: "u1", label: "Deo", outlet: 12 },
+            { value: "u2", label: "Wika", outlet: 11 },
+            { value: "u3", label: "Roby", outlet: 9 },
+            { value: "u4", label: "Aldi", outlet: 8 },
+          ]}
+          areaTerpilih=""
+          bisaPilihArea
+          nav={{
+            judul: j.judul,
+            judulPendek: j.judulPendek,
+            sebelum: j.sebelum,
+            sesudah: j.sesudah,
+            param: skala === "mingguan" ? "bulan" : "tahun",
+            href: `/operational/${s.menu.toLowerCase()}`,
+          }}
+          labelAgregat={s.agregat}
+          labelBanding={`vs ${s.satuan} sama periode lalu`}
+          satuan={s.satuan}
+          ringkas={skala !== "mingguan"}
         />
       </div>
     </I18nProvider>,

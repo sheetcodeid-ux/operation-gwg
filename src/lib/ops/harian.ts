@@ -12,12 +12,26 @@
 
 /** Satu hari dalam bulan itu. */
 export interface HariKolom {
-  /** Tanggal 1–31. */
+  /**
+   * Nomor kolom, dan KUNCI barisnya.
+   *
+   * Pada Daily ini tanggal 1–31. Pada skala lain ia nomor minggu, bulan,
+   * kuartal, atau tahun — lihat `src/lib/ops/periode.ts`. Yang dijaga cuma satu
+   * hal: unik dan urut di dalam satu jendela.
+   */
   tanggal: number;
-  /** Nama hari pendek: SEN, SEL, RAB, KAM, JUM, SAB, MIN. */
+  /** Baris kecil di bawah kepala kolom: SEN/SEL/… pada Daily, rentang tanggal
+   *  pada Weekly, tahun pada Monthly. */
   hari: string;
   /** Sabtu atau Minggu — ditandai supaya pola akhir pekan terbaca. */
   pekan: boolean;
+  /**
+   * Tulisan besar di kepala kolom, kalau bukan tanggal dua digit.
+   *
+   * Kosong pada Daily — dan itu yang membuat Daily tidak berubah sedikit pun
+   * saat skala lain ditambahkan: yang tidak mengisinya tetap dapat "01", "02".
+   */
+  label?: string;
 }
 
 const NAMA_HARI = ["MIN", "SEN", "SEL", "RAB", "KAM", "JUM", "SAB"] as const;

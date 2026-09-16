@@ -21,6 +21,10 @@ export type MenuKey =
   | "op_analysis"
   | "op_pnl"
   | "op_daily"
+  | "op_weekly"
+  | "op_monthly"
+  | "op_quarterly"
+  | "op_yearly"
   | "sys_review"
   | "it_review"
   | "hc_submit"
@@ -157,6 +161,10 @@ export const NAV_MENUS: Omit<NavItem, "section" | "group" | "groupIcon">[] = [
   { key: "op_analysis", label: "Data Analysis", href: "/operation/analysis", icon: "ChartColumnBig" },
   { key: "op_pnl", label: "Laba Rugi", href: "/operation/laba-rugi", icon: "Banknote" },
   { key: "op_daily", label: "Daily", href: "/operational/daily", icon: "CalendarDays" },
+  { key: "op_weekly", label: "Weekly", href: "/operational/weekly", icon: "CalendarRange" },
+  { key: "op_monthly", label: "Monthly", href: "/operational/monthly", icon: "CalendarCheck" },
+  { key: "op_quarterly", label: "Quarterly", href: "/operational/quarterly", icon: "ChartColumnBig" },
+  { key: "op_yearly", label: "Yearly", href: "/operational/yearly", icon: "TrendingUp" },
   { key: "sys_review", label: "Antrian POS", href: "/system/antrian", icon: "Headset" },
   { key: "it_review", label: "Antrian IT", href: "/it-helpdesk/antrian", icon: "CodeXml" },
   // Kedua "pengajuan" ini kini menjadi kategori DI DALAM halaman Pengajuan —
@@ -310,6 +318,13 @@ export const ROLE_DIVISION: Record<Role, Division> = {
   member: "Human Capital",
 };
 
+/**
+ * Kelima halaman Performance — satu daftar, bukan lima nama yang diketik ulang
+ * di tiap peran. Skala keenam kelak cukup ditambahkan di sini, dan seluruh
+ * peran yang berhak langsung ikut.
+ */
+const PERFORMANCE: MenuKey[] = ["op_daily", "op_weekly", "op_monthly", "op_quarterly", "op_yearly"];
+
 const OPERATION_FULL: MenuKey[] = [
   "dashboard",
   "analytics",
@@ -336,7 +351,7 @@ export const ROLE_MENUS: Record<Role, MenuKey[]> = {
   super_admin: NAV_MENUS.map((m) => m.key), // everything, incl. admin menus
   // `kpi_supervisor` — Head Operation yang mencatat Problem Solver tiap
   // supervisor, jadi ia harus bisa membuka rapornya.
-  head_operation: [...OPERATION_FULL, "op_daily", "elearning", "elearning_admin", "assessment", "kpi_supervisor", "kpi_supervisor_umum", "kpi_supervisor_kpk"], // manages E-Learning + monitors every branch
+  head_operation: [...OPERATION_FULL, ...PERFORMANCE, "elearning", "elearning_admin", "assessment", "kpi_supervisor", "kpi_supervisor_umum", "kpi_supervisor_kpk"], // manages E-Learning + monitors every branch
   // Coordinator Area ikut memegang Pengajuan Dokumen. Ia membawahi beberapa
   // cabang dan sering mengurus berkas karyawan cabang yang supervisornya baru,
   // berhalangan, atau justru sedang diurus dokumennya; tanpa menu ini ia harus
@@ -346,7 +361,7 @@ export const ROLE_MENUS: Record<Role, MenuKey[]> = {
   // KPI-nya sendiri ikut dibuka, TAPI hanya areanya — lihat `picTerkunci`.
   // `op_daily` — Daily dibuka Coordinator Area, TAPI hanya areanya sendiri;
   // pembatasannya di halamannya, bukan di sini (lihat `/operational/daily`).
-  area_coordinator: [...OPERATION_FULL, "op_daily", "elearning", "assessment", "hc_submit", "creative_penilaian", "kpi_op_ca"], // learner (E-Learning), menus scoped to their area
+  area_coordinator: [...OPERATION_FULL, ...PERFORMANCE, "elearning", "assessment", "hc_submit", "creative_penilaian", "kpi_op_ca"], // learner (E-Learning), menus scoped to their area
   // Keduanya boleh membaca rapornya sendiri — halaman yang sama yang dibaca
   // atasannya, bukan salinan yang lebih ramah.
   data_operation: ["work", "op_analysis", "assessment", "kpi_op_software"],
@@ -469,6 +484,19 @@ const sopPilar = (slugPilar: string): NavGroupEntry => ({
 
 /** Pengelompokan bawaan per divisi. Bisa ditimpa admin lewat User Management. */
 export const DIVISION_GROUPS: Partial<Record<Division, NavGroupDef[]>> = {
+  /**
+   * PERFORMANCE — lima jarak pandang untuk satu pertanyaan.
+   *
+   * Daily menjawab "kapan naik, kapan turun" dalam sebulan; Weekly sampai
+   * Yearly menjawab hal yang sama pada jarak yang lebih jauh. Dikelompokkan
+   * karena memang satu keluarga: angkanya dari tabel yang sama, tabelnya
+   * komponen yang sama, dan yang berbeda cuma pengelompokan kolomnya. Tanpa
+   * kepala kelompok, kelimanya berjajar sebagai lima menu yang tidak terbaca
+   * saling berhubungan.
+   */
+  "Operational V.1": [
+    { name: "Performance", icon: "TrendingUp", urutan: 0, menus: ["op_daily", "op_weekly", "op_monthly", "op_quarterly", "op_yearly"] },
+  ],
   Operation: [
     { name: "Monitoring Outlet", icon: "Store", menus: ["outlets", "hospitality", "hygiene", "complaints"] },
     { name: "Keuangan Operasional", icon: "Wallet", menus: ["op_beban", "op_pembelian", "op_pnl", "op_settings"] },
@@ -672,7 +700,7 @@ export const DIVISION_MENUS: { division: Division; menus: MenuKey[] }[] = [
    * boleh membaca modul ini — dengan cakupan outlet yang tetap dibatasi per
    * orang di halamannya sendiri.
    */
-  { division: "Operational V.1", menus: ["op_daily"] },
+  { division: "Operational V.1", menus: ["op_daily", "op_weekly", "op_monthly", "op_quarterly", "op_yearly"] },
   { division: "Supervisor", menus: ["events", "hospitality", "hygiene", "complaints", "hc_kontrak", "hc_submit", "sys_submit", "kpi_supervisor", "kpi_supervisor_umum", "kpi_supervisor_kpk"] },
   // Complaints ikut di sini, tapi PDQ hanya melihat kategori Food Quality —
   // penyaringnya di `complaintCategoryScope`, dan memasukkan komplain tetap

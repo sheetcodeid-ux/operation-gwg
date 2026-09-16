@@ -30,6 +30,7 @@ export const DICT: Record<Lang, Record<string, string>> = {
     "nav.Musiman": "Seasonal",
     // Nama bidang (sub-grup) di sidebar. Tanpa ini, menunya berbahasa Inggris
     // tapi judul bidangnya tetap Indonesia — satu sidebar dua bahasa.
+    "group.Performance": "Performance",
     "group.Monitoring Outlet": "Outlet Monitoring",
     "group.Keuangan Operasional": "Operational Finance",
     "group.Analisis & Laporan": "Analytics & Reports",
@@ -136,6 +137,10 @@ export const DICT: Record<Lang, Record<string, string>> = {
     "nav.Data Analysis": "Data Analysis",
     "nav.Laba Rugi": "Profit & Loss",
     "nav.Daily": "Daily",
+    "nav.Weekly": "Weekly",
+    "nav.Monthly": "Monthly",
+    "nav.Quarterly": "Quarterly",
+    "nav.Yearly": "Yearly",
 
     "nav.Kalkulator HPP Produksi": "Production Cost Calculator",
     "nav.Database Produksi": "Production Database",
@@ -334,6 +339,7 @@ export const DICT: Record<Lang, Record<string, string>> = {
     "nav.Pengaturan Threshold": "Pengaturan Threshold",
     "nav.Analisis Fraud": "Analisis Fraud",
     "nav.Musiman": "Musiman",
+    "group.Performance": "Performance",
     "group.Monitoring Outlet": "Monitoring Outlet",
     "group.Keuangan Operasional": "Keuangan Operasional",
     "group.Analisis & Laporan": "Analisis & Laporan",
@@ -438,6 +444,10 @@ export const DICT: Record<Lang, Record<string, string>> = {
     "nav.Data Analysis": "Analisis Data",
     "nav.Laba Rugi": "Laba Rugi",
     "nav.Daily": "Daily",
+    "nav.Weekly": "Weekly",
+    "nav.Monthly": "Monthly",
+    "nav.Quarterly": "Quarterly",
+    "nav.Yearly": "Yearly",
 
     "nav.Kalkulator HPP Produksi": "Kalkulator HPP Produksi",
     "nav.Database Produksi": "Database Produksi",
