@@ -181,4 +181,47 @@ pada blueprint.
 | 12 | Capaian divisi: rata-rata per posisi atau per orang? | — |
 | 13 | Radika ikut rata-rata PDQ? | — |
 | 14 | Ambang kelengkapan data sebelum Signal boleh lahir — usul 95% | PHASE 4 |
-| 15 | Cabang ESB `57-fnb_nord` tanpa outlet — outlet baru atau sisa? | PHASE 1 |
+| 15 | Cabang ESB `57-fnb_nord` tanpa outlet — outlet baru atau sisa? | **sudah diselidiki, lihat di bawah** |
+
+---
+
+## Temuan PHASE 1 — dua cabang ESB tanpa outlet
+
+Diselidiki 16 September 2026. **Tidak ada pemetaan yang diubah, tidak ada outlet
+yang dibuat, tidak ada baris yang dihapus.**
+
+`seasonal_daily` memuat 60 cabang; 58 di antaranya cocok dengan outlet. Dua yang
+tidak:
+
+### `1-fnb_nord` — HEAD OFFICE, dan itu memang benar
+
+52 hari (18 Juli – 7 September 2026), **net Rp 0**.
+
+Ada outlet bernama **HEAD OFFICE** yang `code`-nya justru `1-fnb_nord`, tapi
+`esb_branch_id`-nya null dan tetap aktif. Jadi kantor pusat terdaftar sebagai
+cabang di ESB, wajar tidak berjualan.
+
+Ini sekaligus menjawab temuan audit "1 outlet aktif tanpa cabang ESB": outlet
+itu HEAD OFFICE, bukan gerai. **Tidak ada satu pun gerai yang kehilangan
+penjualannya.** Tidak ada yang perlu diperbaiki.
+
+### `57-fnb_nord` — kemungkinan besar Nordu Coffee Singkawang Garden
+
+78 hari (23 Juni – 8 September 2026), Rp 164.030.635, lalu berhenti — sembilan
+hari sebelum data terakhir tabelnya (17 September).
+
+Ada outlet **Nordu Coffee Singkawang Garden** (`code` NCGN) yang
+`esb_branch_id`-nya null dan `active = false`. Pola berhentinya cocok dengan
+outlet yang ditutup.
+
+**Ini HIPOTESIS, bukan fakta.** Tidak ada satu kolom pun yang menghubungkan
+keduanya; yang cocok cuma waktunya. Yang bisa memastikan: catatan ESB tentang
+cabang 57, atau orang yang tahu kapan Singkawang Garden tutup.
+
+**Dampaknya nol untuk V.1 sekarang.** Aturan `sales-fact.ts` sudah membuang
+kedua cabang ini karena tidak punya outlet. Rp 164 juta itu tidak ikut ke angka
+mana pun, dan itu memang yang benar selama pemetaannya belum dipastikan.
+
+**Kalau kelak terbukti benar** dan outletnya perlu dihidupkan lagi beserta
+penjualannya, itu perubahan master data — bukan pekerjaan fondasi, dan bukan
+sesuatu yang boleh diputuskan dari sini.
