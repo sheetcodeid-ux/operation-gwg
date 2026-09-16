@@ -25,6 +25,14 @@ export type MenuKey =
   | "op_monthly"
   | "op_quarterly"
   | "op_yearly"
+  | "fin_daily"
+  | "fin_weekly"
+  | "fin_monthly"
+  | "fin_quarterly"
+  | "mkt_daily"
+  | "mkt_weekly"
+  | "mkt_monthly"
+  | "mkt_quarterly"
   | "sys_review"
   | "it_review"
   | "hc_submit"
@@ -119,6 +127,8 @@ export type Division =
   | "Marketing Communication"
   | "Sosial Media"
   | "Operational V.1"
+  | "Finance V.1"
+  | "Marketing V.1"
   | "Key Performance Indicator";
 
 export interface NavItem {
@@ -166,6 +176,18 @@ export const NAV_MENUS: Omit<NavItem, "section" | "group" | "groupIcon">[] = [
   { key: "op_monthly", label: "Monthly", href: "/operational/monthly", icon: "CalendarCheck" },
   { key: "op_quarterly", label: "Quarterly", href: "/operational/quarterly", icon: "ChartColumnBig" },
   { key: "op_yearly", label: "Yearly", href: "/operational/yearly", icon: "TrendingUp" },
+  // Finance dan Marketing membaca angka yang SAMA dengan Operational, dari
+  // tabel yang sama. Yang berbeda cuma pintunya: keduanya tidak berdepartemen
+  // di Operational V.1, jadi tanpa bidangnya sendiri satu-satunya cara mereka
+  // membuka Daily adalah lewat menu bidang lain — yang selebihnya terkunci.
+  { key: "fin_daily", label: "Daily", href: "/finance/daily", icon: "CalendarDays" },
+  { key: "fin_weekly", label: "Weekly", href: "/finance/weekly", icon: "CalendarRange" },
+  { key: "fin_monthly", label: "Monthly", href: "/finance/monthly", icon: "CalendarCheck" },
+  { key: "fin_quarterly", label: "Quarterly", href: "/finance/quarterly", icon: "ChartColumnBig" },
+  { key: "mkt_daily", label: "Daily", href: "/marketing/daily", icon: "CalendarDays" },
+  { key: "mkt_weekly", label: "Weekly", href: "/marketing/weekly", icon: "CalendarRange" },
+  { key: "mkt_monthly", label: "Monthly", href: "/marketing/monthly", icon: "CalendarCheck" },
+  { key: "mkt_quarterly", label: "Quarterly", href: "/marketing/quarterly", icon: "ChartColumnBig" },
   { key: "sys_review", label: "Antrian POS", href: "/system/antrian", icon: "Headset" },
   { key: "it_review", label: "Antrian IT", href: "/it-helpdesk/antrian", icon: "CodeXml" },
   // Kedua "pengajuan" ini kini menjadi kategori DI DALAM halaman Pengajuan —
@@ -297,6 +319,11 @@ export const DIVISION_ICON: Record<Division, string> = {
   "Sosial Media": "AtSign",
   // Bidang tempat modul Operational versi satu berkumpul — Daily yang pertama.
   "Operational V.1": "CalendarDays",
+  // Ketiganya berisi halaman yang sama, jadi ikonnya justru HARUS berbeda —
+  // tiga bidang berikon kalender di satu sidebar terbaca sebagai satu bidang
+  // yang tercetak tiga kali.
+  "Finance V.1": "Banknote",
+  "Marketing V.1": "Rocket",
   "Key Performance Indicator": "Target",
 };
 
@@ -326,6 +353,16 @@ export const ROLE_DIVISION: Record<Role, Division> = {
  * peran yang berhak langsung ikut.
  */
 const PERFORMANCE: MenuKey[] = ["op_daily", "op_weekly", "op_monthly", "op_quarterly", "op_yearly"];
+
+/**
+ * Performance milik Finance dan Marketing — EMPAT skala, tanpa Yearly.
+ *
+ * Diminta pemiliknya begitu: yang dipantau kedua bidang ini pergerakan dalam
+ * setahun, bukan perbandingan lima tahun. Yearly tetap ada di Operational V.1
+ * bagi yang memang membacanya.
+ */
+const PERFORMANCE_FIN: MenuKey[] = ["fin_daily", "fin_weekly", "fin_monthly", "fin_quarterly"];
+const PERFORMANCE_MKT: MenuKey[] = ["mkt_daily", "mkt_weekly", "mkt_monthly", "mkt_quarterly"];
 
 const OPERATION_FULL: MenuKey[] = [
   "dashboard",
@@ -499,6 +536,8 @@ export const DIVISION_GROUPS: Partial<Record<Division, NavGroupDef[]>> = {
   "Operational V.1": [
     { name: "Performance", icon: "TrendingUp", urutan: 0, menus: ["op_daily", "op_weekly", "op_monthly", "op_quarterly", "op_yearly"] },
   ],
+  "Finance V.1": [{ name: "Performance", icon: "TrendingUp", urutan: 0, menus: [...PERFORMANCE_FIN] }],
+  "Marketing V.1": [{ name: "Performance", icon: "TrendingUp", urutan: 0, menus: [...PERFORMANCE_MKT] }],
   Operation: [
     { name: "Monitoring Outlet", icon: "Store", menus: ["outlets", "hospitality", "hygiene", "complaints"] },
     { name: "Keuangan Operasional", icon: "Wallet", menus: ["op_beban", "op_pembelian", "op_pnl", "op_settings"] },
@@ -703,6 +742,11 @@ export const DIVISION_MENUS: { division: Division; menus: MenuKey[] }[] = [
    * orang di halamannya sendiri.
    */
   { division: "Operational V.1", menus: ["op_daily", "op_weekly", "op_monthly", "op_quarterly", "op_yearly"] },
+  // Sama bentuknya dengan Operational V.1, dan sama pula alasannya: bidang
+  // sendiri supaya modul berikutnya punya tempat, bukan satu baris yang
+  // dititipkan ke bidang yang sudah penuh.
+  { division: "Finance V.1", menus: [...PERFORMANCE_FIN] },
+  { division: "Marketing V.1", menus: [...PERFORMANCE_MKT] },
   { division: "Supervisor", menus: ["events", "hospitality", "hygiene", "complaints", "hc_kontrak", "hc_submit", "sys_submit", "kpi_supervisor", "kpi_supervisor_umum", "kpi_supervisor_kpk"] },
   // Complaints ikut di sini, tapi PDQ hanya melihat kategori Food Quality —
   // penyaringnya di `complaintCategoryScope`, dan memasukkan komplain tetap
@@ -1093,7 +1137,13 @@ export function divisionHasMenu(division: string, key: MenuKey): boolean {
  * Creative, dan rapor KPI Creative kehilangan satu anggotanya tanpa satu pun
  * pesan.
  */
-export const DIVISI_TANPA_ANGGOTA: readonly string[] = [DIVISI_KPI, "Sosial Media", "Operational V.1"];
+export const DIVISI_TANPA_ANGGOTA: readonly string[] = [
+  DIVISI_KPI,
+  "Sosial Media",
+  "Operational V.1",
+  "Finance V.1",
+  "Marketing V.1",
+];
 
 /** Nama divisi yang benar-benar bisa dipakai sebagai departemen seseorang. */
 export const divisiBerdepartemen = (): string[] =>
@@ -1116,6 +1166,39 @@ export function timSosialMedia(user: { jabatan?: string | null }): boolean {
   return /so[cs]ial\s*media|sosmed/i.test(user.jabatan ?? "");
 }
 
+/**
+ * Departemen yang berhak membuka bidang Performance versi satu masing-masing.
+ *
+ * Finance V.1 dan Marketing V.1 tidak punya anggota — tak seorang pun
+ * berdepartemen di situ, persis seperti Operational V.1. Bedanya, Operational
+ * V.1 dibuka oleh PERAN (head_operation, area_coordinator), sedangkan kedua
+ * bidang ini dibuka oleh DEPARTEMEN: orang Finance dan Marketing berperan
+ * `member`, dan perannya tidak memuat satu menu pun.
+ *
+ * Ditulis sebagai daftar nama, bukan ditebak dari kemiripan kata, supaya
+ * departemen baru yang kebetulan berawalan "Finance" tidak diam-diam ikut
+ * membuka angka penjualan seluruh perusahaan.
+ */
+export const DEPARTEMEN_PERFORMA: Record<string, readonly string[]> = {
+  "Finance V.1": ["Finance", "Finance Accounting Tax"],
+  // Sosial Media ikut: departemennya Creative, tapi pekerjaannya milik
+  // Marketing Communication — dan yang dipantau di sini kampanye yang sama.
+  "Marketing V.1": ["Marketing Communication", "Sosial Media", "Creative"],
+};
+
+/** Menu tiap bidang Performance V.1 → nama bidangnya. */
+const BIDANG_PERFORMA = new Map<MenuKey, string>(
+  Object.keys(DEPARTEMEN_PERFORMA).flatMap((bidang) =>
+    (DIVISION_MENUS.find((d) => d.division === bidang)?.menus ?? []).map((k) => [k, bidang] as const),
+  ),
+);
+
+/** Apakah departemen orang ini membuka bidang Performance V.1 tertentu. */
+export function bolehPerforma(department: string | null | undefined, bidang: string): boolean {
+  const d = divisiDari(department);
+  return !!d && (DEPARTEMEN_PERFORMA[bidang] ?? []).includes(d);
+}
+
 /** Menu yang dibuka jabatan Sosial Media. */
 const MENU_SOSMED = new Set<MenuKey>(DIVISION_MENUS.find((d) => d.division === "Sosial Media")?.menus ?? []);
 
@@ -1136,6 +1219,9 @@ export function canReachMenu(
   if (MENU_KPI.has(key) && kepalaDepartemen(user)) return true;
   // Sidebarnya dibuka jabatan, bukan departemen — lihat `timSosialMedia`.
   if (MENU_SOSMED.has(key) && timSosialMedia(user)) return true;
+  // Finance V.1 / Marketing V.1 — dibuka departemen, bukan peran.
+  const bidang = BIDANG_PERFORMA.get(key);
+  if (bidang && bolehPerforma(user.department, bidang)) return true;
   if (MENU_DIGERBANGI_JABATAN.includes(key)) return false;
   const divisi = divisiDari(user.department);
   return !!divisi && divisionHasMenu(divisi, key);
@@ -1183,6 +1269,10 @@ export function navOpenPredicate(a: NavAccess): (item: { section: string; key: M
     // Divisi Sosial Media dibuka JABATAN, bukan departemen: departemennya
     // Creative, tapi menunya bukan menu seluruh Creative.
     (item.section === "Sosial Media" && timSosialMedia({ jabatan: a.jabatan })) ||
+    // Bidang Performance V.1 milik Finance dan Marketing — lihat
+    // `DEPARTEMEN_PERFORMA`. Tanpa baris ini seluruh isinya terkunci: tak
+    // seorang pun berdepartemen "Finance V.1", dan peran `member` kosong.
+    (BIDANG_PERFORMA.has(item.key) && bolehPerforma(a.department, item.section)) ||
     // Divisi yang TIDAK punya anggota — Key Performance Indicator dan
     // Operational V.1 — haknya diperiksa per BARIS, bukan per divisi. Tak
     // seorang pun berdepartemen di situ, jadi aturan "departemennya sama"

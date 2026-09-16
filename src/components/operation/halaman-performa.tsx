@@ -26,17 +26,26 @@ const WIB = () => new Date(Date.now() + 7 * 3_600_000);
 /** Acuan bawaan: bulan berjalan untuk mingguan, tahun berjalan untuk sisanya. */
 function acuanBawaan(skala: Skala): string {
   const k = WIB();
-  return skala === "mingguan" ? k.toISOString().slice(0, 7) : String(k.getUTCFullYear());
+  return skala === "harian" || skala === "mingguan" ? k.toISOString().slice(0, 7) : String(k.getUTCFullYear());
 }
 
 /** Acuan dari alamat, kalau bentuknya benar. "?bulan=besok" diabaikan. */
 function acuanDari(skala: Skala, nilai: string | undefined): string {
-  const pola = skala === "mingguan" ? /^\d{4}-\d{2}$/ : /^\d{4}$/;
+  const pola = skala === "harian" || skala === "mingguan" ? /^\d{4}-\d{2}$/ : /^\d{4}$/;
   return nilai && pola.test(nilai) ? nilai : acuanBawaan(skala);
 }
 
 export interface PropsPerforma {
-  skala: Exclude<Skala, "harian">;
+  /**
+   * TERMASUK "harian" — tapi BUKAN untuk /operational/daily.
+   *
+   * Daily milik Operational V.1 tetap berjalan di atas jalurnya sendiri
+   * (`harianOutlet`), dan itu dijaga oleh `daily-utuh.test.ts`. Yang memakai
+   * skala harian di sini hanya Daily milik Finance dan Marketing: halaman
+   * baru, tanpa riwayat, jadi tidak ada yang dipertaruhkan dengan
+   * menjalankannya di atas mesin yang sama dengan keempat skala lainnya.
+   */
+  skala: Skala;
   menu: MenuKey;
   href: string;
   ikon: React.ComponentType<{ className?: string }>;
@@ -55,7 +64,7 @@ export async function HalamanPerforma({
   if (!canReachMenu(user, props.menu)) redirect("/dashboard");
 
   const sp = await searchParams;
-  const param = props.skala === "mingguan" ? "bulan" : "tahun";
+  const param = props.skala === "harian" || props.skala === "mingguan" ? "bulan" : "tahun";
   const acuan = acuanDari(props.skala, param === "bulan" ? sp.bulan : sp.tahun);
 
   const area = daftarArea();
@@ -97,11 +106,13 @@ export async function HalamanPerforma({
         satuan={s.satuan}
         // Setahun ke atas angkanya belasan miliar — tidak muat penuh di kolom
         // yang dilebarkan untuk total sebulan.
-        ringkas={props.skala !== "mingguan"}
+        ringkas={props.skala !== "harian" && props.skala !== "mingguan"}
         labelBanding={
-          props.skala === "tahunan"
-            ? `vs ${TAHUN_TAMPIL} tahun sebelumnya`
-            : `vs ${s.satuan} sama periode lalu`
+          props.skala === "harian"
+            ? "vs tanggal sama bulan lalu"
+            : props.skala === "tahunan"
+              ? `vs ${TAHUN_TAMPIL} tahun sebelumnya`
+              : `vs ${s.satuan} sama periode lalu`
         }
       />
     </div>
