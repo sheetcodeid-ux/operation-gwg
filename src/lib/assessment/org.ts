@@ -57,6 +57,10 @@ const ORG_RAW: { department: string; positions: { title: string; employees: stri
     positions: [
       { title: "Head", employees: [] },
       { title: "Finance", employees: [] },
+      // Pemegang wilayah — bentuknya mengikuti Coordinator Area East/West di
+      // Operational. Lihat `JABATAN_WILAYAH` di `@/lib/ops/bidang`.
+      { title: "Finance East", employees: [] },
+      { title: "Finance West", employees: [] },
       { title: "Treasury", employees: [] },
       { title: "Accounting & Verification", employees: [] },
       { title: "AR Staff", employees: [] },
@@ -109,6 +113,8 @@ const ORG_RAW: { department: string; positions: { title: string; employees: stri
     department: "Marketing Specialist",
     positions: [
       { title: "Head", employees: [] },
+      { title: "Marketing East", employees: [] },
+      { title: "Marketing West", employees: [] },
       { title: "Community & Customer Relation", employees: [] },
       { title: "Digital Marketing", employees: [] },
       { title: "Brand & Marketing Strategy", employees: [] },

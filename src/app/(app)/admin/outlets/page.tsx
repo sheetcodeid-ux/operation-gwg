@@ -5,7 +5,7 @@ import { can } from "@/lib/rbac";
 import { getOutlets, getUsers } from "@/lib/data/store";
 import { merekOutlet } from "@/lib/kpi/merek";
 import { pemegangTiapOutlet } from "@/lib/data/wilayah";
-import { bidangOrang } from "@/lib/ops/bidang";
+import { bidangOrang, bolehPunyaWilayah } from "@/lib/ops/bidang";
 import { DaftarOwner, OutletManager, type BarisOutlet, type PilihanCoordinator } from "@/components/admin/outlet-manager";
 
 export const metadata: Metadata = { title: "Manajemen Outlet" };
@@ -70,7 +70,15 @@ export default async function OutletsPage() {
    */
   const picBidang = (bidang: string): PilihanCoordinator[] =>
     getUsers()
-      .filter((u) => u.active !== false && u.role !== "area_coordinator" && bidangOrang(u) === bidang)
+      .filter(
+        (u) =>
+          u.active !== false &&
+          u.role !== "area_coordinator" &&
+          bidangOrang(u) === bidang &&
+          // Hanya yang berjabatan pemegang wilayah — Accounting dan Tax tidak
+          // muncul di pilihan, jadi tidak bisa tertunjuk karena salah klik.
+          bolehPunyaWilayah(u),
+      )
       .map((u) => ({ value: u.id, label: u.name, outlet: (u.outletIds ?? []).length }))
       .sort((a, b) => a.label.localeCompare(b.label, "id"));
 
