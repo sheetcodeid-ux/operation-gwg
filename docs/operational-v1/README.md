@@ -39,6 +39,7 @@ Sebelum mulai:
 Sesudah selesai:
 
 6. jalankan `npm run lint` (wajib **0 error**), `npx tsc --noEmit`, `npx vitest run`, `npm run build`
+   — dan `npm run test:db` bila phase-nya menyentuh skema (lihat di bawah)
 7. uji izin dan cakupan outlet untuk 5 peran
 8. laporkan berkas yang diubah, migration yang dibuat, dan hasil test
 9. kalau belum selesai, **jangan bilang selesai**
@@ -72,8 +73,9 @@ SUBMITTED → VERIFICATION → IMPACT_WAIT → SUCCESS / PARTIAL / FAILED / INCO
 | Phase | Isi | Status |
 |---|---|---|
 | 0 | Keputusan arsitektur | **selesai** |
-| 1 | Fondasi: scope, waktu, aturan baca sales, gerbang kelengkapan | berikutnya |
-| 2 | **KPI + Target** ← gerbang; semua sesudahnya menunggu di sini | |
+| 1 | Fondasi: scope, waktu, aturan baca sales, gerbang kelengkapan | **selesai** |
+| 2A | KPI Sales + Target: tabel, layanan hitung, dry-run Agustus 2026 | **dry-run siap ditinjau** |
+| 2B | KPI biaya: PBJT dan platform fee | menunggu keputusan pemilik (nomor 7 & 8) |
 | 3 | Rule Engine | |
 | 4 | Signal | |
 | 5 | **Command Center** ← nilai terlihat pertama kali | |
@@ -101,11 +103,37 @@ menunggu perlu tahu supaya tidak terbaca sebagai tidak ada kemajuan.
 | `src/lib/data/seasonal.ts`, `fraud.ts`, `esb-*.ts` | ingestion; 183.825 + 15.241 baris bergantung padanya |
 | `seasonal_daily`, `fraud_orders`, `sales_*`, `esb_net_*` | data historis tak terulang |
 | `src/lib/auth.ts` | penandatanganan sesi |
-| `src/lib/data/db.ts`, `hydrate.ts`, `seed.ts`, `store.ts` | menopang seluruh jalur baca |
+| `src/lib/data/db.ts`, `hydrate.ts`, `seed.ts`, `store.ts` | menopang seluruh jalur baca; dijaga `hydrate-v1.test.ts` supaya tidak pernah menjangkau modul V.1 |
+| `src/lib/data/kpi.ts` | KPI Coordinator Area yang sedang melayani produksi; tiga uji membaca kode sumbernya baris per baris |
 | `users`, `credentials`, `outlets` | master; `outlets.esb_branch_id` jangkar seluruh sales |
 | `src/app/(app)/operational/daily/page.tsx`, bawaan `tabel-harian.tsx` | dijaga `daily-utuh.test.ts`, dipakai tiap hari |
 | `tasks` | 3.552 baris, Work Tracker dipakai harian |
 | `DIVISION_MENUS` existing di `nav.ts` | mengubahnya mengubah sidebar orang tanpa diminta |
+
+---
+
+## Menguji perubahan basis data
+
+Migrasi V.1 **tidak pernah dicoba di produksi**. `npm run test:db` membuat basis
+data sendiri di PostgreSQL lokal, memasang perancah bertipe kolom sama persis
+seperti produksi, menjalankan migrasinya, lalu MENCOBA MEMASUKKAN YANG SALAH dan
+memastikan basis datanya menolak — foreign key, CHECK, unique, dan RLS.
+Sesudahnya basis datanya dihancurkan.
+
+```
+npm run test:db                       # batasan saja, dengan isi contoh
+npm run test:db -- --data <folder>    # plus rekonsiliasi satu periode nyata
+npm run test:db -- --simpan           # basis datanya dibiarkan untuk diperiksa
+```
+
+Berkas data untuk `--data` berisi tiga berkas teks: `<periode>.outlets.txt`,
+`<periode>.seasonal.txt`, dan `esb-net-bulanan.txt`. **Tidak disimpan di repo** —
+isinya penjualan harian tiap outlet, dan repo bukan tempatnya.
+
+`npm run test:db` **tidak ikut CI**: CI tidak punya PostgreSQL, dan menambahkan
+layanan basis data ke CI demi ini akan memperlambat setiap pull request untuk
+sesuatu yang cuma berubah ketika skema berubah. Yang menyentuh migrasi
+menjalankannya sendiri dan melampirkan hasilnya.
 
 ---
 

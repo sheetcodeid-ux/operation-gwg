@@ -32,6 +32,8 @@ const MODUL_V1 = [
   "src/lib/ops/waktu.ts",
   "src/lib/ops/sales-fact.ts",
   "src/lib/ops/kelengkapan.ts",
+  "src/lib/ops/kpi-sales.ts",
+  "src/lib/ops/target-sales.ts",
 ];
 
 /** Pintu masuk yang dijaga. */
@@ -128,9 +130,15 @@ describe("arah ketergantungan V.1", () => {
     }
   });
 
-  it("keempatnya murni — tidak ada yang ber-server-only", () => {
+  it("seluruhnya murni — tidak ada yang ber-server-only", () => {
+    // Komentar yang MENYEBUT larangannya tidak dihitung melanggar; yang
+    // diperiksa kodenya. Kalau tidak, satu berkas jadi tidak boleh
+    // menjelaskan kenapa ia tidak boleh ber-server-only.
     for (const m of MODUL_V1) {
-      expect(readFileSync(join(AKAR, m), "utf8"), m).not.toContain('import "server-only"');
+      const kode = readFileSync(join(AKAR, m), "utf8")
+        .replace(/\/\*[\s\S]*?\*\//g, "")
+        .replace(/\/\/.*$/gm, "");
+      expect(kode, m).not.toContain('import "server-only"');
     }
   });
 });

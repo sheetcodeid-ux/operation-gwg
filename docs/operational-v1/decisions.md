@@ -173,8 +173,8 @@ pada blueprint.
 
 | # | Pertanyaan | Memblokir |
 |---|---|---|
-| 7 | PBJT masuk ke kategori mana? Tidak ditemukan di skema mana pun | PHASE 2 |
-| 8 | Platform fee / delivery fee / ekspedisi masuk `potongan`, `ongkos_kirim`, atau `lainnya`? | PHASE 2 |
+| 7 | PBJT masuk ke kategori mana? Tidak ditemukan di skema mana pun | PHASE 2B |
+| 8 | Platform fee / delivery fee / ekspedisi masuk `potongan`, `ongkos_kirim`, atau `lainnya`? | PHASE 2B |
 | 9 | Sumber data cuaca dan kompetitor untuk External Factor | PHASE 10 |
 | 10 | Audit log menyimpan IP dan user-agent? Ada implikasi privasi karyawan | PHASE 12 |
 | 11 | Playbooks muncul di dua menu (Intelligence + Learning) — perlu atau membingungkan? | PHASE 11 |
@@ -182,6 +182,18 @@ pada blueprint.
 | 13 | Radika ikut rata-rata PDQ? | — |
 | 14 | Ambang kelengkapan data sebelum Signal boleh lahir — usul 95% | PHASE 4 |
 | 15 | Cabang ESB `57-fnb_nord` tanpa outlet — outlet baru atau sisa? | **sudah diselidiki, lihat di bawah** |
+| 16 | Signal boleh lahir dari baris ber-`sumber_sah = false`? Usul: tidak | PHASE 4 |
+
+**Nomor 7 dan 8 memblokir PHASE 2B, bukan 2A.** Pemiliknya sudah menjelaskan
+asalnya: PBJT dan platform fee keduanya datang dari laporan keuangan, dimasukkan
+lewat template unggah bulanan. Yang belum diputuskan **kolom mana yang
+menampungnya** — dan `op_expenses` belum punya kolom untuk keduanya.
+
+Satu hal yang wajib diperiksa sebelum kolomnya ditambahkan:
+`op_expenses.ongkos_kirim` sudah berisi Rp 101.641.586 pada 74 baris. Kalau
+sebagiannya sudah memuat potongan platform, menambah kolom baru tanpa memeriksa
+itu lebih dulu akan menghitung biaya yang sama dua kali — dan hasilnya tetap
+terlihat masuk akal.
 
 ---
 
@@ -225,3 +237,105 @@ mana pun, dan itu memang yang benar selama pemetaannya belum dipastikan.
 **Kalau kelak terbukti benar** dan outletnya perlu dihidupkan lagi beserta
 penjualannya, itu perubahan master data — bukan pekerjaan fondasi, dan bukan
 sesuatu yang boleh diputuskan dari sini.
+
+---
+
+## Temuan PHASE 2A — direktori migrasi bukan salinan skema produksi
+
+Diperiksa 16 September 2026, lewat SELECT saja. **Tidak ada satu pun perintah
+yang mengubah produksi.**
+
+| | Jumlah |
+|---|---|
+| Catatan di `supabase_migrations.schema_migrations` (produksi) | **158** |
+| Berkas di `supabase/migrations/` | **102** |
+| Catatan produksi yang TIDAK punya berkas di repo | **68** |
+| Berkas di repo yang tidak ada catatannya di produksi | 11 |
+
+Di antara yang tidak punya berkas: `init_operation_gwg_schema`,
+`assessment_schema`, `op_finance_expenses_purchases`, `seasonal_daily_cache`,
+`system_requests`, `marcomm_reviews`, `performance_indexes`, `outlet_owner`, dan
+seluruh rangkaian `elearning_phase*`.
+
+Buku besar produksi juga memakai versi bertanggal (`20260916093259`), bukan
+nomor urut `0103`, jadi tidak ada bentrokan nomor ke arah mana pun.
+
+**Akibatnya untuk seluruh phase berikutnya:** migrasi V.1 ditulis terhadap
+**skema produksi yang diperiksa langsung**, bukan terhadap hasil pemutaran ulang
+berkas-berkas di direktori itu. Memutar ulang direktori ini pada basis data
+kosong menghasilkan 60 dari 102 — dan bentuk yang dihasilkannya bukan bentuk
+produksi.
+
+**Yang sudah dilakukan:** perancah `scripts/test-db.mjs` memakai tipe kolom hasil
+periksa langsung (`outlets.id`, `areas.id`, `users.id` semuanya `text`).
+
+**Yang belum dan bukan pekerjaan phase ini:** merapikan direktori migrasi supaya
+benar-benar mereproduksi produksi. Itu pekerjaan tersendiri, dan mengerjakannya
+setengah jadi lebih berbahaya daripada tidak sama sekali.
+
+---
+
+## Temuan PHASE 2A — angka Agustus 2026, terbukti
+
+Dijalankan pada PostgreSQL lokal dengan data Agustus 2026 yang sesungguhnya
+(1.860 baris `seasonal_daily`, 59 outlet, 174 baris `esb_net_bulanan`).
+Produksi hanya dibaca.
+
+| | |
+|---|---|
+| `SUM(net)` mentah seluruh tabel | Rp 26.651.072.202 |
+| setelah aturan `sales-fact.ts` | **Rp 13.244.568.329** |
+| selisih | Rp 13.406.503.873 |
+
+Yang dibuang, satu per satu:
+
+| Cabang | Baris | Net | Kenapa |
+|---|---|---|---|
+| `''` | 31 | Rp 13.325.523.600 | balasan ESB untuk "seluruh cabang" — bukan outlet |
+| `1-fnb_nord` | 31 | Rp 0 | cabang HEAD OFFICE; outletnya memang tidak punya `esb_branch_id` |
+| `57-fnb_nord` | 31 | Rp 80.980.273 | tidak dimiliki outlet mana pun |
+
+Baris korporat Rp 13.325.523.600 versus jumlah seluruh cabang
+Rp 13.325.548.602 — **beda Rp 25.002**, data cabang yang datang belakangan,
+bukan kesalahan hitung.
+
+**Koreksi terhadap catatan PHASE 1.** Di atas tertulis "58 di antaranya cocok
+dengan outlet". Yang benar **57**: 58 outlet aktif, satu di antaranya
+(HEAD OFFICE) tidak punya `esb_branch_id`, jadi cabang yang terpetakan 57 dan
+cabang yatim ada dua, bukan satu. Kesimpulannya tidak berubah — tidak ada satu
+gerai pun yang kehilangan penjualannya — tapi angkanya diperbaiki di sini supaya
+tidak dipakai orang lain sebagai patokan.
+
+**Rekonsiliasi:** untuk 57 outlet, A (halaman Daily) = B (`sales-fact.ts`) =
+C (KPI V.1 yang sudah tersimpan). Tidak ada satu pun yang berbeda.
+
+---
+
+## Nomor 16 · Angka ESB yang sudah dinyatakan tidak berlaku — DIPUTUSKAN SEMENTARA
+
+**Pertanyaannya.** `outlets.esb_mulai` dan `outlets.esb_abaikan` menandai
+bulan-bulan yang angka ESB-nya sudah dinyatakan salah bagi sebuah outlet
+(`grossDiketik()`, `src/lib/data/kpi.ts`). KPI Coordinator Area menghormatinya:
+bulan yang ditandai memakai angka ketikan, bukan ESB.
+
+Halaman Daily **tidak** menghormatinya — ia membaca `seasonal_daily` apa adanya.
+
+Jadi KPI Sales V.1 harus ikut yang mana?
+
+**Yang dilakukan PHASE 2A, dan kenapa.** Angkanya **tetap dicatat apa adanya**,
+tapi barisnya ditandai `kpi_values.sumber_sah = false` beserta catatannya.
+
+- Membuangnya akan membuat V.1 berbeda dari halaman Daily tanpa sebab yang bisa
+  dibaca siapa pun dari layar.
+- Menerimanya diam-diam akan membuat angka yang sudah dinyatakan salah ikut
+  menilai orang.
+
+Menandainya menjaga dua-duanya: rekonsiliasi tetap bersih, dan yang menilai
+punya alasan untuk menolak memakainya.
+
+**Agustus 2026:** satu outlet terkena — Nordu Coffee Siantan
+(`esb_mulai = 2026-09`), dan nilainya memang Rp 0, jadi dampaknya nol untuk
+sekarang.
+
+**Yang masih terbuka bagi pemilik:** apakah PHASE 4 boleh melahirkan Signal dari
+baris ber-`sumber_sah = false`. Usul: tidak boleh. Belum diputuskan.

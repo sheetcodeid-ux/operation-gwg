@@ -14,7 +14,8 @@
     "test:watch": "vitest",
     "typecheck": "tsc --noEmit",
     "doctor": "node scripts/doctor.mjs",
-    "r2:cors": "node scripts/r2-cors.mjs"
+    "r2:cors": "node scripts/r2-cors.mjs",
+    "test:db": "node --experimental-strip-types --no-warnings --import ./scripts/muat-ts.mjs scripts/test-db.mjs"
   },
   "dependencies": {
     "@base-ui/react": "^1.6.0",
