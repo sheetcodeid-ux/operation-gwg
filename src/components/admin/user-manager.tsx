@@ -1259,8 +1259,18 @@ const OutletAssignPicker = React.memo(function OutletAssignPicker({
         </div>
       ) : (
         <p className="mb-2 rounded-lg border border-amber-500/40 bg-amber-500/5 p-2 text-[11px] leading-relaxed text-amber-700 dark:text-amber-300">
-          Belum ada outlet yang ditugaskan. {single ? "Supervisor" : "Koordinator"} tanpa outlet tidak akan menerima
-          temuan hygiene maupun komplain cabang mana pun.
+          {/* Kalimatnya IKUT SIAPA YANG DIBACA. Bagi orang Finance, "tidak akan
+              menerima temuan hygiene maupun komplain" bukan cuma tidak relevan
+              — ia menakut-nakuti tentang akibat yang tidak ada, dan membuat
+              admin mengira ada yang belum beres padahal kosong memang wajar. */}
+          {bidang ? (
+            <>Belum ada outlet yang ditugaskan — untuk sementara ia melihat SELURUH outlet di halaman {bidang}.</>
+          ) : (
+            <>
+              Belum ada outlet yang ditugaskan. {single ? "Supervisor" : "Koordinator"} tanpa outlet tidak akan menerima
+              temuan hygiene maupun komplain cabang mana pun.
+            </>
+          )}
         </p>
       )}
 

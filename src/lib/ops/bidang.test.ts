@@ -108,3 +108,47 @@ describe("yang memakainya", () => {
     expect(a).toContain('pindahkan((u) => u.role !== "area_coordinator" && bidangOrang(u) === BIDANG_MARKETING, marketingId);');
   });
 });
+
+describe("penugasan outlet tidak boleh dibuang saat disimpan", () => {
+  /**
+   * BUG YANG DIPERBAIKI DI SINI.
+   *
+   * `normalizeAssignment` membersihkan penugasan outlet menurut PERAN, dan
+   * barisan terakhirnya membuang outlet untuk peran yang tidak memegang
+   * cabang. Orang Finance dan Marketing memegang wilayah lewat DEPARTEMEN —
+   * perannya tetap `member` — jadi outlet yang baru dipilih admin untuk Nisa
+   * ikut terbuang, sementara aksinya tetap menjawab berhasil.
+   *
+   * Yang terlihat: "Pengguna diperbarui", lalu dibuka ulang dan kosong. Tidak
+   * ada pesan, tidak ada yang merah. Diuji lewat sumbernya karena berkas itu
+   * "use server" — seluruh ekspornya wajib fungsi async, jadi penolongnya
+   * tidak bisa diekspor untuk dipanggil langsung.
+   */
+  const aksi = readFileSync(join(process.cwd(), "src/lib/actions/users.ts"), "utf8");
+
+  it("ada cabang khusus wilayah SEBELUM outlet dibuang", () => {
+    const cabang = aksi.indexOf("if (bolehPunyaWilayah(orang)) return { areaId: null, outletIds };");
+    const buang = aksi.indexOf("return { areaId: null, outletIds: [] };");
+    expect(cabang, "cabang wilayah tidak ada").toBeGreaterThan(-1);
+    expect(cabang).toBeLessThan(buang);
+  });
+
+  it("SETIAP pemanggilnya ikut mengirim orangnya, bukan cuma perannya", () => {
+    // Satu pemanggil yang lupa mengirimnya akan membuang outlet lagi — dan
+    // hanya lewat jalur itu, sehingga bugnya kembali tanpa pola yang jelas.
+    const panggilan = aksi.match(/normalizeAssignment\([^;]*?\);/gs) ?? [];
+    expect(panggilan.length).toBeGreaterThanOrEqual(4);
+    for (const p of panggilan) {
+      const argumen = p.slice(p.indexOf("(") + 1);
+      expect(argumen.split(",").length, p).toBeGreaterThanOrEqual(3);
+    }
+  });
+
+  it("orang bidang memang lolos syaratnya", () => {
+    // Syarat yang dipakai cabang itu. Kalau ini salah, cabangnya tidak pernah
+    // kena dan outletnya tetap terbuang.
+    expect(bolehPunyaWilayah({ department: "Finance" })).toBe(true);
+    expect(bolehPunyaWilayah({ department: "Marketing Communication" })).toBe(true);
+    expect(bolehPunyaWilayah({ department: "Supply Chain" })).toBe(false);
+  });
+});

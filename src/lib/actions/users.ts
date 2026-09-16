@@ -17,12 +17,34 @@ import { persistMessage } from "@/lib/data/persist";
 import { syncUserEmployee, unsyncUserEmployee } from "@/lib/data/org";
 import { createUserSchema, parseInput } from "@/lib/validation";
 import type { Role } from "@/lib/types";
+import { bolehPunyaWilayah, type OrangBidang } from "@/lib/ops/bidang";
 
 /** A head/evaluator position — surfaces in the assessment org as a Head. */
 const isHeadPosition = (role: Role, jabatan: string | null | undefined) =>
   role === "assessor" || role.startsWith("head_") || (!!jabatan && /^\s*head\b/i.test(jabatan));
 
-function normalizeAssignment(role: Role, outletIds: string[]): { areaId: string | null; outletIds: string[] } {
+/**
+ * Penugasan outlet yang dibersihkan menurut siapa yang menerimanya.
+ *
+ * BARIS TERAKHIRNYA MEMBUANG OUTLET, dan itu memang disengaja: peran yang
+ * tidak memegang cabang tidak boleh diam-diam menyimpan daftar outlet yang
+ * lalu dipakai modul lain sebagai cakupan.
+ *
+ * Tapi pembuangan itu sempat menelan yang bukan haknya. Orang Finance dan
+ * Marketing memegang wilayah lewat DEPARTEMENNYA — perannya tetap `member`,
+ * sama dengan seluruh staf kantor — jadi outlet yang baru saja dipilih admin
+ * untuk Nisa dibuang di sini, sementara aksinya tetap menjawab berhasil.
+ * Yang terlihat: "Pengguna diperbarui", lalu dibuka ulang dan kosong. Tidak
+ * ada pesan, tidak ada yang merah, dan satu-satunya petunjuk bahwa ada yang
+ * salah adalah ingatan admin tentang apa yang baru saja ia klik.
+ *
+ * `orang` karena itu WAJIB ikut diperiksa, bukan hanya perannya.
+ */
+function normalizeAssignment(
+  role: Role,
+  outletIds: string[],
+  orang?: OrangBidang | null,
+): { areaId: string | null; outletIds: string[] } {
   if (role === "area_coordinator") {
     const areaId = outletIds.length ? getOutlet(outletIds[0])?.areaId ?? null : null;
     return { areaId, outletIds };
@@ -31,6 +53,8 @@ function normalizeAssignment(role: Role, outletIds: string[]): { areaId: string 
   if (role === "head_operation" || role === "pos_operation" || role === "supervisor") {
     return { areaId: null, outletIds: outletIds.slice(0, 1) };
   }
+  // Wilayah yang datang dari departemen — beberapa outlet, seperti coordinator.
+  if (bolehPunyaWilayah(orang)) return { areaId: null, outletIds };
   return { areaId: null, outletIds: [] };
 }
 
@@ -62,7 +86,10 @@ export async function createUserAction(input: CreateUserInput) {
   if (clean.role === "supervisor" && clean.outletIds.length === 0)
     return { error: "Pilih 1 outlet untuk supervisor." };
 
-  const { areaId, outletIds } = normalizeAssignment(clean.role, clean.outletIds);
+  const { areaId, outletIds } = normalizeAssignment(clean.role, clean.outletIds, {
+    department: input.department,
+    jabatan: input.jabatan,
+  });
   let created;
   try {
     created = await createUser({
@@ -121,7 +148,10 @@ export async function updateUserAction(input: UpdateUserInput) {
   if (emailExists(email, input.id)) return { error: "Email already exists." };
   if (input.password && input.password.length < 6) return { error: "Password must be at least 6 characters." };
 
-  const { areaId, outletIds } = normalizeAssignment(input.role, input.outletIds);
+  const { areaId, outletIds } = normalizeAssignment(input.role, input.outletIds, {
+    department: input.department,
+    jabatan: input.jabatan,
+  });
   updateUser(input.id, {
     name,
     email,
@@ -153,7 +183,7 @@ export async function assignRoleAction(userId: string, role: Role) {
   if (!admin || !can(admin, "manage_users")) return { error: "Not authorized" };
   const user = getUser(userId);
   if (!user) return { error: "User not found." };
-  const { areaId, outletIds } = normalizeAssignment(role, user.outletIds ?? []);
+  const { areaId, outletIds } = normalizeAssignment(role, user.outletIds ?? [], user);
   updateUser(userId, { role, areaId, outletIds });
   await syncUserEmployee({
     userId,
@@ -208,7 +238,7 @@ export async function toggleActiveAction(userId: string, active: boolean) {
 export async function updateAssignmentAction(userId: string, role: Role, outletIds: string[]) {
   const admin = await getSessionUser();
   if (!admin || !can(admin, "manage_users")) return { error: "Not authorized" };
-  const { areaId, outletIds: normalized } = normalizeAssignment(role, outletIds);
+  const { areaId, outletIds: normalized } = normalizeAssignment(role, outletIds, getUser(userId));
   setUserAssignment(userId, { areaId, outletIds: normalized });
   revalidatePath("/admin/users");
   return { ok: true };
