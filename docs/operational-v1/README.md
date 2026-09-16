@@ -74,7 +74,8 @@ SUBMITTED → VERIFICATION → IMPACT_WAIT → SUCCESS / PARTIAL / FAILED / INCO
 |---|---|---|
 | 0 | Keputusan arsitektur | **selesai** |
 | 1 | Fondasi: scope, waktu, aturan baca sales, gerbang kelengkapan | **selesai** |
-| 2A | KPI Sales + Target: tabel, layanan hitung, dry-run Agustus 2026 | **dry-run siap ditinjau** |
+| 2A | KPI Sales + Target: tabel, layanan hitung, backfill Agustus 2026 | **selesai** — tabel terpasang di produksi, Agustus 2026 terisi dan terverifikasi |
+| 2A+ | Jalur tulis berulang (cron/rute) supaya bulan berikutnya terisi sendiri | **belum dikerjakan** |
 | 2B | KPI biaya: PBJT dan platform fee | menunggu keputusan pemilik (nomor 7 & 8) |
 | 3 | Rule Engine | |
 | 4 | Signal | |

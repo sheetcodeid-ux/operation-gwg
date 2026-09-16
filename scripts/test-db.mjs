@@ -27,10 +27,11 @@
  * Jalankan:  npm run test:db
  *            npm run test:db -- --data <folder>    ← dengan data Agustus asli
  *            npm run test:db -- --simpan           ← sisakan basis datanya
+ *            npm run test:db -- --keluar <berkas>  ← tulis SQL backfill-nya
  */
 
 import { execFileSync } from "node:child_process";
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
 import { petaCabangOutlet, saringFakta, outletTanpaCabang } from "../src/lib/ops/sales-fact.ts";
@@ -49,6 +50,8 @@ const arg = (nama) => {
 const DATA = arg("--data");
 const SIMPAN = process.argv.includes("--simpan");
 const PERIODE = arg("--periode") || "2026-08";
+/** Tempat menulis SQL backfill, kalau diminta. Tidak pernah dijalankan skrip ini. */
+const KELUAR = arg("--keluar");
 
 /**
  * Outlet yang dipakai uji batasan.
@@ -795,6 +798,40 @@ ${nilai};
         `(${kutip(t.kpiDefinitionId)}, ${kutip(t.cakupan)}, ${kutip(t.outletId)}, ${kutip(t.periode)}, ${kutip(t.skala)}, ${t.nilai}, 'rumus', ${kutip(t.rumus)}, ${t.rumusVersi}, ${kutip(JSON.stringify(t.dasar))}::jsonb)`,
     )
     .join(",\n");
+  // ── berkas backfill: persis yang akan ditulis, supaya bisa dibaca dulu ──
+  //
+  // SQL-nya dibangkitkan dari hasil hitungan yang SAMA dengan yang barusan
+  // diterima basis data lokal — bukan diketik ulang. Yang dibaca orang sebelum
+  // menyetujui adalah yang benar-benar dijalankan.
+  if (KELUAR && typeof KELUAR === "string") {
+    writeFileSync(
+      KELUAR,
+      [
+        `-- Backfill Operational V.1 · periode ${PERIODE}`,
+        `-- Dibangkitkan scripts/test-db.mjs dari hasil hitungan yang sudah`,
+        `-- direkonsiliasi: halaman Daily = sales-fact.ts = KPI ini.`,
+        `-- ${c.nilai.length} baris kpi_values, ${c.target.length} baris targets.`,
+        "",
+        "begin;",
+        "",
+        "insert into kpi_values",
+        "  (kpi_definition_id, cakupan, outlet_id, area_id, periode, skala, nilai, status, sumber, rumus, rumus_versi, sumber_sah, kelengkapan_persen, jumlah_hari, catatan)",
+        "values",
+        `${nilai};`,
+        "",
+        "insert into targets",
+        "  (kpi_definition_id, cakupan, outlet_id, periode, skala, nilai, sumber, rumus, rumus_versi, dasar)",
+        "values",
+        `${target};`,
+        "",
+        "commit;",
+        "",
+      ].join("\n"),
+      "utf8",
+    );
+    ok("berkas backfill ditulis", true, KELUAR);
+  }
+
   sql(`
     insert into targets
       (kpi_definition_id, cakupan, outlet_id, periode, skala, nilai, sumber, rumus, rumus_versi, dasar)

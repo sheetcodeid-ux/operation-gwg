@@ -339,3 +339,87 @@ sekarang.
 
 **Yang masih terbuka bagi pemilik:** apakah PHASE 4 boleh melahirkan Signal dari
 baris ber-`sumber_sah = false`. Usul: tidak boleh. Belum diputuskan.
+
+---
+
+## Backfill PRODUKSI Agustus 2026 — sudah dijalankan
+
+Disetujui pemilik dan dijalankan 16 September 2026.
+
+### Yang dijalankan
+
+| Catatan di buku besar produksi | Isi |
+|---|---|
+| `kpi_target` | migrasi 0103 — tiga tabel, lima definisi KPI Sales |
+| `backfill_kpi_sales_2026_08_a` | 150 baris `kpi_values` (30 outlet) |
+| `backfill_kpi_sales_2026_08_b` | 142 baris `kpi_values` (28 outlet + 2 korporat) |
+| `backfill_target_sales_2026_08` | 44 baris `targets` |
+
+Ditulis lewat jalur migrasi karena `execute_sql` pada sambungan ini bersifat
+read-only — dan itu penjagaan yang benar. Proyek ini memang sudah memakai
+migrasi untuk perubahan data (`pasang_banjarbaru_2`,
+`nonaktifkan_singkawang_garden`, `dita_jabatan_social_media`).
+
+### Kenapa isinya tidak disimpan sebagai berkas di repo
+
+292 + 44 baris itu **angka turunan**, bukan keputusan. Satu-satunya sumbernya
+`hitungSales()` dan `hitungTargetSales()`; menyalinnya ke repo membuat salinan
+kedua yang bisa berbeda dari yang menghasilkannya. Yang disimpan di repo
+**pembangkitnya**:
+
+```
+npm run test:db -- --data <folder> --keluar backfill-2026-08.sql
+```
+
+Berkas data masukannya tidak disimpan di repo — isinya penjualan harian tiap
+outlet.
+
+### Bukti bahwa masukannya memang data produksi
+
+Sebelum satu baris pun ditulis, isi basis data lokal dibandingkan dengan
+produksi lewat md5 atas seluruh baris, dengan urutan `collate "C"` di kedua
+sisi:
+
+| | Produksi | Lokal |
+|---|---|---|
+| `seasonal_daily` Agustus 2026 | `db364ea0315385416cb7e4c51ec6cc9e` | sama |
+| `outlets` | `dfeaee7e8ca5d3e19a09623ee24c606c` | sama |
+
+1.860 baris, total mentah Rp 26.651.072.202 — cocok di kedua sisi.
+
+### Verifikasi SESUDAH ditulis, terhadap data produksi sendiri
+
+Bukan terhadap berkas yang barusan dikirim, melainkan terhadap `seasonal_daily`
+dan `esb_net_bulanan` produksi:
+
+| Yang diperiksa | Hasil |
+|---|---|
+| `net_sales` vs `sum(seasonal_daily.net)` per outlet | **0 berbeda** |
+| `gross_sales` vs sumber yang sama | **0 berbeda** |
+| `average_transaction` vs `net / bills` | **0 berbeda** |
+| `achievement` vs `net / target × 100` | **0 berbeda** |
+| `targets.nilai` vs `kpi_values.monthly_target` | **0 berbeda** |
+| `targets.nilai` vs rata-rata tiga bulan `esb_net_bulanan` × 1,15 | **0 berbeda** |
+| target bersumber tangan | **0** |
+| target tanpa rumus atau tanpa `dasar` | **0** |
+
+Jumlah akhir: 292 baris `kpi_values` (58 outlet × 5 + 2 korporat) dan 44 baris
+`targets`. Jumlah seluruh outlet = angka korporat = **Rp 13.244.568.329**.
+
+### RLS sesudah backfill
+
+`kpi_definitions`, `kpi_values`, dan `targets` kini ikut dalam 109 tabel
+ber-`rls_enabled_no_policy` — level **INFO**, bukan temuan keamanan, dan memang
+sikap yang dikunci `0004_lockdown_rls_and_rpc.sql`. Tidak ada policy permisif
+yang ditambahkan. Dua peringatan lain pada proyek (`pg_net` di schema public,
+proteksi kata sandi bocor) sudah ada sebelumnya dan tidak berhubungan.
+
+### Yang BELUM ada, dan jangan dikira ada
+
+**Belum ada jalur tulis berulang.** Backfill ini sekali jalan. Belum ada cron,
+belum ada server action, belum ada halaman yang memanggil `hitungSales()`.
+September 2026 dan seterusnya **tidak akan terisi sendiri**.
+
+Membangunnya butuh satu rute yang berjalan di server dengan service role —
+pekerjaan kecil, tapi pekerjaan yang belum dilakukan, dan menyebutnya selesai
+sekarang berarti seseorang akan menunggu angka yang tidak akan pernah datang.
