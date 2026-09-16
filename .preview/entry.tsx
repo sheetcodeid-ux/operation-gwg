@@ -20,6 +20,7 @@ import type { LaporanKpi } from "@/lib/data/kpi";
 import { bersatuan } from "@/lib/kpi/satuan";
 import { TabelHarian } from "@/components/operation/tabel-harian";
 import { jendela, NAMA_SKALA, type Skala } from "@/lib/ops/periode";
+import { OutletManager, type BarisOutlet } from "@/components/admin/outlet-manager";
 import { KelengkapanDailyPanel } from "@/components/admin/kelengkapan-daily";
 import { buatPencairanKpiHtml, type OrangKpi } from "@/components/kpi/daftar-pdf";
 import { barisPencairan } from "@/lib/kpi/pencairan";
@@ -535,6 +536,43 @@ if (kode === "daily") {
           ]}
           areaTerpilih=""
           bisaPilihArea
+        />
+      </div>
+    </I18nProvider>,
+  );
+  throw new Error("__stop__");
+}
+if (kode === "outlets") {
+  const CA = ["Deo", "Wika", "Roby", "Aldi", "Maya", "Mieraldy"];
+  const OWNER = ["PT Nordu Nusantara", "Hendra Wijaya", "Koperasi Sejahtera", "", "Lim Tjoen Hok", ""];
+  const contoh: BarisOutlet[] = [
+    ["Nordu Coffee Singkawang Diponegoro", "NRD-SKW-01", "Nordu", "Singkawang"],
+    ["Nordu Banjarbaru 2", "NRD-BJB-02", "Nordu", "Banjarbaru"],
+    ["Nordu Coffee Putussibau", "NRD-PTS-01", "Nordu", "Putussibau"],
+    ["Nordu Tebas", "NRD-TBS-01", "Nordu", "Tebas"],
+    ["Cattu A. Yani", "CTU-PTK-01", "Cattu", "Pontianak"],
+    ["Cattu M. Sohor", "CTU-PTK-02", "Cattu", "Pontianak"],
+    ["Ayam Goreng Busari Siantan", "BSR-PTK-01", "Busari", "Pontianak"],
+    ["Ayam Goreng Busari Depok", "BSR-DPK-01", "Busari", "Depok"],
+    ["Lesung Pipi Bogor", "LSP-BGR-01", "Lesung Pipi", "Bogor"],
+  ].map(([nama, kode2, brand, kota], i) => ({
+    id: `o${i}`,
+    nama: nama as string,
+    kode: kode2 as string,
+    brand: brand as string,
+    kota: kota as string,
+    aktif: i !== 7,
+    owner: OWNER[i % OWNER.length] || null,
+    coordinatorId: i % 4 === 3 ? null : `c${i % CA.length}`,
+    coordinatorNama: i % 4 === 3 ? null : CA[i % CA.length],
+    punyaCabang: i !== 2,
+  }));
+  createRoot(document.getElementById("root")!).render(
+    <I18nProvider initialLang="id">
+      <div className="p-6">
+        <OutletManager
+          outlets={contoh}
+          coordinators={CA.map((n, i) => ({ value: `c${i}`, label: n, outlet: 12 - i }))}
         />
       </div>
     </I18nProvider>,

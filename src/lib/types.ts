@@ -83,6 +83,14 @@ export interface Outlet {
    */
   esbBranchId?: string | null;
   /**
+   * Nama pemilik outlet ini.
+   *
+   * Teks, bukan acuan ke akun: pemilik belum tentu memakai aplikasi ini, dan
+   * sebagian memang tidak akan pernah. Diatur di Administrator → Manajemen
+   * Outlet.
+   */
+  owner?: string | null;
+  /**
    * Penjualannya diisi tangan karena riwayatnya tidak ada di ESB.
    *
    * Tiga outlet pindah dari POS Majoo dan riwayatnya tidak ikut terbawa.

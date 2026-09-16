@@ -96,6 +96,7 @@ export type MenuKey =
   | "sc_hpp"
   | "sc_rekap"
   | "users"
+  | "outlets"
   | "audit"
   | "sinkron"
   | "unggah_data";
@@ -262,6 +263,7 @@ export const NAV_MENUS: Omit<NavItem, "section" | "group" | "groupIcon">[] = [
   { key: "sc_hpp", label: "Kalkulator HPP Produksi", href: "/supply-chain/hpp", icon: "Calculator" },
   { key: "sc_rekap", label: "Database Produksi", href: "/supply-chain/rekap", icon: "Table2" },
   { key: "users", label: "User Management", href: "/admin/users", icon: "Users" },
+  { key: "outlets", label: "Manajemen Outlet", href: "/admin/outlets", icon: "Store" },
   { key: "audit", label: "Audit Logs", href: "/admin/audit", icon: "ScrollText" },
   { key: "sinkron", label: "Kesehatan Data", href: "/admin/sinkron", icon: "HeartPulse" },
   { key: "unggah_data", label: "Unggah Data", href: "/admin/unggah-data", icon: "FileUp" },
@@ -740,7 +742,7 @@ export const DIVISION_MENUS: { division: Division; menus: MenuKey[] }[] = [
   //
   // Anggotanya dikenali dari JABATAN, bukan departemen — lihat `timSosialMedia`.
   { division: "Sosial Media", menus: ["work", "sosmed_request", "mc_events", "complaints"] },
-  { division: "Administrator", menus: ["users", "audit", "sinkron", "unggah_data"] },
+  { division: "Administrator", menus: ["users", "outlets", "audit", "sinkron", "unggah_data"] },
 ];
 
 // ── Admin-defined extra divisions (DB-backed) ──────────────────────────────
