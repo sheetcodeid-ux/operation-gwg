@@ -1,5 +1,5 @@
 import { getUsers } from "./store";
-import { bidangOrang, bolehPunyaWilayah } from "@/lib/ops/bidang";
+import { bidangOrang } from "@/lib/ops/bidang";
 
 /**
  * Pemegang wilayah tiap bidang Performance V.1 — sisi basis datanya.
@@ -33,7 +33,7 @@ export function daftarPemegangBidang(bidang: string): PemegangWilayah[] {
 export function pemegangTiapOutlet(bidang: string): Map<string, { id: string; nama: string }> {
   const peta = new Map<string, { id: string; nama: string }>();
   for (const u of getUsers()) {
-    if (u.active === false || bidangOrang(u) !== bidang || !bolehPunyaWilayah(u)) continue;
+    if (u.active === false || bidangOrang(u) !== bidang) continue;
     for (const id of u.outletIds ?? []) peta.set(id, { id: u.id, nama: u.name });
   }
   return peta;

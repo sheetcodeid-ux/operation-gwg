@@ -1,14 +1,7 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import {
-  bidangOrang,
-  bolehPunyaWilayah,
-  JABATAN_WILAYAH,
-  jabatanPemegangWilayah,
-  jabatanWilayahUntuk,
-  wilayahOrang,
-} from "./bidang";
+import { bidangOrang, bolehPunyaWilayah, wilayahOrang } from "./bidang";
 
 /**
  * WILAYAH DI LUAR COORDINATOR AREA.
@@ -113,70 +106,5 @@ describe("yang memakainya", () => {
     expect(a).toContain('pindahkan((u) => u.role === "area_coordinator" && !bidangOrang(u), coordinatorId);');
     expect(a).toContain('pindahkan((u) => u.role !== "area_coordinator" && bidangOrang(u) === BIDANG_FINANCE, financeId);');
     expect(a).toContain('pindahkan((u) => u.role !== "area_coordinator" && bidangOrang(u) === BIDANG_MARKETING, marketingId);');
-  });
-});
-
-describe("jabatan pemegang wilayah", () => {
-  it("bentuknya mengikuti Coordinator Area East/West milik Operational", () => {
-    expect(JABATAN_WILAYAH["Finance V.1"]).toEqual(["Finance East", "Finance West"]);
-    expect(JABATAN_WILAYAH["Marketing V.1"]).toEqual(["Marketing East", "Marketing West"]);
-  });
-
-  it("TANPA kata \"Area\" — kalau ada, akunnya berubah jadi Coordinator Area operasional", () => {
-    // `isCoordinator` di User Management mengenali Coordinator Area dari pola
-    // ini, lalu memaksa peran akunnya jadi `area_coordinator` beserta seluruh
-    // menu operasionalnya. Jabatan Finance yang memuat kata itu akan diam-diam
-    // memindahkan orangnya ke divisi lain.
-    const polaCoordinatorArea = /coordinator\s*area/i;
-    for (const daftar of Object.values(JABATAN_WILAYAH)) {
-      for (const j of daftar) expect(polaCoordinatorArea.test(j), j).toBe(false);
-    }
-  });
-
-  it("ditawarkan untuk departemen bidangnya, dan hanya itu", () => {
-    expect(jabatanWilayahUntuk("Finance")).toEqual(["Finance East", "Finance West"]);
-    expect(jabatanWilayahUntuk("Finance Accounting Tax")).toEqual(["Finance East", "Finance West"]);
-    expect(jabatanWilayahUntuk("Marketing Communication")).toEqual(["Marketing East", "Marketing West"]);
-    expect(jabatanWilayahUntuk("Supply Chain")).toEqual([]);
-    expect(jabatanWilayahUntuk(null)).toEqual([]);
-  });
-
-  it("dikenali tanpa peduli besar-kecil huruf dan spasi di ujung", () => {
-    expect(jabatanPemegangWilayah({ department: "Finance", jabatan: "Finance East" })).toBe(true);
-    expect(jabatanPemegangWilayah({ department: "Finance", jabatan: "  finance west " })).toBe(true);
-    expect(jabatanPemegangWilayah({ department: "Marketing Communication", jabatan: "Marketing East" })).toBe(true);
-  });
-
-  it("jabatan satu bidang tidak berlaku di bidang sebelahnya", () => {
-    expect(jabatanPemegangWilayah({ department: "Finance", jabatan: "Marketing East" })).toBe(false);
-    expect(jabatanPemegangWilayah({ department: "Marketing Communication", jabatan: "Finance West" })).toBe(false);
-  });
-});
-
-describe("hanya jabatan East/West yang punya wilayah", () => {
-  it("Accounting dan Tax TIDAK bisa dipegangi outlet", () => {
-    // Keputusan pemiliknya: di Finance hanya divisi Finance yang punya wilayah.
-    for (const j of ["Accounting & Verification", "Tax", "Treasury", "Head", "", null]) {
-      expect(bolehPunyaWilayah({ department: "Finance Accounting Tax", jabatan: j }), String(j)).toBe(false);
-    }
-  });
-
-  it("yang berjabatan East/West bisa", () => {
-    expect(bolehPunyaWilayah({ department: "Finance", jabatan: "Finance East" })).toBe(true);
-    expect(bolehPunyaWilayah({ department: "Marketing Communication", jabatan: "Marketing West" })).toBe(true);
-  });
-
-  it("yang TERLANJUR dipegangi outlet tetap terbaca, apa pun jabatannya sekarang", () => {
-    // Jaring pengaman. Tanpa ini, satu jabatan yang diganti membuat penugasan
-    // yang sudah tersimpan diabaikan diam-diam: outletnya masih tercatat atas
-    // namanya di basis data, tapi tidak muncul di layar mana pun — dan tidak
-    // ada satu pun pesan yang menjelaskannya.
-    const pindahJabatan = { department: "Finance", jabatan: "Tax", outletIds: ["a"] };
-    expect(bolehPunyaWilayah(pindahJabatan)).toBe(true);
-    expect(wilayahOrang(pindahJabatan)).toEqual(["a"]);
-  });
-
-  it("di luar Finance dan Marketing tetap tidak, walau jabatannya ditulis East", () => {
-    expect(bolehPunyaWilayah({ department: "Supply Chain", jabatan: "Finance East" })).toBe(false);
   });
 });

@@ -41,7 +41,7 @@ import {
   updateUserAction,
 } from "@/lib/actions/users";
 import { deleteDepartmentAction, saveDepartmentAction } from "@/lib/actions/org-departments";
-import { bidangOrang, jabatanPemegangWilayah, jabatanWilayahUntuk } from "@/lib/ops/bidang";
+import { bidangOrang } from "@/lib/ops/bidang";
 import { listAssignableOutlets, type AssignableOutlet } from "@/lib/actions/outlets";
 import { useI18n } from "@/lib/i18n/provider";
 import { Avatar } from "@/components/ui/avatar";
@@ -126,16 +126,7 @@ function jabatanFor(department: string, orgDepts: OrgDept[], current?: string): 
   const managed = orgDepts.find((d) => d.name === department)?.jabatan ?? [];
   const specific = [...(HO_STRUCTURE[department] ?? []), ...managed];
   const all = specific.length ? specific : allJabatan(orgDepts);
-  // JABATAN PEMEGANG WILAYAH selalu ikut ditawarkan untuk departemennya.
-  //
-  // Bagan organisasi memakai nama departemennya sendiri ("Marketing
-  // Specialist"), sedangkan akun orangnya sering tertulis dengan nama yang
-  // dipakai sehari-hari ("Marketing Communication"). Digantungkan pada bagan
-  // saja, jabatan ini hilang dari pilihan justru pada akun yang
-  // membutuhkannya — dan yang terlihat bukan "namanya beda" melainkan
-  // "pilihannya tidak ada".
-  const wilayah = jabatanWilayahUntuk(department);
-  const uniq = [...new Set([...all, ...wilayah, ...(current ? [current] : [])].filter(Boolean))];
+  const uniq = [...new Set([...all, ...(current ? [current] : [])].filter(Boolean))];
   return uniq;
 }
 /** Every jabatan known across built-in + managed departments (flat fallback). */
@@ -560,12 +551,7 @@ export function UserFormPanel({
    * punya wilayah", cukup kosongkan outlet Accounting dan Tax.
    */
   const bidang = bidangOrang({ department, jabatan });
-  // Pemilihnya muncul untuk yang BERJABATAN pemegang wilayah — Finance
-  // East/West, Marketing East/West — dan untuk yang terlanjur dipegangi outlet,
-  // supaya penugasan lama tetap bisa dilihat dan dicabut.
-  const punyaWilayah =
-    !!bidang && (jabatanPemegangWilayah({ department, jabatan }) || (user?.outletIds?.length ?? 0) > 0);
-  const needsOutletPicker = isCoordinator || isSupervisor || punyaWilayah;
+  const needsOutletPicker = isCoordinator || isSupervisor || !!bidang;
   // Local outlets as an instant fallback shown while the picker loads from POS.
   const fallbackOutlets = React.useMemo(() => outlets.map((o) => ({ id: o.id, name: o.name })), [outlets]);
 
@@ -705,7 +691,7 @@ export function UserFormPanel({
         {needsOutletPicker && (
           <OutletAssignPicker
             role={isSupervisor ? "supervisor" : "area_coordinator"}
-            bidang={!isCoordinator && !isSupervisor && punyaWilayah ? bidang ?? undefined : undefined}
+            bidang={!isCoordinator && !isSupervisor ? bidang ?? undefined : undefined}
             single={isSupervisor}
             userId={user?.id}
             fallback={fallbackOutlets}

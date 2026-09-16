@@ -6,7 +6,7 @@ import { can } from "@/lib/rbac";
 import { getOutlet, getUser, getUsers } from "@/lib/data/store";
 import { updateUser } from "@/lib/data/user-mutations";
 import { saveOutlet } from "@/lib/data/persist";
-import { bidangOrang, bolehPunyaWilayah } from "@/lib/ops/bidang";
+import { bidangOrang } from "@/lib/ops/bidang";
 import { persistMessage } from "@/lib/data/persist";
 
 /**
@@ -81,8 +81,6 @@ export async function simpanOutletAction(input: SimpanOutletInput): Promise<Hasi
     const u = getUser(id);
     if (!u) return { ok: false, error: "Pemegang wilayah tidak ditemukan." };
     if (bidangOrang(u) !== bidang) return { ok: false, error: `${u.name} bukan orang ${bidang}.` };
-    if (!bolehPunyaWilayah(u))
-      return { ok: false, error: `${u.name} belum berjabatan pemegang wilayah (East/West).` };
     if (u.active === false) return { ok: false, error: `${u.name} sudah tidak aktif.` };
   }
 
