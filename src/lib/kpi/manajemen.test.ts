@@ -11,7 +11,9 @@ import {
   PERTUMBUHAN,
   peringkat,
   rasio,
+  SETELAN_BAWAAN,
 } from "./manajemen";
+import { persen } from "./satuan";
 
 /**
  * Rumus KPI Manajemen, dijaga angka per angka.
@@ -264,5 +266,49 @@ describe("peringkat", () => {
     // sama gawatnya — dan yang membacanya kehilangan satu-satunya petunjuk
     // bahwa yang satu masih bisa dikejar.
     expect(peringkat(69).tone).not.toBe(peringkat(20).tone);
+  });
+});
+
+describe("bobot yang digeser HARUS terlihat di totalnya", () => {
+  /**
+   * Keluhan aslinya: bobot diganti 15/50/30/5 lalu 40/30/20/10, Total Skor
+   * tetap "86%". Mesinnya benar — totalnya memang bergerak — tapi geraknya
+   * kecil dan seluruh angka ringkasan dibulatkan ke bilangan bulat, jadi dua
+   * susunan bobot yang berbeda tampil sebagai angka yang sama persis.
+   *
+   * Diuji DUA-DUANYA di sini: bahwa angkanya bergerak, DAN bahwa geraknya
+   * sampai ke layar. Yang pertama saja tidak cukup — itu yang sudah benar
+   * sejak awal dan tetap saja terbaca seperti bug.
+   */
+  const skenario = (bobot: { a: number; b: number; c: number; d: number }) =>
+    hitungManajemen({
+      a: { bulanLalu: [100, 100, 100], actual: 96.6 }, // capaian 84%
+      outlet: [{ id: "1", nama: "A", kode: "A", umur: 12, bulanLalu: [100, 100, 100], actual: 89.7 }], // 78%
+      labaBersih: 89.7 * 0.2934, // margin 29,34% dari target 30% → 97,8%
+      departemen: [dept("HR", [92.5])],
+      setelan: { ...SETELAN_BAWAAN, bobot },
+    });
+
+  const satu = skenario({ a: 15, b: 50, c: 30, d: 5 });
+  const dua = skenario({ a: 40, b: 30, c: 20, d: 10 });
+
+  it("dua susunan bobot memberi dua total yang berbeda", () => {
+    expect(satu.akhir).not.toBe(dua.akhir);
+  });
+
+  it("dan bedanya TIDAK hilang saat ditulis", () => {
+    // Inilah yang dulu gagal: keduanya jadi "86%".
+    expect(persen(satu.akhir)).not.toBe(persen(dua.akhir));
+    // Dibulatkan ke bilangan bulat keduanya memang sama — dipastikan di sini
+    // supaya jelas pembulatannya yang jadi soal, bukan mesinnya.
+    expect(Math.round(satu.akhir)).toBe(Math.round(dua.akhir));
+  });
+
+  it("tiap komponen menyumbang sebanding bobotnya", () => {
+    // Rasio sumbangan terhadap bobot harus sama di kedua susunan — itu bukti
+    // bobot dipakai sebagai pengali, bukan diabaikan.
+    const rasioSumbang = (s: typeof satu, b: { a: number; b: number; c: number; d: number }) =>
+      [s.a.skor / b.a, s.b.skor / b.b, s.c.skor / b.c, s.d.skor / b.d].map((n) => Math.round(n * 1e6) / 1e6);
+    expect(rasioSumbang(satu, { a: 15, b: 50, c: 30, d: 5 })).toEqual(rasioSumbang(dua, { a: 40, b: 30, c: 20, d: 10 }));
   });
 });

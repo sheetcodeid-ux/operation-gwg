@@ -6,6 +6,7 @@ import { ChartPie, Check, Hash, Layers, Percent, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { BarisKpi } from "@/lib/kpi/hitung";
 import type { BarisMinggu, RentangMinggu } from "@/lib/kpi/minggu";
+import { persen } from "@/lib/kpi/satuan";
 import { formatIDR, formatNumber } from "@/lib/utils";
 
 /**
@@ -855,6 +856,8 @@ export function KpiIndicatorDonut({ baris }: { baris: BarisKpi[] }) {
     }));
   }, [irisan, total]);
 
+  const teksTengah = persen(persenAktif);
+
   return (
     <div className="flex flex-col rounded-2xl border border-border bg-card/40 p-5">
       <div className="mb-3 flex flex-col gap-3">
@@ -916,16 +919,20 @@ export function KpiIndicatorDonut({ baris }: { baris: BarisKpi[] }) {
                   />
                 ))}
               </svg>
-              {/* Angkanya DIBULATKAN. Di dalam lingkaran selebar 44px, "28,50%"
-                  harus diperkecil sampai hampir tidak terbaca demi dua digit di
-                  belakang koma yang tidak mengubah satu keputusan pun — angka
-                  penuhnya tetap ada di baris Total Skor di bawah kartunya. */}
+              {/* ANGKANYA TIDAK DIBULATKAN LAGI.
+                  Dulu dibulatkan demi ruang, dengan alasan dua digit di belakang
+                  koma tidak mengubah satu keputusan pun. Ternyata mengubah:
+                  bobot komponen digeser 15/50/30/5 → 40/30/20/10, totalnya
+                  bergerak 85,68% → 85,92%, dan keduanya tampil "86%" — jadi
+                  terbaca seakan penggeseran bobot tidak berpengaruh sama sekali.
+                  Angka ini menentukan pembagian hasil, jadi yang mengalah
+                  ukurannya, bukan ketelitiannya. */}
               <div className="pointer-events-none absolute inset-0 grid place-items-center text-center">
                 <p
-                  className="text-[2.1rem] font-extrabold leading-none tracking-tight"
+                  className={cn("font-extrabold leading-none tracking-tight", teksTengah.length > 6 ? "text-[1.5rem]" : "text-[1.75rem]")}
                   style={{ color: terpilih ? warna(terpilih.key) : "var(--foreground)" }}
                 >
-                  {Math.round(persenAktif)}%
+                  {teksTengah}
                 </p>
               </div>
             </div>
@@ -962,10 +969,10 @@ export function KpiIndicatorDonut({ baris }: { baris: BarisKpi[] }) {
                 ))}
               </div>
               <span className="text-sm font-semibold tabular-nums text-foreground">
-                {/* TOTAL SKOR DIBULATKAN, di mana pun kartu ini dipakai.
-                    Diputuskan pemiliknya. Rincian per indikator tetap memakai
-                    desimalnya — yang dibulatkan hanya angka ringkasannya. */}
-                {total.toLocaleString("id-ID", { maximumFractionDigits: 0 })}%
+                {/* TOTAL SKOR DITULIS PENUH, di mana pun kartu ini dipakai.
+                    Pembulatannya dicabut atas permintaan pemiliknya setelah dua
+                    susunan bobot yang berbeda sama-sama tampil "86%". */}
+                {persen(total)}
               </span>
             </div>
           </div>

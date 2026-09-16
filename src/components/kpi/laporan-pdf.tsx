@@ -217,13 +217,13 @@ function donatSebaran(baris: BarisKpi[], skor: number, t: (typeof THEME)[Mode]):
     <div style="display:flex;align-items:center;gap:14px">
       <svg viewBox="0 0 176 176" width="126" height="126" style="flex:none" role="img" aria-label="Sebaran capaian">
         ${busur}
-        <text x="88" y="97" text-anchor="middle" fill="${t.text}" font-size="26" font-weight="800">${Math.round(skor)}%</text>
+        <text x="88" y="97" text-anchor="middle" fill="${t.text}" font-size="20" font-weight="800">${persen(skor)}</text>
       </svg>
       <ul style="list-style:none;flex:1;min-width:0">${legenda}</ul>
     </div>
     <div style="display:flex;align-items:center;justify-content:space-between;border-top:1px solid ${t.border};margin-top:12px;padding-top:10px">
       <span style="color:${t.sub};font-size:11px">Total Skor</span>
-      <span style="color:${t.text};font-size:13px;font-weight:700">${persen(total, 0)}</span>
+      <span style="color:${t.text};font-size:13px;font-weight:700">${persen(total)}</span>
     </div>
   </div>`;
 }
@@ -367,25 +367,25 @@ export function buatLaporanHtml({
         <p>${aman(labelPeriode(laporan.periode))}</p>
         <!-- Skornya ikut di kepala: laporan yang ditumpuk di meja dibaca dari
              halaman pertama, dan angka yang dicari duluan selalu angka ini. -->
-        <p style="margin-top:8px;font-size:22px;font-weight:800;opacity:1">${persen(ringkas.skor, 0)}</p>
+        <p style="margin-top:8px;font-size:22px;font-weight:800;opacity:1">${persen(ringkas.skor)}</p>
       </div>
     </div>
     <div class="body">
       <div class="sec-title">Identitas Penilaian</div>
       <div class="grid2">
         <div>${identitas("Posisi", namaPosisi)}${identitas("Departemen", namaDepartemen)}${identitas("Periode", labelPeriode(laporan.periode))}</div>
-        <div>${identitas("PIC", namaPic || "Dinilai sebagai satu tim")}${identitas("Indikator Terukur", `${ringkas.jumlahTerukur} dari ${baris.length}`)}${identitas("Skor Setara 100%", persen(ringkas.skorSetara, 0))}</div>
+        <div>${identitas("PIC", namaPic || "Dinilai sebagai satu tim")}${identitas("Indikator Terukur", `${ringkas.jumlahTerukur} dari ${baris.length}`)}${identitas("Skor Setara 100%", persen(ringkas.skorSetara))}</div>
       </div>
 
       <div class="sec-title">Skor Bulan Ini</div>
       <div class="scorebox">
         <div>
           <div style="color:${t.sub};font-size:12px;margin-bottom:4px">Total % Actual</div>
-          <div class="score">${persen(ringkas.skor, 0)}<span style="font-size:16px;color:${t.sub}"> / ${persen(ringkas.bobotTotal, 0)}</span></div>
+          <div class="score">${persen(ringkas.skor)}<span style="font-size:16px;color:${t.sub}"> / ${persen(ringkas.bobotTotal, 0)}</span></div>
         </div>
         <div style="text-align:right;color:${t.sub};font-size:11.5px;line-height:1.7">
           <div>Bobot terukur <b style="color:${t.text}">${persen(ringkas.bobotTerpakai, 0)}</b></div>
-          <div>Setara 100% <b style="color:${t.text}">${persen(ringkas.skorSetara, 0)}</b></div>
+          <div>Setara 100% <b style="color:${t.text}">${persen(ringkas.skorSetara)}</b></div>
         </div>
       </div>
 

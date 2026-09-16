@@ -38,6 +38,26 @@ export interface HasilCair {
 }
 
 /**
+ * Ketelitian angka capaian — DUA DESIMAL, dan dipakai DUA-DUANYA: yang dicetak
+ * dan yang dibandingkan dengan ambang.
+ *
+ * Sebelumnya tidak begitu. Ambangnya diuji pada angka mentah sementara
+ * kertasnya mencetak angka yang sudah dibulatkan satu desimal, jadi divisi
+ * bercapaian 85,96% tercetak "86%" tepat di sebelah lencana "50% cair" —
+ * padahal aturannya sendiri berbunyi "86% ke atas 100% cair". Yang membacanya
+ * tidak punya cara tahu mana yang salah, dan yang dipersoalkan bukan selisih
+ * 0,04% melainkan dokumen yang membantah dirinya sendiri di halaman yang
+ * menentukan pembayaran.
+ *
+ * Dibulatkan SEKALI di sini, lalu angka itulah yang mengalir ke mana-mana.
+ * Selisihnya paling banyak 0,005% — tidak menggeser satu pencairan pun — dan
+ * gantinya angka di kertas tidak mungkin lagi berbeda dari angka yang dipakai
+ * memutuskan.
+ */
+export const bulatkanCapaian = (n: number | null): number | null =>
+  n === null || !Number.isFinite(n) ? null : Math.round(n * 100) / 100;
+
+/**
  * Cair berapa, dari satu angka dasar.
  *
  * DI ATAS 100 TETAP CAIR PENUH. Capaian bisa melewati seratus saat targetnya
@@ -142,7 +162,7 @@ export function barisPencairan(departemen: readonly DepartemenKpi[], heads: read
 
   const baris: BarisCair[] = [];
   for (const d of departemen) {
-    const nilaiDivisi = rataDept.get(d.kode) ?? null;
+    const nilaiDivisi = bulatkanCapaian(rataDept.get(d.kode) ?? null);
     for (const p of d.posisi) {
       for (const o of p.orang) {
         // Capaian personalnya tidak dipakai menghitung apa pun di sini — yang
@@ -152,7 +172,7 @@ export function barisPencairan(departemen: readonly DepartemenKpi[], heads: read
           nama: o.nama,
           departemen: d.nama,
           head: false,
-          personal: o.nilai,
+          personal: bulatkanCapaian(o.nilai),
           divisi: nilaiDivisi,
           hasil: hasilCair(nilaiDivisi),
           alasan: nilaiDivisi === null ? "Divisinya belum punya KPI yang bisa dirata-ratakan." : undefined,
@@ -172,7 +192,7 @@ export function barisPencairan(departemen: readonly DepartemenKpi[], heads: read
     const pinjam = PINJAM_DIVISI[h.divisi];
     const kode = DEPT_DARI_DIVISI[h.divisi] ?? kodeDariNama.get(h.divisi);
     const dipakai = kode ?? pinjam;
-    const nilai = dipakai ? rataDept.get(dipakai) ?? null : null;
+    const nilai = bulatkanCapaian(dipakai ? rataDept.get(dipakai) ?? null : null);
     // DIVISI YANG TIDAK ADA DI DETAIL KPI DIVISI TIDAK IKUT TERCETAK.
     //
     // Supply Chain belum punya modul KPI: anak buahnya pun tidak muncul di

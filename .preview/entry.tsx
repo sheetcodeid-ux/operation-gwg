@@ -211,6 +211,18 @@ const SKOR_MJ = hitungManajemen({
 });
 const DETAIL_MJ: DetailManajemen = {
   periode: "2026-09",
+  // Head tiap divisi — dipakai tab Detail KPI Divisi dan dokumen pencairannya.
+  // TANPA ini seluruh halaman berhenti dirender ("t is not iterable"), karena
+  // `barisPencairan` menyusuri daftar ini di setiap render.
+  heads: [
+    { nama: "Muhammad Andi Wahyudi", divisi: "Operational" },
+    { nama: "Andi", divisi: "Product Development & Quality" },
+    { nama: "Dhimas Satria", divisi: "Creative" },
+    { nama: "Indah", divisi: "Finance Accounting Tax" },
+    { nama: "MT Adrianto", divisi: "Human Capital" },
+    { nama: "Ilfiana", divisi: "Business Development" },
+    { nama: "Stevanie", divisi: "Supply Chain" },
+  ],
   omzetLalu: [13_029_795_465, 14_125_168_904, 13_987_095_243],
   bulanA: ["2026-06", "2026-07", "2026-08"],
   labaBersih: 520_000_000,
@@ -398,7 +410,9 @@ if (kode.startsWith("pencairan")) {
   });
   const departemen = [
     dep("operational", "Operational", [["Fikri", 92], ["Evan Wijaya", 88], ["Adinda Latifah", 74], ["Pricil", 81], ["Maya", 68], ["Roby", 59]]),
-    dep("pdq", "Product Development & Quality", [["Adam", 70], ["Abil", 83], ["Mustadi", 85], ["Bagas", 82], ["Radika", 88]]),
+    // Sengaja mendarat di 85,96% — persis kasus yang dulu tercetak "86%" di
+    // sebelah lencana "50% cair".
+    dep("pdq", "Product Development & Quality", [["Adam", 85.9], ["Abil", 86.1], ["Mustadi", 85.8], ["Bagas", 86.0], ["Radika", 86.0]]),
     dep("marcomm", "Marketing Communication", [["Amanda", 79]]),
     dep("sosmed", "Sosial Media", [["Zia", 91], ["Dita", 91], ["Marta", 91]]),
     dep("creative", "Creative", [["Ricky", 87], ["Seka", 87], ["Via", 87]]),
@@ -423,7 +437,7 @@ if (kode.startsWith("pencairan")) {
       keterangan: b.head ? "Head divisi" : undefined,
       nilai: b.personal,
       alasan: b.alasan ?? null,
-      cair: { head: b.head, personal: b.personal, divisi: b.divisi, dasar: b.dasar, hasil: b.hasil, alasan: b.alasan },
+      cair: { head: b.head, personal: b.personal, divisi: b.divisi, hasil: b.hasil, alasan: b.alasan },
     });
     per.set(b.departemen, k);
   }

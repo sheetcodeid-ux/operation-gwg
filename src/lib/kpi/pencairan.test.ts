@@ -171,3 +171,47 @@ describe("Head yang divisinya belum punya KPI", () => {
     expect(b.find((x) => x.nama === "Ilfiana")).toBeTruthy();
   });
 });
+
+describe("angka yang dicetak = angka yang dipakai memutuskan", () => {
+  /**
+   * BUG YANG DIPERBAIKI DI SINI.
+   *
+   * Ambangnya diuji pada rata-rata mentah, sedangkan kertasnya mencetak angka
+   * yang sudah dibulatkan. Divisi bercapaian 85,96% tercetak "86%" tepat di
+   * sebelah lencana "50% cair" — dokumen pembayaran yang membantah aturannya
+   * sendiri, dan tidak ada cara bagi yang membacanya untuk tahu mana yang
+   * benar.
+   */
+  const cetak = (n: number | null) => (n === null ? "—" : `${n.toFixed(2)}%`);
+
+  it("capaian divisi sudah dibulatkan sebelum diadu dengan ambang", () => {
+    // Rata-rata 85,955 — mentah tidak mencapai 86, dan setelah dibulatkan dua
+    // desimal (85,96) juga tidak. Yang tercetak dan yang diputuskan sepakat.
+    const d = dept("pdq", "PDQ", [["Adam", 85.95], ["Abil", 85.96]]);
+    const b = barisPencairan([d], []);
+    expect(b[0].divisi).toBe(85.96);
+    expect(cetak(b[0].divisi)).toBe("85.96%");
+    expect(b[0].hasil?.jenis).toBe("separuh");
+  });
+
+  it("tidak ada baris yang angkanya terbaca ≥ 86 tapi hasilnya separuh", () => {
+    // Sapuan sepanjang ambang: berapa pun rata-ratanya, yang TERCETAK dan yang
+    // DIPUTUSKAN tidak boleh saling membantah.
+    for (let i = 0; i <= 400; i += 1) {
+      const nilai = 84 + i / 100;
+      const b = barisPencairan([dept("x", "X", [["A", nilai]])], []);
+      const tercetak = Number(b[0].divisi?.toFixed(2));
+      const penuh = b[0].hasil?.jenis === "penuh";
+      expect(tercetak >= AMBANG_PENUH, `${tercetak} → ${b[0].hasil?.label}`).toBe(penuh);
+    }
+  });
+
+  it("head ikut aturan yang sama", () => {
+    const d = dept("pdq", "PDQ", [["Adam", 85.951], ["Abil", 85.959]]);
+    const b = barisPencairan([d], [{ nama: "Andi", divisi: "Product Development & Quality" }]);
+    const head = b.find((x) => x.head);
+    expect(head?.divisi).toBe(85.96);
+    expect(head?.personal).toBe(85.96);
+    expect(head?.hasil?.jenis).toBe("separuh");
+  });
+});

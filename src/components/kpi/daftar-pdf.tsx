@@ -624,10 +624,14 @@ export function buatPencairanKpiHtml({
   const isi = baris
     .map((o, n) => {
       const c = o.cair;
+      // DUA DESIMAL, bukan satu. Angkanya sudah dibulatkan dua desimal di
+      // `bulatkanCapaian`, jadi mencetaknya dengan ketelitian yang sama membuat
+      // yang di kertas PERSIS angka yang dipakai menentukan cair. Dengan satu
+      // desimal, 85,96% tercetak "86%" di sebelah lencana "50% cair".
       const nilai = (v: number | null | undefined, tebal = false) =>
         v === null || v === undefined
           ? `<span style="color:${t.sub}">—</span>`
-          : `<span style="color:${t.text};${tebal ? "font-weight:700;font-size:13px" : ""}">${angka(v)}</span>`;
+          : `<span style="color:${t.text};${tebal ? "font-weight:700;font-size:13px" : ""}">${angka(v, 2)}</span>`;
       // BARIS HEAD DIBERI WARNA. Daftarnya tiga puluh baris lebih dan
       // Head-nya tersebar di antara anak buahnya; tanpa penanda warna,
       // menemukan siapa Head divisi tertentu berarti membaca satu per satu.
@@ -687,7 +691,7 @@ export function buatPencairanKpiHtml({
       <div style="display:flex;align-items:center;gap:14px;min-width:0">${logo()}<div style="min-width:0"><h1>${aman(judul)}</h1><p>Good Will Grow · ${aman(subjudul)}</p></div></div>
       <div style="text-align:right;flex-shrink:0">
         <p style="font-size:12px;opacity:0.85">${aman(labelPeriode(periode))}</p>
-        <p style="margin-top:6px;font-size:26px;font-weight:800;opacity:1;line-height:1">${angka(rataDivisi, 0)}</p>
+        <p style="margin-top:6px;font-size:26px;font-weight:800;opacity:1;line-height:1">${angka(rataDivisi, 2)}</p>
         <p style="font-size:10px;opacity:0.7;margin-top:2px">rata-rata divisi</p>
       </div>
     </div>

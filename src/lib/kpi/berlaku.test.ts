@@ -103,17 +103,31 @@ describe("tampilan Detail KPI Divisi", () => {
     expect(papan).toContain("(b.rata ?? 0) - (a.rata ?? 0)");
   });
 
-  it("Total Skor dibulatkan di mana pun, termasuk di PDF", () => {
-    // Diputuskan pemiliknya: angka ringkasan dibulatkan. Rincian per indikator
-    // tetap berdesimal — di situlah angkanya dicocokkan baris demi baris
-    // dengan laporan yang ditandatangani.
+  it("Total Skor TIDAK dibulatkan di mana pun, termasuk di PDF", () => {
+    // Pembulatannya dicabut atas permintaan pemiliknya. Dengan bobot digeser
+    // 15/50/30/5 → 40/30/20/10 totalnya bergerak 85,68% → 85,92%, dan
+    // keduanya tampil "86%" — jadi terbaca seakan bobot tidak berpengaruh.
+    // Angka ini menentukan pembagian hasil; yang boleh mengalah ukurannya,
+    // bukan ketelitiannya.
     const grafik = readFileSync(join(process.cwd(), "src/components/kpi/kpi-charts.tsx"), "utf8");
-    expect(grafik).toContain('total.toLocaleString("id-ID", { maximumFractionDigits: 0 })');
+    expect(grafik).not.toContain("maximumFractionDigits: 0");
+    expect(grafik).toContain("{persen(total)}");
+    expect(grafik).toContain("const teksTengah = persen(persenAktif);");
     const pdf = readFileSync(join(process.cwd(), "src/components/kpi/laporan-pdf.tsx"), "utf8");
-    expect(pdf).toContain("persen(ringkas.skor, 0)");
-    expect(pdf).toContain("persen(ringkas.skorSetara, 0)");
-    // Rinciannya TIDAK ikut dibulatkan.
+    expect(pdf).not.toContain("persen(ringkas.skor, 0)");
+    expect(pdf).not.toContain("persen(ringkas.skorSetara, 0)");
+    expect(pdf).not.toContain("Math.round(skor)");
+    // Rinciannya juga tetap berdesimal.
     expect(pdf).toContain("persen(b.persenActual)");
+  });
+
+  it("daftar pencairan mencetak capaian setelitian ambangnya", () => {
+    // Angka di kolom Capaian Divisi HARUS angka yang sama dengan yang diadu
+    // dengan ambang 86%. Dulu dicetak satu desimal sementara ambangnya diuji
+    // pada angka mentah, jadi 85,96% tercetak "86%" di sebelah "50% cair".
+    const daftar = readFileSync(join(process.cwd(), "src/components/kpi/daftar-pdf.tsx"), "utf8");
+    expect(daftar).toContain("angka(v, 2)");
+    expect(daftar).not.toContain("angka(rataDivisi, 0)");
   });
 });
 
