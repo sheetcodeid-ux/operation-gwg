@@ -919,3 +919,164 @@ hanya boleh berpijak pada tujuh itu. `tanpa_aturan` adalah hasil yang sah; yang
 tidak sah adalah menyebutnya aman.
 
 **Operational V.1 belum final.**
+
+---
+
+## AD-14 · TASK #88A — decision lock Signal (PHASE 4)
+
+Audit arsitektur #88 menelusuri seluruh repositori untuk mekanisme deteksi yang
+sudah ada, menelusuri rantai `kpi_definitions → kpi_values → rules →
+rule_versions → rule_conditions → evaluasi()`, dan menemukan bahwa **desain
+Signal sudah tertulis di `blueprint.md` bagian 9** — bukan rancangan baru.
+Pada **17 September 2026** pemiliknya mengunci enam keputusan yang tersisa.
+
+### Enam keputusan
+
+**1 · Gerbang kelengkapan — DITUNDA.**
+
+Blueprint bagian 19-22 menuntut "Signal tidak boleh lahir untuk periode
+ber-kelengkapan di bawah ambang", dan keputusan terbuka #14 mengusulkan 95%.
+Pemeriksaan produksi menunjukkan `kelengkapan_persen` hanya terisi di **234 dari
+1.118** baris terkini per periode; seluruh **826 baris KPI keuangan bernilai
+NULL**. Gerbang 95% hari ini akan memblokir seluruh Signal biaya — yaitu seluruh
+341 pelanggaran yang justru sudah bisa dievaluasi.
+
+```
+BELUM ADA SUMBER + AMBANG KELENGKAPAN RESMI
+→ JANGAN PAKAI KELENGKAPAN SEBAGAI GERBANG SIGNAL
+```
+
+Yang dikunci adalah **gerbangnya belum dibuat**, BUKAN bahwa kelengkapan
+dianggap aman, dan BUKAN bahwa ambangnya 95%. Membuat pengecualian berdasarkan
+ada-tidaknya kolom kelengkapan akan melahirkan kebijakan yang tidak pernah
+disetujui siapa pun. `kelengkapan_persen` tidak diisi, `kpi_values` tidak
+disentuh. Keputusan terbuka #14 tetap terbuka.
+
+**2 · `sumber_sah = false` tidak boleh melahirkan Signal.**
+
+Menjawab keputusan terbuka #16 — usulnya "tidak", dan itu yang dikunci.
+`outlets.esb_mulai` dan `outlets.esb_abaikan` menandai bulan yang angka ESB-nya
+sudah dinyatakan salah. Menilai angka yang sudah dinyatakan salah berarti
+menerbitkan tuduhan di atas data yang diketahui keliru.
+
+Yang diblokir **hanya Signal**. Angka KPI-nya tidak diubah, statusnya tidak
+diubah, barisnya tidak dihapus — ia tetap tampil di layar seperti biasa.
+Produksi hari ini punya 5 baris demikian, seluruhnya KPI Sales tanpa aturan.
+
+**3 · Signal punya DUA keadaan kerja: `terbuka` dan `diabaikan`.**
+
+Blueprint bagian 9 mengusulkan tujuh. Lima ditunda ke phase yang benar-benar
+membutuhkannya: `acknowledged` (Phase 5 — belum ada layar tempat orang menekan
+"saya lihat"), `diagnosing` (Phase 6), `escalated` dan `resolved` (Phase 7 —
+"selesai" berarti tindakannya berhasil, dan tanpa Action kata itu kosong),
+`expired` (tidak diperlukan sama sekali).
+
+Yang menjaga jumlahnya tetap dua adalah pemisahan tegas:
+
+```
+kondisi_terakhir  ← HASIL DETEKSI   ditulis hanya mesin
+status            ← KEADAAN KERJA   ditulis hanya manusia
+```
+
+"Masalahnya sudah membaik" adalah hasil deteksi, bukan keadaan kerja, jadi ia
+tidak pernah menjadi state. Daftar kerja cukup menyaring
+`status = 'terbuka' and kondisi_terakhir = 'lewat_ambang'`.
+
+**4 · KPI berstatus `sementara` BOLEH melahirkan Signal.**
+
+Menunggu sampai bulan ditutup berarti pembengkakan tenaga kerja September baru
+terlihat 1 Oktober — bulannya sudah habis dan tidak ada lagi yang bisa
+diperbaiki. Itu menghapus alasan Signal ada.
+
+`sementara` BUKAN keadaan Signal; ia kematangan ANGKANYA, dan disimpan di
+`status_kpi` (beku) serta `status_kpi_terakhir` (diperbarui mesin). Tidak ada
+state `provisional`.
+
+Yang membuat ini bersih adalah AD-11: finalisasi mengubah `status` **di baris
+`kpi_values` yang sama tanpa melahirkan versi baru**. Jadi Signal yang lahir dari
+angka berjalan menjadi Signal berbasis final dengan sendirinya — `id` sama,
+`terdeteksi_pada` sama, tanpa duplikat, tanpa transisi state.
+
+**5 · Tiga koreksi terhadap blueprint bagian 9 — DISETUJUI.**
+
+*Koreksi 1 — wajib, dan ini bug nyata.* Blueprint menulis unik pada
+`(rule_kode, rule_version, outlet_id, periode, skala)`. Di PostgreSQL **NULL
+tidak pernah sama dengan NULL di dalam unique index**, sedangkan Signal korporat
+ber-`outlet_id` NULL. Dua baris korporat yang identik dua-duanya akan lolos, dan
+jumlahnya berlipat tiap kali cron jalan. `kpi_values` sudah memecahkan ini di
+tempat yang sama, dan Signal memakai pola yang sama persis:
+
+```
+cakupan_id = coalesce(outlet_id, area_id, '~korporat')
+
+IDENTITAS = (rule_version_id, cakupan, cakupan_id, periode, skala)
+```
+
+*Koreksi 2.* `rule_kode` + `rule_version` adalah dua kolom yang wajib selalu
+konsisten dengan satu baris di tabel lain, tanpa foreign key yang bisa
+menegakkannya. Diganti satu `rule_version_id` — satu FK, menunjuk tepat satu
+versi.
+
+*Koreksi 3.* `gap` dan `gap_persen` bisa dihitung kapan saja dari dua kolom yang
+sudah tersimpan. `revenue_gap` lebih serius: ia menuntut menghitung rupiah dari
+sumber mentah, padahal Signal dilarang menghitung ulang dari sumber. Ketiganya
+dikeluarkan; `revenue_gap` menjadi urusan Impact di Phase 10.
+
+**6 · Signal `critical` belum memicu notifikasi — DITUNDA ke Phase 5.**
+
+Blueprint bagian 19-22 memang menyebut Signal critical sebagai pemicu
+notifikasi, dan `notifications` memang dipakai ulang apa adanya. Tapi Phase 4
+belum punya layar tujuan, jadi `href`-nya belum punya alamat, dan notifikasi
+tanpa tautan tujuan nyaris tidak berguna. Phase 4 berhenti di Signal yang
+tersimpan. `notifications` tidak diubah, tidak ada notifikasi yang lahir dari
+cron Phase 4.
+
+### Kontrak Phase 4
+
+```
+KPI VALUE → ACTIVE RULE → RULE VERSION → RULE CONDITION → evaluasi()
+                                                              │
+                                                     lewat_ambang
+                                                              │
+                                                           SIGNAL
+```
+
+Tidak ada `KPI → Signal` tanpa aturan. Tidak ada `KPI → Signal` dari ambang yang
+ditulis di kode. Tidak ada `KPI → AI → Signal`.
+
+Signal lahir HANYA bila kesembilan syarat terpenuhi: angkanya ada · finite ·
+bukan `invalid` · bukan `tidak_tersedia` · `sumber_sah` bukan false · ada aturan
+aktif · ada versi yang berlaku untuk periodenya · ada syaratnya · `evaluasi()`
+menghasilkan `lewat_ambang`. Satu saja gagal → **tidak ada Signal**.
+
+`tanpa_aturan` tidak pernah melahirkan Signal, dan itu ditegakkan secara
+struktural, bukan lewat percabangan: Signal wajib punya `rule_version_id` yang
+menunjuk versi yang benar-benar berlaku. Tidak ada aturan → tidak ada
+`rule_version_id` → barisnya tidak bisa dibuat.
+
+`kpi_value_id` adalah **bukti, bukan identitas**. Bulan berjalan ditulis ulang
+tiap hari dan melahirkan `id` baru tiap kali isinya berubah; kalau identitasnya
+di situ, 158 pelanggaran September akan menjadi ribuan baris dalam sebulan dan
+Signal yang sudah diabaikan kemarin muncul lagi hari ini.
+
+Tujuh aturan yang boleh melahirkan Signal adalah tujuh yang dikukuhkan AD-13.
+`listrik_persen`, `air_persen`, dan `internet_persen` tetap non-aktif.
+Dua belas KPI tanpa aturan tetap `tanpa_aturan`.
+
+Penjadwalnya yang sudah ada, dengan urutan yang mengikat:
+
+```
+pg_cron 'kpi-bulanan-harian' → /api/cron/kpi-bulanan
+  1. generasi KPI  2. finalisasi periode  3. deteksi Signal  4. lapor sinkron_sehat
+```
+
+Tidak ada cron baru, tidak ada Vercel Cron, tidak ada n8n, `vercel.json` tidak
+disentuh.
+
+Keamanannya pola yang sama dengan 113 tabel lain: RLS menyala, nol policy,
+`anon`/`authenticated` di-`revoke`. Deteksi hanya lewat jalur server tepercaya;
+klien tidak pernah menyisipkan maupun menyunting. Perubahan `status` oleh
+manusia wajib membawa `diabaikan_oleh` yang menunjuk pengguna nyata.
+
+Phase 4 berhenti di **peristiwa deteksi**. Tidak ada Diagnosis, Action, Case,
+Impact, AI, Command Center, maupun alur notifikasi.
