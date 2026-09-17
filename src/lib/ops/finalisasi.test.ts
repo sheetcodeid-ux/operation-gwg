@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { TANGGAL_TUTUP, periodeBerjalan, periodeGenerasi, periodeSelesai } from "./finalisasi";
+import { periodeBerjalan, periodeGenerasi, periodeSelesai } from "./finalisasi";
 import { TANGGAL_BATAS_BUKA } from "./target-sales";
 
 /**
@@ -9,66 +9,95 @@ import { TANGGAL_BATAS_BUKA } from "./target-sales";
  * paling mahal di seluruh V.1: laporan sudah dicetak, keputusan sudah diambil,
  * dan tidak ada satu pun layar yang menunjukkan bahwa angkanya sempat lain.
  *
- * Itu yang dijaga berkas ini.
+ * Yang dijaga berkas ini kebalikannya juga: bulan yang SUDAH habis tapi tidak
+ * pernah ditutup akan selamanya terbaca "sementara", dan orang berhenti
+ * memercayai statusnya sama sekali.
  */
 
 /** Tengah hari WIB pada tanggal tertentu — jauh dari batas hari mana pun. */
 const wib = (iso: string) => Date.parse(`${iso}T05:00:00Z`); // 12.00 WIB
 
-describe("bulan berjalan tidak pernah final", () => {
+describe("bulan berjalan tidak pernah selesai", () => {
   it("tanggal 1", () => {
     expect(periodeSelesai("2026-09", wib("2026-09-01"))).toBe(false);
   });
 
-  it("tanggal 16 — sudah lewat tanggal tutup, tapi bulannya sendiri belum habis", () => {
+  it("tanggal 16 — lewat tanggal tutup penilaian, tapi bulannya belum habis", () => {
     expect(periodeSelesai("2026-09", wib("2026-09-16"))).toBe(false);
   });
 
-  it("hari terakhir bulan itu", () => {
+  it("hari TERAKHIR bulan itu masih belum selesai", () => {
     expect(periodeSelesai("2026-09", wib("2026-09-30"))).toBe(false);
   });
 });
 
-describe("bulan lalu mengikuti tanggal tutup", () => {
-  it("tanggal 1–14: masih boleh berubah", () => {
-    expect(periodeSelesai("2026-08", wib("2026-09-01"))).toBe(false);
-    expect(periodeSelesai("2026-08", wib("2026-09-14"))).toBe(false);
+describe("selesai begitu bulan kalendernya habis", () => {
+  it("2026-09 pada 1 Oktober → selesai", () => {
+    expect(periodeSelesai("2026-09", wib("2026-10-01"))).toBe(true);
   });
 
-  it("tepat tanggal 15: BELUM final — hari penutupannya sendiri masih berjalan", () => {
-    expect(periodeSelesai("2026-08", wib("2026-09-15"))).toBe(false);
+  it("2026-09 pada 15 Oktober → tetap selesai", () => {
+    expect(periodeSelesai("2026-09", wib("2026-10-15"))).toBe(true);
   });
 
-  it("tanggal 16 ke atas: final", () => {
-    expect(periodeSelesai("2026-08", wib("2026-09-16"))).toBe(true);
-    expect(periodeSelesai("2026-08", wib("2026-09-30"))).toBe(true);
+  it("tidak ada masa tenggang sampai tanggal 15 — itu aturan yang lama", () => {
+    // AD-10 sempat memakai "bulan lalu, tanggal > 15". TASK #85A menggantinya.
+    for (const hari of ["2026-10-01", "2026-10-05", "2026-10-14"]) {
+      expect(periodeSelesai("2026-09", wib(hari))).toBe(true);
+    }
   });
-});
 
-describe("bulan yang lebih lama selalu final", () => {
-  it("dua bulan ke belakang, apa pun tanggalnya", () => {
+  it("bulan yang lebih lama selalu selesai", () => {
     expect(periodeSelesai("2026-07", wib("2026-09-01"))).toBe(true);
     expect(periodeSelesai("2026-01", wib("2026-09-01"))).toBe(true);
   });
+});
 
-  it("pergantian tahun tidak membuatnya terbaca sebagai bulan depan", () => {
-    expect(periodeSelesai("2025-12", wib("2026-01-10"))).toBe(false);
-    expect(periodeSelesai("2025-12", wib("2026-01-20"))).toBe(true);
-    expect(periodeSelesai("2025-11", wib("2026-01-10"))).toBe(true);
+describe("pergantian tahun", () => {
+  it("Desember selesai begitu Januari tiba", () => {
+    expect(periodeSelesai("2025-12", wib("2025-12-31"))).toBe(false);
+    expect(periodeSelesai("2025-12", wib("2026-01-01"))).toBe(true);
+  });
+
+  it("Januari tahun berikutnya tidak terbaca lebih tua dari Desember", () => {
+    expect(periodeSelesai("2026-01", wib("2025-12-31"))).toBe(false);
   });
 });
 
-describe("periode mendatang tidak pernah final", () => {
+describe("Februari dan tahun kabisat", () => {
+  it("2024-02 pada 29 Februari belum selesai", () => {
+    expect(periodeSelesai("2024-02", wib("2024-02-29"))).toBe(false);
+  });
+
+  it("2024-02 pada 1 Maret selesai", () => {
+    expect(periodeSelesai("2024-02", wib("2024-03-01"))).toBe(true);
+  });
+
+  it("2026-02 pada 28 Februari belum selesai — bukan kabisat", () => {
+    expect(periodeSelesai("2026-02", wib("2026-02-28"))).toBe(false);
+    expect(periodeSelesai("2026-02", wib("2026-03-01"))).toBe(true);
+  });
+});
+
+describe("batas tengah malam WIB, bukan UTC", () => {
+  it("1 Oktober 00.30 WIB sudah Oktober — meski UTC masih 30 September", () => {
+    // 2026-09-30T17:30:00Z = 2026-10-01 00.30 WIB.
+    const tengahMalam = Date.parse("2026-09-30T17:30:00Z");
+    expect(periodeBerjalan(tengahMalam)).toBe("2026-10");
+    expect(periodeSelesai("2026-09", tengahMalam)).toBe(true);
+  });
+
+  it("30 September 23.30 WIB masih September", () => {
+    // 2026-09-30T16:30:00Z = 2026-09-30 23.30 WIB.
+    const sebelum = Date.parse("2026-09-30T16:30:00Z");
+    expect(periodeBerjalan(sebelum)).toBe("2026-09");
+    expect(periodeSelesai("2026-09", sebelum)).toBe(false);
+  });
+});
+
+describe("periode mendatang tidak pernah selesai", () => {
   it("bulan depan", () => {
     expect(periodeSelesai("2026-10", wib("2026-09-20"))).toBe(false);
-  });
-});
-
-describe("WIB, bukan UTC", () => {
-  it("pukul 06.00 WIB tanggal 16 sudah tanggal 16 — meski UTC masih tanggal 15", () => {
-    // 2026-09-15T23:00:00Z = 2026-09-16 06.00 WIB.
-    expect(periodeSelesai("2026-08", Date.parse("2026-09-15T23:00:00Z"))).toBe(true);
-    expect(periodeBerjalan(Date.parse("2026-09-30T23:00:00Z"))).toBe("2026-10");
   });
 });
 
@@ -78,9 +107,6 @@ describe("periode yang digenerate penjadwal", () => {
   });
 
   it("tanggal 1–14 pun tetap bulan berjalan, BUKAN bulan lalu", () => {
-    // Beda dengan `periodeSekarang()` di KPI Coordinator Area, yang memang
-    // membuka bulan lalu sepanjang tanggal 1–14. Yang di sini soal periode mana
-    // yang DITULIS, dan menulis Agustus lagi berarti menyentuh data TASK #86.
     expect(periodeGenerasi(wib("2026-09-03"))).toEqual(["2026-09"]);
   });
 
@@ -90,39 +116,49 @@ describe("periode yang digenerate penjadwal", () => {
     }
   });
 
+  it("menutup periode TIDAK membuatnya ikut digenerate ulang", () => {
+    // Oktober: September sudah selesai, tapi yang ditulis ulang tetap Oktober.
+    // Kalau September ikut, angkanya dihitung ulang saat ditutup — persis yang
+    // TASK #85A larang.
+    expect(periodeGenerasi(wib("2026-10-02"))).toEqual(["2026-10"]);
+    expect(periodeSelesai("2026-09", wib("2026-10-02"))).toBe(true);
+  });
+
   it("satu periode saja — backfill tidak boleh terjadi karena cron berangkat", () => {
     expect(periodeGenerasi(wib("2026-09-17"))).toHaveLength(1);
   });
 });
 
-/* ───────────────────── penjaga duplikat yang disengaja ───────────────────── */
+/* ───────────────────── penjaga: dua tanggal yang berbeda ───────────────────── */
 
 const sumber = (p: string) => readFileSync(join(process.cwd(), p), "utf8");
 
-describe("tanggal tutup tidak boleh berbeda dari yang sudah berlaku", () => {
-  it("sama dengan TANGGAL_TUTUP_KPI di src/lib/data/kpi.ts", () => {
-    // Ditulis dua kali karena berkas ini murni dan `data/kpi.ts` menempel pada
-    // Supabase. Kalau suatu hari yang satu diubah, uji ini yang gagal lebih
-    // dulu — bukan pengguna yang menemukan dua tanggal tutup berbeda.
-    const mesin = sumber("src/lib/data/kpi.ts");
-    expect(mesin).toContain(`TANGGAL_TUTUP_KPI = ${TANGGAL_TUTUP}`);
-  });
-
-  it("aturan bulan-lalu di sini sepakat dengan periodeSekarang() di sana", () => {
-    const mesin = sumber("src/lib/data/kpi.ts");
-    expect(mesin).toContain("wib.getUTCDate() >= TANGGAL_TUTUP_KPI ? bulan : bulanSebelum(bulan)");
-  });
-});
-
 describe("tutup buku BUKAN tanggal batas buka outlet", () => {
-  it("keduanya kebetulan lima belas, dan itu harus tetap dua konstanta", () => {
-    expect(TANGGAL_TUTUP).toBe(15);
+  it("finalisasi tidak meminjam TANGGAL_BATAS_BUKA", () => {
     expect(TANGGAL_BATAS_BUKA).toBe(15);
     const kode = sumber("src/lib/ops/finalisasi.ts")
       .replace(/\/\*[\s\S]*?\*\//g, "")
       .replace(/\/\/.*$/gm, "");
-    // Kalau suatu hari `finalisasi.ts` meminjam konstanta tanggal buka, menggeser
-    // jadwal tutup buku akan diam-diam mengubah cara outlet baru dinilai.
     expect(kode).not.toContain("TANGGAL_BATAS_BUKA");
+  });
+
+  it("finalisasi tidak memakai tanggal apa pun — hanya bulan", () => {
+    const kode = sumber("src/lib/ops/finalisasi.ts")
+      .replace(/\/\*[\s\S]*?\*\//g, "")
+      .replace(/\/\/.*$/gm, "");
+    // Begitu ada `getUTCDate()` di sini, aturannya berhenti jadi "bulan
+    // kalendernya habis" dan kembali jadi aturan bertanggal.
+    expect(kode).not.toContain("getUTCDate");
+    expect(kode).not.toMatch(/\b15\b/);
+  });
+});
+
+describe("aturan tanggal 15 milik KPI Coordinator Area tetap utuh", () => {
+  it("periodeSekarang() di data/kpi.ts tidak ikut berubah", () => {
+    // TASK #85A hanya mengubah finalitas periode KPI. Bulan mana yang DIBUKA
+    // di layar KPI tetap memakai tanggal tutup penilaian.
+    const mesin = sumber("src/lib/data/kpi.ts");
+    expect(mesin).toContain("TANGGAL_TUTUP_KPI = 15");
+    expect(mesin).toContain("wib.getUTCDate() >= TANGGAL_TUTUP_KPI ? bulan : bulanSebelum(bulan)");
   });
 });

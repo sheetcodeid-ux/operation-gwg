@@ -2,9 +2,10 @@ import { NextResponse } from "next/server";
 import { cronAuthorized } from "@/lib/cron-auth";
 import { catatHasilSinkron } from "@/lib/data/sinkron-sehat";
 import { generateTerjadwal } from "@/lib/data/kpi-generate";
+import { finalisasiPeriodeSelesai } from "@/lib/data/kpi-finalisasi";
 
 /**
- * Penulis KPI bulanan yang berjalan sendiri.
+ * Penulis KPI bulanan yang berjalan sendiri, plus penutup periode.
  *
  * Dipicu pg_cron Supabase lewat `net.http_get`, pola yang sama dengan
  * `/api/cron/fraud-sync`. Bedanya satu dan penting: rute ini TIDAK MENYENTUH
@@ -12,18 +13,32 @@ import { generateTerjadwal } from "@/lib/data/kpi-generate";
  * mengambil sewa ESB, tidak ikut antre di belakang penarikan, dan tidak ikut
  * gagal ketika ESB sedang membatasi permintaan.
  *
+ * ┌─ DUA PEKERJAAN, URUTANNYA DISENGAJA ─────────────────────────────────────┐
+ * │                                                                          │
+ * │   1. generasi     — menulis ulang bulan BERJALAN                         │
+ * │   2. finalisasi   — menutup bulan yang kalendernya SUDAH HABIS           │
+ * │                                                                          │
+ * │ Keduanya menyentuh himpunan periode yang terpisah, jadi urutannya tidak  │
+ * │ bisa saling merusak. Generasi didahulukan karena ia jalur utamanya:      │
+ * │ kalau ia gagal, rute berhenti di situ dan tidak ada periode yang ikut    │
+ * │ ditutup atas dasar data yang tidak jadi ditulis.                         │
+ * │                                                                          │
+ * │ Keduanya transaksi sendiri-sendiri. Generasi yang sudah berhasil tidak   │
+ * │ dibatalkan hanya karena finalisasi gagal — hasilnya sah dan idempoten —  │
+ * │ tapi kegagalannya TETAP membuat rute membalas 500 dan `sinkron_sehat`    │
+ * │ mencatat galat. Yang tidak boleh terjadi adalah melapor tuntas padahal   │
+ * │ separuhnya tidak jalan.                                                  │
+ * └──────────────────────────────────────────────────────────────────────────┘
+ *
  * ┌─ GAGAL HARUS TERLIHAT GAGAL ─────────────────────────────────────────────┐
  * │                                                                          │
  * │ `cron.job_run_details` melaporkan "succeeded" begitu permintaan HTTP-nya │
  * │ terkirim — bukan ketika pekerjaannya selesai. Itu sudah pernah menutupi  │
- * │ penarikan yang gagal sembilan kali beruntun. Jadi di sini: generasi yang │
- * │ gagal membalas 500 DAN menulis `error` ke `sinkron_sehat`, supaya kedua  │
- * │ tempat yang mungkin diperiksa orang mengatakan hal yang sama.            │
+ * │ penarikan yang gagal sembilan kali beruntun.                             │
  * └──────────────────────────────────────────────────────────────────────────┘
  *
  * Hasilnya idempoten: memanggil rute ini dua kali dalam satu hari WIB tidak
- * melahirkan versi baru, karena angkanya identik dan `gwg_tulis_kpi_bulanan`
- * membandingkan isi sebelum menulis.
+ * melahirkan versi baru dan tidak mengubah satu status pun untuk kedua kalinya.
  */
 export const maxDuration = 60;
 export const dynamic = "force-dynamic";
@@ -35,20 +50,31 @@ export async function GET(req: Request) {
 
   const mulai = Date.now();
   try {
-    const hasil = await generateTerjadwal();
+    const generasi = await generateTerjadwal();
+    const finalisasi = await finalisasiPeriodeSelesai();
+
     // Bentuk yang dimengerti `bacaHasil()`: tanpa `error` dan `sisa` nol
-    // berarti tuntas.
+    // berarti tuntas. Generasi dan finalisasi dipisah supaya yang membaca
+    // `sinkron_sehat` tahu bagian mana yang bergerak.
     const ringkas = {
       sisa: 0,
-      periode: hasil.map((h) => h.periode),
-      berubah: hasil.filter((h) => h.berubah).length,
-      versi: Object.fromEntries(hasil.map((h) => [h.periode, h.versi])),
-      baris: hasil.reduce((n, h) => n + h.nilaiDisisipkan, 0),
-      target: hasil.reduce((n, h) => n + h.targetDisisipkan, 0),
+      generasi: {
+        periode: generasi.map((h) => h.periode),
+        berubah: generasi.filter((h) => h.berubah).length,
+        versi: Object.fromEntries(generasi.map((h) => [h.periode, h.versi])),
+        baris: generasi.reduce((n, h) => n + h.nilaiDisisipkan, 0),
+        target: generasi.reduce((n, h) => n + h.targetDisisipkan, 0),
+      },
+      finalisasi: {
+        bulan_berjalan: finalisasi.bulanBerjalan,
+        periode_diperiksa: finalisasi.periodeDiperiksa,
+        periode_difinalisasi: finalisasi.periodeDifinalisasi,
+        baris_diubah: finalisasi.barisDiubah,
+      },
       msTotal: Date.now() - mulai,
     };
     await catatHasilSinkron({ "kpi-bulanan": ringkas });
-    return NextResponse.json({ ok: true, tookMs: Date.now() - mulai, hasil });
+    return NextResponse.json({ ok: true, tookMs: Date.now() - mulai, generasi, finalisasi });
   } catch (e) {
     const pesan = e instanceof Error ? e.message : "gagal";
     console.error("[cron:kpi-bulanan] gagal:", pesan);

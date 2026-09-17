@@ -656,3 +656,90 @@ Bulan lalu sengaja tidak ikut, dan itu keputusan pemiliknya:
 Aturan bulan-lalu di atas sudah ada di `periodeSelesai()` dan sudah diuji, tapi
 belum dipakai `periodeGenerasi()`. Mengaktifkannya kelak cukup mengubah daftar
 itu — dan itu keputusan tersendiri, bukan efek samping.
+
+---
+
+## AD-11 · TASK #85A — sebuah bulan selesai begitu kalendernya habis
+
+**Menggantikan aturan finalisasi di AD-10.**
+
+AD-10 memakai "bulan lalu, tanggal > 15", meminjam `TANGGAL_TUTUP_KPI` yang
+dipakai `periodeSekarang()` untuk memilih bulan mana yang DIBUKA di layar KPI
+Coordinator Area. Keputusan pemiliknya di TASK #85A: finalitas periode KPI
+memakai berakhirnya bulan kalender.
+
+```
+2026-09 pada 2026-09-30 WIB  →  belum selesai
+2026-09 pada 2026-10-01 WIB  →  SELESAI
+```
+
+Keduanya menjawab pertanyaan yang berbeda, dan itu sebabnya keduanya boleh
+berbeda. Tanggal 15 menjawab "bulan mana yang sedang dikerjakan orang"; yang di
+sini menjawab "bulan mana yang angkanya tidak akan berubah lagi".
+`periodeSekarang()` di `src/lib/data/kpi.ts` tetap memakai tanggal 15 dan tidak
+disentuh — ada uji yang menjaganya.
+
+Perubahannya aman diperiksa: satu-satunya pemakai `periodeSelesai()` adalah
+generator, dan generator hanya menyentuh bulan berjalan — yang mengembalikan
+`false` pada kedua aturan. Tidak ada satu angka pun yang sudah tertulis berubah
+artinya.
+
+`TANGGAL_TUTUP` di `finalisasi.ts` dihapus: aturannya sekarang murni
+perbandingan bulan, dan menyimpan tetapan bertanggal yang tidak dipakai justru
+mengundang orang memakainya lagi. Ada uji yang menolak `finalisasi.ts` menyebut
+`getUTCDate` maupun angka 15.
+
+### Finalisasi adalah perpindahan keadaan, bukan perhitungan ulang
+
+```
+versi 1 · terkini · sementara   →   versi 1 · terkini · final
+```
+
+**BUKAN versi 2.** Bulan yang ditutup bukan bulan yang dihitung ulang;
+melahirkan versi baru untuknya berarti riwayat versi berisi dua baris yang
+angkanya sama persis, dan yang membacanya akan mencari perbedaan yang tidak
+pernah ada.
+
+Karena itu `gwg_finalisasi_kpi_bulanan` (migrasi 0108) tidak membaca satu pun
+tabel sumber, tidak memanggil satu pun mesin KPI, dan tidak menyentuh `targets`.
+Satu-satunya pernyataan tulisnya sebuah `update ... set status = 'final'`. Ada
+uji yang membaca berkas migrasinya dan gagal begitu ada `insert`, `delete`,
+`versi + 1`, atau nama tabel sumber di dalamnya.
+
+### Yang TIDAK ikut jadi final
+
+Hanya `sementara` yang berpindah. `tidak_tersedia` dan `invalid` dibiarkan apa
+adanya:
+
+```
+Warehouse %      sementara       → final
+Platform Fee %   tidak_tersedia  → tidak_tersedia
+PBJT %           tidak_tersedia  → tidak_tersedia
+```
+
+Kalimatnya jadi utuh: bulannya sudah ditutup, dan KPI itu memang tidak ada
+angkanya. Menjadikannya `final` berarti mengklaim Platform Fee September adalah
+angka yang sudah pasti — padahal kolomnya belum pernah diisi.
+
+Akibat langsungnya: **Agustus 2026 tidak pernah masuk daftar periksa.** Ia tidak
+punya satu pun baris `sementara`, jadi saringan pertama fungsinya sudah
+melewatinya — bukan karena ada pengecualian yang ditulis tangan untuknya.
+
+### Siklus hidup target tidak berubah
+
+`targets.status` tetap `draf → berlaku → diganti`. Tidak ada `final` di sana,
+dan `berlaku` tidak pernah berarti periodenya sudah ditutup.
+
+### Urutan di rute cron
+
+```
+1. generasi    — menulis ulang bulan berjalan
+2. finalisasi  — menutup bulan yang kalendernya sudah habis
+```
+
+Himpunan periodenya terpisah, jadi urutannya tidak bisa saling merusak.
+Generasi didahulukan karena ia jalur utamanya: kalau ia gagal, rute berhenti dan
+tidak ada periode yang ditutup atas dasar data yang tidak jadi ditulis.
+Keduanya transaksi sendiri-sendiri; generasi yang sudah berhasil tidak
+dibatalkan karena finalisasi gagal — tapi kegagalannya tetap membuat rute
+membalas 500 dan `sinkron_sehat` mencatat galat.

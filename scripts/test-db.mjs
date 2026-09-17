@@ -1646,6 +1646,199 @@ function ujiKunciPeriode() {
   ok("yang di-rollback tidak meninggalkan jejak", sesudah === 0, `${sesudah} baris periode tetangga`);
 }
 
+
+/* ══════════════ 20 · TASK #85A — menutup periode yang sudah berakhir ══════════════ */
+
+const MIGRASI_85A = join(AKAR, "supabase/migrations/0108_finalisasi_kpi_bulanan.sql");
+
+const tutup = (bulanBerjalan, opsi) =>
+  satu(`select gwg_finalisasi_kpi_bulanan('${bulanBerjalan}');`, opsi);
+
+/** Cacah status baris terkini satu periode: "final=1, sementara=2". */
+const statusTerkini = (periode) =>
+  satu(`select coalesce(string_agg(status || '=' || n, ', ' order by status), 'kosong')
+        from (select status, count(*) n from kpi_values
+              where periode='${periode}' and terkini group by status) x;`);
+
+/** Sidik seluruh baris sebuah periode — termasuk versi lama. */
+const sidikPeriode = (periode) =>
+  satu(`select coalesce(md5(string_agg(kpi_definition_id||'|'||cakupan||'|'||coalesce(cakupan_id,'')||'|'||
+                              coalesce(nilai::text,'')||'|'||status||'|'||versi||'|'||terkini::text, chr(10) order by id)), 'kosong')
+        from kpi_values where periode='${periode}';`);
+
+function jalankanMigrasi85A() {
+  judul("20 · migrasi 0108_finalisasi_kpi_bulanan.sql");
+  if (!existsSync(MIGRASI_85A)) throw new Error(`migrasi tidak ditemukan: ${MIGRASI_85A}`);
+  sql(readFileSync(MIGRASI_85A, "utf8"));
+
+  const ada = satu(`select count(*) from pg_proc p join pg_namespace n on n.oid=p.pronamespace where n.nspname='public' and p.proname='gwg_finalisasi_kpi_bulanan';`);
+  ok("fungsi gwg_finalisasi_kpi_bulanan terpasang", Number(ada) === 1, `${ada} fungsi`);
+
+  const definer = satu(`select prosecdef::text from pg_proc p join pg_namespace n on n.oid=p.pronamespace where n.nspname='public' and p.proname='gwg_finalisasi_kpi_bulanan';`);
+  ok("SECURITY DEFINER", benar(definer), definer);
+
+  for (const peran of ["public", "anon", "authenticated"]) {
+    const boleh = satu(`select has_function_privilege('${peran}', 'public.gwg_finalisasi_kpi_bulanan(text)', 'execute')::text;`);
+    ok(`${peran} TIDAK boleh menutup periode`, !benar(boleh), boleh);
+  }
+  const svc = satu(`select has_function_privilege('service_role', 'public.gwg_finalisasi_kpi_bulanan(text)', 'execute')::text;`);
+  ok("service_role boleh menutup periode", benar(svc), svc);
+
+  ditolak(
+    "bulan berjalan yang tidak berbentuk YYYY-MM ditolak",
+    `select gwg_finalisasi_kpi_bulanan('2027-3');`,
+    "YYYY-MM",
+  );
+}
+
+function ujiFinalisasi() {
+  judul(`21 · sementara → final pada ${P85}`);
+
+  // Versi terkini periode uji dilengkapi supaya memuat KETIGA keadaan yang
+  // mungkin. Tanpa `tidak_tersedia` dan `final` di dalamnya, "yang lain tidak
+  // ikut berubah" tidak terbukti apa-apa.
+  const versiKini = Number(satu(`select max(versi) from kpi_values where periode='${P85}';`));
+  sql(`
+    insert into kpi_values
+      (kpi_definition_id, cakupan, outlet_id, periode, skala, nilai, status, sumber, rumus, versi, terkini)
+    values
+      ('sales.gross_sales', 'outlet', '${outletUji}', '${P85}', 'bulanan', null, 'tidak_tersedia', 'seasonal_daily', 'jumlah-harian', ${versiKini}, true),
+      ('sales.average_transaction', 'outlet', '${outletUji}', '${P85}', 'bulanan', 123, 'final', 'seasonal_daily', 'jumlah-harian', ${versiKini}, true);
+  `);
+
+  const sebelum = statusTerkini(P85);
+  const barisSebelum = Number(satu(`select count(*) from kpi_values where periode='${P85}';`));
+  const versiSebelum = satu(`select string_agg(distinct versi::text, ',' order by versi::text) from kpi_values where periode='${P85}';`);
+  const lamaSebelum = satu(`select coalesce(string_agg(status||'/v'||versi, ',' order by id), 'kosong') from kpi_values where periode='${P85}' and not terkini;`);
+  ok("keadaan awal memuat ketiga status", sebelum.includes("sementara") && sebelum.includes("tidak_tersedia") && sebelum.includes("final"), sebelum);
+
+  /* ── periode BELUM berakhir: diperiksa, tapi tidak ditutup ── */
+
+  const belum = tutup(P85); // bulan berjalan = periodenya sendiri
+  ok("periode yang belum berakhir tetap DIPERIKSA", belum.includes(P85), belum.slice(0, 140));
+  ok("…tapi tidak ada baris yang diubah", bidangJson(belum, "baris_diubah") === "0", bidangJson(belum, "baris_diubah"));
+  ok("…dan tidak masuk daftar yang difinalisasi", /"periode_difinalisasi"\s*:\s*\[\s*\]/.test(belum), belum.slice(0, 140));
+  ok("statusnya belum bergerak", statusTerkini(P85) === sebelum, statusTerkini(P85));
+
+  /* ── bulan berikutnya tiba: periode ditutup ── */
+
+  const hasil = tutup("2027-04");
+  ok("dua baris sementara berpindah jadi final", bidangJson(hasil, "baris_diubah") === "2", bidangJson(hasil, "baris_diubah"));
+  ok("periodenya masuk daftar yang difinalisasi", new RegExp(`"periode_difinalisasi"[^\\]]*${P85}`).test(hasil), hasil.slice(0, 200));
+
+  const sesudah = statusTerkini(P85);
+  ok("tidak ada lagi sementara yang terkini", !sesudah.includes("sementara"), sesudah);
+  ok("tidak_tersedia TETAP tidak_tersedia", sesudah.includes("tidak_tersedia=1"), sesudah);
+  ok("final bertambah persis sebanyak yang berpindah", sesudah.includes("final=3"), sesudah);
+
+  /* ── yang TIDAK boleh ikut berubah ── */
+
+  ok("tidak ada baris yang disisipkan atau dihapus", Number(satu(`select count(*) from kpi_values where periode='${P85}';`)) === barisSebelum, `${barisSebelum} baris`);
+  const versiSesudah = satu(`select string_agg(distinct versi::text, ',' order by versi::text) from kpi_values where periode='${P85}';`);
+  ok("tidak ada versi baru yang lahir", versiSesudah === versiSebelum, `${versiSebelum} → ${versiSesudah}`);
+  const lamaSesudah = satu(`select coalesce(string_agg(status||'/v'||versi, ',' order by id), 'kosong') from kpi_values where periode='${P85}' and not terkini;`);
+  ok("versi lama tidak tersentuh sama sekali", lamaSesudah === lamaSebelum, lamaSesudah.slice(0, 80));
+  const nilaiUtuh = Number(satu(`select count(*) from kpi_values where periode='${P85}' and terkini and kpi_definition_id='sales.average_transaction' and nilai = 123;`));
+  ok("nilai tidak ikut disentuh", nilaiUtuh === 1, `${nilaiUtuh}`);
+
+  const kembar = satu(`
+    select count(*) from (
+      select kpi_definition_id, cakupan, cakupan_id, periode, skala
+      from kpi_values where terkini group by 1,2,3,4,5 having count(*) > 1
+    ) x;`);
+  ok("tidak ada grain terkini yang kembar", Number(kembar) === 0, `${kembar} kembar`);
+
+  /* ── idempotensi ── */
+
+  const ulang = tutup("2027-04");
+  ok("jalan kedua tidak mengubah apa pun", bidangJson(ulang, "baris_diubah") === "0", bidangJson(ulang, "baris_diubah"));
+  ok("periode yang sudah bersih tidak lagi diperiksa", !ulang.includes(P85), ulang.slice(0, 160));
+  ok("statusnya tetap", statusTerkini(P85) === sesudah, statusTerkini(P85));
+
+  /* ── Agustus: tidak pernah disebut, tidak pernah tersentuh ── */
+
+  const agustusSebelum = sidikPeriode("2026-08");
+  const lihatAgustus = tutup("2027-04");
+  ok("Agustus tidak pernah masuk daftar periksa — ia tidak punya sementara", !lihatAgustus.includes("2026-08"), lihatAgustus.slice(0, 160));
+  ok("sidik Agustus tidak berubah", sidikPeriode("2026-08") === agustusSebelum, agustusSebelum);
+}
+
+function ujiFinalisasiUtuh() {
+  judul("22 · keutuhan dan kunci saat menutup periode");
+
+  // Periode kedua supaya ada DUA periode yang bisa ditutup sekaligus — itu yang
+  // membuat "batal separuh jalan" benar-benar mungkin terjadi.
+  sql(`
+    insert into kpi_values
+      (kpi_definition_id, cakupan, outlet_id, periode, skala, nilai, status, sumber, rumus, versi, terkini)
+    values
+      ('sales.net_sales', 'outlet', '${outletUji}', '2027-05', 'bulanan', 10, 'sementara', 'seasonal_daily', 'jumlah-harian', 1, true),
+      ('sales.net_sales', 'korporat', null, '2027-05', 'bulanan', 10, 'sementara', 'seasonal_daily', 'jumlah-harian', 1, true),
+      ('sales.net_sales', 'outlet', '${outletUji}', '2027-06', 'bulanan', 20, 'sementara', 'seasonal_daily', 'jumlah-harian', 1, true);
+  `);
+
+  const sebelum5 = statusTerkini("2027-05");
+  const sebelum6 = statusTerkini("2027-06");
+
+  /* ── ROLLBACK: satu baris menolak diubah, seluruh penutupan batal ── */
+
+  sql(`
+    create or replace function uji_tolak_final() returns trigger language plpgsql as $$
+    begin
+      if new.periode = '2027-06' then
+        raise exception 'penolakan buatan untuk menguji rollback';
+      end if;
+      return new;
+    end $$;
+    create trigger uji_tolak_final before update on kpi_values
+      for each row execute function uji_tolak_final();
+  `);
+
+  ditolak(
+    "satu baris yang menolak membatalkan SELURUH penutupan",
+    `select gwg_finalisasi_kpi_bulanan('2027-07');`,
+    "penolakan buatan",
+  );
+
+  ok("periode yang sempat lolos ikut dibatalkan", statusTerkini("2027-05") === sebelum5, statusTerkini("2027-05"));
+  ok("periode yang menolak tetap seperti semula", statusTerkini("2027-06") === sebelum6, statusTerkini("2027-06"));
+
+  sql(`drop trigger uji_tolak_final on kpi_values; drop function uji_tolak_final();`);
+
+  /* ── tanpa penghalang, keduanya tertutup dalam satu jalan ── */
+
+  const hasil = tutup("2027-07");
+  ok("dua periode tertutup sekaligus", bidangJson(hasil, "baris_diubah") === "3", bidangJson(hasil, "baris_diubah"));
+  ok("keduanya disebut", hasil.includes("2027-05") && hasil.includes("2027-06"), hasil.slice(0, 200));
+
+  /* ── kunci per periode, sama dengan milik penulis ── */
+
+  sql(`update kpi_values set status='sementara' where periode='2027-05' and terkini;`);
+  const dipegang = sql(`
+    begin;
+    select gwg_finalisasi_kpi_bulanan('2027-07');
+    select count(*) from pg_locks where locktype='advisory' and pid = pg_backend_pid();
+    rollback;
+  `).split("\n").filter(Boolean).pop();
+  ok("kunci advisory dipegang selama menutup", Number(dipegang) === 1, `${dipegang} kunci`);
+
+  const sama = sql(`
+    begin;
+    select gwg_tulis_kpi_bulanan('2027-05', '${muatan(1).replace(/'/g, "''")}'::jsonb, '[]'::jsonb);
+    select gwg_finalisasi_kpi_bulanan('2027-07');
+    select count(*) from pg_locks where locktype='advisory' and pid = pg_backend_pid();
+    rollback;
+  `).split("\n").filter(Boolean).pop();
+  ok(
+    "menulis dan menutup periode yang SAMA memakai kunci yang sama — bukan dua kunci berbeda",
+    Number(sama) === 1,
+    `${sama} kunci`,
+  );
+
+  const sisa = Number(satu(`select count(*) from pg_locks where locktype='advisory';`));
+  ok("kunci lepas sendiri", sisa === 0, `${sisa} tersisa`);
+}
+
 /* ─────────────────────────── jalan ─────────────────────────── */
 
 function utama() {
@@ -1684,6 +1877,9 @@ function utama() {
     ujiTulisBerversi();
     ujiTolakDanUtuh();
     ujiKunciPeriode();
+    jalankanMigrasi85A();
+    ujiFinalisasi();
+    ujiFinalisasiUtuh();
   } else {
     judul("4 · isi contoh minimum");
     isiContoh();
@@ -1698,6 +1894,7 @@ function utama() {
     ujiRincianUtilitas();
     jalankanMigrasi2C();
     jalankanMigrasi85();
+    jalankanMigrasi85A();
   }
 
   bersihkan();
