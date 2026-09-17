@@ -3,7 +3,8 @@ import { cronAuthorized } from "@/lib/cron-auth";
 import { catatHasilSinkron } from "@/lib/data/sinkron-sehat";
 import { generateTerjadwal } from "@/lib/data/kpi-generate";
 import { finalisasiPeriodeSelesai } from "@/lib/data/kpi-finalisasi";
-import { deteksiPeriode } from "@/lib/data/signals";
+import { deteksiSignal, deteksiTerjadwal, praDeteksi } from "@/lib/data/signals";
+import { bolehDiremediasi, REMEDIASI_DIIZINKAN } from "@/lib/ops/deteksi";
 
 /**
  * Penulis KPI bulanan yang berjalan sendiri, plus penutup periode.
@@ -18,7 +19,7 @@ import { deteksiPeriode } from "@/lib/data/signals";
  * │                                                                          │
  * │   1. generasi     — menulis ulang bulan BERJALAN                         │
  * │   2. finalisasi   — menutup bulan yang kalendernya SUDAH HABIS           │
- * │   3. deteksi      — mencatat pelanggaran aturan                          │
+ * │   3. deteksi      — mencatat pelanggaran aturan, tunggakan lebih dulu    │
  * │                                                                          │
  * │ Dua yang pertama menyentuh himpunan periode yang terpisah, jadi urutannya│
  * │ tidak bisa saling merusak. Generasi didahulukan karena ia jalur utamanya:│
@@ -48,6 +49,19 @@ import { deteksiPeriode } from "@/lib/data/signals";
  * melahirkan versi baru, tidak mengubah satu status pun untuk kedua kalinya,
  * dan tidak melahirkan satu Signal kembar pun.
  *
+ * ┌─ PINTU REMEDIASI ────────────────────────────────────────────────────────┐
+ * │                                                                          │
+ * │   ?mode=deteksi&periode=YYYY-MM[&pratinjau=1]                            │
+ * │                                                                          │
+ * │ Hanya deteksi: TIDAK menggenerate, TIDAK memfinalisasi, TIDAK menggeser  │
+ * │ watermark. Periodenya dibatasi DAFTAR PUTIH di `src/lib/ops/deteksi.ts`, │
+ * │ bukan sekadar pemeriksaan bentuk — parameter yang menerima bulan apa pun │
+ * │ berarti pemegang token bisa menyuruh sistem menilai ulang bulan mana     │
+ * │ saja, dan itu pintu yang tidak pernah diminta siapa pun.                 │
+ * │                                                                          │
+ * │ Token dan gerbangnya sama persis dengan jalur terjadwal.                 │
+ * └──────────────────────────────────────────────────────────────────────────┘
+ *
  * TIDAK ADA NOTIFIKASI DI SINI, termasuk untuk severity `critical` (AD-14).
  * Phase 4 berhenti di Signal yang tersimpan; layar tujuannya belum ada, jadi
  * notifikasinya belum punya alamat.
@@ -61,15 +75,20 @@ export async function GET(req: Request) {
   }
 
   const mulai = Date.now();
+  const url = new URL(req.url);
+  if (url.searchParams.get("mode") === "deteksi") return remediasi(url, mulai);
+
   try {
     const generasi = await generateTerjadwal();
     const finalisasi = await finalisasiPeriodeSelesai();
 
-    // Bulan berjalan PLUS bulan yang baru saja ditutup pada jalan ini. Periode
-    // lama tidak ikut dinilai ulang: aturannya sudah tidak bergerak dan
-    // Signal-nya sudah tercatat, jadi memeriksanya lagi cuma pekerjaan tanpa
-    // hasil. Periode yang aturannya BARU lahir ditangani saat aturannya dibuat.
-    const deteksi = await deteksiPeriode([...generasi.map((h) => h.periode), ...finalisasi.periodeDifinalisasi]);
+    // Periodenya ditentukan WATERMARK, bukan oleh apa yang kebetulan terjadi
+    // pada jalan ini. `periodeDifinalisasi` sengaja tidak lagi dipakai sebagai
+    // pemicu: ia cuma menangkap periode yang ditutup HARI INI, sehingga periode
+    // yang sudah `final` sebelum Phase 4 ada tidak pernah masuk lewat pintu
+    // mana pun — itulah lubang yang membuat 180 pelanggaran Agustus senyap.
+    // Lihat AD-15 dan `src/lib/ops/deteksi.ts`.
+    const deteksi = await deteksiTerjadwal();
 
     // Bentuk yang dimengerti `bacaHasil()`: tanpa `error` dan `sisa` nol
     // berarti tuntas. Generasi dan finalisasi dipisah supaya yang membaca
@@ -90,12 +109,16 @@ export async function GET(req: Request) {
         baris_diubah: finalisasi.barisDiubah,
       },
       deteksi: {
-        periode: deteksi.map((d) => d.periode),
-        diperiksa: deteksi.reduce((n, d) => n + d.diperiksa, 0),
-        layak: deteksi.reduce((n, d) => n + d.layak, 0),
-        disisipkan: deteksi.reduce((n, d) => n + d.disisipkan, 0),
-        diperbarui: deteksi.reduce((n, d) => n + d.diperbarui, 0),
-        diamati_saja: deteksi.reduce((n, d) => n + d.diamatiSaja, 0),
+        periode: deteksi.hasil.map((d) => d.periode),
+        susulan: deteksi.rencana.susulan,
+        dipotong: deteksi.rencana.dipotong,
+        watermark_sebelum: deteksi.watermarkSebelum,
+        watermark_sesudah: deteksi.watermarkSesudah,
+        diperiksa: deteksi.hasil.reduce((n, d) => n + d.diperiksa, 0),
+        layak: deteksi.hasil.reduce((n, d) => n + d.layak, 0),
+        disisipkan: deteksi.hasil.reduce((n, d) => n + d.disisipkan, 0),
+        diperbarui: deteksi.hasil.reduce((n, d) => n + d.diperbarui, 0),
+        diamati_saja: deteksi.hasil.reduce((n, d) => n + d.diamatiSaja, 0),
       },
       msTotal: Date.now() - mulai,
     };
@@ -106,5 +129,44 @@ export async function GET(req: Request) {
     console.error("[cron:kpi-bulanan] gagal:", pesan);
     await catatHasilSinkron({ "kpi-bulanan": { error: pesan } });
     return NextResponse.json({ ok: false, tookMs: Date.now() - mulai, error: pesan }, { status: 500 });
+  }
+}
+
+/**
+ * Deteksi satu periode historis yang terlewat — sekali jalan, terbatas.
+ *
+ * Jalurnya sama persis dengan deteksi terjadwal: `kondisiPeriode()` →
+ * `evaluasi()` → `susunMuatan()` → `gwg_deteksi_signal`. Tidak ada mesin
+ * penilai kedua, tidak ada status Signal baru, tidak ada jalan pintas yang
+ * melewati gerbang `sumber_sah` maupun periode berlaku aturan.
+ *
+ * Watermark TIDAK digeser di sini. Remediasi menambal lubang di belakang;
+ * watermark menjaga barisan di depan. Menggabungkannya akan membuat perbaikan
+ * sekali pakai diam-diam melangkahi periode yang belum pernah dinilai.
+ */
+async function remediasi(url: URL, mulai: number): Promise<NextResponse> {
+  const periode = url.searchParams.get("periode") ?? "";
+  if (!bolehDiremediasi(periode)) {
+    return NextResponse.json(
+      { ok: false, error: `periode tidak diizinkan untuk remediasi: ${periode || "(kosong)"}`, diizinkan: REMEDIASI_DIIZINKAN },
+      { status: 400 },
+    );
+  }
+
+  const pratinjau = url.searchParams.get("pratinjau") === "1";
+  try {
+    if (pratinjau) {
+      const hasil = await praDeteksi(periode);
+      return NextResponse.json({ ok: true, mode: "pratinjau", tookMs: Date.now() - mulai, pratinjau: hasil });
+    }
+
+    const hasil = await deteksiSignal(periode);
+    await catatHasilSinkron({ "kpi-bulanan-remediasi": { sisa: 0, ...hasil } });
+    return NextResponse.json({ ok: true, mode: "remediasi", tookMs: Date.now() - mulai, deteksi: hasil });
+  } catch (e) {
+    const pesan = e instanceof Error ? e.message : "gagal";
+    console.error("[cron:kpi-bulanan:remediasi] gagal:", pesan);
+    await catatHasilSinkron({ "kpi-bulanan-remediasi": { error: pesan } });
+    return NextResponse.json({ ok: false, mode: "remediasi", tookMs: Date.now() - mulai, error: pesan }, { status: 500 });
   }
 }

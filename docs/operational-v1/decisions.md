@@ -1127,3 +1127,99 @@ alur notifikasi — termasuk untuk `severity = 'critical'`. Tidak ada cron baru;
 `src/lib/ops/rules.ts` tidak disentuh sama sekali — ia tetap satu-satunya
 penilai, dan ia tetap tidak tahu-menahu soal basis data, waktu sekarang, maupun
 keabsahan sumber.
+
+---
+
+## AD-16 · TASK #88B Gate H — watermark deteksi & remediasi Agustus
+
+Jalan pertama Phase 4 menghasilkan 161 Signal September dan **nol** Signal
+Agustus. Bukan sebagian gagal — Agustus tidak pernah diperiksa.
+
+### Sebabnya: himpunan periode yang disimpulkan, bukan dicatat
+
+Rute cron memilih periodenya begini:
+
+```
+bulan berjalan  +  periode yang baru ditutup PADA JALAN INI
+```
+
+Asumsinya: periode lama Signal-nya sudah tercatat. Benar untuk setiap jalan
+**kecuali yang pertama** — dan pada jalan pertama Agustus 2026 sudah lama
+`final`, jadi tidak ada pintu yang bisa dilaluinya. 180 pelanggaran senyap,
+termasuk 35 `laba_bersih_persen` ber-severity critical.
+
+Lubang yang sama terbuka lagi setiap kali aturan baru lahir untuk bulan yang
+sudah ditutup.
+
+### "Sudah dideteksi" tidak bisa disimpulkan dari ada-tidaknya Signal
+
+Inilah inti keputusannya. Periode yang memang nol pelanggaran sah-sah saja
+tidak punya satu baris pun, dan ia **tidak bisa dibedakan** dari periode yang
+belum pernah diperiksa sama sekali. Menebaknya dari jejak yang kebetulan ada
+adalah persis kesalahan yang melahirkan lubang Agustus.
+
+Karena itu penandanya dibuat eksplisit: **`app_config.signal_watermark_bulanan`**
+— bulan terakhir yang deteksinya sudah tuntas. Memakai tabel key/value yang
+sudah ada (`0024`), jadi **tidak ada migration, tidak ada tabel baru**.
+
+### Aturan mainnya
+
+```
+tunggakan  =  (watermark, bulan_terakhir_selesai]     dinilai lebih dulu
+berjalan   =  bulan kalender sekarang                 dinilai paling akhir
+```
+
+- Watermark **maju per periode**, tepat setelah periode itu berhasil dinilai.
+  Kalau periode ketiga gagal, dua yang pertama tetap tercatat tuntas — pekerjaan
+  yang sudah berhasil tidak dibuang, dan tidak ada periode yang dilangkahi.
+- **Deteksi gagal → watermark tidak maju.** Galatnya melempar ke rute, rute
+  membalas 500, `sinkron_sehat` mencatat.
+- **Nol Signal tetap memajukan watermark.** Tidak adanya pelanggaran adalah
+  hasil deteksi yang sah, bukan bukti bahwa periodenya belum diperiksa.
+- **Bulan berjalan tidak pernah menggeser watermark.** Angkanya masih berubah
+  tiap hari; kalau watermark melangkahinya, esok hari tunggakannya kosong dan
+  bulan itu berhenti dinilai ulang — Signal berhenti mengikuti angkanya sendiri.
+- Bootstrap (watermark belum ada) mulai dari **periode KPI paling awal yang ada
+  di basis data**, diturunkan dengan kueri, bukan ditulis sebagai bulan tertentu
+  di dalam kode. Hari ini: 2026-08.
+- Tunggakan dibatasi **12 periode per jalan** — rute punya 60 detik, dan
+  bootstrap yang menemukan bertahun-tahun tunggakan tidak boleh menghabiskannya
+  sekaligus lalu gagal seluruhnya. Sisanya menyusul di jalan berikutnya.
+
+`periodeDifinalisasi` tidak lagi dipakai sebagai pemicu deteksi. Ia tetap ada di
+laporan kesehatan, tapi sebagai keterangan, bukan sebagai pintu.
+
+### Watermark hanya memilih periode; aturan tetap yang memutuskan
+
+`versiBerlaku()` tidak berubah sedikit pun. Periode yang masuk karena watermark
+tetap dinilai dengan aturan yang benar-benar berlaku untuknya — `sewa_melebihi_ambang`
+tetap nol untuk Agustus dan September, dan baru hidup mulai Oktober 2026.
+
+### Pintu remediasi
+
+```
+GET /api/cron/kpi-bulanan?mode=deteksi&periode=YYYY-MM[&pratinjau=1]
+```
+
+Token dan gerbangnya sama persis dengan jalur terjadwal. Hanya deteksi: tidak
+menggenerate, tidak memfinalisasi, **tidak menggeser watermark** — remediasi
+menambal lubang di belakang, watermark menjaga barisan di depan; menggabungkannya
+akan membuat perbaikan sekali pakai diam-diam melangkahi periode yang belum
+pernah dinilai.
+
+Periodenya dibatasi **daftar putih** (`REMEDIASI_DIIZINKAN`), bukan pemeriksaan
+bentuk. Parameter yang menerima bulan apa pun asalkan formatnya benar berarti
+pemegang token bisa menyuruh sistem menilai ulang bulan mana saja — pintu yang
+tidak pernah diminta siapa pun. Isinya hari ini satu baris: `2026-08`.
+
+`pratinjau=1` menghitung apa yang akan terjadi tanpa menulis apa pun, lewat
+jalur yang sama persis (`kondisiPeriode` → `evaluasi` → `susunMuatan`), jadi
+yang dipratinjau memang yang akan ditulis.
+
+### Sidik isi kandidat
+
+`sidikMuatan()` merender tiap angka dengan enam desimal tetap supaya sidiknya
+bisa dihitung ulang di SQL — tanpa itu `0` dan `0.0000` memberi sidik berbeda
+untuk isi yang sama. Angka 180 dan sidiknya **tidak ditulis sebagai assertion di
+dalam kode**: sumber produksi yang berlaku saat eksekusi adalah kebenarannya,
+dan sidik cuma penanda apakah himpunannya masih sama dengan yang disetujui.

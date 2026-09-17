@@ -1,8 +1,11 @@
 import "server-only";
 
+import { createHash } from "node:crypto";
 import { db, dbEnabled } from "./db";
+import { getAppConfig, setAppConfig } from "./app-config";
 import { kondisiPeriode, type KatalogAturan, type KondisiKpi } from "./rules";
 import { versiBerlaku } from "@/lib/ops/rules";
+import { KUNCI_WATERMARK, rencanaDeteksi, type RencanaDeteksi } from "@/lib/ops/deteksi";
 import { bulanSah } from "@/lib/ops/waktu";
 
 /**
@@ -41,6 +44,13 @@ export interface BarisMuatan {
    * tapi tidak pernah menyisipkan baris baru.
    */
   boleh_sisip: boolean;
+  /**
+   * Ikut dikirim untuk keterbacaan muatan dan untuk sidik isi yang stabil.
+   * `jsonb_to_recordset` di `gwg_deteksi_signal` TIDAK mendeklarasikannya, jadi
+   * SQL mengabaikannya sepenuhnya — ia tidak pernah tersimpan di `signals`,
+   * yang memang hanya menyimpan `rule_version_id`.
+   */
+  rule_kode: string;
   rule_version_id: number;
   cakupan: string;
   outlet_id: string | null;
@@ -124,6 +134,7 @@ export function susunMuatan(periode: string, baris: readonly KondisiKpi[], katal
 
     muatan.push({
       boleh_sisip: bolehSisip,
+      rule_kode: versi.ruleKode,
       rule_version_id: id,
       cakupan: b.cakupan,
       ...penunjuk(b),
@@ -180,14 +191,168 @@ export async function deteksiSignal(periode: string): Promise<RingkasDeteksi> {
   };
 }
 
+/* ─────────────────────────── sidik isi & pratinjau ─────────────────────────── */
+
+/** Enam angka di belakang koma, dirender sama di TypeScript maupun SQL. */
+const enam = (n: number | null): string => (n === null ? "~" : n.toFixed(6));
+
 /**
- * Deteksi beberapa periode berurutan.
+ * Sidik jari himpunan kandidat — supaya "himpunan yang disetujui" dan
+ * "himpunan yang benar-benar ditulis" bisa dibandingkan, bukan dipercaya.
  *
- * Berurutan, bukan paralel: tiap periode memegang kunci nasihatnya sendiri, dan
- * menjalankannya bersamaan cuma menukar waktu tunggu dengan tekanan koneksi.
+ * Resepnya sengaja dibuat bisa dihitung ulang di SQL: urutannya eksplisit dan
+ * tiap angka dirender dengan enam desimal tetap. Tanpa itu, `0` dan `0.0000`
+ * menghasilkan sidik yang berbeda untuk isi yang sama — dan sidik yang tidak
+ * bisa dihitung ulang tidak membuktikan apa pun.
  */
-export async function deteksiPeriode(periode: readonly string[]): Promise<RingkasDeteksi[]> {
+export function sidikMuatan(muatan: readonly BarisMuatan[]): string {
+  const urut = [...muatan].sort(
+    (a, b) =>
+      a.rule_kode.localeCompare(b.rule_kode) ||
+      a.cakupan.localeCompare(b.cakupan) ||
+      (a.outlet_id ?? a.area_id ?? "~korporat").localeCompare(b.outlet_id ?? b.area_id ?? "~korporat") ||
+      a.kpi_value_id - b.kpi_value_id,
+  );
+  const baris = urut.map((m) =>
+    [
+      m.rule_kode,
+      m.rule_version_id,
+      m.cakupan,
+      m.outlet_id ?? m.area_id ?? "~korporat",
+      m.periode,
+      m.skala,
+      m.kpi_definition_id,
+      m.kpi_value_id,
+      enam(m.nilai_actual),
+      enam(m.nilai_ambang),
+      enam(m.nilai_ambang_2),
+      m.operator,
+      m.severity,
+      m.status_kpi,
+    ].join("|"),
+  );
+  return createHash("md5").update(baris.join("\n")).digest("hex");
+}
+
+export interface PratinjauDeteksi {
+  periode: string;
+  diperiksa: number;
+  beraturan: number;
+  /** Kandidat Signal — yang akan benar-benar disisipkan. */
+  kandidat: number;
+  perRule: Record<string, number>;
+  perSeverity: Record<string, number>;
+  perCakupan: Record<string, number>;
+  perStatusKpi: Record<string, number>;
+  sidik: string;
+}
+
+const cacah = (baris: readonly BarisMuatan[], ambil: (m: BarisMuatan) => string): Record<string, number> => {
+  const h: Record<string, number> = {};
+  for (const m of baris) h[ambil(m)] = (h[ambil(m)] ?? 0) + 1;
+  return h;
+};
+
+/**
+ * Menghitung apa yang AKAN terjadi, tanpa menulis satu baris pun.
+ *
+ * Memakai jalur yang sama persis dengan deteksi sungguhan — `kondisiPeriode()`
+ * → `evaluasi()` → `susunMuatan()` — jadi yang dipratinjau memang yang akan
+ * ditulis, bukan perkiraan yang disusun terpisah dan bisa berbeda diam-diam.
+ */
+export async function praDeteksi(periode: string): Promise<PratinjauDeteksi> {
+  if (!bulanSah(periode)) throw new Error(`periode tidak sah: ${periode}`);
+  if (!dbEnabled) throw new Error("basis data tidak aktif");
+
+  const ringkas = await kondisiPeriode(periode);
+  const muatan = susunMuatan(periode, ringkas.baris, ringkas.katalog);
+  const kandidat = muatan.filter((m) => m.boleh_sisip);
+
+  return {
+    periode,
+    diperiksa: ringkas.baris.length,
+    beraturan: muatan.length,
+    kandidat: kandidat.length,
+    perRule: cacah(kandidat, (m) => m.rule_kode),
+    perSeverity: cacah(kandidat, (m) => m.severity),
+    perCakupan: cacah(kandidat, (m) => m.cakupan),
+    perStatusKpi: cacah(kandidat, (m) => m.status_kpi),
+    sidik: sidikMuatan(kandidat),
+  };
+}
+
+/* ─────────────────────────── watermark ─────────────────────────── */
+
+/** Bulan terakhir yang deteksinya sudah tuntas, atau null kalau belum pernah ada. */
+export async function bacaWatermark(): Promise<string | null> {
+  const nilai = await getAppConfig(KUNCI_WATERMARK);
+  return nilai && bulanSah(nilai) ? nilai : null;
+}
+
+/**
+ * Memajukan watermark — HANYA maju, tidak pernah mundur.
+ *
+ * Mundur berarti periode yang sudah dinilai akan dinilai ulang tanpa alasan;
+ * lebih buruk, ia menyembunyikan bug yang menulis nilai lama ke sana.
+ */
+export async function majuWatermark(periode: string): Promise<boolean> {
+  if (!bulanSah(periode)) throw new Error(`periode tidak sah: ${periode}`);
+  const sekarang = await bacaWatermark();
+  if (sekarang !== null && periode <= sekarang) return false;
+  await setAppConfig(KUNCI_WATERMARK, periode);
+  return true;
+}
+
+/** Periode KPI bulanan paling awal yang ada — dasar bootstrap, diturunkan dari data. */
+export async function periodeKpiPalingAwal(): Promise<string | null> {
+  if (!dbEnabled) throw new Error("basis data tidak aktif");
+  const { data, error } = await db()
+    .from("kpi_values")
+    .select("periode")
+    .eq("skala", "bulanan")
+    .eq("terkini", true)
+    .order("periode", { ascending: true })
+    .limit(1)
+    .maybeSingle();
+  if (error) throw new Error(`gagal membaca periode KPI paling awal: ${error.message}`);
+  return (data as { periode: string } | null)?.periode ?? null;
+}
+
+export interface RingkasTerjadwal {
+  watermarkSebelum: string | null;
+  watermarkSesudah: string | null;
+  rencana: RencanaDeteksi;
+  hasil: RingkasDeteksi[];
+}
+
+/**
+ * Deteksi terjadwal — tunggakan lebih dulu, bulan berjalan belakangan.
+ *
+ * ┌─ WATERMARK MAJU PER PERIODE, BUKAN DI AKHIR ─────────────────────────────┐
+ * │                                                                          │
+ * │ Kalau periode ketiga gagal, dua yang pertama tetap tercatat tuntas —     │
+ * │ pekerjaan yang sudah berhasil tidak dibuang, dan tidak ada periode yang  │
+ * │ dilangkahi. Kegagalan melempar ke pemanggil, jadi rute tetap membalas    │
+ * │ 500 dan `sinkron_sehat` tetap mencatat galat.                            │
+ * │                                                                          │
+ * │ Bulan berjalan dinilai paling akhir dan TIDAK PERNAH menggeser           │
+ * │ watermark — lihat `src/lib/ops/deteksi.ts`.                              │
+ * └──────────────────────────────────────────────────────────────────────────┘
+ */
+export async function deteksiTerjadwal(pada: number = Date.now()): Promise<RingkasTerjadwal> {
+  const watermarkSebelum = await bacaWatermark();
+  const rencana = rencanaDeteksi(watermarkSebelum, await periodeKpiPalingAwal(), pada);
+
   const hasil: RingkasDeteksi[] = [];
-  for (const p of [...new Set(periode)].sort()) hasil.push(await deteksiSignal(p));
-  return hasil;
+  let watermarkSesudah = watermarkSebelum;
+
+  for (const p of rencana.susulan) {
+    hasil.push(await deteksiSignal(p));
+    await majuWatermark(p);
+    watermarkSesudah = p;
+  }
+
+  hasil.push(await deteksiSignal(rencana.berjalan));
+
+  return { watermarkSebelum, watermarkSesudah, rencana, hasil };
 }

@@ -272,7 +272,11 @@ describe("rute cron mengikuti pola yang sudah ada", () => {
   });
 
   it("melapor ke sinkron_sehat, sukses maupun gagal", () => {
-    expect(rute.match(/catatHasilSinkron\(/g) ?? []).toHaveLength(2);
+    // Dihitung di badan GET saja: jalur remediasi (TASK #88B) punya kunci
+    // `sinkron_sehat` sendiri dan diuji terpisah, jadi mencampur keduanya
+    // membuat angka ini tidak lagi berarti apa-apa.
+    const badanGet = rute.slice(rute.indexOf("export async function GET"), rute.indexOf("async function remediasi"));
+    expect(badanGet.match(/catatHasilSinkron\(/g) ?? []).toHaveLength(2);
     expect(rute).toContain("error: pesan");
   });
 

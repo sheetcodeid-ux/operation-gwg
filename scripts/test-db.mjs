@@ -2463,6 +2463,84 @@ function jalankanMigrasi88() {
   ok("deteksi tidak menambah/menghapus satu baris KPI pun", Number(kpiUtuh) === 4, `${kpiUtuh} baris`);
 }
 
+/* ══════════ 27 · TASK #88B Gate H — tunggakan periode & watermark ══════════ */
+
+/** Periode "tunggakan": sudah selesai, belum pernah dideteksi — bentuk Agustus 2026. */
+const P88B = "2027-08";
+
+function ujiTunggakanPeriode() {
+  judul("27 · deteksi periode tunggakan tidak menyentuh periode lain");
+
+  const idVersi = Number(satu(`select id from rule_versions where rule_kode='tenaga_kerja_persen' and versi=1;`));
+
+  // Satu baris KPI di periode tunggakan, berstatus final — persis bentuk
+  // Agustus 2026: sudah ditutup sebelum lapisan Signal ada.
+  sql(`insert into kpi_values (kpi_definition_id, cakupan, outlet_id, periode, skala, nilai, status, sumber, rumus)
+       values ('biaya.labor_pct', 'outlet', '${outletUji}', '${P88B}', 'bulanan', 16.6, 'final', 'uji', 'uji')
+       on conflict do nothing;`);
+  const idKpi = Number(satu(`select id from kpi_values where periode='${P88B}' and cakupan='outlet' and terkini;`));
+
+  const baris = (o = {}) => ({
+    boleh_sisip: true, rule_version_id: idVersi, cakupan: "outlet", outlet_id: outletUji, area_id: null,
+    periode: P88B, skala: "bulanan", kpi_definition_id: "biaya.labor_pct", kpi_value_id: idKpi,
+    nilai_actual: 16.6, nilai_ambang: 13, nilai_ambang_2: null, operator: "gt", severity: "high",
+    status_kpi: "final", kpi_value_id_terakhir: idKpi, nilai_terakhir: 16.6,
+    kondisi_terakhir: "lewat_ambang", status_kpi_terakhir: "final", ...o,
+  });
+
+  // Potret periode lain SEBELUM tunggakan dideteksi.
+  const sebelumLain = satu(`select count(*)::text || '|' || coalesce(md5(string_agg(id||'|'||nilai_actual::text||'|'||status||'|'||kondisi_terakhir||'|'||terdeteksi_pada::text, E'\n' order by id)),'-')
+                              from signals where periode <> '${P88B}';`);
+
+  const j1 = JSON.parse(satu(`select gwg_deteksi_signal('${P88B}', ${muat([baris()])});`));
+  ok("periode tunggakan melahirkan Signal-nya sendiri", j1.disisipkan === 1, JSON.stringify(j1));
+
+  const sesudahLain = satu(`select count(*)::text || '|' || coalesce(md5(string_agg(id||'|'||nilai_actual::text||'|'||status||'|'||kondisi_terakhir||'|'||terdeteksi_pada::text, E'\n' order by id)),'-')
+                              from signals where periode <> '${P88B}';`);
+  ok("periode lain sama sekali tidak tersentuh — jumlah maupun isinya", sesudahLain === sebelumLain, `${sebelumLain} → ${sesudahLain}`);
+
+  const j2 = JSON.parse(satu(`select gwg_deteksi_signal('${P88B}', ${muat([baris()])});`));
+  ok("deteksi ulang tunggakan tidak melahirkan baris baru", j2.disisipkan === 0 && j2.diperbarui === 1, JSON.stringify(j2));
+
+  const kembar = satu(`select count(*) from (select rule_version_id, cakupan, cakupan_id, periode, skala from signals group by 1,2,3,4,5 having count(*)>1) d;`);
+  ok("tidak ada identitas kembar di seluruh tabel", Number(kembar) === 0, `${kembar} kembar`);
+
+  // Periode adalah bagian identitas: KPI dan aturan yang SAMA di dua periode
+  // berbeda adalah dua Signal, bukan satu yang saling menimpa.
+  const dua = satu(`select count(*) from signals where rule_version_id=${idVersi} and cakupan='outlet' and cakupan_id='${outletUji}' and kpi_definition_id='biaya.labor_pct';`);
+  ok("KPI & aturan sama di dua periode = dua Signal terpisah", Number(dua) === 2, `${dua} Signal`);
+
+  /* ── watermark menumpang app_config, tanpa tabel baru ── */
+
+  // Perancah dengan BENTUK YANG SAMA PERSIS seperti produksi (0024_app_config.sql,
+  // diperiksa lewat information_schema 17 September 2026). Perancah yang
+  // bentuknya meleset membuat uji lolos karena alasan yang salah.
+  sql(`create table if not exists app_config (
+         key text primary key,
+         value text not null,
+         updated_at timestamptz not null default now()
+       );`);
+
+  const bentuk = satu(`select string_agg(column_name||':'||data_type, ', ' order by ordinal_position)
+                         from information_schema.columns where table_schema='public' and table_name='app_config';`);
+  ok("app_config berbentuk key/value seperti produksi", bentuk === "key:text, value:text, updated_at:timestamp with time zone", bentuk);
+
+  const tabelWatermark = satu(`select count(*) from information_schema.tables where table_schema='public' and table_name ilike '%watermark%';`);
+  ok("TIDAK ada tabel watermark baru — memakai pola existing", Number(tabelWatermark) === 0, `${tabelWatermark} tabel`);
+
+  sql(`insert into app_config (key, value) values ('signal_watermark_bulanan', '2027-08')
+       on conflict (key) do update set value = excluded.value, updated_at = now();`);
+  ok("watermark tersimpan sebagai key/value biasa", satu(`select value from app_config where key='signal_watermark_bulanan';`) === "2027-08", "");
+
+  sql(`update app_config set value='2027-09' where key='signal_watermark_bulanan';`);
+  ok("watermark bisa maju", satu(`select value from app_config where key='signal_watermark_bulanan';`) === "2027-09", "");
+
+  // Signal tidak ikut berubah gara-gara watermark bergerak: keduanya memang
+  // menjawab pertanyaan yang berbeda.
+  const utuh = satu(`select count(*) from signals where periode='${P88B}';`);
+  ok("menggeser watermark tidak menyentuh satu Signal pun", Number(utuh) === 1, `${utuh} Signal`);
+}
+
 /* ─────────────────────────── jalan ─────────────────────────── */
 
 function utama() {
@@ -2508,6 +2586,7 @@ function utama() {
     ujiAturanTakBerubah();
     jalankanMigrasi87A();
     jalankanMigrasi88();
+    ujiTunggakanPeriode();
   } else {
     judul("4 · isi contoh minimum");
     isiContoh();

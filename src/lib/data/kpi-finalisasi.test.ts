@@ -143,7 +143,11 @@ describe("rute cron menjalankan keduanya dan bisa membedakannya", () => {
   it("gagal tetap membalas 500 dan mencatat galat", () => {
     expect(rute).toContain("status: 500");
     expect(rute).toContain("error: pesan");
-    expect(rute.match(/catatHasilSinkron\(/g) ?? []).toHaveLength(2);
+    // Dihitung di badan GET saja: jalur remediasi (TASK #88B) punya kunci
+    // `sinkron_sehat` sendiri dan diuji terpisah, jadi mencampur keduanya
+    // membuat angka ini tidak lagi berarti apa-apa.
+    const badanGet = rute.slice(rute.indexOf("export async function GET"), rute.indexOf("async function remediasi"));
+    expect(badanGet.match(/catatHasilSinkron\(/g) ?? []).toHaveLength(2);
   });
 
   it("otorisasinya tidak berubah", () => {

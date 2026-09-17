@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { susunMuatan, type BarisMuatan } from "./signals";
+import { sidikMuatan, susunMuatan, type BarisMuatan } from "./signals";
 import type { KatalogAturan, KondisiKpi } from "./rules";
 import { evaluasi, type VersiAturan } from "@/lib/ops/rules";
 
@@ -412,25 +412,195 @@ describe("deteksi menumpang penjadwal yang sudah ada", () => {
   it("urutannya generasi → finalisasi → deteksi", () => {
     const a = rute.indexOf("generateTerjadwal()");
     const b = rute.indexOf("finalisasiPeriodeSelesai()");
-    const c = rute.indexOf("deteksiPeriode(");
+    const c = rute.indexOf("deteksiTerjadwal()");
     expect(a).toBeGreaterThan(-1);
     expect(b).toBeGreaterThan(a);
     expect(c).toBeGreaterThan(b);
   });
 
-  it("periodenya bulan berjalan + yang baru ditutup", () => {
-    expect(rute).toContain("generasi.map((h) => h.periode)");
-    expect(rute).toContain("finalisasi.periodeDifinalisasi");
+  it("periodenya ditentukan WATERMARK, bukan periodeDifinalisasi", () => {
+    // Inilah lubang yang ditutup: `periodeDifinalisasi` hanya menangkap periode
+    // yang ditutup HARI INI, jadi periode yang sudah final sebelum Phase 4 ada
+    // tidak pernah masuk lewat pintu mana pun.
+    expect(rute).toContain("await deteksiTerjadwal();");
+    // `periodeDifinalisasi` boleh tetap muncul di laporan kesehatan — yang
+    // tidak boleh adalah ia kembali menjadi MASUKAN deteksi.
+    expect(rute).not.toMatch(/deteksi\w*\([^)]*periodeDifinalisasi/);
+    expect(rute).not.toMatch(/deteksi\w*\([^)]*generasi\.map/);
   });
 
-  it("ikut dilaporkan ke sinkron_sehat", () => {
+  it("watermark ikut dilaporkan supaya pergerakannya terlihat", () => {
+    expect(rute).toContain("watermark_sebelum");
+    expect(rute).toContain("watermark_sesudah");
+  });
+
+  it("ikut dilaporkan ke sinkron_sehat — sukses dan gagal", () => {
     expect(rute).toContain("deteksi:");
-    expect(rute.match(/catatHasilSinkron\(/g) ?? []).toHaveLength(2);
+    // Dihitung di badan GET saja; jalur remediasi punya kuncinya sendiri dan
+    // diuji terpisah, jadi mencampur keduanya membuat angka ini tidak berarti.
+    const badanGet = rute.slice(rute.indexOf("export async function GET"), rute.indexOf("async function remediasi"));
+    expect(badanGet.match(/catatHasilSinkron\(/g) ?? []).toHaveLength(2);
   });
 
   it("tidak ada cron kedua", () => {
     const vercel = readFileSync(join(process.cwd(), "vercel.json"), "utf8");
     expect(vercel.match(/"path"/g) ?? []).toHaveLength(2);
     expect(vercel).not.toContain("signal");
+  });
+});
+
+/* ═════════════════ 11 · sidik isi himpunan kandidat ═════════════════ */
+
+describe("sidik isi bisa dihitung ulang, dan itu gunanya", () => {
+  const dasar = (o: Partial<BarisMuatan> = {}): BarisMuatan => ({
+    boleh_sisip: true,
+    rule_kode: "tenaga_kerja_persen",
+    rule_version_id: 6,
+    cakupan: "outlet",
+    outlet_id: "out_1",
+    area_id: null,
+    periode: "2026-08",
+    skala: "bulanan",
+    kpi_definition_id: "biaya.labor_pct",
+    kpi_value_id: 1158,
+    nilai_actual: 14.2,
+    nilai_ambang: 13,
+    nilai_ambang_2: null,
+    operator: "gt",
+    severity: "high",
+    status_kpi: "final",
+    kpi_value_id_terakhir: 1158,
+    nilai_terakhir: 14.2,
+    kondisi_terakhir: "lewat_ambang",
+    status_kpi_terakhir: "final",
+    ...o,
+  });
+
+  it("isi yang sama menghasilkan sidik yang sama, urutan tidak penting", () => {
+    const a = dasar();
+    const b = dasar({ outlet_id: "out_2", kpi_value_id: 1159 });
+    expect(sidikMuatan([a, b])).toBe(sidikMuatan([b, a]));
+  });
+
+  it("satu angka bergeser, sidiknya berubah", () => {
+    expect(sidikMuatan([dasar()])).not.toBe(sidikMuatan([dasar({ nilai_actual: 14.200001 })]));
+    expect(sidikMuatan([dasar()])).not.toBe(sidikMuatan([dasar({ nilai_ambang: 13.000001 })]));
+    expect(sidikMuatan([dasar()])).not.toBe(sidikMuatan([dasar({ severity: "medium" })]));
+    expect(sidikMuatan([dasar()])).not.toBe(sidikMuatan([dasar({ rule_version_id: 7 })]));
+  });
+
+  it("nol dan nol-dengan-desimal adalah angka yang sama", () => {
+    // Resepnya merender enam desimal tetap supaya sidiknya bisa dihitung ulang
+    // di SQL — tanpa itu, `0` dan `0.0000` memberi sidik berbeda untuk isi sama.
+    expect(sidikMuatan([dasar({ nilai_actual: 0 })])).toBe(sidikMuatan([dasar({ nilai_actual: 0.0 })]));
+  });
+
+  it("korporat disidik lewat '~korporat', bukan lewat NULL", () => {
+    const korp = dasar({ cakupan: "korporat", outlet_id: null });
+    expect(sidikMuatan([korp])).toBe(sidikMuatan([korp]));
+    expect(sidikMuatan([korp])).not.toBe(sidikMuatan([dasar()]));
+  });
+
+  it("himpunan kosong tetap punya sidik yang stabil", () => {
+    expect(sidikMuatan([])).toBe(sidikMuatan([]));
+  });
+});
+
+/* ═════════════════ 12 · pintu remediasi ═════════════════ */
+
+describe("pintu remediasi terkunci sekencang jalur terjadwal", () => {
+  const rute = tanpaKomentar("src/app/api/cron/kpi-bulanan/route.ts");
+
+  it("gerbang tokennya SATU, dan remediasi berada di belakangnya", () => {
+    const gerbang = rute.indexOf("cronAuthorized(");
+    const pintu = rute.indexOf('url.searchParams.get("mode") === "deteksi"');
+    expect(gerbang).toBeGreaterThan(-1);
+    expect(pintu).toBeGreaterThan(gerbang);
+    expect(rute.match(/cronAuthorized\(/g) ?? []).toHaveLength(1);
+  });
+
+  it("periodenya lewat daftar putih, bukan sekadar bentuk", () => {
+    expect(rute).toContain("bolehDiremediasi(periode)");
+    expect(rute).not.toMatch(/periode\s*&&\s*bulanSah\(periode\)\s*\)\s*\{/);
+  });
+
+  it("tidak menggenerate, tidak memfinalisasi", () => {
+    const badan = rute.slice(rute.indexOf("async function remediasi"));
+    expect(badan).not.toContain("generateTerjadwal");
+    expect(badan).not.toContain("finalisasiPeriodeSelesai");
+  });
+
+  it("tidak menggeser watermark", () => {
+    const badan = rute.slice(rute.indexOf("async function remediasi"));
+    expect(badan).not.toContain("majuWatermark");
+    expect(badan).not.toContain("deteksiTerjadwal");
+  });
+
+  it("memakai jalur deteksi yang sama, bukan jalur pintas", () => {
+    const badan = rute.slice(rute.indexOf("async function remediasi"));
+    expect(badan).toContain("deteksiSignal(periode)");
+    expect(badan).toContain("praDeteksi(periode)");
+  });
+
+  it("pratinjau tidak menulis apa pun", () => {
+    const pra = kode.slice(kode.indexOf("export async function praDeteksi"), kode.indexOf("export async function bacaWatermark"));
+    expect(pra).not.toContain(".rpc(");
+    expect(pra).not.toContain("gwg_deteksi_signal");
+    expect(pra).not.toContain("majuWatermark");
+  });
+
+  it("melapor ke sinkron_sehat dengan kunci TERPISAH dari jalur terjadwal", () => {
+    expect(rute).toContain('"kpi-bulanan-remediasi"');
+  });
+
+  it("gagal tetap terlihat gagal — 500, bukan 200", () => {
+    const badan = rute.slice(rute.indexOf("async function remediasi"));
+    expect(badan).toContain("status: 500");
+    expect(badan).toContain("status: 400");
+  });
+});
+
+/* ═════════════════ 13 · watermark di lapisan data ═════════════════ */
+
+describe("watermark hanya maju setelah deteksi berhasil", () => {
+  it("tunggakan dinilai dulu, baru watermark digeser — per periode", () => {
+    const badan = kode.slice(kode.indexOf("export async function deteksiTerjadwal"));
+    const deteksi = badan.indexOf("await deteksiSignal(p)");
+    const maju = badan.indexOf("await majuWatermark(p)");
+    expect(deteksi).toBeGreaterThan(-1);
+    expect(maju).toBeGreaterThan(deteksi);
+  });
+
+  it("bulan berjalan dinilai SESUDAH tunggakan dan tidak menggeser watermark", () => {
+    const badan = kode.slice(kode.indexOf("export async function deteksiTerjadwal"));
+    const berjalan = badan.indexOf("deteksiSignal(rencana.berjalan)");
+    expect(berjalan).toBeGreaterThan(badan.indexOf("await majuWatermark(p)"));
+    expect(badan.slice(berjalan)).not.toContain("majuWatermark");
+  });
+
+  it("watermark tidak pernah mundur", () => {
+    const badan = kode.slice(kode.indexOf("export async function majuWatermark"), kode.indexOf("export async function periodeKpiPalingAwal"));
+    expect(badan).toContain("periode <= sekarang");
+    expect(badan).toContain("return false");
+  });
+
+  it("nilai watermark yang tidak sah dianggap belum ada, bukan dipakai", () => {
+    const badan = kode.slice(kode.indexOf("export async function bacaWatermark"), kode.indexOf("export async function majuWatermark"));
+    expect(badan).toContain("bulanSah(nilai)");
+  });
+
+  it("memakai app_config yang sudah ada — tanpa tabel baru", () => {
+    expect(kode).toContain("getAppConfig");
+    expect(kode).toContain("setAppConfig");
+    expect(kode).not.toMatch(/from\("signal_watermark/);
+    const sqlBaru = tanpaKomentar("supabase/migrations/0111_signals.sql");
+    expect(sqlBaru).not.toContain("watermark");
+  });
+
+  it("bootstrap diturunkan dari data, bukan bulan yang ditulis di kode", () => {
+    const badan = kode.slice(kode.indexOf("export async function periodeKpiPalingAwal"));
+    expect(badan).toContain('.from("kpi_values")');
+    expect(badan).toContain('order("periode"');
+    expect(kode).not.toMatch(/"2026-0[0-9]"/);
   });
 });
