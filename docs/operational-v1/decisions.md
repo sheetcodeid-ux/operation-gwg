@@ -502,3 +502,64 @@ Belum disimpan di mana pun. `op_settings.sewa` tetap 3 dan tidak disentuh.
 Angka 5 **tidak ditulis** di berkas mana pun — rule versioning-nya Phase 3,
 dan menyebarkannya sekarang berarti tetapan yang harus dicari di banyak tempat
 saat hendak diubah.
+
+---
+
+## AD-08 · PHASE 2C — empat belas KPI keuangan
+
+Dikunci 17 September 2026. Pemiliknya memilih rekomendasi audit pra-terbang.
+
+### Dua konflik yang diputuskan
+
+**Q1 · Dasar omzet KPI pembelian.** Indikator existing `hpp_kpk` (KPI Supervisor)
+memakai `esb_net_bulanan` lewat `grossOutlet()`. V.1 memakai `seasonal_daily`
+lewat `sales-fact.ts`, sumber yang sama dengan seluruh Phase 2A.
+
+Untuk Agustus 2026 keduanya berbeda **Rp 25.002 dari Rp 13,2 miliar** pada 10
+dari 57 outlet — 0,0002%. Beda sekecil itu tidak sepadan dengan punya dua
+sumber omzet.
+
+**Yang lama TIDAK diubah.** `hppKpkPersen()` tetap melayani KPI Supervisor apa
+adanya, dan ada uji yang menjaganya tetap ada.
+
+**Q2 · Outlet tanpa belanja.** Yang lama membuangnya (6 outlet Agustus). V.1
+memberinya status `tidak_tersedia` — outlet yang hilang dari hasil tidak bisa
+dibedakan dari outlet yang terlewat dihitung.
+
+**Q3 · Kelengkapan.** Tidak ada konvensi kelengkapan bulanan finansial di mana
+pun, dan untuk 14 kolom lama aturan berbasis nilai memang tidak mungkin dibuat.
+Yang dipakai konvensi yang sudah ada di `kpi-sales.ts`: periode selesai →
+`final`, periode berjalan → `sementara`.
+
+**Q4 · Nol pada kolom lama.** Dibaca apa adanya sebagai 0%. Keterbatasannya
+ditulis di `keterangan` tiap definisi KPI, bukan disembunyikan.
+
+### Catatan istilah — jangan dilewati
+
+Indikator existing `hpp_kpk` **bukan harga pokok**. Ia pembelian warehouse +
+non-warehouse dibagi omzet; komentar di `src/lib/data/kpi.ts` menyatakannya
+sendiri. Istilah lamanya tidak diubah.
+
+| Lama | V.1 |
+|---|---|
+| `hpp_kpk` | `biaya.total_purchase_pct` |
+| — | `biaya.hpp_pct` = harga pokok dari `op_pnl.hpp` |
+
+### Yang TIDAK dibuat
+
+- **Tidak ada `financial_facts`.** `kpi_definitions` dan `kpi_values` dari 0103
+  sudah menampung seluruhnya: `kelompok='biaya'` dan `satuan='persen'` sudah ada
+  di CHECK-nya sejak awal. Migrasi 0105 hanya menambah 14 baris katalog.
+- **Tidak ada ambang.** Rent 5% tidak ditulis di mana pun; `op_settings.sewa`
+  tetap 3 dan ada uji yang menjaganya. Governance tetap Phase 3.
+- **Tidak ada Signal, Diagnosis, Action, maupun AI.**
+
+### Korporat bukan rata-rata persen
+
+`Σ biaya ÷ Σ omzet`. Agustus 2026 membuktikan bedanya nyata: Labor tertimbang
+**14,11%**, rata-rata persen outlet **16,61%**. Rata-rata membuat outlet
+beromzet Rp 20 juta sama beratnya dengan outlet beromzet Rp 900 juta.
+
+Outlet yang omzetnya nol atau belum melapor tidak menyumbang pembilang maupun
+penyebut — memasukkan biayanya tanpa omzetnya membuat persen korporat naik
+tanpa sebab.

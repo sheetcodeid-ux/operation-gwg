@@ -36,6 +36,7 @@ import { join } from "node:path";
 
 import { petaCabangOutlet, saringFakta, outletTanpaCabang } from "../src/lib/ops/sales-fact.ts";
 import { hitungSales, KPI } from "../src/lib/ops/kpi-sales.ts";
+import { hitungKeuangan, KPI_KEUANGAN } from "../src/lib/ops/kpi-finansial.ts";
 import { hitungTargetSales } from "../src/lib/ops/target-sales.ts";
 import { hariBerjalan, jumlahHari } from "../src/lib/ops/waktu.ts";
 
@@ -929,10 +930,10 @@ ${target};
   }
 }
 
-/* ─────────────────────────── 11 · bersih-bersih ─────────────────────────── */
+/* ─────────────────────────── 15 · bersih-bersih ─────────────────────────── */
 
 function bersihkan() {
-  judul("11 · bersih-bersih");
+  judul("15 · bersih-bersih");
   if (SIMPAN) {
     console.log(`  --simpan diberikan: basis data ${DB} DIBIARKAN hidup.`);
     console.log(`  Hapus sendiri dengan: sudo -u postgres dropdb ${DB}`);
@@ -1128,6 +1129,257 @@ function ujiRincianUtilitas() {
   );
 }
 
+
+/* ══════════════ 12 · PHASE 2C — empat belas KPI keuangan ══════════════ */
+
+const MIGRASI_2C = join(AKAR, "supabase/migrations/0105_kpi_definitions_keuangan.sql");
+
+/** Muat angka finansial Agustus 2026 yang sesungguhnya. */
+function muatFinansial() {
+  const f = join(DATA, "agustus-2026.finansial.txt");
+  if (!existsSync(f)) throw new Error(`berkas finansial tidak ada: ${f}`);
+  const kutip = (s) => `'${String(s).replace(/'/g, "''")}'`;
+
+  const baris = readFileSync(f, "utf8")
+    .split("\n")
+    .filter((b) => b.length > 0)
+    .map((b) => {
+      const [kode, wh, nonWh, hpp, laba, utilitas, sewa, tk, potongan, mf, pemasaran, ongkir, lainnya] = b.split("|");
+      return { kode, wh, nonWh, hpp, laba, utilitas, sewa, tk, potongan, mf, pemasaran, ongkir, lainnya };
+    });
+
+  sql(
+    `insert into op_purchases (month, outlet_code, outlet_name, warehouse, non_warehouse) values\n${baris
+      .map((r) => `(${kutip(PERIODE)}, ${kutip(r.kode)}, '', ${r.wh}, ${r.nonWh})`)
+      .join(",\n")};`,
+  );
+  sql(
+    `insert into op_pnl (month, outlet_code, outlet_name, pendapatan, hpp, beban, laba_bersih) values\n${baris
+      .map((r) => `(${kutip(PERIODE)}, ${kutip(r.kode)}, '', 0, ${r.hpp}, 0, ${r.laba})`)
+      .join(",\n")};`,
+  );
+  sql(
+    `insert into op_expenses (month, outlet_code, outlet_name, utilitas, sewa, tenaga_kerja, potongan, manajemen_fee, pemasaran, ongkos_kirim, lainnya) values\n${baris
+      .map(
+        (r) =>
+          `(${kutip(PERIODE)}, ${kutip(r.kode)}, '', ${r.utilitas}, ${r.sewa}, ${r.tk}, ${r.potongan}, ${r.mf}, ${r.pemasaran}, ${r.ongkir}, ${r.lainnya})`,
+      )
+      .join(",\n")};`,
+  );
+  return baris.length;
+}
+
+function jalankanMigrasi2C() {
+  judul("12 · migrasi 0105_kpi_definitions_keuangan.sql");
+  if (!existsSync(MIGRASI_2C)) throw new Error(`migrasi tidak ditemukan: ${MIGRASI_2C}`);
+  sql(readFileSync(MIGRASI_2C, "utf8"));
+
+  const n = satu(`select count(*) from kpi_definitions where kelompok='biaya';`);
+  ok("empat belas definisi KPI keuangan terpasang", Number(n) === 14, `${n} definisi`);
+
+  // Tidak ada tabel penyimpanan KPI kedua — `kpi_values` dari 0103 dipakai apa adanya.
+  const tabelKpi = sql(
+    `select table_name from information_schema.tables where table_schema='public' and table_name like '%kpi%' order by 1;`,
+  ).split("\n");
+  ok("tidak ada tabel KPI baru — kpi_values dipakai ulang", tabelKpi.length === 2, tabelKpi.join(", "));
+
+  const persen = satu(`select count(*) from kpi_definitions where kelompok='biaya' and satuan <> 'persen';`);
+  ok("seluruhnya bersatuan persen", Number(persen) === 0);
+
+  const arah = satu(`select arah from kpi_definitions where id='biaya.net_profit_pct';`);
+  ok("Net Profit arahnya naik_baik, sisanya turun_baik", arah === "naik_baik", arah);
+}
+
+function rekonsiliasiKeuangan() {
+  judul(`13 · rekonsiliasi keuangan ${PERIODE}`);
+
+  // ── kumpulkan masukan dari basis data, bukan dari berkas ──
+  const mentah = sql(`
+    select o.id || '~' || coalesce(o.area_id,'') || '~' ||
+           coalesce((select sum(s.net) from seasonal_daily s
+                      where s.branch = o.esb_branch_id
+                        and s.day between '${PERIODE}-01' and '${PERIODE}-${String(jumlahHari(PERIODE)).padStart(2, "0")}')::text, '') || '~' ||
+           coalesce(p.warehouse::text,'') || '~' || coalesce(p.non_warehouse::text,'') || '~' ||
+           coalesce(n.hpp::text,'') || '~' || coalesce(n.laba_bersih::text,'') || '~' ||
+           coalesce(e.tenaga_kerja::text,'') || '~' || coalesce(e.sewa::text,'') || '~' || coalesce(e.lainnya::text,'') || '~' ||
+           coalesce(e.listrik::text,'') || '~' || coalesce(e.air::text,'') || '~' || coalesce(e.internet::text,'') || '~' ||
+           coalesce(e.kebersihan::text,'') || '~' || coalesce(e.platform_fee::text,'') || '~' || coalesce(e.pbjt::text,'') || '~' ||
+           (e.outlet_code is not null)::text
+    from outlets o
+    left join op_expenses  e on e.outlet_code = o.code and e.month = '${PERIODE}'
+    left join op_purchases p on p.outlet_code = o.code and p.month = '${PERIODE}'
+    left join op_pnl       n on n.outlet_code = o.code and n.month = '${PERIODE}'
+    where o.active
+    order by o.id;
+  `);
+
+  const angka = (s) => (s === "" ? null : Number(s));
+  const outlets = mentah
+    .split("\n")
+    .filter(Boolean)
+    .map((b) => {
+      const k = b.split("~");
+      return {
+        outletId: k[0],
+        areaId: k[1] || null,
+        sales: angka(k[2]),
+        warehouse: angka(k[3]),
+        nonWarehouse: angka(k[4]),
+        hpp: angka(k[5]),
+        labaBersih: angka(k[6]),
+        tenagaKerja: angka(k[7]),
+        sewa: angka(k[8]),
+        lainnya: angka(k[9]),
+        listrik: angka(k[10]),
+        air: angka(k[11]),
+        internet: angka(k[12]),
+        kebersihan: angka(k[13]),
+        platformFee: angka(k[14]),
+        pbjt: angka(k[15]),
+        adaLaporan: k[16] === "t" || k[16] === "true",
+      };
+    });
+
+  const selesai = PERIODE < new Date().toISOString().slice(0, 7);
+  const h = hitungKeuangan({ periode: PERIODE, outlets, periodeSelesai: selesai });
+
+  console.log(`  outlet aktif                       ${outlets.length}`);
+  console.log(`  tanpa baris finansial              ${h.tanpaLaporan.length}`);
+  console.log(`  tanpa omzet sah                    ${h.tanpaOmzet.length}`);
+  ok("empat belas baris per outlet, plus korporat", h.nilai.length === outlets.length * 14 + 14, `${h.nilai.length} baris`);
+
+  /* ── korporat dibandingkan dengan SQL, bukan dengan dirinya sendiri ── */
+
+  const dariSql = (kolom, tabel) =>
+    Number(
+      satu(`
+      select coalesce(sum(t.${kolom}) / nullif(sum(s.net), 0) * 100, 0)::text
+      from outlets o
+      join ${tabel} t on t.outlet_code = o.code and t.month = '${PERIODE}'
+      join lateral (select sum(x.net) as net from seasonal_daily x
+                     where x.branch = o.esb_branch_id
+                       and x.day between '${PERIODE}-01' and '${PERIODE}-${String(jumlahHari(PERIODE)).padStart(2, "0")}') s on true
+      where o.active and s.net > 0;`),
+    );
+
+  const korporatDari = (kpi) => h.nilai.find((x) => x.cakupan === "korporat" && x.kpiDefinitionId === kpi)?.nilai ?? null;
+  const dekat = (a, b) => a !== null && Math.abs(a - b) < 1e-9;
+
+  for (const [kpi, kolom, tabel, nama] of [
+    [KPI_KEUANGAN.warehouse, "warehouse", "op_purchases", "Warehouse %"],
+    [KPI_KEUANGAN.nonWarehouse, "non_warehouse", "op_purchases", "Non-Warehouse %"],
+    [KPI_KEUANGAN.hpp, "hpp", "op_pnl", "HPP %"],
+    [KPI_KEUANGAN.netProfit, "laba_bersih", "op_pnl", "Net Profit %"],
+    [KPI_KEUANGAN.labor, "tenaga_kerja", "op_expenses", "Labor %"],
+    [KPI_KEUANGAN.rent, "sewa", "op_expenses", "Rent %"],
+    [KPI_KEUANGAN.other, "lainnya", "op_expenses", "Other %"],
+  ]) {
+    const kode = korporatDari(kpi);
+    const db = dariSql(kolom, tabel);
+    ok(`korporat ${nama} cocok dengan SQL`, dekat(kode, db), `${kode?.toFixed(6)}% vs ${db.toFixed(6)}%`);
+  }
+
+  /* ── korporat BUKAN rata-rata persen outlet ── */
+
+  const perOutlet = h.nilai.filter((x) => x.cakupan === "outlet" && x.kpiDefinitionId === KPI_KEUANGAN.labor && x.nilai !== null);
+  const rataPersen = perOutlet.reduce((a, x) => a + (x.nilai ?? 0), 0) / perOutlet.length;
+  const korporatLabor = korporatDari(KPI_KEUANGAN.labor) ?? 0;
+  ok(
+    "korporat BUKAN rata-rata persen outlet",
+    Math.abs(rataPersen - korporatLabor) > 0.5,
+    `tertimbang ${korporatLabor.toFixed(2)}% vs rata-rata ${rataPersen.toFixed(2)}%`,
+  );
+
+  /* ── omzetnya sumber yang sama dengan Phase 2A ── */
+
+  const omzet2A = Number(satu(`select nilai::text from kpi_values where periode='${PERIODE}' and cakupan='korporat' and kpi_definition_id='sales.net_sales';`));
+  const omzetPakai = outlets.filter((o) => o.adaLaporan && (o.sales ?? 0) > 0).reduce((a, o) => a + (o.sales ?? 0), 0);
+  console.log("");
+  console.log(`  omzet korporat Phase 2A            ${rp(omzet2A)}`);
+  console.log(`  omzet penyebut KPI keuangan        ${rp(omzetPakai)}`);
+  console.log(`  selisih                            ${rp(omzet2A - omzetPakai)}`);
+  console.log(`                                     (outlet tanpa laporan finansial tidak ikut penyebut)`);
+
+  /* ── kosong versus nol, pada data sungguhan ── */
+
+  const nul = (kpi) => h.nilai.filter((x) => x.cakupan === "outlet" && x.kpiDefinitionId === kpi && x.nilai === null).length;
+  console.log("");
+  console.log("  Outlet ber-KPI tidak_tersedia");
+  console.log("  ─────────────────────────────");
+  for (const [kpi, nama] of [
+    [KPI_KEUANGAN.electricity, "Electricity %"],
+    [KPI_KEUANGAN.water, "Water %"],
+    [KPI_KEUANGAN.internet, "Internet %"],
+    [KPI_KEUANGAN.cleaning, "Cleaning %"],
+    [KPI_KEUANGAN.platformFee, "Platform Fee %"],
+    [KPI_KEUANGAN.pbjt, "PBJT %"],
+  ]) {
+    console.log(`  ${nama.padEnd(18)} ${String(nul(kpi)).padStart(3)} dari ${outlets.length}`);
+  }
+  ok(
+    "enam kolom baru seluruhnya tidak_tersedia — belum pernah dilaporkan",
+    [KPI_KEUANGAN.electricity, KPI_KEUANGAN.platformFee, KPI_KEUANGAN.pbjt].every((k) => nul(k) === outlets.length),
+  );
+
+  return h;
+}
+
+function simpanKeuangan(h) {
+  judul("14 · KPI keuangan ditulis ke basis data LOKAL");
+
+  const kutip = (s) => (s === null || s === undefined ? "null" : `'${String(s).replace(/'/g, "''")}'`);
+  const num = (n) => (n === null || n === undefined || !Number.isFinite(n) ? "null" : String(n));
+
+  sql(`
+    insert into kpi_values
+      (kpi_definition_id, cakupan, outlet_id, area_id, periode, skala, nilai, status, sumber, rumus, rumus_versi, sumber_sah, kelengkapan_persen, jumlah_hari, catatan)
+    values
+${h.nilai
+  .map(
+    (n) =>
+      `(${kutip(n.kpiDefinitionId)}, ${kutip(n.cakupan)}, ${kutip(n.outletId)}, ${kutip(n.areaId)}, ${kutip(n.periode)}, ${kutip(n.skala)}, ${num(n.nilai)}, ${kutip(n.status)}, ${kutip(n.sumber)}, ${kutip(n.rumus)}, ${n.rumusVersi}, ${n.sumberSah}, ${num(n.kelengkapanPersen)}, ${n.jumlahHari === null ? "null" : n.jumlahHari}, ${kutip(n.catatan)})`,
+  )
+  .join(",\n")};
+  `);
+
+  const masuk = Number(satu(`select count(*) from kpi_values where periode='${PERIODE}' and kpi_definition_id like 'biaya.%';`));
+  ok("seluruh baris KPI keuangan diterima basis data", masuk === h.nilai.length, `${masuk} dari ${h.nilai.length}`);
+
+  // Satu outlet + satu periode + satu KPI = maksimal satu baris.
+  const kembar = satu(`
+    select count(*) from (
+      select kpi_definition_id, cakupan, cakupan_id, periode, skala, count(*) n
+      from kpi_values where periode='${PERIODE}' and terkini
+      group by 1,2,3,4,5 having count(*) > 1
+    ) x;`);
+  ok("tidak ada grain kembar", Number(kembar) === 0, `${kembar} kombinasi kembar`);
+
+  ditolak(
+    "menulis dua kali DITOLAK basis data",
+    `insert into kpi_values (kpi_definition_id, cakupan, outlet_id, periode, skala, nilai, status, sumber, rumus)
+     select kpi_definition_id, cakupan, outlet_id, periode, skala, nilai, status, sumber, rumus
+     from kpi_values where periode='${PERIODE}' and kpi_definition_id='${KPI_KEUANGAN.labor}' limit 1;`,
+    "kpi_values_terkini_unik",
+  );
+
+  // KPI Sales Phase 2A tidak terganggu sama sekali.
+  const sales2A = Number(satu(`select count(*) from kpi_values where periode='${PERIODE}' and kpi_definition_id like 'sales.%';`));
+  ok("KPI Sales Phase 2A utuh di sampingnya", sales2A === 292, `${sales2A} baris`);
+
+  console.log("");
+  console.log("  Isi tabel setelah ditulis");
+  console.log("  ─────────────────────────");
+  for (const b of sql(`
+    select d.kode || ' · ' || v.cakupan || ' · ' || count(*) || ' baris · ' ||
+           count(*) filter (where v.nilai is null) || ' null'
+    from kpi_values v join kpi_definitions d on d.id = v.kpi_definition_id
+    where v.periode = '${PERIODE}' and d.kelompok = 'biaya'
+    group by d.kode, d.urutan, v.cakupan order by d.urutan, v.cakupan;
+  `).split("\n")) {
+    console.log(`  ${b}`);
+  }
+}
+
 /* ─────────────────────────── jalan ─────────────────────────── */
 
 function utama() {
@@ -1158,6 +1410,10 @@ function utama() {
     jalankanMigrasi2B();
     ujiBatch();
     ujiRincianUtilitas();
+    const jml = muatFinansial();
+    ok("angka finansial Agustus dimuat", jml === 58, `${jml} outlet`);
+    jalankanMigrasi2C();
+    simpanKeuangan(rekonsiliasiKeuangan());
   } else {
     judul("4 · isi contoh minimum");
     isiContoh();

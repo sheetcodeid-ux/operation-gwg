@@ -34,6 +34,7 @@ const MODUL_V1 = [
   "src/lib/ops/kelengkapan.ts",
   "src/lib/ops/kpi-sales.ts",
   "src/lib/ops/target-sales.ts",
+  "src/lib/ops/kpi-finansial.ts",
 ];
 
 /** Pintu masuk yang dijaga. */
