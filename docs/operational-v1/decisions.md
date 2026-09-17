@@ -1080,3 +1080,50 @@ manusia wajib membawa `diabaikan_oleh` yang menunjuk pengguna nyata.
 
 Phase 4 berhenti di **peristiwa deteksi**. Tidak ada Diagnosis, Action, Case,
 Impact, AI, Command Center, maupun alur notifikasi.
+
+---
+
+## AD-15 · TASK #88B — Signal dibangun (PHASE 4)
+
+Kontrak AD-14 diwujudkan. Satu tabel, satu pemicu, satu fungsi penulis, satu
+lapisan deteksi, satu langkah tambahan di rute cron yang sudah ada.
+
+### Yang menjaga kebenarannya, dan di mana
+
+| Jaminan | Ditegakkan oleh |
+|---|---|
+| Tidak ada Signal tanpa aturan | `signals.rule_version_id NOT NULL` — tanpa aturan tidak ada nilainya, jadi barisnya tidak bisa dibuat |
+| Korporat tidak pernah kembar | `cakupan_id` generated + `signals_unik` |
+| Snapshot deteksi tidak bisa ditulis ulang | `signals_tak_tersunting_trg` |
+| Signal tidak bisa dihapus | pemicu yang sama, DELETE selalu ditolak |
+| Yang diabaikan tidak dibuka mesin | pemicu yang sama, `diabaikan → terbuka` ditolak |
+| Upsert tidak menyentuh keadaan kerja | daftar `set` pada `on conflict` hanya memuat lima kolom pengamatan |
+| Dua jalan bersamaan tidak berlipat | `pg_advisory_xact_lock('gwg_signal', periode)` + `signals_unik` |
+| Tidak ada mesin penilai kedua | `gwg_deteksi_signal` tidak memuat satu pun operator bisnis; `boleh_sisip` datang jadi dari TypeScript |
+
+### Dua hal yang baru ketahuan saat membangunnya
+
+**`status_kpi` dan `status_kpi_terakhir` tidak boleh punya batasan yang sama.**
+Signal hanya lahir dari angka `final` atau `sementara`, jadi snapshot-nya cukup
+dua. Tapi pengamatannya bisa berakhir di `tidak_tersedia` atau `invalid` —
+angkanya hilang, atau sumbernya belakangan dinyatakan tidak sah. Menyamakan
+kedua batasan akan membuat pembaruan pengamatan ditolak basis data tepat pada
+kasus yang justru paling perlu dicatat.
+
+**Menolak `diabaikan → terbuka` di pemicu, bukan cuma tidak melakukannya.**
+Fungsi penulis memang tidak pernah menyentuh `status`. Tapi "tidak pernah
+menyentuh" adalah sifat kode yang bisa berubah; "ditolak basis data" tidak.
+Membuka kembali yang sudah diabaikan adalah keputusan workflow Phase 5/6, dan
+sampai keputusan itu diambil ia tidak boleh bisa terjadi secara tidak sengaja.
+
+### Yang TIDAK dibangun
+
+Tidak ada Diagnosis, Action, Case, Impact, Learning, AI, Command Center, maupun
+alur notifikasi — termasuk untuk `severity = 'critical'`. Tidak ada cron baru;
+`vercel.json` tidak disentuh. `kpi_values`, `targets`, `rules`, `rule_versions`,
+`rule_conditions`, `op_settings`, dan seluruh sumber finansial tidak diubah.
+
+`kondisiPeriode()` bertambah dua kolom (`id` dan `sumber_sah`) dan tidak lebih.
+`src/lib/ops/rules.ts` tidak disentuh sama sekali — ia tetap satu-satunya
+penilai, dan ia tetap tidak tahu-menahu soal basis data, waktu sekarang, maupun
+keabsahan sumber.

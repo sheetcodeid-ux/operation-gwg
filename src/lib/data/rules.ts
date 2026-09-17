@@ -60,6 +60,15 @@ export interface BarisSyarat {
 export interface KatalogAturan {
   /** kpi_definition_id → seluruh versi aturan untuk KPI itu. */
   perKpi: Map<string, VersiAturan[]>;
+  /**
+   * "ruleKode|versi" → `rule_versions.id`.
+   *
+   * Mesin aturannya sengaja tidak tahu-menahu soal kunci basis data — lihat
+   * `src/lib/ops/rules.ts`. Tapi Signal butuh identitas yang menunjuk tepat
+   * satu versi, dan itu `rule_versions.id`. Peta ini jembatannya, dan ia ada
+   * di lapisan data karena di sinilah kunci basis data memang boleh hidup.
+   */
+  idVersi: Map<string, number>;
   jumlahRule: number;
   jumlahVersi: number;
   jumlahSyarat: number;
@@ -84,6 +93,7 @@ const angka = (v: number | string | null): number | null => (v === null ? null :
  * └──────────────────────────────────────────────────────────────────────────┘
  */
 export function susunKatalog(rules: BarisRule[], versi: BarisVersi[], syarat: BarisSyarat[]): KatalogAturan {
+  const idVersi = new Map<string, number>();
   const syaratPerVersi = new Map<number, BarisSyarat[]>();
   for (const s of syarat) {
     const daftar = syaratPerVersi.get(s.rule_version_id) ?? [];
@@ -100,6 +110,7 @@ export function susunKatalog(rules: BarisRule[], versi: BarisVersi[], syarat: Ba
     if (!kpi) continue; // aturannya tidak aktif — versinya ikut tidak dipakai
     const s = syaratPerVersi.get(v.id) ?? [];
     jumlahSyarat += s.length;
+    idVersi.set(`${v.rule_kode}|${v.versi}`, v.id);
     const daftar = perKpi.get(kpi) ?? [];
     daftar.push({
       ruleKode: v.rule_kode,
@@ -119,7 +130,7 @@ export function susunKatalog(rules: BarisRule[], versi: BarisVersi[], syarat: Ba
     perKpi.set(kpi, daftar);
   }
 
-  return { perKpi, jumlahRule: rules.length, jumlahVersi: versi.length, jumlahSyarat };
+  return { perKpi, idVersi, jumlahRule: rules.length, jumlahVersi: versi.length, jumlahSyarat };
 }
 
 /** Seluruh aturan aktif beserta versi dan syaratnya — tiga query, sekali jalan. */
@@ -138,28 +149,43 @@ export async function bacaKatalogAturan(): Promise<KatalogAturan> {
 /* ─────────────────────────── penilaian periode ─────────────────────────── */
 
 export interface KondisiKpi {
+  /** `kpi_values.id` — BUKTI, bukan identitas. Lihat AD-14. */
+  kpiValueId: number;
   kpiDefinitionId: string;
   cakupan: string;
   cakupanId: string;
   periode: string;
   nilai: number | null;
   status: StatusNilai;
+  /**
+   * `outlets.esb_mulai` / `esb_abaikan` menandai bulan yang angka ESB-nya sudah
+   * dinyatakan salah. Angkanya tetap tersimpan dan tetap tampil; yang dijaga
+   * adalah ia tidak boleh melahirkan tuduhan (AD-14).
+   *
+   * SENGAJA tidak sampai ke `evaluasi()`: ini pernyataan tentang asal-usul
+   * data, bukan kondisi bisnis. Lapisan deteksi yang menanganinya.
+   */
+  sumberSah: boolean;
   hasil: HasilEvaluasi;
 }
 
 export interface RingkasKondisi {
   periode: string;
   baris: KondisiKpi[];
+  /** Ikut dikembalikan supaya lapisan deteksi tidak membaca katalognya dua kali. */
+  katalog: KatalogAturan;
   /** Cacah per kondisi — untuk dilaporkan apa adanya. */
   cacah: Record<string, number>;
 }
 
 interface BarisNilai {
+  id: number;
   kpi_definition_id: string;
   cakupan: string;
   cakupan_id: string | null;
   nilai: number | string | null;
   status: string;
+  sumber_sah: boolean;
 }
 
 /**
@@ -177,7 +203,7 @@ export async function kondisiPeriode(periode: string): Promise<RingkasKondisi> {
     selectAll<BarisNilai>("kpi_values", (a, b) =>
       db()
         .from("kpi_values")
-        .select("kpi_definition_id,cakupan,cakupan_id,nilai,status")
+        .select("id,kpi_definition_id,cakupan,cakupan_id,nilai,status,sumber_sah")
         .eq("periode", periode)
         .eq("skala", "bulanan")
         .eq("terkini", true)
@@ -187,12 +213,14 @@ export async function kondisiPeriode(periode: string): Promise<RingkasKondisi> {
   ]);
 
   const baris: KondisiKpi[] = nilai.map((n) => ({
+    kpiValueId: n.id,
     kpiDefinitionId: n.kpi_definition_id,
     cakupan: n.cakupan,
     cakupanId: n.cakupan_id ?? "~korporat",
     periode,
     nilai: angka(n.nilai),
     status: n.status as StatusNilai,
+    sumberSah: n.sumber_sah,
     hasil: evaluasi({
       periode,
       nilai: angka(n.nilai),
@@ -204,5 +232,5 @@ export async function kondisiPeriode(periode: string): Promise<RingkasKondisi> {
   const cacah: Record<string, number> = {};
   for (const b of baris) cacah[b.hasil.kondisi] = (cacah[b.hasil.kondisi] ?? 0) + 1;
 
-  return { periode, baris, cacah };
+  return { periode, baris, katalog, cacah };
 }

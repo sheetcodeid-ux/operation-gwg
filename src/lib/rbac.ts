@@ -20,7 +20,11 @@ export type Permission =
   // read access
   | "view_all_outlets"
   | "view_dashboard"
-  | "view_reports";
+  | "view_reports"
+  // Operational V.1 — lihat blueprint bagian 23-24. Hanya dua yang ditambahkan
+  // sekarang; izin Diagnosis/Action menyusul bersama phase-nya masing-masing.
+  | "view_operational_v1"
+  | "manage_signals";
 
 const ALL: Permission[] = [
   "manage_users",
@@ -34,6 +38,8 @@ const ALL: Permission[] = [
   "view_all_outlets",
   "view_dashboard",
   "view_reports",
+  "view_operational_v1",
+  "manage_signals",
 ];
 
 export const ROLE_PERMISSIONS: Record<Role, Permission[]> = {
@@ -46,15 +52,21 @@ export const ROLE_PERMISSIONS: Record<Role, Permission[]> = {
     "manage_complaint",
     "create_work_task",
     "create_event",
+    "view_operational_v1",
+    "manage_signals",
   ],
   // Coordinator Area only reviews/monitors their outlets — Hygiene &
   // Hospitality entry is the Supervisor's job, so no create perms for those.
+  // Coordinator Area melihat Signal outletnya sendiri — cakupannya dipersempit
+  // `scope-v1.ts`, bukan oleh izin. Mengabaikan Signal bukan haknya: itu
+  // keputusan yang menghentikan tindak lanjut, dan pemiliknya Head Operation.
   area_coordinator: [
     "create_work_task",
     "create_event",
     "manage_complaint",
     "view_dashboard",
     "view_reports",
+    "view_operational_v1",
   ],
   data_operation: ["create_work_task"],
   pos_operation: ["create_work_task"],

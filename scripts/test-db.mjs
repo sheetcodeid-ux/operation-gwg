@@ -2165,6 +2165,304 @@ function jalankanMigrasi87A() {
   }
 }
 
+/* ══════════════════ 26 · TASK #88B — lapisan Signal ══════════════════ */
+
+const MIGRASI_88 = join(AKAR, "supabase/migrations/0111_signals.sql");
+
+/** Periode terpencil khusus uji Signal — tidak bersinggungan dengan data mana pun. */
+const P88 = "2027-09";
+
+const muat = (baris) => `$muat$${JSON.stringify(baris)}$muat$::jsonb`;
+
+function jalankanMigrasi88() {
+  judul("26 · migrasi 0111_signals.sql");
+  if (!existsSync(MIGRASI_88)) throw new Error(`migrasi tidak ditemukan: ${MIGRASI_88}`);
+  sql(readFileSync(MIGRASI_88, "utf8"));
+
+  /* ── bentuk ── */
+
+  const ada = satu(`select count(*) from information_schema.tables where table_schema='public' and table_name='signals';`);
+  ok("tabel signals terpasang", Number(ada) === 1, `${ada}`);
+
+  const rls = satu(`select relrowsecurity::text from pg_class where oid='public.signals'::regclass;`);
+  ok("RLS menyala", benar(rls), rls);
+  const policy = satu(`select count(*) from pg_policies where schemaname='public' and tablename='signals';`);
+  ok("tanpa policy — menolak secara bawaan", Number(policy) === 0, `${policy} policy`);
+
+  const unik = satu(`select indexdef from pg_indexes where schemaname='public' and indexname='signals_unik';`);
+  ok("identitasnya (rule_version_id, cakupan, cakupan_id, periode, skala)",
+    unik.includes("rule_version_id, cakupan, cakupan_id, periode, skala"), unik.slice(0, 120));
+  ok("identitasnya TIDAK memuat kpi_value_id", !unik.includes("kpi_value_id"), unik.slice(0, 80));
+
+  const dihasilkan = satu(`select generation_expression from information_schema.columns where table_name='signals' and column_name='cakupan_id';`);
+  ok("cakupan_id dihasilkan dari coalesce — lubang NULL korporat tertutup",
+    dihasilkan.includes("korporat"), dihasilkan);
+
+  const pemicu = satu(`select count(*) from pg_trigger t join pg_class c on c.oid=t.tgrelid where not t.tgisinternal and c.relname='signals';`);
+  ok("pemicu immutability terpasang", Number(pemicu) === 1, `${pemicu} pemicu`);
+
+  const hakRpc = satu(`select count(*) from information_schema.routine_privileges where routine_name='gwg_deteksi_signal' and grantee in ('anon','authenticated','PUBLIC');`);
+  ok("RPC tertutup untuk anon/authenticated", Number(hakRpc) === 0, `${hakRpc} hak`);
+
+  /* ── perancah data: satu outlet, satu korporat, di periode terpencil ── */
+
+  const idVersi = Number(satu(`select id from rule_versions where rule_kode='tenaga_kerja_persen' and versi=1;`));
+  ok("versi aturan tenaga kerja ditemukan", idVersi > 0, `id ${idVersi}`);
+
+  sql(`insert into kpi_values (kpi_definition_id, cakupan, outlet_id, periode, skala, nilai, status, sumber, rumus)
+       values ('biaya.labor_pct', 'outlet', '${outletUji}', '${P88}', 'bulanan', 14.2, 'final', 'uji', 'uji')
+       on conflict do nothing;`);
+  sql(`insert into kpi_values (kpi_definition_id, cakupan, periode, skala, nilai, status, sumber, rumus)
+       values ('biaya.labor_pct', 'korporat', '${P88}', 'bulanan', 15.1, 'final', 'uji', 'uji')
+       on conflict do nothing;`);
+
+  const idOutlet = Number(satu(`select id from kpi_values where periode='${P88}' and cakupan='outlet' and terkini;`));
+  const idKorp = Number(satu(`select id from kpi_values where periode='${P88}' and cakupan='korporat' and terkini;`));
+  ok("dua baris KPI uji tersedia", idOutlet > 0 && idKorp > 0, `outlet ${idOutlet} · korporat ${idKorp}`);
+
+  const barisOutlet = (o = {}) => ({
+    boleh_sisip: true,
+    rule_version_id: idVersi,
+    cakupan: "outlet",
+    outlet_id: outletUji,
+    area_id: null,
+    periode: P88,
+    skala: "bulanan",
+    kpi_definition_id: "biaya.labor_pct",
+    kpi_value_id: idOutlet,
+    nilai_actual: 14.2,
+    nilai_ambang: 13,
+    nilai_ambang_2: null,
+    operator: "gt",
+    severity: "high",
+    status_kpi: "final",
+    kpi_value_id_terakhir: idOutlet,
+    nilai_terakhir: 14.2,
+    kondisi_terakhir: "lewat_ambang",
+    status_kpi_terakhir: "final",
+    ...o,
+  });
+
+  const barisKorp = (o = {}) => barisOutlet({
+    cakupan: "korporat",
+    outlet_id: null,
+    kpi_value_id: idKorp,
+    nilai_actual: 15.1,
+    kpi_value_id_terakhir: idKorp,
+    nilai_terakhir: 15.1,
+    ...o,
+  });
+
+  const deteksi = (baris) => JSON.parse(satu(`select gwg_deteksi_signal('${P88}', ${muat(baris)});`));
+
+  /* ── kelahiran ── */
+
+  const j1 = deteksi([barisOutlet(), barisKorp()]);
+  ok("jalan pertama melahirkan dua Signal", j1.disisipkan === 2 && j1.diperbarui === 0, JSON.stringify(j1));
+
+  const nSignal = Number(satu(`select count(*) from signals where periode='${P88}';`));
+  ok("dua baris tersimpan", nSignal === 2, `${nSignal} baris`);
+
+  const cakupanKorp = satu(`select cakupan_id from signals where periode='${P88}' and cakupan='korporat';`);
+  ok("Signal korporat ber-cakupan_id '~korporat'", cakupanKorp === "~korporat", cakupanKorp);
+
+  const bawaan = satu(`select status || '|' || kondisi_terakhir from signals where periode='${P88}' and cakupan='outlet';`);
+  ok("lahir sebagai terbuka + lewat_ambang", bawaan === "terbuka|lewat_ambang", bawaan);
+
+  /* ── IDEMPOTENSI ── */
+
+  const sidikSebelum = satu(`select md5(string_agg(id||'|'||nilai_actual::text||'|'||nilai_ambang::text||'|'||operator||'|'||severity||'|'||status_kpi||'|'||kpi_value_id::text||'|'||terdeteksi_pada::text, E'\n' order by id)) from signals where periode='${P88}';`);
+
+  const j2 = deteksi([barisOutlet(), barisKorp()]);
+  ok("jalan kedua tidak melahirkan apa pun", j2.disisipkan === 0 && j2.diperbarui === 2, JSON.stringify(j2));
+  ok("jumlahnya tetap dua", Number(satu(`select count(*) from signals where periode='${P88}';`)) === 2, "");
+
+  const sidikSesudah = satu(`select md5(string_agg(id||'|'||nilai_actual::text||'|'||nilai_ambang::text||'|'||operator||'|'||severity||'|'||status_kpi||'|'||kpi_value_id::text||'|'||terdeteksi_pada::text, E'\n' order by id)) from signals where periode='${P88}';`);
+  ok("snapshot tidak bergeser sedikit pun", sidikSesudah === sidikSebelum, `${sidikSebelum} → ${sidikSesudah}`);
+
+  /* ── DUA DETEKSI KORPORAT IDENTIK = SATU SIGNAL ── */
+
+  deteksi([barisKorp()]);
+  deteksi([barisKorp()]);
+  const nKorp = Number(satu(`select count(*) from signals where periode='${P88}' and cakupan='korporat';`));
+  ok("korporat tetap SATU walau dideteksi berkali-kali — lubang NULL tertutup", nKorp === 1, `${nKorp} baris`);
+
+  /* ── bukti berganti, identitas tetap ── */
+
+  sql(`insert into kpi_values (kpi_definition_id, cakupan, outlet_id, periode, skala, nilai, status, sumber, rumus, versi, terkini)
+       values ('biaya.labor_pct', 'outlet', '${outletUji}', '${P88}', 'bulanan', 14.4, 'final', 'uji', 'uji', 2, false);`);
+  const idBaru = Number(satu(`select id from kpi_values where periode='${P88}' and cakupan='outlet' and versi=2;`));
+
+  const j3 = deteksi([barisOutlet({ kpi_value_id: idBaru, kpi_value_id_terakhir: idBaru, nilai_terakhir: 14.4 })]);
+  ok("regenerasi KPI tidak melahirkan Signal baru", j3.disisipkan === 0 && j3.diperbarui === 1, JSON.stringify(j3));
+
+  const jejak = satu(`select kpi_value_id::text || '|' || kpi_value_id_terakhir::text || '|' || nilai_actual::text || '|' || nilai_terakhir::text from signals where periode='${P88}' and cakupan='outlet';`);
+  ok("bukti awal tetap, bukti terakhir berpindah", jejak === `${idOutlet}|${idBaru}|14.2|14.4`, jejak);
+
+  /* ── KPI membaik ── */
+
+  deteksi([barisOutlet({ boleh_sisip: false, kondisi_terakhir: "aman", nilai_terakhir: 12.1 })]);
+  const membaik = satu(`select status || '|' || kondisi_terakhir || '|' || nilai_terakhir::text || '|' || nilai_actual::text from signals where periode='${P88}' and cakupan='outlet';`);
+  ok("membaik: kondisi berubah, status TIDAK, snapshot TIDAK", membaik === "terbuka|aman|12.1|14.2", membaik);
+  ok("Signal tidak dihapus saat membaik", Number(satu(`select count(*) from signals where periode='${P88}';`)) === 2, "");
+
+  /* ── KPI memburuk ── */
+
+  deteksi([barisOutlet({ nilai_terakhir: 41 })]);
+  const memburuk = satu(`select nilai_actual::text || '|' || nilai_terakhir::text from signals where periode='${P88}' and cakupan='outlet';`);
+  ok("memburuk: snapshot tetap 14.2, pengamatan jadi 41", memburuk === "14.2|41", memburuk);
+
+  /* ── AD-14 · sumber_sah = false ── */
+
+  sql(`insert into kpi_values (kpi_definition_id, cakupan, outlet_id, periode, skala, nilai, status, sumber, rumus, sumber_sah)
+       values ('biaya.other_pct', 'outlet', '${outletUji}', '${P88}', 'bulanan', 9.9, 'final', 'uji', 'uji', false);`);
+  const idLain = Number(satu(`select id from kpi_values where periode='${P88}' and kpi_definition_id='biaya.other_pct' and terkini;`));
+  const idVersiLain = Number(satu(`select id from rule_versions where rule_kode='lainnya_persen' and versi=1;`));
+
+  const barisLain = (o = {}) => barisOutlet({
+    boleh_sisip: false,
+    rule_version_id: idVersiLain,
+    kpi_definition_id: "biaya.other_pct",
+    kpi_value_id: idLain,
+    kpi_value_id_terakhir: idLain,
+    nilai_actual: 9.9,
+    nilai_ambang: 3,
+    severity: "medium",
+    nilai_terakhir: 9.9,
+    kondisi_terakhir: "tidak_tersedia",
+    ...o,
+  });
+
+  const j4 = deteksi([barisLain()]);
+  ok("sumber tidak sah TANPA Signal existing → tidak ada yang lahir, tidak ada yang tersentuh",
+    j4.disisipkan === 0 && j4.diperbarui === 0 && j4.diamati_saja === 0, JSON.stringify(j4));
+  ok("tetap dua Signal", Number(satu(`select count(*) from signals where periode='${P88}';`)) === 2, "");
+
+  // Sekarang Signal-nya dilahirkan lebih dulu (sumbernya masih sah), baru
+  // sumbernya dinyatakan tidak sah pada jalan berikutnya.
+  deteksi([barisLain({ boleh_sisip: true, kondisi_terakhir: "lewat_ambang" })]);
+  ok("tiga Signal setelah lainnya_persen lahir", Number(satu(`select count(*) from signals where periode='${P88}';`)) === 3, "");
+
+  const j5 = deteksi([barisLain()]);
+  ok("sumber tidak sah DENGAN Signal existing → pengamatan diperbarui, tanpa baris baru",
+    j5.disisipkan === 0 && j5.diperbarui === 0 && j5.diamati_saja === 1, JSON.stringify(j5));
+
+  const lain = satu(`select status || '|' || kondisi_terakhir from signals where periode='${P88}' and kpi_definition_id='biaya.other_pct';`);
+  ok("kondisinya tidak_tersedia — BUKAN aman", lain === "terbuka|tidak_tersedia", lain);
+
+  /* ── DIABAIKAN TIDAK PERNAH DIBUKA MESIN ── */
+
+  sql(`update signals set status='diabaikan', diabaikan_oleh='u1', diabaikan_pada=now(), diabaikan_alasan='sudah ditangani di luar sistem'
+        where periode='${P88}' and cakupan='outlet' and kpi_definition_id='biaya.labor_pct';`);
+
+  deteksi([barisOutlet()]);
+  const tetap = satu(`select status || '|' || kondisi_terakhir from signals where periode='${P88}' and cakupan='outlet' and kpi_definition_id='biaya.labor_pct';`);
+  ok("diabaikan + masih melanggar → TETAP diabaikan", tetap === "diabaikan|lewat_ambang", tetap);
+
+  // diabaikan → membaik → melanggar lagi. Inilah jalur yang paling mudah
+  // melahirkan Signal kembar diam-diam.
+  deteksi([barisOutlet({ boleh_sisip: false, kondisi_terakhir: "aman", nilai_terakhir: 28 })]);
+  const sesudahAman = satu(`select status || '|' || kondisi_terakhir from signals where periode='${P88}' and cakupan='outlet' and kpi_definition_id='biaya.labor_pct';`);
+  ok("diabaikan → aman: status tetap diabaikan", sesudahAman === "diabaikan|aman", sesudahAman);
+
+  const j6 = deteksi([barisOutlet({ nilai_terakhir: 41 })]);
+  const sesudahLanggarLagi = satu(`select status || '|' || kondisi_terakhir || '|' || nilai_terakhir::text from signals where periode='${P88}' and cakupan='outlet' and kpi_definition_id='biaya.labor_pct';`);
+  ok("diabaikan → aman → melanggar lagi: TETAP diabaikan, tanpa Signal kembar",
+    j6.disisipkan === 0 && sesudahLanggarLagi === "diabaikan|lewat_ambang|41", `${JSON.stringify(j6)} · ${sesudahLanggarLagi}`);
+  ok("jumlahnya tetap tiga sepanjang seluruh urutan itu", Number(satu(`select count(*) from signals where periode='${P88}';`)) === 3, "");
+
+  const idAbai = Number(satu(`select id from signals where periode='${P88}' and status='diabaikan';`));
+  ditolak(
+    "mesin maupun manusia tidak boleh membuka kembali yang sudah diabaikan",
+    `update signals set status='terbuka', diabaikan_oleh=null, diabaikan_pada=null, diabaikan_alasan=null where id=${idAbai};`,
+    "tidak boleh dibuka kembali",
+  );
+
+  /* ── snapshot & identitas tidak bisa disunting ── */
+
+  const idUji = Number(satu(`select id from signals where periode='${P88}' and cakupan='korporat';`));
+
+  for (const [kolom, nilai] of [
+    ["rule_version_id", String(idVersiLain)],
+    ["cakupan", `'outlet'`],
+    ["periode", `'2027-10'`],
+    ["skala", `'harian'`],
+  ]) {
+    ditolak(`identitas — ${kolom} tidak boleh diubah`, `update signals set ${kolom} = ${nilai} where id=${idUji};`, "identitas signal");
+  }
+
+  for (const [kolom, nilai] of [
+    ["kpi_definition_id", `'biaya.other_pct'`],
+    ["kpi_value_id", String(idLain)],
+    ["nilai_actual", "99"],
+    ["nilai_ambang", "1"],
+    ["operator", `'lt'`],
+    ["severity", `'low'`],
+    ["status_kpi", `'sementara'`],
+    ["terdeteksi_pada", "now()"],
+  ]) {
+    ditolak(`snapshot — ${kolom} tidak boleh diubah`, `update signals set ${kolom} = ${nilai} where id=${idUji};`, "snapshot deteksi");
+  }
+
+  ditolak("signal tidak boleh dihapus", `delete from signals where id=${idUji};`, "tidak boleh dihapus");
+
+  sql(`update signals set nilai_terakhir = 17.7, kondisi_terakhir='lewat_ambang', diamati_pada=now() where id=${idUji};`);
+  ok("pengamatan BOLEH berubah", satu(`select nilai_terakhir::text from signals where id=${idUji};`) === "17.7", "");
+
+  /* ── batasan bentuk ── */
+
+  ditolak(
+    "mengabaikan tanpa alasan ditolak",
+    `update signals set status='diabaikan', diabaikan_oleh='u1', diabaikan_pada=now() where id=${idUji};`,
+    "signals_diabaikan_utuh",
+  );
+  // Ditolak dua batasan sekaligus, dan yang bicara duluan tidak ditentukan
+  // PostgreSQL. Jadi yang diuji perilakunya — ditolak — plus keberadaan
+  // batasannya secara struktural. Menuntut nama batasan tertentu di sini
+  // membuat uji ini gagal karena alasan yang salah, dan itu sama tidak
+  // berartinya dengan lolos karena alasan yang salah.
+  ditolak(
+    "keadaan kerja di luar dua yang disepakati ditolak",
+    `update signals set status='resolved' where id=${idUji};`,
+    "violates check constraint",
+  );
+  const bentukStatus = satu(`select pg_get_constraintdef(oid) from pg_constraint where conname='signals_status_check';`);
+  ok("hanya terbuka dan diabaikan yang sah", bentukStatus.includes("terbuka") && bentukStatus.includes("diabaikan")
+      && !bentukStatus.includes("resolved") && !bentukStatus.includes("acknowledged"), bentukStatus);
+  ditolak(
+    "muatan berisi periode lain ditolak",
+    `select gwg_deteksi_signal('${P88}', ${muat([barisOutlet({ periode: "2027-10" })])});`,
+    "memuat periode selain",
+  );
+
+  /* ── versi aturan berganti = Signal baru ── */
+
+  const idVersiWh = Number(satu(`select id from rule_versions where rule_kode='warehouse_persen' and versi=2;`));
+  deteksi([barisOutlet({ rule_version_id: idVersiWh, kpi_definition_id: 'biaya.warehouse_pct' })]);
+  const nAkhir = Number(satu(`select count(*) from signals where periode='${P88}';`));
+  ok("versi aturan berbeda melahirkan Signal tersendiri", nAkhir === 4, `${nAkhir} baris`);
+  ok("yang lama tetap utuh", Number(satu(`select count(*) from signals where periode='${P88}' and rule_version_id=${idVersi};`)) === 2, "");
+
+  /* ── dua panggilan dalam satu transaksi ── */
+
+  const dua = sql(`begin;
+    select gwg_deteksi_signal('${P88}', ${muat([barisOutlet()])});
+    select gwg_deteksi_signal('${P88}', ${muat([barisKorp()])});
+  commit;`);
+  ok("dua panggilan dalam satu transaksi tidak bertabrakan di tabel sementara", dua.includes("periode"), "lolos");
+
+  /* ── RLS ── */
+
+  sql(`grant select on signals to uji_anon;`);
+  const nAnon = Number(satu(`select count(*) from signals;`, { peran: "uji_anon" }));
+  ok("anon membaca NOL baris signals", nAnon === 0, `${nAnon} baris`);
+
+  /* ── KPI tidak tersentuh sama sekali ── */
+
+  const kpiUtuh = satu(`select count(*) from kpi_values where periode='${P88}';`);
+  ok("deteksi tidak menambah/menghapus satu baris KPI pun", Number(kpiUtuh) === 4, `${kpiUtuh} baris`);
+}
+
 /* ─────────────────────────── jalan ─────────────────────────── */
 
 function utama() {
@@ -2209,6 +2507,7 @@ function utama() {
     jalankanMigrasi87();
     ujiAturanTakBerubah();
     jalankanMigrasi87A();
+    jalankanMigrasi88();
   } else {
     judul("4 · isi contoh minimum");
     isiContoh();
