@@ -2,6 +2,8 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { DEFAULT_SETTINGS } from "@/lib/ops/settings-types";
+import { evaluasi } from "@/lib/ops/rules";
+import { susunKatalog, type BarisRule, type BarisSyarat, type BarisVersi } from "./rules";
 
 /**
  * LAPISAN ATURAN TIDAK BOLEH JADI SUMBER KEBENARAN KEDUA.
@@ -160,5 +162,147 @@ describe("bacaannya massal", () => {
   it("tidak ada query di dalam perulangan", () => {
     const badan = kode.slice(kode.indexOf("export async function kondisiPeriode"));
     expect(badan).not.toMatch(/for\s*\([\s\S]{0,200}db\(\)/);
+  });
+});
+
+/* ────────────────── AD-13 · aturan yang ditarik tidak menilai ────────────────── */
+
+describe("AD-13 · rule non-aktif WAJIB menghasilkan tanpa_aturan", () => {
+  /**
+   * Ambang 4/1/1 untuk listrik, air, dan internet TIDAK PERNAH jadi keputusan
+   * bisnis — ia ikut tersemai di `0109` dari prompt TASK #87. Barisnya sengaja
+   * TIDAK dihapus: `sumber`-nya yang menyebut asal-usulnya itulah jejak yang
+   * membuat penarikannya bisa ditelusuri.
+   *
+   * Karena barisnya masih ada, satu-satunya yang menahan ambang itu menilai
+   * adalah `rules.aktif`. Kalau saringan itu hilang, angka yang sudah ditarik
+   * kembali menghakimi tanpa satu pun tanda — dan kondisinya akan terbaca
+   * "aman" atau "lewat ambang" seolah pernah ada yang memutuskannya.
+   */
+  const rule = (kode: string, kpi: string, aktif: boolean): BarisRule => ({
+    kode,
+    nama: kode,
+    kpi_definition_id: kpi,
+    kategori: "biaya",
+    cakupan: "semua",
+    aktif,
+  });
+
+  const versiBaris = (id: number, kode: string): BarisVersi => ({
+    id,
+    rule_kode: kode,
+    versi: 1,
+    berlaku_mulai: "2026-08",
+    berlaku_sampai: null,
+    severity_default: "medium",
+    sumber: "TASK #87 bagian 3 — disebut pemiliknya; belum ada di op_settings",
+  });
+
+  const syaratBaris = (versionId: number, ambang: number): BarisSyarat => ({
+    rule_version_id: versionId,
+    urutan: 1,
+    operator: "gt",
+    nilai_ambang: ambang,
+    nilai_ambang_2: null,
+    skala: "bulanan",
+  });
+
+  // Persis bentuk produksi sesudah 0110: tiga ditarik, satu tetap berjalan.
+  const rules = [
+    rule("listrik_persen", "biaya.electricity_pct", false),
+    rule("air_persen", "biaya.water_pct", false),
+    rule("internet_persen", "biaya.internet_pct", false),
+    rule("warehouse_persen", "biaya.warehouse_pct", true),
+  ];
+  const versi = [versiBaris(1, "listrik_persen"), versiBaris(2, "air_persen"), versiBaris(3, "internet_persen"), versiBaris(4, "warehouse_persen")];
+  const syarat = [syaratBaris(1, 4), syaratBaris(2, 1), syaratBaris(3, 1), syaratBaris(4, 30)];
+
+  const katalog = susunKatalog(rules, versi, syarat);
+
+  it("ketiganya tidak punya satu pun versi di katalog", () => {
+    for (const kpi of ["biaya.electricity_pct", "biaya.water_pct", "biaya.internet_pct"]) {
+      expect(katalog.perKpi.get(kpi)).toBeUndefined();
+    }
+  });
+
+  it("angkanya jadi tanpa_aturan — BUKAN aman, BUKAN lewat_ambang", () => {
+    // 9% jauh di atas bekas ambang 4%, dan 0,4% jauh di bawahnya. Keduanya
+    // harus berakhir sama: belum dinilai.
+    for (const nilai of [9.2, 0.4]) {
+      const h = evaluasi({
+        periode: "2026-09",
+        nilai,
+        status: "final",
+        versi: katalog.perKpi.get("biaya.electricity_pct") ?? [],
+      });
+      expect(h.kondisi).toBe("tanpa_aturan");
+      expect(h.nilaiAmbang).toBeNull();
+      expect(h.ruleKode).toBeNull();
+      expect(h.alasan).toContain("bukan aman");
+    }
+  });
+
+  it("yang menahannya memang `aktif`, bukan ketiadaan data", () => {
+    // Versi dan syaratnya utuh di masukan — sejarahnya tidak dihapus.
+    expect(versi.filter((v) => v.rule_kode === "listrik_persen")).toHaveLength(1);
+    expect(syarat.filter((s) => s.rule_version_id === 1)[0]?.nilai_ambang).toBe(4);
+  });
+
+  it("aturan yang masih aktif tetap menilai seperti biasa", () => {
+    const wh = katalog.perKpi.get("biaya.warehouse_pct");
+    expect(wh).toHaveLength(1);
+    expect(evaluasi({ periode: "2026-09", nilai: 33, status: "final", versi: wh ?? [] }).kondisi).toBe("lewat_ambang");
+  });
+
+  it("dikukuhkan kelak = dinyalakan lagi, tanpa menyentuh sejarahnya", () => {
+    const dihidupkan = rules.map((r) => (r.kode === "listrik_persen" ? { ...r, aktif: true } : r));
+    const sesudah = susunKatalog(dihidupkan, versi, syarat);
+    const h = evaluasi({
+      periode: "2026-09",
+      nilai: 9.2,
+      status: "final",
+      versi: sesudah.perKpi.get("biaya.electricity_pct") ?? [],
+    });
+    expect(h.kondisi).toBe("lewat_ambang");
+    expect(h.nilaiAmbang).toBe(4);
+  });
+
+  it("saringan `aktif` ada di kueri DAN di perakitan", () => {
+    // Dua-duanya disengaja. Yang di kueri mengecilkan muatan; yang di
+    // perakitan yang benar-benar menjaga, dan ia yang diuji di atas.
+    expect(kode).toContain('.eq("aktif", true)');
+    expect(kode).toMatch(/rules\.filter\(\(r\) => r\.aktif\)/);
+  });
+});
+
+describe("migrasi 0110 hanya menonaktifkan", () => {
+  const m = tanpaKomentar("supabase/migrations/0110_decision_lock_87a.sql").replace(/--.*$/gm, "");
+
+  it("tidak menghapus apa pun", () => {
+    expect(m).not.toMatch(/\bdelete\b/i);
+    expect(m).not.toMatch(/\bdrop\b/i);
+  });
+
+  it("tidak menyentuh rule_versions maupun rule_conditions", () => {
+    expect(m).not.toContain("rule_versions");
+    expect(m).not.toContain("rule_conditions");
+  });
+
+  it("tidak mengubah skema, ambang, KPI, target, maupun op_settings", () => {
+    expect(m).not.toMatch(/\balter\b/i);
+    expect(m).not.toMatch(/\binsert\b/i);
+    expect(m).not.toContain("nilai_ambang");
+    for (const t of ["kpi_values", "targets", "op_settings", "op_expenses", "op_pnl", "op_purchases"]) {
+      expect(m).not.toContain(t);
+    }
+  });
+
+  it("satu-satunya pernyataannya menonaktifkan tepat tiga aturan", () => {
+    expect((m.match(/update\s+rules/gi) ?? []).length).toBe(1);
+    expect(m).toContain("set aktif   = false");
+    for (const kode of ["listrik_persen", "air_persen", "internet_persen"]) {
+      expect(m).toContain(`'${kode}'`);
+    }
+    expect(m).toContain("and aktif");
   });
 });

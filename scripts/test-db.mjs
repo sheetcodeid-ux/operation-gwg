@@ -2055,6 +2055,116 @@ function ujiAturanTakBerubah() {
   }
 }
 
+/* ══════════ 25 · TASK #87A — decision lock: aturan yang ditarik ══════════ */
+
+const MIGRASI_87A = join(AKAR, "supabase/migrations/0110_decision_lock_87a.sql");
+
+const DITARIK = ["listrik_persen", "air_persen", "internet_persen"];
+
+// Tujuh yang dikukuhkan pemiliknya. Angkanya ditulis lagi di sini dengan
+// sengaja: kalau salah satunya bergeser di migrasi tanpa keputusan baru,
+// pergeseran itu harus jatuh di sini, bukan di laporan yang sudah dibaca orang.
+const DIKUKUHKAN = [
+  ["warehouse_persen", "gt", "30", "2026-08"],
+  ["non_warehouse_persen", "gt", "5", "2026-08"],
+  ["total_pembelian_persen", "gt", "35", "2026-08"],
+  ["tenaga_kerja_persen", "gt", "13", "2026-08"],
+  ["lainnya_persen", "gt", "3", "2026-08"],
+  ["laba_bersih_persen", "lt", "30", "2026-08"],
+  ["sewa_melebihi_ambang", "gt", "5", "2026-10"],
+];
+
+function jalankanMigrasi87A() {
+  judul("25 · migrasi 0110_decision_lock_87a.sql");
+  if (!existsSync(MIGRASI_87A)) throw new Error(`migrasi tidak ditemukan: ${MIGRASI_87A}`);
+
+  // Sejarah yang harus tetap utuh sesudahnya. Dicatat SEBELUM, supaya "tidak
+  // berubah" dibuktikan, bukan dinyatakan.
+  const versiSebelum = Number(satu(`select count(*) from rule_versions;`));
+  const syaratSebelum = Number(satu(`select count(*) from rule_conditions;`));
+  const ruleSebelum = Number(satu(`select count(*) from rules;`));
+  const sidikSebelum = satu(`select md5(string_agg(v.rule_kode||'|'||v.versi||'|'||c.operator||'|'||c.nilai_ambang::text, E'\n' order by v.rule_kode, v.versi))
+                               from rule_conditions c join rule_versions v on v.id = c.rule_version_id;`);
+  sql(readFileSync(MIGRASI_87A, "utf8"));
+
+  /* ── yang ditarik benar-benar berhenti menilai ── */
+
+  for (const kode of DITARIK) {
+    const aktif = satu(`select aktif::text from rules where kode = '${kode}';`);
+    ok(`${kode} — dinonaktifkan`, !benar(aktif), aktif);
+  }
+
+  const nonaktif = satu(`select string_agg(kode, ', ' order by kode) from rules where not aktif;`);
+  ok("tepat tiga yang ditarik, tidak lebih", nonaktif === DITARIK.slice().sort().join(", "), nonaktif);
+
+  /* ── SEJARAHNYA TIDAK DIHAPUS ──
+   *
+   * Inilah yang membedakan "ditarik" dari "tidak pernah ada". Barisnya tetap
+   * bisa dibaca beserta `sumber` yang menyebut asal-usulnya — dan kalimat itu
+   * yang membuat penarikannya bisa ditelusuri bertahun-tahun kemudian. */
+
+  const versiSesudah = Number(satu(`select count(*) from rule_versions;`));
+  const syaratSesudah = Number(satu(`select count(*) from rule_conditions;`));
+  const ruleSesudah = Number(satu(`select count(*) from rules;`));
+  ok("tidak satu pun versi hilang", versiSesudah === versiSebelum, `${versiSebelum} → ${versiSesudah}`);
+  ok("tidak satu pun syarat hilang", syaratSesudah === syaratSebelum, `${syaratSebelum} → ${syaratSesudah}`);
+  ok("tidak satu pun aturan dihapus", ruleSesudah === ruleSebelum, `${ruleSebelum} → ${ruleSesudah}`);
+
+  const sidikSesudah = satu(`select md5(string_agg(v.rule_kode||'|'||v.versi||'|'||c.operator||'|'||c.nilai_ambang::text, E'\n' order by v.rule_kode, v.versi))
+                               from rule_conditions c join rule_versions v on v.id = c.rule_version_id;`);
+  ok("tidak ada satu pun ambang yang bergeser", sidikSesudah === sidikSebelum, `${sidikSebelum} → ${sidikSesudah}`);
+
+  for (const [kode, ambang] of [["listrik_persen", "4"], ["air_persen", "1"], ["internet_persen", "1"]]) {
+    const a = satu(`select c.nilai_ambang::text from rules r
+                      join rule_versions v on v.rule_kode = r.kode
+                      join rule_conditions c on c.rule_version_id = v.id
+                     where r.kode = '${kode}';`);
+    ok(`${kode} — ambang ${ambang} masih terbaca, cuma tidak berlaku`, a === ambang, a);
+  }
+
+  const sumberJujur = satu(`select count(*) from rules r join rule_versions v on v.rule_kode = r.kode
+                             where not r.aktif and v.sumber like '%TASK #87%';`);
+  ok("sumbernya tetap menyebut asal-usulnya", Number(sumberJujur) === 3, `${sumberJujur} versi`);
+
+  /* ── yang dikukuhkan tidak tersentuh ── */
+
+  for (const [kode, operator, ambang, mulai] of DIKUKUHKAN) {
+    const b = satu(`select r.aktif::text || '|' || c.operator || '|' || c.nilai_ambang::text || '|' || v.berlaku_mulai
+                      from rules r
+                      join rule_versions v on v.rule_kode = r.kode and v.versi = 1
+                      join rule_conditions c on c.rule_version_id = v.id
+                     where r.kode = '${kode}';`);
+    ok(`${kode} — tetap aktif, ${operator} ${ambang}, mulai ${mulai}`, b === `true|${operator}|${ambang}|${mulai}`, b);
+  }
+
+  // `op_settings` tidak ada di perancah lokal — ia diverifikasi langsung di
+  // produksi. Yang bisa dijamin di sini justru yang lebih kuat: perintah
+  // migrasinya tidak menyebut satu pun tabel itu. Komentarnya dibuang dulu;
+  // di sanalah nama-nama tabel itu memang disebut, dan menyebut bukan
+  // menyentuh.
+  const perintah = readFileSync(MIGRASI_87A, "utf8").replace(/--.*$/gm, "");
+  for (const t of ["op_settings", "kpi_values", "targets", "rule_versions", "rule_conditions", "op_expenses", "op_pnl", "op_purchases"]) {
+    ok(`migrasi tidak menyentuh ${t}`, !perintah.includes(t), "");
+  }
+  for (const p of [/\bdelete\b/i, /\bdrop\b/i, /\balter\b/i, /\binsert\b/i]) {
+    ok(`migrasi tidak memuat ${String(p).slice(3, -4)}`, !p.test(perintah), "");
+  }
+
+  /* ── KPI yang tidak punya aturan aktif ──
+   *
+   * Empat yang memang belum pernah punya, ditambah tiga yang baru ditarik.
+   * `tanpa_aturan` adalah hasil yang sah; yang tidak sah adalah menyebutnya
+   * aman. */
+
+  for (const kpi of ["biaya.electricity_pct", "biaya.water_pct", "biaya.internet_pct",
+                     "biaya.cleaning_pct", "biaya.platform_fee_pct", "biaya.pbjt_pct",
+                     "sales.achievement", "sales.gross_sales", "sales.net_sales",
+                     "sales.average_transaction", "sales.monthly_target"]) {
+    const n = satu(`select count(*) from rules where kpi_definition_id = '${kpi}' and aktif;`);
+    ok(`${kpi} — tanpa aturan aktif`, Number(n) === 0, `${n} aturan`);
+  }
+}
+
 /* ─────────────────────────── jalan ─────────────────────────── */
 
 function utama() {
@@ -2098,6 +2208,7 @@ function utama() {
     ujiFinalisasiUtuh();
     jalankanMigrasi87();
     ujiAturanTakBerubah();
+    jalankanMigrasi87A();
   } else {
     judul("4 · isi contoh minimum");
     isiContoh();

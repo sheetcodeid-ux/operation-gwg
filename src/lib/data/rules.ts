@@ -29,7 +29,7 @@ import type { StatusNilai } from "@/lib/ops/kpi-sales";
 
 /* ─────────────────────────── pembacaan aturan ─────────────────────────── */
 
-interface BarisRule {
+export interface BarisRule {
   kode: string;
   nama: string;
   kpi_definition_id: string;
@@ -38,7 +38,7 @@ interface BarisRule {
   aktif: boolean;
 }
 
-interface BarisVersi {
+export interface BarisVersi {
   id: number;
   rule_kode: string;
   versi: number;
@@ -48,7 +48,7 @@ interface BarisVersi {
   sumber: string;
 }
 
-interface BarisSyarat {
+export interface BarisSyarat {
   rule_version_id: number;
   urutan: number;
   operator: string;
@@ -67,16 +67,23 @@ export interface KatalogAturan {
 
 const angka = (v: number | string | null): number | null => (v === null ? null : Number(v));
 
-/** Seluruh aturan aktif beserta versi dan syaratnya — tiga query, sekali jalan. */
-export async function bacaKatalogAturan(): Promise<KatalogAturan> {
-  if (!dbEnabled) throw new Error("basis data tidak aktif");
-
-  const [rules, versi, syarat] = await Promise.all([
-    selectAll<BarisRule>("rules", (a, b) => db().from("rules").select("*").eq("aktif", true).order("kode").range(a, b)),
-    selectAll<BarisVersi>("rule_versions", (a, b) => db().from("rule_versions").select("*").order("id").range(a, b)),
-    selectAll<BarisSyarat>("rule_conditions", (a, b) => db().from("rule_conditions").select("*").order("id").range(a, b)),
-  ]);
-
+/**
+ * Merangkai katalog dari baris mentah — MURNI, supaya perilakunya bisa diuji.
+ *
+ * ┌─ ATURAN NON-AKTIF TIDAK IKUT, DAN ITU YANG DIJAGA DI SINI ───────────────┐
+ * │                                                                          │
+ * │ Penyaringannya sengaja ADA DI DUA TEMPAT: kueri `rules` sudah meminta    │
+ * │ `aktif = true` supaya muatannya kecil, dan fungsi ini menyaring lagi.    │
+ * │ Kelebihan yang disengaja — kalau kelak seseorang menghapus `.eq()` itu   │
+ * │ demi menampilkan aturan non-aktif di layar pengaturan, ambang yang sudah │
+ * │ ditarik TIDAK ikut hidup lagi diam-diam.                                 │
+ * │                                                                          │
+ * │ Yang ditarik hari ini: `listrik_persen`, `air_persen`, `internet_persen` │
+ * │ (AD-13). Versi dan syaratnya masih ada di basis data — memang begitu     │
+ * │ maksudnya — jadi tanpa saringan ini ambang 4/1/1 akan tetap menilai.     │
+ * └──────────────────────────────────────────────────────────────────────────┘
+ */
+export function susunKatalog(rules: BarisRule[], versi: BarisVersi[], syarat: BarisSyarat[]): KatalogAturan {
   const syaratPerVersi = new Map<number, BarisSyarat[]>();
   for (const s of syarat) {
     const daftar = syaratPerVersi.get(s.rule_version_id) ?? [];
@@ -84,7 +91,7 @@ export async function bacaKatalogAturan(): Promise<KatalogAturan> {
     syaratPerVersi.set(s.rule_version_id, daftar);
   }
 
-  const kpiPerRule = new Map(rules.map((r) => [r.kode, r.kpi_definition_id]));
+  const kpiPerRule = new Map(rules.filter((r) => r.aktif).map((r) => [r.kode, r.kpi_definition_id]));
   const perKpi = new Map<string, VersiAturan[]>();
   let jumlahSyarat = 0;
 
@@ -113,6 +120,19 @@ export async function bacaKatalogAturan(): Promise<KatalogAturan> {
   }
 
   return { perKpi, jumlahRule: rules.length, jumlahVersi: versi.length, jumlahSyarat };
+}
+
+/** Seluruh aturan aktif beserta versi dan syaratnya — tiga query, sekali jalan. */
+export async function bacaKatalogAturan(): Promise<KatalogAturan> {
+  if (!dbEnabled) throw new Error("basis data tidak aktif");
+
+  const [rules, versi, syarat] = await Promise.all([
+    selectAll<BarisRule>("rules", (a, b) => db().from("rules").select("*").eq("aktif", true).order("kode").range(a, b)),
+    selectAll<BarisVersi>("rule_versions", (a, b) => db().from("rule_versions").select("*").order("id").range(a, b)),
+    selectAll<BarisSyarat>("rule_conditions", (a, b) => db().from("rule_conditions").select("*").order("id").range(a, b)),
+  ]);
+
+  return susunKatalog(rules, versi, syarat);
 }
 
 /* ─────────────────────────── penilaian periode ─────────────────────────── */

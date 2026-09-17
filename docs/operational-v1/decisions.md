@@ -817,3 +817,105 @@ Menyebutnya aman berarti mengklaim ia sudah dinilai dan lolos.
 
 `marginBands` memuat `sehat 30`, `cukup 29`, `kritis 15`, yang menyisakan rentang
 15–29 tanpa nama. Hanya batas sehat yang dipakai; pita tengahnya tidak dikarang.
+
+---
+
+## AD-13 · TASK #87A — decision lock: yang dikukuhkan, yang ditunda
+
+Audit #87A menelusuri setiap KPI yang belum punya aturan dan mencari sumber
+berwenangnya di dalam repositori. Hasilnya dibawa ke pemiliknya, dan pada
+**17 September 2026** ia mengunci tiga belas keputusan sekaligus.
+
+Yang dicari adalah **kondisi bisnis**, bukan rumus. `achievement = net ÷ target`
+adalah rumus dan ia sudah ada. "Achievement di atas 100% berarti aman" adalah
+kondisi bisnis, dan kalimat itu tidak ada di mana pun.
+
+### Tujuh yang dikukuhkan
+
+| Aturan | Operator | Ambang | Berlaku | Sumber |
+|---|---|---|---|---|
+| `warehouse_persen` | `gt` | 30 | 2026-08 | `op_settings.purchaseLimits.warehouse` |
+| `non_warehouse_persen` | `gt` | 5 | 2026-08 | `op_settings.purchaseLimits.nonWarehouse` |
+| `total_pembelian_persen` | `gt` | 35 | 2026-08 | `op_settings.purchaseLimits.total` |
+| `tenaga_kerja_persen` | `gt` | 13 | 2026-08 | `op_settings.expenseThresholds.tenaga_kerja` |
+| `lainnya_persen` | `gt` | 3 | 2026-08 | `op_settings.expenseThresholds.lainnya` |
+| `laba_bersih_persen` | `lt` | 30 | 2026-08 | `op_settings.marginBands.sehat` |
+| `sewa_melebihi_ambang` | `gt` | 5 | 2026-10 | AD-02 |
+
+**Net Profit tetap dua keadaan.** `marginBands.cukup = 29` dan
+`kritis = 15` TIDAK dijadikan aturan; rentang 15–29 tetap tanpa nama, dan
+`op_settings.marginBands` tidak diubah. Menamai pita yang belum diputuskan
+berarti mengarang tiga kelas dari angka yang cuma menyediakan satu batas.
+
+### Tiga yang ditarik — listrik, air, internet
+
+Ambang **4% / 1% / 1%** ikut tersemai di `0109` dengan `sumber` yang jujur
+menyebut asalnya: prompt TASK #87. Audit menegaskan angka itu tidak ada di
+`op_settings`, tidak ada di `blueprint.md`, tidak ada di `decisions.md`.
+Keputusannya **TUNDA** — tidak ada ambang resmi.
+
+**Ditarik dengan `rules.aktif = false`, bukan dihapus.** `rule_versions` dan
+`rule_conditions` tidak disentuh sama sekali. Alasannya tiga:
+
+1. `DELETE` ditolak pemicu, dan memang seharusnya — sejarah tidak dihapus.
+2. Menutup `berlaku_sampai` akan menyatakan "sah dari 2026-08 sampai X",
+   padahal ia tidak pernah sah sehari pun. Itu menulis sejarah yang keliru.
+3. Barisnya yang tetap ada — beserta kalimat `sumber` yang menyebut asal-usulnya
+   — justru satu-satunya jejak bahwa angka itu pernah ada dan ditarik.
+
+`bacaKatalogAturan()` menyaring `aktif`, jadi ketiga KPI itu kembali
+`tanpa_aturan`. Pengukuhan kelak lewat jalur normal: kalau 4/1/1 yang disetujui,
+cukup dinyalakan lagi; kalau angka lain, ia jadi v2 dan rentang v1 ditutup.
+
+**Tidak ada satu pun hasil penilaian yang berubah hari ini.** Seluruh 354 baris
+Electricity/Water/Internet di Agustus dan September berstatus `tidak_tersedia` —
+`op_expenses.utilitas` masih satu kolom tunggal (AD-03), jadi ketiga ambang itu
+belum pernah menilai satu angka pun. Yang ditutup adalah masa depan: begitu
+kolom utilitas dipecah, angka yang tidak pernah dikukuhkan itu akan langsung
+mulai menghakimi.
+
+### HPP — 40% tidak dipindahkan
+
+`indikator.ts:531` memang memuat `hpp: { jenis: "tetap", nilai: 40 }`, dan angka
+itu hidup di produksi lewat `tabel-monitor.tsx:603`. Tapi ia melekat pada
+`hpp_area`:
+
+```
+hpp_area      = Σ kpi_outlet_bulanan.hpp_nominal ÷ Σ grossOutlet
+biaya.hpp_pct = op_pnl.hpp                       ÷ sales-fact
+```
+
+Pembilang dan penyebutnya dua-duanya berbeda — jebakan yang sama yang sudah
+ditandai AD-08 untuk `hpp_kpk`. Memindahkan 40% ke `biaya.hpp_pct` berarti
+menilai sebuah rasio dengan ambang yang dibuat untuk rasio lain.
+**`biaya.hpp_pct` tetap `tanpa_aturan`.** Rumus KPI HPP tidak diubah.
+
+### Delapan lain yang tetap tanpa aturan
+
+**Cleaning**, **Platform Fee**, **PBJT** — tidak ada sumber berwenang. Cleaning
+TIDAK memakai ambang `lainnya`; ia KPI tersendiri. PBJT TIDAK disamakan dengan
+HPP.
+
+**Sales Achievement**, **Gross Sales**, **Net Sales**, **Average Transaction** —
+ditunda. Dua kandidat sumber diperiksa dan **ditolak**, supaya tidak ada yang
+terpakai diam-diam:
+
+- `pencairan.ts:28-29` `AMBANG_PENUH = 86` / `AMBANG_SEPARUH = 62` — itu ambang
+  **pencairan payroll atas skor divisi**, bukan ambang KPI.
+- `blueprint.md:465-467` `≥100 / 50–100 / <50` — itu milik **Impact** (bagian 16,
+  Phase 10), bukan pita KPI.
+
+**`sales.monthly_target`** dikukuhkan sebagai **target, bukan kondisi**. Ia tidak
+pernah dievaluasi sebagai syarat aturan.
+
+### Prinsipnya
+
+```
+NO RULE → NO CONDITION → NO SIGNAL
+```
+
+Tujuh aturan aktif, dua belas KPI `tanpa_aturan`. Signal, kalau dibangun nanti,
+hanya boleh berpijak pada tujuh itu. `tanpa_aturan` adalah hasil yang sah; yang
+tidak sah adalah menyebutnya aman.
+
+**Operational V.1 belum final.**
