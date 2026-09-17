@@ -76,7 +76,7 @@ SUBMITTED → VERIFICATION → IMPACT_WAIT → SUCCESS / PARTIAL / FAILED / INCO
 | 1 | Fondasi: scope, waktu, aturan baca sales, gerbang kelengkapan | **selesai** |
 | 2A | KPI Sales + Target: tabel, layanan hitung, backfill Agustus 2026 | **selesai** — tabel terpasang di produksi, Agustus 2026 terisi dan terverifikasi |
 | 2A+ | Jalur tulis berulang (cron/rute) supaya bulan berikutnya terisi sendiri | **belum dikerjakan** |
-| 2B | KPI biaya: PBJT dan platform fee | menunggu keputusan pemilik (nomor 7 & 8) |
+| 2B | Unggah data finansial: rincian utilitas, PBJT, platform fee, jejak unggahan | **siap ditinjau** — schema + unggah selesai, KPI-nya belum |
 | 3 | Rule Engine | |
 | 4 | Signal | |
 | 5 | **Command Center** ← nilai terlihat pertama kali | |

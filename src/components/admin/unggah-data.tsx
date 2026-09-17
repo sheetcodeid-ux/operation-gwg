@@ -6,7 +6,7 @@ import { ChevronLeft, ChevronRight, Download, FileUp, Loader2, Save } from "luci
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { simpanUnggahAction } from "@/lib/actions/unggah-data";
-import { TEMPLATE, bacaBarisUnggah, judulKolom, type BarisUnggah } from "@/lib/ops/template-unggah";
+import { KOL_BOLEH_KOSONG, TEMPLATE, bacaBarisUnggah, judulKolom, kunciKembar, type BarisUnggah } from "@/lib/ops/template-unggah";
 import { formatNumber } from "@/lib/utils";
 
 /**
@@ -43,7 +43,17 @@ export interface BarisAwal {
   angka: Record<string, number | null>;
 }
 
-export function UnggahData({ month, awal }: { month: string; awal: BarisAwal[] }) {
+/** Satu baris riwayat unggahan — bentuknya mengikuti `ops-batch`. */
+export interface RiwayatUnggah {
+  id: number;
+  jumlahOutlet: number;
+  status: string;
+  olehNama: string;
+  catatan: string | null;
+  dibuatPada: string;
+}
+
+export function UnggahData({ month, awal, riwayat = [] }: { month: string; awal: BarisAwal[]; riwayat?: RiwayatUnggah[] }) {
   const router = useRouter();
   const pathname = usePathname();
   const [baris, setBaris] = React.useState<BarisUnggah[] | null>(null);
@@ -91,6 +101,15 @@ export function UnggahData({ month, awal }: { month: string; awal: BarisAwal[] }
         return toast.error(`Tidak ada baris yang terbaca — pastikan kolom "${t.kunci}" terisi. Pakai template dari sini.`);
       }
       if (tanpaKunci > 0) toast.info(`${tanpaKunci} baris tanpa ${t.kunci} dilewati.`);
+      // Kode kembar ditolak DI SINI, sebelum apa pun terlihat siap disimpan.
+      // Menyimpan yang terakhir membuat separuh angkanya hilang diam-diam.
+      const kembar = kunciKembar(terbaca);
+      if (kembar.length > 0) {
+        setBaris(null);
+        return toast.error(
+          `${kembar.length} kode outlet muncul dua kali: ${kembar.slice(0, 5).join(", ")}${kembar.length > 5 ? "…" : ""}. Perbaiki Excel-nya dulu.`,
+        );
+      }
       setBaris(terbaca);
       // Belum tersimpan, dan itu disengaja: berkas yang salah harus sempat
       // terlihat di layar sebelum menimpa angka yang sudah benar.
@@ -117,7 +136,20 @@ export function UnggahData({ month, awal }: { month: string; awal: BarisAwal[] }
         // kemudian bahwa angkanya tidak pernah masuk.
         toast.error(`${res.asing.length} baris dilewati karena kodenya tidak dikenali: ${res.asing.slice(0, 3).join(", ")}${res.asing.length > 3 ? "…" : ""}`);
       }
+      if (res.kembar?.length) {
+        toast.error(`Kode kembar: ${res.kembar.slice(0, 5).join(", ")}`);
+        return;
+      }
+      if (res.sudahPernah) {
+        // Bukan galat, dan bukan keberhasilan palsu: berkasnya memang sudah
+        // masuk, dan tidak ada satu angka pun yang berubah.
+        toast.info(`Berkas ini sudah pernah diunggah untuk bulan ini — tidak ada yang berubah.`);
+        setBaris(null);
+        router.refresh();
+        return;
+      }
       if (res.dilewati) toast.info(`${res.dilewati} outlet dilewati karena seluruh angkanya kosong.`);
+      if (res.dirinci) toast.info(`${res.dirinci} outlet utilitasnya dihitung dari rincian Listrik/Air/Internet/Kebersihan.`);
       toast.success(`${res.tersimpan} outlet tersimpan — masuk ke ${res.tujuan?.length ?? 0} tempat.`);
       setBaris(null);
       router.refresh();
@@ -169,6 +201,38 @@ export function UnggahData({ month, awal }: { month: string; awal: BarisAwal[] }
           yang SUDAH tersimpan bulan itu — jadi terlihat apa yang akan ditimpa,
           bukan kotak kosong yang tidak mengatakan apa-apa. */}
       <Pratinjau baris={baris ?? awal} />
+
+      <Riwayat baris={riwayat} />
+    </div>
+  );
+}
+
+/**
+ * Riwayat unggahan bulan itu.
+ *
+ * Sebelum ini tidak ada jejak sama sekali — satu-satunya penanda `updated_at`,
+ * yang tidak mengatakan siapa, berapa baris, atau berkas yang mana. Kalau
+ * angkanya berubah dan tidak ada yang mengaku mengubahnya, tidak ada tempat
+ * untuk memeriksanya.
+ */
+function Riwayat({ baris }: { baris: RiwayatUnggah[] }) {
+  if (baris.length === 0) return null;
+  const waktu = (s: string) =>
+    new Date(s).toLocaleString("id-ID", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" });
+  return (
+    <div className="card-gradient rounded-2xl p-4">
+      <p className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Riwayat Unggahan</p>
+      <ul className="space-y-1.5 text-sm">
+        {baris.map((r) => (
+          <li key={r.id} className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
+            <span className="tabular-nums text-muted-foreground">{waktu(r.dibuatPada)}</span>
+            <span className="font-medium text-foreground">{r.olehNama || "—"}</span>
+            <span className="text-muted-foreground">· {r.jumlahOutlet} outlet</span>
+            {r.status !== "tersimpan" && <span className="text-destructive">· {r.status}</span>}
+            {r.catatan && <span className="text-muted-foreground">· {r.catatan}</span>}
+          </li>
+        ))}
+      </ul>
     </div>
   );
 }
@@ -214,6 +278,10 @@ function Pratinjau({ baris }: { baris: BarisUnggah[] }) {
               <th
                 key={k}
                 className="whitespace-nowrap border-b border-border bg-muted px-3 py-2 text-right text-[11px] font-semibold uppercase tracking-wide text-muted-foreground"
+                // Kolom yang boleh kosong disebut di judulnya. Yang mengisi
+                // berhak tahu mana yang kosongnya tersimpan sebagai kosong dan
+                // mana yang mau tak mau jadi nol.
+                title={KOL_BOLEH_KOSONG.includes(k) ? `${k} — boleh dikosongkan, tersimpan kosong` : k}
               >
                 {k}
               </th>

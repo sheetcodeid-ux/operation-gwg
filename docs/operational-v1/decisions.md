@@ -423,3 +423,82 @@ September 2026 dan seterusnya **tidak akan terisi sendiri**.
 Membangunnya butuh satu rute yang berjalan di server dengan service role —
 pekerjaan kecil, tapi pekerjaan yang belum dilakukan, dan menyebutnya selesai
 sekarang berarti seseorang akan menunggu angka yang tidak akan pernah datang.
+
+---
+
+## AD-07 · PHASE 2B — unggah data finansial
+
+Dikunci pemiliknya 17 September 2026, sesudah audit pra-terbang.
+
+### Nomor 7 dan 8 — TERJAWAB
+
+| | Keputusan |
+|---|---|
+| **PBJT** | Kolom **baru** `op_expenses.pbjt`. Diperlakukan sebagai **beban operasional**: Pendapatan − HPP − Beban(termasuk PBJT) = Laba. Tidak ada tafsir akuntansi pajak lain di phase ini |
+| **Platform fee** | Kolom **baru** `op_expenses.platform_fee`. Belum pernah ada sebelumnya |
+| **`ongkos_kirim`** | **Bukan** platform fee. Field finansial tersendiri sesuai laporan keuangan, tetap seperti apa adanya |
+
+### Yang TIDAK dilakukan, dan itu yang terpenting
+
+**Tidak ada reklasifikasi historis.** `lainnya`, `ongkos_kirim`, dan `potongan`
+tetap di tempatnya. Tidak satu rupiah pun dipindahkan ke `platform_fee` atau
+`pbjt`.
+
+Keduanya mulai terisi ketika penggunanya mengisinya — bukan ditebak dari data
+lama. Sebabnya: tidak ada yang bisa memastikan bagian mana dari Rp 994.759.528
+di `lainnya` yang sebenarnya komisi platform, dan menebaknya berarti menulis
+ulang laporan keuangan yang sudah ditutup.
+
+Risiko yang diterima sadar: sampai ada bulan yang mengisi `platform_fee`, biaya
+yang sama mungkin masih tercatat di `lainnya`. Perbandingan antar bulan harus
+membaca catatan ini lebih dulu.
+
+### Utilitas — satu angka, dua asal
+
+`utilitas` TETAP ADA dan tetap berarti total. Yang berubah asalnya:
+
+| Baris | `utilitas` | Rincian |
+|---|---|---|
+| Historis (128 baris, Rp 1.390.752.683) | angka agregat apa adanya | **NULL** — belum pernah ada |
+| V.1 | **listrik + air + internet + kebersihan** | diisi penggunanya |
+
+Kolom "Utilitas" tetap ada di template demi berkas lama, tapi **bukan lagi
+sumber**: begitu satu rincian terisi, angka ketikan diabaikan.
+
+**Yang dijaga uji:** empat kolom rincian TIDAK ikut dijumlah ke total beban —
+mereka sudah ada di dalam `utilitas`. Menjumlahkan keduanya membuat tiap rupiah
+listrik dihitung dua kali, dan hasilnya tetap terlihat wajar di layar.
+
+### NULL versus 0 — batas yang diterima
+
+| | NULL ≠ 0 |
+|---|---|
+| 6 kolom baru | ✅ nullable |
+| **14** kolom angka lama | ❌ `not null default 0` sejak `0017_op_finance.sql` |
+
+**KOREKSI.** Laporan pra-terbang menyebut "11 kolom existing". Yang benar
+**14**: delapan di `op_expenses`, dua di `op_purchases`, empat di `op_pnl`.
+Angkanya sekarang dihitung uji, bukan diingat.
+
+Keterbatasan ini **tidak diperbaiki** di phase ini — mengubahnya berarti
+menyentuh empat belas kolom yang sedang dipakai. Akibatnya harus diingat siapa
+pun yang membaca angka lama: **0 pada kolom lama tidak berarti benar-benar
+nol.** Ia bisa berarti belum dilaporkan.
+
+### Duplikat dan idempotensi
+
+| Keadaan | Perlakuan |
+|---|---|
+| Kode outlet kembar dalam **satu berkas** | **DITOLAK**, kodenya disebutkan. Bukan "yang terakhir menang" |
+| Berkas **sama** diunggah ulang | Dikenali lewat sidik isi, tidak ditulis ulang, dilaporkan apa adanya |
+| Unggahan **gagal** | Boleh diulang — index uniknya hanya menjaga yang berstatus tersimpan |
+
+Sidiknya dihitung dari isi berkas setelah diurutkan, bukan dari berkas mentah:
+Excel gemar mengubah urutan baris tanpa mengubah satu angka pun.
+
+### Rent 5%
+
+Belum disimpan di mana pun. `op_settings.sewa` tetap 3 dan tidak disentuh.
+Angka 5 **tidak ditulis** di berkas mana pun — rule versioning-nya Phase 3,
+dan menyebarkannya sekarang berarti tetapan yang harus dicari di banyak tempat
+saat hendak diubah.

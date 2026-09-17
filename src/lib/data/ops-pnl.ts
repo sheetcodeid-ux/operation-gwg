@@ -20,7 +20,7 @@ export async function listPnl(month: string): Promise<PnlRow[]> {
   });
 }
 
-export async function upsertPnl(month: string, rows: PnlRow[]): Promise<number> {
+export async function upsertPnl(month: string, rows: PnlRow[], batchId?: number | null): Promise<number> {
   const clean = rows.filter((r) => r.outletCode.trim());
   if (!dbEnabled) {
     for (const r of clean) mem.set(`${month}|${r.outletCode}`, r);
@@ -34,6 +34,7 @@ export async function upsertPnl(month: string, rows: PnlRow[]): Promise<number> 
       updated_at: new Date().toISOString(),
     };
     for (const c of PNL_COLS) o[c] = r[c] || 0;
+    if (batchId != null) o.batch_id = batchId;
     return o;
   });
   for (let i = 0; i < payload.length; i += 500) {

@@ -120,6 +120,16 @@ function ditolak(nama, perintah, pola) {
 
 const satu = (perintah, opsi) => sql(perintah, opsi).split("\n")[0] ?? "";
 
+/**
+ * Jawaban boolean dari psql.
+ *
+ * `boolean::text` menghasilkan "true"/"false", sedangkan psql menampilkan tipe
+ * boolean apa adanya sebagai "t"/"f". Membandingkan dengan salah satunya saja
+ * membuat uji GAGAL padahal basis datanya benar — dan gagal karena alasan yang
+ * salah sama membingungkannya dengan lulus karena alasan yang salah.
+ */
+const benar = (jawab) => jawab === "t" || jawab === "true";
+
 /* ─────────────────────────── 1 · klaster ─────────────────────────── */
 
 function pastikanHidup() {
@@ -201,6 +211,46 @@ create table seasonal_daily (
   primary key (day, branch)
 );
 
+-- Bentuk LAMA persis seperti 0017_op_finance.sql: sebelas kolom angka
+-- not-null-default-nol. Itulah keterbatasan yang diuji, bukan diperbaiki.
+create table op_expenses (
+  month         text not null,
+  outlet_code   text not null,
+  outlet_name   text not null default '',
+  utilitas      numeric not null default 0,
+  sewa          numeric not null default 0,
+  tenaga_kerja  numeric not null default 0,
+  potongan      numeric not null default 0,
+  manajemen_fee numeric not null default 0,
+  pemasaran     numeric not null default 0,
+  ongkos_kirim  numeric not null default 0,
+  lainnya       numeric not null default 0,
+  updated_at    timestamptz not null default now(),
+  primary key (month, outlet_code)
+);
+
+create table op_purchases (
+  month         text not null,
+  outlet_code   text not null,
+  outlet_name   text not null default '',
+  warehouse     numeric not null default 0,
+  non_warehouse numeric not null default 0,
+  updated_at    timestamptz not null default now(),
+  primary key (month, outlet_code)
+);
+
+create table op_pnl (
+  month        text not null,
+  outlet_code  text not null,
+  outlet_name  text not null default '',
+  pendapatan   numeric not null default 0,
+  hpp          numeric not null default 0,
+  beban        numeric not null default 0,
+  laba_bersih  numeric not null default 0,
+  updated_at   timestamptz not null default now(),
+  primary key (month, outlet_code)
+);
+
 create table esb_net_bulanan (
   branch text not null,
   periode text not null,
@@ -215,7 +265,7 @@ function perancah() {
   judul("2 · perancah tabel yang ditunjuk migrasi");
   sql(PERANCAH);
   const n = satu(`select count(*) from information_schema.tables where table_schema='public';`);
-  ok("tabel penunjuk berdiri", Number(n) === 5, `${n} tabel`);
+  ok("tabel penunjuk berdiri", Number(n) === 8, `${n} tabel`);
   const tipe = satu(`select data_type from information_schema.columns where table_name='outlets' and column_name='id';`);
   ok("outlets.id bertipe text, seperti produksi", tipe === "text", tipe);
 }
@@ -894,6 +944,190 @@ function bersihkan() {
   ok("basis data uji dihancurkan", Number(sisa) === 0);
 }
 
+
+/* ══════════════ 8 · PHASE 2B — rincian beban, kolom baru, jejak unggahan ══════════════ */
+
+const MIGRASI_2B = join(AKAR, "supabase/migrations/0104_beban_rinci_dan_batch.sql");
+
+/**
+ * Baris beban bergaya LAMA — persis bentuk 174 baris yang sudah ada di
+ * produksi: delapan kolom, tanpa satu pun kolom baru.
+ *
+ * Dimasukkan SEBELUM migrasi 0104 dijalankan. Itulah intinya: yang diuji bukan
+ * "apakah kolom barunya ada", melainkan "apakah baris lama selamat, dan apakah
+ * kolom barunya NULL — bukan nol".
+ */
+function bebanLamaSebelumMigrasi() {
+  sql(`
+    insert into op_expenses (month, outlet_code, outlet_name, utilitas, sewa, tenaga_kerja, potongan, manajemen_fee, pemasaran, ongkos_kirim, lainnya)
+    values
+      ('2026-08', 'LAMA1', 'Outlet Lama Satu', 1000000, 500000, 2000000, 100000, 300000, 50000, 70000, 400000),
+      ('2026-08', 'LAMA2', 'Outlet Lama Dua',  2000000,      0, 3000000,      0,      0,     0,     0,       0);
+    insert into op_purchases (month, outlet_code, outlet_name, warehouse, non_warehouse)
+      values ('2026-08', 'LAMA1', 'Outlet Lama Satu', 50000000, 2000000);
+    insert into op_pnl (month, outlet_code, outlet_name, pendapatan, hpp, beban, laba_bersih)
+      values ('2026-08', 'LAMA1', 'Outlet Lama Satu', 0, 20000000, 4420000, 9000000);
+  `);
+}
+
+function jalankanMigrasi2B() {
+  judul("8 · migrasi 0104_beban_rinci_dan_batch.sql");
+  if (!existsSync(MIGRASI_2B)) throw new Error(`migrasi tidak ditemukan: ${MIGRASI_2B}`);
+
+  const sebelum = sql(
+    `select utilitas || '|' || sewa || '|' || tenaga_kerja || '|' || potongan || '|' || manajemen_fee || '|' || pemasaran || '|' || ongkos_kirim || '|' || lainnya
+     from op_expenses where month='2026-08' order by outlet_code;`,
+  );
+
+  sql(readFileSync(MIGRASI_2B, "utf8"));
+
+  const kolom = sql(
+    `select column_name || ':' || is_nullable from information_schema.columns
+     where table_name='op_expenses' and column_name in ('listrik','air','internet','kebersihan','platform_fee','pbjt','batch_id') order by 1;`,
+  ).split("\n");
+  ok("enam kolom beban baru + batch_id lahir", kolom.length === 7, `${kolom.length} kolom`);
+  ok("seluruhnya NULL-able", kolom.every((k) => k.endsWith(":YES")), kolom.join(" "));
+
+  // ── inilah yang paling penting: baris lama tidak berubah sedikit pun ──
+  const sesudah = sql(
+    `select utilitas || '|' || sewa || '|' || tenaga_kerja || '|' || potongan || '|' || manajemen_fee || '|' || pemasaran || '|' || ongkos_kirim || '|' || lainnya
+     from op_expenses where month='2026-08' order by outlet_code;`,
+  );
+  ok("delapan kolom lama TIDAK berubah satu angka pun", sebelum === sesudah, sebelum.replace(/\n/g, " · "));
+
+  const nul = satu(
+    `select count(*) from op_expenses
+     where listrik is null and air is null and internet is null and kebersihan is null and platform_fee is null and pbjt is null;`,
+  );
+  ok("baris historis mendapat NULL, BUKAN nol", Number(nul) === 2, `${nul} dari 2 baris`);
+
+  const nolPalsu = satu(
+    `select count(*) from op_expenses where listrik = 0 or platform_fee = 0 or pbjt = 0;`,
+  );
+  ok("tidak ada satu pun yang diam-diam jadi nol", Number(nolPalsu) === 0, `${nolPalsu} baris`);
+
+  // EMPAT BELAS, bukan sebelas: delapan di `op_expenses`, dua di
+  // `op_purchases`, empat di `op_pnl`. Angkanya dihitung di sini, bukan
+  // diingat — hitungan dari ingatan itulah yang sebelumnya salah.
+  const lamaNotNull = sql(
+    `select table_name || ':' || count(*) from information_schema.columns
+     where table_name in ('op_expenses','op_purchases','op_pnl')
+       and is_nullable='NO' and data_type='numeric'
+     group by table_name order by 1;`,
+  ).split("\n");
+  const jumlahLama = lamaNotNull.reduce((a, b) => a + Number(b.split(":")[1] ?? 0), 0);
+  ok("empat belas kolom lama TETAP not null — tidak ikut di-ALTER", jumlahLama === 14, lamaNotNull.join(" · "));
+
+  ok(
+    "tabel jejak unggahan berdiri",
+    Number(satu(`select count(*) from information_schema.tables where table_name='financial_upload_batch';`)) === 1,
+  );
+  ok(
+    "RLS aktif tanpa policy, sama seperti tabel lain",
+    Number(satu(`select count(*) from pg_class where relname='financial_upload_batch' and relrowsecurity;`)) === 1 &&
+      Number(satu(`select count(*) from pg_policies where tablename='financial_upload_batch';`)) === 0,
+  );
+}
+
+function ujiBatch() {
+  judul("9 · idempotensi — berkas yang sama tidak masuk dua kali");
+
+  sql(`insert into financial_upload_batch (periode, sidik, jumlah_baris, jumlah_outlet, oleh_id, oleh_nama)
+       values ('2026-08', 'abc12345-58', 58, 58, 'u1', 'Uji');`);
+
+  ditolak(
+    "sidik yang sama untuk bulan yang sama DITOLAK",
+    `insert into financial_upload_batch (periode, sidik, jumlah_baris, jumlah_outlet, oleh_nama)
+     values ('2026-08', 'abc12345-58', 58, 58, 'Uji');`,
+    "financial_upload_batch_sidik_unik",
+  );
+
+  // Unggahan yang GAGAL tidak menghalangi percobaan ulang — index-nya parsial.
+  sql(`insert into financial_upload_batch (periode, sidik, jumlah_baris, jumlah_outlet, oleh_nama, status)
+       values ('2026-08', 'gagal001-58', 1, 1, 'Uji', 'gagal');`);
+  sql(`insert into financial_upload_batch (periode, sidik, jumlah_baris, jumlah_outlet, oleh_nama, status)
+       values ('2026-08', 'gagal001-58', 1, 1, 'Uji', 'gagal');`);
+  ok(
+    "unggahan GAGAL boleh diulang — index-nya hanya menjaga yang tersimpan",
+    Number(satu(`select count(*) from financial_upload_batch where sidik='gagal001-58';`)) === 2,
+  );
+
+  // Sidik yang sama, BULAN berbeda: sah. Laporan Agustus dan September bisa
+  // kebetulan berisi angka yang sama persis.
+  sql(`insert into financial_upload_batch (periode, sidik, jumlah_baris, jumlah_outlet, oleh_nama)
+       values ('2026-09', 'abc12345-58', 58, 58, 'Uji');`);
+  ok("sidik yang sama pada BULAN LAIN tetap diterima", true);
+
+  ditolak(
+    "periode yang bentuknya salah ditolak",
+    `insert into financial_upload_batch (periode, sidik, jumlah_baris, jumlah_outlet, oleh_nama)
+     values ('2026-8', 'xyz', 1, 1, 'Uji');`,
+    "financial_upload_batch_periode_bentuk",
+  );
+
+  ditolak(
+    "status karangan ditolak",
+    `insert into financial_upload_batch (periode, sidik, jumlah_baris, jumlah_outlet, oleh_nama, status)
+     values ('2026-10', 'xyz', 1, 1, 'Uji', 'entahlah');`,
+    "financial_upload_batch_status_check",
+  );
+
+  // ── penunjuk balik: baris tahu ditulis unggahan yang mana ──
+  const idBatch = satu(`select id from financial_upload_batch where sidik='abc12345-58' and periode='2026-08';`);
+  sql(`update op_expenses set batch_id = ${idBatch} where outlet_code='LAMA1';`);
+  ok("baris bisa menunjuk unggahan yang menulisnya", Number(satu(`select count(*) from op_expenses where batch_id=${idBatch};`)) === 1);
+
+  ditolak(
+    "batch_id karangan ditolak",
+    `update op_expenses set batch_id = 999999 where outlet_code='LAMA2';`,
+    "foreign key",
+  );
+
+  // Menghapus catatan unggahan TIDAK menghapus angkanya — `on delete set null`.
+  // Angka finansial tidak boleh ikut hilang hanya karena jejaknya dibersihkan.
+  sql(`delete from financial_upload_batch where id = ${idBatch};`);
+  ok(
+    "menghapus catatan unggahan TIDAK menghapus angkanya",
+    Number(satu(`select count(*) from op_expenses where outlet_code='LAMA1';`)) === 1 &&
+      satu(`select coalesce(batch_id::text,'null') from op_expenses where outlet_code='LAMA1';`) === "null",
+  );
+}
+
+function ujiRincianUtilitas() {
+  judul("10 · rincian utilitas — jumlahnya, bukan hitung ganda");
+
+  sql(`insert into op_expenses (month, outlet_code, outlet_name, utilitas, sewa, tenaga_kerja, potongan, manajemen_fee, pemasaran, ongkos_kirim, lainnya, listrik, air, internet, kebersihan, platform_fee, pbjt)
+       values ('2026-09', 'BARU1', 'Outlet V.1', 200000, 0, 0, 0, 0, 0, 0, 0, 100000, 50000, 30000, 20000, 75000, 125000);`);
+
+  const r = satu(
+    `select (utilitas = listrik + air + internet + kebersihan)::text from op_expenses where outlet_code='BARU1';`,
+  );
+  ok("utilitas sama dengan jumlah empat rinciannya", benar(r), `utilitas = ${satu(`select utilitas from op_expenses where outlet_code='BARU1';`)}`);
+
+  const total = satu(
+    `select (utilitas + sewa + tenaga_kerja + potongan + manajemen_fee + pemasaran + ongkos_kirim + lainnya + coalesce(platform_fee,0) + coalesce(pbjt,0))::text
+     from op_expenses where outlet_code='BARU1';`,
+  );
+  // 200.000 utilitas + 75.000 platform + 125.000 PBJT = 400.000.
+  // Kalau keempat rincian ikut dijumlah, hasilnya 600.000 — hitung ganda.
+  ok("total beban TIDAK menghitung utilitas dua kali", Number(total) === 400_000, `Rp ${Number(total).toLocaleString("id-ID")}`);
+
+  ok(
+    "baris lama dan baris V.1 hidup berdampingan",
+    Number(satu(`select count(*) from op_expenses where listrik is null;`)) === 2 &&
+      Number(satu(`select count(*) from op_expenses where listrik is not null;`)) === 1,
+  );
+
+  // Nol yang memang diketik tetap dibedakan dari kosong.
+  sql(`insert into op_expenses (month, outlet_code, outlet_name, utilitas, sewa, tenaga_kerja, potongan, manajemen_fee, pemasaran, ongkos_kirim, lainnya, listrik, air, internet, kebersihan)
+       values ('2026-09', 'BARU2', 'Outlet Nol', 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0);`);
+  ok(
+    "nol yang diketik BUKAN kosong",
+    !benar(satu(`select (listrik is null)::text from op_expenses where outlet_code='BARU2';`)) &&
+      satu(`select listrik::text from op_expenses where outlet_code='BARU2';`) === "0",
+  );
+}
+
 /* ─────────────────────────── jalan ─────────────────────────── */
 
 function utama() {
@@ -920,6 +1154,10 @@ function utama() {
     ujiRls();
     const c = rekonsiliasi(outlets);
     dryRun(c);
+    bebanLamaSebelumMigrasi();
+    jalankanMigrasi2B();
+    ujiBatch();
+    ujiRincianUtilitas();
   } else {
     judul("4 · isi contoh minimum");
     isiContoh();
@@ -928,6 +1166,10 @@ function utama() {
     ujiBatasan();
     ujiUnik();
     ujiRls();
+    bebanLamaSebelumMigrasi();
+    jalankanMigrasi2B();
+    ujiBatch();
+    ujiRincianUtilitas();
   }
 
   bersihkan();

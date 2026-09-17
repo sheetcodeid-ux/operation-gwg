@@ -4,19 +4,25 @@ import { revalidatePath } from "next/cache";
 import { getSessionUser } from "@/lib/auth";
 import { canReachMenu, type MenuKey } from "@/lib/nav";
 import { getOutlets } from "@/lib/data/store";
-import { upsertExpenses, upsertPurchases } from "@/lib/data/ops-finance";
+import { listExpenses, upsertExpenses, upsertPurchases } from "@/lib/data/ops-finance";
 import { listPnl, upsertPnl } from "@/lib/data/ops-pnl";
+import { batchSama, catatBatch, tandaiGagal } from "@/lib/data/ops-batch";
 import { simpanOutletBulanan } from "@/lib/data/kpi";
 import {
+  BEBAN_BARU,
+  BEBAN_BARU_LABELS,
   EXPENSE_COLS,
   EXPENSE_LABELS,
   PNL_LABELS,
+  RINCI_UTILITAS,
+  RINCI_UTILITAS_LABELS,
   expenseTotal,
   type ExpenseRow,
   type PnlRow,
   type PurchaseRow,
 } from "@/lib/ops/categories";
-import { TEMPLATE, barisKosong, type BarisUnggah } from "@/lib/ops/template-unggah";
+import { TEMPLATE, barisKosong, kunciKembar, sidikBaris, type BarisUnggah } from "@/lib/ops/template-unggah";
+import { utilitasBaris } from "@/lib/ops/utilitas";
 
 /**
  * Satu pintu unggah — penulisnya.
@@ -39,6 +45,12 @@ export interface HasilUnggah {
   tujuan?: string[];
   /** Baris yang kuncinya tidak dikenali — disebut, tidak didiamkan. */
   asing?: string[];
+  /** Kode outlet yang muncul dua kali dalam satu berkas — berkasnya ditolak. */
+  kembar?: string[];
+  /** Benar bila berkas ini sudah pernah diunggah dan tidak ada yang berubah. */
+  sudahPernah?: true;
+  /** Berapa outlet yang utilitasnya datang dari rincian, bukan angka gabungan. */
+  dirinci?: number;
   error?: string;
 }
 
@@ -59,6 +71,20 @@ export async function simpanUnggahAction(input: { periode: string; baris: BarisU
   if (!/^\d{4}-\d{2}$/.test(input.periode)) return { error: "Bulannya tidak dikenali." };
   if (input.baris.length === 0) return { error: "Tidak ada baris yang terbaca dari berkas itu." };
 
+  // ── berkasnya sendiri harus sah dulu, sebelum menyentuh apa pun ──
+  //
+  // Dua baris untuk outlet yang sama pada bulan yang sama berarti berkasnya
+  // salah. Menyimpan yang terakhir membuat separuh angkanya hilang tanpa satu
+  // pun tanda — jadi ditolak, dan kodenya disebutkan supaya Excel-nya bisa
+  // diperbaiki.
+  const kembar = kunciKembar(input.baris);
+  if (kembar.length > 0) {
+    return {
+      error: `${kembar.length} kode outlet muncul lebih dari sekali di berkas itu. Perbaiki Excel-nya dulu — tidak ada yang disimpan.`,
+      kembar,
+    };
+  }
+
   try {
     return await simpan(input.periode, input.baris, user.id, user.name);
   } catch (e) {
@@ -75,10 +101,33 @@ async function simpan(periode: string, baris: BarisUnggah[], olehId: string, ole
   const beli: PurchaseRow[] = [];
   const beban: ExpenseRow[] = [];
   const keKpi: { outletId: string; netProfit: number | null; hppNominal: number | null }[] = [];
+  let dirinci = 0;
+
+  // ── berkas yang sama persis tidak ditulis dua kali ──
+  //
+  // Sidiknya dihitung dari isi berkas, bukan namanya: mengunggah ulang berkas
+  // yang sama adalah hal yang wajar dilakukan orang saat ragu apakah tadi
+  // berhasil, dan menulis ulang seluruh barisnya hanya menambah risiko tanpa
+  // menambah apa pun.
+  const sidik = sidikBaris(TEMPLATE, baris);
+  const sebelumnya = await batchSama(periode, sidik);
+  if (sebelumnya) {
+    return {
+      ok: true,
+      sudahPernah: true,
+      tersimpan: sebelumnya.jumlahOutlet,
+      tujuan: [...TEMPLATE.tujuan],
+      dilewati: 0,
+      asing: [],
+    };
+  }
 
   // Pendapatan tidak ada di berkas — yang sudah tersimpan dibaca dulu supaya
   // ikut dituliskan kembali apa adanya, bukan tergilas jadi nol.
   const pendapatanLama = new Map((await listPnl(periode)).map((r) => [r.outletCode, r.pendapatan]));
+  // Utilitas yang sudah tersimpan, dengan alasan yang sama: berkas yang tidak
+  // menyebut utilitas sama sekali tidak boleh menghapusnya.
+  const utilitasLama = new Map((await listExpenses(periode)).map((r) => [r.outletCode, r.utilitas]));
 
   for (const b of baris) {
     const o = peta.get(b.kunci.trim().toLowerCase());
@@ -96,6 +145,20 @@ async function simpan(periode: string, baris: BarisUnggah[], olehId: string, ole
 
     const rowBeban = { outletCode: o.code, outletName: o.name } as ExpenseRow;
     for (const c of EXPENSE_COLS) rowBeban[c] = b.angka[EXPENSE_LABELS[c]] ?? 0;
+    // Enam kolom baru: kosong TETAP kosong. Kolomnya nullable, tidak seperti
+    // delapan kolom lama.
+    for (const c of BEBAN_BARU) rowBeban[c] = b.angka[BEBAN_BARU_LABELS[c]] ?? null;
+
+    // ── utilitas: rincian yang menentukan, bukan angka gabungan ──
+    const u = utilitasBaris({
+      rincian: Object.fromEntries(RINCI_UTILITAS.map((c) => [c, b.angka[RINCI_UTILITAS_LABELS[c]] ?? null])),
+      agregat: b.angka[EXPENSE_LABELS.utilitas] ?? null,
+      tersimpan: utilitasLama.get(o.code) ?? null,
+    });
+    rowBeban.utilitas = u.utilitas;
+    for (const c of RINCI_UTILITAS) rowBeban[c] = u.rincian[c];
+    if (u.asal === "rincian") dirinci += 1;
+
     beban.push(rowBeban);
 
     beli.push({
@@ -133,9 +196,27 @@ async function simpan(periode: string, baris: BarisUnggah[], olehId: string, ole
     };
   }
 
-  await upsertPnl(periode, pnl);
-  await upsertPurchases(periode, beli);
-  await upsertExpenses(periode, beban);
+  // Unggahan dicatat SEBELUM angkanya ditulis. Kalau penulisannya gagal di
+  // tengah, yang tertinggal adalah catatan tanpa angka — kelihatan, bisa
+  // diperiksa. Dibalik, yang tertinggal adalah angka tanpa asal-usul.
+  const batchId = await catatBatch({
+    periode,
+    sidik,
+    jumlahBaris: baris.length,
+    jumlahOutlet: pnl.length,
+    olehId,
+    olehNama,
+    catatan: dirinci > 0 ? `${dirinci} outlet utilitasnya dirinci` : null,
+  });
+
+  try {
+    await upsertPnl(periode, pnl, batchId);
+    await upsertPurchases(periode, beli, batchId);
+    await upsertExpenses(periode, beban, batchId);
+  } catch (e) {
+    if (batchId != null) await tandaiGagal(batchId, e instanceof Error ? e.message : "gagal menulis");
+    throw e;
+  }
 
   for (const k of keKpi) {
     // Kolom yang KOSONG di berkas tidak menimpa angka yang sudah ada: kosong
@@ -156,5 +237,5 @@ async function simpan(periode: string, baris: BarisUnggah[], olehId: string, ole
     revalidatePath(p);
   }
 
-  return { ok: true, tersimpan: pnl.length, dilewati, asing, tujuan: [...TEMPLATE.tujuan] };
+  return { ok: true, tersimpan: pnl.length, dilewati, asing, dirinci, tujuan: [...TEMPLATE.tujuan] };
 }

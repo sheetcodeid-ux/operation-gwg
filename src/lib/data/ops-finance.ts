@@ -3,10 +3,10 @@ import "server-only";
 import { db, dbEnabled } from "./db";
 import { selectAll } from "./paged";
 import { areaName, getOutlets } from "./store";
-import { EXPENSE_COLS, expenseTotal, type ExpenseRow, type PurchaseRow } from "@/lib/ops/categories";
+import { BEBAN_BARU, EXPENSE_COLS, RINCI_UTILITAS, expenseTotal, type ExpenseRow, type PurchaseRow } from "@/lib/ops/categories";
 
-export { EXPENSE_COLS, EXPENSE_LABELS, expenseTotal } from "@/lib/ops/categories";
-export type { ExpenseCol, ExpenseRow, PurchaseRow } from "@/lib/ops/categories";
+export { BEBAN_BARU, BEBAN_SEMUA, BEBAN_SEMUA_LABELS, EXPENSE_COLS, EXPENSE_LABELS, RINCI_UTILITAS, RINCI_UTILITAS_LABELS, expenseTotal } from "@/lib/ops/categories";
+export type { BebanBaru, BebanSemua, ExpenseCol, ExpenseRow, PurchaseRow, RinciUtilitas } from "@/lib/ops/categories";
 
 export interface OutletLite { code: string; name: string; area: string }
 export function listOpOutlets(): OutletLite[] {
@@ -28,11 +28,17 @@ export async function listExpenses(month: string): Promise<ExpenseRow[]> {
   return rows.map((r) => {
     const row = { outletCode: String(r.outlet_code), outletName: String(r.outlet_name ?? "") } as ExpenseRow;
     for (const c of EXPENSE_COLS) row[c] = Number(r[c]) || 0;
+    // Enam kolom baru NULL-able: null dibaca null, bukan nol. Baris historis
+    // memang belum pernah dirinci, dan menuliskannya nol berarti mengklaim
+    // outletnya tidak memakai listrik.
+    for (const c of [...RINCI_UTILITAS, ...BEBAN_BARU]) {
+      row[c] = r[c] === null || r[c] === undefined ? null : Number(r[c]);
+    }
     return row;
   });
 }
 
-export async function upsertExpenses(month: string, rows: ExpenseRow[]): Promise<number> {
+export async function upsertExpenses(month: string, rows: ExpenseRow[], batchId?: number | null): Promise<number> {
   const clean = rows.filter((r) => r.outletCode.trim());
   if (!dbEnabled) {
     for (const r of clean) memE.set(`${month}|${r.outletCode}`, r);
@@ -40,7 +46,16 @@ export async function upsertExpenses(month: string, rows: ExpenseRow[]): Promise
   }
   const payload = clean.map((r) => {
     const o: Record<string, unknown> = { month, outlet_code: r.outletCode, outlet_name: r.outletName, updated_at: new Date().toISOString() };
+    // Delapan kolom lama `not null default 0` — kosong mau tak mau jadi nol di
+    // situ, dan itu keterbatasan skema lama yang diterima apa adanya.
     for (const c of EXPENSE_COLS) o[c] = r[c] || 0;
+    // Enam kolom baru: `undefined` berarti kolomnya tidak ikut dikirim sama
+    // sekali, jadi nilai yang sudah tersimpan tidak tergilas; `null` berarti
+    // memang dikosongkan.
+    for (const c of [...RINCI_UTILITAS, ...BEBAN_BARU]) {
+      if (r[c] !== undefined) o[c] = r[c];
+    }
+    if (batchId != null) o.batch_id = batchId;
     return o;
   });
   for (let i = 0; i < payload.length; i += 500) {
@@ -59,13 +74,21 @@ export async function listPurchases(month: string): Promise<PurchaseRow[]> {
   return rows.map((r) => ({ outletCode: String(r.outlet_code), outletName: String(r.outlet_name ?? ""), warehouse: Number(r.warehouse) || 0, nonWarehouse: Number(r.non_warehouse) || 0 }));
 }
 
-export async function upsertPurchases(month: string, rows: PurchaseRow[]): Promise<number> {
+export async function upsertPurchases(month: string, rows: PurchaseRow[], batchId?: number | null): Promise<number> {
   const clean = rows.filter((r) => r.outletCode.trim());
   if (!dbEnabled) {
     for (const r of clean) memP.set(`${month}|${r.outletCode}`, r);
     return clean.length;
   }
-  const payload = clean.map((r) => ({ month, outlet_code: r.outletCode, outlet_name: r.outletName, warehouse: r.warehouse || 0, non_warehouse: r.nonWarehouse || 0, updated_at: new Date().toISOString() }));
+  const payload = clean.map((r) => ({
+    month,
+    outlet_code: r.outletCode,
+    outlet_name: r.outletName,
+    warehouse: r.warehouse || 0,
+    non_warehouse: r.nonWarehouse || 0,
+    updated_at: new Date().toISOString(),
+    ...(batchId == null ? {} : { batch_id: batchId }),
+  }));
   for (let i = 0; i < payload.length; i += 500) {
     const { error } = await db().from("op_purchases").upsert(payload.slice(i, i + 500), { onConflict: "month,outlet_code" });
     if (error) throw new Error(`gagal simpan pembelian: ${error.message}`);

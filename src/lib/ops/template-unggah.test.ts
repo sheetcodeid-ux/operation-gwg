@@ -2,7 +2,7 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { angkaExcel, angkaExcelNol } from "./angka-excel";
-import { KELOMPOK, TEMPLATE, bacaBarisUnggah, barisKosong, judulKolom } from "./template-unggah";
+import { KELOMPOK, KOL_BOLEH_KOSONG, TEMPLATE, bacaBarisUnggah, barisKosong, judulKolom, kunciKembar, sidikBaris } from "./template-unggah";
 
 /**
  * Satu pintu unggah data.
@@ -158,5 +158,161 @@ describe("pembelian jadi milik bersama, bukan milik satu PIC", () => {
     // diketik empat kali dan empat salinan itu bisa berbeda diam-diam.
     expect(kpi).toContain("pembelianPerOutlet(periode)");
     expect(kpi).not.toContain('from("kpi_efisiensi")');
+  });
+});
+
+/* ══════════════════ PHASE 2B — kolom baru, duplikat, idempotensi ══════════════════ */
+
+describe("template V.1: dua puluh kolom, urutannya terkunci", () => {
+  it("judul kolomnya persis seperti yang diputuskan pemiliknya", () => {
+    expect(judulKolom(TEMPLATE)).toEqual([
+      "Kode",
+      "Outlet",
+      "Warehouse",
+      "Non Warehouse",
+      "HPP",
+      "Utilitas",
+      "Sewa",
+      "Tenaga Kerja",
+      "Potongan",
+      "Manajemen Fee",
+      "Pemasaran",
+      "Ongkos Kirim",
+      "Lainnya",
+      "Listrik",
+      "Air",
+      "Internet",
+      "Kebersihan",
+      "Platform Fee",
+      "PBJT",
+      "Laba Bersih",
+    ]);
+  });
+
+  it("Utilitas TETAP ADA — berkas lama harus tetap bisa diunggah", () => {
+    // Menghapusnya membuat setiap berkas yang sudah beredar ditolak, dan
+    // orang kembali mengetik manual — masalah yang justru sedang diperbaiki.
+    expect(TEMPLATE.angka).toContain("Utilitas");
+  });
+
+  it("Platform Fee BUKAN Ongkos Kirim — dua kolom yang berbeda", () => {
+    expect(TEMPLATE.angka).toContain("Platform Fee");
+    expect(TEMPLATE.angka).toContain("Ongkos Kirim");
+    expect(TEMPLATE.angka.filter((k) => k === "Platform Fee")).toHaveLength(1);
+  });
+
+  it("enam kolom baru ditandai boleh kosong; delapan kolom lama tidak", () => {
+    expect(KOL_BOLEH_KOSONG).toEqual(["Listrik", "Air", "Internet", "Kebersihan", "Platform Fee", "PBJT"]);
+    for (const lama of ["Utilitas", "Sewa", "Tenaga Kerja", "Lainnya", "Ongkos Kirim"]) {
+      expect(KOL_BOLEH_KOSONG).not.toContain(lama);
+    }
+  });
+
+  it("masih SATU sheet — tidak dipecah per jenis biaya", () => {
+    expect(KELOMPOK.flatMap((k) => k.kolom)).toEqual(TEMPLATE.angka);
+    expect(TEMPLATE.sheet).toBe("Data Outlet");
+  });
+
+  it("Pendapatan TETAP tidak diminta, juga sesudah kolom baru", () => {
+    for (const k of TEMPLATE.angka) expect(k.toLowerCase()).not.toContain("pendapatan");
+  });
+});
+
+describe("kode outlet kembar dalam satu berkas", () => {
+  const b = (kunci: string) => ({ kunci, teks: {}, angka: {} });
+
+  it("ditemukan dan disebutkan, bukan dibiarkan yang terakhir menang", () => {
+    // "Yang terakhir menang" membuat separuh angkanya hilang tanpa satu pun
+    // tanda, dan yang mengunggah baru sadar berbulan-bulan kemudian.
+    expect(kunciKembar([b("NCSB"), b("NCKG"), b("NCSB")])).toEqual(["NCSB"]);
+  });
+
+  it("beda huruf besar tetap dianggap kode yang sama", () => {
+    expect(kunciKembar([b("ncsb"), b("NCSB")])).toHaveLength(1);
+  });
+
+  it("ditampilkan seperti tertulis di berkas, supaya bisa dicari di Excel", () => {
+    expect(kunciKembar([b("NcSb"), b("ncsb")])).toEqual(["NcSb"]);
+  });
+
+  it("berkas yang benar tidak melaporkan apa pun", () => {
+    expect(kunciKembar([b("NCSB"), b("NCKG"), b("NCPA")])).toEqual([]);
+  });
+
+  it("baris tanpa kunci tidak dihitung kembar", () => {
+    expect(kunciKembar([b(""), b(""), b("NCSB")])).toEqual([]);
+  });
+});
+
+describe("sidik jari isi berkas — untuk mengenali unggahan yang sama", () => {
+  const b = (kunci: string, angka: Record<string, number | null>) => ({ kunci, teks: {}, angka });
+
+  it("isi yang sama menghasilkan sidik yang sama", () => {
+    const x = [b("A", { Warehouse: 100 }), b("B", { Warehouse: 200 })];
+    const y = [b("A", { Warehouse: 100 }), b("B", { Warehouse: 200 })];
+    expect(sidikBaris(TEMPLATE, x)).toBe(sidikBaris(TEMPLATE, y));
+  });
+
+  it("URUTAN BARIS tidak mengubah sidiknya — Excel gemar mengubah urutan", () => {
+    const naik = [b("A", { Warehouse: 100 }), b("B", { Warehouse: 200 })];
+    const turun = [b("B", { Warehouse: 200 }), b("A", { Warehouse: 100 })];
+    expect(sidikBaris(TEMPLATE, naik)).toBe(sidikBaris(TEMPLATE, turun));
+  });
+
+  it("satu angka berbeda mengubah sidiknya", () => {
+    const x = [b("A", { Warehouse: 100 })];
+    const y = [b("A", { Warehouse: 101 })];
+    expect(sidikBaris(TEMPLATE, x)).not.toBe(sidikBaris(TEMPLATE, y));
+  });
+
+  it("KOSONG dan NOL menghasilkan sidik yang berbeda", () => {
+    // Kalau sama, berkas yang mengosongkan sebuah kolom akan dikira unggahan
+    // yang sama dengan berkas yang menuliskannya nol — dan perubahannya
+    // diam-diam tidak jadi tersimpan.
+    const kosong = [b("A", { Warehouse: null })];
+    const nol = [b("A", { Warehouse: 0 })];
+    expect(sidikBaris(TEMPLATE, kosong)).not.toBe(sidikBaris(TEMPLATE, nol));
+  });
+});
+
+describe("jalur tulis Phase 2B", () => {
+  const aksi = readFileSync(join(process.cwd(), "src/lib/actions/unggah-data.ts"), "utf8");
+
+  it("kode kembar ditolak SEBELUM apa pun ditulis", () => {
+    expect(aksi).toContain("const kembar = kunciKembar(input.baris);");
+    expect(aksi).toContain("tidak ada yang disimpan");
+  });
+
+  it("berkas yang sama tidak ditulis dua kali", () => {
+    expect(aksi).toContain("const sebelumnya = await batchSama(periode, sidik);");
+    expect(aksi).toContain("sudahPernah: true");
+  });
+
+  it("unggahan dicatat SEBELUM angkanya ditulis", () => {
+    // Dibalik, yang tertinggal saat gagal adalah angka tanpa asal-usul.
+    expect(aksi.indexOf("catatBatch(")).toBeLessThan(aksi.indexOf("await upsertPnl("));
+    expect(aksi).toContain("tandaiGagal(");
+  });
+
+  it("utilitas diturunkan dari rinciannya, tidak diketik ulang", () => {
+    expect(aksi).toContain("utilitasBaris({");
+    expect(aksi).toContain("rowBeban.utilitas = u.utilitas;");
+  });
+
+  it("utilitas yang sudah tersimpan dibaca supaya tidak tergilas jadi nol", () => {
+    expect(aksi).toContain("const utilitasLama = new Map((await listExpenses(periode)).map");
+    expect(aksi).toContain("tersimpan: utilitasLama.get(o.code) ?? null");
+  });
+
+  it("enam kolom baru: kosong tetap kosong, bukan nol", () => {
+    expect(aksi).toContain("rowBeban[c] = b.angka[BEBAN_BARU_LABELS[c]] ?? null;");
+  });
+
+  it("TIDAK ada reklasifikasi historis", () => {
+    // `lainnya`, `ongkos_kirim`, dan `potongan` tidak boleh dipindahkan ke
+    // kolom baru mana pun — laporan keuangan yang sudah ditutup tidak ditulis
+    // ulang oleh kode.
+    expect(aksi).not.toMatch(/platform_fee\s*=\s*.*(lainnya|potongan|ongkos)/i);
+    expect(aksi).not.toMatch(/pbjt\s*=\s*.*(lainnya|potongan|ongkos)/i);
   });
 });
