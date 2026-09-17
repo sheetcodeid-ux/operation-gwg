@@ -320,10 +320,27 @@ export async function periodeKpiPalingAwal(): Promise<string | null> {
 
 export interface RingkasTerjadwal {
   watermarkSebelum: string | null;
+  /** Nilai yang BENAR-BENAR tersimpan sesudah jalan ini, bukan yang diharapkan. */
   watermarkSesudah: string | null;
   rencana: RencanaDeteksi;
   hasil: RingkasDeteksi[];
 }
+
+/**
+ * Sambungan ke dunia luar, dipisah supaya jalur keputusannya bisa diuji.
+ *
+ * Yang perlu diuji bukan pembacaan basis datanya, melainkan apa yang terjadi
+ * ketika `majuWatermark` MENOLAK maju — dan itu cuma bisa terjadi kalau jalan
+ * lain mendahului, keadaan yang mustahil disusun lewat basis data sungguhan.
+ */
+export interface AlatDeteksi {
+  bacaWatermark: () => Promise<string | null>;
+  majuWatermark: (periode: string) => Promise<boolean>;
+  periodeKpiPalingAwal: () => Promise<string | null>;
+  deteksiSignal: (periode: string) => Promise<RingkasDeteksi>;
+}
+
+const ALAT_BAWAAN: AlatDeteksi = { bacaWatermark, majuWatermark, periodeKpiPalingAwal, deteksiSignal };
 
 /**
  * Deteksi terjadwal — tunggakan lebih dulu, bulan berjalan belakangan.
@@ -339,20 +356,29 @@ export interface RingkasTerjadwal {
  * │ watermark — lihat `src/lib/ops/deteksi.ts`.                              │
  * └──────────────────────────────────────────────────────────────────────────┘
  */
-export async function deteksiTerjadwal(pada: number = Date.now()): Promise<RingkasTerjadwal> {
-  const watermarkSebelum = await bacaWatermark();
-  const rencana = rencanaDeteksi(watermarkSebelum, await periodeKpiPalingAwal(), pada);
+export async function deteksiTerjadwal(pada: number = Date.now(), alat: AlatDeteksi = ALAT_BAWAAN): Promise<RingkasTerjadwal> {
+  const watermarkSebelum = await alat.bacaWatermark();
+  const rencana = rencanaDeteksi(watermarkSebelum, await alat.periodeKpiPalingAwal(), pada);
 
   const hasil: RingkasDeteksi[] = [];
   let watermarkSesudah = watermarkSebelum;
 
   for (const p of rencana.susulan) {
-    hasil.push(await deteksiSignal(p));
-    await majuWatermark(p);
-    watermarkSesudah = p;
+    hasil.push(await alat.deteksiSignal(p));
+    // ┌─ YANG DILAPORKAN ADALAH YANG TERSIMPAN, BUKAN YANG DIHARAPKAN ────────┐
+    // │                                                                      │
+    // │ `majuWatermark` menolak mundur, dan penolakan itu bukan kegagalan —  │
+    // │ ia terjadi ketika jalan lain sudah memajukannya lebih jauh. Dulu     │
+    // │ nilai `p` dicatat begitu saja, sehingga laporannya menyebut angka    │
+    // │ yang LEBIH RENDAH dari isi sebenarnya. Laporan yang salah tentang    │
+    // │ sampai mana deteksi pernah tuntas adalah hal terakhir yang boleh     │
+    // │ salah di lapisan ini.                                                │
+    // └──────────────────────────────────────────────────────────────────────┘
+    const maju = await alat.majuWatermark(p);
+    watermarkSesudah = maju ? p : await alat.bacaWatermark();
   }
 
-  hasil.push(await deteksiSignal(rencana.berjalan));
+  hasil.push(await alat.deteksiSignal(rencana.berjalan));
 
   return { watermarkSebelum, watermarkSesudah, rencana, hasil };
 }

@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { sidikMuatan, susunMuatan, type BarisMuatan } from "./signals";
+import { deteksiTerjadwal, sidikMuatan, susunMuatan, type BarisMuatan, type RingkasDeteksi } from "./signals";
 import type { KatalogAturan, KondisiKpi } from "./rules";
 import { evaluasi, type VersiAturan } from "@/lib/ops/rules";
 
@@ -565,17 +565,24 @@ describe("pintu remediasi terkunci sekencang jalur terjadwal", () => {
 describe("watermark hanya maju setelah deteksi berhasil", () => {
   it("tunggakan dinilai dulu, baru watermark digeser — per periode", () => {
     const badan = kode.slice(kode.indexOf("export async function deteksiTerjadwal"));
-    const deteksi = badan.indexOf("await deteksiSignal(p)");
-    const maju = badan.indexOf("await majuWatermark(p)");
+    const deteksi = badan.indexOf("await alat.deteksiSignal(p)");
+    const maju = badan.indexOf("await alat.majuWatermark(p)");
     expect(deteksi).toBeGreaterThan(-1);
     expect(maju).toBeGreaterThan(deteksi);
   });
 
   it("bulan berjalan dinilai SESUDAH tunggakan dan tidak menggeser watermark", () => {
     const badan = kode.slice(kode.indexOf("export async function deteksiTerjadwal"));
-    const berjalan = badan.indexOf("deteksiSignal(rencana.berjalan)");
-    expect(berjalan).toBeGreaterThan(badan.indexOf("await majuWatermark(p)"));
+    const berjalan = badan.indexOf("alat.deteksiSignal(rencana.berjalan)");
+    expect(berjalan).toBeGreaterThan(badan.indexOf("await alat.majuWatermark(p)"));
     expect(badan.slice(berjalan)).not.toContain("majuWatermark");
+  });
+
+  it("yang dilaporkan diambil dari nilai kembalian, bukan diasumsikan", () => {
+    const badan = kode.slice(kode.indexOf("export async function deteksiTerjadwal"));
+    expect(badan).toContain("const maju = await alat.majuWatermark(p)");
+    expect(badan).toContain("watermarkSesudah = maju ? p : await alat.bacaWatermark()");
+    expect(badan).not.toMatch(/await alat\.majuWatermark\(p\);\s*\n\s*watermarkSesudah = p;/);
   });
 
   it("watermark tidak pernah mundur", () => {
@@ -602,5 +609,108 @@ describe("watermark hanya maju setelah deteksi berhasil", () => {
     expect(badan).toContain('.from("kpi_values")');
     expect(badan).toContain('order("periode"');
     expect(kode).not.toMatch(/"2026-0[0-9]"/);
+  });
+});
+
+/* ═════════ 14 · watermark yang dilaporkan = yang benar-benar tersimpan ═════════ */
+
+describe("laporan watermark tidak boleh mengarang", () => {
+  const SEP = Date.parse("2026-09-17T13:00:00Z"); // bulan berjalan 2026-09
+
+  const ringkas = (periode: string, layak = 0): RingkasDeteksi => ({
+    periode, diperiksa: 1118, beraturan: 354, layak, disisipkan: 0, diperbarui: layak, diamatiSaja: 0,
+  });
+
+  /** Perancah yang mencatat siapa dipanggil dengan apa. */
+  const alat = (o: { tersimpan?: string | null; tolak?: string[]; gagal?: string[]; palingAwal?: string | null } = {}) => {
+    const jejak = { deteksi: [] as string[], maju: [] as string[] };
+    let tersimpan = o.tersimpan ?? null;
+    return {
+      jejak,
+      get tersimpan() { return tersimpan; },
+      set tersimpan(v: string | null) { tersimpan = v; },
+      alat: {
+        bacaWatermark: async () => tersimpan,
+        periodeKpiPalingAwal: async () => o.palingAwal ?? "2026-06",
+        deteksiSignal: async (p: string) => {
+          jejak.deteksi.push(p);
+          if (o.gagal?.includes(p)) throw new Error(`deteksi ${p} gagal`);
+          return ringkas(p, 10);
+        },
+        majuWatermark: async (p: string) => {
+          jejak.maju.push(p);
+          if (o.tolak?.includes(p)) return false; // jalan lain sudah mendahului
+          tersimpan = p;
+          return true;
+        },
+      },
+    };
+  };
+
+  it("jalan normal: yang dilaporkan sama dengan yang tersimpan", async () => {
+    const a = alat();
+    const h = await deteksiTerjadwal(SEP, a.alat);
+    expect(h.rencana.susulan).toEqual(["2026-06", "2026-07", "2026-08"]);
+    expect(h.watermarkSesudah).toBe("2026-08");
+    expect(a.tersimpan).toBe("2026-08");
+  });
+
+  it("MENOLAK MAJU: yang dilaporkan diambil dari yang tersimpan, bukan dari p", async () => {
+    // Jalan lain sudah memajukannya ke 2026-08 sementara jalan ini masih di
+    // 2026-07. Sebelum perbaikan, laporannya menyebut "2026-07" — lebih rendah
+    // dari isi sebenarnya, dan itu kebohongan tentang sampai mana deteksi tuntas.
+    const a = alat({ tolak: ["2026-07", "2026-08"] });
+    a.alat.majuWatermark = async (p: string) => {
+      a.jejak.maju.push(p);
+      if (p === "2026-06") { a.tersimpan = "2026-06"; return true; }
+      a.tersimpan = "2026-08"; // didahului jalan lain
+      return false;
+    };
+    const h = await deteksiTerjadwal(SEP, a.alat);
+    expect(h.watermarkSesudah).toBe("2026-08");
+    expect(h.watermarkSesudah).toBe(a.tersimpan);
+    expect(h.watermarkSesudah).not.toBe("2026-07");
+  });
+
+  it("penolakan bukan kegagalan — deteksi tetap berlanjut sampai bulan berjalan", async () => {
+    const a = alat({ tolak: ["2026-06", "2026-07", "2026-08"] });
+    const h = await deteksiTerjadwal(SEP, a.alat);
+    expect(a.jejak.deteksi).toEqual(["2026-06", "2026-07", "2026-08", "2026-09"]);
+    expect(h.hasil).toHaveLength(4);
+  });
+
+  it("gagal di tengah: melempar, dan periode sesudahnya tidak pernah menggeser watermark", async () => {
+    const a = alat({ gagal: ["2026-07"] });
+    await expect(deteksiTerjadwal(SEP, a.alat)).rejects.toThrow(/deteksi 2026-07 gagal/);
+    expect(a.jejak.maju).toEqual(["2026-06"]);          // hanya yang berhasil
+    expect(a.tersimpan).toBe("2026-06");                 // berhenti di situ
+    expect(a.jejak.deteksi).not.toContain("2026-08");    // tidak dilangkahi
+    expect(a.jejak.deteksi).not.toContain("2026-09");
+  });
+
+  it("nol Signal tetap memajukan watermark", async () => {
+    const a = alat();
+    a.alat.deteksiSignal = async (p: string) => { a.jejak.deteksi.push(p); return ringkas(p, 0); };
+    const h = await deteksiTerjadwal(SEP, a.alat);
+    expect(h.watermarkSesudah).toBe("2026-08");
+    expect(h.hasil.every((x) => x.layak === 0)).toBe(true);
+  });
+
+  it("bulan berjalan dinilai terakhir dan TIDAK PERNAH diajukan ke watermark", async () => {
+    const a = alat();
+    const h = await deteksiTerjadwal(SEP, a.alat);
+    expect(a.jejak.deteksi[a.jejak.deteksi.length - 1]).toBe("2026-09");
+    expect(a.jejak.maju).not.toContain("2026-09");
+    expect(h.watermarkSesudah).not.toBe("2026-09");
+  });
+
+  it("tanpa tunggakan: watermark tidak disentuh sama sekali", async () => {
+    const a = alat({ tersimpan: "2026-08", palingAwal: "2026-08" });
+    const h = await deteksiTerjadwal(SEP, a.alat);
+    expect(h.rencana.susulan).toEqual([]);
+    expect(a.jejak.maju).toEqual([]);
+    expect(h.watermarkSebelum).toBe("2026-08");
+    expect(h.watermarkSesudah).toBe("2026-08");
+    expect(a.jejak.deteksi).toEqual(["2026-09"]);
   });
 });
