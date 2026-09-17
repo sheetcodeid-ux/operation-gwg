@@ -1839,6 +1839,222 @@ function ujiFinalisasiUtuh() {
   ok("kunci lepas sendiri", sisa === 0, `${sisa} tersisa`);
 }
 
+
+/* ══════════════ 23 · TASK #87 — lapisan aturan yang berversi ══════════════ */
+
+const MIGRASI_87 = join(AKAR, "supabase/migrations/0109_rule_versioning.sql");
+
+function jalankanMigrasi87() {
+  judul("23 · migrasi 0109_rule_versioning.sql");
+  if (!existsSync(MIGRASI_87)) throw new Error(`migrasi tidak ditemukan: ${MIGRASI_87}`);
+  sql(readFileSync(MIGRASI_87, "utf8"));
+
+  const tabel = sql(`select table_name from information_schema.tables where table_schema='public' and table_name in ('rules','rule_versions','rule_conditions') order by 1;`)
+    .split("\n").filter(Boolean);
+  ok("tiga tabel aturan terpasang", tabel.length === 3, tabel.join(", "));
+
+  for (const t of ["rules", "rule_versions", "rule_conditions"]) {
+    const rls = satu(`select relrowsecurity::text from pg_class where oid='public.${t}'::regclass;`);
+    ok(`${t} — RLS menyala`, benar(rls), rls);
+    const policy = satu(`select count(*) from pg_policies where schemaname='public' and tablename='${t}';`);
+    ok(`${t} — tanpa policy, menolak secara bawaan`, Number(policy) === 0, `${policy} policy`);
+  }
+
+  const nRule = Number(satu(`select count(*) from rules;`));
+  const nVersi = Number(satu(`select count(*) from rule_versions;`));
+  const nSyarat = Number(satu(`select count(*) from rule_conditions;`));
+  ok("sepuluh aturan tersemai", nRule === 10, `${nRule} aturan`);
+  ok("sepuluh versi tersemai", nVersi === 10, `${nVersi} versi`);
+  ok("sepuluh syarat tersemai", nSyarat === 10, `${nSyarat} syarat`);
+
+  const yatim = satu(`select count(*) from rules r where not exists (select 1 from kpi_definitions d where d.id = r.kpi_definition_id);`);
+  ok("tiap aturan menunjuk definisi KPI yang ada", Number(yatim) === 0, `${yatim} yatim`);
+
+  const tanpaSyarat = satu(`select count(*) from rule_versions v where not exists (select 1 from rule_conditions c where c.rule_version_id = v.id);`);
+  ok("tidak ada versi tanpa syarat", Number(tanpaSyarat) === 0, `${tanpaSyarat} versi kosong`);
+
+  // Sewa: AD-02. Berbeda sendiri, dan memang harus berbeda.
+  const sewa = satu(`select v.berlaku_mulai || ' · ' || c.operator || ' ' || c.nilai_ambang
+                     from rule_versions v join rule_conditions c on c.rule_version_id = v.id
+                     where v.rule_kode = 'sewa_melebihi_ambang';`);
+  ok("aturan sewa berambang 5 dan baru berlaku 2026-10", sewa === "2026-10 · gt 5", sewa);
+
+  const sumberSewa = satu(`select sumber from rule_versions where rule_kode='sewa_melebihi_ambang';`);
+  ok("sumbernya menyebut AD-02", sumberSewa.includes("AD-02"), sumberSewa.slice(0, 60));
+
+  // Tiap versi menyebut dari mana angkanya. Tanpa ini, penilaian tidak bisa
+  // dijelaskan tanpa membaca kode sumber lama.
+  const tanpaSumber = satu(`select count(*) from rule_versions where coalesce(trim(sumber),'') = '';`);
+  ok("tiap versi menyebut sumber angkanya", Number(tanpaSumber) === 0, `${tanpaSumber} tanpa sumber`);
+}
+
+function ujiAturanTakBerubah() {
+  judul("24 · versi aturan tidak bisa disunting, rentangnya tidak bisa bertumpang");
+
+  const idWh = satu(`select id from rule_versions where rule_kode='warehouse_persen' and versi=1;`);
+
+  /* ── tumpang tindih ── */
+
+  ditolak(
+    "versi kedua yang rentangnya bertumpang DITOLAK",
+    `insert into rule_versions (rule_kode, versi, berlaku_mulai, sumber)
+     values ('warehouse_persen', 2, '2026-09', 'uji');`,
+    "bertumpang",
+  );
+
+  ditolak(
+    "rentang yang membungkus versi lama juga ditolak",
+    `insert into rule_versions (rule_kode, versi, berlaku_mulai, berlaku_sampai, sumber)
+     values ('warehouse_persen', 3, '2026-01', '2099-12', 'uji');`,
+    "bertumpang",
+  );
+
+  // Struktur penjaganya sendiri, bukan cuma perilakunya: satu nomor versi per
+  // aturan dijaga index unik, bukan sekadar oleh pemicu tumpang tindih.
+  const unik = satu(`select indexdef from pg_indexes where schemaname='public' and indexname='rule_versions_unik';`);
+  ok("nomor versi dijaga index unik", unik.includes("(rule_kode, versi)"), unik.slice(0, 80));
+
+  /* ── kekekalan ── */
+
+  ditolak(
+    "ambang tidak boleh diubah di tempat",
+    `update rule_conditions set nilai_ambang = 28 where rule_version_id = ${idWh};`,
+    "menuntut versi aturan baru",
+  );
+
+  ditolak(
+    "operator tidak boleh diubah di tempat",
+    `update rule_conditions set operator = 'gte' where rule_version_id = ${idWh};`,
+    "menuntut versi aturan baru",
+  );
+
+  ditolak(
+    "syarat tidak boleh dihapus",
+    `delete from rule_conditions where rule_version_id = ${idWh};`,
+    "menuntut versi aturan baru",
+  );
+
+  ditolak(
+    "versi aturan tidak boleh dihapus",
+    `delete from rule_versions where id = ${idWh};`,
+    "jangan menghapus sejarahnya",
+  );
+
+  ditolak(
+    "severity tidak boleh diubah di tempat",
+    `update rule_versions set severity_default = 'critical' where id = ${idWh};`,
+    "tidak boleh diubah di tempat",
+  );
+
+  ditolak(
+    "periode mulai tidak boleh digeser",
+    `update rule_versions set berlaku_mulai = '2026-01' where id = ${idWh};`,
+    "tidak boleh diubah di tempat",
+  );
+
+  // `catatan` memang boleh diperbaiki — ia tidak menentukan arti apa pun.
+  sql(`update rule_versions set catatan = 'catatan boleh diperbaiki' where id = ${idWh};`);
+  const catatan = satu(`select catatan from rule_versions where id = ${idWh};`);
+  ok("catatan boleh diperbaiki — ia tidak mengubah arti", catatan === "catatan boleh diperbaiki", catatan);
+
+  const ambangUtuh = satu(`select nilai_ambang::text from rule_conditions where rule_version_id = ${idWh};`);
+  ok("ambangnya tetap 30 setelah semua penolakan", Number(ambangUtuh) === 30, ambangUtuh);
+
+  /* ── satu-satunya cara ambang berubah: tutup yang lama, lahirkan yang baru ── */
+
+  sql(`update rule_versions set berlaku_sampai = '2026-11' where id = ${idWh};`);
+  const tertutup = satu(`select berlaku_sampai from rule_versions where id = ${idWh};`);
+  ok("versi yang masih berlaku BOLEH ditutup", tertutup === "2026-11", tertutup);
+
+  ditolak(
+    "rentang yang sudah ditutup tidak boleh diubah lagi",
+    `update rule_versions set berlaku_sampai = '2027-05' where id = ${idWh};`,
+    "sudah ditutup",
+  );
+
+  ditolak(
+    "rentang yang sudah ditutup tidak boleh dibuka kembali",
+    `update rule_versions set berlaku_sampai = null where id = ${idWh};`,
+    "sudah ditutup",
+  );
+
+  sql(`
+    with v as (
+      insert into rule_versions (rule_kode, versi, berlaku_mulai, sumber)
+      values ('warehouse_persen', 2, '2026-12', 'keputusan uji')
+      returning id
+    )
+    insert into rule_conditions (rule_version_id, urutan, operator, nilai_ambang)
+    select id, 1, 'gt', 25 from v;
+  `);
+  const dua = Number(satu(`select count(*) from rule_versions where rule_kode='warehouse_persen';`));
+  ok("versi baru lahir berdampingan, yang lama tetap ada", dua === 2, `${dua} versi`);
+
+  const lama = satu(`select c.nilai_ambang::text from rule_versions v join rule_conditions c on c.rule_version_id=v.id where v.rule_kode='warehouse_persen' and v.versi=1;`);
+  ok("v1 masih berambang 30 — sejarahnya utuh", Number(lama) === 30, lama);
+
+  const septemberPakai = satu(`select v.versi::text from rule_versions v where v.rule_kode='warehouse_persen'
+                               and '2026-09' >= v.berlaku_mulai and '2026-09' <= coalesce(v.berlaku_sampai, '9999-99');`);
+  ok("September tetap dinilai v1 walau v2 sudah ada", septemberPakai === "1", `v${septemberPakai}`);
+  const desemberPakai = satu(`select v.versi::text from rule_versions v where v.rule_kode='warehouse_persen'
+                               and '2026-12' >= v.berlaku_mulai and '2026-12' <= coalesce(v.berlaku_sampai, '9999-99');`);
+  ok("Desember memakai v2", desemberPakai === "2", `v${desemberPakai}`);
+
+  const bertumpang = satu(`
+    select count(*) from rule_versions a join rule_versions b
+      on a.rule_kode = b.rule_kode and a.id <> b.id
+     and a.berlaku_mulai <= coalesce(b.berlaku_sampai, '9999-99')
+     and coalesce(a.berlaku_sampai, '9999-99') >= b.berlaku_mulai;`);
+  ok("tidak ada satu pun rentang yang bertumpang di seluruh tabel", Number(bertumpang) === 0, `${bertumpang} pasangan`);
+
+  /* ── batasan bentuk ── */
+
+  // Aturan kosong khusus uji bentuk. Aturan yang sudah punya versi terbuka
+  // selalu ditolak pemicu tumpang tindih LEBIH DULU — pemicu BEFORE berjalan
+  // sebelum CHECK — jadi batasan bentuknya tidak akan pernah kebagian bicara
+  // kalau diuji di sana. Ditolak karena alasan yang salah sama tidak berartinya
+  // dengan lolos karena alasan yang salah.
+  sql(`insert into rules (kode, nama, kpi_definition_id, kategori) values ('uji_bentuk', 'Uji bentuk', 'biaya.hpp_pct', 'biaya');`);
+
+  ditolak(
+    "periode berlaku yang bukan YYYY-MM ditolak",
+    `insert into rule_versions (rule_kode, versi, berlaku_mulai, sumber) values ('uji_bentuk', 1, '2026-1', 'uji');`,
+    "rule_versions_mulai_bentuk",
+  );
+
+  ditolak(
+    "rentang terbalik ditolak",
+    `insert into rule_versions (rule_kode, versi, berlaku_mulai, berlaku_sampai, sumber) values ('uji_bentuk', 1, '2027-05', '2027-01', 'uji');`,
+    "rule_versions_rentang",
+  );
+
+  ditolak(
+    "severity di luar daftar ditolak",
+    `insert into rule_versions (rule_kode, versi, berlaku_mulai, severity_default, sumber) values ('uji_bentuk', 1, '2027-01', 'gawat', 'uji');`,
+    "rule_versions_severity_check",
+  );
+
+  ditolak(
+    "between tanpa ambang kedua ditolak",
+    `insert into rule_conditions (rule_version_id, urutan, operator, nilai_ambang) values (${idWh}, 2, 'between', 10);`,
+    "rule_conditions_between",
+  );
+
+  ditolak(
+    "aturan yang menunjuk KPI tak dikenal ditolak",
+    `insert into rules (kode, nama, kpi_definition_id, kategori) values ('uji_yatim', 'Uji', 'biaya.tidak_ada', 'biaya');`,
+    "foreign key",
+  );
+
+  /* ── RLS betul-betul menutup ── */
+
+  sql(`grant select on rules, rule_versions, rule_conditions to uji_anon;`);
+  for (const t of ["rules", "rule_versions", "rule_conditions"]) {
+    const n = Number(satu(`select count(*) from ${t};`, { peran: "uji_anon" }));
+    ok(`anon membaca NOL baris ${t}`, n === 0, `${n} baris`);
+  }
+}
+
 /* ─────────────────────────── jalan ─────────────────────────── */
 
 function utama() {
@@ -1880,6 +2096,8 @@ function utama() {
     jalankanMigrasi85A();
     ujiFinalisasi();
     ujiFinalisasiUtuh();
+    jalankanMigrasi87();
+    ujiAturanTakBerubah();
   } else {
     judul("4 · isi contoh minimum");
     isiContoh();
@@ -1895,6 +2113,7 @@ function utama() {
     jalankanMigrasi2C();
     jalankanMigrasi85();
     jalankanMigrasi85A();
+    jalankanMigrasi87();
   }
 
   bersihkan();

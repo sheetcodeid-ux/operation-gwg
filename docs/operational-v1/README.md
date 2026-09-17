@@ -77,7 +77,7 @@ SUBMITTED → VERIFICATION → IMPACT_WAIT → SUCCESS / PARTIAL / FAILED / INCO
 | 2A | KPI Sales + Target: tabel, layanan hitung, backfill Agustus 2026 | **selesai** — tabel terpasang di produksi, Agustus 2026 terisi dan terverifikasi |
 | 2A+ | Jalur tulis berulang (cron/rute) supaya bulan berikutnya terisi sendiri | **selesai** — pg_cron → `/api/cron/kpi-bulanan` → orkestrator → `gwg_tulis_kpi_bulanan`, berversi dan idempoten, plus penutupan periode sementara → final (AD-09, AD-10, AD-11) |
 | 2B | Unggah data finansial: rincian utilitas, PBJT, platform fee, jejak unggahan | **siap ditinjau** — schema + unggah selesai, KPI-nya belum |
-| 3 | Rule Engine | |
+| 3 | Rule Engine | **fondasi selesai** — `rules`/`rule_versions`/`rule_conditions` + mesin murni `src/lib/ops/rules.ts` (AD-12). Berhenti di kondisi; Signal belum. |
 | 4 | Signal | |
 | 5 | **Command Center** ← nilai terlihat pertama kali | |
 | 6 | Diagnosis + Evidence + Recommendation | |

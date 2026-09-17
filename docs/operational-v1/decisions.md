@@ -743,3 +743,77 @@ tidak ada periode yang ditutup atas dasar data yang tidak jadi ditulis.
 Keduanya transaksi sendiri-sendiri; generasi yang sudah berhasil tidak
 dibatalkan karena finalisasi gagal — tapi kegagalannya tetap membuat rute
 membalas 500 dan `sinkron_sehat` mencatat galat.
+
+---
+
+## AD-12 · TASK #87 / PHASE 3 — lapisan aturan yang berversi
+
+Angka dan artinya dipisah:
+
+```
+kpi_values.nilai   20.364919      ← fakta
+rule_conditions    gt 30          ← tafsir
+```
+
+Tafsirnya tidak pernah disimpan ke dalam angkanya. Kalau menempel, mengubah
+kebijakan berarti mengubah sejarah: laporan September yang sudah dibaca orang
+berbeda artinya begitu ambang Desember ditetapkan, tanpa jejak bahwa yang
+berubah adalah aturannya, bukan kinerjanya.
+
+Tabelnya mengikuti rancangan yang sudah ada di `blueprint.md` bagian 8 —
+`rules`, `rule_versions`, `rule_conditions` — bukan rancangan baru.
+
+### Operator menyatakan pelanggaran, bukan kesehatan
+
+`gt 5` berarti "dilanggar bila LEBIH DARI 5", jadi tepat 5 masih aman. Bentuknya
+diambil dari contoh AD-02 di blueprint, dan ia yang membuat perilaku di titik
+batas tidak pernah jadi tebakan. Dokumen lama menulis `Warehouse < 30%` yang
+secara harfiah membuat 30 sudah tidak sehat; yang dipakai konvensi AD-02, dan
+aturan yang ingin sebaliknya memakai `gte` di barisnya sendiri — bukan di kode.
+
+### Versi tidak pernah disunting
+
+UPDATE dan DELETE pada kolom yang menentukan arti sebuah versi ditolak pemicu.
+Satu-satunya suntingan yang diizinkan: **menutup** rentang yang masih terbuka
+(`berlaku_sampai` dari null menjadi sebuah periode). Tanpa itu, versi terbuka
+bertumpang dengan penggantinya selamanya dan ambang tidak akan pernah bisa
+berubah — cacat yang ditemukan uji basis data, bukan produksi. Rentang yang
+sudah ditutup tidak boleh diubah lagi maupun dibuka kembali.
+
+### Versi dipilih oleh periode KPI
+
+Menilai September memakai aturan yang berlaku untuk September, bukan aturan yang
+kebetulan berlaku saat laporannya dibuka. Dua versi tidak boleh berlaku untuk
+periode yang sama — dijaga pemicu berkunci nasihat, dan diperiksa ulang mesin
+hitungnya.
+
+### Hasil penilaian TIDAK disimpan
+
+Sebuah kondisi bisa dihasilkan ulang kapan saja dari dua hal yang sudah
+tersimpan dan sama-sama berversi: angka di `kpi_values` dan aturan di
+`rule_versions`. Menyimpannya berarti sumber kebenaran ketiga yang bisa basi
+diam-diam, dan hari ini tidak ada pembacanya. `kpi_rule_evaluations` baru masuk
+akal ketika Signal butuh mengingat "sudah pernah ditangani belum".
+
+### `op_settings` disalin, bukan dipindah
+
+Angkanya jadi benih versi 1. Halaman `/operation/settings` dan dashboard lama
+tetap membacanya. Batas peralihannya: aturan V.1 membaca tabel rule, layar lama
+membaca `op_settings`.
+
+### Sewa — AD-02 ditegakkan di sini
+
+`sewa_melebihi_ambang` v1: `gt 5`, berlaku mulai **2026-10**, sumber AD-02.
+`op_settings.expenseThresholds.sewa` **tetap 3** dan tidak disentuh. Periode
+sebelum Oktober 2026 sengaja tidak punya aturan sewa V.1, dan itu jawaban yang
+benar — bukan lubang.
+
+### Yang TIDAK dibuatkan aturan
+
+Tidak ada sumber berwenang untuk **HPP %**, **Cleaning %**, **Platform Fee %**,
+dan **PBJT %**, maupun untuk kelima KPI Sales. Keduanya dibiarkan tanpa aturan,
+dan mesinnya mengembalikan `tanpa_aturan` — sengaja dibedakan dari `aman`.
+Menyebutnya aman berarti mengklaim ia sudah dinilai dan lolos.
+
+`marginBands` memuat `sehat 30`, `cukup 29`, `kritis 15`, yang menyisakan rentang
+15–29 tanpa nama. Hanya batas sehat yang dipakai; pita tengahnya tidak dikarang.
