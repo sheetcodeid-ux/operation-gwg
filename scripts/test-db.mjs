@@ -941,6 +941,7 @@ function bersihkan() {
   }
   sql(`drop database if exists ${DB};`, { db: "postgres" });
   sql(`drop role if exists uji_anon; drop role if exists uji_service;`, { db: "postgres" });
+  sql(`drop role if exists anon; drop role if exists authenticated; drop role if exists service_role;`, { db: "postgres" });
   const sisa = satu(`select count(*) from pg_database where datname = '${DB}';`, { db: "postgres" });
   ok("basis data uji dihancurkan", Number(sisa) === 0);
 }
@@ -1069,7 +1070,7 @@ function ujiBatch() {
   ditolak(
     "status karangan ditolak",
     `insert into financial_upload_batch (periode, sidik, jumlah_baris, jumlah_outlet, oleh_nama, status)
-     values ('2026-10', 'xyz', 1, 1, 'Uji', 'entahlah');`,
+     values ('2027-04', 'xyz', 1, 1, 'Uji', 'entahlah');`,
     "financial_upload_batch_status_check",
   );
 
@@ -1380,6 +1381,271 @@ ${h.nilai
   }
 }
 
+
+/* ══════════════ 16 · TASK #85 — penulisan berversi, idempoten, dan utuh ══════════════ */
+
+const MIGRASI_85 = join(AKAR, "supabase/migrations/0106_tulis_kpi_bulanan.sql");
+
+/**
+ * Periode uji tersendiri.
+ *
+ * BUKAN 2026-08 (hasil rekonsiliasi) dan bukan 2026-09 — yang kedua sudah
+ * dipakai uji riwayat versi di bagian 6, dan memakainya lagi membuat uji ini
+ * mulai dari versi 3 dengan baris yang bukan miliknya.
+ */
+const P85 = "2027-03";
+
+/** Muatan `kpi_values` untuk RPC — kecil, cukup untuk menguji versinya. */
+const muatan = (net, catatan = null) =>
+  JSON.stringify([
+    {
+      kpi: "sales.net_sales",
+      cakupan: "outlet",
+      outlet_id: outletUji,
+      area_id: null,
+      nilai: net,
+      status: "sementara",
+      sumber: "seasonal_daily",
+      rumus: "jumlah-harian",
+      rumus_versi: 1,
+      sumber_sah: true,
+      kelengkapan_persen: null,
+      jumlah_hari: null,
+      catatan,
+    },
+    {
+      kpi: "sales.net_sales",
+      cakupan: "korporat",
+      outlet_id: null,
+      area_id: null,
+      nilai: net,
+      status: "sementara",
+      sumber: "seasonal_daily",
+      rumus: "jumlah-harian",
+      rumus_versi: 1,
+      sumber_sah: true,
+      kelengkapan_persen: null,
+      jumlah_hari: null,
+      catatan: null,
+    },
+  ]);
+
+const muatanTarget = (nilai, kpi = "sales.monthly_target") =>
+  JSON.stringify([
+    {
+      kpi,
+      cakupan: "outlet",
+      outlet_id: outletUji,
+      area_id: null,
+      nilai,
+      sumber: "rumus",
+      rumus: "avg3-tumbuh",
+      rumus_versi: 1,
+      dasar: { bulan: [], riwayat: [], dipakai: [], pertumbuhan: 15 },
+    },
+  ]);
+
+const panggil = (nilai, target, opsi) =>
+  satu(
+    `select gwg_tulis_kpi_bulanan('${P85}', '${nilai.replace(/'/g, "''")}'::jsonb, '${target.replace(/'/g, "''")}'::jsonb);`,
+    opsi,
+  );
+
+const bidangJson = (teks, kunci) => {
+  const m = new RegExp(`"${kunci}"\\s*:\\s*(true|false|-?\\d+)`).exec(teks);
+  return m ? m[1] : null;
+};
+
+function jalankanMigrasi85() {
+  judul("16 · migrasi 0106_tulis_kpi_bulanan.sql");
+  if (!existsSync(MIGRASI_85)) throw new Error(`migrasi tidak ditemukan: ${MIGRASI_85}`);
+
+  // Peran Supabase dibuat dulu supaya berkas migrasinya bisa dijalankan APA
+  // ADANYA — termasuk baris revoke/grant-nya. Menjalankan versi yang sudah
+  // dipotong berarti menguji sesuatu yang bukan yang akan naik ke produksi.
+  sql(`
+    do $$ begin
+      if not exists (select 1 from pg_roles where rolname='anon') then create role anon nologin; end if;
+      if not exists (select 1 from pg_roles where rolname='authenticated') then create role authenticated nologin; end if;
+      if not exists (select 1 from pg_roles where rolname='service_role') then create role service_role nologin bypassrls; end if;
+    end $$;
+  `);
+  sql(readFileSync(MIGRASI_85, "utf8"));
+
+  const ada = satu(`select count(*) from pg_proc p join pg_namespace n on n.oid=p.pronamespace where n.nspname='public' and p.proname='gwg_tulis_kpi_bulanan';`);
+  ok("fungsi gwg_tulis_kpi_bulanan terpasang", Number(ada) === 1, `${ada} fungsi`);
+
+  const definer = satu(`select prosecdef::text from pg_proc p join pg_namespace n on n.oid=p.pronamespace where n.nspname='public' and p.proname='gwg_tulis_kpi_bulanan';`);
+  ok("berjalan sebagai SECURITY DEFINER dengan search_path terkunci", benar(definer), definer);
+  const konfig = satu(`select array_to_string(proconfig, ', ') from pg_proc p join pg_namespace n on n.oid=p.pronamespace where n.nspname='public' and p.proname='gwg_tulis_kpi_bulanan';`);
+  ok("search_path disetel di fungsinya", konfig.includes("search_path"), konfig);
+
+  // Hak jalan: hanya service_role. `authenticated` disebut terpisah karena
+  // Supabase memberinya secara bawaan untuk fungsi baru di skema public.
+  for (const peran of ["public", "anon", "authenticated"]) {
+    const boleh = satu(`select has_function_privilege('${peran}', 'public.gwg_tulis_kpi_bulanan(text, jsonb, jsonb)', 'execute')::text;`);
+    ok(`${peran} TIDAK boleh menjalankannya`, !benar(boleh), boleh);
+  }
+  const svc = satu(`select has_function_privilege('service_role', 'public.gwg_tulis_kpi_bulanan(text, jsonb, jsonb)', 'execute')::text;`);
+  ok("service_role boleh menjalankannya", benar(svc), svc);
+
+  // Tidak ada rumus KPI yang menyelinap ke PL/pgSQL.
+  const badan = readFileSync(MIGRASI_85, "utf8");
+  ok(
+    "tidak ada rumus KPI di dalam fungsinya",
+    !/\/\s*nullif\(sum|sum\([a-z_]+\)\s*\/|\* 100/.test(badan.replace(/--.*$/gm, "")),
+    "tidak ditemukan pembagian/persentase",
+  );
+}
+
+function ujiTulisBerversi() {
+  judul(`17 · penulisan berversi ${P85}`);
+
+  const hitungNilai = () => Number(satu(`select count(*) from kpi_values where periode='${P85}';`));
+  const hitungTerkini = () => Number(satu(`select count(*) from kpi_values where periode='${P85}' and terkini;`));
+  const versiMaks = () => Number(satu(`select coalesce(max(versi),0) from kpi_values where periode='${P85}';`));
+
+  /* ── jalan pertama ── */
+
+  const r1 = panggil(muatan(1000), muatanTarget(2000));
+  ok("jalan pertama menyatakan berubah", bidangJson(r1, "berubah") === "true", r1.slice(0, 120));
+  ok("versi pertama adalah 1", bidangJson(r1, "versi") === "1", bidangJson(r1, "versi"));
+  ok("dua baris nilai tersimpan", hitungNilai() === 2, `${hitungNilai()} baris`);
+  ok("keduanya terkini", hitungTerkini() === 2, `${hitungTerkini()} terkini`);
+  const t1 = Number(satu(`select count(*) from targets where periode='${P85}' and terkini and status='berlaku';`));
+  ok("satu target berlaku", t1 === 1, `${t1} target`);
+
+  /* ── jalan kedua, muatan SAMA PERSIS ── */
+
+  const r2 = panggil(muatan(1000), muatanTarget(2000));
+  ok("jalan kedua menyatakan TIDAK berubah", bidangJson(r2, "berubah") === "false", r2.slice(0, 120));
+  ok("tidak ada baris baru", hitungNilai() === 2, `${hitungNilai()} baris`);
+  ok("tidak ada versi baru", versiMaks() === 1, `versi maks ${versiMaks()}`);
+  ok("tidak ada baris yang disisipkan", bidangJson(r2, "nilai_disisipkan") === "0", bidangJson(r2, "nilai_disisipkan"));
+  const t2 = Number(satu(`select count(*) from targets where periode='${P85}';`));
+  ok("target tidak berlipat", t2 === 1, `${t2} target`);
+
+  /* ── jalan ketiga, angkanya BERUBAH ── */
+
+  const r3 = panggil(muatan(1500), muatanTarget(2000));
+  ok("jalan ketiga menyatakan berubah", bidangJson(r3, "berubah") === "true", r3.slice(0, 120));
+  ok("versi naik ke 2", bidangJson(r3, "versi") === "2", bidangJson(r3, "versi"));
+  ok("versi lama DIPERTAHANKAN, bukan ditimpa", hitungNilai() === 4, `${hitungNilai()} baris`);
+  ok("hanya dua yang terkini", hitungTerkini() === 2, `${hitungTerkini()} terkini`);
+
+  const lama = Number(satu(`select count(*) from kpi_values where periode='${P85}' and versi=1 and terkini;`));
+  ok("versi 1 tidak lagi terkini", lama === 0, `${lama} baris versi 1 masih terkini`);
+  const baru = Number(satu(`select nilai::text from kpi_values where periode='${P85}' and terkini and cakupan='korporat';`));
+  ok("yang terkini adalah angka baru", baru === 1500, `${baru}`);
+
+  const tLama = satu(`select status from targets where periode='${P85}' and versi=1;`);
+  ok("target versi lama berstatus diganti", tLama === "diganti", tLama);
+  const tBaru = Number(satu(`select count(*) from targets where periode='${P85}' and terkini and versi=2 and status='berlaku';`));
+  ok("target versi baru berlaku dan terkini", tBaru === 1, `${tBaru}`);
+
+  /* ── perubahan yang HANYA di catatan tetap terhitung berubah ── */
+
+  const r4 = panggil(muatan(1500, "alasan baru"), muatanTarget(2000));
+  ok("catatan yang berubah melahirkan versi baru", bidangJson(r4, "versi") === "3", bidangJson(r4, "versi"));
+
+  /* ── perubahan yang HANYA di target ── */
+
+  const r5 = panggil(muatan(1500, "alasan baru"), muatanTarget(2500));
+  ok("target yang berubah melahirkan versi baru walau KPI-nya sama", bidangJson(r5, "versi") === "4", bidangJson(r5, "versi"));
+
+  /* ── grain: satu terkini per kombinasi, termasuk baris korporat ber-NULL ── */
+
+  const kembar = satu(`
+    select count(*) from (
+      select kpi_definition_id, cakupan, cakupan_id, periode, skala
+      from kpi_values where terkini group by 1,2,3,4,5 having count(*) > 1
+    ) x;`);
+  ok("tidak ada grain terkini yang kembar di seluruh tabel", Number(kembar) === 0, `${kembar} kembar`);
+
+  /* ── Agustus tidak tersentuh ── */
+
+  const agustus = Number(satu(`select count(*) from kpi_values where periode='2026-08';`));
+  const agustusVersi = satu(`select coalesce(max(versi),0)::text from kpi_values where periode='2026-08';`);
+  const agustusTerkini = Number(satu(`select count(*) from kpi_values where periode='2026-08' and terkini;`));
+  ok("Agustus tetap satu versi", agustusVersi === "1", `versi maks ${agustusVersi}`);
+  ok("seluruh baris Agustus masih terkini", agustus === agustusTerkini, `${agustusTerkini} dari ${agustus}`);
+}
+
+function ujiTolakDanUtuh() {
+  judul("18 · yang DITOLAK, dan keutuhan saat gagal");
+
+  const sebelumNilai = Number(satu(`select count(*) from kpi_values where periode='${P85}';`));
+  const sebelumVersi = Number(satu(`select coalesce(max(versi),0) from kpi_values where periode='${P85}';`));
+  const sebelumTarget = Number(satu(`select count(*) from targets where periode='${P85}';`));
+
+  ditolak(
+    "periode yang tidak berbentuk YYYY-MM ditolak",
+    `select gwg_tulis_kpi_bulanan('2026-9', '${muatan(1).replace(/'/g, "''")}'::jsonb, '[]'::jsonb);`,
+    "YYYY-MM",
+  );
+
+  ditolak(
+    "muatan kosong ditolak — tidak boleh mengosongkan periode diam-diam",
+    `select gwg_tulis_kpi_bulanan('${P85}', '[]'::jsonb, '[]'::jsonb);`,
+    "kosong",
+  );
+
+  /* ── ROLLBACK: KPI lolos, target gagal → tidak ada yang tersisa ── */
+
+  // Targetnya menunjuk definisi KPI yang tidak ada, jadi penyisipan target
+  // melanggar foreign key SESUDAH kpi_values berhasil disisipkan. Kalau
+  // keduanya tidak dalam satu transaksi, di sinilah generasi setengah jadi
+  // lahir: KPI sudah naik versi, targetnya tertinggal.
+  ditolak(
+    "target yang melanggar foreign key membatalkan SELURUH generasi",
+    `select gwg_tulis_kpi_bulanan('${P85}', '${muatan(9999).replace(/'/g, "''")}'::jsonb, '${muatanTarget(1, "sales.tidak_ada").replace(/'/g, "''")}'::jsonb);`,
+    "foreign key",
+  );
+
+  const sesudahNilai = Number(satu(`select count(*) from kpi_values where periode='${P85}';`));
+  const sesudahVersi = Number(satu(`select coalesce(max(versi),0) from kpi_values where periode='${P85}';`));
+  const sesudahTarget = Number(satu(`select count(*) from targets where periode='${P85}';`));
+  ok("tidak ada baris KPI yang tertinggal dari generasi yang gagal", sesudahNilai === sebelumNilai, `${sebelumNilai} → ${sesudahNilai}`);
+  ok("versi tidak ikut naik saat gagal", sesudahVersi === sebelumVersi, `${sebelumVersi} → ${sesudahVersi}`);
+  ok("target tidak ikut berubah saat gagal", sesudahTarget === sebelumTarget, `${sebelumTarget} → ${sesudahTarget}`);
+
+  const terkiniLagi = Number(satu(`select count(*) from kpi_values where periode='${P85}' and terkini;`));
+  ok("baris yang terkini kembali seperti semula", terkiniLagi === 2, `${terkiniLagi} terkini`);
+  const nilaiLagi = Number(satu(`select nilai::text from kpi_values where periode='${P85}' and terkini and cakupan='korporat';`));
+  ok("angkanya tidak berubah jadi 9999", nilaiLagi === 1500, `${nilaiLagi}`);
+}
+
+function ujiKunciPeriode() {
+  judul("19 · kunci per periode");
+
+  // Kuncinya terikat TRANSAKSI, jadi ia cuma bisa dilihat dari dalam transaksi
+  // yang sama. Memanggil fungsinya di dalam `begin` lalu menghitung kunci
+  // advisory yang dipegang sesi ini membuktikan kuncinya memang diambil —
+  // bukan sekadar tertulis di berkas migrasinya.
+  const dipegang = sql(`
+    begin;
+    select gwg_tulis_kpi_bulanan('${P85}', '${muatan(1500, "alasan baru").replace(/'/g, "''")}'::jsonb, '${muatanTarget(2500).replace(/'/g, "''")}'::jsonb);
+    select count(*) from pg_locks where locktype='advisory' and pid = pg_backend_pid();
+    rollback;
+  `).split("\n").filter(Boolean).pop();
+  ok("satu kunci advisory dipegang selama menulis", Number(dipegang) === 1, `${dipegang} kunci`);
+
+  const dua = sql(`
+    begin;
+    select gwg_tulis_kpi_bulanan('${P85}', '${muatan(1).replace(/'/g, "''")}'::jsonb, '[]'::jsonb);
+    select gwg_tulis_kpi_bulanan('2027-04', '${muatan(1).replace(/'/g, "''")}'::jsonb, '[]'::jsonb);
+    select count(*) from pg_locks where locktype='advisory' and pid = pg_backend_pid();
+    rollback;
+  `).split("\n").filter(Boolean).pop();
+  ok("periode berbeda memakai kunci berbeda — bukan satu kunci global", Number(dua) === 2, `${dua} kunci`);
+
+  const sisa = Number(satu(`select count(*) from pg_locks where locktype='advisory';`));
+  ok("kunci lepas sendiri begitu transaksinya berakhir", sisa === 0, `${sisa} kunci tersisa`);
+
+  const sesudah = Number(satu(`select count(*) from kpi_values where periode='2027-04';`));
+  ok("yang di-rollback tidak meninggalkan jejak", sesudah === 0, `${sesudah} baris periode tetangga`);
+}
+
 /* ─────────────────────────── jalan ─────────────────────────── */
 
 function utama() {
@@ -1414,6 +1680,10 @@ function utama() {
     ok("angka finansial Agustus dimuat", jml === 58, `${jml} outlet`);
     jalankanMigrasi2C();
     simpanKeuangan(rekonsiliasiKeuangan());
+    jalankanMigrasi85();
+    ujiTulisBerversi();
+    ujiTolakDanUtuh();
+    ujiKunciPeriode();
   } else {
     judul("4 · isi contoh minimum");
     isiContoh();
@@ -1426,6 +1696,8 @@ function utama() {
     jalankanMigrasi2B();
     ujiBatch();
     ujiRincianUtilitas();
+    jalankanMigrasi2C();
+    jalankanMigrasi85();
   }
 
   bersihkan();

@@ -600,7 +600,7 @@ export async function simpanOutletBulanan(input: {
 /* ─────────────────────── angka se-area Coordinator Area ─────────────────────── */
 
 /** Outlet yang dinilai, beserta cabang ESB-nya. */
-interface OutletCa {
+export interface OutletCa {
   id: string;
   nama: string;
   branch: string | null;
@@ -645,7 +645,7 @@ export function grossDiketik(o: { esbMulai: string | null; esbAbaikan: string[] 
   return o.esbAbaikan.includes(periode);
 }
 
-function grossOutlet(
+export function grossOutlet(
   o: OutletCa,
   periode: string,
   esb: Map<string, { net: number }>,
@@ -736,7 +736,7 @@ function sudahTigaBulan(o: OutletCa, periode: string, nilaiTigaBulan: (number | 
  * outlet terbaca gagal di tab mingguan tapi tercapai di indikator bulanannya —
  * tanpa satu pun tanda bahwa dua angka itu memang tidak sepakat.
  */
-const tumbuhCa = (): number => {
+export const tumbuhCa = (): number => {
   const t = indikatorPosisi("operational_ca").find((i) => i.key === "gross_sales")?.target;
   return t && t.jenis === "avg3" ? t.pertumbuhan : 0;
 };

@@ -563,3 +563,96 @@ beromzet Rp 20 juta sama beratnya dengan outlet beromzet Rp 900 juta.
 Outlet yang omzetnya nol atau belum melapor tidak menyumbang pembilang maupun
 penyebut — memasukkan biayanya tanpa omzetnya membuat persen korporat naik
 tanpa sebab.
+
+---
+
+## AD-09 · TASK #85 — identitas generasi berbasis isi
+
+Jalur tulis berulang perlu menjawab satu pertanyaan sebelum apa pun bisa
+ditulis: **kapan dua jalan dianggap sama?**
+
+Jawaban yang dipakai: **dua jalan sama bila HASILNYA sama.** Bukan bila sebuah
+kunci buatan — periode + tanggal + sidik masukan — kebetulan sama.
+
+Kunci buatan bisa gagal menangkap masukan yang berubah, dan kegagalan seperti
+itu tidak kelihatan dari mana pun: angkanya tetap masuk akal, cuma basi.
+Perbandingan isi tidak bisa salah menurut definisinya. Kalau masukan berubah
+tapi angkanya tidak, tidak melahirkan versi baru memang yang benar.
+
+Yang dibandingkan, per grain `(kpi, cakupan, cakupan_id, periode, skala)`:
+
+| Tabel | Kolom pembanding |
+|---|---|
+| `kpi_values` | `nilai`, `status`, `catatan` |
+| `targets` | `nilai` |
+
+Konsekuensinya sengaja: `hitungSales()` ikut menulis `hariBerjalan` dan
+`kelengkapanPersen`, yang berubah tiap hari selama bulan berjalan.
+`hariBerjalan()` memakai tanggal WIB, jadi stabil di dalam satu hari WIB.
+Hasilnya **paling banyak satu versi baru per hari WIB**, dan cron yang
+berangkat dua kali dalam sehari adalah no-op.
+
+**Tidak ada kolom baru.** `kpi_values` tidak punya kolom jsonb, dan menambah
+kolom `sidik` hanya demi identitas berarti migrasi yang tidak dibutuhkan.
+
+Lifecycle versinya memakai yang sudah disiapkan 0103 dan belum pernah dipakai:
+baris lama `terkini = false` (target juga `status = 'diganti'`), baris baru
+`versi + 1`, `terkini = true`. **Versi lama tidak pernah dihapus.**
+
+### Kenapa penulisannya sebuah fungsi basis data
+
+PostgREST tidak punya transaksi lintas-pernyataan. Menulis `kpi_values` lalu
+`targets` lewat dua panggilan berarti panggilan pertama sudah ter-commit ketika
+yang kedua gagal — KPI naik versi, targetnya tertinggal, dan tidak ada layar
+yang menunjukkannya. Karena itu `gwg_tulis_kpi_bulanan` (migrasi 0106): satu
+transaksi, satu `pg_advisory_xact_lock` per periode, satu nomor versi.
+
+Fungsinya **tidak memuat satu pun rumus KPI** — ia menerima baris yang sudah
+jadi. Ada uji basis data yang gagal begitu ada pembagian atau persentase
+menyelinap ke dalamnya.
+
+---
+
+## AD-10 · TASK #85 — generasi pertama hanya bulan berjalan
+
+`periodeSelesai` sebelumnya tidak pernah dihitung di mana pun: kedua mesin
+menerimanya sebagai MASUKAN, dan tidak ada pemanggil yang mengisinya.
+`src/lib/ops/finalisasi.ts` yang menjawabnya sekarang.
+
+### Aturan finalisasi
+
+```
+bulan berjalan             → BELUM final, apa pun tanggalnya
+bulan lalu, tanggal ≤ 15   → BELUM final
+bulan lalu, tanggal > 15   → final
+bulan yang lebih lama      → final
+```
+
+Tanggal 15 bukan angka baru: ia `TANGGAL_TUTUP_KPI` yang sudah berlaku lewat
+`periodeSekarang()` di `src/lib/data/kpi.ts`. Ditulis ulang di `finalisasi.ts`
+karena berkas itu murni sementara `data/kpi.ts` menempel pada Supabase — dan
+dijaga uji yang membaca kedua berkas, sama seperti `TANGGAL_BATAS_BUKA`.
+
+**`TANGGAL_TUTUP` BUKAN `TANGGAL_BATAS_BUKA`.** Keduanya kebetulan 15. Yang
+pertama soal sampai kapan sebuah bulan masih boleh berubah; yang kedua soal
+outlet yang buka tanggal 31 tidak dihitung berjalan sebulan penuh. Menyatukan
+keduanya berarti menggeser jadwal tutup buku diam-diam mengubah cara outlet
+baru dinilai. Ada uji yang menolak `finalisasi.ts` menyebut konstanta yang satu
+lagi.
+
+### Cakupan generasi pertama
+
+`periodeGenerasi()` mengembalikan **satu periode: bulan berjalan.**
+
+Bulan lalu sengaja tidak ikut, dan itu keputusan pemiliknya:
+
+- **Agustus 2026 adalah data historis yang terkunci.** 826 baris hasil TASK #86
+  berstatus final. TASK #85 tidak membandingkannya, tidak memversikannya, tidak
+  menulis ulangnya, dan tidak mem-backfill-nya.
+- **Tidak ada catch-up historis.** Backfill adalah pekerjaan sekali jalan yang
+  punya gerbang sendiri, bukan sesuatu yang boleh terjadi diam-diam karena
+  sebuah cron kebetulan berangkat.
+
+Aturan bulan-lalu di atas sudah ada di `periodeSelesai()` dan sudah diuji, tapi
+belum dipakai `periodeGenerasi()`. Mengaktifkannya kelak cukup mengubah daftar
+itu — dan itu keputusan tersendiri, bukan efek samping.
