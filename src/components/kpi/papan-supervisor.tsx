@@ -2,10 +2,13 @@
 
 import * as React from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { ChevronRight, Download, ListChecks, Search, TriangleAlert } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Combobox } from "@/components/ui/combobox";
 import { DialogDaftarKpi, type KelompokKpi } from "./daftar-pdf";
 import { IsiProblemSolver } from "./isi-problem-solver";
+import { BULAN, periodeDari, tahunPilihan } from "./periode";
 import type { RekapSupervisor } from "@/lib/data/supervisor";
 import { cn, formatNumber } from "@/lib/utils";
 
@@ -41,10 +44,25 @@ export function PapanSupervisor({
   /** Boleh mengisi Problem Solver — Head Operation dan Super Admin. */
   bisaIsi?: boolean;
 }) {
+  const router = useRouter();
   const [cari, setCari] = React.useState("");
   const [jenis, setJenis] = React.useState<"semua" | "Umum" | "KPK">("semua");
   const [unduh, setUnduh] = React.useState(false);
   const [isiPs, setIsiPs] = React.useState(false);
+
+  // ┌─ BULAN MANA YANG SEDANG DIBUKA ─────────────────────────────────────────┐
+  // │ Halamannya sejak awal menerima `?bulan=`, tapi tidak ada satu pun cara  │
+  // │ mengubahnya dari layar: yang mau mengisi Problem Solver bulan lalu      │
+  // │ terjebak di bulan berjalan, dan satu-satunya jalan keluar adalah        │
+  // │ mengetik sendiri alamatnya. Pemilihnya dibaca DARI `rekap.periode` —    │
+  // │ bukan dari jam peramban — supaya yang tertulis di dropdown selalu bulan │
+  // │ yang angkanya benar-benar sedang ditampilkan.                           │
+  // └─────────────────────────────────────────────────────────────────────────┘
+  const [tahun, bulan] = rekap.periode.split("-");
+
+  function gantiPeriode(th: string, bl: string) {
+    router.push(`/kpi/supervisor?bulan=${periodeDari(th, bl)}`);
+  }
 
   const tampil = React.useMemo(() => {
     const q = cari.trim().toLowerCase();
@@ -104,6 +122,24 @@ export function PapanSupervisor({
       </div>
 
       <div className="mb-3 flex flex-wrap items-center gap-2">
+        {/* Tahun dan bulan terpisah — pola yang sama dengan pemilih periode KPI
+            lainnya, supaya tidak ada yang perlu menerjemahkan "2026-08". */}
+        <Combobox
+          searchable={false}
+          value={bulan}
+          onChange={(v) => gantiPeriode(tahun, v)}
+          options={BULAN}
+          className="w-36 shrink-0"
+          matchTriggerWidth
+        />
+        <Combobox
+          searchable={false}
+          value={tahun}
+          onChange={(v) => gantiPeriode(v, bulan)}
+          options={tahunPilihan()}
+          className="w-24 shrink-0"
+          matchTriggerWidth
+        />
         <div className="relative min-w-0 flex-1 sm:max-w-xs">
           <Search className="pointer-events-none absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
           <input
