@@ -33,9 +33,16 @@ export default async function OutletsPage() {
     .filter((a) => areaIds.has(a.id))
     .map((a) => ({ id: a.id, name: a.name }));
 
-  const avg = (xs: number[]) => (xs.length ? Math.round(xs.reduce((a, b) => a + b, 0) / xs.length) : 0);
-  const avgHosp = avg(rows.map((r) => r.hospitality));
-  const avgHyg = avg(rows.map((r) => r.hygiene));
+  // Rata-rata hanya dari outlet yang BENAR-BENAR punya skornya. Outlet yang
+  // belum diaudit tidak ikut sebagai nol — itu akan menyeret rata-rata seluruh
+  // perusahaan turun karena pekerjaan audit yang belum selesai, bukan karena
+  // ada yang memburuk. Null bila tak satu pun outlet punya skornya.
+  const rata = (xs: (number | null)[]): number | null => {
+    const ada = xs.filter((x): x is number => x !== null);
+    return ada.length ? Math.round(ada.reduce((a, b) => a + b, 0) / ada.length) : null;
+  };
+  const avgHosp = rata(rows.map((r) => r.hospitality));
+  const avgHyg = rata(rows.map((r) => r.hygiene));
   const openComplaints = rows.reduce((a, b) => a + b.complaints, 0);
 
   return (
@@ -49,8 +56,11 @@ export default async function OutletsPage() {
 
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         <StatTile icon={Store} label="Total Outlets" value={rows.length} tone="brand" />
-        <StatTile icon={ConciergeBell} label="Avg Hospitality" value={avgHosp} tone="cyan" />
-        <StatTile icon={SprayCan} label="Avg Hygiene" value={avgHyg} tone="success" />
+        {/* `StatTile.value` bertipe ReactNode, jadi `null` akan merender kartu
+            KOSONG tanpa satu kata pun. Kartu kosong menyuruh yang membacanya
+            menebak; kalimatnya menyuruhnya menunggu data. */}
+        <StatTile icon={ConciergeBell} label="Avg Hospitality" value={avgHosp ?? "Belum ada data"} tone="cyan" />
+        <StatTile icon={SprayCan} label="Avg Hygiene" value={avgHyg ?? "Belum ada data"} tone="success" />
         <StatTile icon={MessageSquareWarning} label="Open Complaints" value={openComplaints} tone="warning" />
       </div>
 

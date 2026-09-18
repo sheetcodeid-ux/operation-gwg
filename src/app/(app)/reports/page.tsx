@@ -3,7 +3,7 @@ import Link from "next/link";
 import { ChevronRight, FileText, MapPinned, Store, UserCog } from "lucide-react";
 import type { Metadata } from "next";
 import { requireSessionUser } from "@/lib/auth";
-import { areaReportRows, coordinatorReportRows, outletReportRows } from "@/lib/data/store";
+import { areaReportRows, coordinatorReportRows, outletReportRows, rataAudit } from "@/lib/data/store";
 import { can } from "@/lib/rbac";
 import { hasMenuGrant } from "@/lib/nav";
 import { ROLE_LABEL } from "@/lib/constants";
@@ -14,6 +14,20 @@ import { StatTile } from "@/components/ui/stat";
 import { ReportsOutletTable, type ReportOutletRow } from "@/components/reports/reports-outlet-table";
 
 export const metadata: Metadata = { title: "Reports" };
+
+const TAK_ADA = "Belum ada data";
+
+/** Cincin mutu gabungan, atau kalimat bila belum ada satu pun audit. */
+function CincinMutu({ v }: { v: number | null }) {
+  if (v === null) {
+    return (
+      <div className="grid size-11 shrink-0 place-items-center rounded-full border border-dashed border-border px-1 text-center">
+        <span className="text-[8px] leading-tight text-muted-foreground/80">{TAK_ADA}</span>
+      </div>
+    );
+  }
+  return <ScoreRing value={Math.round(v)} size={44} stroke={5} />;
+}
 
 export default async function ReportsPage() {
   const user = await requireSessionUser();
@@ -34,7 +48,11 @@ export default async function ReportsPage() {
     hygiene: o.hygiene,
   }));
   const areaOptions = areas.map((a) => ({ id: a.area.id, name: a.area.name }));
-  const avg = (xs: number[]) => (xs.length ? Math.round(xs.reduce((a, b) => a + b, 0) / xs.length) : 0);
+  // Mutu satu outlet = rata-rata skor yang ADA padanya; outlet tanpa audit sama
+  // sekali tidak ikut menarik rata-rata perusahaan turun, karena yang belum
+  // diperiksa bukan yang buruk.
+  const mutu = (hosp: number | null, hyg: number | null) => rataAudit([hosp, hyg]);
+  const avgQuality = rataAudit(outlets.map((o) => mutu(o.hospitality, o.hygiene)));
 
   return (
     <div className="w-full">
@@ -48,7 +66,7 @@ export default async function ReportsPage() {
         <StatTile icon={Store} label="Outlets" value={outlets.length} tone="brand" />
         <StatTile icon={MapPinned} label="Regions" value={areas.length} tone="cyan" />
         <StatTile icon={UserCog} label="Coordinators" value={coordinators.length} tone="amber" />
-        <StatTile icon={FileText} label="Avg Quality" value={avg(outlets.map((o) => (o.hospitality + o.hygiene) / 2))} tone="success" />
+        <StatTile icon={FileText} label="Avg Quality" value={avgQuality ?? TAK_ADA} tone="success" />
       </div>
 
       {/* Areas (Wilayah) */}
@@ -67,7 +85,7 @@ export default async function ReportsPage() {
                 href={`/reports/area/${a.area.id}`}
                 className="group flex items-center gap-3 rounded-xl border border-border bg-muted/20 p-3 transition-colors hover:border-primary/40 hover:bg-muted/40"
               >
-                <ScoreRing value={Math.round((a.agg.hospitality + a.agg.hygiene) / 2)} size={44} stroke={5} />
+                <CincinMutu v={mutu(a.agg.hospitality, a.agg.hygiene)} />
                 <div className="min-w-0 flex-1">
                   <p className="truncate text-sm font-medium text-foreground">{a.area.name}</p>
                   <p className="text-[11px] text-muted-foreground">{a.agg.outlets} outlets · {a.agg.complaintsOpen} open</p>
@@ -95,7 +113,7 @@ export default async function ReportsPage() {
                 href={`/reports/ca/${c.coordinator.id}`}
                 className="group flex items-center gap-3 rounded-xl border border-border bg-muted/20 p-3 transition-colors hover:border-primary/40 hover:bg-muted/40"
               >
-                <ScoreRing value={Math.round((c.agg.hospitality + c.agg.hygiene) / 2)} size={44} stroke={5} />
+                <CincinMutu v={mutu(c.agg.hospitality, c.agg.hygiene)} />
                 <div className="min-w-0 flex-1">
                   <p className="truncate text-sm font-medium text-foreground">{c.coordinator.name}</p>
                   <p className="text-[11px] text-muted-foreground">{ROLE_LABEL.area_coordinator} · {c.agg.outlets} outlets</p>

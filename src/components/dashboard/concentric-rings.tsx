@@ -13,7 +13,8 @@ export function ConcentricRings({
 }: {
   rings: Ring[];
   size?: number;
-  centerValue: number;
+  /** `null` = belum ada angka yang terukur untuk ditulis di tengah. */
+  centerValue: number | null;
   centerLabel?: string;
 }) {
   const stroke = size * 0.075;
@@ -48,7 +49,11 @@ export function ConcentricRings({
         })}
       </svg>
       <div className="absolute inset-0 flex flex-col items-center justify-center">
-        <span className="text-2xl font-semibold tabular-nums text-foreground">{centerValue.toFixed(0)}%</span>
+        {centerValue === null ? (
+          <span className="px-2 text-center text-[11px] leading-tight text-muted-foreground">Belum ada data</span>
+        ) : (
+          <span className="text-2xl font-semibold tabular-nums text-foreground">{centerValue.toFixed(0)}%</span>
+        )}
         {centerLabel && <span className="text-[10px] uppercase tracking-wide text-muted-foreground">{centerLabel}</span>}
       </div>
     </div>

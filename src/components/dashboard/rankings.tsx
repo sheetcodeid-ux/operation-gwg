@@ -42,17 +42,26 @@ export function OutletRanking({ rows }: { rows: OutletRankRow[] }) {
             <Metric label="Hyg" value={row.hygiene} />
             {row.complaints > 0 && <Badge tone="danger">{row.complaints} open</Badge>}
           </div>
-          <ScoreRing value={row.composite} size={40} stroke={4} />
+          {row.composite === null ? (
+            <span className="w-10 shrink-0 text-center text-[9px] leading-tight text-muted-foreground/70">Belum ada data</span>
+          ) : (
+            <ScoreRing value={row.composite} size={40} stroke={4} />
+          )}
         </div>
       ))}
     </div>
   );
 }
 
-function Metric({ label, value }: { label: string; value: number }) {
+/** `null` = outlet ini belum punya bukti auditnya. Bukan nol. */
+function Metric({ label, value }: { label: string; value: number | null }) {
   return (
     <div className="text-right">
-      <p className="text-sm font-semibold tabular-nums text-foreground">{value.toFixed(0)}</p>
+      {value === null ? (
+        <p className="text-[11px] italic text-muted-foreground/70">—</p>
+      ) : (
+        <p className="text-sm font-semibold tabular-nums text-foreground">{value.toFixed(0)}</p>
+      )}
       <p className="text-[10px] uppercase tracking-wide text-muted-foreground">{label}</p>
     </div>
   );

@@ -21,7 +21,6 @@ import {
   Boxes,
   CheckCircle2,
   ChevronDown,
-  CircleAlert,
   Coins,
   Download,
   Eye,
@@ -36,49 +35,61 @@ import {
   XCircle,
   type LucideIcon,
 } from "lucide-react";
-import { Bar, BarChart, CartesianGrid, Line, LineChart, ReferenceLine, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
+import { CartesianGrid, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { SegmentedTabs } from "@/components/ui/segmented-tabs";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
-import { ConcentricRings } from "@/components/dashboard/concentric-rings";
 import type { OpsActivityFeed, OpsBranchPerf, OpsControl, OpsDashboardData, OpsFinance, OpsFraud, OpsHourly, OpsProduct, OpsTarget } from "@/lib/data/ops-dashboard";
 import { cn } from "@/lib/utils";
 
 /* ---------- palette (tone.ts) ---------- */
 const C = { blue: "#3b82f6", blueLt: "#93c5fd", green: "#22c55e", amber: "#f59e0b", red: "#ef4444", slate: "#94a3b8", slate2: "#64748b" };
 /** 8 shades of blue (dark → light) for the stacked Beban chart gradient. */
-const BLUES = ["#1e40af", "#1d4ed8", "#2563eb", "#3b82f6", "#60a5fa", "#93c5fd", "#bfdbfe", "#dbeafe"];
 const rp = (n: number) => "Rp" + Math.round(n).toLocaleString("id-ID");
-const rand = (seed: number) => { let s = seed; return () => ((s = (s * 1103515245 + 12345) & 0x7fffffff) / 0x7fffffff); };
+/** Rupiah, atau pernyataan jujur bahwa angkanya belum ada. */
+const rpAtau = (n: number | null) => (n === null ? TAK_ADA : rp(n));
+/** Satu kata yang dipakai seluruh halaman ini untuk ketiadaan angka. */
+const TAK_ADA = "Belum ada data";
 
-const EXPENSE_CATS = ["Utilitas", "Sewa", "Tenaga Kerja", "Potongan", "Manajemen Fee", "Pemasaran", "Ongkos Kirim", "Lainnya"];
-const MONTHS = ["Jan", "Feb", "Mar", "Apr", "Mei", "Jun", "Jul", "Agu", "Sep", "Okt", "Nov", "Des"];
 
 /* ==================================================================== */
 
 export function OperationDashboard2({ initial }: { initial: OpsDashboardData }) {
-  const [period, setPeriod] = React.useState("bulan");
+  // ┌─ PENGALIH PERIODE DIHILANGKAN, BUKAN DIPERBAIKI LABELNYA ───────────────┐
+  // │                                                                        │
+  // │ Labelnya di-hardcode "Per Bulan 2026.03" sementara halaman ini selalu   │
+  // │ memuat bulan berjalan lewat `ym(new Date())`. Dan `period` tidak pernah │
+  // │ dipakai menyaring apa pun — mengubah pilihannya tidak mengubah satu     │
+  // │ angka pun.                                                             │
+  // │                                                                        │
+  // │ Memperbaiki labelnya saja akan meninggalkan kontrol yang terlihat       │
+  // │ bekerja padahal tidak, dan itu bentuk lain dari hal yang sama: layar    │
+  // │ menjanjikan sesuatu yang tidak terjadi. Filternya belum ada, jadi       │
+  // │ kontrolnya juga tidak.                                                 │
+  // └────────────────────────────────────────────────────────────────────────┘
   const [cabang, setCabang] = React.useState("all");
   const [ca, setCa] = React.useState("all");
 
   const kpi = initial.kpi;
   const fin = initial.finance;
   const t = initial.target;
-  const nsDelta = kpi && kpi.netSalesPrev > 0 ? +(((kpi.netSales - kpi.netSalesPrev) / kpi.netSalesPrev) * 100).toFixed(1) : 0;
+  // Delta hanya ada bila KEDUA harinya terukur dan pembandingnya sah. Tanpa
+  // pembanding hasilnya null, bukan 0% — "tidak ada pembanding" dan "tidak ada
+  // perubahan" dua hal yang berbeda.
+  const nsDelta =
+    kpi && kpi.netSales !== null && kpi.netSalesPrev !== null && kpi.netSalesPrev > 0
+      ? +(((kpi.netSales - kpi.netSalesPrev) / kpi.netSalesPrev) * 100).toFixed(1)
+      : null;
   // Laba Bersih = Net Sales − Pembelian − Beban Operasional (needs both ERP Net Sales & Finance input).
-  const laba = kpi && fin ? kpi.netSales - fin.purchaseTotal - fin.expenses : null;
+  const laba = kpi && kpi.netSales !== null && fin ? kpi.netSales - fin.purchaseTotal - fin.expenses : null;
   const cabangOptions = [{ v: "all", l: "Semua Cabang" }, ...initial.branches.map((b) => ({ v: b.code, l: b.name }))];
 
   return (
     <div className="w-full space-y-4">
       {/* Global filter row */}
       <div className="flex flex-wrap items-center gap-2">
-        <div className="flex items-center gap-2 rounded-xl border border-border bg-card px-3 py-2 text-xs">
-          <span className="text-muted-foreground">Periode</span>
-          <PillSelect value={period} onChange={setPeriod} bare options={[{ v: "hari", l: "Per Hari" }, { v: "minggu", l: "Per Minggu" }, { v: "bulan", l: "Per Bulan 2026.03" }]} />
-        </div>
         {initial.configured ? (
           <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-500/12 px-2 py-1 text-[11px] font-medium text-emerald-600 dark:text-emerald-400">
             <span className="size-1.5 rounded-full bg-emerald-500" /> ERP tersambung
@@ -103,28 +114,39 @@ export function OperationDashboard2({ initial }: { initial: OpsDashboardData }) 
         {/* LEFT rail — targets & produk */}
         <div className="min-w-0 space-y-4 lg:col-span-3">
           <TargetGauge target={t} />
-          <ProgressCard title="Proyeksi Bulanan" live={!!t} pct={t ? Math.round((t.proyeksiBulanan / t.targetMonth) * 100) : 50} actual={t ? t.proyeksiBulanan : 300_000_000} target={t ? t.targetMonth : 600_000_000} />
-          <ProgressCard title="Target Harian" live={!!t} pct={t && t.targetHarian > 0 ? Math.round((t.todayActual / t.targetHarian) * 100) : 50} actual={t ? t.todayActual : 10_000_000} target={t ? t.targetHarian : 20_000_000} />
-          <WeeklyTarget target={t} />
+          <ProgressCard
+            title="Proyeksi Bulanan"
+            live={!!t}
+            pct={t && t.targetMonth > 0 ? Math.round((t.proyeksiBulanan / t.targetMonth) * 100) : null}
+            actual={t ? t.proyeksiBulanan : null}
+            target={t ? t.targetMonth : null}
+            sebab="Proyeksi diturunkan dari target bulanan, yang butuh riwayat omzet tiga bulan penuh."
+          />
+          <ProgressCard
+            title="Target Harian"
+            live={!!t && t.todayActual !== null}
+            pct={t && t.todayActual !== null && t.targetHarian > 0 ? Math.round((t.todayActual / t.targetHarian) * 100) : null}
+            actual={t ? t.todayActual : null}
+            target={t ? t.targetHarian : null}
+            sebab="Penjualan hari ini belum ditarik dari ESB, atau target bulanan belum bisa dihitung."
+          />
           <ProdukCard products={initial.products} />
         </div>
 
         {/* MIDDLE rail — KPI 2×2, charts, table */}
         <div className="min-w-0 space-y-4 lg:col-span-6">
           <div className="grid grid-cols-2 gap-4">
-            <KpiTile icon={Coins} label="Net Sales" value={kpi ? rp(kpi.netSales) : rp(100_000_000)} delta={kpi ? nsDelta : 2.45} live={!!kpi} />
-            <KpiTile icon={ShoppingCart} label="Pembelian" value={fin ? rp(fin.purchaseTotal) : rp(100_000_000)} delta={2.45} live={!!fin} />
-            <KpiTile icon={Wallet} label="Beban Operasional" value={fin ? rp(fin.expenses) : rp(100_000_000)} delta={-2.45} positiveIsGood={false} live={!!fin} />
-            <KpiTile icon={TrendingUp} label="Laba Bersih" value={laba != null ? rp(laba) : rp(100_000_000)} delta={2.45} live={laba != null} />
+            <KpiTile icon={Coins} label="Net Sales" value={kpi && kpi.netSales !== null ? rp(kpi.netSales) : null} delta={nsDelta} live={!!kpi && kpi.netSales !== null} />
+            <KpiTile icon={ShoppingCart} label="Pembelian" value={fin ? rp(fin.purchaseTotal) : null} delta={null} live={!!fin} />
+            <KpiTile icon={Wallet} label="Beban Operasional" value={fin ? rp(fin.expenses) : null} delta={null} positiveIsGood={false} live={!!fin} />
+            <KpiTile icon={TrendingUp} label="Laba Bersih" value={laba != null ? rp(laba) : null} delta={null} live={laba != null} />
           </div>
           <PenjualanChart hourly={initial.hourly} />
-          <BebanChart thresholdTK={initial.settings.expenseThresholds.tenaga_kerja} />
           <PerformaCabang data={initial.branchPerf} />
         </div>
 
         {/* RIGHT rail — distribusi, kontrol, rencana, aktivitas */}
         <div className="min-w-0 space-y-4 lg:col-span-3">
-          <DistribusiMargin />
           <KontrolCard fraud={initial.fraud} control={initial.control} />
           <RencanaPengeluaran fin={fin} netSales={kpi?.netSales ?? null} limits={initial.settings.purchaseLimits} />
           <AktivitasTerkini activity={initial.activity} />
@@ -194,8 +216,31 @@ function ChartTip({ active, label, payload, money, suffix }: TipProps) {
   );
 }
 
+/**
+ * Satu kalimat jujur, dipakai seluruh panel yang angkanya belum ada.
+ *
+ * Bukan "—", bukan "0", bukan sel kosong: ketiganya menyuruh pembacanya
+ * menebak, dan tebakan yang paling sering diambil adalah nol. `sebab` mengisi
+ * bagian yang paling berguna — apa yang harus dikerjakan supaya angkanya ada.
+ */
+function BelumAdaData({ sebab, className }: { sebab?: string; className?: string }) {
+  return (
+    <div className={cn("grid place-items-center rounded-xl border border-dashed border-border px-3 py-6 text-center", className)}>
+      <p className="text-[12px] font-medium text-muted-foreground">{TAK_ADA}</p>
+      {sebab && <p className="mt-1 max-w-[22rem] text-[10.5px] leading-relaxed text-muted-foreground/80">{sebab}</p>}
+    </div>
+  );
+}
+
 /* ---------- KPI ---------- */
-function KpiTile({ icon: Icon, label, value, delta, positiveIsGood, live }: { icon: LucideIcon; label: string; value: string; delta: number; positiveIsGood?: boolean; live?: boolean }) {
+/**
+ * Satu kartu KPI. `value` null berarti angkanya belum ada.
+ *
+ * `delta` sengaja WAJIB null ketika `value` null. Sebelum Gate R keempat kartu
+ * ini jatuh ke Rp 100.000.000 dengan delta +2,45% — dan delta itu bukan sekadar
+ * angka contoh, ia klaim tentang perubahan yang tidak pernah dihitung.
+ */
+function KpiTile({ icon: Icon, label, value, delta, positiveIsGood, live }: { icon: LucideIcon; label: string; value: string | null; delta: number | null; positiveIsGood?: boolean; live?: boolean }) {
   return (
     <div className="card-gradient flex flex-col rounded-2xl p-4">
       <div className="flex items-center justify-between gap-2">
@@ -205,10 +250,14 @@ function KpiTile({ icon: Icon, label, value, delta, positiveIsGood, live }: { ic
       <div className="mt-4 flex items-end justify-between gap-2">
         <div className="min-w-0">
           <p className="text-[12px] text-muted-foreground">{label}</p>
-          <p className="truncate text-lg font-semibold tabular-nums text-foreground">{value}</p>
-          <p className="text-[10px] text-muted-foreground">vs kemarin</p>
+          {value === null ? (
+            <p className="truncate text-[13px] font-medium italic text-muted-foreground">{TAK_ADA}</p>
+          ) : (
+            <p className="truncate text-lg font-semibold tabular-nums text-foreground">{value}</p>
+          )}
+          {delta !== null && <p className="text-[10px] text-muted-foreground">vs kemarin</p>}
         </div>
-        <Delta v={delta} positiveIsGood={positiveIsGood} />
+        {delta !== null && <Delta v={delta} positiveIsGood={positiveIsGood} />}
       </div>
     </div>
   );
@@ -217,21 +266,32 @@ function KpiTile({ icon: Icon, label, value, delta, positiveIsGood, live }: { ic
 /* ---------- Penjualan (3-line chart) ---------- */
 function PenjualanChart({ className, hourly }: { className?: string; hourly: OpsHourly[] | null }) {
   const [mode, setMode] = React.useState("harian");
-  const points = mode === "harian" ? 24 : mode === "mingguan" ? 7 : 30;
-  const label = (i: number) => (mode === "harian" ? String(i).padStart(2, "0") : mode === "mingguan" ? ["Sen", "Sel", "Rab", "Kam", "Jum", "Sab", "Min"][i] : String(i + 1));
-  const r = rand(7 + points);
-  // Real ERP hourly (today vs yesterday) drives Harian mode; other modes use placeholder until wired.
+  // ┌─ DUA MODE YANG BELUM TERSAMBUNG TIDAK LAGI MENGARANG ───────────────────┐
+  // │                                                                        │
+  // │ Sebelum Gate R, mode Mingguan dan Bulanan SELALU memakai PRNG —         │
+  // │ walaupun data ESB lengkap — dan `rand()` berseed tetap, jadi angkanya   │
+  // │ identik tiap pemuatan. Kestabilan itu justru yang membuatnya terbaca    │
+  // │ sebagai data sungguhan.                                                │
+  // │                                                                        │
+  // │ Modenya DIPERTAHANKAN dengan keadaan kosong, bukan dihapus: yang        │
+  // │ kurang sumbernya, bukan kebutuhannya.                                  │
+  // └────────────────────────────────────────────────────────────────────────┘
   const useReal = mode === "harian" && hourly && hourly.length > 0;
-  const target = useReal ? Math.round(hourly!.reduce((a, p) => Math.max(a, p.hari), 0) * 0.9) : 6500;
-  const data = useReal
-    ? hourly!.map((p) => ({ x: p.x, hari: p.hari, kemarin: p.kemarin, target }))
-    : Array.from({ length: points }, (_, i) => ({ x: label(i), hari: Math.round(3000 + r() * 6000), kemarin: Math.round(2500 + r() * 5000), target: 6500 }));
-  const total = useReal ? hourly!.reduce((a, p) => a + p.hari, 0) : 100_000_000;
+  const target = useReal ? Math.round(hourly!.reduce((a, p) => Math.max(a, p.hari), 0) * 0.9) : 0;
+  const data = useReal ? hourly!.map((p) => ({ x: p.x, hari: p.hari, kemarin: p.kemarin, target })) : [];
+  const total = useReal ? hourly!.reduce((a, p) => a + p.hari, 0) : null;
+  const sebab =
+    mode === "harian"
+      ? "Tren harian butuh penarikan penjualan ESB. Belum ada, atau penarikannya gagal."
+      : `Mode ${mode === "mingguan" ? "Mingguan" : "Bulanan"} belum tersambung ke sumber penjualan mana pun.`;
   return (
     <Panel className={className}>
       <Head title="Penjualan" desc={useReal ? "Data ERP · hari ini vs kemarin vs target" : "Hari ini vs kemarin vs target"} right={<PillSelect value={mode} onChange={setMode} options={[{ v: "harian", l: "Harian" }, { v: "mingguan", l: "Mingguan" }, { v: "bulanan", l: "Bulanan" }]} />} />
-      <div className="mb-2 flex items-center gap-2"><p className="text-xl font-bold tabular-nums text-foreground">{rp(total)}</p><Delta v={1.78} />{useReal && <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500/12 px-1.5 py-0.5 text-[9px] font-semibold uppercase text-emerald-600 dark:text-emerald-400">live</span>}</div>
-      <div className="min-h-[15rem] flex-1">
+      {total !== null && (
+        <div className="mb-2 flex items-center gap-2"><p className="text-xl font-bold tabular-nums text-foreground">{rp(total)}</p><span className="inline-flex items-center gap-1 rounded-full bg-emerald-500/12 px-1.5 py-0.5 text-[9px] font-semibold uppercase text-emerald-600 dark:text-emerald-400">live</span></div>
+      )}
+      {!useReal && <BelumAdaData className="flex-1" sebab={sebab} />}
+      <div className={cn("min-h-[15rem] flex-1", !useReal && "hidden")}>
         <ResponsiveContainer width="100%" height="100%">
           <LineChart data={data} margin={{ top: 8, right: 8, left: -16, bottom: 0 }}>
             <CartesianGrid strokeDasharray="3 3" stroke="rgba(148,163,184,0.16)" vertical={false} />
@@ -253,78 +313,6 @@ function PenjualanChart({ className, hourly }: { className?: string; hourly: Ops
   );
 }
 
-/* ---------- Distribusi Margin (2 concentric-ring views) ---------- */
-function DistribusiMargin() {
-  const [view, setView] = React.useState("wilayah");
-  const sets: Record<string, { sehat: number; cukup: number; kritis: number }> = {
-    wilayah: { sehat: 30, cukup: 15, kritis: 5 },
-    coordinator: { sehat: 22, cukup: 18, kritis: 10 },
-  };
-  const d = sets[view];
-  const total = d.sehat + d.cukup + d.kritis;
-  const pct = (n: number) => Math.round((n / total) * 100);
-  const rings = [
-    { label: "Sehat", value: pct(d.sehat), color: C.green },
-    { label: "Cukup", value: pct(d.cukup), color: C.amber },
-    { label: "Kritis", value: pct(d.kritis), color: C.red },
-  ];
-  const legend = [
-    { label: "Sehat", sub: ">30% margin", color: C.green, count: d.sehat, icon: CheckCircle2 },
-    { label: "Cukup", sub: "29–30% margin", color: C.amber, count: d.cukup, icon: CircleAlert },
-    { label: "Kritis", sub: "<15% margin", color: C.red, count: d.kritis, icon: AlertTriangle },
-  ];
-  return (
-    <Panel>
-      <Head title="Distribusi Margin" desc="Sebaran kesehatan margin cabang" />
-      <SegmentedTabs size="sm" value={view} onChange={setView} items={[{ value: "wilayah", label: "Wilayah" }, { value: "coordinator", label: "Coordinator" }]} />
-      <div className="mt-3 flex flex-1 flex-wrap content-center items-center justify-center gap-5">
-        <ConcentricRings rings={rings} centerValue={rings[0].value} centerLabel="Sehat" size={168} />
-        <ul className="min-w-44 flex-1 space-y-3">
-          {legend.map((l) => (
-            <li key={l.label} className="flex items-center gap-3">
-              <span className="grid size-9 shrink-0 place-items-center rounded-full" style={{ background: `${l.color}22` }}><l.icon className="size-4" style={{ color: l.color }} /></span>
-              <div className="min-w-0 flex-1">
-                <p className="truncate text-sm font-semibold text-foreground">{l.label}</p>
-                <p className="truncate text-[11px] text-muted-foreground">{l.sub}</p>
-              </div>
-              <span className="shrink-0 text-sm font-semibold tabular-nums" style={{ color: l.color }}>{l.count}</span>
-            </li>
-          ))}
-        </ul>
-      </div>
-    </Panel>
-  );
-}
-
-/* ---------- Beban Operasional (blue-gradient stacked) ---------- */
-function BebanChart({ className, thresholdTK }: { className?: string; thresholdTK: number }) {
-  const [mode, setMode] = React.useState("persentase");
-  const r = rand(11);
-  const data = MONTHS.map((m) => { const row: Record<string, number | string> = { m }; for (const c of EXPENSE_CATS) row[c] = Math.round(2 + r() * 6); return row; });
-  return (
-    <Panel className={className}>
-      <Head title="Beban Operasional" desc="Rincian beban per kategori (% omset) · 12 bulan" right={<PillSelect value={mode} onChange={setMode} options={[{ v: "persentase", l: "Persentase" }, { v: "nominal", l: "Nominal" }]} />} />
-      <div className="mb-1 flex items-center gap-2"><p className="text-xl font-bold tabular-nums text-foreground">{rp(100_000_000)}</p><Delta v={1.78} positiveIsGood={false} /></div>
-      <div className="mb-2 flex flex-wrap gap-x-3 gap-y-1">
-        {EXPENSE_CATS.map((c, i) => <span key={c} className="flex items-center gap-1 text-[10px] text-muted-foreground"><span className="size-2 rounded-full" style={{ background: BLUES[i] }} /> {c}</span>)}
-      </div>
-      <div className="min-h-[14rem] flex-1">
-        <ResponsiveContainer width="100%" height="100%">
-          <BarChart data={data} margin={{ top: 6, right: 4, left: -20, bottom: 0 }}>
-            <CartesianGrid strokeDasharray="3 3" stroke="rgba(148,163,184,0.16)" vertical={false} />
-            <XAxis dataKey="m" tick={{ fill: C.slate, fontSize: 10 }} tickLine={false} axisLine={false} />
-            <YAxis tick={{ fill: C.slate, fontSize: 10 }} tickLine={false} axisLine={false} width={30} tickFormatter={(v) => `${v}%`} />
-            <Tooltip cursor={{ fill: "rgba(148,163,184,0.08)" }} content={(p) => <ChartTip {...(p as unknown as TipProps)} suffix="%" />} />
-            <ReferenceLine y={thresholdTK} stroke={C.red} strokeDasharray="4 4" strokeOpacity={0.5} />
-            {EXPENSE_CATS.map((c, i) => <Bar key={c} dataKey={c} stackId="e" fill={BLUES[i]} radius={i === EXPENSE_CATS.length - 1 ? [3, 3, 0, 0] : undefined} maxBarSize={34} />)}
-          </BarChart>
-        </ResponsiveContainer>
-      </div>
-      <p className="mt-1 text-[10px] text-muted-foreground">Garis putus merah = ambang batas (Tenaga Kerja {thresholdTK}%, diatur di Pengaturan Threshold)</p>
-    </Panel>
-  );
-}
-
 /* ---------- Performa Cabang (executive table, Juknis 2.8) ---------- */
 type SortDir = "asc" | "desc";
 function PerformaCabang({ className, data }: { className?: string; data: OpsBranchPerf[] }) {
@@ -334,29 +322,37 @@ function PerformaCabang({ className, data }: { className?: string; data: OpsBran
   const [dir, setDir] = React.useState<SortDir>("desc");
   const per = 8;
 
-  const hasFinance = data.some((d) => d.pembelianCur || d.bebanCur || d.pembelianPrev || d.bebanPrev);
+  // Non-null, bukan truthy: outlet yang melapor Rp 0 tetap terhitung punya data.
+  const hasFinance = data.some(
+    (d) => d.pembelianCur !== null || d.bebanCur !== null || d.pembelianPrev !== null || d.bebanPrev !== null,
+  );
 
   const all = React.useMemo(() => {
-    if (tab !== "net" && hasFinance) {
-      return data.map((d, i) => {
-        const cur = tab === "beli" ? d.pembelianCur : d.bebanCur;
-        const prev = tab === "beli" ? d.pembelianPrev : d.bebanPrev;
-        const growth = prev > 0 ? +(((cur - prev) / prev) * 100).toFixed(2) : 0;
-        return { id: i + 1, name: d.name, area: d.area, prev, cur, growth };
-      });
-    }
-    // Net Sales tab (or no Finance input yet) — placeholder.
-    const r = rand(99);
-    return Array.from({ length: 40 }, (_, i) => {
-      const prev = Math.round(80_000_000 + r() * 60_000_000);
-      const cur = Math.round(prev * (0.9 + r() * 0.3));
-      return { id: i + 1, name: `Cabang ${String.fromCharCode(65 + (i % 26))}${Math.floor(i / 26) + 1}`, area: ["Kalimantan", "Jawa", "Bali"][i % 3], prev, cur, growth: +(((cur - prev) / prev) * 100).toFixed(2) };
+    // Tab Net Sales belum punya sumber per cabang. Sebelum Gate R ia memakai
+    // PRNG 40 cabang palsu — satu-satunya panel yang setidaknya melabelinya
+    // "Data contoh". Sekarang labelnya tetap, angkanya tidak.
+    if (tab === "net" || !hasFinance) return [];
+    return data.map((d, i) => {
+      const cur = tab === "beli" ? d.pembelianCur : d.bebanCur;
+      const prev = tab === "beli" ? d.pembelianPrev : d.bebanPrev;
+      // Tanpa pembanding hasilnya TIDAK DIKETAHUI, bukan 0%. Dulu null berarti
+      // "stabil", dan outlet yang belum pernah melapor mengendap di tengah
+      // pengurutan seolah tidak bergerak.
+      const growth = cur !== null && prev !== null && prev > 0 ? +(((cur - prev) / prev) * 100).toFixed(2) : null;
+      return { id: i + 1, name: d.name, area: d.area, prev, cur, growth };
     });
   }, [data, tab, hasFinance]);
 
   const filtered = React.useMemo(() => {
     const s = all.filter((x) => x.name.toLowerCase().includes(q.toLowerCase()));
-    s.sort((a, b) => (dir === "asc" ? a.growth - b.growth : b.growth - a.growth));
+    // Yang pertumbuhannya tidak diketahui dikumpulkan di bawah, bukan
+    // diperlakukan sebagai 0% lalu tercampur di tengah.
+    s.sort((a, b) => {
+      if (a.growth === null && b.growth === null) return a.name.localeCompare(b.name, "id");
+      if (a.growth === null) return 1;
+      if (b.growth === null) return -1;
+      return dir === "asc" ? a.growth - b.growth : b.growth - a.growth;
+    });
     return s;
   }, [all, q, dir]);
 
@@ -376,8 +372,17 @@ function PerformaCabang({ className, data }: { className?: string; data: OpsBran
       } />
       {tab === "net" && (
         <p className="mb-3 rounded-lg border border-amber-500/25 bg-amber-500/[0.06] px-3 py-2 text-[11px] text-amber-700 dark:text-amber-400">
-          Net Sales per cabang butuh parameter cabang di API ERP (belum tersedia). Data contoh ditampilkan. Tab <b>Pembelian</b> & <b>Beban</b> sudah pakai data Finance asli.
+          Net Sales per cabang butuh parameter cabang di API ERP (belum tersedia). Tab <b>Pembelian</b> & <b>Beban</b> memakai data Finance asli.
         </p>
+      )}
+      {all.length === 0 && (
+        <BelumAdaData
+          sebab={
+            tab === "net"
+              ? "Belum ada sumber Net Sales per cabang."
+              : "Belum ada satu pun outlet yang mengunggah Pembelian atau Beban bulan ini."
+          }
+        />
       )}
       <div className="relative mb-3 max-w-xs">
         <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
@@ -406,9 +411,15 @@ function PerformaCabang({ className, data }: { className?: string; data: OpsBran
                     <div className="min-w-0"><p className="truncate font-medium text-foreground">{row.name}</p><p className="truncate text-[11px] text-muted-foreground">{row.area}</p></div>
                   </div>
                 </td>
-                <td className="px-3 py-2.5 text-right tabular-nums text-muted-foreground">{rp(row.prev)}</td>
-                <td className="px-3 py-2.5 text-right tabular-nums text-foreground">{rp(row.cur)}</td>
-                <td className="px-3 py-2.5 text-right"><span className="inline-flex justify-end"><Delta v={row.growth} /></span></td>
+                <td className="px-3 py-2.5 text-right tabular-nums text-muted-foreground">{rpAtau(row.prev)}</td>
+                <td className="px-3 py-2.5 text-right tabular-nums text-foreground">{rpAtau(row.cur)}</td>
+                <td className="px-3 py-2.5 text-right">
+                  {row.growth === null ? (
+                    <span className="text-[11px] italic text-muted-foreground/70" title="Bulan lalu tidak punya angka pembanding — pertumbuhannya tidak bisa dihitung.">tanpa pembanding</span>
+                  ) : (
+                    <span className="inline-flex justify-end"><Delta v={row.growth} /></span>
+                  )}
+                </td>
               </tr>
             ))}
           </tbody>
@@ -433,7 +444,19 @@ function PerformaCabang({ className, data }: { className?: string; data: OpsBran
 /* ---------- Kontrol (tabs + scrollable) ---------- */
 function KontrolCard({ fraud, control }: { fraud: OpsFraud[] | null; control: OpsControl | null }) {
   const [tab, setTab] = React.useState("fraud");
-  const fraudRows = fraud && fraud.length > 0 ? fraud : [{ name: "Promosi", value: 21_000_000 }, { name: "Kompliment", value: 5_200_000 }, { name: "Refund", value: 420_000 }, { name: "Void", value: 420_000 }];
+  // ┌─ TEMUAN PALING BERAT GATE R, DAN KODENYA SUDAH MENYATAKAN NIATNYA ──────┐
+  // │                                                                        │
+  // │ `ops-dashboard.ts` menetapkan `fraud = null` TANPA SYARAT, dengan       │
+  // │ komentar: "leave the dashboard fraud card empty rather than approximate │
+  // │ it here". Tapi kartunya tidak kosong — ia jatuh ke Promosi Rp 21 jt,    │
+  // │ Kompliment Rp 5,2 jt, Refund Rp 420 rb, Void Rp 420 rb.                │
+  // │                                                                        │
+  // │ Karena `fraud` selalu null, itu bukan cadangan yang muncul kalau data   │
+  // │ tidak ada: itu SATU-SATUNYA keadaan. Seratus persen pemuatan halaman    │
+  // │ menampilkan empat angka kebocoran karangan di panel yang berjudul       │
+  // │ "Pemantauan potensi kebocoran".                                        │
+  // └────────────────────────────────────────────────────────────────────────┘
+  const fraudRows = fraud ?? [];
   const complaints = control?.complaints ?? [];
   const hygiene = control?.hygiene ?? null;
   const events = control?.events ?? [];
@@ -442,7 +465,9 @@ function KontrolCard({ fraud, control }: { fraud: OpsFraud[] | null; control: Op
       <Head title="Kontrol" desc="Pemantauan potensi kebocoran" right={fraud && fraud.length > 0 ? <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500/12 px-1.5 py-0.5 text-[9px] font-semibold uppercase text-emerald-600 dark:text-emerald-400">live</span> : undefined} />
       <SegmentedTabs size="sm" value={tab} onChange={setTab} items={[{ value: "fraud", label: "Fraud" }, { value: "complain", label: "Complain" }, { value: "bersih", label: "Kebersihan" }, { value: "event", label: "Event" }]} />
       <div className="mt-3 max-h-72 flex-1 overflow-y-auto pr-1 [scrollbar-width:thin]">
-        {tab === "fraud" && (
+        {tab === "fraud" && (fraudRows.length === 0 ? (
+          <BelumAdaData sebab="Rincian void/cancel dibaca di halaman Fraud, dari ekspor ESB. Dashboard ini belum menariknya." />
+        ) : (
           <div className="space-y-2">
             {fraudRows.map((row, i) => (
               <div key={row.name + i} className="flex items-center gap-2 rounded-lg border border-border/60 bg-muted/20 px-2.5 py-2">
@@ -452,7 +477,7 @@ function KontrolCard({ fraud, control }: { fraud: OpsFraud[] | null; control: Op
               </div>
             ))}
           </div>
-        )}
+        ))}
         {tab === "complain" && (
           complaints.length === 0 ? (
             <div className="grid place-items-center py-8 text-center text-[12px] text-muted-foreground"><span className="flex flex-col items-center gap-1.5"><CheckCircle2 className="size-5 text-emerald-500" /> Tidak ada komplain terbuka</span></div>
@@ -531,21 +556,22 @@ function ActTimeline({ label, rows }: { label: string; rows: Act[] }) {
     </div>
   );
 }
-const PH_DIVISI: Act[] = [
-  { who: "Andi", t: "11:45", a: "Review performa operasional 32 outlet selesai", tone: "green" },
-  { who: "Fikri", t: "09:22", a: "Sinkronisasi data penjualan seluruh outlet berhasil", tone: "blue" },
-  { who: "Jayadi", t: "07:15", a: "Menindaklanjuti temuan audit Outlet Bengkayang", tone: "amber" },
-];
-const PH_OUTLET: Act[] = [
-  { who: "Cattu A. Yani", t: "10:12", a: "SPV belum upload checklist kebersihan hari ini", tone: "red" },
-  { who: "Nordu Bengkayang", t: "09:40", a: "Omset turun 12% dari target harian", tone: "amber" },
-  { who: "Busari Desa", t: "08:05", a: "Finance belum input laporan kemarin", tone: "red" },
-];
 function AktivitasTerkini({ activity }: { activity: OpsActivityFeed | null }) {
   const [tab, setTab] = React.useState("divisi");
   const toActs = (src: OpsActivityFeed["divisi"]): Act[] => src.map((a) => ({ who: a.who, t: a.time, a: a.desc, tone: a.tone }));
-  const divisi = activity && activity.divisi.length > 0 ? toActs(activity.divisi) : PH_DIVISI;
-  const outlet = activity && activity.outlet.length > 0 ? toActs(activity.outlet) : PH_OUTLET;
+  // ┌─ TIDAK ADA PLACEHOLDER DI SINI, DAN ITU KEPUTUSAN ──────────────────────┐
+  // │                                                                        │
+  // │ Sebelum Gate R, panel ini jatuh ke enam baris karangan yang menyebut    │
+  // │ NAMA ORANG NYATA dan NAMA OUTLET NYATA: tiga outlet dituduh lalai       │
+  // │ ("SPV belum upload", "Finance belum input"), satu diumumkan turun 12%,  │
+  // │ tiga orang dinyatakan mengerjakan sesuatu. Tak satu pun pernah terjadi. │
+  // │                                                                        │
+  // │ Angka rupiah yang salah bisa dikoreksi. Tuduhan terhadap outlet         │
+  // │ tertentu sudah sampai ke orangnya sebelum ada yang memeriksanya, dan    │
+  // │ itu biaya yang berbeda jenis.                                          │
+  // └────────────────────────────────────────────────────────────────────────┘
+  const divisi = activity ? toActs(activity.divisi) : [];
+  const outlet = activity ? toActs(activity.outlet) : [];
   const rows = tab === "divisi" ? divisi : outlet;
   const live = !!(activity && (activity.divisi.length > 0 || activity.outlet.length > 0));
   return (
@@ -565,15 +591,27 @@ function AktivitasTerkini({ activity }: { activity: OpsActivityFeed | null }) {
 
 /* ---------- Target Per Bulan (gauge) ---------- */
 function TargetGauge({ target }: { target: OpsTarget | null }) {
-  const pct = target ? Math.min(100, target.attainmentPct) : 95.38;
-  const mom = target ? target.momPct : -5;
-  const realisasi = target ? target.realisasi : 12_400_000_000;
-  const tgt = target ? target.targetMonth : 13_000_000_000;
+  // Sebelum Gate R: 95,38% · Rp 12,4 M / Rp 13 M ketika target null. Angka
+  // miliaran yang business-realistic untuk GWG, jadi yang membacanya
+  // menyimpulkan perusahaan hampir mencapai target — kesimpulan yang tidak
+  // pernah diukur.
+  if (!target) {
+    return (
+      <Panel>
+        <Head title="Target Per Bulan" desc="Realisasi vs target bulan ini" />
+        <BelumAdaData sebab="Target bulanan butuh riwayat omzet tiga bulan penuh dari ESB. Belum cukup, atau penarikannya gagal." />
+      </Panel>
+    );
+  }
+  const pct = Math.min(100, target.attainmentPct);
+  const mom = target.momPct;
+  const realisasi = target.realisasi;
+  const tgt = target.targetMonth;
   const R = 52, circ = Math.PI * R;
   const dash = (pct / 100) * circ;
   return (
     <Panel>
-      <Head title="Target Per Bulan" desc="Realisasi vs target bulan ini" right={target ? <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500/12 px-1.5 py-0.5 text-[9px] font-semibold uppercase text-emerald-600 dark:text-emerald-400">live</span> : undefined} />
+      <Head title="Target Per Bulan" desc="Realisasi vs target bulan ini" right={<span className="inline-flex items-center gap-1 rounded-full bg-emerald-500/12 px-1.5 py-0.5 text-[9px] font-semibold uppercase text-emerald-600 dark:text-emerald-400">live</span>} />
       <div className="relative mx-auto grid h-28 w-56 place-items-end">
         <svg viewBox="0 0 140 78" className="w-full">
           <defs>
@@ -584,7 +622,7 @@ function TargetGauge({ target }: { target: OpsTarget | null }) {
         </svg>
         <div className="absolute inset-x-0 bottom-0 text-center">
           <p className="text-[10px] text-muted-foreground">Total Target</p>
-          <p className="text-2xl font-bold tabular-nums text-foreground">{(target ? target.attainmentPct : pct).toFixed(2)}%</p>
+          <p className="text-2xl font-bold tabular-nums text-foreground">{target.attainmentPct.toFixed(2)}%</p>
           <p className={cn("text-[10px] font-medium", mom >= 0 ? "text-emerald-500" : "text-red-500")}>{mom >= 0 ? "+" : ""}{mom}% vs bulan lalu</p>
         </div>
       </div>
@@ -596,7 +634,23 @@ function TargetGauge({ target }: { target: OpsTarget | null }) {
     </Panel>
   );
 }
-function ProgressCard({ title, pct, actual, target, live }: { title: string; pct: number; actual: number; target: number; live?: boolean }) {
+/**
+ * Kartu progres. `actual`/`target` null berarti angkanya belum ada.
+ *
+ * Sebelum Gate R kartu ini menerima `number` saja, sehingga pemanggilnya WAJIB
+ * mengarang angka ketika datanya kosong: Proyeksi Bulanan jatuh ke Rp 300 jt /
+ * Rp 600 jt dan Target Harian ke Rp 10 jt / Rp 20 jt, keduanya tepat 50%.
+ * Tipe yang menolak null adalah tipe yang memaksa angka palsu.
+ */
+function ProgressCard({ title, pct, actual, target, live, sebab }: { title: string; pct: number | null; actual: number | null; target: number | null; live?: boolean; sebab?: string }) {
+  if (pct === null || actual === null || target === null) {
+    return (
+      <Panel>
+        <h3 className="text-sm font-semibold text-foreground">{title}</h3>
+        <div className="mt-3"><BelumAdaData sebab={sebab} /></div>
+      </Panel>
+    );
+  }
   return (
     <Panel>
       <div className="flex items-center justify-between">
@@ -612,41 +666,16 @@ function ProgressCard({ title, pct, actual, target, live }: { title: string; pct
     </Panel>
   );
 }
-function WeeklyTarget({ target }: { target: OpsTarget | null }) {
-  const weeks = target
-    ? target.weeks.map((w) => ({ w: w.label, a: w.actual, t: w.target, pct: w.target > 0 ? Math.round((w.actual / w.target) * 100) : 0, porsi: w.porsi }))
-    : [
-        { w: "Minggu I", a: 105_000_000, t: 210_000_000, pct: 50, porsi: 22 },
-        { w: "Minggu II", a: 15_000_000, t: 30_000_000, pct: 50, porsi: 22 },
-        { w: "Minggu III", a: 120_000_000, t: 240_000_000, pct: 50, porsi: 22 },
-        { w: "Minggu IV", a: 90_000_000, t: 240_000_000, pct: 38, porsi: 22 },
-        { w: "Minggu V", a: 60_000_000, t: 240_000_000, pct: 25, porsi: 12 },
-      ];
-  return (
-    <Panel>
-      <Head title="Target Mingguan" desc={target ? `Target bulan ${rp(target.targetMonth)}` : "Pembagian target per minggu"} right={target ? <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500/12 px-1.5 py-0.5 text-[9px] font-semibold uppercase text-emerald-600 dark:text-emerald-400">live</span> : undefined} />
-      <div className="space-y-2.5">
-        {weeks.map((w) => (
-          <div key={w.w}>
-            <div className="flex items-center justify-between text-[12px]"><span className="font-medium text-foreground">{w.w} <span className="text-[10px] text-muted-foreground">· porsi {w.porsi}%</span></span><span className="text-muted-foreground tabular-nums">{w.pct}%</span></div>
-            <div className="mt-1"><Progress value={w.pct} tone="cyan" /></div>
-            <p className="mt-0.5 text-[10px] text-muted-foreground tabular-nums">{rp(w.a)} / {rp(w.t)}</p>
-          </div>
-        ))}
-      </div>
-    </Panel>
-  );
-}
 function ProdukCard({ products }: { products: OpsProduct[] | null }) {
   const [tab, setTab] = React.useState("total"); // jumlah | total
   const [groupBy, setGroupBy] = React.useState("kategori"); // kategori | produk
   const [q, setQ] = React.useState("");
 
   const rows = React.useMemo(() => {
-    const live = products && products.length > 0;
-    const base = live
-      ? products!
-      : Array.from({ length: 16 }, (_, i) => ({ name: `Kategori ${String.fromCharCode(65 + (i % 8))}`, category: `Kategori ${String.fromCharCode(65 + (i % 8))}`, qty: 200 - i * 8, amount: [21_000_000, 5_200_000, 420_000][i % 3] || 420_000 }));
+    // Sebelum Gate R: 16 baris "Kategori A".."Kategori H" dengan qty menurun
+    // rapi dan amount berputar 21jt/5,2jt/420rb. Nama kategorinya generik,
+    // tapi tabelnya bisa diurut dan dicari seperti tabel sungguhan.
+    const base = products ?? [];
     // Group by category or keep per product
     let list: { name: string; qty: number; amount: number }[];
     if (groupBy === "kategori") {
@@ -665,6 +694,7 @@ function ProdukCard({ products }: { products: OpsProduct[] | null }) {
 
   const filtered = rows.filter((r) => r.name.toLowerCase().includes(q.toLowerCase()));
   const live = !!(products && products.length > 0);
+  const kosong = !products || products.length === 0;
   return (
     <Panel>
       <Head title="Produk" right={
@@ -674,6 +704,7 @@ function ProdukCard({ products }: { products: OpsProduct[] | null }) {
         </div>
       } />
       <SegmentedTabs size="sm" value={tab} onChange={setTab} items={[{ value: "jumlah", label: "Jumlah" }, { value: "total", label: "Total" }]} />
+      {kosong && <div className="mt-3"><BelumAdaData sebab="Katalog menu ESB belum tertarik untuk tiga bulan terakhir." /></div>}
       <div className="relative mt-2">
         <Search className="absolute left-2.5 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground" />
         <input value={q} onChange={(e) => setQ(e.target.value)} placeholder={groupBy === "kategori" ? "Cari kategori" : "Cari produk"} className="w-full rounded-lg border border-border bg-transparent py-1.5 pl-8 pr-2 text-[12px] outline-none placeholder:text-muted-foreground" />
@@ -694,21 +725,30 @@ function ProdukCard({ products }: { products: OpsProduct[] | null }) {
 /* ---------- Rencana Pengeluaran (Juknis 2.11) ---------- */
 function RencanaPengeluaran({ fin, netSales, limits }: { fin: OpsFinance | null; netSales: number | null; limits: { warehouse: number; nonWarehouse: number; total: number } }) {
   const live = !!(fin && netSales && netSales > 0);
-  const pctOf = (v: number) => (live ? +((v / netSales!) * 100).toFixed(1) : 0);
-  const rows = live
-    ? [
-        { l: "Warehouse", a: fin!.purchaseWh, t: netSales! * (limits.warehouse / 100), actualPct: pctOf(fin!.purchaseWh), limit: limits.warehouse, icon: Boxes },
-        { l: "Non Warehouse", a: fin!.purchaseNonWh, t: netSales! * (limits.nonWarehouse / 100), actualPct: pctOf(fin!.purchaseNonWh), limit: limits.nonWarehouse, icon: PackageSearch },
-        { l: "Rasio Total", a: fin!.purchaseTotal, t: netSales! * (limits.total / 100), actualPct: pctOf(fin!.purchaseTotal), limit: limits.total, icon: Layers },
-      ]
-    : [
-        { l: "Warehouse", a: 105_000_000, t: 210_000_000, actualPct: 25, limit: 30, icon: Boxes },
-        { l: "Non Warehouse", a: 15_000_000, t: 30_000_000, actualPct: 6, limit: 5, icon: PackageSearch },
-        { l: "Rasio Total", a: 120_000_000, t: 240_000_000, actualPct: 31, limit: 35, icon: Layers },
-      ];
+  // ┌─ CADANGANNYA DULU MENGARANG PELANGGARAN AMBANG ─────────────────────────┐
+  // │                                                                        │
+  // │ Baris "Non Warehouse" disetel 6% terhadap batas 5%, sehingga panel      │
+  // │ menampilkan lencana merah "Melebihi" beserta bar danger. Itu bukan      │
+  // │ angka netral yang kebetulan salah — itu tuduhan pelanggaran ambang yang │
+  // │ dikarang, di panel yang tugasnya justru mengawasi ambang.               │
+  // └────────────────────────────────────────────────────────────────────────┘
+  if (!live) {
+    return (
+      <Panel>
+        <Head title="Rencana Pengeluaran" desc="Pembelian vs omset · ambang batas" />
+        <BelumAdaData sebab="Butuh dua-duanya: input Pembelian bulan ini dan omzet hari ini dari ESB." />
+      </Panel>
+    );
+  }
+  const pctOf = (v: number) => +((v / netSales!) * 100).toFixed(1);
+  const rows = [
+    { l: "Warehouse", a: fin!.purchaseWh, t: netSales! * (limits.warehouse / 100), actualPct: pctOf(fin!.purchaseWh), limit: limits.warehouse, icon: Boxes },
+    { l: "Non Warehouse", a: fin!.purchaseNonWh, t: netSales! * (limits.nonWarehouse / 100), actualPct: pctOf(fin!.purchaseNonWh), limit: limits.nonWarehouse, icon: PackageSearch },
+    { l: "Rasio Total", a: fin!.purchaseTotal, t: netSales! * (limits.total / 100), actualPct: pctOf(fin!.purchaseTotal), limit: limits.total, icon: Layers },
+  ];
   return (
     <Panel>
-      <Head title="Rencana Pengeluaran" desc="Pembelian vs omset · ambang batas" right={live ? <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500/12 px-1.5 py-0.5 text-[9px] font-semibold uppercase text-emerald-600 dark:text-emerald-400">live</span> : undefined} />
+      <Head title="Rencana Pengeluaran" desc="Pembelian vs omset · ambang batas" right={<span className="inline-flex items-center gap-1 rounded-full bg-emerald-500/12 px-1.5 py-0.5 text-[9px] font-semibold uppercase text-emerald-600 dark:text-emerald-400">live</span>} />
       <div className="space-y-3.5">
         {rows.map((row) => {
           const over = row.actualPct > row.limit;
