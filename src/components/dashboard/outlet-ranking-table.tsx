@@ -15,6 +15,26 @@ type SortKey = "outlet" | "coordinator" | "hospitality" | "hygiene" | "complaint
 
 const STRING_KEYS: SortKey[] = ["outlet", "coordinator"];
 
+/**
+ * Satu sel skor. `null` berarti outlet ini belum punya bukti auditnya.
+ *
+ * Ditulis apa adanya, bukan "0.0": nol adalah hasil penilaian, dan outlet yang
+ * belum pernah dinilai tidak boleh terbaca sebagai outlet yang nilainya nol.
+ */
+function Skor({ v }: { v: number | null }) {
+  if (v === null) {
+    return (
+      <span
+        title="Outlet ini belum punya catatan audit untuk periode ini. Belum dinilai — bukan bernilai nol."
+        className="cursor-help text-[11px] font-normal italic text-muted-foreground/70"
+      >
+        Belum ada data
+      </span>
+    );
+  }
+  return <>{v.toFixed(1)}</>;
+}
+
 export function OutletRankingTable({ rows }: { rows: RankedOutletRow[] }) {
   const [sort, setSort] = React.useState<{ key: SortKey; dir: "asc" | "desc" }>({ key: "composite", dir: "desc" });
   const [query, setQuery] = React.useState("");
@@ -42,7 +62,15 @@ export function OutletRankingTable({ rows }: { rows: RankedOutletRow[] }) {
         const bv = key === "outlet" ? b.outlet.name : b.coordinator;
         return av.localeCompare(bv) * mul;
       }
-      return ((a[key] as number) - (b[key] as number)) * mul;
+      // Yang belum berskor selalu di BELAKANG, apa pun arah urutannya.
+      // Membandingkannya sebagai angka menuntut nilai pengganti, dan setiap
+      // nilai pengganti adalah skor palsu.
+      const av = a[key] as number | null;
+      const bv = b[key] as number | null;
+      if (av === null && bv === null) return a.outlet.name.localeCompare(b.outlet.name, "id");
+      if (av === null) return 1;
+      if (bv === null) return -1;
+      return (av - bv) * mul;
     });
     return s;
   }, [filtered, sort]);
@@ -134,16 +162,16 @@ export function OutletRankingTable({ rows }: { rows: RankedOutletRow[] }) {
                   </td>
                   <td className="truncate px-4 py-3 text-muted-foreground">{row.coordinator}</td>
                   <td className="px-4 py-3 text-center tabular-nums text-foreground/90">
-                    {row.hospitality.toFixed(1)}
+                    <Skor v={row.hospitality} />
                   </td>
                   <td className="px-4 py-3 text-center tabular-nums text-foreground/90">
-                    {row.hygiene.toFixed(1)}
+                    <Skor v={row.hygiene} />
                   </td>
                   <td className="px-4 py-3 text-center">
                     <Badge tone={row.complaints > 0 ? "danger" : "success"}>{row.complaints}</Badge>
                   </td>
                   <td className="px-4 py-3 text-center text-base font-semibold tabular-nums text-foreground">
-                    {row.composite.toFixed(1)}
+                    <Skor v={row.composite} />
                   </td>
                   <td className="px-4 py-3">
                     <div className="flex justify-center">

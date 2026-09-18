@@ -128,9 +128,10 @@ describe("CASE 21 — source guard: tidak ada pembagian target menjadi angka min
 
 describe("source guard: tidak ada angka demo saat data tidak tersedia", () => {
   it("tidak ada literal rupiah besar di mana pun — itu bentuk angka contoh", () => {
-    // `WeeklyTarget` di /analytics jatuh ke 105_000_000 dan 210_000_000 ketika
-    // datanya null, lengkap dengan persentase, tanpa satu pun tanda bahwa itu
-    // bukan angka sungguhan. Jalur ini tidak boleh punya padanannya.
+    // Panel "Target Mingguan" di /analytics dulu jatuh ke lima baris rupiah
+    // berangka lengkap dengan persentase ketika datanya null, tanpa satu pun
+    // tanda bahwa itu bukan angka sungguhan. Panel itu sudah dipensiunkan
+    // (Gate Q), dan jalur ini tidak boleh melahirkan padanannya.
     for (const p of JALUR_MINGGUAN) {
       expect(RUMUS[p], p).not.toMatch(/\b\d{1,3}(_\d{3}){2,}\b/);
     }

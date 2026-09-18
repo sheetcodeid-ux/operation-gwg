@@ -25,13 +25,19 @@ export function PerformanceMetrics({ data }: { data: CoordinatorPerf[] }) {
   const meta = METRICS.find((m) => m.value === metric)!;
   const isScore = meta.score;
 
-  const points = data.map((d) => ({ label: firstName(d.name), value: d[metric] }));
+  // Skor bisa belum ada (`null`); jumlah komplain selalu terhitung. Yang belum
+  // ada TIDAK digambar sebagai batang setinggi nol - batang nol adalah klaim
+  // bahwa area itu diukur dan hasilnya nol.
+  const semua = data.map((d) => ({ label: firstName(d.name), value: d[metric] }));
+  const points = semua.filter((p): p is { label: string; value: number } => p.value !== null);
+  const belumDinilai = semua.length - points.length;
   const values = points.map((p) => p.value);
-  const avg = values.length ? Math.round((values.reduce((a, b) => a + b, 0) / values.length) * 10) / 10 : 0;
+  const avg = values.length ? Math.round((values.reduce((a, b) => a + b, 0) / values.length) * 10) / 10 : null;
 
-  // Best CA: highest score, or fewest complaints.
-  const best = data.length
-    ? data.reduce((a, b) => (isScore ? (b[metric] > a[metric] ? b : a) : b[metric] < a[metric] ? b : a))
+  // Best CA: highest score, or fewest complaints — hanya di antara yang terukur.
+  const terukur = data.filter((d) => d[metric] !== null);
+  const best = terukur.length
+    ? terukur.reduce((a, b) => (isScore ? (b[metric]! > a[metric]! ? b : a) : b[metric]! < a[metric]! ? b : a))
     : null;
 
   return (
@@ -64,17 +70,25 @@ export function PerformanceMetrics({ data }: { data: CoordinatorPerf[] }) {
               height={220}
             />
             <div className="mt-3 grid grid-cols-3 gap-2 border-t border-border pt-3 text-center">
-              <Stat label={isScore ? "Avg Score" : "Avg Complaints"} value={isScore ? avg.toFixed(1) : String(avg)} />
+              <Stat
+                label={isScore ? "Avg Score" : "Avg Complaints"}
+                value={avg === null ? "Belum ada data" : isScore ? avg.toFixed(1) : String(avg)}
+              />
               <Stat
                 label={isScore ? "Above Target" : "Total Complaints"}
                 value={isScore ? `${values.filter((v) => v >= TARGET).length}/${values.length}` : String(values.reduce((a, b) => a + b, 0))}
               />
               <Stat label={isScore ? "Top Area" : "Cleanest Area"} value={best ? firstName(best.name) : "—"} />
             </div>
+            {belumDinilai > 0 && (
+              <p className="mt-2 text-center text-[11px] text-muted-foreground">
+                {belumDinilai} area belum punya audit untuk metrik ini — tidak ikut ditampilkan.
+              </p>
+            )}
           </>
         ) : (
           <p className="flex flex-1 items-center justify-center py-8 text-center text-sm text-muted-foreground">
-            No coordinator areas in scope
+            {semua.length > 0 ? "Belum ada audit untuk metrik ini di area mana pun" : "No coordinator areas in scope"}
           </p>
         )}
       </CardContent>

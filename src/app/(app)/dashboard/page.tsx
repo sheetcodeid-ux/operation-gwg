@@ -11,6 +11,7 @@ import {
   listTasks,
   outletName,
   outletRankingInRange,
+  rataAudit,
   reportPeriodCompare,
   userName,
   visibleOutlets,
@@ -32,6 +33,8 @@ import { departmentList } from "@/components/work/work-data";
 import { formatNumber } from "@/lib/utils";
 
 export const metadata: Metadata = { title: "Executive Dashboard" };
+
+const TAK_ADA = "Belum ada data";
 
 export default async function DashboardPage({
   searchParams,
@@ -66,7 +69,10 @@ export default async function DashboardPage({
 
   const agg = aggregateOutlets(ids);
   const cmp = reportPeriodCompare(ids, range.days, range.endMs);
-  const perfIndex = Math.round(((cmp.hospitality.cur + cmp.hygiene.cur) / 2) * 10) / 10;
+  // Indeks gabungan dari yang TERUKUR saja: bila hanya hygiene yang punya
+  // audit, indeksnya hygiene — bukan hygiene dibagi dua oleh nol yang tidak
+  // pernah diukur. Null bila dua-duanya belum ada.
+  const perfIndex = rataAudit([cmp.hospitality.cur, cmp.hygiene.cur]);
 
   const insightRings = [
     { label: "Task Completion", value: agg.taskCompletion, color: "#22c55e", icon: "check", sub: "Overall completion rate" },
@@ -142,8 +148,23 @@ export default async function DashboardPage({
   const cards: Kpi[] = [
     { label: "Total Outlets", value: formatNumber(agg.outlets), icon: "Store", tone: "brand", sub: "In scope" },
     { label: "Total Areas", value: formatNumber(new Set(scoped.map((o) => o.areaId)).size), icon: "MapPinned", tone: "cyan", sub: "Coordination zones" },
-    { label: "Hospitality Score", value: cmp.hospitality.cur.toFixed(1), icon: "ConciergeBell", tone: "brand", delta: { value: cmp.hospitality.delta }, sub: periodSub },
-    { label: "Hygiene Score", value: cmp.hygiene.cur.toFixed(1), icon: "SprayCan", tone: "success", delta: { value: cmp.hygiene.delta }, sub: periodSub },
+    {
+      label: "Hospitality Score",
+      value: cmp.hospitality.cur === null ? TAK_ADA : cmp.hospitality.cur.toFixed(1),
+      icon: "ConciergeBell",
+      tone: "brand",
+      // Delta hanya ikut kalau perubahannya benar-benar terukur.
+      ...(cmp.hospitality.delta === null ? {} : { delta: { value: cmp.hospitality.delta } }),
+      sub: periodSub,
+    },
+    {
+      label: "Hygiene Score",
+      value: cmp.hygiene.cur === null ? TAK_ADA : cmp.hygiene.cur.toFixed(1),
+      icon: "SprayCan",
+      tone: "success",
+      ...(cmp.hygiene.delta === null ? {} : { delta: { value: cmp.hygiene.delta } }),
+      sub: periodSub,
+    },
     { label: "Complaints Open", value: formatNumber(agg.complaintsOpen), icon: "MessageSquareWarning", tone: "warning", delta: { value: cmp.complaintsReceived.delta, positiveIsGood: false }, sub: `${cmp.complaintsReceived.cur} new` },
     { label: "Complaints Closed", value: formatNumber(agg.complaintsClosed), icon: "CheckCircle2", tone: "success", delta: { value: cmp.complaintsResolved.delta }, sub: `${cmp.complaintsResolved.cur} resolved` },
     { label: "Task Completion", value: `${agg.taskCompletion}%`, icon: "ListChecks", tone: "cyan", delta: { value: cmp.tasksCompleted.delta }, sub: `${cmp.tasksCompleted.cur} done` },

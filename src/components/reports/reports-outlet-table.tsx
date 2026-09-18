@@ -13,8 +13,35 @@ export interface ReportOutletRow {
   code: string;
   areaId: string;
   area: string;
-  hospitality: number;
-  hygiene: number;
+  /** `null` = outlet ini belum punya audit hospitality. Bukan nol. */
+  hospitality: number | null;
+  /** `null` = outlet ini belum punya audit hygiene. Bukan nol. */
+  hygiene: number | null;
+}
+
+/**
+ * ┌─ UNKNOWN TIDAK IKUT DIURUTKAN SEBAGAI ANGKA ────────────────────────────┐
+ * │                                                                        │
+ * │ Pengurutan bawaan TanStack untuk kolom angka adalah `sortingFns.basic`, │
+ * │ dan `compareBasic` membandingkan `null` dengan operator `>`. Hasilnya   │
+ * │ tidak transitif (`null > 0` dan `null > 75` sama-sama false), sehingga  │
+ * │ baris tanpa skor mendarat DI ANTARA skor-skor nyata - persis klaim yang │
+ * │ dilarang: yang belum dinilai terbaca sebagai yang bernilai sekian.      │
+ * │                                                                        │
+ * │ Karena itu skor yang hilang keluar dari accessor sebagai `undefined`,   │
+ * │ bukan `null`: `sortUndefined: "last"` diperiksa TanStack sebelum arah   │
+ * │ urutan dibalik, jadi UNKNOWN tetap di belakang baik menaik maupun       │
+ * │ menurun. Nol yang sungguh-sungguh dinilai tetap angka biasa dan ikut    │
+ * │ diurutkan sebagaimana mestinya.                                        │
+ * └────────────────────────────────────────────────────────────────────────┘
+ */
+const skorSort = { sortUndefined: "last" } as const;
+const nilaiSkor = (v: number | null): number | undefined => v ?? undefined;
+
+/** Satu sel skor; yang belum dinilai ditulis apa adanya, bukan "0". */
+function SelSkor({ v }: { v: number | undefined }) {
+  if (v === undefined) return <span className="text-[11px] italic text-muted-foreground/70">Belum ada data</span>;
+  return <span className="tabular-nums text-foreground">{v.toFixed(0)}</span>;
 }
 
 export function ReportsOutletTable({ rows, areas }: { rows: ReportOutletRow[]; areas: { id: string; name: string }[] }) {
@@ -36,8 +63,20 @@ export function ReportsOutletTable({ rows, areas }: { rows: ReportOutletRow[]; a
         ),
       },
       { accessorKey: "area", header: "Region", cell: ({ getValue }) => <span className="text-muted-foreground">{getValue<string>()}</span> },
-      { accessorKey: "hospitality", header: "Hospitality", cell: ({ getValue }) => <span className="tabular-nums text-foreground">{getValue<number>().toFixed(0)}</span> },
-      { accessorKey: "hygiene", header: "Hygiene", cell: ({ getValue }) => <span className="tabular-nums text-foreground">{getValue<number>().toFixed(0)}</span> },
+      {
+        id: "hospitality",
+        accessorFn: (r) => nilaiSkor(r.hospitality),
+        header: "Hospitality",
+        ...skorSort,
+        cell: ({ getValue }) => <SelSkor v={getValue<number | undefined>()} />,
+      },
+      {
+        id: "hygiene",
+        accessorFn: (r) => nilaiSkor(r.hygiene),
+        header: "Hygiene",
+        ...skorSort,
+        cell: ({ getValue }) => <SelSkor v={getValue<number | undefined>()} />,
+      },
       {
         id: "actions",
         header: "",

@@ -218,13 +218,39 @@ function latestByOutlet<T extends { outletId: string; date?: string; createdAt?:
   return map;
 }
 
-export function hospitalityScoreFor(outletId: string): number {
-  const xs = SEED.hospitality.filter((h) => h.outletId === outletId).map((h) => h.overallScore);
-  return round1(avg(xs));
+/**
+ * ┌─ RATA-RATA SKOR AUDIT: KOSONG BERARTI BELUM DINILAI ────────────────────┐
+ * │                                                                        │
+ * │ `avg` di berkas ini mengembalikan 0 untuk daftar kosong, dan itu BENAR  │
+ * │ untuk hal-hal yang memang terhitung: jumlah task, jumlah komplain,      │
+ * │ anggaran. Nol di sana adalah pengukuran.                                │
+ * │                                                                        │
+ * │ Untuk SKOR AUDIT tidak. Outlet tanpa satu pun audit bukan outlet        │
+ * │ bernilai nol — ia outlet yang belum diperiksa. Keduanya tidak boleh     │
+ * │ memakai rata-rata yang sama, dan mengubah `avg` global akan menyeret    │
+ * │ jumlah task ikut menjadi null.                                          │
+ * │                                                                        │
+ * │ Kontraknya:                                                             │
+ * │   []            → null   (belum ada bukti sama sekali)                  │
+ * │   [0]           → 0      (dinilai, dan nilainya nol)                    │
+ * │   [80, null, 90]→ 85     (yang hilang tidak ikut menarik turun)         │
+ * │   [null, null]  → null                                                  │
+ * └────────────────────────────────────────────────────────────────────────┘
+ */
+export function rataAudit(xs: readonly (number | null | undefined)[]): number | null {
+  const ada = xs.filter((x): x is number => typeof x === "number" && Number.isFinite(x));
+  return ada.length ? round1(ada.reduce((a, b) => a + b, 0) / ada.length) : null;
 }
-export function hygieneScoreFor(outletId: string): number {
+
+/** Skor hospitality outlet sepanjang masa. `null` = belum pernah dinilai. */
+export function hospitalityScoreFor(outletId: string): number | null {
+  const xs = SEED.hospitality.filter((h) => h.outletId === outletId).map((h) => h.overallScore);
+  return rataAudit(xs);
+}
+/** Skor hygiene outlet sepanjang masa. `null` = belum pernah dinilai. */
+export function hygieneScoreFor(outletId: string): number | null {
   const xs = SEED.hygiene.filter((h) => h.outletId === outletId).map((h) => h.hygieneScore);
-  return round1(avg(xs));
+  return rataAudit(xs);
 }
 
 
@@ -240,12 +266,75 @@ function pctDelta(cur: number, prev: number): number {
 
 
 /* ---------------- rankings ---------------- */
+
+/**
+ * ┌─ SKOR YANG BELUM PUNYA BUKTI AUDIT ADALAH `null`, BUKAN NOL ────────────┐
+ * │                                                                        │
+ * │ Dulu `?? 0`. Outlet yang BELUM PERNAH diaudit mendapat skor 0, lalu     │
+ * │ compositenya jatuh dan ia mengendap di dasar peringkat — tidak bisa     │
+ * │ dibedakan dari outlet yang sudah diaudit dan hasilnya memang buruk.     │
+ * │ Layarnya pun sama: `toFixed(1)` menulis "0.0" untuk keduanya.           │
+ * │                                                                        │
+ * │ Tiga hal yang dijaga sekarang:                                          │
+ * │   bukti audit hilang  ≠  skor 0                                         │
+ * │   bukti audit hilang  ≠  performa terburuk                              │
+ * │   bukti audit hilang  ≠  outlet terburuk                                │
+ * │                                                                        │
+ * │ `number | null`, bukan `Terukur` dari `@/lib/ops/mingguan`: berkas ini   │
+ * │ lapisan store lama yang melayani /dashboard dan /outlets, dan menyeret  │
+ * │ tipe Operational V.1 ke sini berarti menyeret domainnya juga. `null`    │
+ * │ sudah menjadi idiom di tetangganya (`ops/harian.ts`,                     │
+ * │ `data/performa-outlet.ts`) dan TypeScript strict tetap memaksa          │
+ * │ pemeriksaannya di setiap pembaca.                                       │
+ * └────────────────────────────────────────────────────────────────────────┘
+ */
 export interface OutletRankRow {
   outlet: Outlet;
-  hospitality: number;
-  hygiene: number;
+  /** `null` = belum ada bukti audit hospitality. BUKAN nol. */
+  hospitality: number | null;
+  /** `null` = belum ada bukti audit hygiene. BUKAN nol. */
+  hygiene: number | null;
+  /** Jumlah komplain terbuka. Nol di sini BENAR-BENAR nol — lihat `hitungKomplain`. */
   complaints: number;
-  composite: number;
+  /** `null` bila salah satu komponen skornya belum ada buktinya. */
+  composite: number | null;
+}
+
+/** Skor satu outlet, atau `null` bila belum pernah diaudit. */
+const skorAtauNull = (v: number | undefined): number | null => (v === undefined ? null : round1(v));
+
+/**
+ * Composite HANYA lahir dari bukti yang lengkap.
+ *
+ * DIEKSPOR supaya kontraknya bisa diuji langsung. Seluruh outlet di data contoh
+ * punya kedua auditnya, jadi jalur UNKNOWN tidak pernah terjadi lewat
+ * `outletRanking()` di lingkungan uji — dan kontrak yang tidak bisa diuji adalah
+ * kontrak yang akan dilanggar diam-diam.
+ *
+ * Formulanya tidak berubah sedikit pun — bobot 0,45 / 0,45 dan penalti komplain
+ * 2 tetap seperti sebelumnya. Yang berubah cuma satu: ia menolak menghitung
+ * ketika salah satu komponennya tidak punya bukti, alih-alih memperlakukan
+ * ketiadaan itu sebagai nol.
+ */
+export function skorKomposit(hospitality: number | null, hygiene: number | null, complaints: number): number | null {
+  if (hospitality === null || hygiene === null) return null;
+  return round1(hospitality * 0.45 + hygiene * 0.45 - complaints * 2);
+}
+
+/**
+ * Urutan peringkat: yang BERSKOR lebih dulu, menurun. Yang belum berskor
+ * menyusul, urut nama.
+ *
+ * `UNKNOWN` sampai di belakang sebagai akibat penyajian, BUKAN karena diberi
+ * angka terendah. Tidak ada `?? 0` dan tidak ada `-Infinity` di sini — keduanya
+ * akan membuatnya kembali bisa dibandingkan sebagai angka, dan itu persis yang
+ * dilarang.
+ */
+export function urutkanPeringkat<T extends { composite: number | null; outlet: Outlet }>(a: T, b: T): number {
+  if (a.composite === null && b.composite === null) return a.outlet.name.localeCompare(b.outlet.name, "id");
+  if (a.composite === null) return 1;
+  if (b.composite === null) return -1;
+  return b.composite - a.composite;
 }
 
 export function outletRanking(user: UserProfile): OutletRankRow[] {
@@ -260,13 +349,14 @@ export function outletRanking(user: UserProfile): OutletRankRow[] {
   }
   return outlets
     .map((outlet) => {
-      const hospitality = round1(hospLatest.get(outlet.id)?.overallScore ?? 0);
-      const hygiene = round1(hygLatest.get(outlet.id)?.hygieneScore ?? 0);
+      const hospitality = skorAtauNull(hospLatest.get(outlet.id)?.overallScore);
+      const hygiene = skorAtauNull(hygLatest.get(outlet.id)?.hygieneScore);
+      // Nol di sini SAH: tidak ada komplain terbuka adalah pengukuran, bukan
+      // ketiadaan bukti. Akumulatornya berjalan di atas daftar yang memang ada.
       const complaints = complaintsByOutlet.get(outlet.id) ?? 0;
-      const composite = round1(hospitality * 0.45 + hygiene * 0.45 - complaints * 2);
-      return { outlet, hospitality, hygiene, complaints, composite };
+      return { outlet, hospitality, hygiene, complaints, composite: skorKomposit(hospitality, hygiene, complaints) };
     })
-    .sort((a, b) => b.composite - a.composite);
+    .sort(urutkanPeringkat);
 }
 
 /** Ranked outlet with scores computed inside a date window (fallback to latest), plus area + coordinator name. */
@@ -274,10 +364,13 @@ export interface RankedOutletRow {
   outlet: Outlet;
   area: string;
   coordinator: string;
-  hospitality: number;
-  hygiene: number;
+  /** `null` = belum ada bukti audit hospitality, baik di jendela ini maupun sebelumnya. */
+  hospitality: number | null;
+  /** `null` = belum ada bukti audit hygiene. */
+  hygiene: number | null;
   complaints: number;
-  composite: number;
+  /** `null` bila salah satu komponen skornya belum ada buktinya. */
+  composite: number | null;
 }
 
 export function outletRankingInRange(outletIds: string[], endMs: number, days: number): RankedOutletRow[] {
@@ -302,10 +395,13 @@ export function outletRankingInRange(outletIds: string[], endMs: number, days: n
       const hyg = SEED.hygiene
         .filter((h) => h.outletId === outlet.id && inWin(+new Date(h.date)))
         .map((h) => h.hygieneScore);
-      const hospitality = round1(hosp.length ? avg(hosp) : hospLatest.get(outlet.id)?.overallScore ?? 0);
-      const hygiene = round1(hyg.length ? avg(hyg) : hygLatest.get(outlet.id)?.hygieneScore ?? 0);
+      // Semantik yang SAMA PERSIS dengan `outletRanking`: rata-rata jendela bila
+      // ada, kalau tidak jatuh ke audit terakhir, kalau tidak ada juga → null.
+      // Keduanya wajib sepakat — satu outlet tidak boleh terbaca UNKNOWN di
+      // /outlets dan berskor 0 di /dashboard.
+      const hospitality = hosp.length ? round1(avg(hosp)) : skorAtauNull(hospLatest.get(outlet.id)?.overallScore);
+      const hygiene = hyg.length ? round1(avg(hyg)) : skorAtauNull(hygLatest.get(outlet.id)?.hygieneScore);
       const complaints = SEED.complaints.filter((c) => c.outletId === outlet.id && inWin(+new Date(c.createdAt))).length;
-      const composite = round1(hospitality * 0.45 + hygiene * 0.45 - complaints * 2);
       return {
         outlet,
         area: getArea(outlet.areaId)?.name ?? "—",
@@ -313,10 +409,10 @@ export function outletRankingInRange(outletIds: string[], endMs: number, days: n
         hospitality,
         hygiene,
         complaints,
-        composite,
+        composite: skorKomposit(hospitality, hygiene, complaints),
       };
     })
-    .sort((a, b) => b.composite - a.composite);
+    .sort(urutkanPeringkat);
 }
 
 export interface AreaRankRow {
@@ -360,8 +456,10 @@ export interface OutletDetail {
   supervisorName: string;
   picName: string;
   coordinatorName: string;
-  hospitality: number;
-  hygiene: number;
+  /** `null` = outlet ini belum pernah diaudit hospitality. Bukan nol. */
+  hospitality: number | null;
+  /** `null` = outlet ini belum pernah diaudit hygiene. Bukan nol. */
+  hygiene: number | null;
   tasksOpen: number;
   tasksDone: number;
   taskCompletion: number;
@@ -411,13 +509,37 @@ export interface MetricCompare {
   prev: number;
   delta: number;
 }
+
+/**
+ * Pembanding untuk SKOR AUDIT. Bentuknya sama dengan `MetricCompare`, tipenya
+ * tidak: jumlah komplain dan task selalu terhitung, skor audit belum tentu ada.
+ * Dipisah supaya kolom yang memang selalu berangka tidak ikut dipaksa
+ * diperiksa null di setiap pembacanya.
+ *
+ * `delta` null ketika salah satu sisinya tidak diketahui — perubahan terhadap
+ * sesuatu yang tidak terukur tidak bisa dihitung, dan 0% akan terbaca "stabil".
+ */
+export interface SkorCompare {
+  cur: number | null;
+  prev: number | null;
+  delta: number | null;
+}
+
 export interface ReportData {
-  hospitality: MetricCompare;
-  hygiene: MetricCompare;
+  hospitality: SkorCompare;
+  hygiene: SkorCompare;
   complaintsReceived: MetricCompare;
   complaintsResolved: MetricCompare;
   tasksCompleted: MetricCompare;
-  perOutlet: { name: string; code: string; hospCur: number; hospPrev: number; hygCur: number; hygPrev: number }[];
+  perOutlet: {
+    name: string;
+    code: string;
+    /** Seluruh skor di bawah ini `null` bila jendelanya tidak punya bukti audit. */
+    hospCur: number | null;
+    hospPrev: number | null;
+    hygCur: number | null;
+    hygPrev: number | null;
+  }[];
 }
 
 /** Current window vs previous equal window across a set of outlets (default 30 days, ending now). */
@@ -428,7 +550,6 @@ export function reportPeriodCompare(outletIds: string[], days = 30, endMs = NOW(
   const curStart = end - win;
   const prevStart = end - 2 * win;
   const inW = (t: number, s: number, e: number) => t >= s && t < e;
-  const avg2 = (xs: number[]) => (xs.length ? Math.round((xs.reduce((a, b) => a + b, 0) / xs.length) * 10) / 10 : 0);
 
   const hosp = SEED.hospitality.filter((h) => ids.has(h.outletId));
   const hyg = SEED.hygiene.filter((h) => ids.has(h.outletId));
@@ -436,8 +557,16 @@ export function reportPeriodCompare(outletIds: string[], days = 30, endMs = NOW(
   const tasks = SEED.tasks.filter((t) => t.outletId !== null && ids.has(t.outletId));
 
   const mc = (cur: number, prev: number): MetricCompare => ({ cur, prev, delta: pctDelta(cur, prev) });
+  // Delta skor hanya lahir kalau KEDUA sisinya terukur.
+  const sc = (cur: number | null, prev: number | null): SkorCompare => ({
+    cur,
+    prev,
+    delta: cur === null || prev === null ? null : pctDelta(cur, prev),
+  });
   const avgWin = (recs: { date: string; v: number }[], s: number, e: number) =>
-    avg2(recs.filter((r) => inW(+new Date(r.date), s, e)).map((r) => r.v));
+    // Rata-rata SKOR di sebuah jendela: tanpa satu pun audit di dalamnya
+    // hasilnya null — jendela itu tidak punya bukti, bukan bernilai nol.
+    rataAudit(recs.filter((r) => inW(+new Date(r.date), s, e)).map((r) => r.v));
 
   const hospRecs = hosp.map((h) => ({ date: h.date, v: h.overallScore }));
   const hygRecs = hyg.map((h) => ({ date: h.date, v: h.hygieneScore }));
@@ -451,16 +580,20 @@ export function reportPeriodCompare(outletIds: string[], days = 30, endMs = NOW(
       return {
         name: o.name,
         code: o.code,
-        hospCur: avgWin(h, curStart, end) || hospitalityScoreFor(o.id),
+        // `??`, BUKAN `||`. Dengan `||` outlet yang jendela ini benar-benar
+        // dinilai 0 dianggap tidak punya data dan diam-diam diganti skor
+        // sepanjang masanya - angka periode lain yang tampil sebagai angka
+        // periode ini. Yang boleh memicu cadangan hanya ketiadaan bukti.
+        hospCur: avgWin(h, curStart, end) ?? hospitalityScoreFor(o.id),
         hospPrev: avgWin(h, prevStart, curStart),
-        hygCur: avgWin(g, curStart, end) || hygieneScoreFor(o.id),
+        hygCur: avgWin(g, curStart, end) ?? hygieneScoreFor(o.id),
         hygPrev: avgWin(g, prevStart, curStart),
       };
     });
 
   return {
-    hospitality: mc(avgWin(hospRecs, curStart, end) || avg2(hospRecs.map((r) => r.v)), avgWin(hospRecs, prevStart, curStart)),
-    hygiene: mc(avgWin(hygRecs, curStart, end) || avg2(hygRecs.map((r) => r.v)), avgWin(hygRecs, prevStart, curStart)),
+    hospitality: sc(avgWin(hospRecs, curStart, end) ?? rataAudit(hospRecs.map((r) => r.v)), avgWin(hospRecs, prevStart, curStart)),
+    hygiene: sc(avgWin(hygRecs, curStart, end) ?? rataAudit(hygRecs.map((r) => r.v)), avgWin(hygRecs, prevStart, curStart)),
     complaintsReceived: mc(
       comp.filter((c) => inW(+new Date(c.createdAt), curStart, end)).length,
       comp.filter((c) => inW(+new Date(c.createdAt), prevStart, curStart)).length,
@@ -480,8 +613,10 @@ export function reportPeriodCompare(outletIds: string[], days = 30, endMs = NOW(
 /* ---------------- Reports: aggregation over a set of outlets ---------------- */
 export interface OutletsAggregate {
   outlets: number;
-  hospitality: number;
-  hygiene: number;
+  /** `null` = tak satu pun outlet dalam cakupan ini punya audit hospitality. */
+  hospitality: number | null;
+  /** `null` = tak satu pun outlet dalam cakupan ini punya audit hygiene. */
+  hygiene: number | null;
   tasksTotal: number;
   tasksDone: number;
   taskCompletion: number;
@@ -505,8 +640,8 @@ export function aggregateOutlets(outletIds: string[]): OutletsAggregate {
   const events = SEED.events.filter((e) => ids.has(e.outletId));
   return {
     outlets: ids.size,
-    hospitality: round1(avg(hosp)),
-    hygiene: round1(avg(hyg)),
+    hospitality: rataAudit(hosp),
+    hygiene: rataAudit(hyg),
     tasksTotal: tasks.length,
     tasksDone,
     taskCompletion: tasks.length ? Math.round((tasksDone / tasks.length) * 100) : 0,
@@ -564,8 +699,10 @@ export interface MonthPoint {
 export interface CoordinatorPerf {
   id: string;
   name: string;
-  hospitality: number;
-  hygiene: number;
+  /** `null` = belum ada audit hospitality di outlet binaannya. */
+  hospitality: number | null;
+  /** `null` = belum ada audit hygiene di outlet binaannya. */
+  hygiene: number | null;
   complaints: number;
 }
 
@@ -585,8 +722,8 @@ export function coordinatorPerformance(outletIds: string[]): CoordinatorPerf[] {
       return {
         id: c.id,
         name: c.name,
-        hospitality: round1(avg(hosp)),
-        hygiene: round1(avg(hyg)),
+        hospitality: rataAudit(hosp),
+        hygiene: rataAudit(hyg),
         complaints,
       };
     });

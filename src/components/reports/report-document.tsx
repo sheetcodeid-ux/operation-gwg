@@ -1,9 +1,27 @@
 import { ArrowDownRight, ArrowUpRight, CheckCircle2, Lightbulb, TriangleAlert } from "lucide-react";
-import { aggregateOutlets, reportPeriodCompare } from "@/lib/data/store";
+import { aggregateOutlets, rataAudit, reportPeriodCompare } from "@/lib/data/store";
 import { KPI_TARGETS } from "@/lib/constants";
 import { cn } from "@/lib/utils";
 
-function DeltaBadge({ value, goodWhenUp = true }: { value: number; goodWhenUp?: boolean }) {
+const TAK_ADA = "Belum ada data";
+
+/** Skor untuk teks; yang belum dinilai tidak dipaksa menjadi angka. */
+const skor = (v: number | null, digit = 1) => (v === null ? TAK_ADA : v.toFixed(digit));
+
+/**
+ * `null` = perubahannya tidak terukur, bukan 0%.
+ *
+ * Lencana 0% berwarna hijau berarti "stabil", dan itu klaim tentang periode
+ * yang salah satu sisinya tidak punya audit sama sekali.
+ */
+function DeltaBadge({ value, goodWhenUp = true }: { value: number | null; goodWhenUp?: boolean }) {
+  if (value === null) {
+    return (
+      <span className="inline-flex items-center gap-0.5 rounded-full bg-muted px-1.5 py-0.5 text-[11px] font-medium text-muted-foreground">
+        Tak terukur
+      </span>
+    );
+  }
   const up = value >= 0;
   const good = goodWhenUp ? up : !up;
   return (
@@ -32,16 +50,36 @@ export function ReportDocument({ outletIds }: { outletIds: string[] }) {
   const agg = aggregateOutlets(outletIds);
 
   const chips = [
-    { label: "Hospitality", value: data.hospitality.cur.toFixed(1), delta: data.hospitality.delta, good: true },
-    { label: "Hygiene", value: data.hygiene.cur.toFixed(1), delta: data.hygiene.delta, good: true },
+    { label: "Hospitality", value: skor(data.hospitality.cur), delta: data.hospitality.delta, good: true },
+    { label: "Hygiene", value: skor(data.hygiene.cur), delta: data.hygiene.delta, good: true },
     { label: "Komplain (30h)", value: String(data.complaintsReceived.cur), delta: data.complaintsReceived.delta, good: false },
     { label: "Terselesaikan", value: String(data.complaintsResolved.cur), delta: data.complaintsResolved.delta, good: true },
     { label: "Task Completion", value: `${agg.taskCompletion}%`, delta: data.tasksCompleted.delta, good: true },
   ];
 
-  const belowTarget = data.perOutlet.filter((o) => o.hospCur < KPI_TARGETS.hospitality || o.hygCur < KPI_TARGETS.hygiene);
-  const improved = data.perOutlet.filter((o) => o.hospPrev > 0 && o.hospCur > o.hospPrev);
-  const sorted = [...data.perOutlet].sort((a, b) => b.hospCur + b.hygCur - (a.hospCur + a.hygCur));
+  // Di bawah target hanya bisa DIBUKTIKAN oleh skor yang ada. Outlet tanpa
+  // audit tidak dihitung di bawah target - dan justru karena itu ia tidak boleh
+  // hilang dari laporan, jadi jumlahnya disebut terpisah. Ambangnya sendiri
+  // (`KPI_TARGETS`) tidak diubah.
+  const terukur = (o: { hospCur: number | null; hygCur: number | null }) => o.hospCur !== null || o.hygCur !== null;
+  const belowTarget = data.perOutlet.filter(
+    (o) =>
+      (o.hospCur !== null && o.hospCur < KPI_TARGETS.hospitality) ||
+      (o.hygCur !== null && o.hygCur < KPI_TARGETS.hygiene),
+  );
+  const belumDinilai = data.perOutlet.filter((o) => !terukur(o));
+  const improved = data.perOutlet.filter((o) => o.hospPrev !== null && o.hospPrev > 0 && o.hospCur !== null && o.hospCur > o.hospPrev);
+  // Mutu gabungan per outlet; yang tidak terukur turun ke bawah daftar tanpa
+  // diberi angka pengganti.
+  const mutu = (o: { hospCur: number | null; hygCur: number | null }) => rataAudit([o.hospCur, o.hygCur]);
+  const sorted = [...data.perOutlet].sort((a, b) => {
+    const x = mutu(a);
+    const y = mutu(b);
+    if (x === null && y === null) return a.name.localeCompare(b.name, "id");
+    if (x === null) return 1;
+    if (y === null) return -1;
+    return y - x;
+  });
 
   return (
     <div className="space-y-5">
@@ -80,18 +118,21 @@ export function ReportDocument({ outletIds }: { outletIds: string[] }) {
             </thead>
             <tbody>
               {sorted.map((o) => {
-                const d = o.hospPrev > 0 ? Math.round(((o.hospCur - o.hospPrev) / o.hospPrev) * 100) : 0;
+                const d =
+                  o.hospPrev !== null && o.hospPrev > 0 && o.hospCur !== null
+                    ? Math.round(((o.hospCur - o.hospPrev) / o.hospPrev) * 100)
+                    : null;
                 return (
                   <tr key={o.code} className="border-b border-border/60 last:border-0">
                     <td className="px-3 py-2.5">
                       <span className="font-medium text-foreground">{o.name}</span>
                       <span className="ml-1 text-[11px] text-muted-foreground">{o.code}</span>
                     </td>
-                    <td className="px-3 py-2.5 text-center tabular-nums text-foreground">{o.hospCur.toFixed(0)}</td>
-                    <td className="px-3 py-2.5 text-center tabular-nums text-muted-foreground">{o.hospPrev.toFixed(0)}</td>
+                    <td className="px-3 py-2.5 text-center tabular-nums text-foreground">{skor(o.hospCur, 0)}</td>
+                    <td className="px-3 py-2.5 text-center tabular-nums text-muted-foreground">{skor(o.hospPrev, 0)}</td>
                     <td className="px-3 py-2.5 text-center"><DeltaBadge value={d} /></td>
-                    <td className="px-3 py-2.5 text-center tabular-nums text-foreground">{o.hygCur.toFixed(0)}</td>
-                    <td className="px-3 py-2.5 text-center tabular-nums text-muted-foreground">{o.hygPrev.toFixed(0)}</td>
+                    <td className="px-3 py-2.5 text-center tabular-nums text-foreground">{skor(o.hygCur, 0)}</td>
+                    <td className="px-3 py-2.5 text-center tabular-nums text-muted-foreground">{skor(o.hygPrev, 0)}</td>
                   </tr>
                 );
               })}
@@ -104,13 +145,21 @@ export function ReportDocument({ outletIds }: { outletIds: string[] }) {
       <section className="grid gap-3 lg:grid-cols-3 print-break">
         <Callout tone="success" icon={CheckCircle2} title="Positif">
           {improved.length > 0
-            ? `${improved.length} outlet membaik MoM. Tertinggi: ${sorted[0]?.name ?? "—"} (${sorted[0]?.hospCur.toFixed(0)}).`
-            : "Skor relatif stabil dibanding bulan lalu."}
+            ? `${improved.length} outlet membaik MoM. Tertinggi: ${sorted[0]?.name ?? "—"} (${skor(sorted[0]?.hospCur ?? null, 0)}).`
+            : "Belum ada outlet yang terbukti membaik dibanding periode sebelumnya."}
         </Callout>
         <Callout tone="danger" icon={TriangleAlert} title="Perlu Perhatian">
+          {/* Kalimat "semua outlet memenuhi target" tidak boleh diucapkan
+              selama masih ada outlet yang belum diaudit - itu klaim tentang
+              outlet yang tak seorang pun periksa. */}
           {belowTarget.length > 0
             ? `${belowTarget.length} outlet di bawah target (Hosp/Hyg < ${KPI_TARGETS.hospitality}). Contoh: ${belowTarget[0]?.name}.`
-            : "Semua outlet memenuhi target minimum."}
+            : belumDinilai.length > 0
+              ? `Tidak ada outlet terukur di bawah target, tetapi ${belumDinilai.length} outlet belum punya audit pada periode ini.`
+              : "Semua outlet memenuhi target minimum."}
+          {belowTarget.length > 0 && belumDinilai.length > 0
+            ? ` ${belumDinilai.length} outlet lain belum diaudit.`
+            : ""}
         </Callout>
         <Callout tone="warning" icon={Lightbulb} title="Rekomendasi">
           {belowTarget.length > 0
@@ -125,7 +174,7 @@ export function ReportDocument({ outletIds }: { outletIds: string[] }) {
           <span className="inline-block h-4 w-1 rounded bg-primary" /> Kesimpulan &amp; Tindak Lanjut
         </h3>
         <ul className="space-y-1.5 text-sm text-foreground/90">
-          <li>• Rata-rata hospitality {agg.hospitality.toFixed(1)} dan hygiene {agg.hygiene.toFixed(1)} dari {agg.outlets} outlet.</li>
+          <li>• Rata-rata hospitality {skor(agg.hospitality)} dan hygiene {skor(agg.hygiene)} dari {agg.outlets} outlet.</li>
           <li>• {belowTarget.length} outlet perlu perhatian; resolution rate komplain {agg.resolution}%.</li>
           <li>• Penyelesaian task {agg.taskCompletion}% · {agg.eventsRunning} event berjalan.</li>
         </ul>

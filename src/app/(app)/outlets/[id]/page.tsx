@@ -29,6 +29,27 @@ import { Progress } from "@/components/ui/progress";
 import { EventCard } from "@/components/events/event-views";
 import { formatDate } from "@/lib/utils";
 
+/** Kalimat tunggal untuk skor yang belum punya bukti auditnya. */
+const TAK_ADA = "Belum ada data";
+
+/**
+ * Cincin skor, atau kalimat bila outlet ini belum pernah dinilai.
+ *
+ * `ScoreRing` menerima angka dan menggambar busurnya; memberinya 0 akan
+ * menggambar cincin kosong berwarna merah - persis tampilan outlet terburuk,
+ * untuk outlet yang belum diperiksa siapa pun.
+ */
+function CincinSkor({ v, label }: { v: number | null; label: string }) {
+  if (v === null) {
+    return (
+      <div className="grid size-14 shrink-0 place-items-center rounded-full border border-dashed border-border px-1 text-center">
+        <span className="text-[9px] leading-tight text-muted-foreground/80">{TAK_ADA}</span>
+      </div>
+    );
+  }
+  return <ScoreRing value={v} size={56} stroke={6} label={label} />;
+}
+
 export async function generateMetadata({ params }: { params: Promise<{ id: string }> }): Promise<Metadata> {
   const { id } = await params;
   const detail = getOutletDetail(id);
@@ -64,8 +85,8 @@ export default async function OutletDetailPage({ params }: { params: Promise<{ i
           </div>
         </div>
         <div className="flex items-center gap-4">
-          <ScoreRing value={d.hospitality} size={56} stroke={6} label="Hosp" />
-          <ScoreRing value={d.hygiene} size={56} stroke={6} label="Hyg" />
+          <CincinSkor v={d.hospitality} label="Hosp" />
+          <CincinSkor v={d.hygiene} label="Hyg" />
         </div>
       </div>
 
@@ -89,8 +110,10 @@ export default async function OutletDetailPage({ params }: { params: Promise<{ i
       </div>
 
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-        <StatTile icon={ConciergeBell} label="Hospitality" value={d.hospitality.toFixed(1)} tone="brand" />
-        <StatTile icon={SprayCan} label="Hygiene" value={d.hygiene.toFixed(1)} tone="success" />
+        {/* `StatTile.value` bertipe ReactNode: `null` merender kartu KOSONG,
+            jadi ketiadaannya harus dikatakan dengan kalimat. */}
+        <StatTile icon={ConciergeBell} label="Hospitality" value={d.hospitality?.toFixed(1) ?? TAK_ADA} tone="brand" />
+        <StatTile icon={SprayCan} label="Hygiene" value={d.hygiene?.toFixed(1) ?? TAK_ADA} tone="success" />
         <StatTile icon={ListChecks} label="Task Completion" value={`${d.taskCompletion}%`} tone="cyan" sub={`${d.tasksOpen} open`} />
         <StatTile icon={MessageSquareWarning} label="Open Complaints" value={d.complaintsOpen} tone="warning" />
       </div>
