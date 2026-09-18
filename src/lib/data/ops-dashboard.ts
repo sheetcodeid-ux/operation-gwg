@@ -7,7 +7,7 @@ import { expenseTotal, listExpenses, listOpOutlets, listPurchases, sumExpenses, 
 import { areaName, listComplaints, listEvents, listHygiene, listTasks, outletName, userName, visibleOutlets } from "@/lib/data/store";
 import { getOpsSettings } from "@/lib/data/ops-settings";
 import { DEFAULT_SETTINGS, type OpsSettings } from "@/lib/ops/settings-types";
-import { geserHari, hariIniWib, tanggalSah } from "@/lib/ops/waktu";
+import { bulanDari, bulanIniWib, bulanSebelum, geserHari, hariBerjalan, hariIniWib, jumlahHari, tanggalSah } from "@/lib/ops/waktu";
 import type { ComplaintCategory, UserProfile } from "@/lib/types";
 
 export interface OpsKpi {
@@ -168,16 +168,31 @@ async function omzetOfMonth(month: string): Promise<number> {
  */
 async function loadTarget(todayNetSales: number | null): Promise<OpsTarget | null> {
   try {
-    const now = new Date();
-    const monthOf = (back: number) => ym(new Date(now.getFullYear(), now.getMonth() - back, 1));
+    // ┌─ BULAN BISNIS, BUKAN BULAN SERVER ──────────────────────────────────┐
+    // │ Dulu `new Date()` lalu `getFullYear()/getMonth()/getDate()` — jam   │
+    // │ lokal proses. Di server UTC, tujuh jam pertama setiap tanggal 1 WIB │
+    // │ masih terbaca bulan SEBELUMNYA: `realisasi` menampilkan omzet bulan │
+    // │ lalu sebagai bulan berjalan, `avg3` bergeser satu bulan, dan        │
+    // │ `daysElapsed` melompat dari 1 ke jumlah hari bulan lalu — capaian   │
+    // │ yang terbaca masuk akal, hanya saja milik bulan yang salah.         │
+    // │                                                                     │
+    // │ Rumusnya TIDAK diubah sedikit pun; yang berubah hanya bulan mana    │
+    // │ yang dihitung dan berapa hari dari bulan itu yang sudah lewat.      │
+    // └─────────────────────────────────────────────────────────────────────┘
+    const bulanIni = bulanIniWib();
+    const monthOf = (back: number) => {
+      let m = bulanIni;
+      for (let i = 0; i < back; i++) m = bulanSebelum(m);
+      return m;
+    };
     const [o0, o1, o2, o3] = await Promise.all([omzetOfMonth(monthOf(0)), omzetOfMonth(monthOf(1)), omzetOfMonth(monthOf(2)), omzetOfMonth(monthOf(3))]);
     const avg3 = (o1 + o2 + o3) / 3;
     if (avg3 <= 0) return null; // not enough history (Juknis: min 3 bulan)
 
     const targetMonth = avg3 * 1.15;
     const realisasi = o0;
-    const daysInMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
-    const daysElapsed = now.getDate();
+    const daysInMonth = jumlahHari(bulanIni);
+    const daysElapsed = hariBerjalan(bulanIni);
     const targetHarian = targetMonth / daysInMonth;
     const ratePerDay = daysElapsed > 0 ? realisasi / daysElapsed : 0;
 
@@ -292,6 +307,15 @@ export interface TanggalHarian {
   dYest: string;
   /** Awal jendela tren; `dFrom..dToday` berisi tepat `HARI_JENDELA` tanggal. */
   dFrom: string;
+  /**
+   * Bulan bisnis milik `dToday`, "YYYY-MM".
+   *
+   * Diturunkan DARI `dToday`, bukan dibaca ulang dari jam server. Dua turunan
+   * yang membaca jam masing-masing bisa berbeda bulan tepat di tanggal 1 —
+   * halaman yang sama lalu menampilkan hari dari September dan bulan dari
+   * Agustus, dan tidak ada satu pun angkanya yang tampak salah.
+   */
+  bulan: string;
 }
 
 /**
@@ -326,7 +350,12 @@ export interface TanggalHarian {
  */
 export function tanggalHarian(pada: number = Date.now(), diminta?: string): TanggalHarian {
   const dToday = diminta && tanggalSah(diminta) ? diminta : hariIniWib(pada);
-  return { dToday, dYest: geserHari(dToday, -1), dFrom: geserHari(dToday, -(HARI_JENDELA - 1)) };
+  return {
+    dToday,
+    dYest: geserHari(dToday, -1),
+    dFrom: geserHari(dToday, -(HARI_JENDELA - 1)),
+    bulan: bulanDari(dToday),
+  };
 }
 
 const ym = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
@@ -357,7 +386,12 @@ function baseOpsDashboard(): OpsDashboardData {
  * the rest — the component keeps its placeholder for anything that errored.
  */
 export async function getOpsDashboard(opts: { date?: string; user?: UserProfile } = {}): Promise<OpsDashboardData> {
-  const month = ym(opts.date ? new Date(opts.date) : new Date());
+  // Hari dan bulan lahir dari SATU turunan. Dulu bulannya dihitung terpisah
+  // lewat `ym(new Date(...))`: tanpa `opts.date` ia memakai jam server, dan
+  // DENGAN `opts.date` ia memutar tanggal bisnis lewat `new Date()` lalu
+  // membacanya kembali dengan getter lokal — dua cara berbeda untuk meleset
+  // satu hari, dan di tanggal 1 keduanya meleset satu bulan.
+  const { dToday, dYest, dFrom, bulan: month } = tanggalHarian(Date.now(), opts.date);
   const finance = await loadFinance(month);
   const control = opts.user ? loadControl(opts.user) : null;
   const activity = opts.user ? loadActivity(opts.user) : null;
@@ -366,7 +400,6 @@ export async function getOpsDashboard(opts: { date?: string; user?: UserProfile 
   if (!esbConfigured()) return { ...baseOpsDashboard(), finance, control, branchPerf, activity, settings };
   const errors: string[] = [];
 
-  const { dToday, dYest, dFrom } = tanggalHarian(Date.now(), opts.date);
 
   // ESB gives daily net sales (cached, fast) + branches. There's no per-hour or
   // transaksi/pelanggan/avg-bill data, so the hourly chart becomes a DAILY net

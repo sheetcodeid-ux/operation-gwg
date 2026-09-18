@@ -216,3 +216,122 @@ describe("tanggalHarian — batas hari WIB", () => {
     expect(kode).not.toMatch(/const ymd =/);
   });
 });
+
+/**
+ * BATAS BULAN BISNIS (U-A).
+ *
+ * Gate V membereskan HARI; bulannya masih dibaca dari jam server lewat
+ * `ym(new Date())`. Di server UTC, tujuh jam pertama setiap tanggal 1 WIB
+ * masih terbaca bulan sebelumnya — dan itu tidak tampak seperti kesalahan di
+ * layar: `realisasi` menampilkan omzet bulan lalu sebagai bulan berjalan,
+ * `avg3` bergeser satu bulan, Finance dan Pembelian per cabang membaca periode
+ * yang sudah ditutup, dan capaiannya tetap terlihat wajar.
+ *
+ * Bulan sekarang diturunkan DARI `dToday`, jadi hari dan bulan pada satu
+ * halaman tidak mungkin berasal dari dua kalender yang berbeda.
+ */
+describe("bulan bisnis mengikuti kalender WIB", () => {
+  const pada = (iso: string) => Date.parse(iso);
+
+  it("UA-01 · 16.59.59 UTC masih 17 September WIB — bulan September", () => {
+    const t = tanggalHarian(pada("2026-09-17T16:59:59Z"));
+    expect(t.dToday).toBe("2026-09-17");
+    expect(t.bulan).toBe("2026-09");
+  });
+
+  it("UA-02 · akhir bulan UTC yang sudah awal bulan WIB", () => {
+    // 2026-08-31 17.00Z = 2026-09-01 00.00 WIB. Jam server masih Agustus;
+    // kalender bisnis sudah September.
+    const t = tanggalHarian(pada("2026-08-31T17:00:00Z"));
+    expect(t.dToday).toBe("2026-09-01");
+    expect(t.bulan).toBe("2026-09");
+  });
+
+  it("UA-03 · sedetik sebelumnya masih Agustus", () => {
+    const t = tanggalHarian(pada("2026-08-31T16:59:59Z"));
+    expect(t.dToday).toBe("2026-08-31");
+    expect(t.bulan).toBe("2026-08");
+  });
+
+  it("UA-04 · tengah malam WIB di pergantian tahun", () => {
+    // Yang bergeser bukan cuma bulannya, tapi tahunnya.
+    expect(tanggalHarian(pada("2026-12-31T16:59:59Z")).bulan).toBe("2026-12");
+    expect(tanggalHarian(pada("2026-12-31T17:00:00Z")).bulan).toBe("2027-01");
+  });
+
+  it("UA-05 · opts.date eksplisit menentukan bulannya juga", () => {
+    // Jam server masih 31 Agustus; yang diminta 1 September. Yang dipakai
+    // tanggal yang diminta, berikut bulannya.
+    const t = tanggalHarian(pada("2026-08-31T10:00:00Z"), "2026-09-01");
+    expect(t.dToday).toBe("2026-09-01");
+    expect(t.bulan).toBe("2026-09");
+    expect(tanggalHarian(pada("2026-09-17T23:30:00Z"), "2026-09-18").bulan).toBe("2026-09");
+  });
+
+  it("UA-06 · tanggal biasa tetap di bulan yang sama", () => {
+    for (const jam of ["00:30", "06:00", "12:00", "16:30", "18:30", "23:30"]) {
+      expect(tanggalHarian(pada(`2026-09-10T${jam}:00Z`)).bulan, jam).toBe("2026-09");
+    }
+  });
+
+  it("bulan SELALU milik dToday — tidak pernah dibaca ulang dari jam server", () => {
+    const contoh = [
+      "2026-01-31T17:00:00Z",
+      "2026-02-28T16:59:59Z",
+      "2026-02-28T17:00:00Z",
+      "2024-02-29T17:00:00Z",
+      "2026-06-30T18:45:00Z",
+      "2026-11-30T23:59:59Z",
+    ];
+    for (const iso of contoh) {
+      const t = tanggalHarian(pada(iso));
+      expect(t.bulan, iso).toBe(t.dToday.slice(0, 7));
+    }
+  });
+});
+
+describe("loadTarget memakai bulan bisnis, bukan bulan server", () => {
+  // `loadTarget` tidak diekspor dan menuntut basis data, jadi yang dijaga
+  // sumbernya — pola yang sama dengan penjagaan aktivitas di atas.
+  const b = badan("loadTarget");
+
+  it("tidak ada lagi jam lokal server di dalamnya", () => {
+    expect(b).not.toMatch(/new Date\(/);
+    expect(b).not.toMatch(/getFullYear\(\)|getMonth\(\)|getDate\(\)/);
+  });
+
+  it("memakai helper WIB yang sudah ada, bukan rumus baru", () => {
+    expect(b).toContain("bulanIniWib()");
+    expect(b).toContain("bulanSebelum(m)");
+    expect(b).toContain("jumlahHari(bulanIni)");
+    expect(b).toContain("hariBerjalan(bulanIni)");
+  });
+
+  it("rumus bisnisnya tidak berubah", () => {
+    // Yang boleh berubah cuma BULAN MANA yang dihitung — bukan cara menghitungnya.
+    expect(b).toContain("const avg3 = (o1 + o2 + o3) / 3");
+    expect(b).toContain("const targetMonth = avg3 * 1.15");
+    expect(b).toContain("const targetHarian = targetMonth / daysInMonth");
+    expect(b).toContain("const ratePerDay = daysElapsed > 0 ? realisasi / daysElapsed : 0");
+    expect(b).toContain("proyeksiBulanan: ratePerDay * daysInMonth");
+    // S-A-04 tetap terbuka: tidak ada ambang kelengkapan yang dikarang.
+    expect(b).not.toMatch(/0\.9|0\.95|90\s*%|95\s*%|kelengkapan|threshold/i);
+  });
+});
+
+describe("getOpsDashboard: hari dan bulan dari satu turunan", () => {
+  it("bulan diambil dari tanggalHarian, tidak dihitung sendiri", () => {
+    expect(kode).toContain("const { dToday, dYest, dFrom, bulan: month } = tanggalHarian(Date.now(), opts.date);");
+    expect(kode).not.toMatch(/ym\(opts\.date/);
+    expect(kode).not.toMatch(/ym\(new Date\(\)\)/);
+  });
+
+  it("satu-satunya sisa `ym` adalah bulan sebelum milik loadBranchPerf", () => {
+    // Baris itu menurunkan bulan dari STRING bulan, bukan dari jam server:
+    // dibangun dan dibaca pada zona yang sama, jadi hasilnya identik di zona
+    // mana pun. Bukan bagian U-A, dan tidak disentuh.
+    expect(kode.match(/\bym\(/g) ?? []).toHaveLength(1); // tinggal satu pemanggil
+    expect(kode).toContain("const ym = (d: Date) =>"); // definisinya masih dipakai baris itu
+    expect(badan("loadBranchPerf")).toContain("const prev = ym(new Date(Number(month.slice(0, 4))");
+  });
+});
