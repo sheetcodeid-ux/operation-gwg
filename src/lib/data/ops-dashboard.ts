@@ -7,6 +7,7 @@ import { expenseTotal, listExpenses, listOpOutlets, listPurchases, sumExpenses, 
 import { areaName, listComplaints, listEvents, listHygiene, listTasks, outletName, userName, visibleOutlets } from "@/lib/data/store";
 import { getOpsSettings } from "@/lib/data/ops-settings";
 import { DEFAULT_SETTINGS, type OpsSettings } from "@/lib/ops/settings-types";
+import { wajibPasangan, type StatusKelengkapan } from "@/lib/ops/kelengkapan";
 import { bulanDari, bulanIniWib, bulanSebelum, geserHari, hariBerjalan, hariIniWib, jumlahHari, tanggalSah } from "@/lib/ops/waktu";
 import type { ComplaintCategory, UserProfile } from "@/lib/types";
 
@@ -50,15 +51,35 @@ export interface OpsActivity { who: string; time: string; desc: string; tone: "b
 export interface OpsActivityFeed { divisi: OpsActivity[]; outlet: OpsActivity[] }
 
 /** Target & projection (Juknis 2.1–2.3, computed from 3-month omzet history). */
+/**
+ * ┌─ TARGET LAHIR DARI TIGA BULAN LENGKAP; REALISASI DARI BULAN BERJALAN ───┐
+ * │                                                                        │
+ * │ Keduanya punya syarat bukti SENDIRI, dan itu sebabnya `targetMonth`     │
+ * │ tetap angka sementara `realisasi` boleh null. Target dihitung dari tiga │
+ * │ bulan rujukan yang sudah ditutup dan sudah terbukti lengkap (S-A-04);   │
+ * │ realisasi dihitung dari bulan yang masih berjalan, dan bulan berjalan   │
+ * │ bisa berlubang.                                                        │
+ * │                                                                        │
+ * │ Dulu `realisasi` menjumlahkan tanggal yang KEBETULAN ada. Satu hari     │
+ * │ yang belum tertarik membuatnya lebih kecil tanpa satu tanda pun, lalu   │
+ * │ kekurangannya menular: capaian terbaca lebih rendah, laju harian        │
+ * │ terbaca lebih lambat (pembilangnya kurang hari, penyebutnya tetap hari  │
+ * │ kalender), dan proyeksi sebulan mewarisi keduanya.                      │
+ * └────────────────────────────────────────────────────────────────────────┘
+ */
 export interface OpsTarget {
   targetMonth: number; // avg 3-month omzet × 115%
-  realisasi: number; // current-month omzet (MTD)
-  attainmentPct: number; // realisasi / targetMonth × 100
-  momPct: number; // realisasi vs previous month (for the −5% style badge)
+  /** Omzet bulan berjalan (MTD). `null` = harinya belum lengkap — bukan Rp 0. */
+  realisasi: number | null;
+  /** `null` mengikuti `realisasi`: capaian tanpa realisasi tidak bisa dihitung. */
+  attainmentPct: number | null;
+  /** `null` mengikuti `realisasi`. Perbandingannya sendiri belum setara — SA04-A-02. */
+  momPct: number | null;
   targetHarian: number;
   /** Net sales hari ini. Null berarti belum ada barisnya — bukan Rp 0. */
   todayActual: number | null;
-  proyeksiBulanan: number; // rate/day × days-in-month
+  /** `null` bila lajunya tidak terukur. Tidak ada metode proyeksi cadangan. */
+  proyeksiBulanan: number | null;
 }
 
 /** Produk (per-menu sales this month, from ERP menu-performance — Juknis 2.7). */
@@ -142,11 +163,114 @@ function monthBounds(month: string): { from: string; to: string } {
   return { from: `${month}-01`, to: `${month}-${String(last).padStart(2, "0")}` };
 }
 
-/** Total omzet of a month = Σ daily net sales from the ESB sales cache. */
-async function omzetOfMonth(month: string): Promise<number> {
+/**
+ * ┌─ KETERSEDIAAN BUKAN NILAI ──────────────────────────────────────────────┐
+ * │                                                                        │
+ * │ `sales_daily` menyimpan SATU baris per tanggal: total seluruh cabang    │
+ * │ hari itu (`day` PRIMARY KEY, diisi satu panggilan ESB "semua cabang").  │
+ * │ Karena itu kelengkapan bulan di jalur ini cuma bisa berarti satu hal —  │
+ * │ tanggal mana yang barisnya sudah ada. Bukan outlet × tanggal.           │
+ * │                                                                        │
+ * │ Dulu fungsi ini mengembalikan `number` saja: tanggal yang barisnya      │
+ * │ belum ada tidak menyumbang apa pun, dan hasilnya tetap keluar sebagai   │
+ * │ angka — tidak ada cara membedakan "bulan ini Rp 13 M" dari "bulan ini   │
+ * │ Rp 13 M dari separuh harinya". Bulan yang sama sekali kosong bahkan     │
+ * │ menghasilkan 0, dan 0 itu mengalir ke `avg3` sebagai fakta.             │
+ * │                                                                        │
+ * │ Akibatnya sudah terjadi: April 2026 ke belakang tidak punya satu baris  │
+ * │ pun dan Mei 2026 hanya 8 dari 31 hari (cron cuma memelihara jendela 60  │
+ * │ hari). Pada Juli dan Agustus 2026, `avg3` membaca bulan-bulan itu, dan  │
+ * │ target bulanan yang tampil lebih kecil daripada seharusnya — capaian    │
+ * │ terbaca lebih tinggi daripada kenyataannya.                             │
+ * └────────────────────────────────────────────────────────────────────────┘
+ */
+export interface OmzetBulan {
+  periode: string;
+  /**
+   * Jumlah net sales dari tanggal YANG ADA barisnya.
+   *
+   * Ini BUKAN omzet bulan itu kecuali `status === "lengkap"`. Yang membacanya
+   * wajib melihat statusnya dulu — itulah sebabnya keduanya dikembalikan
+   * bersama alih-alih angkanya saja.
+   */
+  nilai: number;
+  /** Berapa tanggal yang barisnya ada. Baris ber-`net = 0` ikut terhitung ada. */
+  hariAda: number;
+  /** Berapa tanggal yang seharusnya ada; bulan berjalan = hari yang sudah lewat. */
+  hariWajib: number;
+  status: StatusKelengkapan;
+  /** Bulan berjalan: `nilai` berarti "sampai hari ini", bukan sebulan penuh. */
+  berjalan: boolean;
+}
+
+/**
+ * Berapa tanggal yang seharusnya sudah punya baris.
+ *
+ * Bulan yang sudah lewat: seluruh hari kalendernya. Bulan berjalan: hari yang
+ * SUDAH LEWAT menurut WIB — menuntut tanggal yang belum terjadi akan membuat
+ * setiap bulan berjalan selamanya terbaca tidak lengkap. Aturan itu tidak
+ * ditulis ulang di sini: `hariBerjalan` dan `wajibPasangan` sudah memilikinya.
+ */
+export function hariWajibBulan(periode: string, pada: number = Date.now()): number {
+  const sekarang = bulanIniWib(pada);
+  if (periode > sekarang) return 0; // bulan yang belum datang
+  if (periode < sekarang) return jumlahHari(periode);
+  return wajibPasangan(1, hariBerjalan(periode, pada));
+}
+
+/**
+ * Status kelengkapan satu bulan di jalur ini.
+ *
+ * Kosakatanya `StatusKelengkapan` milik `@/lib/ops/kelengkapan` supaya dua
+ * bagian aplikasi tidak menamai keadaan yang sama dengan kata berbeda.
+ * `nilaiKelengkapan()` sendiri TIDAK dipanggil karena dua hal: masukannya
+ * `FaktaPenjualan[]` yang bergrain outlet — memberinya baris harian berarti
+ * mengarang `outletId` — dan ia menimbang lewat AMBANG, sementara kontrak
+ * S-A-04 tidak punya ambang sama sekali: 100% atau tidak lengkap.
+ *
+ * `wajib === 0` sengaja TIDAK dianggap lengkap di sini, berbeda dari helper
+ * itu. Di sana "tidak ada outlet yang perlu dihitung" memang berarti tidak ada
+ * yang kurang; di sini "tidak ada hari yang wajib" berarti tidak ada satu pun
+ * bukti untuk bulan itu — dan bulan tanpa bukti tidak boleh ikut menghitung
+ * rata-rata.
+ */
+export function statusBulan(hariAda: number, hariWajib: number): StatusKelengkapan {
+  if (hariWajib <= 0) return "tidak_tersedia";
+  if (hariAda <= 0) return "tidak_tersedia";
+  return hariAda >= hariWajib ? "lengkap" : "tidak_lengkap";
+}
+
+/**
+ * Rata-rata tiga bulan rujukan — HANYA bila ketiganya lengkap.
+ *
+ * Rumusnya tidak berubah: jumlah dibagi tiga. Yang berubah cuma kapan ia boleh
+ * lahir. Satu bulan berlubang menurunkan rata-ratanya, dan rata-rata yang lebih
+ * rendah menghasilkan target yang lebih rendah — lalu capaian terbaca lebih
+ * tinggi. Angka yang salah arah begitu lebih berbahaya daripada tidak ada
+ * angka, karena tidak ada yang curiga pada bulan yang kelihatan tercapai.
+ */
+export function rataTigaBulan(bulan: readonly OmzetBulan[]): number | null {
+  if (bulan.length !== 3) return null;
+  if (!bulan.every((b) => b.status === "lengkap")) return null;
+  return bulan.reduce((a, b) => a + b.nilai, 0) / 3;
+}
+
+/** Omzet sebulan dari cache ESB, beserta bukti kelengkapannya. */
+async function omzetOfMonth(month: string, pada: number = Date.now()): Promise<OmzetBulan> {
   const { from, to } = monthBounds(month);
   const days = await getSalesDaily(from, to);
-  return days.reduce((a, d) => a + d.netSales, 0);
+  const hariWajib = hariWajibBulan(month, pada);
+  // Baris yang ADA — termasuk yang ber-`net = 0`. Nol yang tercatat adalah
+  // hari yang terukur tidak berjualan, bukan hari yang datanya belum ditarik.
+  const hariAda = days.length;
+  return {
+    periode: month,
+    nilai: days.reduce((a, d) => a + d.netSales, 0),
+    hariAda,
+    hariWajib,
+    status: statusBulan(hariAda, hariWajib),
+    berjalan: month === bulanIniWib(pada),
+  };
 }
 
 /**
@@ -166,6 +290,62 @@ async function omzetOfMonth(month: string): Promise<number> {
  * Angka mingguan per outlet yang sah ada di `/operational/weekly`, dari
  * `esb_net_mingguan`, dan ia tidak punya target.
  */
+/**
+ * Angka panel Target dari bukti yang sudah dikumpulkan — MURNI, tanpa basis data.
+ *
+ * Dipisah dari `loadTarget` supaya kontraknya bisa diuji langsung: seluruh
+ * cabangnya bergantung pada KELENGKAPAN bulan berjalan, dan bulan berjalan di
+ * data contoh selalu kebetulan lengkap. Kontrak yang cuma bisa dijalankan
+ * ketika produksi kebetulan berlubang adalah kontrak yang tidak pernah diuji.
+ *
+ * Tidak satu rumus pun berubah di sini. Yang ditambahkan hanya SYARAT: angka
+ * yang menurunkan dirinya dari realisasi tidak lahir ketika realisasinya tidak
+ * ada. Targetnya sendiri tetap lahir — ia datang dari tiga bulan rujukan yang
+ * sudah ditutup, bukan dari bulan yang sedang berjalan.
+ */
+export function angkaTarget(x: {
+  /** Bulan berjalan, "YYYY-MM". */
+  bulanIni: string;
+  /** Bulan berjalan beserta bukti kelengkapannya. */
+  o0: OmzetBulan;
+  /** Bulan sebelumnya — pembanding MoM. Sudah dijamin lengkap oleh `rataTigaBulan`. */
+  o1: OmzetBulan;
+  avg3: number;
+  todayActual: number | null;
+  pada?: number;
+}): OpsTarget {
+  const { bulanIni, o0, o1, avg3, todayActual } = x;
+  const pada = x.pada ?? Date.now();
+
+  const targetMonth = avg3 * 1.15;
+  // Realisasi hanya lahir dari bulan berjalan yang harinya LENGKAP sampai hari
+  // ini. Yang belum lengkap tidak diturunkan menjadi angka yang lebih kecil —
+  // ia tidak menjadi angka sama sekali.
+  const realisasi = o0.status === "lengkap" ? o0.nilai : null;
+  const daysInMonth = jumlahHari(bulanIni);
+  const daysElapsed = hariBerjalan(bulanIni, pada);
+  const targetHarian = targetMonth / daysInMonth;
+  // Penyebutnya TETAP hari kalender yang sudah lewat. Menggantinya dengan
+  // jumlah hari yang ada datanya akan menyembunyikan lubangnya di balik laju
+  // yang kelihatan wajar — dan itu aturan bisnis baru, bukan propagasi.
+  const ratePerDay = realisasi === null ? null : daysElapsed > 0 ? realisasi / daysElapsed : 0;
+
+  return {
+    targetMonth,
+    realisasi,
+    attainmentPct: realisasi === null ? null : targetMonth > 0 ? +((realisasi / targetMonth) * 100).toFixed(2) : 0,
+    // Rumus MoM tidak berubah — yang berubah cuma kapan ia boleh lahir.
+    //
+    // CATATAN: null di sini hanya menutup bulan berjalan yang BERLUBANG. Bahwa
+    // 18 hari September dibandingkan 31 hari Agustus penuh adalah persoalan
+    // lain (SA04-A-02) dan sengaja TIDAK disentuh di sini.
+    momPct: realisasi === null ? null : o1.nilai > 0 ? +(((realisasi - o1.nilai) / o1.nilai) * 100).toFixed(1) : 0,
+    targetHarian,
+    todayActual,
+    proyeksiBulanan: ratePerDay === null ? null : ratePerDay * daysInMonth,
+  };
+}
+
 async function loadTarget(todayNetSales: number | null): Promise<OpsTarget | null> {
   try {
     // ┌─ BULAN BISNIS, BUKAN BULAN SERVER ──────────────────────────────────┐
@@ -186,25 +366,12 @@ async function loadTarget(todayNetSales: number | null): Promise<OpsTarget | nul
       return m;
     };
     const [o0, o1, o2, o3] = await Promise.all([omzetOfMonth(monthOf(0)), omzetOfMonth(monthOf(1)), omzetOfMonth(monthOf(2)), omzetOfMonth(monthOf(3))]);
-    const avg3 = (o1 + o2 + o3) / 3;
-    if (avg3 <= 0) return null; // not enough history (Juknis: min 3 bulan)
+    // Tiga bulan rujukan harus LENGKAP. Yang tidak lengkap tidak diturunkan
+    // menjadi nol dan tidak diganti bulan lain — targetnya yang tidak lahir.
+    const avg3 = rataTigaBulan([o1, o2, o3]);
+    if (avg3 === null || avg3 <= 0) return null; // bukti tiga bulan belum cukup (Juknis: min 3 bulan)
 
-    const targetMonth = avg3 * 1.15;
-    const realisasi = o0;
-    const daysInMonth = jumlahHari(bulanIni);
-    const daysElapsed = hariBerjalan(bulanIni);
-    const targetHarian = targetMonth / daysInMonth;
-    const ratePerDay = daysElapsed > 0 ? realisasi / daysElapsed : 0;
-
-    return {
-      targetMonth,
-      realisasi,
-      attainmentPct: targetMonth > 0 ? +((realisasi / targetMonth) * 100).toFixed(2) : 0,
-      momPct: o1 > 0 ? +(((realisasi - o1) / o1) * 100).toFixed(1) : 0,
-      targetHarian,
-      todayActual: todayNetSales,
-      proyeksiBulanan: ratePerDay * daysInMonth,
-    };
+    return angkaTarget({ bulanIni, o0, o1, avg3, todayActual: todayNetSales });
   } catch {
     return null;
   }

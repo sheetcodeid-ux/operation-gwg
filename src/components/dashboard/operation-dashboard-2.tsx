@@ -117,10 +117,10 @@ export function OperationDashboard2({ initial }: { initial: OpsDashboardData }) 
           <ProgressCard
             title="Proyeksi Bulanan"
             live={!!t}
-            pct={t && t.targetMonth > 0 ? Math.round((t.proyeksiBulanan / t.targetMonth) * 100) : null}
+            pct={t && t.proyeksiBulanan !== null && t.targetMonth > 0 ? Math.round((t.proyeksiBulanan / t.targetMonth) * 100) : null}
             actual={t ? t.proyeksiBulanan : null}
             target={t ? t.targetMonth : null}
-            sebab="Proyeksi diturunkan dari target bulanan, yang butuh riwayat omzet tiga bulan penuh."
+            sebab="Proyeksi butuh dua-duanya: target bulanan dari riwayat tiga bulan penuh, dan hari-hari bulan ini yang sudah lengkap tertarik."
           />
           <ProgressCard
             title="Target Harian"
@@ -603,6 +603,24 @@ function TargetGauge({ target }: { target: OpsTarget | null }) {
       </Panel>
     );
   }
+  // ┌─ REALISASI YANG BELUM LENGKAP TIDAK PUNYA JARUM ────────────────────┐
+  // │ Gauge menggambar capaian, dan capaian menuntut realisasi. Selama     │
+  // │ hari-hari bulan ini belum lengkap tertarik, yang jujur adalah        │
+  // │ mengatakannya — bukan menggambar busur dari angka yang kurang hari.  │
+  // │ Targetnya sendiri TETAP disebut: ia lahir dari tiga bulan rujukan    │
+  // │ yang sudah ditutup dan sudah terbukti lengkap, jadi ia memang tahu.  │
+  // └──────────────────────────────────────────────────────────────────────┘
+  if (target.realisasi === null || target.attainmentPct === null) {
+    return (
+      <Panel>
+        <Head title="Target Per Bulan" desc="Realisasi vs target bulan ini" />
+        <BelumAdaData sebab="Belum semua hari bulan ini tertarik dari ESB, jadi realisasi bulan berjalan belum bisa dipakai sebagai angka." />
+        <p className="mt-2 text-center text-[12px] text-muted-foreground">
+          Target bulan ini <span className="font-semibold tabular-nums text-foreground">{rp(target.targetMonth)}</span>
+        </p>
+      </Panel>
+    );
+  }
   const pct = Math.min(100, target.attainmentPct);
   const mom = target.momPct;
   const realisasi = target.realisasi;
@@ -623,7 +641,11 @@ function TargetGauge({ target }: { target: OpsTarget | null }) {
         <div className="absolute inset-x-0 bottom-0 text-center">
           <p className="text-[10px] text-muted-foreground">Total Target</p>
           <p className="text-2xl font-bold tabular-nums text-foreground">{target.attainmentPct.toFixed(2)}%</p>
-          <p className={cn("text-[10px] font-medium", mom >= 0 ? "text-emerald-500" : "text-red-500")}>{mom >= 0 ? "+" : ""}{mom}% vs bulan lalu</p>
+          {mom === null ? (
+            <p className="text-[10px] text-muted-foreground">Perubahan vs bulan lalu belum terukur</p>
+          ) : (
+            <p className={cn("text-[10px] font-medium", mom >= 0 ? "text-emerald-500" : "text-red-500")}>{mom >= 0 ? "+" : ""}{mom}% vs bulan lalu</p>
+          )}
         </div>
       </div>
       <p className="mt-2 text-center text-[12px] font-semibold tabular-nums text-foreground">{rp(realisasi)} <span className="text-muted-foreground">/ {rp(tgt)}</span></p>
