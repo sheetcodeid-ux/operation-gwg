@@ -73,8 +73,14 @@ export interface OpsTarget {
   realisasi: number | null;
   /** `null` mengikuti `realisasi`: capaian tanpa realisasi tidak bisa dihitung. */
   attainmentPct: number | null;
-  /** `null` mengikuti `realisasi`. Perbandingannya sendiri belum setara — SA04-A-02. */
+  /**
+   * Perubahan terhadap periode YANG SAMA bulan lalu (tanggal 1 sampai hari
+   * terakhir yang sudah selesai). `null` bila belum ada hari penuh, bila
+   * realisasinya tidak terukur, atau bila pembandingnya nol.
+   */
   momPct: number | null;
+  /** Periode pembanding yang dipakai `momPct` — supaya layar bisa menyebutnya. */
+  momPembanding: { dari: string; sampai: string } | null;
   targetHarian: number;
   /** Net sales hari ini. Null berarti belum ada barisnya — bukan Rp 0. */
   todayActual: number | null;
@@ -184,6 +190,13 @@ function monthBounds(month: string): { from: string; to: string } {
  * │ terbaca lebih tinggi daripada kenyataannya.                             │
  * └────────────────────────────────────────────────────────────────────────┘
  */
+/** Satu hari dari `sales_daily`, seperti adanya. */
+export interface HariOmzet {
+  /** "YYYY-MM-DD". */
+  tanggal: string;
+  nilai: number;
+}
+
 export interface OmzetBulan {
   periode: string;
   /**
@@ -201,6 +214,16 @@ export interface OmzetBulan {
   status: StatusKelengkapan;
   /** Bulan berjalan: `nilai` berarti "sampai hari ini", bukan sebulan penuh. */
   berjalan: boolean;
+  /**
+   * Baris harian yang membentuk `nilai`.
+   *
+   * Dibawa ikut karena MoM sepadan menuntut penjumlahan SEBAGIAN bulan
+   * (tanggal 1 sampai D), dan baris-baris ini sudah terlanjur dibaca untuk
+   * menghitung `nilai`. Membuangnya lalu membacanya lagi dari basis data
+   * berarti dua penarikan untuk satu bulan yang sama — dan dua penarikan bisa
+   * mendapat isi berbeda kalau cron menulis di antaranya.
+   */
+  hari: readonly HariOmzet[];
 }
 
 /**
@@ -270,6 +293,7 @@ async function omzetOfMonth(month: string, pada: number = Date.now()): Promise<O
     hariWajib,
     status: statusBulan(hariAda, hariWajib),
     berjalan: month === bulanIniWib(pada),
+    hari: days.map((d) => ({ tanggal: d.day, nilai: d.netSales })),
   };
 }
 
@@ -290,6 +314,63 @@ async function omzetOfMonth(month: string, pada: number = Date.now()): Promise<O
  * Angka mingguan per outlet yang sah ada di `/operational/weekly`, dari
  * `esb_net_mingguan`, dan ia tidak punya target.
  */
+/** Jumlah omzet sebuah bulan dari tanggal 1 sampai tanggal `sampai`. */
+const jumlahSampai = (b: OmzetBulan, sampai: number): number =>
+  b.hari.reduce((a, h) => (Number(h.tanggal.slice(8, 10)) <= sampai ? a + h.nilai : a), 0);
+
+export interface MomSepadan {
+  /** Perubahan dalam persen, satu angka di belakang koma. */
+  pct: number;
+  /** Awal periode pembanding, "YYYY-MM-DD" — selalu tanggal 1. */
+  dari: string;
+  /** Akhir periode pembanding, "YYYY-MM-DD". */
+  sampai: string;
+}
+
+/**
+ * ┌─ MoM MEMBANDINGKAN PERIODE YANG SAMA PANJANG ───────────────────────────┐
+ * │                                                                        │
+ * │ Dulu: seluruh omzet bulan berjalan dibagi seluruh omzet bulan lalu.     │
+ * │ Pada 18 September itu berarti 18 hari dilawan 31 hari, dan layar        │
+ * │ mengumumkan −43,4% merah — padahal tidak ada yang turun; Septembernya   │
+ * │ saja yang belum selesai. Angka itu negatif sepanjang bulan dan baru     │
+ * │ wajar di hari terakhir. Dengan tanggal yang sepadan, hari yang sama     │
+ * │ menunjukkan −1,3%.                                                     │
+ * │                                                                        │
+ * │ Kesalahan yang sama pernah diperbaiki di Daily V.1 (`ops/harian.ts`):   │
+ * │ "empat belas hari dilawan dua hari, dan tabelnya mengumumkan outlet itu │
+ * │ turun 85% padahal tidak ada yang turun".                               │
+ * │                                                                        │
+ * │ HARI BERJALAN TIDAK IKUT. Hari ini masih bertambah sampai tengah malam, │
+ * │ jadi membandingkannya dengan hari yang sudah penuh di bulan lalu        │
+ * │ membuat angkanya berubah sepanjang hari tanpa ada yang berubah secara   │
+ * │ bisnis. `D` berhenti di hari terakhir yang SUDAH SELESAI.               │
+ * │                                                                        │
+ * │ Akibat yang disengaja: tanggal 1 tidak punya MoM sama sekali, dan hari  │
+ * │ terakhir sebuah bulan tidak pernah ikut terhitung dalam MoM bulan itu.  │
+ * └────────────────────────────────────────────────────────────────────────┘
+ *
+ * MURNI — `pada` disuntikkan supaya seluruh batasnya bisa diuji.
+ */
+export function momSepadan(o0: OmzetBulan, o1: OmzetBulan, pada: number = Date.now()): MomSepadan | null {
+  const d = hariBerjalan(o0.periode, pada) - 1; // hari ini belum selesai
+  if (d <= 0) return null; // tanggal 1: belum ada satu hari penuh pun
+  // Bulan lalu bisa lebih pendek: 31 Maret tidak punya lawan di Februari.
+  // Tanggal yang tidak ada di kalender tidak boleh dikarang.
+  const dPrev = Math.min(d, jumlahHari(o1.periode));
+  const lalu = jumlahSampai(o1, dPrev);
+  // Pembagi nol berarti MoM TIDAK TERUKUR, bukan "tidak berubah". Bulan lalu
+  // di sini sudah dijamin lengkap, jadi nol itu nol yang sungguh — tetapi
+  // pertumbuhan terhadap nol tetap tidak punya arti.
+  if (lalu <= 0) return null;
+  const kini = jumlahSampai(o0, d);
+  return {
+    pct: +(((kini - lalu) / lalu) * 100).toFixed(1),
+    dari: `${o1.periode}-01`,
+    sampai: `${o1.periode}-${String(dPrev).padStart(2, "0")}`,
+  };
+}
+
 /**
  * Angka panel Target dari bukti yang sudah dikumpulkan — MURNI, tanpa basis data.
  *
@@ -329,17 +410,16 @@ export function angkaTarget(x: {
   // jumlah hari yang ada datanya akan menyembunyikan lubangnya di balik laju
   // yang kelihatan wajar — dan itu aturan bisnis baru, bukan propagasi.
   const ratePerDay = realisasi === null ? null : daysElapsed > 0 ? realisasi / daysElapsed : 0;
+  const mom = realisasi === null ? null : momSepadan(o0, o1, pada);
 
   return {
     targetMonth,
     realisasi,
     attainmentPct: realisasi === null ? null : targetMonth > 0 ? +((realisasi / targetMonth) * 100).toFixed(2) : 0,
-    // Rumus MoM tidak berubah — yang berubah cuma kapan ia boleh lahir.
-    //
-    // CATATAN: null di sini hanya menutup bulan berjalan yang BERLUBANG. Bahwa
-    // 18 hari September dibandingkan 31 hari Agustus penuh adalah persoalan
-    // lain (SA04-A-02) dan sengaja TIDAK disentuh di sini.
-    momPct: realisasi === null ? null : o1.nilai > 0 ? +(((realisasi - o1.nilai) / o1.nilai) * 100).toFixed(1) : 0,
+    // Bulan berjalan yang berlubang tetap menutup MoM lebih dulu (S-A-04-A);
+    // sesudah itu `momSepadan` yang memutuskan periodenya.
+    momPct: mom?.pct ?? null,
+    momPembanding: mom ? { dari: mom.dari, sampai: mom.sampai } : null,
     targetHarian,
     todayActual,
     proyeksiBulanan: ratePerDay === null ? null : ratePerDay * daysInMonth,

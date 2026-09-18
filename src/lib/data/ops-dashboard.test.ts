@@ -1,7 +1,16 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 
-import { HARI_JENDELA, angkaTarget, hariWajibBulan, rataTigaBulan, statusBulan, tanggalHarian, type OmzetBulan } from "@/lib/data/ops-dashboard";
+import {
+  HARI_JENDELA,
+  angkaTarget,
+  hariWajibBulan,
+  momSepadan,
+  rataTigaBulan,
+  statusBulan,
+  tanggalHarian,
+  type OmzetBulan,
+} from "@/lib/data/ops-dashboard";
 import { geserHari, selisihHari } from "@/lib/ops/waktu";
 
 /**
@@ -371,6 +380,7 @@ describe("getOpsDashboard: hari dan bulan dari satu turunan", () => {
  * Yang dijaga di sini: ketersediaan dan nilai adalah dua hal berbeda, dan
  * target hanya boleh lahir dari tiga bulan yang benar-benar utuh.
  */
+/** Bulan dengan `hariAda` hari yang nilainya dibagi rata — cukup untuk kontrak kelengkapan. */
 const bulan = (periode: string, nilai: number, hariAda: number, hariWajib: number): OmzetBulan => ({
   periode,
   nilai,
@@ -378,6 +388,10 @@ const bulan = (periode: string, nilai: number, hariAda: number, hariWajib: numbe
   hariWajib,
   status: statusBulan(hariAda, hariWajib),
   berjalan: false,
+  hari: Array.from({ length: hariAda }, (_, i) => ({
+    tanggal: `${periode}-${String(i + 1).padStart(2, "0")}`,
+    nilai: hariAda > 0 ? nilai / hariAda : 0,
+  })),
 });
 
 describe("status kelengkapan bulan", () => {
@@ -570,6 +584,10 @@ describe("angkaTarget — realisasi bulan berjalan", () => {
     hariWajib: 18,
     status: statusBulan(hariAda, 18),
     berjalan: true,
+    hari: Array.from({ length: hariAda }, (_, i) => ({
+      tanggal: `2026-09-${String(i + 1).padStart(2, "0")}`,
+      nilai: hariAda > 0 ? nilai / hariAda : 0,
+    })),
   });
   const agustus: OmzetBulan = {
     periode: "2026-08",
@@ -578,6 +596,10 @@ describe("angkaTarget — realisasi bulan berjalan", () => {
     hariWajib: 31,
     status: "lengkap",
     berjalan: false,
+    hari: Array.from({ length: 31 }, (_, i) => ({
+      tanggal: `2026-08-${String(i + 1).padStart(2, "0")}`,
+      nilai: AGUSTUS / 31,
+    })),
   };
   const hitung = (o0: OmzetBulan, todayActual: number | null = 420_000_000) =>
     angkaTarget({ bulanIni: "2026-09", o0, o1: agustus, avg3: AVG3, todayActual, pada });
@@ -587,7 +609,13 @@ describe("angkaTarget — realisasi bulan berjalan", () => {
     expect(t.realisasi).toBe(7_485_463_340);
     expect(t.attainmentPct).toBeCloseTo(48.24, 2);
     expect(t.proyeksiBulanan).toBeCloseTo((7_485_463_340 / 18) * 30, 0);
-    expect(t.momPct).toBeCloseTo(-43.8, 1); // rumus MoM TIDAK diubah gate ini
+    // MoM kini SEPADAN (SA04-A-02): 1–17 September vs 1–17 Agustus, bukan
+    // 18 hari dilawan 31 hari. Dengan fixture yang rata, hasilnya perbandingan
+    // laju harian kedua bulan.
+    const sep17 = (7_485_463_340 / 18) * 17;
+    const agu17 = (AGUSTUS / 31) * 17;
+    expect(t.momPct).toBeCloseTo(+(((sep17 - agu17) / agu17) * 100).toFixed(1), 1);
+    expect(t.momPembanding).toEqual({ dari: "2026-08-01", sampai: "2026-08-17" });
     expect(t.targetMonth).toBe(AVG3 * 1.15);
   });
 
@@ -649,9 +677,158 @@ describe("angkaTarget — realisasi bulan berjalan", () => {
     const b = badanAngkaTarget();
     expect(b).toContain("const targetMonth = avg3 * 1.15;");
     expect(b).toContain("+((realisasi / targetMonth) * 100).toFixed(2)");
-    expect(b).toContain("+(((realisasi - o1.nilai) / o1.nilai) * 100).toFixed(1)");
     expect(b).toContain("ratePerDay * daysInMonth");
-    // SA04-A-02 TIDAK dikerjakan di sini: pembandingnya masih bulan penuh.
-    expect(b).not.toMatch(/mtd|MTD|sampaiTanggal|prorata/);
+    // MoM pindah ke `momSepadan` (SA04-A-02). Yang tersisa di sini cuma
+    // gerbang S-A-04-A: bulan berjalan berlubang menutupnya lebih dulu.
+    expect(b).toContain("const mom = realisasi === null ? null : momSepadan(o0, o1, pada);");
+    expect(b).toContain("momPct: mom?.pct ?? null");
+    // Rumus MoM-nya sendiri tetap selisih dibagi pembanding — hanya periodenya
+    // yang berubah, bukan cara menghitung perubahannya.
+    expect(badan("momSepadan")).toContain("+(((kini - lalu) / lalu) * 100).toFixed(1)");
+  });
+});
+
+/**
+ * MoM SEPADAN (SA04-A-02).
+ *
+ * Yang dibandingkan dua jendela sama panjang, dihitung dari tanggal 1 dan
+ * berhenti pada hari terakhir yang SUDAH SELESAI. Sebelumnya seluruh bulan
+ * berjalan dilawan seluruh bulan lalu — pada 18 September itu 18 hari lawan
+ * 31 hari, dan layar mengumumkan −43,4% merah untuk bulan yang cuma belum
+ * selesai.
+ *
+ * Angkanya dibuat supaya bisa dihitung di kepala: tiap hari bernilai 100,
+ * kecuali hari yang sedang berjalan yang sengaja dibuat besar agar ketahuan
+ * kalau ia sampai ikut terhitung.
+ */
+describe("momSepadan — periode yang sama panjang", () => {
+  const bulanDeret = (periode: string, nilaiHarian: readonly number[]): OmzetBulan => ({
+    periode,
+    nilai: nilaiHarian.reduce((a, b) => a + b, 0),
+    hariAda: nilaiHarian.length,
+    hariWajib: nilaiHarian.length,
+    status: "lengkap",
+    berjalan: false,
+    hari: nilaiHarian.map((nilai, i) => ({ tanggal: `${periode}-${String(i + 1).padStart(2, "0")}`, nilai })),
+  });
+  const rata = (periode: string, hari: number, nilai: number) =>
+    bulanDeret(periode, Array.from({ length: hari }, () => nilai));
+  /** Jam 05.00 WIB pada tanggal itu — harinya sedang berjalan, belum selesai. */
+  const padaWib = (tanggalWib: string) => Date.parse(`${tanggalWib}T05:00:00+07:00`);
+
+  it("tanggal 18: 1–17 vs 1–17, dan hari ke-18 TIDAK ikut", () => {
+    // September: 17 hari × 100, lalu hari ke-18 bernilai 9.999. Kalau hari
+    // berjalan ikut terhitung, hasilnya melonjak +588% alih-alih 0%.
+    const sep = bulanDeret("2026-09", [...Array.from({ length: 17 }, () => 100), 9_999]);
+    const agu = rata("2026-08", 31, 100);
+    const m = momSepadan(sep, agu, padaWib("2026-09-18"));
+    expect(m).not.toBeNull();
+    expect(m!.pct).toBe(0); // 1.700 vs 1.700
+    expect(m!.dari).toBe("2026-08-01");
+    expect(m!.sampai).toBe("2026-08-17");
+    // Perilaku lama: (1.700 + 9.999) vs 3.100 → +277,4%. Jelas bukan ini.
+    expect(m!.pct).not.toBeCloseTo(((11_699 - 3_100) / 3_100) * 100, 1);
+  });
+
+  it("tanggal 1: belum ada satu hari penuh pun → null", () => {
+    const sep = bulanDeret("2026-09", [500]);
+    const agu = rata("2026-08", 31, 100);
+    expect(momSepadan(sep, agu, padaWib("2026-09-01"))).toBeNull();
+  });
+
+  it("tanggal 2: yang dibandingkan tepat satu hari", () => {
+    const sep = bulanDeret("2026-09", [120, 9_999]);
+    const agu = rata("2026-08", 31, 100);
+    const m = momSepadan(sep, agu, padaWib("2026-09-02"));
+    expect(m!.pct).toBe(20); // 120 vs 100
+    expect(m!.dari).toBe("2026-08-01");
+    expect(m!.sampai).toBe("2026-08-01"); // satu hari: dari === sampai
+  });
+
+  it("30 September: 1–29 vs 1–29", () => {
+    const sep = bulanDeret("2026-09", [...Array.from({ length: 29 }, () => 110), 9_999]);
+    const agu = rata("2026-08", 31, 100);
+    const m = momSepadan(sep, agu, padaWib("2026-09-30"));
+    expect(m!.pct).toBe(10); // 3.190 vs 2.900
+    expect(m!.sampai).toBe("2026-08-29");
+  });
+
+  it("31 Oktober: 1–30 Oktober vs 1–30 September — September memang 30 hari", () => {
+    const okt = bulanDeret("2026-10", [...Array.from({ length: 30 }, () => 100), 9_999]);
+    const sep = rata("2026-09", 30, 100);
+    const m = momSepadan(okt, sep, padaWib("2026-10-31"));
+    expect(m!.pct).toBe(0); // 3.000 vs 3.000
+    expect(m!.sampai).toBe("2026-09-30");
+  });
+
+  it("29 Maret: 1–28 Maret vs 1–28 Februari", () => {
+    const mar = bulanDeret("2026-03", [...Array.from({ length: 28 }, () => 100), 9_999]);
+    const feb = rata("2026-02", 28, 100); // 2026 bukan kabisat
+    const m = momSepadan(mar, feb, padaWib("2026-03-29"));
+    expect(m!.pct).toBe(0);
+    expect(m!.sampai).toBe("2026-02-28");
+  });
+
+  it("31 Maret: pembanding berhenti di 28 Februari, tidak mengarang tanggal", () => {
+    // Konsekuensi yang DISENGAJA: 30 hari Maret dilawan 28 hari Februari.
+    // Tanggal 29–31 Februari tidak ada, dan tidak boleh dibuat-buat.
+    const mar = bulanDeret("2026-03", [...Array.from({ length: 30 }, () => 100), 9_999]);
+    const feb = rata("2026-02", 28, 100);
+    const m = momSepadan(mar, feb, padaWib("2026-03-31"));
+    expect(m!.sampai).toBe("2026-02-28");
+    expect(m!.pct).toBe(+(((3_000 - 2_800) / 2_800) * 100).toFixed(1)); // +7,1%
+  });
+
+  it("pembanding nol → null, bukan 0%", () => {
+    // Bulan lalu lengkap tetapi tidak berjualan sama sekali. Pertumbuhan
+    // terhadap nol tidak terukur — dan 0% akan terbaca "tidak berubah".
+    const sep = rata("2026-09", 18, 100);
+    const agu = rata("2026-08", 31, 0);
+    expect(momSepadan(sep, agu, padaWib("2026-09-18"))).toBeNull();
+  });
+
+  it("bulan berjalan yang nolnya SAH tetap menghasilkan angka", () => {
+    const sep = rata("2026-09", 18, 0);
+    const agu = rata("2026-08", 31, 100);
+    const m = momSepadan(sep, agu, padaWib("2026-09-18"));
+    expect(m!.pct).toBe(-100); // nol jualan yang terukur, bukan data hilang
+  });
+
+  it("lubang di tengah bulan lalu tidak diisi nol diam-diam", () => {
+    // Tidak akan terjadi lewat loadTarget — rataTigaBulan menolak bulan lalu
+    // yang tidak lengkap lebih dulu. Dijaga di sini supaya perilakunya tetap
+    // terdefinisi: yang dijumlah hanya baris yang ADA.
+    const sep = rata("2026-09", 18, 100);
+    const agu = bulanDeret("2026-08", Array.from({ length: 31 }, () => 100));
+    const aguBolong: OmzetBulan = { ...agu, hari: agu.hari.filter((h) => h.tanggal !== "2026-08-05") };
+    const m = momSepadan(sep, aguBolong, padaWib("2026-09-18"));
+    expect(m!.pct).toBe(+(((1_700 - 1_600) / 1_600) * 100).toFixed(1)); // 16 hari yang ada
+  });
+
+  it("batas tengah malam WIB menggeser D tepat satu hari", () => {
+    const sep = bulanDeret("2026-09", [...Array.from({ length: 18 }, () => 100), 9_999]);
+    const agu = rata("2026-08", 31, 100);
+    // 2026-09-17 16:59:59Z = 23.59.59 WIB tanggal 17 → D = 16
+    const sebelum = momSepadan(sep, agu, Date.parse("2026-09-17T16:59:59Z"));
+    // 2026-09-17 17:00:00Z = 00.00 WIB tanggal 18 → D = 17
+    const sesudah = momSepadan(sep, agu, Date.parse("2026-09-17T17:00:00Z"));
+    expect(sebelum!.sampai).toBe("2026-08-16");
+    expect(sesudah!.sampai).toBe("2026-08-17");
+  });
+
+  it("hari berjalan tidak pernah ikut, berapa pun nilainya", () => {
+    const agu = rata("2026-08", 31, 100);
+    for (const nilaiHariIni of [0, 50, 100, 1_000_000]) {
+      const sep = bulanDeret("2026-09", [...Array.from({ length: 17 }, () => 100), nilaiHariIni]);
+      expect(momSepadan(sep, agu, padaWib("2026-09-18"))!.pct, String(nilaiHariIni)).toBe(0);
+    }
+  });
+
+  it("D diturunkan dari hari berjalan dikurangi satu, dan Dprev dari panjang bulan lalu", () => {
+    const b = badan("momSepadan");
+    expect(b).toContain("hariBerjalan(o0.periode, pada) - 1");
+    expect(b).toContain("Math.min(d, jumlahHari(o1.periode))");
+    expect(b).toContain("if (lalu <= 0) return null;");
+    expect(b).not.toMatch(/hariAda/); // bukan "hari yang ada datanya", tapi tanggal kalender
   });
 });

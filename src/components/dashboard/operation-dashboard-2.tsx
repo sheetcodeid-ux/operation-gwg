@@ -42,6 +42,7 @@ import { SegmentedTabs } from "@/components/ui/segmented-tabs";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import type { OpsActivityFeed, OpsBranchPerf, OpsControl, OpsDashboardData, OpsFinance, OpsFraud, OpsHourly, OpsProduct, OpsTarget } from "@/lib/data/ops-dashboard";
+import { NAMA_BULAN } from "@/components/kpi/periode";
 import { cn } from "@/lib/utils";
 
 /* ---------- palette (tone.ts) ---------- */
@@ -590,6 +591,24 @@ function AktivitasTerkini({ activity }: { activity: OpsActivityFeed | null }) {
 }
 
 /* ---------- Target Per Bulan (gauge) ---------- */
+/**
+ * Periode pembanding MoM, disebut apa adanya: "vs 1–17 Agustus".
+ *
+ * "vs bulan lalu" saja pernah membuat layar mengumumkan −43,4% merah, karena
+ * yang dibandingkan 18 hari September dengan 31 hari Agustus penuh. Sekarang
+ * periodenya sepadan — dan kalimatnya menyebut sampai tanggal berapa, supaya
+ * yang membaca tahu hari ini memang belum ikut.
+ *
+ * `NAMA_BULAN` dipinjam dari pemilih periode KPI; tidak ada formatter baru.
+ */
+function labelPembanding(p: { dari: string; sampai: string } | null): string {
+  if (!p) return "vs bulan lalu";
+  const bulan = NAMA_BULAN[Number(p.dari.slice(5, 7)) - 1] ?? p.dari.slice(0, 7);
+  const a = Number(p.dari.slice(8, 10));
+  const b = Number(p.sampai.slice(8, 10));
+  return a === b ? `vs ${a} ${bulan}` : `vs ${a}–${b} ${bulan}`;
+}
+
 function TargetGauge({ target }: { target: OpsTarget | null }) {
   // Sebelum Gate R: 95,38% · Rp 12,4 M / Rp 13 M ketika target null. Angka
   // miliaran yang business-realistic untuk GWG, jadi yang membacanya
@@ -642,9 +661,11 @@ function TargetGauge({ target }: { target: OpsTarget | null }) {
           <p className="text-[10px] text-muted-foreground">Total Target</p>
           <p className="text-2xl font-bold tabular-nums text-foreground">{target.attainmentPct.toFixed(2)}%</p>
           {mom === null ? (
-            <p className="text-[10px] text-muted-foreground">Perubahan vs bulan lalu belum terukur</p>
+            <p className="text-[10px] text-muted-foreground">Perubahan vs periode yang sama bulan lalu belum terukur</p>
           ) : (
-            <p className={cn("text-[10px] font-medium", mom >= 0 ? "text-emerald-500" : "text-red-500")}>{mom >= 0 ? "+" : ""}{mom}% vs bulan lalu</p>
+            <p className={cn("text-[10px] font-medium", mom >= 0 ? "text-emerald-500" : "text-red-500")}>
+              {mom >= 0 ? "+" : ""}{mom}% {labelPembanding(target.momPembanding)}
+            </p>
           )}
         </div>
       </div>
