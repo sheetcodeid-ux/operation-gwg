@@ -182,7 +182,7 @@ pada blueprint.
 | 13 | Radika ikut rata-rata PDQ? | — |
 | 14 | Ambang kelengkapan data sebelum Signal boleh lahir — usul 95% | PHASE 4 |
 | 15 | Cabang ESB `57-fnb_nord` tanpa outlet — outlet baru atau sisa? | **sudah diselidiki, lihat di bawah** |
-| 16 | Signal boleh lahir dari baris ber-`sumber_sah = false`? Usul: tidak | PHASE 4 |
+| 16 | Signal boleh lahir dari baris ber-`sumber_sah = false`? | **SUDAH DIPUTUSKAN — tidak boleh. Lihat AD-14 poin 2** |
 
 **Nomor 7 dan 8 memblokir PHASE 2B, bukan 2A.** Pemiliknya sudah menjelaskan
 asalnya: PBJT dan platform fee keduanya datang dari laporan keuangan, dimasukkan
@@ -311,7 +311,7 @@ C (KPI V.1 yang sudah tersimpan). Tidak ada satu pun yang berbeda.
 
 ---
 
-## Nomor 16 · Angka ESB yang sudah dinyatakan tidak berlaku — DIPUTUSKAN SEMENTARA
+## Nomor 16 · Angka ESB yang sudah dinyatakan tidak berlaku — DIPUTUSKAN
 
 **Pertanyaannya.** `outlets.esb_mulai` dan `outlets.esb_abaikan` menandai
 bulan-bulan yang angka ESB-nya sudah dinyatakan salah bagi sebuah outlet
@@ -337,8 +337,24 @@ punya alasan untuk menolak memakainya.
 (`esb_mulai = 2026-09`), dan nilainya memang Rp 0, jadi dampaknya nol untuk
 sekarang.
 
-**Yang masih terbuka bagi pemilik:** apakah PHASE 4 boleh melahirkan Signal dari
-baris ber-`sumber_sah = false`. Usul: tidak boleh. Belum diputuskan.
+**Yang saat itu masih terbuka bagi pemilik** (dicatat apa adanya sebagai
+sejarah): apakah PHASE 4 boleh melahirkan Signal dari baris ber-`sumber_sah =
+false`. Usul waktu itu: tidak boleh.
+
+**SUDAH DIPUTUSKAN — `FALSE SOURCE VALIDITY MUST NOT CREATE SIGNAL`.**
+
+Usul itu dikunci pemiliknya di **AD-14 poin 2**, dan diwujudkan `susunMuatan()`
+lewat satu baris — `const bolehSisip = melanggar && b.sumberSah;`
+(`src/lib/data/signals.ts`). Yang diblokir hanya KELAHIRAN Signal: angkanya tidak
+diubah, statusnya tidak diubah, barisnya tidak dihapus, dan ia tetap tampil di
+layar Weekly sebagai sel "sumber tidak sah" dengan bukti `UNKNOWN` dan keyakinan
+`LOW`.
+
+Ditegaskan ulang pemiliknya pada gate **Z-04** (Q1 = A). Gate itu ditutup
+sebagai verification-only: nol perubahan kode, nol migration, nol penulisan
+produksi — karena perilaku yang diputuskan memang sudah berjalan. Buktinya
+terukur di produksi: dari 341 Signal, **0** lahir dari baris ber-`sumber_sah =
+false`, ditelusuri lewat `signals.kpi_value_id`.
 
 ---
 
