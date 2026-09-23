@@ -24,6 +24,24 @@ import type { PilihanArea } from "@/lib/data/daily-outlet";
  * │ satu pun persentase yang membandingkannya dengan angka minggu.           │
  * └──────────────────────────────────────────────────────────────────────────┘
  *
+ * ┌─ SIGNAL BULAN BERJALAN ADALAH INDIKASI (AD-17 · Z-03) ───────────────────┐
+ * │                                                                          │
+ * │ Owner mengunci Signal bulan berjalan sebagai EARLY WARNING, bukan hasil  │
+ * │ bulan penuh. Alasannya ada di angkanya sendiri: penyebut rasio biaya     │
+ * │ datang harian dari ESB dan bertambah tiap hari, sementara pembilangnya   │
+ * │ satu baris per BULAN di `op_expenses`/`op_purchases`/`op_pnl` yang tidak │
+ * │ punya satu kolom pun untuk menyatakan berapa hari yang dicakupnya.       │
+ * │                                                                          │
+ * │ Akibatnya berjalan DUA ARAH, dan itu sebabnya layar ini tidak boleh      │
+ * │ menyimpulkan apa pun: rasio yang pembilangnya sudah sebulan terbaca      │
+ * │ terlalu tinggi, dan rasio yang pembilangnya baru sebagian terbaca        │
+ * │ terlalu rendah — yang kedua membuat Signal HILANG tanpa meninggalkan     │
+ * │ jejak apa pun di layar.                                                  │
+ * │                                                                          │
+ * │ Karena itu: sel kosong tidak pernah berbunyi "tidak ada", dan badge      │
+ * │ bulan berjalan selalu bertanda MTD.                                      │
+ * └──────────────────────────────────────────────────────────────────────────┘
+ *
  * ┌─ YANG TIDAK DIKETAHUI DITULIS APA ADANYA ────────────────────────────────┐
  * │                                                                          │
  * │ Bukan "—", bukan "0", bukan sel kosong. Sel yang tidak diketahui memuat  │
@@ -128,6 +146,44 @@ const WARNA_SEVERITY: Record<string, string> = {
   low: "border-border bg-muted/60 text-muted-foreground",
 };
 
+/* ───────────────────────── Signal bulan berjalan ───────────────────────── */
+
+/**
+ * Kalimat kontrak AD-17, satu tempat supaya tidak ditulis ulang berbeda-beda.
+ */
+const SEBAB_MTD =
+  "Bulan ini masih berjalan. Signal-nya INDIKASI untuk diselidiki, bukan hasil bulan penuh dan bukan diagnosis: " +
+  "omzet penyebutnya baru terkumpul sampai hari ini, sementara biaya pembilangnya satu angka per bulan yang tidak " +
+  "menyatakan berapa hari yang dicakupnya.";
+
+/**
+ * Sel Signal yang kosong — dan kenapa ia TIDAK boleh berbunyi "tidak ada".
+ *
+ * Kosong punya lebih dari satu sebab, dan sebab-sebab itu menuntut tindakan
+ * yang berbeda. Menuliskannya "tidak ada" memilihkan salah satunya untuk yang
+ * membaca, dan yang paling sering dipilih adalah yang paling melegakan.
+ */
+const SEBAB_TANPA_INDIKASI = {
+  berjalan:
+    "Belum ada indikasi untuk bulan berjalan. Ini BUKAN berarti outlet ini aman: biaya yang belum seluruhnya " +
+    "masuk membuat rasionya terbaca lebih rendah dari keadaan sebenarnya, dan indikasinya bisa muncul belakangan.",
+  selesai:
+    "Tidak ada angka yang melanggar ambang bulan ini. Tetap bukan pernyataan bahwa outlet ini tanpa masalah — " +
+    "yang diperiksa hanya KPI yang punya aturan berlaku.",
+} as const;
+
+/** Penanda bahwa badge di sebelahnya milik bulan yang belum selesai. */
+function PenandaMtd() {
+  return (
+    <span
+      title={SEBAB_MTD}
+      className="cursor-help rounded-md border border-sky-500/40 bg-sky-500/10 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-sky-700 dark:text-sky-400"
+    >
+      MTD
+    </span>
+  );
+}
+
 const BULAN_PANJANG = [
   "Januari", "Februari", "Maret", "April", "Mei", "Juni",
   "Juli", "Agustus", "September", "Oktober", "November", "Desember",
@@ -176,7 +232,10 @@ function Kelengkapan({ detail }: { detail: DetailMingguan }) {
       )}
     >
       {!penuh && <TriangleAlert className="size-3.5 shrink-0" />}
-      <span className="font-semibold">
+      <span
+        className="cursor-help font-semibold"
+        title="Yang diukur kelengkapan OMZET mingguan dari ESB. Kelengkapan biaya tidak ikut terukur di sini dan memang tidak bisa: op_expenses, op_purchases, dan op_pnl bergrain bulan, tanpa satu kolom pun yang menyatakan berapa hari yang dicakupnya. Angka 100% di sini tidak berarti biayanya sudah lengkap."
+      >
         Kelengkapan data {formatNumber(persenLengkap, { maximumFractionDigits: 0 })}%
       </span>
       {sebab.length > 0 && <span className="text-foreground/70">{sebab.join(" · ")}</span>}
@@ -309,7 +368,12 @@ export function TabelMingguan({
                 </th>
                 <th className="min-w-[9rem] border-l border-border px-3 py-2 text-left font-semibold">
                   Monthly Signals
-                  <span className="block text-[10px] font-normal text-muted-foreground">{labelBulan}</span>
+                  <span className="block text-[10px] font-normal text-muted-foreground">
+                    {labelBulan}
+                    {detail.berjalan && (
+                      <span title={SEBAB_MTD} className="cursor-help"> · indikasi, bulan berjalan</span>
+                    )}
+                  </span>
                 </th>
                 <th className="min-w-[8rem] border-l border-border px-3 py-2 text-left font-semibold">
                   Root Cause
@@ -367,13 +431,24 @@ export function TabelMingguan({
 
                   <td className="border-l border-border px-3 py-2">
                     {b.signal.daftar.length === 0 ? (
-                      <span className="text-[11px] text-muted-foreground">tidak ada</span>
+                      <span
+                        title={
+                          detail.berjalan
+                            ? SEBAB_TANPA_INDIKASI.berjalan
+                            : SEBAB_TANPA_INDIKASI.selesai
+                        }
+                        className="cursor-help text-[11px] font-medium italic text-muted-foreground/70 decoration-dotted underline-offset-2 hover:underline"
+                      >
+                        belum ada indikasi
+                      </span>
                     ) : (
                       <span
-                        className="flex flex-wrap gap-1"
+                        className="flex flex-wrap items-center gap-1"
                         title={`Monthly Signals — ${labelBulan}. ${b.signal.daftar
                           .map((s) => `${s.kpiDefinitionId} (${s.severity})`)
-                          .join(", ")}. Signal ini milik BULAN, bukan minggu mana pun.`}
+                          .join(", ")}. Signal ini milik BULAN, bukan minggu mana pun.${
+                          detail.berjalan ? ` ${SEBAB_MTD}` : ""
+                        }`}
                       >
                         {Object.entries(b.signal.perSeverity).map(([sev, n]) => (
                           <span
@@ -383,6 +458,7 @@ export function TabelMingguan({
                             {sev} {n}
                           </span>
                         ))}
+                        {detail.berjalan && <PenandaMtd />}
                       </span>
                     )}
                   </td>
@@ -426,6 +502,9 @@ export function TabelMingguan({
         Monthly Target di kanan adalah target SEBULAN dan ditampilkan sebagai konteks, tidak dibagi ke minggu mana pun.
         Signal juga berskala bulanan: ia muncul di sini berlabel {labelBulan}, dan tidak pernah dianggap milik satu minggu
         tertentu.
+        {detail.berjalan
+          ? " Bulan ini masih berjalan, jadi Signal-nya adalah INDIKASI untuk diselidiki — bukan hasil bulan penuh, bukan diagnosis, dan bukan bukti bahwa sebabnya sudah diketahui. Sebaliknya, outlet tanpa Signal belum tentu aman: sebagian biaya bisa saja belum masuk, dan rasionya terbaca lebih rendah dari keadaan sebenarnya."
+          : " Bulan ini sudah selesai, jadi angkanya tidak berubah lagi. Signal tetap memicu penyelidikan, bukan menyimpulkannya."}
       </p>
     </div>
   );

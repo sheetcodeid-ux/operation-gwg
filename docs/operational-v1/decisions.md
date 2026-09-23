@@ -1223,3 +1223,89 @@ bisa dihitung ulang di SQL — tanpa itu `0` dan `0.0000` memberi sidik berbeda
 untuk isi yang sama. Angka 180 dan sidiknya **tidak ditulis sebagai assertion di
 dalam kode**: sumber produksi yang berlaku saat eksekusi adalah kebenarannya,
 dan sidik cuma penanda apakah himpunannya masih sama dengan yang disetujui.
+
+---
+
+## AD-17 · Z-03 — decision lock: Signal bulan berjalan adalah MTD Early Warning
+
+Keputusan Owner, dikunci setelah Z-03 Semantic Audit:
+
+| pertanyaan | keputusan |
+| --- | --- |
+| **Q1** Signal dimaksudkan sebagai apa? | **MTD EARLY WARNING** |
+| **Q2** bila MTD, bagaimana ia dibaca? | **ACCEPT MTD AS INDICATION** |
+| **Q3** satu mode atau per rule? | **ONE MODE** |
+| **Q4** perubahan schema? | **NO SCHEMA CHANGE** |
+
+### Alasan Owner
+
+> GWG menggunakan Signal bulan berjalan sebagai early warning operasional agar
+> Coordinator dapat melakukan investigasi sebelum bulan berakhir. Karena data
+> biaya belum memiliki coverage harian, Signal MTD tidak diperlakukan sebagai
+> hasil final dan tidak boleh dianggap sebagai diagnosis.
+
+### Kenapa ini keputusan semantik, bukan keputusan kelengkapan
+
+Yang sempat dikira persoalan kelengkapan ternyata bukan. Ketujuh aturan aktif
+berbentuk sama: sebuah angka rupiah dibagi omzet. Penyebutnya `seasonal_daily`,
+bergrain **cabang × hari**, dan ia bertambah tiap hari. Pembilangnya satu baris
+di `op_expenses` / `op_purchases` / `op_pnl`, bergrain **outlet × bulan**, tanpa
+satu kolom pun yang menyatakan berapa hari yang dicakupnya.
+
+Penyebutnya MTD. Pembilangnya **bukan MTD dan bukan bulan penuh — ia tidak
+terdefinisi.** Karena itu `biaya.* completeness` tidak bisa dihitung, dan sebuah
+ambang kelengkapan akan diterapkan pada angka yang tidak ada. Keputusan #14
+karena itu tidak "masih terbuka" untuk Signal; ia tidak punya masukan.
+
+### Akibatnya berjalan dua arah
+
+Arahnya ditentukan oleh apakah cakupan pembilang lebih besar atau lebih kecil
+daripada cakupan penyebut, dan itu berbeda per kolom **di dalam satu unggahan
+yang sama**:
+
+- Pembilang yang cakupannya melampaui penyebut membuat rasio terbaca **terlalu
+  tinggi**, dan Signal muncul untuk outlet yang pada bulan penuh tidak
+  memilikinya.
+- Pembilang yang tertinggal lebih jauh daripada penyebut membuat rasio terbaca
+  **terlalu rendah**, dan Signal **hilang** — tanpa meninggalkan satu baris pun,
+  karena `signals.status` cuma mengenal `terbuka` dan `diabaikan`.
+
+Yang kedua itulah sebabnya "tidak ada Signal" dilarang dibaca sebagai "aman".
+
+### Yang berubah karena AD-17
+
+Tidak ada satu pun aturan bisnis. Detektornya tidak disentuh: syarat kelahiran
+Signal tetap `melanggar && b.sumberSah`, ambangnya tetap, `SKALA_SIGNAL` tetap
+`bulanan`, dan bulan berjalan tetap dinilai tiap jalan seperti yang dikunci
+AD-16.
+
+Yang berubah hanya **klaim yang dibuat layar**:
+
+- `DetailMingguan.berjalan` — satu boolean turunan, dihitung `bulanIniWib()` di
+  server. Bukan di komponen: jam peramban bukan WIB, dan tujuh jam cukup untuk
+  memindahkan seluruh layar ke bulan yang salah.
+- Sel Signal kosong tidak lagi berbunyi "tidak ada". Ia berbunyi **"belum ada
+  indikasi"**, dengan sebab yang berbeda untuk bulan berjalan dan bulan selesai.
+- Badge bulan berjalan bertanda **MTD**.
+- Banner kelengkapan menyatakan batas maknanya: yang diukur kelengkapan **omzet**,
+  bukan biaya.
+
+### Yang TIDAK dibangun
+
+Tidak ada `mode_penilaian` dan tidak ada konfigurasi per rule (Q3). Tidak ada
+kolom cakupan, tidak ada grain harian untuk biaya, tidak ada migration (Q4).
+341 Signal yang sudah ada tidak disentuh: dalam model MTD, 161 Signal September
+memang sah sebagai indikasi dan tidak dihapus hanya karena bulannya belum
+selesai.
+
+### Yang tetap tidak boleh disimpulkan
+
+Signal bukan root cause, dan bukan diagnosis — `bukti.ts` sudah menegakkannya:
+Signal yang sebabnya belum terbukti menghasilkan `investigation_required`,
+yaitu **tidak layak ditindaklanjuti**, bukan layak. Ada Signal tidak berarti
+outletnya sudah terbukti bermasalah; tidak ada Signal tidak berarti outletnya
+aman; perubahan jumlah Signal antar bulan tidak berarti performanya berubah.
+
+Alurnya karena itu tetap: **MTD data → Signal → Coordinator membaca → validasi
+kondisi → diagnosis → assignment/action → monitoring → verification.** Signal
+tidak pernah melompati diagnosis.
