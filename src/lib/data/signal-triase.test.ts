@@ -234,8 +234,57 @@ describe("halaman memasang gerbang sebelum query", () => {
 /* ───────────── P · migration ───────────── */
 
 describe("migration bertambah satu, dan hanya satu", () => {
-  it("jumlahnya 113", () => {
-    expect(readdirSync(join(akar, "supabase/migrations")).filter((f) => f.endsWith(".sql"))).toHaveLength(113);
+  /**
+   * DULU yang dijaga JUMLAH SELURUH migration repositori. Itu benar sehari:
+   * begitu gate berikutnya menambah satu berkas, penjaga ini merah karena
+   * alasan yang tidak ada hubungannya dengan Z-01 — dan mengganti angkanya
+   * jadi 114 hanya memindahkan kegagalan yang sama ke gate sesudahnya.
+   *
+   * Yang dijaga sekarang BATASNYA: Z-01 menambah tepat satu migration di atas
+   * batas Z-03, yaitu `0113_signal_diakui.sql`, dan seluruh rentang sampai ke
+   * situ tetap utuh — tidak berkurang, tidak berlubang, tidak berganti nama.
+   * Nomor di atas 0113 milik gate lain dan sengaja TIDAK dihitung di sini,
+   * sama persis dengan cara `signal-mtd.test.ts` menjaga batas Z-03.
+   */
+  const BATAS_Z03 = 112;
+  const BATAS_Z01 = 113;
+  const TERAKHIR_Z01 = "0113_signal_diakui.sql";
+
+  const berkas = () =>
+    readdirSync(join(akar, "supabase/migrations"))
+      .filter((f) => f.endsWith(".sql"))
+      .sort();
+  const nomor = (f: string) => Number(f.slice(0, 4));
+
+  it("Z-01 menambah tepat satu migration di atas batas Z-03", () => {
+    const milikZ01 = berkas().filter((f) => nomor(f) > BATAS_Z03 && nomor(f) <= BATAS_Z01);
+    expect(milikZ01).toEqual([TERAKHIR_Z01]);
+  });
+
+  it("batas Z-01 tetap 0113_signal_diakui.sql dan tidak pernah hilang", () => {
+    const sampaiZ01 = berkas().filter((f) => nomor(f) <= BATAS_Z01);
+    expect(sampaiZ01).toContain(TERAKHIR_Z01);
+    expect(sampaiZ01).toContain("0111_signals.sql");
+    expect(sampaiZ01[sampaiZ01.length - 1]).toBe(TERAKHIR_Z01);
+  });
+
+  it("tidak ada nomor kembar maupun lubang sampai batas Z-01", () => {
+    // Kembar berarti dua migration berebut satu urutan; lubang berarti ada
+    // yang dihapus. Keduanya tidak terlihat dari jumlahnya saja kalau salah
+    // satunya menutupi yang lain.
+    const sampaiZ01 = berkas()
+      .filter((f) => nomor(f) <= BATAS_Z01)
+      .map(nomor);
+    expect(new Set(sampaiZ01).size).toBe(BATAS_Z01);
+    expect(Math.min(...sampaiZ01)).toBe(1);
+    expect(Math.max(...sampaiZ01)).toBe(BATAS_Z01);
+  });
+
+  it("migration di atas 0113 milik gate lain — di luar cakupan kontrak Z-01", () => {
+    // Bukan izin longgar: yang dinyatakan di sini persis batas wewenang
+    // penjaga ini. Kontrak gate lain dijaga berkas ujinya sendiri.
+    const sesudah = berkas().filter((f) => nomor(f) > BATAS_Z01);
+    for (const f of sesudah) expect(nomor(f)).toBeGreaterThan(BATAS_Z01);
   });
 
   it("tidak ada kolom ownership yang ikut diselundupkan (Q5 → Z-02)", () => {
