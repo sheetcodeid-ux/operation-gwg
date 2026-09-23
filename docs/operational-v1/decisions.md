@@ -1325,3 +1325,348 @@ aman; perubahan jumlah Signal antar bulan tidak berarti performanya berubah.
 Alurnya karena itu tetap: **MTD data → Signal → Coordinator membaca → validasi
 kondisi → diagnosis → assignment/action → monitoring → verification.** Signal
 tidak pernah melompati diagnosis.
+
+---
+
+## AD-18 · Z-01 — decision lock: Command Center V.1
+
+Keputusan Owner, dikunci setelah Z-01 Read-Only Audit. **Kontrak, belum
+implementasi:** tidak ada layar, tabel, kolom, maupun server action yang dibuat
+saat keputusan ini dicatat.
+
+| # | pertanyaan | keputusan |
+| --- | --- | --- |
+| **Q1** Cakupan | **B — Outlet + Corporate** |
+| **Q2** Periode | **C — Periode aktif + filter periode lain** |
+| **Q3** Status | **A — hanya `terbuka`** |
+| **Q4** Tindakan | **C — hanya peran ber-`manage_signals`** |
+| **Q5** Ownership | **C — menjadi gate Z-02** |
+| **Q6** Unit kerja | **D — Signal, dikelompokkan per outlet × periode** |
+| **Q7** Corporate | **A — jalur tampilan khusus** |
+
+### Kontrak Z-01
+
+```
+COMMAND CENTER V.1
+
+Scope:
+- Outlet
+- Corporate
+
+Period:
+- Active period by default
+- Historical period filter
+
+Status:
+- Open signals only
+
+Actions:
+- Ignore available to manage_signals roles
+- Ignore requires actor + timestamp + non-empty reason
+- Ignore is irreversible
+
+Ownership:
+- Deferred to Z-02
+
+Unit:
+- Signal
+- Grouped by outlet × period
+- Corporate separate section
+
+MTD:
+- Current month = INDIKASI
+- Not diagnosis
+- Not full-month verdict
+
+Source validity:
+- sumber_sah=false never creates Signal
+- no disclosure UI required
+
+Signal integrity:
+- snapshot immutable
+- Signal cannot be deleted
+- detector does not recalculate from UI
+```
+
+### Alasan tiap keputusan, dan apa yang membatasinya
+
+**Q1 — Corporate ikut, Area tidak.** Produksi hari ini punya **335 Signal
+outlet, 6 korporat, dan 0 area**. Keenam Signal korporat — termasuk
+`biaya.net_profit_pct` critical −3,21% periode 2026-09 — **tidak punya satu
+pembaca pun** di seluruh aplikasi, karena `signal-baca.ts` mengunci
+`.eq("cakupan","outlet")`. Area tidak dimasukkan justru karena datanya nol:
+membangun dukungan untuk data yang belum pernah ada berarti menulis kode yang
+tidak bisa diperiksa benar-salahnya.
+
+**Q2 — periode aktif plus penyaring.** Pembaca sekarang mewajibkan satu periode
+dan `signals_kerja_idx` memang bergrain `(periode, skala)`. Yang dikunci bukan
+sekadar penyaringnya melainkan **penandaannya**: periode aktif wajib terlihat
+sebagai periode aktif, periode historis wajib bisa dibedakan, dan MTD tidak
+boleh tercampur dengan bulan penuh. Penanda AD-17 tetap berlaku sepenuhnya di
+layar ini.
+
+**Q3 — hanya `terbuka`.** Daftar kerja berisi yang masih perlu ditangani.
+Menampilkan yang sudah diabaikan sebagai pekerjaan aktif menghidupkan kembali
+keputusan yang sudah diambil orang. Hari ini pilihan ini belum menggeser satu
+baris pun — `status = 'diabaikan'` berjumlah **0** — tetapi ia mengikat begitu
+baris pertama lahir. **Tidak ada penyaring status baru di Z-01.**
+
+**Q4 — mengabaikan, hanya bagi yang berhak.** Memakai izin yang sudah ada,
+bukan izin baru: `manage_signals` dimiliki `super_admin` dan `head_operation`,
+dan **tidak** dimiliki `area_coordinator` — pembatasan yang alasannya sudah
+tertulis di `src/lib/rbac.ts` sejak Phase 4.
+
+Constraint `signals_diabaikan_utuh` mewajibkan `diabaikan_oleh`,
+`diabaikan_pada`, dan `diabaikan_alasan` non-kosong berjalan bersama atau tidak
+sama sekali. Trigger `signals_tak_tersunting_trg` melarang `diabaikan →
+terbuka`. Karena itu **tindakan ini tidak dapat dibatalkan**, dan layar wajib
+memperlakukannya demikian.
+
+`diabaikan` adalah **keputusan workflow manusia**. Ia bukan diagnosis, bukan
+root cause, bukan action, bukan resolution. Ia tidak mengubah snapshot deteksi,
+nilai KPI, severity, rule, KPI, periode, maupun identitas Signal.
+
+**Q5 — ownership ditunda.** `signals` tidak punya kolom pemilik, assignee,
+tenggat, maupun SLA; `sla_policies` yang disebut blueprint bagian 5 belum ada.
+Z-01 karena itu dibatasi pada **lihat → saring → kelompokkan → prioritaskan →
+boleh abaikan**, dan tidak menambah satu kolom pun. Rantai `Signal → Owner →
+Assignment → SLA → Follow-up` menjadi gate Z-02 tersendiri.
+
+**Q6 — unit tetap Signal.** Yang dikelompokkan adalah tampilannya, bukan
+datanya: grain basis data tidak berubah, dan beberapa Signal tidak pernah
+digabung menjadi satu. 341 Signal tersebar di 56 outlet dan 2 periode, dengan
+beban tertinggi 10 Signal per outlet — angka yang membuat pengelompokan per
+outlet × periode terbaca, sementara peleburan per outlet akan menghapus
+pembedaan rule yang justru menentukan tindakan.
+
+**Q7 — corporate punya jalurnya sendiri.** Signal korporat ber-`outlet_id =
+NULL` dan `cakupan_id = '~korporat'`, sehingga **tidak dapat melewati
+`persempit()`** yang bekerja atas daftar outlet. Ia ditampilkan di bagian
+terpisah `CORPORATE SIGNALS`, tidak dipaksa masuk model outlet, dan tidak
+dijadikan outlet palsu. Otorisasinya dipisahkan dari `scopeOutlets()` —
+**tanpa mengarang cakupan korporat baru pada gate ini**.
+
+### Yang TIDAK dilakukan Z-01
+
+Tidak ada migration, perubahan schema, perubahan grain, kolom ownership,
+penulisan produksi, perubahan detector, perubahan ambang, maupun status Signal
+baru. 341 Signal yang ada tidak disentuh.
+
+### OLD BLUEPRINT vs CURRENT LOCKED OWNER CONTRACT
+
+Blueprint ditulis sebelum Phase 4 dibangun. Bagian-bagian berikut **tidak
+diubah** — ia tetap berdiri sebagai rancangan awal, dan yang mengikat adalah
+kontrak di atas.
+
+| bagian | OLD BLUEPRINT | CURRENT LOCKED CONTRACT |
+| --- | --- | --- |
+| §9 Signal | `status` tujuh nilai: `new`, `acknowledged`, `diagnosing`, `escalated`, `dismissed`, `resolved`, `expired` | **Dua**: `terbuka`, `diabaikan` (AD-14 poin 3). Z-01 **tidak menambah** `acknowledged`, walau AD-14 menundanya "ke Phase 5" |
+| §9 Signal | kolom `gap`, `gap_persen`, `revenue_gap` | Dikeluarkan (AD-14 koreksi 3); `revenue_gap` menjadi urusan Impact |
+| §19–22 | Signal `critical` memicu notifikasi | AD-14 poin 6 menundanya "ke Phase 5". **Kontrak Z-01 tidak memuat notifikasi** |
+| §25 Sidebar | grup `Intelligence`, `Work`, `Impact`, `Learning` lahir bersama Command Center | Z-01 hanya Command Center |
+| §25 Sidebar | Readiness & Incidents menjadi tab Command Center | Tidak disebut kontrak Z-01 |
+| §33 R8 | Outlet tanpa cabang ESB ditampilkan terang-terangan di Command Center | Tidak disebut kontrak Z-01 |
+| §5 | `sla_policies` (CREATE) | Q5 menundanya ke Z-02 |
+
+Perbedaan-perbedaan itu **dicatat, bukan diperbaiki**. Menyelaraskan blueprint
+adalah keputusan tersendiri.
+
+### Dependency yang wajib diselesaikan sebelum coding
+
+**Otorisasi korporat belum ada.** Seluruh cakupan V.1 berjalan lewat
+`cakupanOutlet()`/`persempit()` di `src/lib/ops/scope-v1.ts`, yang bekerja atas
+daftar outlet. Signal korporat tidak punya `outlet_id`, jadi tidak ada aturan
+yang menyatakan siapa boleh membacanya. Q7 mengunci bahwa otorisasinya
+**dipisahkan** dari `scopeOutlets()` dan **tidak dikarang di gate ini** — maka
+audit implementasi Z-01 wajib melaporkannya sebagai dependency sebelum baris
+kode pertama ditulis.
+
+Catatan kedua, sudah tercatat di `scope-v1.ts` dan berlaku untuk setiap halaman
+baru: `scopeOutlets` melepas siapa pun yang tidak ditugasi apa pun (aturan
+nomor 5), sehingga yang menahan akses bukan cakupan melainkan `canReachMenu()`
+yang dijalankan lebih dulu. Halaman Command Center wajib memasangnya.
+
+### AD-18 · Addendum — penutupan dependency O8–O10
+
+Tiga dependency yang AD-18 tinggalkan terbuka sudah diputuskan pemiliknya.
+Addendum ini **melanjutkan** AD-18, tidak menggantikannya: Q1–Q7 di atas tetap
+berlaku apa adanya.
+
+| # | dependency | keputusan Owner |
+| --- | --- | --- |
+| **O8** | Notifikasi Signal critical | **A — diimplementasikan di Z-01** |
+| **O9** | `acknowledged` | **A — diimplementasikan di Z-01** |
+| **O10** | Otorisasi corporate | **B — seluruh peran yang berhak membuka Command Center** |
+
+Yang di bawah ini memisahkan tiga hal dengan sengaja: **keputusan Owner** ·
+**fakta repositori** (hasil audit read-only) · **dependency implementasi** yang
+masih harus diputuskan pemiliknya sebelum coding.
+
+---
+
+#### O8 · Notifikasi Signal critical
+
+**Keputusan Owner.** Signal `critical` harus dapat melahirkan notifikasi lewat
+mekanisme yang sudah ada. Tidak ada sistem notifikasi kedua. Notifikasi bukan
+pengganti Signal, tidak mengubah `severity`, tidak mengubah `kondisi_terakhir`,
+dan tidak menyentuh snapshot deteksi. Ia wajib dapat ditelusuri kembali ke
+Signal sumbernya.
+
+Keputusan ini **mencabut penundaan** AD-14 poin 6, yang menyatakan notifikasi
+Signal ditunda "ke Phase 5" karena belum ada layar tujuan. Layar itu kini
+menjadi Command Center, jadi alasan penundaannya gugur.
+
+**Fakta repositori.**
+
+- Satu pintu pengiriman: `notify()`, `notifyMany()`, `notifyCollapsed()` di
+  `src/lib/data/notify.ts`. Enam berkas memanggilnya; **tidak satu pun** dari
+  jalur Signal.
+- Tabel `notifications` — 2.476 baris, **nol** berasal dari Signal.
+- Kolomnya: `id · kind · title · message · outlet_id · area_id · severity ·
+  read · created_at · target_user · department · href · dismissed ·
+  actor_name`. Constraint yang ada hanya PK dan dua FK (`outlets`, `areas`) —
+  **tidak ada CHECK pada `kind` maupun `severity`**.
+- `AppNotification["severity"]` sudah memuat `"critical"`, walau produksi
+  hari ini hanya memakai `info` dan `warning`.
+- Kegagalan kirim sengaja ditelan: notifikasi efek samping, tidak pernah
+  menggagalkan aksi pemicunya.
+
+**Dependency implementasi — belum diputuskan, jangan ditebak.**
+
+1. **Penelusuran balik ke Signal.** `notifications` **tidak punya** kolom
+   `entity_type`/`entity_id`/`signal_id`. Dua jalan yang tersedia, dan
+   pilihannya milik Owner:
+   *(a)* menaruh `signals.id` di dalam `href` — **tanpa migration**, dan
+   sejalan dengan kebiasaan yang sudah ada (100% baris produksi punya `href`);
+   *(b)* menambah kolom relasi — **butuh migration**.
+2. **Penerima.** `notify()` mewajibkan `targetUser` **atau** `department`;
+   tanpa keduanya ia diam. Tidak ada penolong yang menyebarkan ke sebuah peran.
+   Siapa penerima Signal critical — perorangan, departemen, atau pemegang
+   `manage_signals` — **belum diputuskan**.
+3. **Duplikasi.** `notify()` tidak punya penangkal duplikat: tiap panggilan
+   menyisipkan baris. `notifyCollapsed()` menggabungkan berdasarkan
+   `(kind, href, read=false, dismissed=false, target_user)` — baris yang sudah
+   dibaca atau ditutup **tidak** ikut diperbarui, jadi kabar yang sama bisa
+   lahir lagi sebagai baris baru. Deteksi berjalan tiap hari untuk bulan
+   berjalan; tanpa keputusan soal ini, satu Signal bisa menghasilkan puluhan
+   notifikasi dalam sebulan.
+4. **Jenisnya.** `NotificationKind` belum punya nilai untuk Signal. Menambahnya
+   perubahan TypeScript, **bukan migration** — tidak ada CHECK di basis data.
+5. **Kapan dikirim.** Deteksi berjalan di rute cron; Command Center adalah
+   layar. Titik pemicunya belum ditetapkan.
+
+---
+
+#### O9 · `acknowledged`
+
+**Keputusan Owner.** `acknowledged` diimplementasikan di Z-01 — **tetapi schema
+tidak boleh langsung diubah**, dan bentuknya ditentukan setelah audit.
+
+**Fakta repositori.** Seluruh tempat yang hari ini mengasumsikan `status` hanya
+dua nilai:
+
+| lokasi | bentuk asumsinya |
+| --- | --- |
+| `signals_status_check` | `CHECK (status = ANY (ARRAY['terbuka','diabaikan']))` |
+| `signals_diabaikan_utuh` | dua cabang saja; **nilai ketiga akan langsung melanggarnya** |
+| `signals_kerja_idx` | partial index `WHERE status = 'terbuka' AND kondisi_terakhir = 'lewat_ambang'` |
+| `signals_tak_tersunting_trg` | melarang `diabaikan → terbuka` |
+| `gwg_deteksi_signal` | `on conflict` hanya menyentuh blok pengamatan; `status` dan `diabaikan_*` tidak pernah disentuh mesin |
+| `signal-baca.ts:110` | `.eq("status", "terbuka")` — **satu-satunya** penyaring status Signal di seluruh kode aplikasi |
+| AD-14 poin 3 | mengunci dua keadaan; lima usulan blueprint ditunda |
+| AD-18 Q3 | daftar kerja Z-01 hanya `terbuka` |
+
+Invariant yang tidak boleh rusak: snapshot deteksi immutable · Signal tidak
+dapat dihapus · mesin tidak membatalkan keputusan manusia · yang sudah
+diabaikan tidak pernah kembali terbuka.
+
+**Dependency implementasi — bentuknya belum diputuskan.** Audit menyediakan
+bukti untuk tiga bentuk; **tidak satu pun dipilih di sini.**
+
+- **Bentuk A — nilai ketiga pada `status`.** Menuntut **migration**: memperluas
+  `signals_status_check`, menulis ulang `signals_diabaikan_utuh` agar
+  `acknowledged` sah tanpa kolom `diabaikan_*`, dan meninjau `signals_kerja_idx`
+  karena partial index-nya akan berhenti memuat Signal yang sudah di-acknowledge
+  — yang berarti Q3 ("hanya `terbuka`") akan **menyembunyikannya dari daftar
+  kerja**. Trigger juga perlu aturan arah baru: apakah `acknowledged → terbuka`
+  boleh, dan apakah `acknowledged → diabaikan` boleh.
+- **Bentuk B — work-state terpisah dari `status`.** Kolom atau tabel sendiri
+  (`diakui_oleh`, `diakui_pada`). Tetap **butuh migration**, tetapi
+  `signals_status_check`, `signals_diabaikan_utuh`, `signals_kerja_idx`, dan
+  `signal-baca.ts` **tidak berubah artinya** — Signal yang sudah diakui tetap
+  `terbuka`, jadi tetap muncul di daftar kerja Q3, hanya bertanda.
+- **Bentuk C — tanpa perubahan basis data.** "Sudah saya lihat" disimpan di
+  luar `signals`. Tidak ditemukan tabel yang cocok untuk ini hari ini.
+
+**Yang belum boleh diputuskan Claude:** mana dari ketiganya. Ketiganya mengubah
+arti "daftar kerja" secara berbeda, dan itu keputusan bisnis.
+
+**Migration dependency bila A atau B dipilih:** satu migration baru. Migration
+hari ini **112** dan tidak diubah pada gate ini.
+
+---
+
+#### O10 · Otorisasi corporate
+
+**Keputusan Owner.** Signal corporate dapat dibaca **seluruh peran yang secara
+sah dapat membuka Command Center**. Corporate tidak memakai `scopeOutlets()`.
+`outlet_id = NULL`, `cakupan = 'korporat'`, `cakupan_id = '~korporat'`
+dipertahankan. Tidak ada peran baru, tidak ada permission baru, tidak ada
+migration. Area tetap tidak dibangun — produksi 0 baris.
+
+**Fakta repositori.** Mekanisme yang akan dipakai sudah ada dan sudah dipakai
+setiap halaman V.1:
+
+```
+canReachMenu(user, <MenuKey>)        src/lib/nav.ts
+  ├─ UNIVERSAL_MENUS
+  ├─ canOpenMenu(role, key, grants)  ← ROLE_MENUS + grant perorangan
+  ├─ MENU_KPI / MENU_SOSMED / BIDANG_PERFORMA
+  └─ divisionHasMenu(divisiDari(user.department), key)   ← DIVISION_MENUS
+```
+
+Untuk Operational V.1 hari ini, `ROLE_MENUS` memberi lima menu Performance
+kepada `super_admin`, `head_operation`, dan `area_coordinator`; `DIVISION_MENUS`
+membukanya bagi siapa pun yang departemennya memetakan ke divisi
+`Operational V.1`. `persempit()`/`cakupanOutlet()` bekerja **setelah** pintu itu,
+dan hanya atas daftar outlet — Signal corporate tidak melewatinya sama sekali.
+
+Dengan O10 = B, **`canReachMenu` menjadi satu-satunya gerbang** bagi Signal
+corporate. Itu memang mekanisme yang sudah ada, bukan yang dikarang.
+
+**Dependency implementasi.**
+
+1. **Kunci menu Command Center belum ada.** Tidak ada `MenuKey` untuk Command
+   Center. Yang wajib diubah bersamaan (blueprint bagian 25): `MenuKey` ·
+   `NAV_MENUS` · `DIVISION_GROUPS["Operational V.1"]` · `DIVISION_MENUS` ·
+   `ROLE_MENUS`, plus kunci `nav.*` di `src/lib/i18n/dict.ts` yang dijaga
+   `dict.test.ts`. Seluruhnya TypeScript, **tanpa migration**.
+2. **Peran mana yang mendapat kunci itu adalah keputusan Owner, dan ia
+   menentukan siapa melihat angka korporat.** `area_coordinator` hari ini
+   memegang seluruh menu Performance tetapi cakupan outletnya dipersempit ke
+   areanya. Bila kunci Command Center diberikan kepadanya, O10 = B berarti ia
+   **melihat angka korporat seluruh perusahaan** — sesuatu yang tidak pernah
+   terjadi pada halaman V.1 mana pun sampai hari ini. Ini dilaporkan sebagai
+   konsekuensi, bukan diputuskan.
+3. **Kebocoran outlet di luar cakupan tidak terjadi lewat jalur corporate.**
+   Signal corporate ber-`outlet_id = NULL` dan `nilai_actual`-nya agregat
+   perusahaan; ia tidak memuat identitas outlet mana pun. Bagian outlet pada
+   layar yang sama tetap wajib melewati `persempit()`.
+4. Aturan nomor 5 `scopeOutlets` (siapa pun yang belum ditugasi apa pun tidak
+   dibatasi) tetap berlaku. Yang menahannya `canReachMenu()`, yang wajib
+   dipasang di halaman Command Center persis seperti `/operational/weekly`.
+
+---
+
+#### OLD BLUEPRINT vs CURRENT LOCKED CONTRACT — tambahan dari O8–O10
+
+| bagian | OLD BLUEPRINT | CURRENT LOCKED CONTRACT |
+| --- | --- | --- |
+| §19–22 | Signal critical memicu notifikasi; pemicu V.1 juga mencakup Case ditugaskan, SLA, Blocker, verifikasi, Impact, Playbook | **O8** mengambil Signal critical saja. Pemicu lain tetap milik phase-nya |
+| §9 | `status` tujuh nilai, termasuk `acknowledged` sebagai salah satu dari tujuh | **O9** memasukkan `acknowledged` ke Z-01, tetapi **bentuknya belum ditetapkan** — bisa jadi bukan nilai `status`. Lima nilai lain tetap ditunda |
+| AD-14 poin 6 | notifikasi Signal ditunda "ke Phase 5" | **dicabut oleh O8** — sekarang masuk Z-01 |
+| AD-14 poin 3 | `acknowledged` ditunda "ke Phase 5" | **ditindaklanjuti O9** — Z-01, bentuk menyusul audit |
+
+AD-14 **tidak diubah**. Kedua penundaannya memang menyebut Phase 5, dan Z-01
+adalah Phase 5 — jadi yang terjadi pemenuhan jadwalnya, bukan pembatalan
+keputusannya.

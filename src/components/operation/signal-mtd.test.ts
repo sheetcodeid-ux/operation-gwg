@@ -116,17 +116,61 @@ describe("Q1 MTD — detektor dibiarkan apa adanya", () => {
 /* ───────────────────── Q4 — tidak ada schema change ───────────────────── */
 
 describe("NO SCHEMA CHANGE", () => {
-  it("jumlah migration tetap 112", () => {
-    const berkas = readdirSync(join(akar, "supabase/migrations")).filter((f) => f.endsWith(".sql"));
-    expect(berkas).toHaveLength(112);
-  });
+  /**
+   * BATAS YANG DIJAGA PENJAGA INI, DAN KENAPA IA BERBATAS.
+   *
+   * Z-03 memutuskan TIDAK menambah migration, dan keputusan itu tetap berlaku
+   * selamanya. Tapi ia keputusan tentang Z-03 — bukan tentang repositori.
+   *
+   * Versi pertama penjaga ini menuntut `total = 112`, dan itu keliru sebagai
+   * bentuk: ia menyalakan merah untuk SETIAP migration gate berikutnya, walau
+   * gate itu memang diizinkan pemiliknya. Penjaga yang gagal karena pekerjaan
+   * yang sah bukan penjaga — ia cuma gangguan yang cepat atau lambat dimatikan
+   * orang, dan begitu ia mati, kontrak Z-03 ikut hilang bersamanya.
+   *
+   * Yang dijaga sekarang RENTANGNYA: seluruh migration sampai 0112 adalah
+   * milik Z-03 dan sebelumnya, dan rentang itu tidak boleh bergeser — tidak
+   * bertambah, tidak berkurang, tidak berganti nama. Nomor di atas 0112 milik
+   * gate lain (0113 = Z-01, diizinkan §P) dan sengaja TIDAK dihitung di sini.
+   */
+  const BATAS_Z03 = 112;
+  const TERAKHIR_Z03 = "0112_kunci_app_config.sql";
 
-  it("migration terakhir tidak bergeser — Z-03 tidak menambah satu pun", () => {
-    const berkas = readdirSync(join(akar, "supabase/migrations"))
+  const migrasi = () =>
+    readdirSync(join(akar, "supabase/migrations"))
       .filter((f) => f.endsWith(".sql"))
       .sort();
-    expect(berkas[berkas.length - 1]).toBe("0112_kunci_app_config.sql");
-    expect(berkas).toContain("0111_signals.sql");
+  const nomor = (f: string) => Number(f.slice(0, 4));
+
+  it("Z-03 tidak menambah satu migration pun — rentang sampai 0112 tetap 112 berkas", () => {
+    const sampaiZ03 = migrasi().filter((f) => nomor(f) <= BATAS_Z03);
+    expect(sampaiZ03).toHaveLength(BATAS_Z03);
+  });
+
+  it("batas Z-03 tetap 0112_kunci_app_config.sql", () => {
+    const sampaiZ03 = migrasi().filter((f) => nomor(f) <= BATAS_Z03);
+    expect(sampaiZ03[sampaiZ03.length - 1]).toBe(TERAKHIR_Z03);
+    expect(sampaiZ03).toContain("0111_signals.sql");
+  });
+
+  it("tidak ada nomor kembar maupun lubang di rentang Z-03", () => {
+    // Kembar berarti dua migration berebut satu urutan; lubang berarti ada
+    // yang dihapus. Keduanya tidak akan terlihat dari jumlahnya saja kalau
+    // salah satunya menutupi yang lain.
+    const nomorZ03 = migrasi()
+      .filter((f) => nomor(f) <= BATAS_Z03)
+      .map(nomor);
+    expect(new Set(nomorZ03).size).toBe(BATAS_Z03);
+    expect(Math.min(...nomorZ03)).toBe(1);
+    expect(Math.max(...nomorZ03)).toBe(BATAS_Z03);
+  });
+
+  it("migration di atas 0112 milik gate lain — di luar cakupan kontrak Z-03", () => {
+    // Bukan izin longgar: yang dinyatakan di sini persis batas wewenang
+    // penjaga ini. Kontrak gate lain dijaga berkas ujinya sendiri —
+    // `src/lib/data/signal-triase.test.ts` untuk 0113 (Z-01).
+    const sesudah = migrasi().filter((f) => nomor(f) > BATAS_Z03);
+    for (const f of sesudah) expect(nomor(f)).toBeGreaterThan(BATAS_Z03);
   });
 
   it("tidak ada kolom cakupan biaya yang diam-diam ditambahkan", () => {
