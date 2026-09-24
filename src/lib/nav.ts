@@ -21,6 +21,7 @@ export type MenuKey =
   | "op_analysis"
   | "op_pnl"
   | "op_command"
+  | "op_work"
   | "op_daily"
   | "op_weekly"
   | "op_monthly"
@@ -173,6 +174,7 @@ export const NAV_MENUS: Omit<NavItem, "section" | "group" | "groupIcon">[] = [
   { key: "op_analysis", label: "Data Analysis", href: "/operation/analysis", icon: "ChartColumnBig" },
   { key: "op_pnl", label: "Laba Rugi", href: "/operation/laba-rugi", icon: "Banknote" },
   { key: "op_command", label: "Command Center", href: "/operational/command-center", icon: "Siren" },
+  { key: "op_work", label: "Work", href: "/operational/work", icon: "ListChecks" },
   { key: "op_daily", label: "Daily", href: "/operational/daily", icon: "CalendarDays" },
   { key: "op_weekly", label: "Weekly", href: "/operational/weekly", icon: "CalendarRange" },
   { key: "op_monthly", label: "Monthly", href: "/operational/monthly", icon: "CalendarCheck" },
@@ -368,7 +370,16 @@ const PERFORMANCE: MenuKey[] = ["op_daily", "op_weekly", "op_monthly", "op_quart
  * `super_admin` (seluruh menu), `head_operation`, dan `area_coordinator`.
  * Tidak ada peran baru (Z-01 · O10).
  */
-const COMMAND_CENTER: MenuKey[] = ["op_command"];
+/**
+ * ┌─ SATU DAFTAR UNTUK DUA LAYAR, DAN ITU DISENGAJA ─────────────────────────┐
+ * │                                                                          │
+ * │ O-06 mengunci VIEW Work sebagai "batas akses Command Center yang sudah   │
+ * │ ada, ATAU penugasan executor eksplisit". Batas itu terbaca dari satu     │
+ * │ daftar; kalau Work diberi daftarnya sendiri, keduanya akan bergeser      │
+ * │ sendiri-sendiri — dan yang bergeser adalah gerbangnya (OD-06).           │
+ * └──────────────────────────────────────────────────────────────────────────┘
+ */
+const COMMAND_CENTER: MenuKey[] = ["op_command", "op_work"];
 
 /**
  * Kunci menu Command Center — SATU tempat, dipakai halaman maupun server action.
@@ -378,6 +389,15 @@ const COMMAND_CENTER: MenuKey[] = ["op_command"];
  * antaranya bisa bergeser sendiri, dan yang bergeser adalah gerbangnya.
  */
 export const MENU_COMMAND_CENTER: MenuKey = "op_command";
+
+/**
+ * Kunci menu Work Z-02 — SATU tempat, alasannya sama dengan di atas.
+ *
+ * Halaman daftar dan halaman detail memakainya sebagai gerbang. Ia BUKAN
+ * pengganti `MENU_COMMAND_CENTER`: Signal dan Work dua layar yang berbeda,
+ * hanya batas aksesnya yang memang satu (O-06).
+ */
+export const MENU_WORK: MenuKey = "op_work";
 
 /**
  * Performance milik Finance dan Marketing — EMPAT skala, tanpa Yearly.
@@ -565,7 +585,11 @@ export const DIVISION_GROUPS: Partial<Record<Division, NavGroupDef[]>> = {
     // `itemsForDivision`, jadi ia tampil sebagai satu baris biasa — bukan
     // judul kelompok di atas satu menu.
     { name: "Command Center", icon: "Siren", urutan: 0, menus: ["op_command"] },
-    { name: "Performance", icon: "TrendingUp", urutan: 1, menus: ["op_daily", "op_weekly", "op_monthly", "op_quarterly", "op_yearly"] },
+    // Work berdiri sebagai barisnya sendiri, tepat di bawah Command Center:
+    // yang ditanyakan berurutan — "apa yang terdeteksi", lalu "apa yang
+    // dikerjakan orang tentangnya".
+    { name: "Work", icon: "ListChecks", urutan: 1, menus: ["op_work"] },
+    { name: "Performance", icon: "TrendingUp", urutan: 2, menus: ["op_daily", "op_weekly", "op_monthly", "op_quarterly", "op_yearly"] },
   ],
   "Finance V.1": [{ name: "Performance", icon: "TrendingUp", urutan: 0, menus: [...PERFORMANCE_FIN] }],
   "Marketing V.1": [{ name: "Performance", icon: "TrendingUp", urutan: 0, menus: [...PERFORMANCE_MKT] }],
@@ -772,7 +796,7 @@ export const DIVISION_MENUS: { division: Division; menus: MenuKey[] }[] = [
    * boleh membaca modul ini — dengan cakupan outlet yang tetap dibatasi per
    * orang di halamannya sendiri.
    */
-  { division: "Operational V.1", menus: ["op_command", "op_daily", "op_weekly", "op_monthly", "op_quarterly", "op_yearly"] },
+  { division: "Operational V.1", menus: ["op_command", "op_work", "op_daily", "op_weekly", "op_monthly", "op_quarterly", "op_yearly"] },
   // Sama bentuknya dengan Operational V.1, dan sama pula alasannya: bidang
   // sendiri supaya modul berikutnya punya tempat, bukan satu baris yang
   // dititipkan ke bidang yang sudah penuh.

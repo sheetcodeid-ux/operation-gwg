@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { MENU_COMMAND_CENTER, canReachMenu } from "@/lib/nav";
+import { MENU_COMMAND_CENTER, MENU_WORK, NAV_MENUS, canReachMenu } from "@/lib/nav";
 import { can } from "@/lib/rbac";
 import { persempit } from "./scope-v1";
 import type { Outlet, Role, UserProfile } from "@/lib/types";
@@ -280,5 +280,80 @@ describe("fungsi penulis Z-02 bukan sumber kebenaran izin", () => {
   it("tenggat offset murni — tanpa pembulatan akhir hari (AD-20 · J.2)", () => {
     expect(kode).toContain("v_tenggat := v_anchor + make_interval(days => v_hari);");
     expect(kode).not.toMatch(/23:59|date_trunc|end of day/i);
+  });
+});
+
+/* ──────── 8. MenuKey Work berjalan seiring Command Center (Z-02 · OD-06) ──────── */
+
+/**
+ * SATU BATAS AKSES, DUA LAYAR.
+ *
+ * ┌─ KENAPA SINKRONNYA YANG DIJAGA, BUKAN DAFTAR PERANNYA ───────────────────┐
+ * │                                                                          │
+ * │ O-06 mengunci VIEW Work sebagai "batas akses Command Center yang sudah   │
+ * │ ada, ATAU penugasan executor eksplisit". Batas itu punya EMPAT pintu di  │
+ * │ `nav.ts` — peran super admin, `ROLE_MENUS`, izin per-pengguna, dan       │
+ * │ keanggotaan divisi. Menambahkan Work hanya ke sebagian di antaranya      │
+ * │ melahirkan orang yang melihat Signal tetapi tidak Work, atau            │
+ * │ sebaliknya — dan tidak satu pun dari keduanya akan terlihat sebagai      │
+ * │ galat.                                                                   │
+ * │                                                                          │
+ * │ Karena itu yang diuji KESAMAANNYA, bukan daftar peran yang ditulis ulang │
+ * │ di sini. Daftar yang disalin akan menyimpang diam-diam; kesamaan tidak.  │
+ * └──────────────────────────────────────────────────────────────────────────┘
+ */
+describe("MENU_WORK mengikuti batas akses Command Center", () => {
+  const SEMUA: Role[] = [
+    "super_admin",
+    "head_operation",
+    "area_coordinator",
+    "data_operation",
+    "pos_operation",
+    "admin_operation",
+    "supervisor",
+    "head_bar_rnd",
+    "bar_rnd",
+    "kitchen_rnd",
+    "coordinator_rnd",
+    "legal",
+    "assessor",
+    "member",
+  ];
+
+  it("pintu 1 & 2 — setiap peran menjawab sama untuk keduanya", () => {
+    for (const r of SEMUA) {
+      expect(canReachMenu(orang(r), MENU_WORK)).toBe(canReachMenu(orang(r), MENU_COMMAND_CENTER));
+    }
+  });
+
+  it("ketiga peran yang memegang Command Center memegang Work", () => {
+    for (const r of ["super_admin", "head_operation", "area_coordinator"] as Role[]) {
+      expect(canReachMenu(orang(r), MENU_WORK)).toBe(true);
+    }
+  });
+
+  it("pintu 3 — izin per-pengguna membuka Work persis seperti ia membuka Command Center", () => {
+    const tanpa = orang("member");
+    expect(canReachMenu(tanpa, MENU_WORK)).toBe(false);
+
+    const berizin = orang("member", { grants: ["menu:op_work"] } as Partial<UserProfile>);
+    expect(canReachMenu(berizin, MENU_WORK)).toBe(true);
+
+    const berizinSignal = orang("member", { grants: ["menu:op_command"] } as Partial<UserProfile>);
+    expect(canReachMenu(berizinSignal, MENU_COMMAND_CENTER)).toBe(true);
+  });
+
+  it("pintu 4 — divisi Operational V.1 membuka keduanya", () => {
+    const u = orang("member", { department: "Operational V.1" });
+    expect(canReachMenu(u, MENU_WORK)).toBe(true);
+    expect(canReachMenu(u, MENU_COMMAND_CENTER)).toBe(true);
+  });
+
+  it("Work punya rutenya sendiri, dan itu bukan rute Command Center", () => {
+    const work = NAV_MENUS.find((m) => m.key === MENU_WORK);
+    const signal = NAV_MENUS.find((m) => m.key === MENU_COMMAND_CENTER);
+    expect(work?.href).toBe("/operational/work");
+    expect(signal?.href).toBe("/operational/command-center");
+    expect(work?.href).not.toBe(signal?.href);
   });
 });

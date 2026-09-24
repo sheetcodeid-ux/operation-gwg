@@ -31,6 +31,7 @@ export const DICT: Record<Lang, Record<string, string>> = {
     // Nama bidang (sub-grup) di sidebar. Tanpa ini, menunya berbahasa Inggris
     // tapi judul bidangnya tetap Indonesia — satu sidebar dua bahasa.
     "group.Command Center": "Command Center",
+    "group.Work": "Work",
     "group.Performance": "Performance",
     "group.Monitoring Outlet": "Outlet Monitoring",
     "group.Keuangan Operasional": "Operational Finance",
@@ -139,6 +140,7 @@ export const DICT: Record<Lang, Record<string, string>> = {
     "nav.Laba Rugi": "Profit & Loss",
     "nav.Manajemen Outlet": "Outlet Management",
     "nav.Command Center": "Command Center",
+    "nav.Work": "Work",
     "nav.Daily": "Daily",
     "nav.Weekly": "Weekly",
     "nav.Monthly": "Monthly",
@@ -343,6 +345,7 @@ export const DICT: Record<Lang, Record<string, string>> = {
     "nav.Analisis Fraud": "Analisis Fraud",
     "nav.Musiman": "Musiman",
     "group.Command Center": "Command Center",
+    "group.Work": "Work",
     "group.Performance": "Performance",
     "group.Monitoring Outlet": "Monitoring Outlet",
     "group.Keuangan Operasional": "Keuangan Operasional",
@@ -449,6 +452,7 @@ export const DICT: Record<Lang, Record<string, string>> = {
     "nav.Laba Rugi": "Laba Rugi",
     "nav.Manajemen Outlet": "Manajemen Outlet",
     "nav.Command Center": "Command Center",
+    "nav.Work": "Work",
     "nav.Daily": "Daily",
     "nav.Weekly": "Weekly",
     "nav.Monthly": "Monthly",
