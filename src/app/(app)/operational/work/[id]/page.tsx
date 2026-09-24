@@ -3,6 +3,7 @@ import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 import { requireSessionUser } from "@/lib/auth";
 import { detailWork } from "@/lib/data/work-daftar";
+import { pilihanWork } from "@/lib/data/work-pilihan";
 import { canReachMenu, MENU_WORK } from "@/lib/nav";
 import { can } from "@/lib/rbac";
 import { PageHeader } from "@/components/ui/page-header";
@@ -35,14 +36,25 @@ export default async function DetailWorkPage({ params }: { params: Promise<{ id:
   const pelaksanaAktif = detail.pelaksana.some((p) => p.userId === user.id && p.aktif);
   if (!canReachMenu(user, MENU_WORK) && !pelaksanaAktif) redirect("/dashboard");
 
+  // Daftar orang, departemen, dan Signal untuk pemilih di layar — sumber yang
+  // SAMA dengan form Work baru, bukan daftar kedua yang bisa berbeda diam-diam.
+  //
+  // Hanya ditarik untuk orang yang memang bisa membuka salah satu dialognya.
+  // Yang cuma menonton tidak perlu menerima daftar orang dan Signal yang tidak
+  // dapat ia pakai — ini penghematan bacaan, BUKAN otorisasi: yang memutuskan
+  // tetap `work-signal.ts` di server.
+  const kelola = can(user, "manage_signals");
+  const pilihan = kelola || user.id === detail.ownerId ? await pilihanWork(user) : undefined;
+
   return (
     <div className="w-full">
       <PageHeader icon={ListChecks} title={detail.judul} description={`Work #${detail.id}`} />
       <DetailWorkUI
         detail={detail}
         aktor={user.id}
-        kelola={can(user, "manage_signals")}
+        kelola={kelola}
         pelaksanaAktif={pelaksanaAktif}
+        pilihan={pilihan}
       />
     </div>
   );

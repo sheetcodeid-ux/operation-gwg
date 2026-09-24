@@ -3,7 +3,7 @@ import { join } from "node:path";
 import { describe, expect, it, vi } from "vitest";
 import { renderToStaticMarkup } from "react-dom/server";
 import { PapanWorkUI } from "./papan-work";
-import { DetailWorkUI } from "./detail-work";
+import { DetailWorkUI, opsiUntuk } from "./detail-work";
 import { FormWorkBaru, kekuranganForm, muatanBuat, type IsiForm } from "./form-work-baru";
 import type { BarisWork, DaftarWork, DetailWork } from "@/lib/data/work-daftar";
 import type { PilihanWork } from "@/lib/data/work-pilihan";
@@ -553,5 +553,251 @@ describe("daftar Work: pintu pembuatan dan kontrol saringan", () => {
     const html = renderToStaticMarkup(<PapanWorkUI papan={papan()} bolehBuat pilihan={pilihan} />);
     expect(html).toContain("Masih berjalan");
     expect(html).toContain("hanya yang lewat tenggat".replace("h", "H"));
+  });
+});
+
+/* ───────────────── Z-02 Step 8B · GAP-01 · tidak ada id yang diketik ───────────────── */
+
+/**
+ * ┌─ YANG DIPERBAIKI GAP-01 ────────────────────────────────────────────────┐
+ * │                                                                          │
+ * │ Lima isian mutasi di layar detail dahulu menuntut orang MENGETIK         │
+ * │ `u_exec1`, `Human Capital`, `10`, dan sebuah ISO 8601 — empat hal yang   │
+ * │ tidak pernah ia lihat di layar mana pun. Salah ketik satu huruf berarti  │
+ * │ penolakan basis data yang tidak dapat dibedakan dari penolakan aturan.   │
+ * │                                                                          │
+ * │ Penyaringannya pun bukan hiasan: menawarkan Owner sebagai pelaksana      │
+ * │ (I-03), atau menawarkan kaitan yang sudah pernah dilepas (I-26/I-28),    │
+ * │ berarti menuntun orang ke penolakan yang sudah pasti.                    │
+ * └──────────────────────────────────────────────────────────────────────────┘
+ */
+
+const SUMBER_DETAIL = readFileSync(join(process.cwd(), "src/components/operation/detail-work.tsx"), "utf8");
+const SUMBER_HALAMAN = readFileSync(join(process.cwd(), "src/app/(app)/operational/work/[id]/page.tsx"), "utf8");
+const SUMBER_PICKER = readFileSync(join(process.cwd(), "src/components/ui/datetime-picker.tsx"), "utf8");
+
+/** Pilihan yang masih menyisakan kandidat setelah seluruh penyaringan berjalan. */
+const pilihanDetail: PilihanWork = {
+  ...pilihan,
+  owner: [...pilihan.owner, { value: "u_kandidat", label: "Kandidat Baru · Operational" }],
+  pelaksana: [...pilihan.pelaksana, { value: "u_kandidat", label: "Kandidat Baru · Operational" }],
+  signal: [
+    ...pilihan.signal,
+    { id: 12, label: "#biaya.utilitas_pct · Cattu Kemang · 2026-09 · medium", severity: "medium" },
+  ],
+};
+
+describe("GAP-01 · 1 · pilihan owner terbaca sebagai nama dan memetakan ke user id", () => {
+  it("menawarkan nama orang, bukan id — dan nilainya tetap id yang diterima action", () => {
+    const opsi = opsiUntuk("owner", detail(), pilihanDetail);
+    expect(opsi).toEqual([{ value: "u_kandidat", label: "Kandidat Baru · Operational" }]);
+    // Yang dibaca orang bukan yang dikirim ke server, dan itu memang intinya.
+    expect(opsi[0].label).not.toBe(opsi[0].value);
+    expect(opsi[0].value).toBe("u_kandidat");
+  });
+
+  it("owner yang sedang menjabat tidak ditawarkan sebagai owner baru", () => {
+    expect(opsiUntuk("owner", detail(), pilihanDetail).map((o) => o.value)).not.toContain("u_owner");
+  });
+
+  it("pelaksana AKTIF tidak ditawarkan sebagai owner — I-03 sudah pasti menolaknya", () => {
+    expect(opsiUntuk("owner", detail(), pilihanDetail).map((o) => o.value)).not.toContain("u_exec1");
+  });
+
+  it("pelaksana yang sudah dilepas boleh menjadi owner — ia bukan lagi pelaksana aktif", () => {
+    const d = detail();
+    const p: PilihanWork = { ...pilihanDetail, owner: [...pilihanDetail.owner, { value: "u_exec2", label: "Exec Dua · Human Capital" }] };
+    expect(opsiUntuk("owner", d, p).map((o) => o.value)).toContain("u_exec2");
+  });
+
+  it("tanpa data pilihan, tidak ada satu pun opsi yang dikarang", () => {
+    expect(opsiUntuk("owner", detail(), undefined)).toEqual([]);
+  });
+});
+
+describe("GAP-01 · 2 · pilihan departemen terbaca dan memetakan ke nama departemen yang sah", () => {
+  it("departemen yang sedang dipakai tidak ditawarkan lagi", () => {
+    const opsi = opsiUntuk("departemen", detail(), pilihanDetail);
+    expect(opsi.map((o) => o.value)).not.toContain("Operational");
+    expect(opsi.map((o) => o.value)).toContain("Human Capital");
+  });
+
+  it("nilainya nama departemen apa adanya — itulah yang diterima ubahWorkAction", () => {
+    for (const o of opsiUntuk("departemen", detail(), pilihanDetail)) {
+      expect(o.value).toBe(o.label);
+      expect(o.value.trim()).not.toBe("");
+    }
+  });
+});
+
+describe("GAP-01 · 3 · tenggat dipilih pada kalender, dan nilainya diterima action yang ada", () => {
+  it("DateTimePicker memancarkan ISO 8601 — persis yang lolos Date.parse di ubahWorkAction", () => {
+    expect(SUMBER_PICKER).toContain("onChange(next.toISOString())");
+    // Bentuk yang sama dengan yang dihasilkan picker, diuji terhadap penjaga
+    // yang sama dengan milik action: `Number.isNaN(Date.parse(tenggat))`.
+    const d = new Date("2026-09-29T00:00:00.000Z");
+    d.setHours(17, 0, 0, 0);
+    const iso = d.toISOString();
+    expect(Number.isNaN(Date.parse(iso))).toBe(false);
+    expect(iso).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/);
+  });
+
+  it("nilai picker mengalir utuh ke medan `tenggat`, tanpa penulisan ulang format", () => {
+    expect(SUMBER_DETAIL).toContain("<DateTimePicker value={nilai} onChange={setNilai}");
+    expect(SUMBER_DETAIL).toContain("ubahWorkAction(detail.id, { tenggat: v, alasan: a })");
+  });
+
+  it("menggeser tenggat tidak menyentuh kategori maupun kebijakan (0117)", () => {
+    expect(SUMBER_DETAIL).toContain("Menggeser tenggat tidak mengubah kategori maupun kebijakan");
+    for (const medan of ["tenggatKategori:", "tenggat_kategori", "tenggatKebijakanVersi:"]) {
+      expect(SUMBER_DETAIL).not.toContain(`${medan} v`);
+    }
+  });
+});
+
+describe("GAP-01 · 4-5 · pilihan pelaksana menolak Owner dan memetakan ke user id", () => {
+  it("Owner TIDAK PERNAH ditawarkan sebagai pelaksana — I-03", () => {
+    const nilai = opsiUntuk("tambah-pelaksana", detail(), pilihanDetail).map((o) => o.value);
+    expect(nilai).not.toContain("u_owner");
+  });
+
+  it("yang sudah tercatat tidak ditawarkan lagi, termasuk yang sudah dilepas (I-28)", () => {
+    const nilai = opsiUntuk("tambah-pelaksana", detail(), pilihanDetail).map((o) => o.value);
+    expect(nilai).not.toContain("u_exec1"); // masih aktif
+    expect(nilai).not.toContain("u_exec2"); // sudah dilepas, tidak dapat ditugaskan ulang
+  });
+
+  it("yang tersisa terbaca sebagai nama, dan nilainya user id yang diterima action", () => {
+    const opsi = opsiUntuk("tambah-pelaksana", detail(), pilihanDetail);
+    expect(opsi).toEqual([{ value: "u_kandidat", label: "Kandidat Baru · Operational" }]);
+    expect(opsi[0].label).not.toBe(opsi[0].value);
+    expect(SUMBER_DETAIL).toContain('kelolaPelaksanaWorkAction(detail.id, v, "tambah")');
+  });
+});
+
+describe("GAP-01 · 6 · pilihan Signal terbaca dan memetakan ke signal id", () => {
+  it("menawarkan keterangan KPI, tempat, dan periode — bukan sekadar nomor", () => {
+    const opsi = opsiUntuk("kait-signal", detail(), pilihanDetail);
+    expect(opsi).toHaveLength(1);
+    expect(opsi[0].label).toContain("biaya.utilitas_pct");
+    expect(opsi[0].label).toContain("Cattu Kemang");
+    expect(opsi[0].label).toContain("2026-09");
+  });
+
+  it("nilainya signal id, dan Number() memulihkannya sebagai angka bagi action", () => {
+    const opsi = opsiUntuk("kait-signal", detail(), pilihanDetail);
+    expect(opsi[0].value).toBe("12");
+    expect(Number(opsi[0].value)).toBe(12);
+    expect(SUMBER_DETAIL).toContain("kaitkanSignalWorkAction(detail.id, Number(v))");
+  });
+
+  it("kaitan yang masih aktif maupun yang sudah dilepas tidak ditawarkan lagi (I-26)", () => {
+    const nilai = opsiUntuk("kait-signal", detail(), pilihanDetail).map((o) => o.value);
+    expect(nilai).not.toContain("10"); // kaitan aktif
+    expect(nilai).not.toContain("11"); // kaitan sudah dilepas — tidak dapat dihidupkan kembali
+  });
+});
+
+describe("GAP-01 · 7-8 · tidak ada id mentah maupun ISO mentah yang harus diketik", () => {
+  it("kelima label lama sudah tidak ada di mana pun", () => {
+    const html = renderToStaticMarkup(<DetailWorkUI detail={detail()} aktor="u_mgr" kelola pilihan={pilihanDetail} />);
+    for (const lama of [
+      "Id pengguna owner baru",
+      "Nama departemen baru",
+      "Tenggat baru (ISO 8601)",
+      "Id Signal",
+      "Id pengguna pelaksana",
+    ]) {
+      expect(SUMBER_DETAIL).not.toContain(lama);
+      expect(html).not.toContain(lama);
+    }
+  });
+
+  it("tidak ada satu pun <input> teks di layar detail — hanya pemilih dan alasan", () => {
+    // Alasan tetap berupa <textarea>: ia memang kalimat bebas, bukan id.
+    expect(SUMBER_DETAIL).not.toContain("<input");
+    expect(SUMBER_DETAIL).toContain("<textarea");
+  });
+
+  it("kata ISO 8601 tidak lagi dibebankan kepada pengguna", () => {
+    expect(SUMBER_DETAIL).not.toContain("ISO 8601");
+    expect(SUMBER_DETAIL).not.toContain('type="datetime-local"');
+  });
+
+  it("keempat sasaran dipilih lewat Combobox, dan tenggat lewat DateTimePicker", () => {
+    expect(SUMBER_DETAIL).toContain('const BERSASARAN = new Set<Minta["jenis"]>(["owner", "departemen", "kait-signal", "tambah-pelaksana"]);');
+    expect(SUMBER_DETAIL).toContain("<Combobox");
+    expect(SUMBER_DETAIL).toContain("<DateTimePicker");
+  });
+
+  it("Simpan tetap mati selama sasarannya belum dipilih", () => {
+    expect(SUMBER_DETAIL).toContain(
+      '(minta !== null && (BERSASARAN.has(minta.jenis) || minta.jenis === "tenggat") && nilai.trim() === "")',
+    );
+  });
+
+  it("pilihan habis tidak berubah menjadi undangan mengetik", () => {
+    expect(SUMBER_DETAIL).toContain("Tidak ada pilihan yang tersisa untuk tindakan ini.");
+  });
+});
+
+describe("GAP-01 · sumber pilihan tunggal, tanpa salinan kedua", () => {
+  it("halaman mengambilnya dari pilihanWork() dan meneruskannya apa adanya", () => {
+    expect(SUMBER_HALAMAN).toContain("pilihanWork(user)");
+    expect(SUMBER_HALAMAN).toContain("pilihan={pilihan}");
+  });
+
+  it("hanya ditarik untuk yang bisa membukanya — penonton tidak menerima daftarnya", () => {
+    expect(SUMBER_HALAMAN).toContain("kelola || user.id === detail.ownerId ? await pilihanWork(user) : undefined");
+  });
+
+  it("tanpa pilihan, layar tetap tergambar utuh dan tidak melempar", () => {
+    const html = renderToStaticMarkup(<DetailWorkUI detail={detail()} aktor="u_exec1" kelola={false} pelaksanaAktif />);
+    expect(html).toContain("Mulai dikerjakan");
+    expect(html).toContain("Signal yang ditangani");
+  });
+
+  it("komponen detail tidak membaca data sendiri — ia hanya menerima prop", () => {
+    for (const larangan of ["getUsers(", "supabase", "selectAll(", "server-only"]) {
+      expect(SUMBER_DETAIL).not.toContain(larangan);
+    }
+    expect(SUMBER_DETAIL).toContain("pilihan?: PilihanWork");
+  });
+});
+
+describe("GAP-01 · 9 · otorisasi yang sudah dikunci tidak bergeser satu pun", () => {
+  const tombolnya = (kelola: boolean, aktor: string, pakaiPilihan: boolean) =>
+    tombol(
+      renderToStaticMarkup(
+        <DetailWorkUI
+          detail={detail()}
+          aktor={aktor}
+          kelola={kelola}
+          pilihan={pakaiPilihan ? pilihanDetail : undefined}
+        />,
+      ),
+    );
+
+  it("menambahkan data pilihan tidak menambah maupun mengurangi satu tombol pun", () => {
+    for (const [aktor, kelola] of [
+      ["u_owner", false],
+      ["u_mgr", true],
+      ["u_orang_lewat", false],
+    ] as const) {
+      expect(tombolnya(kelola, aktor, true)).toBe(tombolnya(kelola, aktor, false));
+    }
+  });
+
+  it("Work terminal tetap tanpa tombol meski data pilihan tersedia", () => {
+    const html = renderToStaticMarkup(
+      <DetailWorkUI
+        detail={detail({ status: "completed", terminal: true })}
+        aktor="u_owner"
+        kelola
+        pelaksanaAktif
+        pilihan={pilihanDetail}
+      />,
+    );
+    expect(tombol(html)).toBe("");
   });
 });

@@ -3,6 +3,8 @@
 import * as React from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
+import { Combobox } from "@/components/ui/combobox";
+import { DateTimePicker } from "@/components/ui/datetime-picker";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
 import {
@@ -13,6 +15,7 @@ import {
   ubahWorkAction,
 } from "@/lib/actions/work-signal";
 import type { DetailWork } from "@/lib/data/work-daftar";
+import type { Opsi, PilihanWork } from "@/lib/data/work-pilihan";
 
 /**
  * DETAIL WORK — DAN SEPULUH TINDAKAN YANG GERBANGNYA SUDAH DIKUNCI.
@@ -84,6 +87,50 @@ const JUDUL: Record<Minta["jenis"], string> = {
 /** Tindakan yang alasannya WAJIB — bukan pilihan tampilan, melainkan kontrak. */
 const BERALASAN = new Set<Minta["jenis"]>(["batal", "owner", "departemen", "tenggat", "lepas-signal"]);
 
+/** Tindakan yang sasarannya DIPILIH, bukan diketik. */
+const BERSASARAN = new Set<Minta["jenis"]>(["owner", "departemen", "kait-signal", "tambah-pelaksana"]);
+
+/**
+ * Pilihan yang sah untuk sebuah tindakan.
+ *
+ * ┌─ MURNI DAN DIEKSPOR, SUPAYA PENYARINGANNYA BISA DIUJI ───────────────────┐
+ * │                                                                          │
+ * │ Yang disaring di sini bukan hiasan: menawarkan Owner sebagai pelaksana,  │
+ * │ atau menawarkan Signal yang sudah terkait, berarti menuntun orang ke     │
+ * │ penolakan yang sudah pasti. Basis data tetap yang menolak — yang di sini │
+ * │ menjaga agar permintaannya tidak pernah sampai ke sana.                  │
+ * └──────────────────────────────────────────────────────────────────────────┘
+ */
+export function opsiUntuk(jenis: Minta["jenis"], detail: DetailWork, pilihan?: PilihanWork): Opsi[] {
+  if (!pilihan) return [];
+  switch (jenis) {
+    case "owner": {
+      // Owner baru tidak boleh orang yang sama, dan tidak boleh pelaksana
+      // aktif — I-03 menolaknya, jadi ia tidak pantas ditawarkan.
+      const pelaksanaAktif = new Set(detail.pelaksana.filter((p) => p.aktif).map((p) => p.userId));
+      return pilihan.owner.filter((o) => o.value !== detail.ownerId && !pelaksanaAktif.has(o.value));
+    }
+    case "departemen":
+      return pilihan.departemen.filter((o) => o.value !== detail.primaryDepartment);
+    case "tambah-pelaksana": {
+      // Yang sudah pernah tercatat tidak ditawarkan lagi: yang aktif sudah ada,
+      // dan yang sudah dilepas TIDAK dapat ditugaskan ulang (I-28).
+      const pernah = new Set(detail.pelaksana.map((p) => p.userId));
+      return pilihan.pelaksana.filter((o) => o.value !== detail.ownerId && !pernah.has(o.value));
+    }
+    case "kait-signal": {
+      // Sama alasannya: kaitan yang pernah dilepas tidak dapat dihidupkan
+      // kembali (I-26), dan yang masih aktif sudah terkait.
+      const pernah = new Set(detail.signal.map((s) => String(s.signalId)));
+      return pilihan.signal
+        .map((s) => ({ value: String(s.id), label: s.label }))
+        .filter((o) => !pernah.has(o.value));
+    }
+    default:
+      return [];
+  }
+}
+
 export function DetailWorkUI({
   detail,
   aktor,
@@ -91,11 +138,14 @@ export function DetailWorkUI({
   // Tanpa disebut, orang ini BUKAN pelaksana. Bawaan yang membuka lebih banyak
   // daripada yang diminta adalah bawaan yang salah.
   pelaksanaAktif = false,
+  pilihan,
 }: {
   detail: DetailWork;
   aktor: string;
   kelola: boolean;
   pelaksanaAktif?: boolean;
+  /** Daftar orang, departemen, dan Signal — dari `pilihanWork()` di halaman. */
+  pilihan?: PilihanWork;
 }) {
   const router = useRouter();
   const [sibuk, setSibuk] = React.useState(false);
@@ -371,20 +421,43 @@ export function DetailWorkUI({
       <Dialog open={minta !== null} onOpenChange={(v) => !v && setMinta(null)}>
         <DialogContent title={minta ? JUDUL[minta.jenis] : ""}>
           <div className="space-y-3">
-            {minta && minta.jenis !== "batal" && minta.jenis !== "lepas-signal" && (
+            {/*
+              TIDAK ADA SATU PUN ID YANG DIKETIK.
+              Orang memilih nama, departemen, Signal, dan tanggal; id-nya urusan
+              berkas ini. Mengetik `u_exec1` menuntut orang menghafal sesuatu
+              yang tidak pernah ia lihat di layar mana pun.
+            */}
+            {minta && BERSASARAN.has(minta.jenis) && (
               <label className="block text-sm">
                 <span className="text-xs text-muted-foreground">
-                  {minta.jenis === "owner" && "Id pengguna owner baru"}
-                  {minta.jenis === "departemen" && "Nama departemen baru"}
-                  {minta.jenis === "tenggat" && "Tenggat baru (ISO 8601)"}
-                  {minta.jenis === "kait-signal" && "Id Signal"}
-                  {minta.jenis === "tambah-pelaksana" && "Id pengguna pelaksana"}
+                  {minta.jenis === "owner" && "Owner baru"}
+                  {minta.jenis === "departemen" && "Departemen utama baru"}
+                  {minta.jenis === "kait-signal" && "Signal yang akan dikaitkan"}
+                  {minta.jenis === "tambah-pelaksana" && "Pelaksana yang ditambahkan"}
                 </span>
-                <input
-                  className="mt-1 w-full rounded-md border px-3 py-2"
+                <Combobox
+                  options={opsiUntuk(minta.jenis, detail, pilihan)}
                   value={nilai}
-                  onChange={(e) => setNilai(e.target.value)}
+                  onChange={setNilai}
+                  placeholder="Pilih"
+                  searchable
+                  className="mt-1"
                 />
+                {opsiUntuk(minta.jenis, detail, pilihan).length === 0 && (
+                  <span className="mt-1 block text-[11px] text-muted-foreground">
+                    Tidak ada pilihan yang tersisa untuk tindakan ini.
+                  </span>
+                )}
+              </label>
+            )}
+
+            {minta && minta.jenis === "tenggat" && (
+              <label className="block text-sm">
+                <span className="text-xs text-muted-foreground">Tenggat baru</span>
+                <DateTimePicker value={nilai} onChange={setNilai} className="mt-1" />
+                <span className="mt-1 block text-[11px] text-muted-foreground">
+                  Menggeser tenggat tidak mengubah kategori maupun kebijakan yang melahirkannya — keduanya beku.
+                </span>
               </label>
             )}
             {minta && BERALASAN.has(minta.jenis) && (
@@ -405,7 +478,11 @@ export function DetailWorkUI({
               <Button
                 size="sm"
                 onClick={kirim}
-                disabled={sibuk || (minta !== null && BERALASAN.has(minta.jenis) && alasan.trim() === "")}
+                disabled={
+                  sibuk ||
+                  (minta !== null && BERALASAN.has(minta.jenis) && alasan.trim() === "") ||
+                  (minta !== null && (BERSASARAN.has(minta.jenis) || minta.jenis === "tenggat") && nilai.trim() === "")
+                }
               >
                 Simpan
               </Button>
