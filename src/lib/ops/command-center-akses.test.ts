@@ -1,3 +1,5 @@
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { MENU_COMMAND_CENTER, canReachMenu } from "@/lib/nav";
 import { can } from "@/lib/rbac";
@@ -155,5 +157,128 @@ describe("mengakui Signal — mengikuti akses layar, bukan manage_signals", () =
   it("mengakui TIDAK menuntut manage_signals — dua pintu yang berbeda", () => {
     const u = orang("area_coordinator");
     expect(canReachMenu(u, MENU_COMMAND_CENTER) && !can(u, "manage_signals")).toBe(true);
+  });
+});
+
+/* ───────────────────── 6. izin membuat Work (Z-02) ───────────────────── */
+
+/**
+ * `create_signal_work` — IZIN APLIKASI, DAN HANYA DI SINI.
+ *
+ * ┌─ KENAPA BUKAN `create_work_task` ────────────────────────────────────────┐
+ * │                                                                          │
+ * │ `create_work_task` dipegang 12 dari 14 peran, termasuk peran yang tidak  │
+ * │ boleh membuka Operational V.1 sama sekali. Memakainya ulang akan memberi │
+ * │ hak mengerjakan Signal kepada orang yang tidak boleh melihat Signalnya   │
+ * │ (AD-19 · O-06).                                                          │
+ * │                                                                          │
+ * │ Dan KENAPA di TypeScript, bukan di SQL: AD-20 · C dan O-12 mengunci      │
+ * │ otorisasi di lapisan aplikasi. Fungsi penulis `gwg_*` sengaja TIDAK      │
+ * │ memeriksa izin apa pun — dua daftar izin untuk satu aturan berarti yang  │
+ * │ kedua akan menyimpang diam-diam (AD-20 · J.1).                           │
+ * └──────────────────────────────────────────────────────────────────────────┘
+ */
+describe("membuat Work dari Signal — hanya pemegang create_signal_work", () => {
+  const BOLEH: Role[] = ["super_admin", "head_operation", "area_coordinator"];
+
+  it.each(BOLEH)("%s boleh", (r) => {
+    expect(can(orang(r), "create_signal_work")).toBe(true);
+  });
+
+  it("peran lain TIDAK boleh — termasuk yang memegang create_work_task", () => {
+    const lain: Role[] = [
+      "data_operation",
+      "pos_operation",
+      "admin_operation",
+      "supervisor",
+      "head_bar_rnd",
+      "bar_rnd",
+      "kitchen_rnd",
+      "coordinator_rnd",
+      "legal",
+      "assessor",
+      "member",
+    ];
+    for (const r of lain) {
+      expect(can(orang(r), "create_signal_work")).toBe(false);
+    }
+  });
+
+  it("memegang create_work_task TIDAK berarti boleh membuat Work dari Signal", () => {
+    const u = orang("member");
+    expect(can(u, "create_work_task")).toBe(true);
+    expect(can(u, "create_signal_work")).toBe(false);
+  });
+
+  it("membuat Work dan mengabaikan Signal dua pintu berbeda", () => {
+    const u = orang("area_coordinator");
+    expect(can(u, "create_signal_work")).toBe(true);
+    expect(can(u, "manage_signals")).toBe(false);
+  });
+
+  it("yang tidak boleh membuka Command Center tidak boleh membuat Work", () => {
+    for (const r of ["supervisor", "bar_rnd", "data_operation"] as Role[]) {
+      expect(canReachMenu(orang(r), MENU_COMMAND_CENTER)).toBe(false);
+      expect(can(orang(r), "create_signal_work")).toBe(false);
+    }
+  });
+});
+
+/* ──────────── 7. otorisasi TIDAK disalin ke basis data (AD-20 · J.1) ──────────── */
+
+describe("fungsi penulis Z-02 bukan sumber kebenaran izin", () => {
+  const migrasi = readFileSync(
+    join(process.cwd(), "supabase/migrations/0116_work_rpc.sql"),
+    "utf8",
+  );
+  // Komentar dibuang lebih dulu: berkas ini menjelaskan panjang lebar KENAPA
+  // otorisasi tidak ada di dalamnya, dan penjelasan itu tidak boleh terbaca
+  // sebagai pelanggaran oleh penjaganya sendiri.
+  const kode = migrasi
+    .replace(/\/\*[\s\S]*?\*\//g, "")
+    .split("\n")
+    .filter((b) => !b.trimStart().startsWith("--"))
+    .join("\n");
+
+  it("tidak menyalin ROLE_PERMISSIONS maupun peta peran→izin", () => {
+    for (const pola of ["ROLE_PERMISSIONS", "role_permissions", "create_signal_work", "manage_signals"]) {
+      expect(kode).not.toContain(pola);
+    }
+  });
+
+  it("tidak membaca kolom role siapa pun", () => {
+    expect(kode).not.toMatch(/\brole\b/i);
+  });
+
+  it("tidak memakai SQL dinamis", () => {
+    expect(kode).not.toMatch(/execute\s+(format|immediate)|quote_ident|quote_literal/i);
+  });
+
+  it("tidak menyentuh tasks maupun lifecycle Signal", () => {
+    expect(kode).not.toMatch(/\btasks\b/);
+    expect(kode).not.toMatch(/(update|delete\s+from)\s+signals\b/i);
+  });
+
+  it("satu-satunya penjaga beraktor adalah konsistensi owner saat penyelesaian", () => {
+    expect(kode).toContain("p_oleh is distinct from v_owner");
+  });
+
+  it("keenam fungsi penulis security definer dengan search_path eksplisit", () => {
+    const nama = kode.match(/create or replace function (gwg_\w+)/g) ?? [];
+    expect(nama).toHaveLength(6);
+    expect((kode.match(/security definer/g) ?? []).length).toBe(6);
+    // 6 fungsi penulis + 3 fungsi trigger yang diperluas. `work_riwayat_hanya_bertambah`
+    // sengaja TIDAK ada di sini: isinya pada `0115` sudah persis yang dituntut kontrak.
+    expect((kode.match(/set search_path = public, pg_temp/g) ?? []).length).toBe(9);
+  });
+
+  it("keenam fungsi dicabut dari public/anon/authenticated dan hanya service_role", () => {
+    expect((kode.match(/revoke all on function gwg_\w+\([^)]*\) from public, anon, authenticated;/g) ?? []).length).toBe(6);
+    expect((kode.match(/grant execute on function gwg_\w+\([^)]*\) to service_role;/g) ?? []).length).toBe(6);
+  });
+
+  it("tenggat offset murni — tanpa pembulatan akhir hari (AD-20 · J.2)", () => {
+    expect(kode).toContain("v_tenggat := v_anchor + make_interval(days => v_hari);");
+    expect(kode).not.toMatch(/23:59|date_trunc|end of day/i);
   });
 });

@@ -2268,6 +2268,110 @@ adanya sebagai aturan khusus pembatalan — I-25 mewajibkan **riwayatnya**, I-21
 mewajibkan **alasannya**. Transisi normal tidak menuntut alasan, dan tidak ada
 alasan kosong yang boleh menyamar sebagai alasan.
 
+### J · Tiga hal yang dikunci Z-02 Step 3
+
+Ketiganya muncul sebagai pertanyaan terbuka saat implementasi, dan ketiganya
+diputuskan Owner sebelum satu barisnya dipakai.
+
+#### J.1 · `create_signal_work` adalah izin aplikasi, bukan izin basis data
+
+**Decision** — `create_signal_work` hidup di `src/lib/rbac.ts` dan diperiksa
+lapisan aplikasi. Fungsi penulis SQL **tidak boleh** menyalin
+`ROLE_PERMISSIONS`, memetakan peran ke izin, maupun menjadi sumber kebenaran
+otorisasi. Pemegangnya persis tiga peran yang sudah dikunci O-06:
+`super_admin`, `head_operation`, `area_coordinator`. `manage_signals` memakai
+izin yang sudah ada dan tidak dibuat ulang.
+
+**Status** — LOCKED
+
+**Rationale** — AD-20 · C dan O-12 sudah mengunci otorisasi di lapisan
+aplikasi. Memeriksanya di SQL berarti dua daftar izin untuk satu aturan, dan
+yang kedua akan menyimpang diam-diam. O-06 Impact sendiri menyatakan izin ini
+dibuat pada gate implementasi — dan gate inilah gate itu.
+
+**Impact** — Satu-satunya penjaga beraktor di basis data tetap yang dikunci
+AD-20 · C: penyelesaian ditolak bila pelaku yang disampaikan bukan
+`works.owner_id`. Ia penjaga konsistensi, bukan autentikasi. Tidak ada peran
+baru, tidak ada izin lain yang berubah, tidak ada perubahan model autentikasi.
+
+#### J.2 · Tenggat adalah offset murni, bukan akhir hari
+
+**Decision** — Tenggat dihitung `anchor + N hari` — offset murni, tanpa
+pembulatan ke akhir hari, tanpa `23:59:59`, tanpa aturan hari kerja.
+`tenggat_zona = 'Asia/Jakarta'` tetap disimpan sebagai snapshot kalender
+bisnisnya. Alurnya tetap `policy input → anchor → calculation → stored result`,
+versi `Z02-SLA-v1`.
+
+**Status** — LOCKED
+
+**Rationale** — O-04 mengeja offset per kategori tetapi tidak pernah menyebut
+pembulatan. Menambahkan aturan akhir hari berarti memindahkan tenggat setiap
+Work beberapa jam tanpa satu keputusan pun yang menuntutnya.
+
+**Impact** — O-04 tidak berubah maknanya; bagian ini menutup satu-satunya
+bacaan kedua yang mungkin. Work berkategori `high` yang dibuat pukul 10.17 WIB
+jatuh tempo pukul 10.17 WIB tiga hari kemudian.
+
+#### J.3 · Pelepasan tidak bisa ditarik kembali, dan penugasan tidak dihapus
+
+**Decision**
+
+| yang dilarang | putusan |
+| --- | --- |
+| mengosongkan `signal_work.dilepas_pada` \| `dilepas_oleh` \| `alasan` | DILARANG |
+| menulis ulang trio pelepasan yang sudah terisi | DILARANG |
+| mengaitkan ulang Signal yang kaitannya pernah dilepas | DILARANG |
+| `DELETE` pada `work_executors` | DILARANG, termasuk pada Work non-terminal |
+
+Pelaksana hanya berhenti lewat pelepasan lunak yang membawa `dilepas_pada` dan
+`dilepas_oleh`.
+
+**Status** — LOCKED
+
+**Rationale** — Trio pelepasan adalah satu-satunya jejak bahwa sebuah kaitan
+pernah dianggap salah; mengosongkannya menghidupkan kaitan lama tanpa menyebut
+siapa dan kenapa. `DELETE` pada penugasan melewati audit pelepasan seluruhnya,
+dan larangan yang hanya berlaku sesudah Work terminal bisa dilewati dengan
+menghapus barisnya sebelum Work terminal — yang melemahkan I-18.
+
+**Impact** — Invariant baru **I-26** dan **I-27**. Kalau kebutuhan bisnis
+menuntut kaitan Signal yang baru pada Work yang sama, itu **belum termasuk
+kontrak Z-02** dan ditolak untuk saat ini. O-10 tidak berubah maknanya: ia
+mengunci pelepasan yang lunak, J.3 mengunci bahwa yang lunak itu tetap
+permanen.
+
+### K · Pelepasan pelaksana juga rekam audit yang beku
+
+**Decision** — Setelah `work_executors.dilepas_pada` dan `dilepas_oleh`
+terisi, keduanya **tidak boleh dikosongkan, diganti, maupun digeser**.
+
+| keadaan | putusan |
+| --- | --- |
+| `dilepas_pada` \| `dilepas_oleh` masih NULL | boleh terisi **satu kali**, bersama-sama |
+| keduanya sudah terisi → kembali NULL | DILARANG |
+| keduanya sudah terisi → diganti nilainya | DILARANG |
+| keduanya sudah terisi → digeser waktunya | DILARANG |
+| menugaskan ulang pelaksana yang sudah dilepas | DILARANG |
+| `DELETE` baris `work_executors` | DILARANG (tetap, I-27) |
+
+Yang **tidak berubah**: owner ≠ pelaksana, pelaksana aktif terakhir tidak boleh
+dilepas (I-18), pelaksana lintas departemen tetap diizinkan, dan snapshot
+`departemen_saat_ditugaskan` tetap beku.
+
+**Status** — LOCKED
+
+**Rationale** — J.3 menutup `DELETE` karena ia melewati audit pelepasan. Tetapi
+mengosongkan `dilepas_pada` dan `dilepas_oleh` menghapus audit yang sama persis
+tanpa menghapus satu baris pun — lubang yang sama, lewat pintu yang lain.
+Prinsipnya identik dengan T-L pada `signal_work`: yang sudah berhenti, jejak
+berhentinya tidak bisa ditarik kembali.
+
+**Impact** — Invariant baru **I-28**. I-27 **tidak berubah maknanya** — ia
+melarang penghapusan baris, I-28 membekukan isi jejak pelepasannya; keduanya
+berdiri berdampingan untuk permukaan yang berbeda. Tidak ada kolom baru, tidak
+ada trigger baru, tidak ada migrasi baru: penegakannya menumpang
+`work_executors_terjaga()` yang sudah ada.
+
 ### Invariant tambahan
 
 | # | invariant |
@@ -2277,12 +2381,20 @@ alasan kosong yang boleh menyamar sebagai alasan.
 | I-23 | Penyelesaian Work hanya tercatat atas nama Owner-nya |
 | I-24 | Work berstatus `completed` atau `cancelled` adalah terminal dan tidak dapat mengalami mutasi lifecycle maupun penugasan, termasuk owner, `primary_department`, tenggat, pelaksana, dan kaitan Signal aktif — baik dilepas maupun ditambah (AD-20 · H) |
 | I-25 | Setiap perubahan status Work wajib memiliki satu `work_riwayat` ber-`jenis = 'status'` pada transaksi yang sama; alasan wajib untuk transisi menuju `cancelled` |
+| I-26 | Trio pelepasan `signal_work` dibekukan begitu terisi: tidak dapat dikosongkan, ditulis ulang, maupun dihidupkan kembali |
+| I-27 | Baris `work_executors` tidak pernah dihapus; penugasan hanya berhenti lewat pelepasan lunak yang membawa `dilepas_pada` dan `dilepas_oleh` |
+| I-28 | Setelah `dilepas_pada` dan `dilepas_oleh` pada `work_executors` terisi, keduanya tidak boleh dikosongkan, ditulis ulang, maupun digeser; pelepasan pelaksana adalah rekam audit yang tidak dapat diaktifkan kembali |
 
-I-01 … I-20 tidak berubah. I-21, I-22, dan I-23 tidak berubah maknanya.
+I-01 … I-20 tidak berubah. I-21 sampai I-27 tidak berubah maknanya.
 
 ### Yang TIDAK diputuskan di sini
 
-Tidak ada. Seluruh keputusan yang ditemukan Z-02 Step 2B Preflight Audit dan
-Z-02 Implementation Preflight sudah dikunci di AD-20 · A sampai I —
-termasuk BLOCKER-1 (kaitan Signal pada Work terminal, AD-20 · H) dan
-OPEN-1 (riwayat untuk setiap transisi status, AD-20 · I).
+Tidak ada. Seluruh keputusan yang ditemukan Z-02 Step 2B Preflight Audit,
+Z-02 Implementation Preflight, dan Z-02 Step 3 sudah dikunci di AD-20 · A
+sampai K — termasuk BLOCKER-1 (kaitan Signal pada Work terminal, AD-20 · H),
+OPEN-1 (riwayat untuk setiap transisi status, AD-20 · I), BLOCKER-2
+(`create_signal_work` sebagai izin aplikasi, AD-20 · J.1), dan immutabilitas
+rekam pelepasan pelaksana (AD-20 · K).
+
+Otorisasi lapisan aplikasi untuk keenam fungsi penulis — layar, server action,
+dan `can()`-nya — adalah pekerjaan gate berikutnya, bukan gate ini.
