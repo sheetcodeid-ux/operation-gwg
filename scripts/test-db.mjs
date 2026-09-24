@@ -30,7 +30,7 @@
  *            npm run test:db -- --keluar <berkas>  ← tulis SQL backfill-nya
  */
 
-import { execFileSync } from "node:child_process";
+import { execFileSync, spawn } from "node:child_process";
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
@@ -2543,6 +2543,1196 @@ function ujiTunggakanPeriode() {
 
 /* ─────────────────────────── jalan ─────────────────────────── */
 
+/* ═══════════════════ 28 · Z-02 WORK SIGNAL — 0111 → 0117 ═══════════════════ */
+
+/**
+ * ┌─ KENAPA BLOK INI ADA, DAN KENAPA IA BUKAN VITEST ────────────────────────┐
+ * │                                                                          │
+ * │ Seluruh penegakan Z-02 hidup di dalam PostgreSQL: empat trigger, enam    │
+ * │ fungsi penulis, dan dua advisory lock. Tidak satu pun dapat dibuktikan   │
+ * │ vitest — `expect()` tidak tahu apa yang akan ditolak basis data, dan     │
+ * │ lomba antara dua transaksi tidak punya wujud sama sekali di Node.        │
+ * │                                                                          │
+ * │ Sebelum ini buktinya ada, tetapi hanya sebagai skrip sekali pakai di     │
+ * │ luar repositori — yang berarti ia lenyap begitu jendela ditutup, dan     │
+ * │ regresi berikutnya tidak akan ditangkap siapa pun. Blok ini              │
+ * │ memindahkannya ke dalam repositori tanpa mengubah satu huruf pun         │
+ * │ migrasinya.                                                              │
+ * │                                                                          │
+ * │ MIGRASINYA DIJALANKAN APA ADANYA, dari berkas produksi. Tidak ada tabel  │
+ * │ tiruan: `signals` lahir dari `0111` yang sesungguhnya, lengkap dengan    │
+ * │ seluruh kunci asingnya ke `rule_versions`, `kpi_values`, dan `outlets`.  │
+ * │ Perancah tiruan hanya akan menguji tabel yang tidak pernah ada di        │
+ * │ produksi.                                                                │
+ * └──────────────────────────────────────────────────────────────────────────┘
+ */
+
+const MIGRASI_Z02 = [
+  "0111_signals.sql",
+  "0113_signal_diakui.sql",
+  "0114_work_signal.sql",
+  "0115_work_enforcement.sql",
+  "0116_work_rpc.sql",
+  "0117_work_deadline_category_immutable.sql",
+].map((n) => join(AKAR, "supabase/migrations", n));
+
+const M0116 = join(AKAR, "supabase/migrations/0116_work_rpc.sql");
+const M0117 = join(AKAR, "supabase/migrations/0117_work_deadline_category_immutable.sql");
+
+/** Id Signal yang dipakai seluruh uji Z-02 — diisi `semaiZ02()`. */
+const SIG = { a: 0, b: 0, c: 0 };
+
+/** Tidur yang benar-benar menahan utas utama; dipakai uji konkurensi. */
+const jeda = (ms) => {
+  Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
+};
+
+/** Benar bila SQL-nya DITERIMA — kebalikan `ditolak()`, tanpa menghentikan run. */
+function diterima(nama, perintah, rinci = "") {
+  try {
+    sql(perintah, { diam: true });
+    ok(nama, true, rinci || "diterima");
+  } catch (e) {
+    ok(nama, false, (e.stderr || e.message || "").toString().split("\n")[0].slice(0, 160));
+  }
+}
+
+/** Benar bila SQL-nya menjawab `t`/`true`. */
+function nilai(nama, perintah) {
+  try {
+    const jawab = satu(perintah, { diam: true });
+    ok(nama, benar(jawab), jawab);
+  } catch (e) {
+    ok(nama, false, (e.stderr || e.message || "").toString().split("\n")[0].slice(0, 160));
+  }
+}
+
+/**
+ * Menunggu sesi latar benar-benar selesai.
+ *
+ * SIGTERM TIDAK DIPAKAI, dan itu bukan kerapian melainkan keharusan: yang
+ * dijalankan `sudo`, dan sinyalnya berhenti di situ — `psql` di bawahnya tetap
+ * hidup memegang koneksi, lalu `drop database` pada pembersihan gagal dengan
+ * "is being accessed by other users". Sesi latar selalu ber-COMMIT sendiri
+ * sesudah `pg_sleep`, jadi yang benar adalah menunggunya, bukan menembaknya.
+ */
+function tuntaskan(anak) {
+  jeda(2500);
+  try {
+    sql(
+      `select pg_terminate_backend(pid) from pg_stat_activity
+         where datname = current_database() and pid <> pg_backend_pid()
+           and application_name = 'psql';`,
+      { diam: true },
+    );
+  } catch {
+    /* tidak ada sisa sesi — memang yang diharapkan */
+  }
+  void anak;
+}
+
+/** Sesi psql kedua yang berjalan BERSAMAAN — satu-satunya cara menguji lomba. */
+function sesiLatar(perintah) {
+  /*
+   * SELURUH skripnya lewat satu `-c`, BUKAN lewat stdin.
+   *
+   * Lewat stdin pernah menggantung tanpa jejak: utas utama Node tertahan
+   * menunggu sesi depan, jadi gelung peristiwanya tidak pernah jalan, dan
+   * `stdin.end()` tidak pernah benar-benar menutup pipanya. `psql` menerima
+   * `begin` dan `pg_sleep`, lalu duduk sebagai "idle in transaction"
+   * selamanya — sesi depan menunggu kunci yang tidak akan pernah dilepas.
+   *
+   * Satu `-c` dikirim sebagai satu pesan kueri dan dijalankan sampai habis,
+   * tanpa satu pun tulisan yang perlu digelontorkan dari sisi Node.
+   */
+  return spawn(
+    "sudo",
+    ["-u", "postgres", "psql", "-v", "ON_ERROR_STOP=1", "-X", "-q", "-A", "-t", "-d", DB, "-c", perintah],
+    { stdio: ["ignore", "ignore", "ignore"], detached: false },
+  );
+}
+
+/* ───────────────────────── migrasi & semai ───────────────────────── */
+
+function jalankanMigrasiZ02() {
+  judul("28 · migrasi Z-02 — 0111 · 0113 · 0114 · 0115 · 0116 · 0117");
+
+  // `0111` sudah dijalankan lebih dulu pada jalur `--data`. Menjalankannya dua
+  // kali aman (`create table if not exists`), tetapi melewatinya membuat maksud
+  // blok ini terbaca: yang dibutuhkan KEADAANNYA, bukan pengulangannya.
+  const adaSignals = Number(satu(`select count(*) from information_schema.tables where table_name='signals';`));
+  for (const berkas of MIGRASI_Z02) {
+    if (!existsSync(berkas)) throw new Error(`migrasi tidak ditemukan: ${berkas}`);
+    if (adaSignals > 0 && berkas.endsWith("0111_signals.sql")) continue;
+    sql(readFileSync(berkas, "utf8"));
+  }
+
+  const tabel = sql(
+    `select table_name from information_schema.tables where table_schema='public'
+       and table_name in ('works','signal_work','work_executors','work_riwayat') order by 1;`,
+  ).split("\n");
+  ok("empat tabel Z-02 lahir", tabel.length === 4, tabel.join(", "));
+
+  const fungsi = Number(
+    satu(`select count(*) from pg_proc p join pg_namespace n on n.oid=p.pronamespace
+            where n.nspname='public' and p.proname in
+            ('gwg_buat_work','gwg_kaitkan_signal_work','gwg_lepas_signal_work',
+             'gwg_kelola_executor_work','gwg_ubah_work','gwg_ubah_status_work');`),
+  );
+  ok("keenam fungsi penulis terpasang", fungsi === 6, `${fungsi} fungsi`);
+
+  const trig = Number(
+    satu(`select count(*) from pg_trigger where not tgisinternal and tgname in
+            ('works_mutasi_tercatat_trg','work_executors_terjaga_trg',
+             'signal_work_terjaga_trg','work_riwayat_hanya_bertambah_trg');`),
+  );
+  ok("keempat trigger terpasang", trig === 4, `${trig} trigger`);
+}
+
+function semaiZ02() {
+  // Orang-orangnya. `u_tanpadep` sengaja tanpa departemen, `u_mati` sengaja
+  // nonaktif — keduanya sasaran uji penolakan, bukan sisa data.
+  sql(`
+    insert into users (id, name, email, role, department, active) values
+      ('u_owner','Owner','owner@z02.test','head_operation','Operational',true),
+      ('u_owner2','Owner Dua','owner2@z02.test','head_operation','Operational',true),
+      ('u_exec1','Exec Satu','exec1@z02.test','member','Operational',true),
+      ('u_exec2','Exec Dua','exec2@z02.test','member','Human Capital',true),
+      ('u_mgr','Manajer','mgr@z02.test','super_admin','Operational',true),
+      ('u_mati','Nonaktif','mati@z02.test','member','Operational',false),
+      ('u_tanpadep','Tanpa Dep','tanpadep@z02.test','member',null,true)
+    on conflict (id) do update
+      set active = excluded.active, department = excluded.department;
+  `);
+
+  // Satu angka KPI sungguhan sebagai sandaran Signal. `signals` ber-FK ke
+  // `kpi_values` DUA KALI (deteksi dan pengamatan terakhir), jadi barisnya
+  // harus benar-benar ada — bukan id karangan.
+  // Periode sendiri, jauh dari periode yang dipakai blok lain: `kpi_values`
+  // punya unique index per (definisi, cakupan, periode, skala), dan menabraknya
+  // membuat blok ini gagal karena alasan yang bukan miliknya.
+  const kpi = satu(`
+    insert into kpi_values (kpi_definition_id, cakupan, outlet_id, periode, skala, nilai, sumber, rumus)
+      values ('sales.net_sales', 'outlet', '${outletUji}', '2029-12', 'bulanan', 100, 'uji-z02', 'uji')
+    returning id;
+  `);
+
+  // Tiga versi aturan yang BERBEDA: `signals_unik` mengunci
+  // (rule_version_id, cakupan, cakupan_id, periode, skala), jadi tiga Signal
+  // pada outlet dan periode yang sama hanya sah bila versinya berbeda.
+  const rv = sql(`select id from rule_versions order by id limit 3;`).split("\n").map(Number);
+  ok("tiga versi aturan tersedia sebagai sandaran Signal", rv.length === 3, rv.join(", "));
+
+  const ids = sql(`
+    insert into signals (
+      rule_version_id, cakupan, outlet_id, periode, skala, kpi_definition_id,
+      kpi_value_id, nilai_actual, nilai_ambang, operator, severity, status_kpi,
+      kpi_value_id_terakhir, status_kpi_terakhir
+    )
+    select s.rv, 'outlet', '${outletUji}', '2029-12', 'bulanan', 'sales.net_sales',
+           ${kpi}, 41, 30, 'gt', s.sev, 'final', ${kpi}, 'final'
+      from (values (${rv[0]}, 'critical'), (${rv[1]}, 'high'), (${rv[2]}, 'low')) as s(rv, sev)
+    returning id;
+  `).split("\n");
+
+  [SIG.a, SIG.b, SIG.c] = ids.map(Number);
+  ok(
+    "tiga Signal sungguhan tersemai lewat skema 0111",
+    ids.length === 3 && SIG.a > 0 && SIG.b > 0 && SIG.c > 0,
+    ids.join(", "),
+  );
+}
+
+/** Kembali ke titik nol Z-02. `signals` TIDAK ikut — ia milik 0111, bukan blok ini. */
+function resetZ02() {
+  sql(`truncate signal_work, work_riwayat, work_executors, works restart identity;`);
+}
+
+/** Work baku: owner u_owner, dua Signal, satu pelaksana. Selalu ber-`id = 1`. */
+const BUAT = () =>
+  `select gwg_buat_work('Kerja uji','','u_owner','Operational','normal',array[${SIG.a},${SIG.b}]::bigint[],array['u_exec1'],'u_mgr');`;
+
+function dasar() {
+  resetZ02();
+  sql(BUAT());
+}
+
+/* ───────────────────────── skema ───────────────────────── */
+
+function ujiZ02Skema() {
+  judul("29 · Z-02 skema — kunci asing, kunci utama, CHECK, dan RLS");
+  resetZ02();
+
+  // Seluruh kolom NOT NULL diisi, supaya yang menolak benar-benar batasan yang
+  // sedang diuji. Baris yang kurang kolomnya ditolak lebih dulu oleh NOT NULL —
+  // dan ditolak karena alasan yang salah terlihat persis seperti lulus.
+  const barisWork = (o = {}) => {
+    const w = {
+      judul: "X", owner: "u_owner", dep: "Ops", status: "open", kategori: "normal",
+      anchor: "work_dibuat", zona: "Asia/Jakarta", versi: "Z02-SLA-v1", ...o,
+    };
+    return `insert into works (judul, deskripsi, owner_id, primary_department, status,
+        tenggat_kategori, tenggat_anchor, tenggat_anchor_pada, tenggat_zona,
+        tenggat_kebijakan_versi, tenggat, tenggat_dihitung_pada, dibuat_oleh)
+      values ('${w.judul}', '', '${w.owner}', '${w.dep}', '${w.status}', '${w.kategori}',
+        '${w.anchor}', now(), '${w.zona}', '${w.versi}', now() + interval '5 days', now(), 'u_mgr');`;
+  };
+
+  ditolak("S1 · FK owner_id ke users", barisWork({ owner: "u_hantu" }), "foreign key");
+  ditolak("S2 · CHECK judul tidak boleh kosong", barisWork({ judul: "   " }), "works_judul_terisi");
+  ditolak("S3 · CHECK status di luar empat nilai sah", barisWork({ status: "blocked" }), "works_status_sah");
+  ditolak("S4 · CHECK kategori tenggat di luar empat nilai sah", barisWork({ kategori: "besok" }), "works_tenggat_kategori_sah");
+  ditolak("S5 · CHECK departemen utama tidak boleh kosong (I-05)", barisWork({ dep: "   " }), "works_departemen_terisi");
+  ditolak("S5b · CHECK titik tolak tenggat hanya `work_dibuat`", barisWork({ anchor: "signal_lahir" }), "works_tenggat_anchor_sah");
+  ditolak("S5c · CHECK zona tenggat tidak boleh kosong", barisWork({ zona: "  " }), "works_tenggat_zona_terisi");
+  ditolak("S5d · CHECK versi kebijakan tidak boleh kosong", barisWork({ versi: "  " }), "works_tenggat_versi_terisi");
+
+  dasar();
+  ditolak(
+    "S6 · PK majemuk (signal_id, work_id) menolak pasangan kembar (I-13)",
+    `insert into signal_work (signal_id, work_id, dikaitkan_oleh) values (${SIG.a}, 1, 'u_mgr');`,
+    "duplicate key",
+  );
+  ditolak(
+    "S7 · PK majemuk (work_id, user_id) menolak pasangan kembar (I-14)",
+    `insert into work_executors (work_id, user_id, departemen_saat_ditugaskan, ditugaskan_oleh)
+     values (1, 'u_exec1', 'Operational', 'u_mgr');`,
+    "duplicate key",
+  );
+  ditolak(
+    "S8 · FK signal_id ke signals",
+    `insert into signal_work (signal_id, work_id, dikaitkan_oleh) values (999999, 1, 'u_mgr');`,
+    "foreign key",
+  );
+  ditolak(
+    "S9 · FK work_id ke works",
+    `insert into work_executors (work_id, user_id, departemen_saat_ditugaskan, ditugaskan_oleh)
+     values (999, 'u_exec2', 'Ops', 'u_mgr');`,
+    "foreign key",
+  );
+  ditolak(
+    "S10 · CHECK trio pelepasan harus utuh",
+    `insert into signal_work (signal_id, work_id, dikaitkan_oleh, dilepas_pada)
+     values (${SIG.c}, 1, 'u_mgr', now());`,
+    "signal_work_pelepasan_utuh",
+  );
+
+  const rls = sql(
+    `select relname from pg_class where relname in
+       ('works','signal_work','work_executors','work_riwayat') and relrowsecurity order by 1;`,
+  ).split("\n");
+  ok("S11 · RLS menyala di keempat tabel Z-02", rls.length === 4, rls.join(", "));
+
+  const policy = satu(
+    `select count(*) from pg_policies where tablename in
+       ('works','signal_work','work_executors','work_riwayat');`,
+  );
+  ok("S12 · tanpa policy permisif — menolak secara bawaan", Number(policy) === 0, `${policy} policy`);
+
+  nilai(
+    "S13 · anon dan authenticated tidak punya hak apa pun atas keempatnya",
+    `select bool_and(not has_table_privilege(r, t, p))
+       from unnest(array['anon','authenticated']) r,
+            unnest(array['works','signal_work','work_executors','work_riwayat']) t,
+            unnest(array['select','insert','update','delete']) p;`,
+  );
+}
+
+/* ───────────────────────── CREATE ───────────────────────── */
+
+function ujiZ02Buat() {
+  judul("30 · Z-02 gwg_buat_work — satu transaksi, atau tidak sama sekali");
+
+  resetZ02();
+  diterima("1 · create yang sah", BUAT());
+  nilai(
+    "1b · work + kaitan + pelaksana + riwayat lahir bersama (atomic)",
+    `select (select count(*) from works)=1 and (select count(*) from signal_work where work_id=1)=2
+        and (select count(*) from work_executors where work_id=1)=1;`,
+  );
+
+  resetZ02();
+  ditolak(
+    "2 · tanpa Signal ditolak (I-01)",
+    `select gwg_buat_work('K','','u_owner','Operational','normal',array[]::bigint[],array['u_exec1'],'u_mgr');`,
+    "signal",
+  );
+  ditolak(
+    "3 · tanpa pelaksana ditolak (I-04)",
+    `select gwg_buat_work('K','','u_owner','Operational','normal',array[${SIG.a}]::bigint[],array[]::text[],'u_mgr');`,
+    "pelaksana",
+  );
+  ditolak(
+    "4 · owner merangkap pelaksana ditolak (I-03)",
+    `select gwg_buat_work('K','','u_owner','Operational','normal',array[${SIG.a}]::bigint[],array['u_owner'],'u_mgr');`,
+    "owner",
+  );
+  ditolak(
+    "5 · owner nonaktif ditolak",
+    `select gwg_buat_work('K','','u_mati','Operational','normal',array[${SIG.a}]::bigint[],array['u_exec1'],'u_mgr');`,
+    "owner",
+  );
+  ditolak(
+    "5b · owner yang tidak ada ditolak",
+    `select gwg_buat_work('K','','u_hantu','Operational','normal',array[${SIG.a}]::bigint[],array['u_exec1'],'u_mgr');`,
+    "owner",
+  );
+  ditolak(
+    "5c · kategori tenggat tidak dikenal ditolak",
+    `select gwg_buat_work('K','','u_owner','Operational','besok',array[${SIG.a}]::bigint[],array['u_exec1'],'u_mgr');`,
+    "kategori tenggat",
+  );
+  ditolak(
+    "5d · pelaksana tanpa departemen ditolak",
+    `select gwg_buat_work('K','','u_owner','Operational','normal',array[${SIG.a}]::bigint[],array['u_tanpadep'],'u_mgr');`,
+    "departemen",
+  );
+  nilai("5e · tidak ada Work separuh jadi sesudah tujuh penolakan", `select count(*)=0 from works;`);
+
+  resetZ02();
+  sql(`
+    select gwg_buat_work('U','','u_owner','Ops','urgent',array[${SIG.a}]::bigint[],array['u_exec1'],'u_mgr');
+    select gwg_buat_work('H','','u_owner','Ops','high',  array[${SIG.b}]::bigint[],array['u_exec1'],'u_mgr');
+    select gwg_buat_work('N','','u_owner','Ops','normal',array[${SIG.c}]::bigint[],array['u_exec1'],'u_mgr');
+    select gwg_buat_work('L','','u_owner','Ops','low',   array[${SIG.a}]::bigint[],array['u_exec2'],'u_mgr');
+  `);
+  nilai(
+    "6 · tenggat 1/3/5/7 hari + snapshot kebijakan beku (I-09 · I-10)",
+    `select bool_and(
+       tenggat - tenggat_anchor_pada = make_interval(days => case tenggat_kategori
+         when 'urgent' then 1 when 'high' then 3 when 'normal' then 5 else 7 end)
+       and tenggat_zona='Asia/Jakarta' and tenggat_kebijakan_versi='Z02-SLA-v1'
+       and tenggat_anchor='work_dibuat' and status='open') from works;`,
+  );
+}
+
+/* ───────────────────────── SIGNAL ───────────────────────── */
+
+function ujiZ02Signal() {
+  judul("31 · Z-02 kaitan Signal — melepas yang terakhir tidak pernah boleh");
+
+  dasar();
+  diterima("7 · kaitkan Signal ketiga", `select gwg_kaitkan_signal_work(1,${SIG.c},'u_mgr');`);
+  nilai("7b · kaitannya benar-benar tercatat", `select count(*)=3 from signal_work where work_id=1;`);
+  nilai(
+    "8 · kaitan kembar mengembalikan berubah:false",
+    `select (gwg_kaitkan_signal_work(1,${SIG.c},'u_mgr')->>'berubah')='false';`,
+  );
+
+  resetZ02();
+  sql(`
+    select gwg_buat_work('T','','u_owner','Ops','normal',array[${SIG.a},${SIG.b}]::bigint[],array['u_exec1'],'u_mgr');
+    select gwg_ubah_status_work(1,'in_progress',null,'u_mgr');
+    select gwg_ubah_status_work(1,'completed',null,'u_owner');
+  `);
+  ditolak(
+    "9 · mengaitkan Signal ke Work terminal ditolak (I-24)",
+    `select gwg_kaitkan_signal_work(1,${SIG.c},'u_mgr');`,
+    "sudah",
+  );
+
+  dasar();
+  diterima("10 · melepas kaitan yang sah", `select gwg_lepas_signal_work(1,${SIG.b},'salah kait','u_mgr');`);
+  nilai(
+    "10b · pelepasan LUNAK: barisnya tetap ada dan bertanda (I-16)",
+    `select count(*)=1 from signal_work where work_id=1 and signal_id=${SIG.b}
+       and dilepas_pada is not null and dilepas_oleh='u_mgr';`,
+  );
+  ditolak(
+    "11 · melepas kaitan aktif TERAKHIR ditolak (I-17)",
+    `select gwg_lepas_signal_work(1,${SIG.a},'coba','u_mgr');`,
+    "terakhir",
+  );
+  ditolak(
+    "11b · melepas tanpa alasan ditolak",
+    `select gwg_lepas_signal_work(1,${SIG.a},'   ','u_mgr');`,
+    "alasan",
+  );
+  nilai(
+    "11c · melepas ulang mengembalikan berubah:false",
+    `select (gwg_lepas_signal_work(1,${SIG.b},'lagi','u_mgr')->>'berubah')='false';`,
+  );
+  ditolak(
+    "11d · DELETE baris kaitan ditolak",
+    `delete from signal_work where work_id=1 and signal_id=${SIG.b};`,
+    "tidak",
+  );
+}
+
+/* ───────────────────────── EXECUTOR ───────────────────────── */
+
+function ujiZ02Executor() {
+  judul("32 · Z-02 pelaksana — lintas departemen boleh, habis tidak");
+
+  dasar();
+  diterima("12 · menambah pelaksana kedua", `select gwg_kelola_executor_work(1,'u_exec2','tambah','u_mgr');`);
+  nilai(
+    "13 · menambah yang sama mengembalikan berubah:false",
+    `select (gwg_kelola_executor_work(1,'u_exec2','tambah','u_mgr')->>'berubah')='false';`,
+  );
+  ditolak(
+    "14 · owner sebagai pelaksana ditolak (I-03)",
+    `select gwg_kelola_executor_work(1,'u_owner','tambah','u_mgr');`,
+    "owner",
+  );
+  diterima("15 · melepas pelaksana kedua", `select gwg_kelola_executor_work(1,'u_exec2','lepas','u_mgr');`);
+  nilai(
+    "16 · melepas yang sudah dilepas mengembalikan berubah:false",
+    `select (gwg_kelola_executor_work(1,'u_exec2','lepas','u_mgr')->>'berubah')='false';`,
+  );
+  ditolak(
+    "17 · melepas pelaksana aktif TERAKHIR ditolak (I-18)",
+    `select gwg_kelola_executor_work(1,'u_exec1','lepas','u_mgr');`,
+    "terakhir",
+  );
+  nilai(
+    "18 · pelaksana lintas departemen: snapshotnya berbeda dari primary (I-06)",
+    `select departemen_saat_ditugaskan='Human Capital' from work_executors
+       where work_id=1 and user_id='u_exec2';`,
+  );
+  ditolak(
+    "18b · snapshot departemen penugasan tidak boleh diubah",
+    `update work_executors set departemen_saat_ditugaskan='Lain' where work_id=1 and user_id='u_exec1';`,
+    "tidak",
+  );
+  ditolak(
+    "18c · DELETE baris pelaksana ditolak (I-27)",
+    `delete from work_executors where work_id=1 and user_id='u_exec2';`,
+    "tidak",
+  );
+
+  resetZ02();
+  sql(`
+    select gwg_buat_work('T','','u_owner','Ops','normal',array[${SIG.a}]::bigint[],array['u_exec1'],'u_mgr');
+    select gwg_ubah_status_work(1,'in_progress',null,'u_mgr');
+    select gwg_ubah_status_work(1,'cancelled','tidak jadi','u_mgr');
+  `);
+  ditolak(
+    "19 · menambah pelaksana pada Work terminal ditolak (I-24)",
+    `select gwg_kelola_executor_work(1,'u_exec2','tambah','u_mgr');`,
+    "sudah",
+  );
+  ditolak(
+    "19b · melepas pelaksana pada Work terminal ditolak (I-24)",
+    `select gwg_kelola_executor_work(1,'u_exec1','lepas','u_mgr');`,
+    "sudah",
+  );
+}
+
+/* ───────────────────────── MUTASI WORK ───────────────────────── */
+
+function ujiZ02Mutasi() {
+  judul("33 · Z-02 mutasi Work — tidak ada perubahan tanpa jejak beralasan");
+
+  dasar();
+  diterima("20 · ganti owner", `select gwg_ubah_work(1,'u_owner2',null,null,'owner lama cuti panjang','u_mgr');`);
+  nilai(
+    "20b · riwayat owner tercatat lengkap (I-20)",
+    `select count(*)=1 from work_riwayat where work_id=1 and jenis='owner'
+       and nilai_lama='u_owner' and nilai_baru='u_owner2'
+       and alasan='owner lama cuti panjang' and oleh='u_mgr';`,
+  );
+  diterima("21 · ganti departemen utama", `select gwg_ubah_work(1,null,'Human Capital',null,'salah domain','u_mgr');`);
+  nilai(
+    "21b · riwayat departemen tercatat (I-20)",
+    `select count(*)=1 from work_riwayat where work_id=1 and jenis='departemen'
+       and nilai_lama='Operational' and nilai_baru='Human Capital';`,
+  );
+  diterima(
+    "22 · geser tenggat",
+    `select gwg_ubah_work(1,null,null,now()+interval '10 days','perlu waktu tambahan','u_mgr');`,
+  );
+  nilai(
+    "22b · riwayat tenggat tercatat, snapshot kebijakan tetap (I-11 · I-19)",
+    `select count(*)=1 from work_riwayat r join works w on w.id=r.work_id
+       where r.work_id=1 and r.jenis='tenggat'
+         and w.tenggat_kebijakan_versi='Z02-SLA-v1' and w.tenggat_anchor='work_dibuat';`,
+  );
+  ditolak(
+    "22c · mengubah tanpa alasan ditolak (I-19 · I-20)",
+    `select gwg_ubah_work(1,'u_owner',null,null,'  ','u_mgr');`,
+    "alasan",
+  );
+  nilai(
+    "22d · ubah tanpa perubahan mengembalikan berubah:false",
+    `select (gwg_ubah_work(1,null,null,null,'tidak perlu','u_mgr')->>'berubah')='false';`,
+  );
+  ditolak("23 · UPDATE owner langsung tanpa riwayat ditolak", `update works set owner_id='u_owner' where id=1;`, "riwayat");
+  ditolak(
+    "23b · UPDATE tenggat langsung tanpa riwayat ditolak",
+    `update works set tenggat=now()+interval '99 days' where id=1;`,
+    "riwayat",
+  );
+  ditolak(
+    "24 · owner baru yang masih pelaksana aktif ditolak (I-03)",
+    `select gwg_ubah_work(1,'u_exec1',null,null,'coba','u_mgr');`,
+    "pelaksana",
+  );
+  ditolak("24b · owner baru nonaktif ditolak", `select gwg_ubah_work(1,'u_mati',null,null,'coba','u_mgr');`, "owner");
+
+  resetZ02();
+  sql(`
+    select gwg_buat_work('T','','u_owner','Ops','normal',array[${SIG.a}]::bigint[],array['u_exec1'],'u_mgr');
+    select gwg_ubah_status_work(1,'in_progress',null,'u_mgr');
+    select gwg_ubah_status_work(1,'completed',null,'u_owner');
+  `);
+  ditolak(
+    "25 · mutasi Work terminal lewat RPC ditolak (I-24)",
+    `select gwg_ubah_work(1,'u_owner2',null,null,'coba','u_mgr');`,
+    "sudah",
+  );
+  ditolak(
+    "25b · mutasi Work terminal lewat UPDATE langsung ditolak (I-24)",
+    `update works set primary_department='X' where id=1;`,
+    "sudah",
+  );
+}
+
+/* ───────────────────────── STATUS & RIWAYAT ───────────────────────── */
+
+function ujiZ02Status() {
+  judul("34 · Z-02 status — mesin status, kepemilikan penyelesaian, dan jejak sezaman");
+
+  dasar();
+  diterima("26 · open → in_progress", `select gwg_ubah_status_work(1,'in_progress',null,'u_mgr');`);
+  nilai(
+    "26b · riwayat status tercatat, tanpa alasan (I-25)",
+    `select count(*)=1 from work_riwayat where work_id=1 and jenis='status'
+       and nilai_lama='open' and nilai_baru='in_progress' and alasan is null;`,
+  );
+  diterima("27 · in_progress → completed oleh owner (I-23)", `select gwg_ubah_status_work(1,'completed',null,'u_owner');`);
+
+  dasar();
+  diterima("28 · open → cancelled beralasan (I-21)", `select gwg_ubah_status_work(1,'cancelled','anggaran ditarik','u_mgr');`);
+  nilai(
+    "28b · riwayat pembatalan membawa alasannya (I-21 · I-25)",
+    `select count(*)=1 from work_riwayat where work_id=1 and jenis='status'
+       and nilai_baru='cancelled' and alasan='anggaran ditarik';`,
+  );
+
+  resetZ02();
+  sql(`
+    select gwg_buat_work('K','','u_owner','Ops','normal',array[${SIG.a}]::bigint[],array['u_exec1'],'u_mgr');
+    select gwg_ubah_status_work(1,'in_progress',null,'u_mgr');
+  `);
+  diterima("29 · in_progress → cancelled beralasan", `select gwg_ubah_status_work(1,'cancelled','outlet tutup','u_mgr');`);
+
+  dasar();
+  ditolak("30 · open → completed ditolak (I-22)", `select gwg_ubah_status_work(1,'completed',null,'u_owner');`, "tidak sah");
+  ditolak("30b · status tidak dikenal ditolak (I-22)", `select gwg_ubah_status_work(1,'blocked',null,'u_mgr');`, "tidak dikenal");
+  ditolak("31 · cancelled tanpa alasan ditolak (I-21)", `select gwg_ubah_status_work(1,'cancelled','   ','u_mgr');`, "alasan");
+  ditolak("32 · UPDATE status langsung tanpa riwayat ditolak (I-25)", `update works set status='in_progress' where id=1;`, "riwayat");
+  ditolak(
+    "32b · UPDATE cancelled dengan riwayat tanpa alasan ditolak (I-21)",
+    `with r as (insert into work_riwayat (work_id,jenis,nilai_lama,nilai_baru,oleh)
+       values (1,'status','open','cancelled','u_mgr') returning 1)
+     update works set status='cancelled' where id=1;`,
+    "alasan",
+  );
+
+  // ── jejak dari transaksi LAIN tidak mengesahkan apa pun ──
+  //
+  // Inilah yang dijaga `r.xmin = pg_current_xact_id()::xid`. Tanpa itu, satu
+  // baris riwayat yang ditanam lebih dulu akan mengesahkan setiap UPDATE
+  // sesudahnya — dan jejaknya berhenti berarti apa-apa.
+  sql(`insert into work_riwayat (work_id,jenis,nilai_lama,nilai_baru,alasan,oleh)
+         values (1,'status','open','in_progress','ditanam lebih dulu','u_mgr');`);
+  ditolak(
+    "33 · riwayat dari transaksi sebelumnya ditolak (xmin)",
+    `update works set status='in_progress' where id=1;`,
+    "riwayat",
+  );
+  diterima(
+    "33b · riwayat + UPDATE dalam SATU transaksi diterima (xmin)",
+    `begin;
+     insert into work_riwayat (work_id,jenis,nilai_lama,nilai_baru,oleh)
+       values (1,'status','open','in_progress','u_mgr');
+     update works set status='in_progress' where id=1;
+     commit;`,
+  );
+  ditolak(
+    "34 · penyelesaian oleh bukan owner ditolak (I-23)",
+    `select gwg_ubah_status_work(1,'completed',null,'u_mgr');`,
+    "owner",
+  );
+  sql(`select gwg_ubah_status_work(1,'completed',null,'u_owner');`);
+  ditolak("35 · mutasi status Work terminal ditolak (I-24)", `select gwg_ubah_status_work(1,'cancelled','coba','u_mgr');`, "sudah");
+  ditolak("36 · membuka kembali Work terminal ditolak (I-22 · I-24)", `select gwg_ubah_status_work(1,'open',null,'u_mgr');`, "sudah");
+  ditolak("36b · membuka kembali lewat UPDATE langsung ditolak", `update works set status='open' where id=1;`, "sudah");
+  nilai(
+    "36c · status yang sama pada Work terminal mengembalikan berubah:false",
+    `select (gwg_ubah_status_work(1,'completed',null,'u_owner')->>'berubah')='false';`,
+  );
+  ditolak("36d · riwayat tidak boleh diubah (append-only)", `update work_riwayat set alasan='diganti' where work_id=1;`, "tidak");
+  ditolak("36e · riwayat tidak boleh dihapus (append-only)", `delete from work_riwayat where work_id=1;`, "tidak");
+}
+
+/* ───────────────────────── KONTRAK NILAI BALIK ───────────────────────── */
+
+function ujiZ02Kontrak() {
+  judul("35 · Z-02 kontrak nilai balik — kuncinya persis, no-op selalu berubah:false");
+
+  resetZ02();
+  nilai(
+    "37a · gwg_buat_work",
+    `select (select array_agg(k order by k) from jsonb_object_keys(gwg_buat_work(
+       'K','','u_owner','Ops','normal',array[${SIG.a}]::bigint[],array['u_exec1'],'u_mgr')) k)
+       = array['berubah','id','jumlah_executor','jumlah_signal','tenggat'];`,
+  );
+  nilai(
+    "37b · gwg_kaitkan_signal_work",
+    `select (select array_agg(k order by k) from jsonb_object_keys(
+       gwg_kaitkan_signal_work(1,${SIG.b},'u_mgr')) k) = array['berubah','signal_id','work_id'];`,
+  );
+  nilai(
+    "37c · gwg_lepas_signal_work",
+    `select (select array_agg(k order by k) from jsonb_object_keys(
+       gwg_lepas_signal_work(1,${SIG.b},'salah','u_mgr')) k) = array['berubah','signal_id','work_id'];`,
+  );
+  nilai(
+    "37d · gwg_kelola_executor_work",
+    `select (select array_agg(k order by k) from jsonb_object_keys(
+       gwg_kelola_executor_work(1,'u_exec2','tambah','u_mgr')) k)
+       = array['aksi','berubah','user_id','work_id'];`,
+  );
+  nilai(
+    "37e · gwg_ubah_work",
+    `select (select array_agg(k order by k) from jsonb_object_keys(
+       gwg_ubah_work(1,null,null,null,null,'u_mgr')) k) = array['berubah','id'];`,
+  );
+  nilai(
+    "37f · gwg_ubah_status_work",
+    `select (select array_agg(k order by k) from jsonb_object_keys(
+       gwg_ubah_status_work(1,'in_progress',null,'u_mgr')) k) = array['berubah','id','status'];`,
+  );
+  nilai(
+    "38 · seluruh no-op mengembalikan berubah:false",
+    `select (gwg_kaitkan_signal_work(1,${SIG.a},'u_mgr')->>'berubah')='false'
+        and (gwg_lepas_signal_work(1,${SIG.b},'x','u_mgr')->>'berubah')='false'
+        and (gwg_kelola_executor_work(1,'u_exec2','tambah','u_mgr')->>'berubah')='false'
+        and (gwg_ubah_work(1,null,null,null,null,'u_mgr')->>'berubah')='false'
+        and (gwg_ubah_status_work(1,'in_progress',null,'u_mgr')->>'berubah')='false';`,
+  );
+}
+
+/* ───────────────────────── GALAT ───────────────────────── */
+
+function ujiZ02Galat() {
+  judul("36 · Z-02 kelas galat — P0001 dengan pesan yang dapat dibaca orang");
+
+  dasar();
+  const hasil = `
+    do $$
+    declare v_st text; v_msg text; v_n int := 0; v_ok int := 0;
+    begin
+      begin perform gwg_ubah_status_work(1,'completed',null,'u_owner');
+      exception when others then get stacked diagnostics v_st=returned_sqlstate, v_msg=message_text;
+        v_n:=v_n+1; if v_st='P0001' and v_msg ~ '(tidak|wajib|sudah|hanya)' then v_ok:=v_ok+1; end if; end;
+      begin perform gwg_ubah_status_work(1,'cancelled','','u_mgr');
+      exception when others then get stacked diagnostics v_st=returned_sqlstate, v_msg=message_text;
+        v_n:=v_n+1; if v_st='P0001' and v_msg ~ '(tidak|wajib|sudah|hanya)' then v_ok:=v_ok+1; end if; end;
+      begin perform gwg_ubah_status_work(999,'open',null,'u_mgr');
+      exception when others then get stacked diagnostics v_st=returned_sqlstate, v_msg=message_text;
+        v_n:=v_n+1; if v_st='P0001' and v_msg ~ '(tidak|wajib|sudah|hanya)' then v_ok:=v_ok+1; end if; end;
+      begin perform gwg_kelola_executor_work(1,'u_owner','tambah','u_mgr');
+      exception when others then get stacked diagnostics v_st=returned_sqlstate, v_msg=message_text;
+        v_n:=v_n+1; if v_st='P0001' and v_msg ~ '(tidak|wajib|sudah|hanya)' then v_ok:=v_ok+1; end if; end;
+      begin perform gwg_buat_work('K','','u_owner','Ops','besok',array[1]::bigint[],array['u_exec1'],'u_mgr');
+      exception when others then get stacked diagnostics v_st=returned_sqlstate, v_msg=message_text;
+        v_n:=v_n+1; if v_st='P0001' and v_msg ~ '(tidak|wajib|sudah|hanya)' then v_ok:=v_ok+1; end if; end;
+      -- Kegagalannya WAJIB berupa exception, bukan notice: notice pergi ke
+      -- stderr dan tidak terbaca pemanggil — uji yang selalu hijau lebih buruk
+      -- daripada tidak ada uji sama sekali.
+      if v_ok <> 5 or v_n <> 5 then
+        raise exception 'kelas galat Z-02 meleset: % dari % yang diperiksa', v_ok, v_n;
+      end if;
+    end $$;
+  `;
+  diterima("39 · kelima kelas galat ber-SQLSTATE P0001 dan berpesan Indonesia", hasil, "5 dari 5 kelas galat");
+}
+
+/* ───────────────────────── TENGGAT ───────────────────────── */
+
+function ujiZ02Tenggat() {
+  judul("37 · Z-02 tenggat — offset murni, tanpa pembulatan akhir hari");
+
+  resetZ02();
+  sql(`
+    select gwg_buat_work('U','','u_owner','Ops','urgent',array[${SIG.a}]::bigint[],array['u_exec1'],'u_mgr');
+    select gwg_buat_work('H','','u_owner','Ops','high',  array[${SIG.b}]::bigint[],array['u_exec1'],'u_mgr');
+    select gwg_buat_work('N','','u_owner','Ops','normal',array[${SIG.c}]::bigint[],array['u_exec1'],'u_mgr');
+    select gwg_buat_work('L','','u_owner','Ops','low',   array[${SIG.a}]::bigint[],array['u_exec2'],'u_mgr');
+  `);
+  nilai("D1 · urgent = anchor + 1 hari, tepat", `select tenggat = tenggat_anchor_pada + interval '1 day' from works where tenggat_kategori='urgent';`);
+  nilai("D2 · high = anchor + 3 hari, tepat", `select tenggat = tenggat_anchor_pada + interval '3 days' from works where tenggat_kategori='high';`);
+  nilai("D3 · normal = anchor + 5 hari, tepat", `select tenggat = tenggat_anchor_pada + interval '5 days' from works where tenggat_kategori='normal';`);
+  nilai("D4 · low = anchor + 7 hari, tepat", `select tenggat = tenggat_anchor_pada + interval '7 days' from works where tenggat_kategori='low';`);
+  nilai(
+    "D5 · TIDAK dibulatkan ke akhir hari WIB — jamnya sama dengan titik tolak",
+    `select bool_and(
+       to_char(tenggat at time zone 'Asia/Jakarta','HH24:MI:SS') <> '23:59:59'
+       and to_char(tenggat at time zone 'Asia/Jakarta','HH24:MI:SS')
+         = to_char(tenggat_anchor_pada at time zone 'Asia/Jakarta','HH24:MI:SS')) from works;`,
+  );
+  nilai(
+    "D6 · zona, versi kebijakan, dan titik tolak tersimpan sebagai snapshot (I-09 · I-10)",
+    `select bool_and(tenggat_zona='Asia/Jakarta' and tenggat_kebijakan_versi='Z02-SLA-v1'
+       and tenggat_anchor='work_dibuat') from works;`,
+  );
+}
+
+/* ───────────────────────── PELEPASAN BEKU ───────────────────────── */
+
+function ujiZ02Pelepasan() {
+  judul("38 · Z-02 jejak pelepasan — dibekukan begitu terisi (I-26 · I-27 · I-28)");
+
+  dasar();
+  diterima("R1 · melepas kaitan Signal", `select gwg_lepas_signal_work(1,${SIG.b},'salah kait','u_mgr');`);
+  nilai(
+    "R2 · trio pelepasan tercatat lengkap",
+    `select count(*)=1 from signal_work where work_id=1 and signal_id=${SIG.b}
+       and dilepas_pada is not null and dilepas_oleh='u_mgr' and alasan='salah kait';`,
+  );
+  ditolak("R3 · mengaitkan ulang lewat RPC ditolak (I-26)", `select gwg_kaitkan_signal_work(1,${SIG.b},'u_mgr');`, "dilepas");
+  ditolak(
+    "R4 · mengosongkan dilepas_pada ditolak",
+    `update signal_work set dilepas_pada=null, dilepas_oleh=null, alasan=null where work_id=1 and signal_id=${SIG.b};`,
+    "tidak",
+  );
+  ditolak("R5 · mengosongkan dilepas_oleh saja ditolak", `update signal_work set dilepas_oleh=null where work_id=1 and signal_id=${SIG.b};`, "tidak");
+  ditolak("R6 · menghapus alasan pelepasan ditolak", `update signal_work set alasan=null where work_id=1 and signal_id=${SIG.b};`, "tidak");
+  ditolak("R7 · menulis ulang alasan pelepasan ditolak", `update signal_work set alasan='alasan lain' where work_id=1 and signal_id=${SIG.b};`, "tidak");
+  ditolak("R8 · menggeser waktu pelepasan ditolak", `update signal_work set dilepas_pada=now() where work_id=1 and signal_id=${SIG.b};`, "tidak");
+  ditolak("R9 · DELETE kaitan ditolak", `delete from signal_work where work_id=1 and signal_id=${SIG.b};`, "tidak");
+  nilai(
+    "R10 · rekam audit tetap utuh sesudah enam percobaan",
+    `select count(*)=1 from signal_work where work_id=1 and signal_id=${SIG.b}
+       and dilepas_oleh='u_mgr' and alasan='salah kait';`,
+  );
+
+  dasar();
+  ditolak("E1 · DELETE pelaksana pada Work berjalan ditolak (I-27)", `delete from work_executors where work_id=1 and user_id='u_exec1';`, "tidak");
+  sql(`select gwg_kelola_executor_work(1,'u_exec2','tambah','u_mgr');`);
+  diterima("E2 · pelepasan lunak diterima", `select gwg_kelola_executor_work(1,'u_exec2','lepas','u_mgr');`);
+  nilai(
+    "E3 · pelepasan membawa dilepas_pada dan dilepas_oleh",
+    `select count(*)=1 from work_executors where work_id=1 and user_id='u_exec2'
+       and dilepas_pada is not null and dilepas_oleh='u_mgr';`,
+  );
+  ditolak("E4 · pelaksana aktif terakhir tidak boleh dilepas (I-18)", `select gwg_kelola_executor_work(1,'u_exec1','lepas','u_mgr');`, "terakhir");
+  ditolak("E5 · DELETE pelaksana yang sudah dilepas ditolak (I-27)", `delete from work_executors where work_id=1 and user_id='u_exec2';`, "tidak");
+  ditolak("E6 · menugaskan ulang yang sudah dilepas ditolak (I-28)", `select gwg_kelola_executor_work(1,'u_exec2','tambah','u_mgr');`, "dilepas");
+  ditolak("E8 · dilepas_pada = NULL ditolak (I-28)", `update work_executors set dilepas_pada=null, dilepas_oleh=null where work_id=1 and user_id='u_exec2';`, "tidak");
+  ditolak("E9 · dilepas_oleh = NULL ditolak (I-28)", `update work_executors set dilepas_oleh=null where work_id=1 and user_id='u_exec2';`, "tidak");
+  ditolak("E10 · menggeser dilepas_pada ditolak (I-28)", `update work_executors set dilepas_pada=now()+interval '1 day' where work_id=1 and user_id='u_exec2';`, "tidak");
+  ditolak("E11 · mengganti dilepas_oleh ditolak (I-28)", `update work_executors set dilepas_oleh='u_owner2' where work_id=1 and user_id='u_exec2';`, "tidak");
+  nilai(
+    "E14 · rekam pelepasan tetap utuh sesudah seluruh percobaan",
+    `select count(*)=1 from work_executors where work_id=1 and user_id='u_exec2'
+       and dilepas_oleh='u_mgr' and dilepas_pada is not null;`,
+  );
+  nilai(
+    "E15 · snapshot departemen tetap beku, lintas departemen tetap sah (I-06)",
+    `select departemen_saat_ditugaskan='Human Capital' from work_executors where work_id=1 and user_id='u_exec2';`,
+  );
+
+  // I-28 membekukan BARIS YANG SUDAH DILEPAS, bukan baris lain.
+  resetZ02();
+  sql(`
+    select gwg_buat_work('Tiga','','u_owner','Operational','normal',array[${SIG.a}]::bigint[],
+      array['u_exec1','u_exec2','u_owner2'],'u_mgr');
+    select gwg_kelola_executor_work(1,'u_exec2','lepas','u_mgr');
+  `);
+  nilai(
+    "E17 · baris lain tidak ikut beku — masih dapat dilepas",
+    `select (gwg_kelola_executor_work(1,'u_owner2','lepas','u_mgr')->>'berubah')='true';`,
+  );
+  nilai(
+    "E18 · sisa satu pelaksana aktif, dua terekam dilepas",
+    `select (select count(*) from work_executors where work_id=1 and dilepas_pada is null)=1
+        and (select count(*) from work_executors where work_id=1 and dilepas_oleh='u_mgr')=2;`,
+  );
+}
+
+/* ───────────────────────── KATEGORI TENGGAT BEKU (0117) ───────────────────────── */
+
+function ujiZ02Kategori() {
+  judul("39 · Z-02 kategori tenggat dibekukan — migrasi 0117");
+
+  resetZ02();
+  sql(`
+    select gwg_buat_work('U','','u_owner','Ops','urgent',array[${SIG.a}]::bigint[],array['u_exec1'],'u_mgr');
+    select gwg_buat_work('H','','u_owner','Ops','high',  array[${SIG.b}]::bigint[],array['u_exec1'],'u_mgr');
+    select gwg_buat_work('N','','u_owner','Ops','normal',array[${SIG.c}]::bigint[],array['u_exec1'],'u_mgr');
+    select gwg_buat_work('L','','u_owner','Ops','low',   array[${SIG.a}]::bigint[],array['u_exec2'],'u_mgr');
+  `);
+  nilai(
+    "G1 · kategori dan tenggat tersimpan sesuai kebijakan saat dibuat",
+    `select bool_and(tenggat - tenggat_anchor_pada = make_interval(days => case tenggat_kategori
+       when 'urgent' then 1 when 'high' then 3 when 'normal' then 5 else 7 end)) from works;`,
+  );
+
+  resetZ02();
+  sql(`select gwg_buat_work('K','','u_owner','Ops','normal',array[${SIG.a}]::bigint[],array['u_exec1'],'u_mgr');`);
+  ditolak("G2 · open → UPDATE tenggat_kategori ditolak", `update works set tenggat_kategori='urgent' where id=1;`, "snapshot");
+  sql(`select gwg_ubah_status_work(1,'in_progress',null,'u_mgr');`);
+  ditolak("G3 · in_progress → ditolak", `update works set tenggat_kategori='urgent' where id=1;`, "snapshot");
+  sql(`select gwg_ubah_status_work(1,'completed',null,'u_owner');`);
+  // Pada Work terminal, penjaga SNAPSHOT menyalak lebih dulu daripada penjaga
+  // terminal — dan itu bukan kelemahan: keduanya menolak, dan yang paling
+  // dekat dengan kolomnya yang menjawab.
+  ditolak("G4 · completed → ditolak", `update works set tenggat_kategori='urgent' where id=1;`, "snapshot");
+
+  resetZ02();
+  sql(`
+    select gwg_buat_work('K','','u_owner','Ops','normal',array[${SIG.a}]::bigint[],array['u_exec1'],'u_mgr');
+    select gwg_ubah_status_work(1,'cancelled','tidak jadi','u_mgr');
+  `);
+  ditolak("G5 · cancelled → ditolak", `update works set tenggat_kategori='urgent' where id=1;`, "snapshot");
+
+  resetZ02();
+  sql(`select gwg_buat_work('K','','u_owner','Ops','normal',array[${SIG.a}]::bigint[],array['u_exec1'],'u_mgr');`);
+  ditolak(
+    "G6 · riwayat pada transaksi yang sama TIDAK mengesahkannya",
+    `begin;
+     insert into work_riwayat (work_id,jenis,nilai_lama,nilai_baru,alasan,oleh)
+       values (1,'tenggat','normal','urgent','coba','u_mgr');
+     update works set tenggat_kategori='urgent' where id=1;
+     commit;`,
+    "snapshot",
+  );
+  ditolak("G7 · keempat kategori sah pun tetap ditolak", `update works set tenggat_kategori='low' where id=1;`, "snapshot");
+  nilai("G8 · nilainya utuh sesudah seluruh percobaan", `select tenggat_kategori='normal' from works where id=1;`);
+  nilai("G9 · tidak ada mutasi separuh — tenggatnya pun tidak bergeser", `select tenggat = tenggat_anchor_pada + interval '5 days' from works where id=1;`);
+
+  ditolak("G10 · tenggat_anchor tetap beku", `update works set tenggat_anchor='work_dibuat_lain' where id=1;`, "snapshot");
+  ditolak("G11 · tenggat_anchor_pada tetap beku", `update works set tenggat_anchor_pada=now() where id=1;`, "snapshot");
+  ditolak("G12 · tenggat_zona tetap beku", `update works set tenggat_zona='UTC' where id=1;`, "snapshot");
+  ditolak("G13 · tenggat_kebijakan_versi tetap beku", `update works set tenggat_kebijakan_versi='Z02-SLA-v2' where id=1;`, "snapshot");
+
+  nilai(
+    "G14 · jalur resmi tetap dapat menggeser tenggat",
+    `select (gwg_ubah_work(1,null,null,now()+interval '10 days','perlu waktu tambahan','u_mgr')->>'berubah')='true';`,
+  );
+  nilai(
+    "G15 · riwayat tenggat tetap lahir, kategorinya tidak ikut berubah",
+    `select (select count(*) from work_riwayat where work_id=1 and jenis='tenggat')=1
+        and (select tenggat_kategori from works where id=1)='normal';`,
+  );
+  ditolak("G16 · tenggat langsung tanpa riwayat tetap ditolak", `update works set tenggat=now()+interval '99 days' where id=1;`, "riwayat");
+
+  resetZ02();
+  sql(`select gwg_buat_work('K','','u_owner','Ops','normal',array[${SIG.a},${SIG.b}]::bigint[],array['u_exec1'],'u_mgr');`);
+  ditolak("G17 · mesin status tetap: open → completed ditolak", `select gwg_ubah_status_work(1,'completed',null,'u_owner');`, "tidak sah");
+  ditolak("G18 · owner langsung tanpa riwayat tetap ditolak", `update works set owner_id='u_owner2' where id=1;`, "riwayat");
+  nilai("G19 · status normal tetap jalan", `select (gwg_ubah_status_work(1,'in_progress',null,'u_mgr')->>'berubah')='true';`);
+}
+
+/* ───────────────────────── PEMISAHAN LIFECYCLE ───────────────────────── */
+
+/**
+ * ┌─ YANG DIBUKTIKAN DI SINI ADALAH KETIADAAN ──────────────────────────────┐
+ * │                                                                          │
+ * │ I-07, I-08, I-12, dan I-15 semuanya berbunyi "jalur Work TIDAK menyentuh │
+ * │ X". Invariant semacam itu paling mudah bocor tanpa terlihat: satu baris  │
+ * │ `update signals` di dalam RPC akan lolos seluruh uji lain — Work-nya     │
+ * │ tetap benar, dan yang rusak Signal di sebelahnya.                        │
+ * │                                                                          │
+ * │ Karena itu keadaan `signals` dipotret SEBELUM dan SESUDAH satu daur      │
+ * │ hidup Work yang penuh, lalu dibandingkan apa adanya.                     │
+ * └──────────────────────────────────────────────────────────────────────────┘
+ */
+function ujiZ02Pemisahan() {
+  judul("40 · Z-02 pemisahan lifecycle — Work tidak pernah menulis Signal");
+
+  resetZ02();
+  // Satu Signal sengaja sudah "diakui" lebih dulu: yang diuji apakah jalur Work
+  // menyentuhnya, bukan apakah kolomnya bisa diisi.
+  sql(`update signals set diakui_oleh='u_mgr', diakui_pada=now() where id=${SIG.a};`);
+  const potret = () =>
+    satu(`select md5(string_agg(t, '|' order by t)) from (
+            select concat_ws(':', id, status, diakui_oleh, diakui_pada, diabaikan_oleh, kondisi_terakhir) as t
+              from signals where id in (${SIG.a}, ${SIG.b}, ${SIG.c})) s;`);
+  const sebelum = potret();
+
+  sql(`
+    select gwg_buat_work('Daur penuh','','u_owner','Operational','normal',
+      array[${SIG.a},${SIG.b}]::bigint[],array['u_exec1','u_exec2'],'u_mgr');
+    select gwg_kaitkan_signal_work(1,${SIG.c},'u_mgr');
+    select gwg_lepas_signal_work(1,${SIG.c},'salah kait','u_mgr');
+    select gwg_kelola_executor_work(1,'u_exec2','lepas','u_mgr');
+    select gwg_ubah_work(1,'u_owner2',null,null,'owner lama cuti','u_mgr');
+    select gwg_ubah_status_work(1,'in_progress',null,'u_mgr');
+    select gwg_ubah_status_work(1,'completed',null,'u_owner2');
+  `);
+
+  ok("X1 · daur hidup Work penuh berjalan tanpa menyentuh Signal", potret() === sebelum, potret() === sebelum ? "potret identik" : "POTRET BERUBAH");
+  nilai(
+    "X2 · I-08 · Work selesai TIDAK menutup Signal-nya",
+    `select (select status from works where id=1)='completed'
+        and (select bool_and(status='terbuka') from signals where id in (${SIG.a}, ${SIG.b}));`,
+  );
+  nilai(
+    "X3 · I-07 · pengakuan Signal tidak berpindah menjadi penugasan Work",
+    `select (select diakui_oleh from signals where id=${SIG.a})='u_mgr'
+        and (select count(*) from work_executors where work_id=1 and user_id='u_mgr')=0;`,
+  );
+  nilai(
+    "X4 · I-07 · Signal yang belum diakui tetap belum diakui meski Work-nya selesai",
+    `select diakui_oleh is null and diakui_pada is null from signals where id=${SIG.b};`,
+  );
+  nilai(
+    "X5 · I-12 · tidak satu pun fungsi Z-02 menulis ke `signals`",
+    `select bool_and(p.prosrc !~* '(update|insert into|delete from)\\s+signals\\M')
+       from pg_proc p join pg_namespace n on n.oid=p.pronamespace
+       where n.nspname='public' and (p.proname like 'gwg_%work%'
+         or p.proname in ('works_mutasi_tercatat','work_executors_terjaga','signal_work_terjaga'));`,
+  );
+  nilai(
+    "X6 · I-15 · tidak satu pun fungsi Z-02 menyebut `tasks`",
+    `select bool_and(p.prosrc !~* '\\mtasks\\M')
+       from pg_proc p join pg_namespace n on n.oid=p.pronamespace
+       where n.nspname='public' and (p.proname like 'gwg_%work%'
+         or p.proname in ('works_mutasi_tercatat','work_executors_terjaga',
+                          'signal_work_terjaga','work_riwayat_hanya_bertambah'));`,
+  );
+  nilai(
+    "X7 · I-16 · jejak kaitan yang dilepas tetap terbaca sesudah Work selesai",
+    `select count(*)=1 from signal_work where work_id=1 and signal_id=${SIG.c}
+       and dilepas_oleh='u_mgr' and alasan='salah kait';`,
+  );
+}
+
+/* ───────────────────────── BATAS KEAMANAN ───────────────────────── */
+
+function ujiZ02Keamanan() {
+  judul("41 · Z-02 batas keamanan — dibaca dari basis data yang berjalan, bukan dari teksnya");
+
+  const ENAM = `p.proname in ('gwg_buat_work','gwg_kaitkan_signal_work','gwg_lepas_signal_work',
+    'gwg_kelola_executor_work','gwg_ubah_work','gwg_ubah_status_work')`;
+
+  nilai(
+    "P1 · keenamnya SECURITY DEFINER",
+    `select count(*)=6 from pg_proc p join pg_namespace n on n.oid=p.pronamespace
+       where n.nspname='public' and ${ENAM} and p.prosecdef;`,
+  );
+  nilai(
+    "P2 · keenamnya ber-search_path = public, pg_temp",
+    `select count(*)=6 from pg_proc p join pg_namespace n on n.oid=p.pronamespace
+       where n.nspname='public' and ${ENAM}
+         and array_to_string(p.proconfig,',') = 'search_path=public, pg_temp';`,
+  );
+  nilai(
+    "P3 · PUBLIC tidak punya hak jalan atas satu pun",
+    `select bool_and(coalesce(array_to_string(p.proacl,',') !~ '(^|,)=[a-zA-Z]*X', true))
+       from pg_proc p join pg_namespace n on n.oid=p.pronamespace
+       where n.nspname='public' and ${ENAM};`,
+  );
+  nilai(
+    "P4 · anon tidak boleh menjalankan satu pun",
+    `select bool_and(not has_function_privilege('anon', p.oid, 'execute'))
+       from pg_proc p join pg_namespace n on n.oid=p.pronamespace where n.nspname='public' and ${ENAM};`,
+  );
+  nilai(
+    "P5 · authenticated tidak boleh menjalankan satu pun",
+    `select bool_and(not has_function_privilege('authenticated', p.oid, 'execute'))
+       from pg_proc p join pg_namespace n on n.oid=p.pronamespace where n.nspname='public' and ${ENAM};`,
+  );
+  nilai(
+    "P6 · service_role boleh menjalankan keenamnya",
+    `select bool_and(has_function_privilege('service_role', p.oid, 'execute'))
+       from pg_proc p join pg_namespace n on n.oid=p.pronamespace where n.nspname='public' and ${ENAM};`,
+  );
+  nilai(
+    "P7 · keempat fungsi trigger juga ber-search_path eksplisit",
+    `select count(*)=4 from pg_proc p join pg_namespace n on n.oid=p.pronamespace
+       where n.nspname='public' and p.proname in ('works_mutasi_tercatat','work_executors_terjaga',
+         'signal_work_terjaga','work_riwayat_hanya_bertambah')
+         and array_to_string(p.proconfig,',') = 'search_path=public, pg_temp';`,
+  );
+
+  // `p_oleh` MENCATAT, ia tidak MENGIZINKAN. Satu-satunya tempat ia menentukan
+  // adalah konsistensi owner saat penyelesaian (I-23) — dan itu memang kontraknya.
+  dasar();
+  sql(`select gwg_ubah_status_work(1,'in_progress',null,'u_mgr');`);
+  ditolak(
+    "P8 · aktor sembarang tidak dapat menyelesaikan Work milik orang lain (I-23)",
+    `select gwg_ubah_status_work(1,'completed',null,'u_exec1');`,
+    "owner",
+  );
+  nilai(
+    "P9 · aktor yang tercatat adalah yang dikirim pemanggil, dan ia tersimpan apa adanya",
+    `select oleh='u_mgr' from work_riwayat where work_id=1 and jenis='status' order by id desc limit 1;`,
+  );
+}
+
+/* ───────────────────────── KONKURENSI ───────────────────────── */
+
+/**
+ * ┌─ DUA SESI SUNGGUHAN, DAN TIDAK ADA GANTINYA ────────────────────────────┐
+ * │                                                                          │
+ * │ Yang dijaga di sini hanya muncul ketika dua transaksi berjalan           │
+ * │ BERSAMAAN. Satu sesi tidak akan pernah menangkapnya: setiap pemeriksaan  │
+ * │ lolos sendiri-sendiri, dan yang salah baru lahir dari urutannya.         │
+ * │                                                                          │
+ * │ Sesi latar membuka transaksi, menahan kuncinya selama dua detik, lalu    │
+ * │ COMMIT. Sesi depan menabraknya. Kalau penguncinya dicabut, sesi depan    │
+ * │ lolos — dan itulah yang dibuktikan counter-proof di bawah.               │
+ * └──────────────────────────────────────────────────────────────────────────┘
+ */
+function ujiZ02Konkurensi() {
+  judul("42 · Z-02 konkurensi — dua sesi PostgreSQL yang benar-benar berlomba");
+
+  /* ── K1 · FOR SHARE: Signal tidak boleh menempel ke Work yang sedang diselesaikan ── */
+  dasar();
+  const a1 = sesiLatar(`begin;
+    select gwg_ubah_status_work(1,'in_progress',null,'u_mgr');
+    select gwg_ubah_status_work(1,'completed',null,'u_owner');
+    select pg_sleep(2);
+    commit;`);
+  jeda(800);
+  ditolak(
+    "K1 · FOR SHARE menahan kaitan sampai penyelesaian terlihat",
+    `select gwg_kaitkan_signal_work(1,${SIG.c},'u_mgr');`,
+    "sudah",
+  );
+  tuntaskan(a1);
+  nilai(
+    "K1b · Signal ketiga TIDAK menempel pada Work yang selesai",
+    `select count(*)=0 from signal_work where work_id=1 and signal_id=${SIG.c};`,
+  );
+
+  /* ── K1c · penjagaan yang sama pada tingkat tabel, bukan hanya lewat RPC ── */
+  //
+  // Probe ini sengaja MELEWATI `gwg_kaitkan_signal_work` dan menulis langsung
+  // ke `signal_work`. Alasannya: RPC punya `for share`-nya SENDIRI, jadi lewat
+  // RPC kita tidak pernah tahu penjaga mana yang menolak. Yang diuji di bawah
+  // benar-benar `for share` milik TRIGGER — dan counter-proof-nya memakai
+  // probe yang sama persis, supaya keduanya dapat dibandingkan.
+  const PROBE = `insert into signal_work (signal_id, work_id, dikaitkan_oleh) values (${SIG.c}, 1, 'u_mgr');`;
+
+  dasar();
+  const a1b = sesiLatar(`begin;
+    select gwg_ubah_status_work(1,'in_progress',null,'u_mgr');
+    select gwg_ubah_status_work(1,'completed',null,'u_owner');
+    select pg_sleep(2);
+    commit;`);
+  jeda(800);
+  ditolak("K1c · trigger menahan tulisan langsung sampai penyelesaian terlihat", PROBE, "sudah");
+  tuntaskan(a1b);
+
+  /* ── K2 · counter-proof: penguncinya dicabut, dan kesalahannya muncul ── */
+  //
+  // Fungsi trigger diganti SEMENTARA di basis data uji — berkas migrasinya
+  // tidak disentuh sama sekali. Sesudahnya `0116` dan `0117` dijalankan ulang
+  // apa adanya, dan penjagaannya dibuktikan pulih.
+  const asli = readFileSync(M0116, "utf8");
+  const awal = asli.indexOf("create or replace function signal_work_terjaga()");
+  const akhir = asli.indexOf("$$;", awal) + 3;
+  sql(asli.slice(awal, akhir).replace(/\bfor share\b/g, ""));
+
+  dasar();
+  const a2 = sesiLatar(`begin;
+    select gwg_ubah_status_work(1,'in_progress',null,'u_mgr');
+    select gwg_ubah_status_work(1,'completed',null,'u_owner');
+    select pg_sleep(2);
+    commit;`);
+  jeda(800);
+  let lolos = false;
+  try {
+    sql(PROBE, { diam: true });
+    lolos = true;
+  } catch {
+    lolos = false;
+  }
+  tuntaskan(a2);
+  ok(
+    "K2 · COUNTER-PROOF: tanpa FOR SHARE kaitannya lolos ke Work yang selesai",
+    lolos,
+    lolos ? "lolos — persis yang dicegah penguncinya" : "tidak lolos — uji ini kehilangan dayanya",
+  );
+  nilai(
+    "K2b · dan akibatnya nyata: Work selesai memegang kaitan yang lahir sesudahnya",
+    `select (select status from works where id=1)='completed'
+        and (select count(*) from signal_work where work_id=1 and signal_id=${SIG.c})=1;`,
+  );
+
+  sql(readFileSync(M0116, "utf8"));
+  sql(readFileSync(M0117, "utf8"));
+  dasar();
+  const a3 = sesiLatar(`begin;
+    select gwg_ubah_status_work(1,'in_progress',null,'u_mgr');
+    select gwg_ubah_status_work(1,'completed',null,'u_owner');
+    select pg_sleep(2);
+    commit;`);
+  jeda(800);
+  ditolak("K2c · penjagaan pulih sesudah 0116 dan 0117 dijalankan ulang", PROBE, "sudah");
+  tuntaskan(a3);
+
+  /* ── K3 · advisory lock: kaitan Signal aktif terakhir tidak bisa hilang (I-17) ── */
+  dasar();
+  const b1 = sesiLatar(`begin;
+    select gwg_lepas_signal_work(1,${SIG.a},'sesi latar','u_mgr');
+    select pg_sleep(2);
+    commit;`);
+  jeda(800);
+  ditolak(
+    "K3 · dua pelepasan bersamaan: yang kedua ditolak, bukan lolos (I-17)",
+    `select gwg_lepas_signal_work(1,${SIG.b},'sesi depan','u_mgr');`,
+    "terakhir",
+  );
+  tuntaskan(b1);
+  nilai(
+    "K3b · Work tetap punya tepat satu kaitan Signal aktif",
+    `select count(*)=1 from signal_work where work_id=1 and dilepas_pada is null;`,
+  );
+
+  /* ── K4 · advisory lock: pelaksana aktif terakhir tidak bisa hilang (I-18) ── */
+  resetZ02();
+  sql(`select gwg_buat_work('Dua','','u_owner','Operational','normal',array[${SIG.a}]::bigint[],
+        array['u_exec1','u_exec2'],'u_mgr');`);
+  const b2 = sesiLatar(`begin;
+    select gwg_kelola_executor_work(1,'u_exec1','lepas','u_mgr');
+    select pg_sleep(2);
+    commit;`);
+  jeda(800);
+  ditolak(
+    "K4 · dua pelepasan pelaksana bersamaan: yang kedua ditolak (I-18)",
+    `select gwg_kelola_executor_work(1,'u_exec2','lepas','u_mgr');`,
+    "terakhir",
+  );
+  tuntaskan(b2);
+  nilai(
+    "K4b · Work tetap punya tepat satu pelaksana aktif",
+    `select count(*)=1 from work_executors where work_id=1 and dilepas_pada is null;`,
+  );
+}
+
+/* ───────────────────────── pintu tunggal ───────────────────────── */
+
+/**
+ * SATU pintu, dipanggil DUA jalur. Menyalin daftar panggilannya ke masing-masing
+ * cabang berarti suatu hari keduanya berbeda tanpa ada yang menyadarinya.
+ */
+function ujiZ02() {
+  jalankanMigrasiZ02();
+  semaiZ02();
+  ujiZ02Skema();
+  ujiZ02Buat();
+  ujiZ02Signal();
+  ujiZ02Executor();
+  ujiZ02Mutasi();
+  ujiZ02Status();
+  ujiZ02Kontrak();
+  ujiZ02Galat();
+  ujiZ02Tenggat();
+  ujiZ02Pelepasan();
+  ujiZ02Kategori();
+  ujiZ02Pemisahan();
+  ujiZ02Keamanan();
+  ujiZ02Konkurensi();
+}
+
 function utama() {
   console.log("╭──────────────────────────────────────────────────────────────╮");
   console.log("│  UJI BASIS DATA OPERATIONAL V.1 — PostgreSQL LOKAL            │");
@@ -2587,6 +3777,7 @@ function utama() {
     jalankanMigrasi87A();
     jalankanMigrasi88();
     ujiTunggakanPeriode();
+    ujiZ02();
   } else {
     judul("4 · isi contoh minimum");
     isiContoh();
@@ -2603,6 +3794,7 @@ function utama() {
     jalankanMigrasi85();
     jalankanMigrasi85A();
     jalankanMigrasi87();
+    ujiZ02();
   }
 
   bersihkan();
