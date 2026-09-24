@@ -182,7 +182,7 @@ pada blueprint.
 | 13 | Radika ikut rata-rata PDQ? | — |
 | 14 | Ambang kelengkapan data sebelum Signal boleh lahir — usul 95% | PHASE 4 |
 | 15 | Cabang ESB `57-fnb_nord` tanpa outlet — outlet baru atau sisa? | **sudah diselidiki, lihat di bawah** |
-| 16 | Signal boleh lahir dari baris ber-`sumber_sah = false`? Usul: tidak | PHASE 4 |
+| 16 | Signal boleh lahir dari baris ber-`sumber_sah = false`? | **SUDAH DIPUTUSKAN — tidak boleh. Lihat AD-14 poin 2** |
 
 **Nomor 7 dan 8 memblokir PHASE 2B, bukan 2A.** Pemiliknya sudah menjelaskan
 asalnya: PBJT dan platform fee keduanya datang dari laporan keuangan, dimasukkan
@@ -311,7 +311,7 @@ C (KPI V.1 yang sudah tersimpan). Tidak ada satu pun yang berbeda.
 
 ---
 
-## Nomor 16 · Angka ESB yang sudah dinyatakan tidak berlaku — DIPUTUSKAN SEMENTARA
+## Nomor 16 · Angka ESB yang sudah dinyatakan tidak berlaku — DIPUTUSKAN
 
 **Pertanyaannya.** `outlets.esb_mulai` dan `outlets.esb_abaikan` menandai
 bulan-bulan yang angka ESB-nya sudah dinyatakan salah bagi sebuah outlet
@@ -337,8 +337,24 @@ punya alasan untuk menolak memakainya.
 (`esb_mulai = 2026-09`), dan nilainya memang Rp 0, jadi dampaknya nol untuk
 sekarang.
 
-**Yang masih terbuka bagi pemilik:** apakah PHASE 4 boleh melahirkan Signal dari
-baris ber-`sumber_sah = false`. Usul: tidak boleh. Belum diputuskan.
+**Yang saat itu masih terbuka bagi pemilik** (dicatat apa adanya sebagai
+sejarah): apakah PHASE 4 boleh melahirkan Signal dari baris ber-`sumber_sah =
+false`. Usul waktu itu: tidak boleh.
+
+**SUDAH DIPUTUSKAN — `FALSE SOURCE VALIDITY MUST NOT CREATE SIGNAL`.**
+
+Usul itu dikunci pemiliknya di **AD-14 poin 2**, dan diwujudkan `susunMuatan()`
+lewat satu baris — `const bolehSisip = melanggar && b.sumberSah;`
+(`src/lib/data/signals.ts`). Yang diblokir hanya KELAHIRAN Signal: angkanya tidak
+diubah, statusnya tidak diubah, barisnya tidak dihapus, dan ia tetap tampil di
+layar Weekly sebagai sel "sumber tidak sah" dengan bukti `UNKNOWN` dan keyakinan
+`LOW`.
+
+Ditegaskan ulang pemiliknya pada gate **Z-04** (Q1 = A). Gate itu ditutup
+sebagai verification-only: nol perubahan kode, nol migration, nol penulisan
+produksi — karena perilaku yang diputuskan memang sudah berjalan. Buktinya
+terukur di produksi: dari 341 Signal, **0** lahir dari baris ber-`sumber_sah =
+false`, ditelusuri lewat `signals.kpi_value_id`.
 
 ---
 
@@ -1223,3 +1239,1162 @@ bisa dihitung ulang di SQL — tanpa itu `0` dan `0.0000` memberi sidik berbeda
 untuk isi yang sama. Angka 180 dan sidiknya **tidak ditulis sebagai assertion di
 dalam kode**: sumber produksi yang berlaku saat eksekusi adalah kebenarannya,
 dan sidik cuma penanda apakah himpunannya masih sama dengan yang disetujui.
+
+---
+
+## AD-17 · Z-03 — decision lock: Signal bulan berjalan adalah MTD Early Warning
+
+Keputusan Owner, dikunci setelah Z-03 Semantic Audit:
+
+| pertanyaan | keputusan |
+| --- | --- |
+| **Q1** Signal dimaksudkan sebagai apa? | **MTD EARLY WARNING** |
+| **Q2** bila MTD, bagaimana ia dibaca? | **ACCEPT MTD AS INDICATION** |
+| **Q3** satu mode atau per rule? | **ONE MODE** |
+| **Q4** perubahan schema? | **NO SCHEMA CHANGE** |
+
+### Alasan Owner
+
+> GWG menggunakan Signal bulan berjalan sebagai early warning operasional agar
+> Coordinator dapat melakukan investigasi sebelum bulan berakhir. Karena data
+> biaya belum memiliki coverage harian, Signal MTD tidak diperlakukan sebagai
+> hasil final dan tidak boleh dianggap sebagai diagnosis.
+
+### Kenapa ini keputusan semantik, bukan keputusan kelengkapan
+
+Yang sempat dikira persoalan kelengkapan ternyata bukan. Ketujuh aturan aktif
+berbentuk sama: sebuah angka rupiah dibagi omzet. Penyebutnya `seasonal_daily`,
+bergrain **cabang × hari**, dan ia bertambah tiap hari. Pembilangnya satu baris
+di `op_expenses` / `op_purchases` / `op_pnl`, bergrain **outlet × bulan**, tanpa
+satu kolom pun yang menyatakan berapa hari yang dicakupnya.
+
+Penyebutnya MTD. Pembilangnya **bukan MTD dan bukan bulan penuh — ia tidak
+terdefinisi.** Karena itu `biaya.* completeness` tidak bisa dihitung, dan sebuah
+ambang kelengkapan akan diterapkan pada angka yang tidak ada. Keputusan #14
+karena itu tidak "masih terbuka" untuk Signal; ia tidak punya masukan.
+
+### Akibatnya berjalan dua arah
+
+Arahnya ditentukan oleh apakah cakupan pembilang lebih besar atau lebih kecil
+daripada cakupan penyebut, dan itu berbeda per kolom **di dalam satu unggahan
+yang sama**:
+
+- Pembilang yang cakupannya melampaui penyebut membuat rasio terbaca **terlalu
+  tinggi**, dan Signal muncul untuk outlet yang pada bulan penuh tidak
+  memilikinya.
+- Pembilang yang tertinggal lebih jauh daripada penyebut membuat rasio terbaca
+  **terlalu rendah**, dan Signal **hilang** — tanpa meninggalkan satu baris pun,
+  karena `signals.status` cuma mengenal `terbuka` dan `diabaikan`.
+
+Yang kedua itulah sebabnya "tidak ada Signal" dilarang dibaca sebagai "aman".
+
+### Yang berubah karena AD-17
+
+Tidak ada satu pun aturan bisnis. Detektornya tidak disentuh: syarat kelahiran
+Signal tetap `melanggar && b.sumberSah`, ambangnya tetap, `SKALA_SIGNAL` tetap
+`bulanan`, dan bulan berjalan tetap dinilai tiap jalan seperti yang dikunci
+AD-16.
+
+Yang berubah hanya **klaim yang dibuat layar**:
+
+- `DetailMingguan.berjalan` — satu boolean turunan, dihitung `bulanIniWib()` di
+  server. Bukan di komponen: jam peramban bukan WIB, dan tujuh jam cukup untuk
+  memindahkan seluruh layar ke bulan yang salah.
+- Sel Signal kosong tidak lagi berbunyi "tidak ada". Ia berbunyi **"belum ada
+  indikasi"**, dengan sebab yang berbeda untuk bulan berjalan dan bulan selesai.
+- Badge bulan berjalan bertanda **MTD**.
+- Banner kelengkapan menyatakan batas maknanya: yang diukur kelengkapan **omzet**,
+  bukan biaya.
+
+### Yang TIDAK dibangun
+
+Tidak ada `mode_penilaian` dan tidak ada konfigurasi per rule (Q3). Tidak ada
+kolom cakupan, tidak ada grain harian untuk biaya, tidak ada migration (Q4).
+341 Signal yang sudah ada tidak disentuh: dalam model MTD, 161 Signal September
+memang sah sebagai indikasi dan tidak dihapus hanya karena bulannya belum
+selesai.
+
+### Yang tetap tidak boleh disimpulkan
+
+Signal bukan root cause, dan bukan diagnosis — `bukti.ts` sudah menegakkannya:
+Signal yang sebabnya belum terbukti menghasilkan `investigation_required`,
+yaitu **tidak layak ditindaklanjuti**, bukan layak. Ada Signal tidak berarti
+outletnya sudah terbukti bermasalah; tidak ada Signal tidak berarti outletnya
+aman; perubahan jumlah Signal antar bulan tidak berarti performanya berubah.
+
+Alurnya karena itu tetap: **MTD data → Signal → Coordinator membaca → validasi
+kondisi → diagnosis → assignment/action → monitoring → verification.** Signal
+tidak pernah melompati diagnosis.
+
+---
+
+## AD-18 · Z-01 — decision lock: Command Center V.1
+
+Keputusan Owner, dikunci setelah Z-01 Read-Only Audit. **Kontrak, belum
+implementasi:** tidak ada layar, tabel, kolom, maupun server action yang dibuat
+saat keputusan ini dicatat.
+
+| # | pertanyaan | keputusan |
+| --- | --- | --- |
+| **Q1** Cakupan | **B — Outlet + Corporate** |
+| **Q2** Periode | **C — Periode aktif + filter periode lain** |
+| **Q3** Status | **A — hanya `terbuka`** |
+| **Q4** Tindakan | **C — hanya peran ber-`manage_signals`** |
+| **Q5** Ownership | **C — menjadi gate Z-02** |
+| **Q6** Unit kerja | **D — Signal, dikelompokkan per outlet × periode** |
+| **Q7** Corporate | **A — jalur tampilan khusus** |
+
+### Kontrak Z-01
+
+```
+COMMAND CENTER V.1
+
+Scope:
+- Outlet
+- Corporate
+
+Period:
+- Active period by default
+- Historical period filter
+
+Status:
+- Open signals only
+
+Actions:
+- Ignore available to manage_signals roles
+- Ignore requires actor + timestamp + non-empty reason
+- Ignore is irreversible
+
+Ownership:
+- Deferred to Z-02
+
+Unit:
+- Signal
+- Grouped by outlet × period
+- Corporate separate section
+
+MTD:
+- Current month = INDIKASI
+- Not diagnosis
+- Not full-month verdict
+
+Source validity:
+- sumber_sah=false never creates Signal
+- no disclosure UI required
+
+Signal integrity:
+- snapshot immutable
+- Signal cannot be deleted
+- detector does not recalculate from UI
+```
+
+### Alasan tiap keputusan, dan apa yang membatasinya
+
+**Q1 — Corporate ikut, Area tidak.** Produksi hari ini punya **335 Signal
+outlet, 6 korporat, dan 0 area**. Keenam Signal korporat — termasuk
+`biaya.net_profit_pct` critical −3,21% periode 2026-09 — **tidak punya satu
+pembaca pun** di seluruh aplikasi, karena `signal-baca.ts` mengunci
+`.eq("cakupan","outlet")`. Area tidak dimasukkan justru karena datanya nol:
+membangun dukungan untuk data yang belum pernah ada berarti menulis kode yang
+tidak bisa diperiksa benar-salahnya.
+
+**Q2 — periode aktif plus penyaring.** Pembaca sekarang mewajibkan satu periode
+dan `signals_kerja_idx` memang bergrain `(periode, skala)`. Yang dikunci bukan
+sekadar penyaringnya melainkan **penandaannya**: periode aktif wajib terlihat
+sebagai periode aktif, periode historis wajib bisa dibedakan, dan MTD tidak
+boleh tercampur dengan bulan penuh. Penanda AD-17 tetap berlaku sepenuhnya di
+layar ini.
+
+**Q3 — hanya `terbuka`.** Daftar kerja berisi yang masih perlu ditangani.
+Menampilkan yang sudah diabaikan sebagai pekerjaan aktif menghidupkan kembali
+keputusan yang sudah diambil orang. Hari ini pilihan ini belum menggeser satu
+baris pun — `status = 'diabaikan'` berjumlah **0** — tetapi ia mengikat begitu
+baris pertama lahir. **Tidak ada penyaring status baru di Z-01.**
+
+**Q4 — mengabaikan, hanya bagi yang berhak.** Memakai izin yang sudah ada,
+bukan izin baru: `manage_signals` dimiliki `super_admin` dan `head_operation`,
+dan **tidak** dimiliki `area_coordinator` — pembatasan yang alasannya sudah
+tertulis di `src/lib/rbac.ts` sejak Phase 4.
+
+Constraint `signals_diabaikan_utuh` mewajibkan `diabaikan_oleh`,
+`diabaikan_pada`, dan `diabaikan_alasan` non-kosong berjalan bersama atau tidak
+sama sekali. Trigger `signals_tak_tersunting_trg` melarang `diabaikan →
+terbuka`. Karena itu **tindakan ini tidak dapat dibatalkan**, dan layar wajib
+memperlakukannya demikian.
+
+`diabaikan` adalah **keputusan workflow manusia**. Ia bukan diagnosis, bukan
+root cause, bukan action, bukan resolution. Ia tidak mengubah snapshot deteksi,
+nilai KPI, severity, rule, KPI, periode, maupun identitas Signal.
+
+**Q5 — ownership ditunda.** `signals` tidak punya kolom pemilik, assignee,
+tenggat, maupun SLA; `sla_policies` yang disebut blueprint bagian 5 belum ada.
+Z-01 karena itu dibatasi pada **lihat → saring → kelompokkan → prioritaskan →
+boleh abaikan**, dan tidak menambah satu kolom pun. Rantai `Signal → Owner →
+Assignment → SLA → Follow-up` menjadi gate Z-02 tersendiri.
+
+**Q6 — unit tetap Signal.** Yang dikelompokkan adalah tampilannya, bukan
+datanya: grain basis data tidak berubah, dan beberapa Signal tidak pernah
+digabung menjadi satu. 341 Signal tersebar di 56 outlet dan 2 periode, dengan
+beban tertinggi 10 Signal per outlet — angka yang membuat pengelompokan per
+outlet × periode terbaca, sementara peleburan per outlet akan menghapus
+pembedaan rule yang justru menentukan tindakan.
+
+**Q7 — corporate punya jalurnya sendiri.** Signal korporat ber-`outlet_id =
+NULL` dan `cakupan_id = '~korporat'`, sehingga **tidak dapat melewati
+`persempit()`** yang bekerja atas daftar outlet. Ia ditampilkan di bagian
+terpisah `CORPORATE SIGNALS`, tidak dipaksa masuk model outlet, dan tidak
+dijadikan outlet palsu. Otorisasinya dipisahkan dari `scopeOutlets()` —
+**tanpa mengarang cakupan korporat baru pada gate ini**.
+
+### Yang TIDAK dilakukan Z-01
+
+Tidak ada migration, perubahan schema, perubahan grain, kolom ownership,
+penulisan produksi, perubahan detector, perubahan ambang, maupun status Signal
+baru. 341 Signal yang ada tidak disentuh.
+
+### OLD BLUEPRINT vs CURRENT LOCKED OWNER CONTRACT
+
+Blueprint ditulis sebelum Phase 4 dibangun. Bagian-bagian berikut **tidak
+diubah** — ia tetap berdiri sebagai rancangan awal, dan yang mengikat adalah
+kontrak di atas.
+
+| bagian | OLD BLUEPRINT | CURRENT LOCKED CONTRACT |
+| --- | --- | --- |
+| §9 Signal | `status` tujuh nilai: `new`, `acknowledged`, `diagnosing`, `escalated`, `dismissed`, `resolved`, `expired` | **Dua**: `terbuka`, `diabaikan` (AD-14 poin 3). Z-01 **tidak menambah** `acknowledged`, walau AD-14 menundanya "ke Phase 5" |
+| §9 Signal | kolom `gap`, `gap_persen`, `revenue_gap` | Dikeluarkan (AD-14 koreksi 3); `revenue_gap` menjadi urusan Impact |
+| §19–22 | Signal `critical` memicu notifikasi | AD-14 poin 6 menundanya "ke Phase 5". **Kontrak Z-01 tidak memuat notifikasi** |
+| §25 Sidebar | grup `Intelligence`, `Work`, `Impact`, `Learning` lahir bersama Command Center | Z-01 hanya Command Center |
+| §25 Sidebar | Readiness & Incidents menjadi tab Command Center | Tidak disebut kontrak Z-01 |
+| §33 R8 | Outlet tanpa cabang ESB ditampilkan terang-terangan di Command Center | Tidak disebut kontrak Z-01 |
+| §5 | `sla_policies` (CREATE) | Q5 menundanya ke Z-02 |
+
+Perbedaan-perbedaan itu **dicatat, bukan diperbaiki**. Menyelaraskan blueprint
+adalah keputusan tersendiri.
+
+### Dependency yang wajib diselesaikan sebelum coding
+
+**Otorisasi korporat belum ada.** Seluruh cakupan V.1 berjalan lewat
+`cakupanOutlet()`/`persempit()` di `src/lib/ops/scope-v1.ts`, yang bekerja atas
+daftar outlet. Signal korporat tidak punya `outlet_id`, jadi tidak ada aturan
+yang menyatakan siapa boleh membacanya. Q7 mengunci bahwa otorisasinya
+**dipisahkan** dari `scopeOutlets()` dan **tidak dikarang di gate ini** — maka
+audit implementasi Z-01 wajib melaporkannya sebagai dependency sebelum baris
+kode pertama ditulis.
+
+Catatan kedua, sudah tercatat di `scope-v1.ts` dan berlaku untuk setiap halaman
+baru: `scopeOutlets` melepas siapa pun yang tidak ditugasi apa pun (aturan
+nomor 5), sehingga yang menahan akses bukan cakupan melainkan `canReachMenu()`
+yang dijalankan lebih dulu. Halaman Command Center wajib memasangnya.
+
+### AD-18 · Addendum — penutupan dependency O8–O10
+
+Tiga dependency yang AD-18 tinggalkan terbuka sudah diputuskan pemiliknya.
+Addendum ini **melanjutkan** AD-18, tidak menggantikannya: Q1–Q7 di atas tetap
+berlaku apa adanya.
+
+| # | dependency | keputusan Owner |
+| --- | --- | --- |
+| **O8** | Notifikasi Signal critical | **A — diimplementasikan di Z-01** |
+| **O9** | `acknowledged` | **A — diimplementasikan di Z-01** |
+| **O10** | Otorisasi corporate | **B — seluruh peran yang berhak membuka Command Center** |
+
+Yang di bawah ini memisahkan tiga hal dengan sengaja: **keputusan Owner** ·
+**fakta repositori** (hasil audit read-only) · **dependency implementasi** yang
+masih harus diputuskan pemiliknya sebelum coding.
+
+---
+
+#### O8 · Notifikasi Signal critical
+
+**Keputusan Owner.** Signal `critical` harus dapat melahirkan notifikasi lewat
+mekanisme yang sudah ada. Tidak ada sistem notifikasi kedua. Notifikasi bukan
+pengganti Signal, tidak mengubah `severity`, tidak mengubah `kondisi_terakhir`,
+dan tidak menyentuh snapshot deteksi. Ia wajib dapat ditelusuri kembali ke
+Signal sumbernya.
+
+Keputusan ini **mencabut penundaan** AD-14 poin 6, yang menyatakan notifikasi
+Signal ditunda "ke Phase 5" karena belum ada layar tujuan. Layar itu kini
+menjadi Command Center, jadi alasan penundaannya gugur.
+
+**Fakta repositori.**
+
+- Satu pintu pengiriman: `notify()`, `notifyMany()`, `notifyCollapsed()` di
+  `src/lib/data/notify.ts`. Enam berkas memanggilnya; **tidak satu pun** dari
+  jalur Signal.
+- Tabel `notifications` — 2.476 baris, **nol** berasal dari Signal.
+- Kolomnya: `id · kind · title · message · outlet_id · area_id · severity ·
+  read · created_at · target_user · department · href · dismissed ·
+  actor_name`. Constraint yang ada hanya PK dan dua FK (`outlets`, `areas`) —
+  **tidak ada CHECK pada `kind` maupun `severity`**.
+- `AppNotification["severity"]` sudah memuat `"critical"`, walau produksi
+  hari ini hanya memakai `info` dan `warning`.
+- Kegagalan kirim sengaja ditelan: notifikasi efek samping, tidak pernah
+  menggagalkan aksi pemicunya.
+
+**Dependency implementasi — belum diputuskan, jangan ditebak.**
+
+1. **Penelusuran balik ke Signal.** `notifications` **tidak punya** kolom
+   `entity_type`/`entity_id`/`signal_id`. Dua jalan yang tersedia, dan
+   pilihannya milik Owner:
+   *(a)* menaruh `signals.id` di dalam `href` — **tanpa migration**, dan
+   sejalan dengan kebiasaan yang sudah ada (100% baris produksi punya `href`);
+   *(b)* menambah kolom relasi — **butuh migration**.
+2. **Penerima.** `notify()` mewajibkan `targetUser` **atau** `department`;
+   tanpa keduanya ia diam. Tidak ada penolong yang menyebarkan ke sebuah peran.
+   Siapa penerima Signal critical — perorangan, departemen, atau pemegang
+   `manage_signals` — **belum diputuskan**.
+3. **Duplikasi.** `notify()` tidak punya penangkal duplikat: tiap panggilan
+   menyisipkan baris. `notifyCollapsed()` menggabungkan berdasarkan
+   `(kind, href, read=false, dismissed=false, target_user)` — baris yang sudah
+   dibaca atau ditutup **tidak** ikut diperbarui, jadi kabar yang sama bisa
+   lahir lagi sebagai baris baru. Deteksi berjalan tiap hari untuk bulan
+   berjalan; tanpa keputusan soal ini, satu Signal bisa menghasilkan puluhan
+   notifikasi dalam sebulan.
+4. **Jenisnya.** `NotificationKind` belum punya nilai untuk Signal. Menambahnya
+   perubahan TypeScript, **bukan migration** — tidak ada CHECK di basis data.
+5. **Kapan dikirim.** Deteksi berjalan di rute cron; Command Center adalah
+   layar. Titik pemicunya belum ditetapkan.
+
+---
+
+#### O9 · `acknowledged`
+
+**Keputusan Owner.** `acknowledged` diimplementasikan di Z-01 — **tetapi schema
+tidak boleh langsung diubah**, dan bentuknya ditentukan setelah audit.
+
+**Fakta repositori.** Seluruh tempat yang hari ini mengasumsikan `status` hanya
+dua nilai:
+
+| lokasi | bentuk asumsinya |
+| --- | --- |
+| `signals_status_check` | `CHECK (status = ANY (ARRAY['terbuka','diabaikan']))` |
+| `signals_diabaikan_utuh` | dua cabang saja; **nilai ketiga akan langsung melanggarnya** |
+| `signals_kerja_idx` | partial index `WHERE status = 'terbuka' AND kondisi_terakhir = 'lewat_ambang'` |
+| `signals_tak_tersunting_trg` | melarang `diabaikan → terbuka` |
+| `gwg_deteksi_signal` | `on conflict` hanya menyentuh blok pengamatan; `status` dan `diabaikan_*` tidak pernah disentuh mesin |
+| `signal-baca.ts:110` | `.eq("status", "terbuka")` — **satu-satunya** penyaring status Signal di seluruh kode aplikasi |
+| AD-14 poin 3 | mengunci dua keadaan; lima usulan blueprint ditunda |
+| AD-18 Q3 | daftar kerja Z-01 hanya `terbuka` |
+
+Invariant yang tidak boleh rusak: snapshot deteksi immutable · Signal tidak
+dapat dihapus · mesin tidak membatalkan keputusan manusia · yang sudah
+diabaikan tidak pernah kembali terbuka.
+
+**Dependency implementasi — bentuknya belum diputuskan.** Audit menyediakan
+bukti untuk tiga bentuk; **tidak satu pun dipilih di sini.**
+
+- **Bentuk A — nilai ketiga pada `status`.** Menuntut **migration**: memperluas
+  `signals_status_check`, menulis ulang `signals_diabaikan_utuh` agar
+  `acknowledged` sah tanpa kolom `diabaikan_*`, dan meninjau `signals_kerja_idx`
+  karena partial index-nya akan berhenti memuat Signal yang sudah di-acknowledge
+  — yang berarti Q3 ("hanya `terbuka`") akan **menyembunyikannya dari daftar
+  kerja**. Trigger juga perlu aturan arah baru: apakah `acknowledged → terbuka`
+  boleh, dan apakah `acknowledged → diabaikan` boleh.
+- **Bentuk B — work-state terpisah dari `status`.** Kolom atau tabel sendiri
+  (`diakui_oleh`, `diakui_pada`). Tetap **butuh migration**, tetapi
+  `signals_status_check`, `signals_diabaikan_utuh`, `signals_kerja_idx`, dan
+  `signal-baca.ts` **tidak berubah artinya** — Signal yang sudah diakui tetap
+  `terbuka`, jadi tetap muncul di daftar kerja Q3, hanya bertanda.
+- **Bentuk C — tanpa perubahan basis data.** "Sudah saya lihat" disimpan di
+  luar `signals`. Tidak ditemukan tabel yang cocok untuk ini hari ini.
+
+**Yang belum boleh diputuskan Claude:** mana dari ketiganya. Ketiganya mengubah
+arti "daftar kerja" secara berbeda, dan itu keputusan bisnis.
+
+**Migration dependency bila A atau B dipilih:** satu migration baru. Migration
+hari ini **112** dan tidak diubah pada gate ini.
+
+---
+
+#### O10 · Otorisasi corporate
+
+**Keputusan Owner.** Signal corporate dapat dibaca **seluruh peran yang secara
+sah dapat membuka Command Center**. Corporate tidak memakai `scopeOutlets()`.
+`outlet_id = NULL`, `cakupan = 'korporat'`, `cakupan_id = '~korporat'`
+dipertahankan. Tidak ada peran baru, tidak ada permission baru, tidak ada
+migration. Area tetap tidak dibangun — produksi 0 baris.
+
+**Fakta repositori.** Mekanisme yang akan dipakai sudah ada dan sudah dipakai
+setiap halaman V.1:
+
+```
+canReachMenu(user, <MenuKey>)        src/lib/nav.ts
+  ├─ UNIVERSAL_MENUS
+  ├─ canOpenMenu(role, key, grants)  ← ROLE_MENUS + grant perorangan
+  ├─ MENU_KPI / MENU_SOSMED / BIDANG_PERFORMA
+  └─ divisionHasMenu(divisiDari(user.department), key)   ← DIVISION_MENUS
+```
+
+Untuk Operational V.1 hari ini, `ROLE_MENUS` memberi lima menu Performance
+kepada `super_admin`, `head_operation`, dan `area_coordinator`; `DIVISION_MENUS`
+membukanya bagi siapa pun yang departemennya memetakan ke divisi
+`Operational V.1`. `persempit()`/`cakupanOutlet()` bekerja **setelah** pintu itu,
+dan hanya atas daftar outlet — Signal corporate tidak melewatinya sama sekali.
+
+Dengan O10 = B, **`canReachMenu` menjadi satu-satunya gerbang** bagi Signal
+corporate. Itu memang mekanisme yang sudah ada, bukan yang dikarang.
+
+**Dependency implementasi.**
+
+1. **Kunci menu Command Center belum ada.** Tidak ada `MenuKey` untuk Command
+   Center. Yang wajib diubah bersamaan (blueprint bagian 25): `MenuKey` ·
+   `NAV_MENUS` · `DIVISION_GROUPS["Operational V.1"]` · `DIVISION_MENUS` ·
+   `ROLE_MENUS`, plus kunci `nav.*` di `src/lib/i18n/dict.ts` yang dijaga
+   `dict.test.ts`. Seluruhnya TypeScript, **tanpa migration**.
+2. **Peran mana yang mendapat kunci itu adalah keputusan Owner, dan ia
+   menentukan siapa melihat angka korporat.** `area_coordinator` hari ini
+   memegang seluruh menu Performance tetapi cakupan outletnya dipersempit ke
+   areanya. Bila kunci Command Center diberikan kepadanya, O10 = B berarti ia
+   **melihat angka korporat seluruh perusahaan** — sesuatu yang tidak pernah
+   terjadi pada halaman V.1 mana pun sampai hari ini. Ini dilaporkan sebagai
+   konsekuensi, bukan diputuskan.
+3. **Kebocoran outlet di luar cakupan tidak terjadi lewat jalur corporate.**
+   Signal corporate ber-`outlet_id = NULL` dan `nilai_actual`-nya agregat
+   perusahaan; ia tidak memuat identitas outlet mana pun. Bagian outlet pada
+   layar yang sama tetap wajib melewati `persempit()`.
+4. Aturan nomor 5 `scopeOutlets` (siapa pun yang belum ditugasi apa pun tidak
+   dibatasi) tetap berlaku. Yang menahannya `canReachMenu()`, yang wajib
+   dipasang di halaman Command Center persis seperti `/operational/weekly`.
+
+---
+
+#### OLD BLUEPRINT vs CURRENT LOCKED CONTRACT — tambahan dari O8–O10
+
+| bagian | OLD BLUEPRINT | CURRENT LOCKED CONTRACT |
+| --- | --- | --- |
+| §19–22 | Signal critical memicu notifikasi; pemicu V.1 juga mencakup Case ditugaskan, SLA, Blocker, verifikasi, Impact, Playbook | **O8** mengambil Signal critical saja. Pemicu lain tetap milik phase-nya |
+| §9 | `status` tujuh nilai, termasuk `acknowledged` sebagai salah satu dari tujuh | **O9** memasukkan `acknowledged` ke Z-01, tetapi **bentuknya belum ditetapkan** — bisa jadi bukan nilai `status`. Lima nilai lain tetap ditunda |
+| AD-14 poin 6 | notifikasi Signal ditunda "ke Phase 5" | **dicabut oleh O8** — sekarang masuk Z-01 |
+| AD-14 poin 3 | `acknowledged` ditunda "ke Phase 5" | **ditindaklanjuti O9** — Z-01, bentuk menyusul audit |
+
+AD-14 **tidak diubah**. Kedua penundaannya memang menyebut Phase 5, dan Z-01
+adalah Phase 5 — jadi yang terjadi pemenuhan jadwalnya, bukan pembatalan
+keputusannya.
+
+---
+
+## AD-19 · Z-02 — decision lock: Work entity, arsitektur dan kontrak
+
+Keputusan Owner, dikunci setelah Z-02 Contract Discovery, Architecture Selection
+Discovery, dan Owner Decision Resolution Discovery. **Kontrak, belum
+implementasi:** saat keputusan ini dicatat tidak ada tabel, kolom, fungsi,
+trigger, server action, maupun layar yang dibuat.
+
+Register AD yang berwenang adalah berkas ini (N1). Tabel AD pada
+`blueprint.md` §2 adalah penomoran dokumen rancangan dan **bukan** register
+keputusan — nomornya tidak diubah, tidak dihapus, dan tidak dipetakan ulang.
+
+### Fondasi yang sudah dikunci lebih dulu
+
+| # | keputusan |
+| --- | --- |
+| **D0** | Lifecycle Signal pada `blueprint.md` §9 (`new/acknowledged/diagnosing/escalated/dismissed/resolved/expired`) **usang**. Yang berlaku: `terbuka` \| `diabaikan`, dengan acknowledgement sebagai work-state terpisah (AD-18) |
+| **D0b** | Signal → Work **langsung diizinkan**. Diagnosis dan Business Case bukan prasyarat universal; keduanya tetap mungkin sebagai jalur panjang untuk kasus yang menuntutnya |
+| **D1** | Ownership = **satu individu** |
+| **D2** | Owner ≠ Executor · Executor = **1..N** |
+| **D3** | Signal ↔ Work = **N:N** |
+| **D4** | Primary Department = **1** · Executor lintas departemen **diizinkan** |
+| **D5** | Deadline **berbasis policy/kategori** · perhitungan otomatis **wajib** |
+| **D13 / N2** | Acknowledgement **OPSIONAL**. `diakui_oleh` ≠ owner · ≠ executor · `diakui_pada` ≠ waktu penugasan |
+| **D14** | Work Z-02 **wajib** berasal dari Signal |
+| **N1** | Register AD berwenang = `docs/operational-v1/decisions.md` |
+| **N3** | Pembeda terhadap `tasks` selesai secara struktural lewat D14 |
+| **Arsitektur** | **SEPARATE WORK ENTITY** — `works` berdiri sendiri, `tasks` tidak disentuh |
+
+`tasks` (3.939 baris produksi) tetap menjadi **Work Tracker umum/ad-hoc**. Ia
+bukan Work Z-02, tidak di-rename, tidak dimigrasi, tidak digabung, dan tidak
+di-retrofit. Bila kelak satu daftar kerja gabungan dibutuhkan, itu urusan read
+model — bukan alasan menyatukan entitas.
+
+### O-01 · Department Authority Source
+
+**Decision** — `user_departments` adalah registry departemen yang berwenang
+untuk Z-02. `works.primary_department` tetap bertipe `text`, **tanpa** FK.
+
+**Status** — LOCKED
+
+**Rationale** — `user_departments` satu-satunya registry yang punya PK, id
+`text` yang bisa dijadikan FK, hierarki (`parent_id`, `level`, `urutan`), dan
+dikelola lewat User Management sebagai sumber departemen/jabatan orang.
+`users.department` adalah salinan teks bebas; `org_departments` milik modul
+penilaian; `tasks.division` kosakata papan warisan.
+
+**Impact** — Tidak ada pembersihan data `users.department`, tidak ada perubahan
+`org_departments` maupun `tasks.division`, tidak ada migrasi lintas registry
+sebagai bagian Z-02. FK dapat dipasang kemudian sebagai migrasi aditif tanpa
+mengubah bentuk `works`.
+
+### O-02 · Deadline Anchor
+
+**Decision** — `tenggat_anchor = work_dibuat`. `tenggat_anchor_pada` menyimpan
+cap waktu pembuatan Work dan **dibekukan**.
+
+**Status** — LOCKED
+
+**Rationale** — Satu Work dapat menangani banyak Signal dari periode berbeda,
+dan `works` tidak memiliki `signal_id`; anchor apa pun yang bersumber dari
+Signal menuntut jawaban "Signal yang mana" yang tidak ada di bawah N:N.
+`signals.diamati_pada` ditulis ulang detektor setiap hari, sehingga tenggat yang
+bertumpu padanya akan bergeser sendiri.
+
+**Impact** — `signals.diamati_pada` dan `signals.periode` **dilarang** menjadi
+anchor. Umur Signal tetap informasi terpisah dari tenggat Work. Enum anchor
+tetap disimpan eksplisit supaya anchor lain dapat ditambahkan kelak tanpa
+migrasi bentuk.
+
+### O-03 · Deadline Timezone
+
+**Decision** — Seluruh tenggat Work Z-02 memakai `Asia/Jakarta`. `tenggat_zona`
+disimpan pada setiap Work.
+
+**Status** — LOCKED
+
+**Rationale** — Seluruh periode Operational V.1 sudah WIB lewat
+`src/lib/ops/waktu.ts`. Menghitung tenggat dengan UTC menggeser batas hari tujuh
+jam terhadap data yang melahirkannya.
+
+**Impact** — Tidak ada timezone per departemen, per Work, maupun dari peramban.
+UTC tidak dipakai sebagai kalender bisnis. `isOverdue()` di `src/lib/utils.ts`
+adalah milik Work Tracker lama dan tidak dipakai jalur Z-02.
+
+### O-04 · Deadline Policy
+
+**Decision** — Policy Z-02 V1 yang baru, versi `Z02-SLA-v1`:
+
+| kategori | offset |
+| --- | ---: |
+| `urgent` | 1 hari |
+| `high` | 3 hari |
+| `normal` | 5 hari |
+| `low` | 7 hari |
+
+Keempat kategori dibatasi CHECK di basis data. Alurnya
+`policy input → anchor → calculation → stored deadline`, **bukan** hitung ulang
+saat render. Versi policy disimpan sebagai snapshot pada setiap Work.
+
+**Status** — LOCKED
+
+**Rationale** — Kosakata `sebelum_h5/h5/h3/h1` pada `src/lib/kpi/deadline.ts`
+menjawab "seberapa mendesak permintaan saya" — pilihan pemohon desain, dengan
+konsekuensi pada skor pemohon. Signal tidak diminta siapa pun; memakai ulang
+kosakata itu memindahkan makna yang tidak berlaku.
+
+**Impact** — Perubahan policy di masa depan **tidak boleh** mengubah tenggat
+Work lama. `src/lib/kpi/deadline.ts` tidak disentuh dan tetap melayani pengajuan
+desain.
+
+### O-05 · Work Lifecycle
+
+**Decision** — `open` · `in_progress` · `completed` · `cancelled`.
+
+| status | arti |
+| --- | --- |
+| `open` | Work sudah dibuat dan sah, belum mulai dikerjakan |
+| `in_progress` | Executor sudah mulai mengerjakan |
+| `completed` | dinyatakan selesai oleh Owner |
+| `cancelled` | dibatalkan oleh pemegang `manage_signals` |
+
+**Status** — LOCKED
+
+**Rationale** — Pembeda `open`/`in_progress` sudah terbukti dipakai di tiga
+sistem produksi (`tasks`, `complaints`, `system_requests`). `blocked` menuntut
+tabel `blockers` yang tidak pernah dibuat.
+
+**Impact** — `overdue` **bukan** status; ia kondisi turunan
+(`tenggat < waktu bisnis sekarang AND status NOT IN ('completed','cancelled')`).
+Tidak ada status `blocked`, `verified`, `diagnosing`, `business_case`, maupun
+`closed` pada Z-02. Lifecycle `blueprint.md` §12 tetap usang untuk Work.
+
+### O-06 · Authorization Boundaries
+
+**Decision**
+
+| kemampuan | pemegang |
+| --- | --- |
+| CREATE Work | izin baru `create_signal_work` → `super_admin`, `head_operation`, `area_coordinator` |
+| VIEW Work | batas akses Command Center yang sudah ada, **atau** penugasan executor eksplisit |
+| Menjadi OWNER | siapa pun yang punya akses VIEW Work, dan **aktif** |
+| ADD / REMOVE EXECUTOR | Owner saat itu, atau pemegang `manage_signals` |
+| CHANGE OWNER | **hanya** `manage_signals` |
+| CHANGE DEADLINE | **hanya** `manage_signals` |
+| COMPLETE Work | **hanya** Owner |
+| CANCEL Work | **hanya** `manage_signals` |
+
+**Status** — LOCKED
+
+**Rationale** — `create_work_task` dipegang 12 dari 14 peran, termasuk peran
+yang tidak boleh membuka Operational V.1 sama sekali; memakainya ulang akan
+memberi hak kerja Signal kepada orang yang tidak boleh melihat Signalnya.
+Pemisahan "yang mengerjakan tidak menutup pekerjaannya sendiri" meniru
+`hygiene_followups`, satu-satunya alur verifikasi yang sudah terbukti jalan.
+
+**Impact** — Izin `create_signal_work` dibuat pada gate implementasi, bukan
+sekarang. Tidak ada peran baru. Keanggotaan departemen **tidak** menjadi jalan
+pintas otorisasi: executor aktif boleh melihat Work-nya walau
+`primary_department` berbeda dari departemennya, tetapi tidak otomatis melihat
+seluruh Work departemen itu. Pembatalan dan perubahan tenggat wajib beralasan
+dan tercatat.
+
+### O-07 · Owner Required at Creation
+
+**Decision** — `owner_id NOT NULL`. Owner ditetapkan di dalam transaksi
+pembuatan Work, harus pengguna aktif, dan tidak boleh sama dengan Executor.
+
+**Status** — LOCKED
+
+**Rationale** — `tasks` membolehkan pekerjaan tanpa penanggung jawab, dan
+hasilnya 51 baris tanpa PIC serta 248 baris lewat tenggat yang tidak ada yang
+menagih. Accountability yang boleh kosong bukan accountability.
+
+**Impact** — Tidak ada keadaan `owner = null`. Bersama I-03 dan I-04, satu Work
+selalu melibatkan sedikitnya dua orang berbeda sejak lahir.
+
+### O-08 · Owner Changeability
+
+**Decision** — Owner dapat diganti oleh pemegang `manage_signals`. Alasan
+**wajib**. Riwayat **wajib** (`work_riwayat`, jenis `owner`, memuat nilai lama,
+nilai baru, aktor, waktu, alasan). Owner baru harus aktif dan tidak boleh
+menjadi Executor aktif pada Work yang sama.
+
+**Status** — LOCKED
+
+**Rationale** — Orang nonaktif, pindah divisi, atau cuti panjang; kepemilikan
+yang tidak bisa dipindah menghasilkan pekerjaan yatim. Tetapi memindahkan
+tanggung jawab atas kehendak sendiri menghapus arti accountability, jadi
+otoritasnya bukan Owner.
+
+**Impact** — Riwayat tidak pernah ditimpa. Owner lama tetap terbaca selamanya.
+Tidak ada alur persetujuan baru.
+
+### O-09 · Deadline Changeability
+
+**Decision** — Tenggat dapat diubah oleh pemegang `manage_signals`. Alasan
+**wajib**, tidak boleh kosong maupun spasi. Riwayat **wajib**. Perubahan manual
+**tidak** mengubah `tenggat_anchor`, `tenggat_anchor_pada`, `tenggat_zona`,
+maupun `tenggat_kebijakan_versi`.
+
+**Status** — LOCKED
+
+**Rationale** — `tasks.due_date` dapat diubah bebas oleh 12 peran tanpa alasan
+dan tanpa jejak; akibatnya 248 baris lewat tenggat tidak bisa dijelaskan
+riwayatnya.
+
+**Impact** — Dua fakta tetap dapat dibedakan selamanya: tenggat hasil kebijakan
+awal, dan tenggat yang kemudian digeser orang. Tidak ada perubahan tenggat yang
+senyap.
+
+### O-10 · Signal Release
+
+**Decision** — Pelepasan kaitan Signal ↔ Work bersifat **lunak**:
+`dilepas_pada`, `dilepas_oleh`, `alasan` — ketiganya kosong bersama-sama atau
+terisi bersama-sama. Baris `signal_work` **tidak pernah dihapus**. Kaitan aktif
+berarti `dilepas_pada IS NULL`. Melepas kaitan aktif terakhir **ditolak**.
+
+**Status** — LOCKED
+
+**Rationale** — Di bawah N:N salah kait pasti terjadi; tanpa jalan keluar,
+satu-satunya perbaikan adalah membatalkan Work dan membuang juga kaitan yang
+benar. Menghapus baris menghapus fakta bahwa Signal itu pernah dianggap
+ditangani — pertanyaan yang justru menjadi alasan Signal dipersistenkan.
+
+**Impact** — Pemulihan Signal (`kondisi_terakhir = 'aman'`) **tidak** melepas
+kaitan apa pun. Lifecycle Signal dan lifecycle Work tetap terpisah.
+
+### O-11 · Primary Department Changeability
+
+**Decision** — `primary_department` dapat berubah, oleh pemegang
+`manage_signals`, dengan alasan wajib dan riwayat wajib (`work_riwayat`, jenis
+`departemen`). Nilai lama tidak pernah dihapus. Kolomnya tetap `text` pada
+Z-02, tanpa FK.
+
+**Status** — LOCKED
+
+**Rationale** — Salah domain terjadi, dan pelaporan historis harus dijawab
+dengan departemen saat itu, bukan departemen sekarang.
+
+**Impact** — Tidak ada migrasi registry departemen sebagai bagian Z-02.
+
+### O-12 · Invariant Enforcement
+
+**Decision** — **RPC writer + row-level trigger**. Bukan penegakan
+service-only, dan bukan `DEFERRABLE CONSTRAINT TRIGGER`.
+
+**Status** — LOCKED
+
+**Rationale** — PostgREST tidak menyediakan transaksi lintas permintaan, jadi
+jaminan lapisan layanan bukan jaminan: kegagalan di langkah kedua meninggalkan
+Work tanpa Signal tanpa satu galat pun terlihat. Alasan yang sama sudah tertulis
+di `0111_signals.sql` dan sudah dijawab repositori dengan pola RPC sebanyak
+tujuh kali. Trigger baris sudah terbukti pada `signals` dan teruji lewat
+`scripts/test-db.mjs`.
+
+**Impact** — Jalur tulis Z-02 melewati fungsi basis data, bukan
+`db().from("works").insert(...)`. Produksi belum pernah memakai constraint
+`DEFERRABLE` maupun constraint trigger, dan Z-02 tidak memperkenalkannya.
+
+### Kontrak struktural Z-02
+
+```
+Z-02 WORK CONTRACT
+
+ARCHITECTURE
+  SEPARATE WORK ENTITY
+
+works
+  id · judul · deskripsi
+  owner_id · primary_department · status
+  tenggat_kategori · tenggat_anchor · tenggat_anchor_pada
+  tenggat_zona · tenggat_kebijakan_versi
+  tenggat · tenggat_dihitung_pada
+  dibuat_oleh · dibuat_pada · diperbarui_pada
+
+  tepat satu Owner · Owner aktif saat ditetapkan · Owner != Executor
+  status terbatas · kategori tenggat terbatas
+  primary_department tidak boleh kosong
+
+signal_work
+  signal_id · work_id
+  dikaitkan_oleh · dikaitkan_pada
+  dilepas_pada · dilepas_oleh · alasan
+  PK (signal_id, work_id) · historis append-only
+  kaitan aktif = dilepas_pada IS NULL
+
+work_executors
+  work_id · user_id
+  ditugaskan_oleh · ditugaskan_pada
+  departemen_saat_ditugaskan
+  dilepas_pada · dilepas_oleh
+  PK (work_id, user_id) · Owner != Executor
+  minimal satu executor aktif
+  snapshot departemen tidak mengikuti perubahan departemen orang
+
+work_riwayat
+  id · work_id · jenis · nilai_lama · nilai_baru
+  alasan · oleh · pada
+  jenis minimal: owner · tenggat · status · departemen
+  append-only
+  alasan wajib untuk: ganti owner · ganti tenggat · ganti departemen · batal
+
+tasks
+  TIDAK DISENTUH — Work Tracker umum/ad-hoc
+```
+
+### Invariant Z-02
+
+| # | invariant |
+| --- | --- |
+| I-01 | Work selalu punya ≥1 kaitan Signal aktif |
+| I-02 | Work punya tepat 1 Owner |
+| I-03 | Owner bukan Executor |
+| I-04 | Work punya ≥1 Executor aktif |
+| I-05 | Work punya tepat 1 primary department |
+| I-06 | Executor boleh lintas departemen |
+| I-07 | Acknowledgement Signal bukan penugasan Work |
+| I-08 | Lifecycle Signal bukan lifecycle Work |
+| I-09 | Tenggat berasal dari policy + anchor |
+| I-10 | Tenggat hasil hitung disimpan |
+| I-11 | Perubahan policy tidak mengubah Work lama |
+| I-12 | Jalur Work tidak menulis lifecycle Signal |
+| I-13 | Pasangan Signal–Work unik |
+| I-14 | Pasangan Executor unik |
+| I-15 | Jalur Work Z-02 tidak memakai `tasks` |
+| I-16 | Kaitan Signal yang dilepas tetap tersimpan sebagai riwayat |
+| I-17 | Work tidak boleh kehilangan kaitan Signal aktif terakhir |
+| I-18 | Work tidak boleh kehilangan Executor aktif terakhir |
+| I-19 | Perubahan tenggat wajib beralasan dan tercatat |
+| I-20 | Perubahan owner/departemen wajib beralasan dan tercatat |
+
+### Yang TIDAK diputuskan di sini
+
+Verification · Evidence · Resolution semantics · Escalation · notifikasi Work ·
+audit log perusahaan · Diagnosis · Business Case · Approval. Semuanya di luar
+cakupan Z-02 dan masing-masing memerlukan gerbangnya sendiri.
+
+---
+
+## AD-20 · Z-02 STEP 2B — decision lock: status Work, pembatalan, dan kontrak penulis
+
+Keputusan Owner, dikunci setelah Z-02 Step 2B Preflight Audit menemukan enam
+hal yang belum tercakup AD-19. **Kontrak, belum implementasi:** saat keputusan
+ini dicatat tidak ada fungsi penulis, trigger baru, maupun migrasi yang dibuat.
+
+`0114_work_signal.sql` dan `0115_work_enforcement.sql` **tidak diubah**.
+Penegakan tambahan yang dituntut keputusan ini wajib lahir sebagai migrasi
+BARU sesudah 0115 — bukan suntingan atas berkas yang sudah tertutup.
+
+AD-01 … AD-19 tidak disentuh, tidak dinomori ulang, tidak dibatalkan.
+
+### A · Alasan pembatalan ditegakkan basis data
+
+**Decision** — Transisi menuju `cancelled` wajib disertai `work_riwayat`
+ber-`jenis = 'status'`, dengan `alasan` tidak kosong, yang lahir pada
+**transaksi yang sama**. Urutannya sama dengan tiga mutasi lain: riwayat
+disisipkan lebih dulu, `works` diperbarui sesudahnya, keduanya atomik.
+Pencocokannya memakai mekanisme yang sudah terbukti pada T-F — kesamaan
+`xmin` baris riwayat dengan transaksi berjalan. Bukan penanda `set_config`,
+bukan `DEFERRABLE`, bukan constraint trigger.
+
+**Status** — LOCKED
+
+**Rationale** — Kontrak struktural AD-19 sudah menuntut alasan untuk
+pembatalan, tetapi tidak ada invariant bernomor yang menyebutnya dan T-F pada
+`0115` hanya menjaga `owner_id`, `primary_department`, dan `tenggat`. Kolom
+`status` tidak diperiksa sama sekali, sehingga hari ini sebuah Work dapat
+dibatalkan tanpa satu baris jejak pun. Pembatalan menghentikan pekerjaan; yang
+menghentikan pekerjaan tanpa alasan tertulis tidak dapat ditagih siapa pun.
+
+**Impact** — Invariant baru **I-21**: *pembatalan Work wajib beralasan dan
+tercatat*. I-19 dan I-20 tidak berubah, tidak diperluas, dan tidak digantikan —
+I-21 berdiri di sampingnya untuk kolom yang berbeda. Penegakannya menuntut
+perluasan T-F ke kolom `status`, yang harus dituliskan sebagai migrasi baru.
+
+### B · Mesin status Work
+
+**Decision**
+
+```
+open ─┬─> in_progress ─┬─> completed
+      │                └─> cancelled
+      └─> cancelled
+```
+
+| # | transisi | putusan |
+| --- | --- | --- |
+| 1 | `open` → `in_progress` | DIIZINKAN |
+| 2 | `in_progress` → `completed` | DIIZINKAN |
+| 3 | `open` → `cancelled` | DIIZINKAN |
+| 4 | `in_progress` → `cancelled` | DIIZINKAN |
+| 5 | `open` → `completed` | DITOLAK |
+| 6 | `completed` → apa pun | DITOLAK |
+| 7 | `cancelled` → apa pun | DITOLAK |
+
+**Status** — LOCKED
+
+**Rationale** — AD-19 mengunci empat nilai dan artinya, tetapi tidak pernah
+menyatakan arahnya. Tanpa arah, `completed` dapat dikembalikan menjadi `open`
+dan pekerjaan yang sudah dinyatakan selesai berubah lagi tanpa jejak — persis
+penyakit yang sudah dicegah pada `signals` lewat larangan
+`diabaikan → terbuka`.
+
+**Impact** — `completed` dan `cancelled` bersifat **terminal**. Aturan nomor 5
+berarti Work tidak dapat melompati `in_progress`: yang dinyatakan selesai harus
+lebih dulu dinyatakan dikerjakan. Tidak ada status baru ditambahkan. Lifecycle
+Signal tidak tersentuh — ia tetap `terbuka` \| `diabaikan`, dan acknowledgement
+tetap terpisah dari keduanya.
+
+### C · Penjaga Owner pada penyelesaian
+
+**Decision** — Dua lapis, dan keduanya disebut apa adanya:
+
+1. **Otorisasi tetap di lapisan aplikasi**, sesuai O-12 dan pola repositori.
+2. **Penjaga konsistensi di fungsi penulis:** untuk transisi menuju
+   `completed`, fungsi menolak bila pelaku yang disampaikan bukan
+   `works.owner_id`.
+
+**Status** — LOCKED
+
+**Rationale** — O-06 mengunci bahwa hanya Owner yang menyelesaikan Work.
+Fungsi penulis berjalan sebagai `service_role` tanpa konteks autentikasi,
+sehingga ia tidak dapat membuktikan siapa pemanggilnya. Yang bisa ia lakukan
+adalah menolak pelaku yang jelas-jelas bukan Owner.
+
+**Impact** — Pemeriksaan ini **bukan autentikasi**. Nilai pelaku tetap datang
+dari lapisan layanan dan tidak terverifikasi basis data; penjaga ini hanya
+memastikan penyelesaian tidak tercatat atas nama orang yang bukan pemiliknya.
+Seluruh otorisasi tidak dipindahkan ke basis data. Tidak ada peran baru, tidak
+ada perubahan RBAC.
+
+### D · Risiko sisa pada penyisipan langsung
+
+**Decision** — I-01 (Work punya ≥1 kaitan Signal aktif) dan I-04 (Work punya
+≥1 pelaksana aktif) **dijamin konstruksi** di dalam fungsi penulis resmi, bukan
+oleh trigger. Risikonya diterima apa adanya.
+
+**Status** — LOCKED
+
+**Rationale** — Keduanya baru dapat dinilai setelah baris anak ada, sedangkan
+`works` lahir lewat `INSERT`. Menegakkannya di basis data menuntut constraint
+trigger yang ditunda sampai COMMIT, dan O-12 melarangnya.
+
+**Impact** — Penyisipan langsung ke `works` di luar fungsi penulis dapat
+menghasilkan Work tanpa Signal dan tanpa pelaksana, dan tidak ada yang
+menolaknya. Yang menahan: pembuatan atomik di dalam fungsi resmi, uji penjaga
+sumber yang melarang jalur tulis aplikasi menyentuh tabel ini langsung, dan uji
+regresi. Tidak ada trigger baru dibuat hanya untuk ini; `0114` dan `0115` tidak
+diubah.
+
+### E · Operasi tanpa perubahan bukan pelanggaran
+
+**Decision** — Bila operasi resmi menghasilkan keadaan yang sudah sama dan
+tidak mengubah satu baris pun, fungsi mengembalikan `"berubah": false` —
+bukan galat. Berlaku untuk kaitan Signal yang sudah aktif, kaitan yang sudah
+dilepas, pelaksana yang sudah ditugaskan atau sudah dilepas, mutasi bernilai
+sama, dan status yang sudah sama.
+
+Yang **tetap ditolak**: transisi tidak sah, tidak berwenang, alasan wajib yang
+kosong, sasaran tidak ditemukan, benturan owner/pelaksana, dan kembaran yang
+memang dilarang kontrak.
+
+**Status** — LOCKED
+
+**Rationale** — Polanya sudah ada di repositori: `gwg_tulis_kpi_bulanan`
+mengembalikan `'berubah': false` untuk panggilan yang tidak mengubah apa pun.
+Menjadikan pengulangan sebagai galat membuat pemanggil harus membedakan
+kegagalan sungguhan dari pengulangan yang tidak berbahaya.
+
+**Impact** — PK dan CHECK pada `0114` tidak diubah; kembaran yang dilarang
+kontrak tetap ditolak basis data.
+
+### F · Bentuk jawaban fungsi penulis
+
+**Decision** — `jsonb_build_object` dengan kunci berbahasa Indonesia,
+mengikuti seluruh fungsi `gwg_*` yang sudah ada:
+
+```
+gwg_buat_work              { id, tenggat, jumlah_signal, jumlah_executor, berubah }
+gwg_kaitkan_signal_work    { work_id, signal_id, berubah }
+gwg_lepas_signal_work      { work_id, signal_id, berubah }
+gwg_kelola_executor_work   { work_id, user_id, aksi: tambah|lepas, berubah }
+gwg_ubah_work              { id, berubah }
+gwg_ubah_status_work       { id, status, berubah }
+```
+
+Tidak ada field di luar daftar ini.
+
+**Status** — LOCKED
+
+**Rationale** — Enam fungsi `gwg_*` existing seluruhnya mengembalikan `jsonb`
+ringkasan berkunci Indonesia. Bentuk ini mengikutinya tanpa menambah konvensi
+baru.
+
+**Impact** — Galat tetap memakai `raise exception` berpesan bahasa Indonesia
+yang menjelaskan alasan penolakan. Tidak ada kerangka kode galat baru, tidak
+ada SQLSTATE khusus. Kelas kegagalan dibedakan dari pesannya: masukan tidak
+sah · sasaran tidak ditemukan · tidak berwenang · dilarang kontrak ·
+pelanggaran invariant · kembaran · transisi tidak sah · alasan wajib ·
+tenggat tidak sah.
+
+### G · Work terminal berhenti sepenuhnya
+
+**Decision** — Work berstatus `completed` atau `cancelled` bersifat
+**terminal**, dan yang berhenti bukan hanya statusnya melainkan seluruh
+mutasinya. Setelah Work mencapai salah satu dari keduanya:
+
+| # | yang berhenti |
+| --- | --- |
+| 1 | `owner_id` tidak boleh diubah |
+| 2 | `primary_department` tidak boleh diubah |
+| 3 | `tenggat` tidak boleh diubah |
+| 4 | `status` tidak boleh berubah lagi |
+| 5 | pelaksana tidak boleh ditambah maupun dilepas |
+| 6 | kaitan Signal tidak boleh dilepas |
+| 7 | tidak ada mekanisme membuka kembali |
+| 8 | tidak ada mekanisme menghidupkan kembali |
+
+Bila pekerjaannya perlu dilanjutkan sesudah itu, yang dibuat **Work baru**
+sesuai kontrak Z-02, dikaitkan dengan Signal yang masih aktif sepanjang
+invariantnya terpenuhi.
+
+**Status** — LOCKED
+
+**Rationale** — AD-20 · B mengunci arah status, dan itu saja menyisakan lubang:
+Work yang sudah dinyatakan selesai masih bisa berpindah pemilik, berpindah
+departemen, dan bergeser tenggatnya. Catatan yang sudah ditutup lalu berubah
+isinya bukan catatan — dan seluruh nilai `works` sebagai rekam audit bertumpu
+pada isinya berhenti bergerak ketika pekerjaannya berhenti.
+
+**Impact** — Invariant baru **I-24**. Work terminal **tetap dapat dibaca**
+sesuai otorisasi yang berlaku, tetap membawa seluruh riwayat yang sudah
+tercatat, dan tetap sah sebagai rujukan maupun rekam audit. Tidak ada riwayat
+yang dihapus, tidak ada status baru, tidak ada kolom baru, dan lifecycle Signal
+tidak tersentuh. I-21, I-22, dan I-23 tidak berubah maknanya; I-24 berdiri di
+sampingnya dan mencakup permukaan yang lebih luas daripada ketiganya.
+
+### H · Work terminal juga tidak menerima kaitan Signal baru
+
+**Decision** — Work berstatus `completed` atau `cancelled` **tidak boleh
+menerima kaitan Signal baru**. Ketiga arah ditutup sekaligus:
+
+| arah | putusan |
+| --- | --- |
+| mengaitkan Signal baru | DILARANG |
+| melepas kaitan aktif | DILARANG |
+| menghapus baris `signal_work` | DILARANG |
+
+Kaitan yang sudah ada tetap tersimpan sebagai rekam audit. Tidak ada perubahan
+pada lifecycle Signal, tidak ada membuka kembali, tidak ada menghidupkan
+kembali.
+
+**Status** — LOCKED
+
+**Rationale** — Z-02 Implementation Preflight menemukan dua bacaan yang
+berbeda cakupannya: tabel AD-20 · G nomor 6 hanya menyebut **pelepasan**,
+sedangkan I-24 menyebut *"kaitan Signal aktif"* secara keseluruhan.
+Mengaitkan Signal baru memperbesar himpunan kaitan aktif sebuah Work terminal,
+sehingga ia mutasi — dan bacaan I-24 yang berlaku.
+
+**Impact** — AD-20 · G nomor 6 **tidak dihapus maupun ditulis ulang**; bagian
+ini yang menyatakan cakupan penuhnya. `gwg_kaitkan_signal_work` menolak Work
+terminal. I-24 tidak berubah maknanya — ia diperjelas, bukan diperluas.
+
+### I · Setiap perubahan status meninggalkan jejak
+
+**Decision** — Setiap transisi status Work wajib disertai satu
+`work_riwayat` ber-`jenis = 'status'` pada **transaksi yang sama**.
+
+| transisi | riwayat | alasan |
+| --- | --- | --- |
+| `open` → `in_progress` | **wajib** | tidak wajib |
+| `in_progress` → `completed` | **wajib** | tidak wajib |
+| `open` → `cancelled` | **wajib** | **wajib**, tidak boleh kosong |
+| `in_progress` → `cancelled` | **wajib** | **wajib**, tidak boleh kosong |
+
+`nilai_lama` memuat status sebelumnya, `nilai_baru` memuat status barunya.
+Riwayat disisipkan lebih dulu, `works` diperbarui sesudahnya, dan
+pencocokannya memakai mekanisme `xmin` yang sama dengan T-F. Seluruhnya satu
+transaksi: bila pembaruan `works` gagal, riwayatnya ikut batal.
+
+**Status** — LOCKED
+
+**Rationale** — AD-20 · A hanya mewajibkan jejak untuk pembatalan, sehingga
+"kapan pekerjaan ini mulai dikerjakan" dan "kapan ia dinyatakan selesai" tidak
+terjawab oleh apa pun. Keduanya pertanyaan yang paling sering ditanyakan
+tentang sebuah daftar kerja, dan jawabannya tidak boleh hanya disimpulkan dari
+`diperbarui_pada` yang berubah karena sebab apa saja.
+
+**Impact** — Invariant baru **I-25**. `0114` sudah mengizinkan
+`jenis = 'status'`, jadi tidak ada perubahan skema. AD-20 · A tetap berlaku apa
+adanya sebagai aturan khusus pembatalan — I-25 mewajibkan **riwayatnya**, I-21
+mewajibkan **alasannya**. Transisi normal tidak menuntut alasan, dan tidak ada
+alasan kosong yang boleh menyamar sebagai alasan.
+
+### J · Tiga hal yang dikunci Z-02 Step 3
+
+Ketiganya muncul sebagai pertanyaan terbuka saat implementasi, dan ketiganya
+diputuskan Owner sebelum satu barisnya dipakai.
+
+#### J.1 · `create_signal_work` adalah izin aplikasi, bukan izin basis data
+
+**Decision** — `create_signal_work` hidup di `src/lib/rbac.ts` dan diperiksa
+lapisan aplikasi. Fungsi penulis SQL **tidak boleh** menyalin
+`ROLE_PERMISSIONS`, memetakan peran ke izin, maupun menjadi sumber kebenaran
+otorisasi. Pemegangnya persis tiga peran yang sudah dikunci O-06:
+`super_admin`, `head_operation`, `area_coordinator`. `manage_signals` memakai
+izin yang sudah ada dan tidak dibuat ulang.
+
+**Status** — LOCKED
+
+**Rationale** — AD-20 · C dan O-12 sudah mengunci otorisasi di lapisan
+aplikasi. Memeriksanya di SQL berarti dua daftar izin untuk satu aturan, dan
+yang kedua akan menyimpang diam-diam. O-06 Impact sendiri menyatakan izin ini
+dibuat pada gate implementasi — dan gate inilah gate itu.
+
+**Impact** — Satu-satunya penjaga beraktor di basis data tetap yang dikunci
+AD-20 · C: penyelesaian ditolak bila pelaku yang disampaikan bukan
+`works.owner_id`. Ia penjaga konsistensi, bukan autentikasi. Tidak ada peran
+baru, tidak ada izin lain yang berubah, tidak ada perubahan model autentikasi.
+
+#### J.2 · Tenggat adalah offset murni, bukan akhir hari
+
+**Decision** — Tenggat dihitung `anchor + N hari` — offset murni, tanpa
+pembulatan ke akhir hari, tanpa `23:59:59`, tanpa aturan hari kerja.
+`tenggat_zona = 'Asia/Jakarta'` tetap disimpan sebagai snapshot kalender
+bisnisnya. Alurnya tetap `policy input → anchor → calculation → stored result`,
+versi `Z02-SLA-v1`.
+
+**Status** — LOCKED
+
+**Rationale** — O-04 mengeja offset per kategori tetapi tidak pernah menyebut
+pembulatan. Menambahkan aturan akhir hari berarti memindahkan tenggat setiap
+Work beberapa jam tanpa satu keputusan pun yang menuntutnya.
+
+**Impact** — O-04 tidak berubah maknanya; bagian ini menutup satu-satunya
+bacaan kedua yang mungkin. Work berkategori `high` yang dibuat pukul 10.17 WIB
+jatuh tempo pukul 10.17 WIB tiga hari kemudian.
+
+#### J.3 · Pelepasan tidak bisa ditarik kembali, dan penugasan tidak dihapus
+
+**Decision**
+
+| yang dilarang | putusan |
+| --- | --- |
+| mengosongkan `signal_work.dilepas_pada` \| `dilepas_oleh` \| `alasan` | DILARANG |
+| menulis ulang trio pelepasan yang sudah terisi | DILARANG |
+| mengaitkan ulang Signal yang kaitannya pernah dilepas | DILARANG |
+| `DELETE` pada `work_executors` | DILARANG, termasuk pada Work non-terminal |
+
+Pelaksana hanya berhenti lewat pelepasan lunak yang membawa `dilepas_pada` dan
+`dilepas_oleh`.
+
+**Status** — LOCKED
+
+**Rationale** — Trio pelepasan adalah satu-satunya jejak bahwa sebuah kaitan
+pernah dianggap salah; mengosongkannya menghidupkan kaitan lama tanpa menyebut
+siapa dan kenapa. `DELETE` pada penugasan melewati audit pelepasan seluruhnya,
+dan larangan yang hanya berlaku sesudah Work terminal bisa dilewati dengan
+menghapus barisnya sebelum Work terminal — yang melemahkan I-18.
+
+**Impact** — Invariant baru **I-26** dan **I-27**. Kalau kebutuhan bisnis
+menuntut kaitan Signal yang baru pada Work yang sama, itu **belum termasuk
+kontrak Z-02** dan ditolak untuk saat ini. O-10 tidak berubah maknanya: ia
+mengunci pelepasan yang lunak, J.3 mengunci bahwa yang lunak itu tetap
+permanen.
+
+### K · Pelepasan pelaksana juga rekam audit yang beku
+
+**Decision** — Setelah `work_executors.dilepas_pada` dan `dilepas_oleh`
+terisi, keduanya **tidak boleh dikosongkan, diganti, maupun digeser**.
+
+| keadaan | putusan |
+| --- | --- |
+| `dilepas_pada` \| `dilepas_oleh` masih NULL | boleh terisi **satu kali**, bersama-sama |
+| keduanya sudah terisi → kembali NULL | DILARANG |
+| keduanya sudah terisi → diganti nilainya | DILARANG |
+| keduanya sudah terisi → digeser waktunya | DILARANG |
+| menugaskan ulang pelaksana yang sudah dilepas | DILARANG |
+| `DELETE` baris `work_executors` | DILARANG (tetap, I-27) |
+
+Yang **tidak berubah**: owner ≠ pelaksana, pelaksana aktif terakhir tidak boleh
+dilepas (I-18), pelaksana lintas departemen tetap diizinkan, dan snapshot
+`departemen_saat_ditugaskan` tetap beku.
+
+**Status** — LOCKED
+
+**Rationale** — J.3 menutup `DELETE` karena ia melewati audit pelepasan. Tetapi
+mengosongkan `dilepas_pada` dan `dilepas_oleh` menghapus audit yang sama persis
+tanpa menghapus satu baris pun — lubang yang sama, lewat pintu yang lain.
+Prinsipnya identik dengan T-L pada `signal_work`: yang sudah berhenti, jejak
+berhentinya tidak bisa ditarik kembali.
+
+**Impact** — Invariant baru **I-28**. I-27 **tidak berubah maknanya** — ia
+melarang penghapusan baris, I-28 membekukan isi jejak pelepasannya; keduanya
+berdiri berdampingan untuk permukaan yang berbeda. Tidak ada kolom baru, tidak
+ada trigger baru, tidak ada migrasi baru: penegakannya menumpang
+`work_executors_terjaga()` yang sudah ada.
+
+### Invariant tambahan
+
+| # | invariant |
+| --- | --- |
+| I-21 | Pembatalan Work wajib beralasan dan tercatat |
+| I-22 | Transisi status Work mengikuti mesin status AD-20 · B; `completed` dan `cancelled` terminal |
+| I-23 | Penyelesaian Work hanya tercatat atas nama Owner-nya |
+| I-24 | Work berstatus `completed` atau `cancelled` adalah terminal dan tidak dapat mengalami mutasi lifecycle maupun penugasan, termasuk owner, `primary_department`, tenggat, pelaksana, dan kaitan Signal aktif — baik dilepas maupun ditambah (AD-20 · H) |
+| I-25 | Setiap perubahan status Work wajib memiliki satu `work_riwayat` ber-`jenis = 'status'` pada transaksi yang sama; alasan wajib untuk transisi menuju `cancelled` |
+| I-26 | Trio pelepasan `signal_work` dibekukan begitu terisi: tidak dapat dikosongkan, ditulis ulang, maupun dihidupkan kembali |
+| I-27 | Baris `work_executors` tidak pernah dihapus; penugasan hanya berhenti lewat pelepasan lunak yang membawa `dilepas_pada` dan `dilepas_oleh` |
+| I-28 | Setelah `dilepas_pada` dan `dilepas_oleh` pada `work_executors` terisi, keduanya tidak boleh dikosongkan, ditulis ulang, maupun digeser; pelepasan pelaksana adalah rekam audit yang tidak dapat diaktifkan kembali |
+
+I-01 … I-20 tidak berubah. I-21 sampai I-27 tidak berubah maknanya.
+
+### Yang TIDAK diputuskan di sini
+
+Tidak ada. Seluruh keputusan yang ditemukan Z-02 Step 2B Preflight Audit,
+Z-02 Implementation Preflight, dan Z-02 Step 3 sudah dikunci di AD-20 · A
+sampai K — termasuk BLOCKER-1 (kaitan Signal pada Work terminal, AD-20 · H),
+OPEN-1 (riwayat untuk setiap transisi status, AD-20 · I), BLOCKER-2
+(`create_signal_work` sebagai izin aplikasi, AD-20 · J.1), dan immutabilitas
+rekam pelepasan pelaksana (AD-20 · K).
+
+Otorisasi lapisan aplikasi untuk keenam fungsi penulis — layar, server action,
+dan `can()`-nya — adalah pekerjaan gate berikutnya, bukan gate ini.

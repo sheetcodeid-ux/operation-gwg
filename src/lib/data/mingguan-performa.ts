@@ -27,7 +27,7 @@ import {
   rangkumBukti,
   type RangkumanBukti,
 } from "@/lib/ops/bukti";
-import { bulanSah, bulanSebelum } from "@/lib/ops/waktu";
+import { bulanIniWib, bulanSah, bulanSebelum } from "@/lib/ops/waktu";
 
 /**
  * WEEKLY PERFORMANCE — pembaca produksi.
@@ -78,6 +78,15 @@ export interface BarisPerformaMingguan extends BarisMingguan {
 
 export interface DetailMingguan {
   periode: string;
+  /**
+   * Periode ini masih berjalan menurut WIB (AD-17 · Z-03).
+   *
+   * Dihitung DI SINI, bukan di komponen: jam peramban bukan WIB, dan
+   * "bulan ini" yang bergeser tujuh jam mengubah arti seluruh Signal di
+   * layar. Pemakainya cuma satu — penanda bahwa Signal bulan berjalan
+   * adalah INDIKASI, bukan hasil bulan penuh.
+   */
+  berjalan: boolean;
   minggu: RentangMinggu[];
   baris: BarisPerformaMingguan[];
   /** Outlet yang belum dipasangkan ke cabang ESB — disebut, tidak didiamkan. */
@@ -269,6 +278,7 @@ export async function performaMingguan(periode: string, outletIds?: readonly str
 
   return {
     periode,
+    berjalan: periode === bulanIniWib(),
     minggu,
     baris,
     tanpaCabang: baris.filter((b) => b.cabang === null).map((b) => b.nama),

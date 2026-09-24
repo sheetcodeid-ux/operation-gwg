@@ -142,9 +142,18 @@ export async function signalBulananOutlet(
 }
 
 /** Paling berat lebih dulu; yang setara diurut KPI supaya tampilannya stabil. */
-const BOBOT: Record<string, number> = { critical: 0, high: 1, medium: 2, low: 3 };
-const urutSeverity = (a: SignalBulanan, b: SignalBulanan): number =>
-  (BOBOT[a.severity] ?? 9) - (BOBOT[b.severity] ?? 9) || a.kpiDefinitionId.localeCompare(b.kpiDefinitionId);
+export const BOBOT_SEVERITY: Record<string, number> = { critical: 0, high: 1, medium: 2, low: 3 };
+
+/**
+ * Pengurut severity — dibagi dengan Command Center (Z-01).
+ *
+ * Diekspor sebagai primitif, bukan disalin: dua layar yang mengurutkan
+ * severity dengan aturan berbeda akan menampilkan dua daftar yang sama-sama
+ * masuk akal dan tidak pernah sama.
+ */
+export const urutSeverity = <T extends { severity: string; kpiDefinitionId: string }>(a: T, b: T): number =>
+  (BOBOT_SEVERITY[a.severity] ?? 9) - (BOBOT_SEVERITY[b.severity] ?? 9) ||
+  a.kpiDefinitionId.localeCompare(b.kpiDefinitionId);
 
 /** Cacah per severity — untuk lencana ringkas di layar. Tetap per BULAN. */
 export function cacahSeverity(daftar: readonly SignalBulanan[]): Record<string, number> {

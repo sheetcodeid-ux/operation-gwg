@@ -391,6 +391,9 @@ export type NotificationKind =
   | "chat_message"
   // Pengingat Update Bulanan outlet (HC-MOS Kontrak Tracker).
   | "hc_update_due"
+  // Signal `critical` Operational V.1 — SEKALI seumur Signal, tautannya
+  // membawa `signals.id` supaya bisa ditelusuri balik tanpa kolom relasi.
+  | "signal_critical"
   // Laporan penilaian permintaan design yang dikirim ke Coordinator Area.
   | "creative_report"
   // Aktivitas komplain.

@@ -20,6 +20,8 @@ export type MenuKey =
   | "op_seasonal"
   | "op_analysis"
   | "op_pnl"
+  | "op_command"
+  | "op_work"
   | "op_daily"
   | "op_weekly"
   | "op_monthly"
@@ -171,6 +173,12 @@ export const NAV_MENUS: Omit<NavItem, "section" | "group" | "groupIcon">[] = [
   { key: "op_seasonal", label: "Musiman", href: "/operation/musiman", icon: "Waves" },
   { key: "op_analysis", label: "Data Analysis", href: "/operation/analysis", icon: "ChartColumnBig" },
   { key: "op_pnl", label: "Laba Rugi", href: "/operation/laba-rugi", icon: "Banknote" },
+  { key: "op_command", label: "Command Center", href: "/operational/command-center", icon: "Siren" },
+  // Labelnya "Work Signal", bukan "Work" — di sidebar yang sama sudah ada
+  // "Work Tracker" (`/work-tracker`, tabel `tasks`) yang merupakan sistem lama
+  // dan TIDAK digabungkan. Dua baris bernama mirip akan tertukar, dan yang
+  // tertukar adalah dua entitas yang sengaja dipisahkan (OD-STEP7-02).
+  { key: "op_work", label: "Work Signal", href: "/operational/work", icon: "ListChecks" },
   { key: "op_daily", label: "Daily", href: "/operational/daily", icon: "CalendarDays" },
   { key: "op_weekly", label: "Weekly", href: "/operational/weekly", icon: "CalendarRange" },
   { key: "op_monthly", label: "Monthly", href: "/operational/monthly", icon: "CalendarCheck" },
@@ -355,6 +363,47 @@ export const ROLE_DIVISION: Record<Role, Division> = {
 const PERFORMANCE: MenuKey[] = ["op_daily", "op_weekly", "op_monthly", "op_quarterly", "op_yearly"];
 
 /**
+ * Command Center — kunci menunya sendiri, DI LUAR `PERFORMANCE`.
+ *
+ * Bukan kerapian: `PERFORMANCE` dipakai Finance dan Marketing lewat daftarnya
+ * masing-masing, dan Command Center bukan milik mereka. Menitipkannya di sana
+ * akan membuka Signal seluruh perusahaan kepada dua bidang yang tidak pernah
+ * diberi akses Operational V.1.
+ *
+ * Yang memegangnya hari ini sama dengan yang memegang Operational V.1:
+ * `super_admin` (seluruh menu), `head_operation`, dan `area_coordinator`.
+ * Tidak ada peran baru (Z-01 · O10).
+ */
+/**
+ * ┌─ SATU DAFTAR UNTUK DUA LAYAR, DAN ITU DISENGAJA ─────────────────────────┐
+ * │                                                                          │
+ * │ O-06 mengunci VIEW Work sebagai "batas akses Command Center yang sudah   │
+ * │ ada, ATAU penugasan executor eksplisit". Batas itu terbaca dari satu     │
+ * │ daftar; kalau Work diberi daftarnya sendiri, keduanya akan bergeser      │
+ * │ sendiri-sendiri — dan yang bergeser adalah gerbangnya (OD-06).           │
+ * └──────────────────────────────────────────────────────────────────────────┘
+ */
+const COMMAND_CENTER: MenuKey[] = ["op_command", "op_work"];
+
+/**
+ * Kunci menu Command Center — SATU tempat, dipakai halaman maupun server action.
+ *
+ * Halaman memakainya sebagai gerbang; `src/lib/actions/signals.ts` memakainya
+ * lagi sebelum menulis. Menuliskan `"op_command"` dua kali berarti satu di
+ * antaranya bisa bergeser sendiri, dan yang bergeser adalah gerbangnya.
+ */
+export const MENU_COMMAND_CENTER: MenuKey = "op_command";
+
+/**
+ * Kunci menu Work Z-02 — SATU tempat, alasannya sama dengan di atas.
+ *
+ * Halaman daftar dan halaman detail memakainya sebagai gerbang. Ia BUKAN
+ * pengganti `MENU_COMMAND_CENTER`: Signal dan Work dua layar yang berbeda,
+ * hanya batas aksesnya yang memang satu (O-06).
+ */
+export const MENU_WORK: MenuKey = "op_work";
+
+/**
  * Performance milik Finance dan Marketing — EMPAT skala, tanpa Yearly.
  *
  * Diminta pemiliknya begitu: yang dipantau kedua bidang ini pergerakan dalam
@@ -390,7 +439,7 @@ export const ROLE_MENUS: Record<Role, MenuKey[]> = {
   super_admin: NAV_MENUS.map((m) => m.key), // everything, incl. admin menus
   // `kpi_supervisor` — Head Operation yang mencatat Problem Solver tiap
   // supervisor, jadi ia harus bisa membuka rapornya.
-  head_operation: [...OPERATION_FULL, ...PERFORMANCE, "elearning", "elearning_admin", "assessment", "kpi_supervisor", "kpi_supervisor_umum", "kpi_supervisor_kpk"], // manages E-Learning + monitors every branch
+  head_operation: [...OPERATION_FULL, ...COMMAND_CENTER, ...PERFORMANCE, "elearning", "elearning_admin", "assessment", "kpi_supervisor", "kpi_supervisor_umum", "kpi_supervisor_kpk"], // manages E-Learning + monitors every branch
   // Coordinator Area ikut memegang Pengajuan Dokumen. Ia membawahi beberapa
   // cabang dan sering mengurus berkas karyawan cabang yang supervisornya baru,
   // berhalangan, atau justru sedang diurus dokumennya; tanpa menu ini ia harus
@@ -400,7 +449,7 @@ export const ROLE_MENUS: Record<Role, MenuKey[]> = {
   // KPI-nya sendiri ikut dibuka, TAPI hanya areanya — lihat `picTerkunci`.
   // `op_daily` — Daily dibuka Coordinator Area, TAPI hanya areanya sendiri;
   // pembatasannya di halamannya, bukan di sini (lihat `/operational/daily`).
-  area_coordinator: [...OPERATION_FULL, ...PERFORMANCE, "elearning", "assessment", "hc_submit", "creative_penilaian", "kpi_op_ca"], // learner (E-Learning), menus scoped to their area
+  area_coordinator: [...OPERATION_FULL, ...COMMAND_CENTER, ...PERFORMANCE, "elearning", "assessment", "hc_submit", "creative_penilaian", "kpi_op_ca"], // learner (E-Learning), menus scoped to their area
   // Keduanya boleh membaca rapornya sendiri — halaman yang sama yang dibaca
   // atasannya, bukan salinan yang lebih ramah.
   data_operation: ["work", "op_analysis", "assessment", "kpi_op_software"],
@@ -534,7 +583,17 @@ export const DIVISION_GROUPS: Partial<Record<Division, NavGroupDef[]>> = {
    * saling berhubungan.
    */
   "Operational V.1": [
-    { name: "Performance", icon: "TrendingUp", urutan: 0, menus: ["op_daily", "op_weekly", "op_monthly", "op_quarterly", "op_yearly"] },
+    // Command Center di ATAS Performance, dan urutannya memang bermakna:
+    // yang ditanyakan lebih dulu "apa yang perlu ditangani", baru "bagaimana
+    // angkanya bergerak". Kelompok berisi satu baris diratakan sendiri oleh
+    // `itemsForDivision`, jadi ia tampil sebagai satu baris biasa — bukan
+    // judul kelompok di atas satu menu.
+    { name: "Command Center", icon: "Siren", urutan: 0, menus: ["op_command"] },
+    // Work berdiri sebagai barisnya sendiri, tepat di bawah Command Center:
+    // yang ditanyakan berurutan — "apa yang terdeteksi", lalu "apa yang
+    // dikerjakan orang tentangnya".
+    { name: "Work Signal", icon: "ListChecks", urutan: 1, menus: ["op_work"] },
+    { name: "Performance", icon: "TrendingUp", urutan: 2, menus: ["op_daily", "op_weekly", "op_monthly", "op_quarterly", "op_yearly"] },
   ],
   "Finance V.1": [{ name: "Performance", icon: "TrendingUp", urutan: 0, menus: [...PERFORMANCE_FIN] }],
   "Marketing V.1": [{ name: "Performance", icon: "TrendingUp", urutan: 0, menus: [...PERFORMANCE_MKT] }],
@@ -741,7 +800,7 @@ export const DIVISION_MENUS: { division: Division; menus: MenuKey[] }[] = [
    * boleh membaca modul ini — dengan cakupan outlet yang tetap dibatasi per
    * orang di halamannya sendiri.
    */
-  { division: "Operational V.1", menus: ["op_daily", "op_weekly", "op_monthly", "op_quarterly", "op_yearly"] },
+  { division: "Operational V.1", menus: ["op_command", "op_work", "op_daily", "op_weekly", "op_monthly", "op_quarterly", "op_yearly"] },
   // Sama bentuknya dengan Operational V.1, dan sama pula alasannya: bidang
   // sendiri supaya modul berikutnya punya tempat, bukan satu baris yang
   // dititipkan ke bidang yang sudah penuh.

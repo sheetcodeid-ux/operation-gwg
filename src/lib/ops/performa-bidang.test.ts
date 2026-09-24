@@ -37,7 +37,14 @@ describe("isi kedua bidang", () => {
 
   it("Operational V.1 tidak ikut berkurang", () => {
     // Bidang baru tidak boleh mengambil apa pun dari yang sudah dipakai.
-    expect(menusBidang("Operational V.1")).toEqual(["op_daily", "op_weekly", "op_monthly", "op_quarterly", "op_yearly"]);
+    //
+    // Yang dijaga BERKURANG, bukan bertambah: Command Center (Z-01) menambah
+    // satu menu ke bidang ini, dan penjaga yang menuntut kesamaan persis akan
+    // menyalakan merah untuk setiap penambahan yang memang disengaja — lalu
+    // dimatikan orang. Kelima Performance tetap wajib ada, seluruhnya.
+    for (const k of ["op_daily", "op_weekly", "op_monthly", "op_quarterly", "op_yearly"]) {
+      expect(menusBidang("Operational V.1")).toContain(k);
+    }
   });
 
   it("alamatnya milik bidangnya sendiri", () => {

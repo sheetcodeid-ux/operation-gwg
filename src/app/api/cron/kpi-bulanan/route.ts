@@ -4,6 +4,7 @@ import { catatHasilSinkron } from "@/lib/data/sinkron-sehat";
 import { generateTerjadwal } from "@/lib/data/kpi-generate";
 import { finalisasiPeriodeSelesai } from "@/lib/data/kpi-finalisasi";
 import { deteksiSignal, deteksiTerjadwal, praDeteksi } from "@/lib/data/signals";
+import { kabarkanSignalCritical } from "@/lib/data/signal-notifikasi";
 import { bolehDiremediasi, REMEDIASI_DIIZINKAN } from "@/lib/ops/deteksi";
 
 /**
@@ -90,6 +91,12 @@ export async function GET(req: Request) {
     // Lihat AD-15 dan `src/lib/ops/deteksi.ts`.
     const deteksi = await deteksiTerjadwal();
 
+    // Kabar menyusul deteksi, dan SELALU sesudahnya: yang dikabarkan harus
+    // sudah tersimpan. Kegagalannya tidak menggagalkan apa pun — Signal yang
+    // sudah tercatat tetap sah walau kabarnya tidak terkirim, dan `notify()`
+    // sendiri sudah menelan galatnya dengan alasan yang sama.
+    const kabar = await kabarkanSignalCritical(deteksi.hasil.map((d) => d.periode));
+
     // Bentuk yang dimengerti `bacaHasil()`: tanpa `error` dan `sisa` nol
     // berarti tuntas. Generasi dan finalisasi dipisah supaya yang membaca
     // `sinkron_sehat` tahu bagian mana yang bergerak.
@@ -120,10 +127,20 @@ export async function GET(req: Request) {
         diperbarui: deteksi.hasil.reduce((n, d) => n + d.diperbarui, 0),
         diamati_saja: deteksi.hasil.reduce((n, d) => n + d.diamatiSaja, 0),
       },
+      // Sengaja dilaporkan terpisah dari deteksi: `terkirim` nol dengan
+      // `kandidat` bukan nol berarti seluruhnya SUDAH pernah dikabarkan —
+      // keadaan normal, bukan kegagalan. Menggabungkannya ke dalam angka
+      // deteksi akan membuat keduanya tidak bisa dibedakan.
+      notifikasi: {
+        kandidat: kabar.kandidat,
+        baru: kabar.baru,
+        penerima: kabar.penerima,
+        terkirim: kabar.terkirim,
+      },
       msTotal: Date.now() - mulai,
     };
     await catatHasilSinkron({ "kpi-bulanan": ringkas });
-    return NextResponse.json({ ok: true, tookMs: Date.now() - mulai, generasi, finalisasi, deteksi });
+    return NextResponse.json({ ok: true, tookMs: Date.now() - mulai, generasi, finalisasi, deteksi, notifikasi: kabar });
   } catch (e) {
     const pesan = e instanceof Error ? e.message : "gagal";
     console.error("[cron:kpi-bulanan] gagal:", pesan);
