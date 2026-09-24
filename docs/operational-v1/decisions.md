@@ -2210,6 +2210,64 @@ yang dihapus, tidak ada status baru, tidak ada kolom baru, dan lifecycle Signal
 tidak tersentuh. I-21, I-22, dan I-23 tidak berubah maknanya; I-24 berdiri di
 sampingnya dan mencakup permukaan yang lebih luas daripada ketiganya.
 
+### H · Work terminal juga tidak menerima kaitan Signal baru
+
+**Decision** — Work berstatus `completed` atau `cancelled` **tidak boleh
+menerima kaitan Signal baru**. Ketiga arah ditutup sekaligus:
+
+| arah | putusan |
+| --- | --- |
+| mengaitkan Signal baru | DILARANG |
+| melepas kaitan aktif | DILARANG |
+| menghapus baris `signal_work` | DILARANG |
+
+Kaitan yang sudah ada tetap tersimpan sebagai rekam audit. Tidak ada perubahan
+pada lifecycle Signal, tidak ada membuka kembali, tidak ada menghidupkan
+kembali.
+
+**Status** — LOCKED
+
+**Rationale** — Z-02 Implementation Preflight menemukan dua bacaan yang
+berbeda cakupannya: tabel AD-20 · G nomor 6 hanya menyebut **pelepasan**,
+sedangkan I-24 menyebut *"kaitan Signal aktif"* secara keseluruhan.
+Mengaitkan Signal baru memperbesar himpunan kaitan aktif sebuah Work terminal,
+sehingga ia mutasi — dan bacaan I-24 yang berlaku.
+
+**Impact** — AD-20 · G nomor 6 **tidak dihapus maupun ditulis ulang**; bagian
+ini yang menyatakan cakupan penuhnya. `gwg_kaitkan_signal_work` menolak Work
+terminal. I-24 tidak berubah maknanya — ia diperjelas, bukan diperluas.
+
+### I · Setiap perubahan status meninggalkan jejak
+
+**Decision** — Setiap transisi status Work wajib disertai satu
+`work_riwayat` ber-`jenis = 'status'` pada **transaksi yang sama**.
+
+| transisi | riwayat | alasan |
+| --- | --- | --- |
+| `open` → `in_progress` | **wajib** | tidak wajib |
+| `in_progress` → `completed` | **wajib** | tidak wajib |
+| `open` → `cancelled` | **wajib** | **wajib**, tidak boleh kosong |
+| `in_progress` → `cancelled` | **wajib** | **wajib**, tidak boleh kosong |
+
+`nilai_lama` memuat status sebelumnya, `nilai_baru` memuat status barunya.
+Riwayat disisipkan lebih dulu, `works` diperbarui sesudahnya, dan
+pencocokannya memakai mekanisme `xmin` yang sama dengan T-F. Seluruhnya satu
+transaksi: bila pembaruan `works` gagal, riwayatnya ikut batal.
+
+**Status** — LOCKED
+
+**Rationale** — AD-20 · A hanya mewajibkan jejak untuk pembatalan, sehingga
+"kapan pekerjaan ini mulai dikerjakan" dan "kapan ia dinyatakan selesai" tidak
+terjawab oleh apa pun. Keduanya pertanyaan yang paling sering ditanyakan
+tentang sebuah daftar kerja, dan jawabannya tidak boleh hanya disimpulkan dari
+`diperbarui_pada` yang berubah karena sebab apa saja.
+
+**Impact** — Invariant baru **I-25**. `0114` sudah mengizinkan
+`jenis = 'status'`, jadi tidak ada perubahan skema. AD-20 · A tetap berlaku apa
+adanya sebagai aturan khusus pembatalan — I-25 mewajibkan **riwayatnya**, I-21
+mewajibkan **alasannya**. Transisi normal tidak menuntut alasan, dan tidak ada
+alasan kosong yang boleh menyamar sebagai alasan.
+
 ### Invariant tambahan
 
 | # | invariant |
@@ -2217,11 +2275,14 @@ sampingnya dan mencakup permukaan yang lebih luas daripada ketiganya.
 | I-21 | Pembatalan Work wajib beralasan dan tercatat |
 | I-22 | Transisi status Work mengikuti mesin status AD-20 · B; `completed` dan `cancelled` terminal |
 | I-23 | Penyelesaian Work hanya tercatat atas nama Owner-nya |
-| I-24 | Work berstatus `completed` atau `cancelled` adalah terminal dan tidak dapat mengalami mutasi lifecycle maupun penugasan, termasuk owner, `primary_department`, tenggat, pelaksana, dan kaitan Signal aktif |
+| I-24 | Work berstatus `completed` atau `cancelled` adalah terminal dan tidak dapat mengalami mutasi lifecycle maupun penugasan, termasuk owner, `primary_department`, tenggat, pelaksana, dan kaitan Signal aktif — baik dilepas maupun ditambah (AD-20 · H) |
+| I-25 | Setiap perubahan status Work wajib memiliki satu `work_riwayat` ber-`jenis = 'status'` pada transaksi yang sama; alasan wajib untuk transisi menuju `cancelled` |
 
-I-01 … I-20 tidak berubah.
+I-01 … I-20 tidak berubah. I-21, I-22, dan I-23 tidak berubah maknanya.
 
 ### Yang TIDAK diputuskan di sini
 
-Tidak ada. Seluruh keputusan yang ditemukan Z-02 Step 2B Preflight Audit sudah
-dikunci di AD-20 · A sampai G.
+Tidak ada. Seluruh keputusan yang ditemukan Z-02 Step 2B Preflight Audit dan
+Z-02 Implementation Preflight sudah dikunci di AD-20 · A sampai I —
+termasuk BLOCKER-1 (kaitan Signal pada Work terminal, AD-20 · H) dan
+OPEN-1 (riwayat untuk setiap transisi status, AD-20 · I).
