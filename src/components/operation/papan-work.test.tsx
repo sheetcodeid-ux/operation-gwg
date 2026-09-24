@@ -801,3 +801,144 @@ describe("GAP-01 · 9 · otorisasi yang sudah dikunci tidak bergeser satu pun", 
     expect(tombol(html)).toBe("");
   });
 });
+
+/* ───────────────── Z-02 Step 8C · GAP-02 · jalan keluar dari Work Detail ───────────────── */
+
+/**
+ * ┌─ HALAMAN YANG HANYA BISA DITINGGALKAN LEWAT TOMBOL BACK ─────────────────┐
+ * │                                                                          │
+ * │ Remah roti global disembunyikan di bawah `lg`, dan `PageHeader` tanpa    │
+ * │ `actions` cuma mengeluarkan judul tak terlihat. Di tablet dan ponsel     │
+ * │ layar ini karena itu tidak punya satu pun jalan keluar.                  │
+ * │                                                                          │
+ * │ Yang diuji di sini kontrak halamannya — komponen server tidak dapat      │
+ * │ dirender di harness ini (tidak ada jsdom, dan `requireSessionUser()`     │
+ * │ menyentuh sesi), jadi yang dipastikan sumbernya: tautan mana yang        │
+ * │ bersyarat, tautan mana yang tidak, dan gerbang mana yang tidak bergeser. │
+ * │ Teknik yang sama sudah dipakai dan diterima pada Step 8B.                │
+ * └──────────────────────────────────────────────────────────────────────────┘
+ */
+
+/** Kepala halaman saja — dari `<div className="mb-4` sampai `<DetailWorkUI`. */
+const KEPALA = SUMBER_HALAMAN.slice(
+  SUMBER_HALAMAN.indexOf('<div className="mb-4'),
+  SUMBER_HALAMAN.indexOf("<DetailWorkUI"),
+);
+
+describe("GAP-02 · 1-2 · jalan pulang ke daftar Work selalu ada", () => {
+  it("tautan ke /operational/work tergambar di kepala halaman", () => {
+    expect(KEPALA).toContain('href="/operational/work"');
+    expect(KEPALA).toContain("Work Signal");
+  });
+
+  it("tautannya berlabel dan berpanah — bukan ikon telanjang yang harus ditebak", () => {
+    expect(KEPALA).toContain('<ArrowLeft className="size-4" /> Work Signal');
+  });
+
+  it("TIDAK bersyarat apa pun — pelaksana pintu samping pun tetap melihatnya", () => {
+    // Ia berdiri di luar satu-satunya cabang di kepala halaman.
+    const sebelumCabang = KEPALA.slice(0, KEPALA.indexOf("{bolehCommandCenter &&"));
+    expect(sebelumCabang).toContain('href="/operational/work"');
+    // Dan tidak ada gerbang menu yang membungkusnya.
+    expect(KEPALA).not.toContain("canReachMenu(user, MENU_WORK) &&");
+  });
+
+  it("judul Work benar-benar terbaca, bukan hanya bagi pembaca layar", () => {
+    expect(KEPALA).toContain('className="truncate text-xl font-semibold text-foreground"');
+    expect(KEPALA).toContain("{detail.judul}");
+    expect(KEPALA).toContain("Work #{detail.id}");
+  });
+
+  it("judulnya tidak terdengar dua kali — yang terbaca mata disembunyikan dari pembaca layar", () => {
+    // Heading tingkat satu tetap milik `PageHeader`, dan salinan kasatmatanya
+    // ber-`aria-hidden`. Satu judul di layar, satu judul di telinga.
+    expect(SUMBER_HALAMAN).toContain("<PageHeader icon={ListChecks} title={detail.judul} />");
+    expect(KEPALA).toContain('aria-hidden="true"');
+  });
+});
+
+describe("GAP-02 · 3-4 · Command Center hanya ditawarkan kepada yang boleh membukanya", () => {
+  it("syaratnya dihitung di server, dari canReachMenu — bukan dari peran yang ditebak layar", () => {
+    expect(SUMBER_HALAMAN).toContain("const bolehCommandCenter = canReachMenu(user, MENU_COMMAND_CENTER);");
+    expect(SUMBER_HALAMAN).toContain("MENU_COMMAND_CENTER");
+  });
+
+  it("tautannya hidup di dalam cabang itu, dan hanya di sana", () => {
+    const cabang = KEPALA.slice(KEPALA.indexOf("{bolehCommandCenter &&"));
+    expect(cabang).toContain('href="/operational/command-center"');
+    // Satu-satunya sebutan Command Center di seluruh berkas ada di dalam cabang.
+    expect(KEPALA.match(/\/operational\/command-center/g) ?? []).toHaveLength(1);
+  });
+
+  it("tanpa akses menu, tidak ada tautan Command Center yang tergambar", () => {
+    const sebelumCabang = KEPALA.slice(0, KEPALA.indexOf("{bolehCommandCenter &&"));
+    expect(sebelumCabang).not.toContain("command-center");
+  });
+});
+
+describe("GAP-02 · 5 · tautan yang tidak tersedia BUKAN alasan mengusir orang", () => {
+  it("hanya ada dua redirect, dan keduanya yang lama", () => {
+    const redirects = SUMBER_HALAMAN.match(/redirect\("\/dashboard"\)/g) ?? [];
+    expect(redirects).toHaveLength(2);
+  });
+
+  it("tidak ada satu pun redirect yang bergantung pada akses Command Center", () => {
+    expect(SUMBER_HALAMAN).not.toMatch(/bolehCommandCenter[\s\S]{0,80}redirect/);
+  });
+
+  it("gerbang baca Work tidak bergeser — pelaksana aktif tetap masuk", () => {
+    expect(SUMBER_HALAMAN).toContain("if (!canReachMenu(user, MENU_WORK) && !pelaksanaAktif) redirect(\"/dashboard\");");
+  });
+});
+
+describe("GAP-02 · 6-7 · Signal tetap teks mati, dan tidak ada ?signal= yang lahir", () => {
+  it("tidak ada satu pun tautan di dalam layar detail Work", () => {
+    const html = renderToStaticMarkup(<DetailWorkUI detail={detail()} aktor="u_mgr" kelola pilihan={pilihanDetail} />);
+    expect(html).not.toContain("<a ");
+    expect(html).not.toContain("href=");
+  });
+
+  it("nomor Signal tetap tergambar sebagai teks biasa", () => {
+    const html = renderToStaticMarkup(<DetailWorkUI detail={detail()} aktor="u_mgr" kelola pilihan={pilihanDetail} />);
+    expect(html).toContain('<span class="font-medium">#10</span>');
+    expect(SUMBER_DETAIL).toContain('<span className="font-medium">#{s.signalId}</span>');
+  });
+
+  it("tidak ada query parameter ?signal= maupun anchor Signal yang ditambahkan", () => {
+    for (const sumber of [SUMBER_HALAMAN, SUMBER_DETAIL]) {
+      expect(sumber).not.toContain("?signal=");
+      expect(sumber).not.toContain("#signal-");
+      expect(sumber).not.toContain("scrollIntoView");
+    }
+  });
+
+  it("`detail-work.tsx` tidak disentuh sama sekali oleh GAP-02", () => {
+    // Tidak ada navigasi yang bocor ke dalamnya: satu-satunya `next/navigation`
+    // yang dipakai tetap `useRouter().refresh()` sesudah mutasi.
+    expect(SUMBER_DETAIL).not.toContain("next/link");
+    expect(SUMBER_DETAIL).not.toContain("/operational/");
+  });
+});
+
+describe("GAP-02 · 8 · tidak ada otorisasi yang berubah", () => {
+  it("ketiga gerbang lama masih berbunyi persis seperti sebelumnya", () => {
+    expect(SUMBER_HALAMAN).toContain('const kelola = can(user, "manage_signals");');
+    expect(SUMBER_HALAMAN).toContain("kelola || user.id === detail.ownerId ? await pilihanWork(user) : undefined");
+    expect(SUMBER_HALAMAN).toContain("const pelaksanaAktif = detail.pelaksana.some((p) => p.userId === user.id && p.aktif);");
+  });
+
+  it("matriks tombol pada layar detail tidak bergeser satu pun", () => {
+    const owner = renderToStaticMarkup(<DetailWorkUI detail={detail()} aktor="u_owner" kelola={false} />);
+    expect(owner).toContain("Mulai dikerjakan");
+    expect(owner).not.toContain("Batalkan");
+    const kelola = renderToStaticMarkup(<DetailWorkUI detail={detail()} aktor="u_mgr" kelola />);
+    expect(kelola).toContain("Batalkan");
+    expect(kelola).toContain("Lepas kaitan");
+  });
+
+  it("halaman tidak memanggil satu pun penulis — ia hanya membaca", () => {
+    for (const larangan of ["buatWorkAction", "ubahWorkAction", "gwg_", ".insert(", ".update("]) {
+      expect(SUMBER_HALAMAN).not.toContain(larangan);
+    }
+  });
+});
