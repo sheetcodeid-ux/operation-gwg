@@ -3,9 +3,11 @@
 import * as React from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
+import { Button } from "@/components/ui/button";
 import { Combobox } from "@/components/ui/combobox";
 import { cn } from "@/lib/utils";
 import type { BarisWork, DaftarWork } from "@/lib/data/work-daftar";
+import type { PilihanWork } from "@/lib/data/work-pilihan";
 
 /**
  * WORK — DAFTAR KERJA, BUKAN DASBOR.
@@ -116,11 +118,38 @@ function Baris({ w }: { w: BarisWork }) {
   );
 }
 
-export function PapanWorkUI({ papan }: { papan: DaftarWork }) {
+export function PapanWorkUI({
+  papan,
+  bolehBuat = false,
+  pilihan,
+}: {
+  papan: DaftarWork;
+  /** Hasil gerbang di halaman — bukan keputusan baru, dan bukan keamanan. */
+  bolehBuat?: boolean;
+  pilihan?: PilihanWork;
+}) {
   const router = useRouter();
   const sp = useSearchParams();
   const statusKini = sp.get("status") ?? "";
   const overdueKini = sp.get("overdue") === "1";
+  const ownerKini = sp.get("owner") ?? "";
+  const departemenKini = sp.get("departemen") ?? "";
+  const pelaksanaKini = sp.get("pelaksana") ?? "";
+
+  // Pilihan saringan dibuka dari daftar yang sama dengan form — satu sumber,
+  // bukan dua daftar orang yang bisa berbeda diam-diam.
+  const opsiOwner = React.useMemo(
+    () => [{ value: "", label: "Semua owner" }, ...(pilihan?.owner ?? [])],
+    [pilihan],
+  );
+  const opsiDepartemen = React.useMemo(
+    () => [{ value: "", label: "Semua departemen" }, ...(pilihan?.departemen ?? [])],
+    [pilihan],
+  );
+  const opsiPelaksana = React.useMemo(
+    () => [{ value: "", label: "Semua pelaksana" }, ...(pilihan?.pelaksana ?? [])],
+    [pilihan],
+  );
 
   function pergi(ubah: Record<string, string | null>) {
     const q = new URLSearchParams(sp.toString());
@@ -151,8 +180,36 @@ export function PapanWorkUI({ papan }: { papan: DaftarWork }) {
         >
           Hanya yang lewat tenggat
         </button>
-        <div className="ml-auto text-sm text-muted-foreground">
-          {papan.total} Work · {papan.overdue} lewat tenggat
+        {opsiOwner.length > 1 && (
+          <Combobox options={opsiOwner} value={ownerKini} onChange={(v) => pergi({ owner: v })} searchable className="w-56" />
+        )}
+        {opsiDepartemen.length > 1 && (
+          <Combobox
+            options={opsiDepartemen}
+            value={departemenKini}
+            onChange={(v) => pergi({ departemen: v })}
+            searchable
+            className="w-56"
+          />
+        )}
+        {opsiPelaksana.length > 1 && (
+          <Combobox
+            options={opsiPelaksana}
+            value={pelaksanaKini}
+            onChange={(v) => pergi({ pelaksana: v })}
+            searchable
+            className="w-56"
+          />
+        )}
+        <div className="ml-auto flex items-center gap-2 text-sm text-muted-foreground">
+          <span>
+            {papan.total} Work · {papan.overdue} lewat tenggat
+          </span>
+          {bolehBuat && (
+            <Button size="sm" onClick={() => router.push("/operational/work?buat=1")}>
+              Buat Work
+            </Button>
+          )}
         </div>
       </div>
 

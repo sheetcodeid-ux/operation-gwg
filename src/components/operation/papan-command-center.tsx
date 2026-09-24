@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import { useRouter } from "next/navigation";
-import { CheckCheck, EyeOff, TriangleAlert } from "lucide-react";
+import { CheckCheck, EyeOff, ListChecks, TriangleAlert } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Combobox } from "@/components/ui/combobox";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
@@ -99,16 +99,20 @@ function BarisSignal({
   s,
   berjalan,
   bolehAbaikan,
+  bolehBuatWork,
   sibuk,
   onAkui,
   onAbaikan,
+  onBuatWork,
 }: {
   s: SignalTriase;
   berjalan: boolean;
   bolehAbaikan: boolean;
+  bolehBuatWork: boolean;
   sibuk: boolean;
   onAkui: (id: number) => void;
   onAbaikan: (s: SignalTriase) => void;
+  onBuatWork: (id: number) => void;
 }) {
   const membaik = s.nilaiTerakhir !== null && s.nilaiTerakhir !== s.nilaiActual;
   return (
@@ -167,10 +171,44 @@ function BarisSignal({
             <EyeOff className="size-3" /> Abaikan
           </Button>
         )}
+        {/*
+          Tombol Z-02. Ia TIDAK membuka form dan tidak menyentuh apa pun di
+          layar ini — ia berpindah ke halaman Work dengan Signal ini sudah
+          terpilih. Command Center tetap tipis (OD-STEP7-04 = B).
+        */}
+        {bolehBuatWork && (
+          <Button
+            size="sm"
+            variant="ghost"
+            disabled={sibuk}
+            onClick={() => onBuatWork(s.id)}
+            className="h-6 px-2 text-[11px] text-muted-foreground"
+          >
+            <ListChecks className="size-3" /> Buat Work
+          </Button>
+        )}
       </span>
     </div>
   );
 }
+
+/**
+ * Ke mana tombol "Buat Work" membawa orang.
+ *
+ * ┌─ DIEKSPOR SUPAYA TUJUANNYA BISA DIUJI, BUKAN CUMA TOMBOLNYA ─────────────┐
+ * │                                                                          │
+ * │ Uji di repositori ini merender ke teks statis dan tidak bisa menekan     │
+ * │ tombol — tidak ada jsdom. Tanpa fungsi ini, satu-satunya yang bisa       │
+ * │ dipastikan adalah "tombolnya ada", dan tombol yang membawa ke alamat     │
+ * │ yang salah akan lolos sepenuhnya.                                        │
+ * │                                                                          │
+ * │ Satu-satunya hal yang dilakukan tombol Z-02 adalah BERPINDAH. Tidak ada  │
+ * │ form, tidak ada state, tidak ada data pilihan yang ditarik di layar ini. │
+ * │ Halaman Work yang menanganinya, dan Signal ini sudah terpilih di sana    │
+ * │ (OD-STEP7-04 = B).                                                       │
+ * └──────────────────────────────────────────────────────────────────────────┘
+ */
+export const jalanBuatWork = (signalId: number): string => `/operational/work?buat=1&signal=${signalId}`;
 
 const PenandaPeriodeRingkas = ({ berjalan }: { berjalan: boolean }) => (
   <span className={cn("font-medium", berjalan ? "text-sky-700 dark:text-sky-400" : "text-muted-foreground")}>
@@ -183,9 +221,13 @@ const PenandaPeriodeRingkas = ({ berjalan }: { berjalan: boolean }) => (
 export function PapanCommandCenterUI({
   papan,
   bolehAbaikan,
+  // Tanpa disebut, tombolnya tidak muncul. Bawaan yang membuka lebih banyak
+  // daripada yang diminta adalah bawaan yang salah.
+  bolehBuatWork = false,
 }: {
   papan: PapanCommandCenter;
   bolehAbaikan: boolean;
+  bolehBuatWork?: boolean;
 }) {
   const router = useRouter();
   const [sibuk, setSibuk] = React.useState(false);
@@ -215,6 +257,10 @@ export function PapanCommandCenterUI({
     setSibuk(false);
     if (!r.ok) setPesan(r.pesan);
     else router.refresh();
+  }
+
+  function buatWork(id: number) {
+    router.push(jalanBuatWork(id));
   }
 
   async function abaikan() {
@@ -291,9 +337,11 @@ export function PapanCommandCenterUI({
                   s={s}
                   berjalan={s.periode === papan.bulanBerjalan}
                   bolehAbaikan={bolehAbaikan}
+                  bolehBuatWork={bolehBuatWork}
                   sibuk={sibuk}
                   onAkui={akui}
                   onAbaikan={setTarget}
+                  onBuatWork={buatWork}
                 />
               </div>
             ))}
@@ -334,9 +382,11 @@ export function PapanCommandCenterUI({
                         s={s}
                         berjalan={kp.berjalan}
                         bolehAbaikan={bolehAbaikan}
+                        bolehBuatWork={bolehBuatWork}
                         sibuk={sibuk}
                         onAkui={akui}
                         onAbaikan={setTarget}
+                        onBuatWork={buatWork}
                       />
                     ))}
                   </div>

@@ -1,6 +1,8 @@
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { describe, expect, it, vi } from "vitest";
 import { renderToStaticMarkup } from "react-dom/server";
-import { PapanCommandCenterUI } from "./papan-command-center";
+import { PapanCommandCenterUI, jalanBuatWork } from "./papan-command-center";
 import type { PapanCommandCenter, SignalTriase } from "@/lib/data/command-center";
 
 /**
@@ -110,5 +112,68 @@ describe("tombol mengikuti izin", () => {
     const html = renderToStaticMarkup(<PapanCommandCenterUI papan={p} bolehAbaikan />);
     expect(html).toContain("dilihat Fikri");
     expect(html).toContain("biaya.labor_pct");
+  });
+});
+
+/* ───────────── Z-02 · pintu "Buat Work" (OD-STEP7-04 = B) ───────────── */
+
+/**
+ * ┌─ COMMAND CENTER TETAP TIPIS, DAN ITU YANG DIUJI ─────────────────────────┐
+ * │                                                                          │
+ * │ Layar ini melayani produksi. Tombol Z-02 karena itu hanya BERPINDAH —    │
+ * │ tidak membuka dialog, tidak menarik daftar pengguna, tidak menarik       │
+ * │ departemen, tidak menyimpan state pembuatan Work. Kalau suatu hari salah │
+ * │ satunya masuk ke sini, uji di bawah yang menolaknya.                     │
+ * └──────────────────────────────────────────────────────────────────────────┘
+ */
+describe("tombol Buat Work", () => {
+  it("muncul hanya ketika bolehBuatWork", () => {
+    expect(renderToStaticMarkup(<PapanCommandCenterUI papan={papan()} bolehAbaikan bolehBuatWork />)).toContain(
+      "Buat Work",
+    );
+    expect(renderToStaticMarkup(<PapanCommandCenterUI papan={papan()} bolehAbaikan />)).not.toContain("Buat Work");
+    expect(
+      renderToStaticMarkup(<PapanCommandCenterUI papan={papan()} bolehAbaikan={false} bolehBuatWork={false} />),
+    ).not.toContain("Buat Work");
+  });
+
+  it("izin Abaikan dan izin Buat Work dua pintu yang berbeda", () => {
+    const html = renderToStaticMarkup(
+      <PapanCommandCenterUI papan={papan()} bolehAbaikan={false} bolehBuatWork />,
+    );
+    expect(html).toContain("Buat Work");
+    expect(html).not.toContain("Abaikan");
+  });
+
+  it("membawa Signal itu ke halaman Work — bukan sekadar membuka halamannya", () => {
+    expect(jalanBuatWork(10)).toBe("/operational/work?buat=1&signal=10");
+    expect(jalanBuatWork(341)).toBe("/operational/work?buat=1&signal=341");
+    // Halaman Work yang menangani formnya; layar ini tidak menyebut form apa pun.
+    expect(jalanBuatWork(1)).toContain("buat=1");
+    expect(jalanBuatWork(1)).toContain("signal=1");
+  });
+
+  it("tombolnya terpasang pada baris Signal, satu per Signal yang tergambar", () => {
+    const p = papan();
+    const jumlah = p.korporat.length + p.kelompok.flatMap((k) => k.outlet.flatMap((o) => o.signal)).length;
+    const html = renderToStaticMarkup(<PapanCommandCenterUI papan={p} bolehAbaikan bolehBuatWork />);
+    expect(html.match(/Buat Work/g) ?? []).toHaveLength(jumlah);
+  });
+
+  it("layar ini tidak menarik data pilihan apa pun untuk pembuatan Work", () => {
+    const sumber = readFileSync(join(process.cwd(), "src/components/operation/papan-command-center.tsx"), "utf8");
+    const kode = sumber.replace(/\/\*[\s\S]*?\*\//g, "").replace(/\{\/\*[\s\S]*?\*\/\}/g, "");
+    for (const terlarang of ["getUsers", "getUserDepartments", "pilihanWork", "FormWorkBaru", "buatWorkAction"]) {
+      expect(kode).not.toContain(terlarang);
+    }
+  });
+
+  it("Akui dan Abaikan tidak tersentuh — keduanya tetap tergambar dan tetap memanggil action-nya", () => {
+    const html = renderToStaticMarkup(<PapanCommandCenterUI papan={papan()} bolehAbaikan bolehBuatWork />);
+    expect(html).toContain("Sudah dilihat");
+    expect(html).toContain("Abaikan");
+    const sumber = readFileSync(join(process.cwd(), "src/components/operation/papan-command-center.tsx"), "utf8");
+    expect(sumber).toContain("akuiSignalAction");
+    expect(sumber).toContain("abaikanSignalAction");
   });
 });

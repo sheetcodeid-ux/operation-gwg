@@ -174,7 +174,11 @@ export const NAV_MENUS: Omit<NavItem, "section" | "group" | "groupIcon">[] = [
   { key: "op_analysis", label: "Data Analysis", href: "/operation/analysis", icon: "ChartColumnBig" },
   { key: "op_pnl", label: "Laba Rugi", href: "/operation/laba-rugi", icon: "Banknote" },
   { key: "op_command", label: "Command Center", href: "/operational/command-center", icon: "Siren" },
-  { key: "op_work", label: "Work", href: "/operational/work", icon: "ListChecks" },
+  // Labelnya "Work Signal", bukan "Work" — di sidebar yang sama sudah ada
+  // "Work Tracker" (`/work-tracker`, tabel `tasks`) yang merupakan sistem lama
+  // dan TIDAK digabungkan. Dua baris bernama mirip akan tertukar, dan yang
+  // tertukar adalah dua entitas yang sengaja dipisahkan (OD-STEP7-02).
+  { key: "op_work", label: "Work Signal", href: "/operational/work", icon: "ListChecks" },
   { key: "op_daily", label: "Daily", href: "/operational/daily", icon: "CalendarDays" },
   { key: "op_weekly", label: "Weekly", href: "/operational/weekly", icon: "CalendarRange" },
   { key: "op_monthly", label: "Monthly", href: "/operational/monthly", icon: "CalendarCheck" },
@@ -588,7 +592,7 @@ export const DIVISION_GROUPS: Partial<Record<Division, NavGroupDef[]>> = {
     // Work berdiri sebagai barisnya sendiri, tepat di bawah Command Center:
     // yang ditanyakan berurutan — "apa yang terdeteksi", lalu "apa yang
     // dikerjakan orang tentangnya".
-    { name: "Work", icon: "ListChecks", urutan: 1, menus: ["op_work"] },
+    { name: "Work Signal", icon: "ListChecks", urutan: 1, menus: ["op_work"] },
     { name: "Performance", icon: "TrendingUp", urutan: 2, menus: ["op_daily", "op_weekly", "op_monthly", "op_quarterly", "op_yearly"] },
   ],
   "Finance V.1": [{ name: "Performance", icon: "TrendingUp", urutan: 0, menus: [...PERFORMANCE_FIN] }],

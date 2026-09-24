@@ -1,8 +1,12 @@
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { describe, expect, it, vi } from "vitest";
 import { renderToStaticMarkup } from "react-dom/server";
 import { PapanWorkUI } from "./papan-work";
 import { DetailWorkUI } from "./detail-work";
+import { FormWorkBaru, kekuranganForm, muatanBuat, type IsiForm } from "./form-work-baru";
 import type { BarisWork, DaftarWork, DetailWork } from "@/lib/data/work-daftar";
+import type { PilihanWork } from "@/lib/data/work-pilihan";
 
 /**
  * LAYAR WORK BENAR-BENAR DIRENDER, bukan dibaca sebagai teks.
@@ -22,6 +26,7 @@ vi.mock("next/navigation", () => ({
 }));
 
 vi.mock("@/lib/actions/work-signal", () => ({
+  buatWorkAction: vi.fn(),
   kaitkanSignalWorkAction: vi.fn(),
   kelolaPelaksanaWorkAction: vi.fn(),
   lepasSignalWorkAction: vi.fn(),
@@ -356,5 +361,197 @@ describe("8 · Signal tetap Signal", () => {
     expect(html).toContain("hanya bertambah, tidak pernah diubah maupun dihapus");
     expect(html).not.toContain("Ubah riwayat");
     expect(html).not.toContain("Hapus riwayat");
+  });
+});
+
+/* ───────────────── Z-02 Step 7 · form Work baru ───────────────── */
+
+/**
+ * ┌─ YANG DIUJI DI SINI ATURANNYA, BUKAN PIKSELNYA ──────────────────────────┐
+ * │                                                                          │
+ * │ Repositori ini merender ke teks statis dan tidak punya jsdom, jadi tidak │
+ * │ ada yang bisa mengetik maupun menekan tombol. Karena itu bagian yang     │
+ * │ paling penting dari form ini — apa yang wajib, dan apa yang dikirim —    │
+ * │ dibuat MURNI dan diuji langsung, bukan ditebak dari markup.              │
+ * └──────────────────────────────────────────────────────────────────────────┘
+ */
+const isi = (o: Partial<IsiForm> = {}): IsiForm => ({
+  judul: "Perbaiki biaya tenaga kerja",
+  deskripsi: "",
+  owner: "u_owner",
+  departemen: "Operational",
+  kategori: "normal",
+  signalIds: ["10"],
+  executorIds: ["u_exec1"],
+  ...o,
+});
+
+const pilihan: PilihanWork = {
+  owner: [
+    { value: "u_owner", label: "Owner Satu" },
+    { value: "u_exec1", label: "Exec Satu · Operational" },
+  ],
+  pelaksana: [
+    { value: "u_exec1", label: "Exec Satu · Operational" },
+    { value: "u_exec2", label: "Exec Dua · Human Capital" },
+    { value: "u_owner", label: "Owner Satu" },
+  ],
+  departemen: [
+    { value: "Human Capital", label: "Human Capital" },
+    { value: "Operational", label: "Operational" },
+  ],
+  signal: [
+    { id: 10, label: "#biaya.labor_pct · Nordu Perdana · 2026-09 · high", severity: "high" },
+    { id: 11, label: "#biaya.sewa_pct · korporat · 2026-09 · low", severity: "low" },
+  ],
+};
+
+describe("validasi form sebelum dikirim", () => {
+  it("lengkap → tidak ada kekurangan", () => {
+    expect(kekuranganForm(isi())).toEqual([]);
+  });
+
+  it.each([
+    ["judul", { judul: "   " }, "Judul wajib diisi."],
+    ["owner", { owner: "" }, "Pemilik Work wajib dipilih."],
+    ["departemen", { departemen: "" }, "Departemen utama wajib dipilih."],
+    ["kategori tenggat", { kategori: "" }, "Kategori tenggat wajib dipilih."],
+    ["Signal", { signalIds: [] }, "Pilih sedikitnya satu Signal."],
+    ["pelaksana", { executorIds: [] }, "Pilih sedikitnya satu pelaksana."],
+  ])("%s wajib", (_nama, ubah, pesan) => {
+    expect(kekuranganForm(isi(ubah as Partial<IsiForm>))).toContain(pesan);
+  });
+
+  it("owner yang merangkap pelaksana ditolak sebelum dikirim (D2 · I-03)", () => {
+    expect(kekuranganForm(isi({ executorIds: ["u_owner"] }))).toContain(
+      "Pemilik Work tidak boleh sekaligus menjadi pelaksananya.",
+    );
+  });
+
+  it("owner yang bukan pelaksana tidak menimbulkan keluhan apa pun", () => {
+    expect(kekuranganForm(isi({ executorIds: ["u_exec1", "u_exec2"] }))).toEqual([]);
+  });
+});
+
+describe("pemetaan muatan ke buatWorkAction", () => {
+  it("tujuh medan, dengan nama yang diharapkan action", () => {
+    expect(muatanBuat(isi({ deskripsi: "catatan", signalIds: ["10", "11"], executorIds: ["u_exec1", "u_exec2"] }))).toEqual({
+      judul: "Perbaiki biaya tenaga kerja",
+      deskripsi: "catatan",
+      ownerId: "u_owner",
+      departemen: "Operational",
+      tenggatKategori: "normal",
+      signalIds: [10, 11],
+      executorIds: ["u_exec1", "u_exec2"],
+    });
+  });
+
+  it("Signal dikirim sebagai angka, bukan teks", () => {
+    expect(muatanBuat(isi({ signalIds: ["10"] })).signalIds).toEqual([10]);
+  });
+
+  it("AKTOR TIDAK PERNAH IKUT — ia diambil dari sesi, bukan dari form", () => {
+    const muatan = muatanBuat(isi()) as Record<string, unknown>;
+    for (const medan of ["oleh", "aktor", "actor", "actorId", "userId", "p_oleh"]) {
+      expect(muatan).not.toHaveProperty(medan);
+    }
+    expect(Object.keys(muatan).sort()).toEqual([
+      "departemen",
+      "deskripsi",
+      "executorIds",
+      "judul",
+      "ownerId",
+      "signalIds",
+      "tenggatKategori",
+    ]);
+  });
+});
+
+describe("form tergambar", () => {
+  it("merender tanpa melempar, dengan seluruh medan kontrak", () => {
+    const html = renderToStaticMarkup(<FormWorkBaru pilihan={pilihan} />);
+    for (const label of [
+      "Judul",
+      "Deskripsi",
+      "Pemilik Work",
+      "Departemen utama",
+      "Kategori tenggat",
+      "Signal yang ditangani",
+      "Pelaksana",
+    ]) {
+      expect(html).toContain(label);
+    }
+  });
+
+  it("tidak ada medan aktor di layar", () => {
+    const html = renderToStaticMarkup(<FormWorkBaru pilihan={pilihan} />).toLowerCase();
+    for (const kata of ["dibuat oleh", "aktor", "user id pembuat"]) {
+      expect(html).not.toContain(kata);
+    }
+  });
+
+  it("menyatakan bahwa tenggat dihitung basis data, bukan oleh layar", () => {
+    const html = renderToStaticMarkup(<FormWorkBaru pilihan={pilihan} />);
+    expect(html).toContain("tidak menghitungnya");
+  });
+
+  it("kosong sejak awal → seluruh kekurangan terbaca, tombol Simpan mati", () => {
+    const html = renderToStaticMarkup(<FormWorkBaru pilihan={pilihan} />);
+    expect(html).toContain("Judul wajib diisi.");
+    expect(html).toContain("Pilih sedikitnya satu Signal.");
+    expect(html).toContain("Pilih sedikitnya satu pelaksana.");
+    expect(html).toMatch(/<button[^>]*disabled[^>]*>\s*Buat Work/);
+  });
+
+  it("initialSignalIds=[10] membuat Signal itu sudah terpilih", () => {
+    const html = renderToStaticMarkup(<FormWorkBaru pilihan={pilihan} initialSignalIds={[10]} />);
+    // Kekurangan "Signal" hilang begitu satu Signal sudah terpilih.
+    expect(html).not.toContain("Pilih sedikitnya satu Signal.");
+    expect(html).toContain("Pilih sedikitnya satu pelaksana.");
+  });
+
+  it("tanpa preseleksi, Signal tetap wajib — D14 tidak bisa dilewati dari mana pun", () => {
+    const html = renderToStaticMarkup(<FormWorkBaru pilihan={pilihan} initialSignalIds={[]} />);
+    expect(html).toContain("Pilih sedikitnya satu Signal.");
+    expect(kekuranganForm(isi({ signalIds: [] }))).toContain("Pilih sedikitnya satu Signal.");
+  });
+
+  it("Signal ditawarkan dengan keterangan yang berguna, bukan hanya nomornya", () => {
+    // Daftar pilihan hidup di dalam Popover dan baru tergambar saat dibuka,
+    // jadi yang dipastikan di sini SUMBER labelnya: `s.label` yang membawa
+    // KPI, tempat, periode, dan severity — bukan `String(s.id)`.
+    const sumber = readFileSync(join(process.cwd(), "src/components/operation/form-work-baru.tsx"), "utf8");
+    expect(sumber).toContain("label: s.label");
+    expect(sumber).not.toMatch(/label:\s*String\(s\.id\)/);
+    expect(pilihan.signal[0].label).toContain("biaya.labor_pct");
+    expect(pilihan.signal[0].label).toContain("Nordu Perdana");
+  });
+});
+
+/* ───────────────── Z-02 Step 7 · daftar: tombol buat + saringan ───────────────── */
+
+describe("daftar Work: pintu pembuatan dan kontrol saringan", () => {
+  it("tombol Buat Work muncul hanya bagi yang berhak", () => {
+    expect(renderToStaticMarkup(<PapanWorkUI papan={papan()} bolehBuat pilihan={pilihan} />)).toContain("Buat Work");
+    expect(renderToStaticMarkup(<PapanWorkUI papan={papan()} pilihan={pilihan} />)).not.toContain("Buat Work");
+  });
+
+  it("ketiga kontrol saringan baru tergambar ketika pilihannya tersedia", () => {
+    const html = renderToStaticMarkup(<PapanWorkUI papan={papan()} bolehBuat pilihan={pilihan} />);
+    expect(html).toContain("Semua owner");
+    expect(html).toContain("Semua departemen");
+    expect(html).toContain("Semua pelaksana");
+  });
+
+  it("tanpa data pilihan, kontrolnya tidak dipaksa tampil kosong", () => {
+    const html = renderToStaticMarkup(<PapanWorkUI papan={papan()} />);
+    expect(html).not.toContain("Semua owner");
+    expect(html).toContain("Masih berjalan");
+  });
+
+  it("saringan status dan overdue tetap ada dan tidak berubah", () => {
+    const html = renderToStaticMarkup(<PapanWorkUI papan={papan()} bolehBuat pilihan={pilihan} />);
+    expect(html).toContain("Masih berjalan");
+    expect(html).toContain("hanya yang lewat tenggat".replace("h", "H"));
   });
 });

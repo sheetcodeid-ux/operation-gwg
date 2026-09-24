@@ -67,7 +67,15 @@ export default async function CommandCenterPage({
         title="Command Center"
         description="Signal terbuka yang masih perlu ditangani — indikasi untuk diselidiki, bukan vonis"
       />
-      <PapanCommandCenterUI papan={papan} bolehAbaikan={can(user, "manage_signals")} />
+      <PapanCommandCenterUI
+        papan={papan}
+        bolehAbaikan={can(user, "manage_signals")}
+        // Pintu Z-02: yang boleh membuat Work dari Signal. Layar ini TIDAK
+        // merender formnya dan tidak mengambil satu pun data pilihan — tombolnya
+        // hanya berpindah ke `/operational/work?buat=1&signal=<id>`
+        // (OD-STEP7-04 = B). Command Center tetap tipis.
+        bolehBuatWork={can(user, "create_signal_work")}
+      />
     </div>
   );
 }
