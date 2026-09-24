@@ -2009,3 +2009,219 @@ tasks
 Verification · Evidence · Resolution semantics · Escalation · notifikasi Work ·
 audit log perusahaan · Diagnosis · Business Case · Approval. Semuanya di luar
 cakupan Z-02 dan masing-masing memerlukan gerbangnya sendiri.
+
+---
+
+## AD-20 · Z-02 STEP 2B — decision lock: status Work, pembatalan, dan kontrak penulis
+
+Keputusan Owner, dikunci setelah Z-02 Step 2B Preflight Audit menemukan enam
+hal yang belum tercakup AD-19. **Kontrak, belum implementasi:** saat keputusan
+ini dicatat tidak ada fungsi penulis, trigger baru, maupun migrasi yang dibuat.
+
+`0114_work_signal.sql` dan `0115_work_enforcement.sql` **tidak diubah**.
+Penegakan tambahan yang dituntut keputusan ini wajib lahir sebagai migrasi
+BARU sesudah 0115 — bukan suntingan atas berkas yang sudah tertutup.
+
+AD-01 … AD-19 tidak disentuh, tidak dinomori ulang, tidak dibatalkan.
+
+### A · Alasan pembatalan ditegakkan basis data
+
+**Decision** — Transisi menuju `cancelled` wajib disertai `work_riwayat`
+ber-`jenis = 'status'`, dengan `alasan` tidak kosong, yang lahir pada
+**transaksi yang sama**. Urutannya sama dengan tiga mutasi lain: riwayat
+disisipkan lebih dulu, `works` diperbarui sesudahnya, keduanya atomik.
+Pencocokannya memakai mekanisme yang sudah terbukti pada T-F — kesamaan
+`xmin` baris riwayat dengan transaksi berjalan. Bukan penanda `set_config`,
+bukan `DEFERRABLE`, bukan constraint trigger.
+
+**Status** — LOCKED
+
+**Rationale** — Kontrak struktural AD-19 sudah menuntut alasan untuk
+pembatalan, tetapi tidak ada invariant bernomor yang menyebutnya dan T-F pada
+`0115` hanya menjaga `owner_id`, `primary_department`, dan `tenggat`. Kolom
+`status` tidak diperiksa sama sekali, sehingga hari ini sebuah Work dapat
+dibatalkan tanpa satu baris jejak pun. Pembatalan menghentikan pekerjaan; yang
+menghentikan pekerjaan tanpa alasan tertulis tidak dapat ditagih siapa pun.
+
+**Impact** — Invariant baru **I-21**: *pembatalan Work wajib beralasan dan
+tercatat*. I-19 dan I-20 tidak berubah, tidak diperluas, dan tidak digantikan —
+I-21 berdiri di sampingnya untuk kolom yang berbeda. Penegakannya menuntut
+perluasan T-F ke kolom `status`, yang harus dituliskan sebagai migrasi baru.
+
+### B · Mesin status Work
+
+**Decision**
+
+```
+open ─┬─> in_progress ─┬─> completed
+      │                └─> cancelled
+      └─> cancelled
+```
+
+| # | transisi | putusan |
+| --- | --- | --- |
+| 1 | `open` → `in_progress` | DIIZINKAN |
+| 2 | `in_progress` → `completed` | DIIZINKAN |
+| 3 | `open` → `cancelled` | DIIZINKAN |
+| 4 | `in_progress` → `cancelled` | DIIZINKAN |
+| 5 | `open` → `completed` | DITOLAK |
+| 6 | `completed` → apa pun | DITOLAK |
+| 7 | `cancelled` → apa pun | DITOLAK |
+
+**Status** — LOCKED
+
+**Rationale** — AD-19 mengunci empat nilai dan artinya, tetapi tidak pernah
+menyatakan arahnya. Tanpa arah, `completed` dapat dikembalikan menjadi `open`
+dan pekerjaan yang sudah dinyatakan selesai berubah lagi tanpa jejak — persis
+penyakit yang sudah dicegah pada `signals` lewat larangan
+`diabaikan → terbuka`.
+
+**Impact** — `completed` dan `cancelled` bersifat **terminal**. Aturan nomor 5
+berarti Work tidak dapat melompati `in_progress`: yang dinyatakan selesai harus
+lebih dulu dinyatakan dikerjakan. Tidak ada status baru ditambahkan. Lifecycle
+Signal tidak tersentuh — ia tetap `terbuka` \| `diabaikan`, dan acknowledgement
+tetap terpisah dari keduanya.
+
+### C · Penjaga Owner pada penyelesaian
+
+**Decision** — Dua lapis, dan keduanya disebut apa adanya:
+
+1. **Otorisasi tetap di lapisan aplikasi**, sesuai O-12 dan pola repositori.
+2. **Penjaga konsistensi di fungsi penulis:** untuk transisi menuju
+   `completed`, fungsi menolak bila pelaku yang disampaikan bukan
+   `works.owner_id`.
+
+**Status** — LOCKED
+
+**Rationale** — O-06 mengunci bahwa hanya Owner yang menyelesaikan Work.
+Fungsi penulis berjalan sebagai `service_role` tanpa konteks autentikasi,
+sehingga ia tidak dapat membuktikan siapa pemanggilnya. Yang bisa ia lakukan
+adalah menolak pelaku yang jelas-jelas bukan Owner.
+
+**Impact** — Pemeriksaan ini **bukan autentikasi**. Nilai pelaku tetap datang
+dari lapisan layanan dan tidak terverifikasi basis data; penjaga ini hanya
+memastikan penyelesaian tidak tercatat atas nama orang yang bukan pemiliknya.
+Seluruh otorisasi tidak dipindahkan ke basis data. Tidak ada peran baru, tidak
+ada perubahan RBAC.
+
+### D · Risiko sisa pada penyisipan langsung
+
+**Decision** — I-01 (Work punya ≥1 kaitan Signal aktif) dan I-04 (Work punya
+≥1 pelaksana aktif) **dijamin konstruksi** di dalam fungsi penulis resmi, bukan
+oleh trigger. Risikonya diterima apa adanya.
+
+**Status** — LOCKED
+
+**Rationale** — Keduanya baru dapat dinilai setelah baris anak ada, sedangkan
+`works` lahir lewat `INSERT`. Menegakkannya di basis data menuntut constraint
+trigger yang ditunda sampai COMMIT, dan O-12 melarangnya.
+
+**Impact** — Penyisipan langsung ke `works` di luar fungsi penulis dapat
+menghasilkan Work tanpa Signal dan tanpa pelaksana, dan tidak ada yang
+menolaknya. Yang menahan: pembuatan atomik di dalam fungsi resmi, uji penjaga
+sumber yang melarang jalur tulis aplikasi menyentuh tabel ini langsung, dan uji
+regresi. Tidak ada trigger baru dibuat hanya untuk ini; `0114` dan `0115` tidak
+diubah.
+
+### E · Operasi tanpa perubahan bukan pelanggaran
+
+**Decision** — Bila operasi resmi menghasilkan keadaan yang sudah sama dan
+tidak mengubah satu baris pun, fungsi mengembalikan `"berubah": false` —
+bukan galat. Berlaku untuk kaitan Signal yang sudah aktif, kaitan yang sudah
+dilepas, pelaksana yang sudah ditugaskan atau sudah dilepas, mutasi bernilai
+sama, dan status yang sudah sama.
+
+Yang **tetap ditolak**: transisi tidak sah, tidak berwenang, alasan wajib yang
+kosong, sasaran tidak ditemukan, benturan owner/pelaksana, dan kembaran yang
+memang dilarang kontrak.
+
+**Status** — LOCKED
+
+**Rationale** — Polanya sudah ada di repositori: `gwg_tulis_kpi_bulanan`
+mengembalikan `'berubah': false` untuk panggilan yang tidak mengubah apa pun.
+Menjadikan pengulangan sebagai galat membuat pemanggil harus membedakan
+kegagalan sungguhan dari pengulangan yang tidak berbahaya.
+
+**Impact** — PK dan CHECK pada `0114` tidak diubah; kembaran yang dilarang
+kontrak tetap ditolak basis data.
+
+### F · Bentuk jawaban fungsi penulis
+
+**Decision** — `jsonb_build_object` dengan kunci berbahasa Indonesia,
+mengikuti seluruh fungsi `gwg_*` yang sudah ada:
+
+```
+gwg_buat_work              { id, tenggat, jumlah_signal, jumlah_executor, berubah }
+gwg_kaitkan_signal_work    { work_id, signal_id, berubah }
+gwg_lepas_signal_work      { work_id, signal_id, berubah }
+gwg_kelola_executor_work   { work_id, user_id, aksi: tambah|lepas, berubah }
+gwg_ubah_work              { id, berubah }
+gwg_ubah_status_work       { id, status, berubah }
+```
+
+Tidak ada field di luar daftar ini.
+
+**Status** — LOCKED
+
+**Rationale** — Enam fungsi `gwg_*` existing seluruhnya mengembalikan `jsonb`
+ringkasan berkunci Indonesia. Bentuk ini mengikutinya tanpa menambah konvensi
+baru.
+
+**Impact** — Galat tetap memakai `raise exception` berpesan bahasa Indonesia
+yang menjelaskan alasan penolakan. Tidak ada kerangka kode galat baru, tidak
+ada SQLSTATE khusus. Kelas kegagalan dibedakan dari pesannya: masukan tidak
+sah · sasaran tidak ditemukan · tidak berwenang · dilarang kontrak ·
+pelanggaran invariant · kembaran · transisi tidak sah · alasan wajib ·
+tenggat tidak sah.
+
+### G · Work terminal berhenti sepenuhnya
+
+**Decision** — Work berstatus `completed` atau `cancelled` bersifat
+**terminal**, dan yang berhenti bukan hanya statusnya melainkan seluruh
+mutasinya. Setelah Work mencapai salah satu dari keduanya:
+
+| # | yang berhenti |
+| --- | --- |
+| 1 | `owner_id` tidak boleh diubah |
+| 2 | `primary_department` tidak boleh diubah |
+| 3 | `tenggat` tidak boleh diubah |
+| 4 | `status` tidak boleh berubah lagi |
+| 5 | pelaksana tidak boleh ditambah maupun dilepas |
+| 6 | kaitan Signal tidak boleh dilepas |
+| 7 | tidak ada mekanisme membuka kembali |
+| 8 | tidak ada mekanisme menghidupkan kembali |
+
+Bila pekerjaannya perlu dilanjutkan sesudah itu, yang dibuat **Work baru**
+sesuai kontrak Z-02, dikaitkan dengan Signal yang masih aktif sepanjang
+invariantnya terpenuhi.
+
+**Status** — LOCKED
+
+**Rationale** — AD-20 · B mengunci arah status, dan itu saja menyisakan lubang:
+Work yang sudah dinyatakan selesai masih bisa berpindah pemilik, berpindah
+departemen, dan bergeser tenggatnya. Catatan yang sudah ditutup lalu berubah
+isinya bukan catatan — dan seluruh nilai `works` sebagai rekam audit bertumpu
+pada isinya berhenti bergerak ketika pekerjaannya berhenti.
+
+**Impact** — Invariant baru **I-24**. Work terminal **tetap dapat dibaca**
+sesuai otorisasi yang berlaku, tetap membawa seluruh riwayat yang sudah
+tercatat, dan tetap sah sebagai rujukan maupun rekam audit. Tidak ada riwayat
+yang dihapus, tidak ada status baru, tidak ada kolom baru, dan lifecycle Signal
+tidak tersentuh. I-21, I-22, dan I-23 tidak berubah maknanya; I-24 berdiri di
+sampingnya dan mencakup permukaan yang lebih luas daripada ketiganya.
+
+### Invariant tambahan
+
+| # | invariant |
+| --- | --- |
+| I-21 | Pembatalan Work wajib beralasan dan tercatat |
+| I-22 | Transisi status Work mengikuti mesin status AD-20 · B; `completed` dan `cancelled` terminal |
+| I-23 | Penyelesaian Work hanya tercatat atas nama Owner-nya |
+| I-24 | Work berstatus `completed` atau `cancelled` adalah terminal dan tidak dapat mengalami mutasi lifecycle maupun penugasan, termasuk owner, `primary_department`, tenggat, pelaksana, dan kaitan Signal aktif |
+
+I-01 … I-20 tidak berubah.
+
+### Yang TIDAK diputuskan di sini
+
+Tidak ada. Seluruh keputusan yang ditemukan Z-02 Step 2B Preflight Audit sudah
+dikunci di AD-20 · A sampai G.
