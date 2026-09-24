@@ -4,6 +4,7 @@ import { redirect } from "next/navigation";
 import { requireSessionUser } from "@/lib/auth";
 import { canReachMenu, MENU_COMMAND_CENTER } from "@/lib/nav";
 import { papanCommandCenter } from "@/lib/data/command-center";
+import { workAktifPerSignal } from "@/lib/data/work-daftar";
 import { getOutlets } from "@/lib/data/store";
 import { can } from "@/lib/rbac";
 import { persempit } from "@/lib/ops/scope-v1";
@@ -60,6 +61,19 @@ export default async function CommandCenterPage({
     sertakanKorporat: true,
   });
 
+  // ── GAP-04 · Signal mana yang sudah dikerjakan ──
+  //
+  // Satu pembacaan balik untuk seluruh Signal yang tergambar. Layar ini TIDAK
+  // berubah menjadi halaman kelola Work: yang diturunkan cuma cacah Work yang
+  // masih berjalan, dan yang digambar cuma satu lencana per baris.
+  //
+  // Ia keterangan, bukan gerbang. D3 mengunci N:N, jadi tombol "Buat Work"
+  // tetap hidup walau lencananya menyala (OD-STEP8E-01 · OD-STEP8E-04).
+  const idSignal = [...papan.kelompok.flatMap((k) => k.outlet.flatMap((o) => o.signal)), ...papan.korporat].map(
+    (s) => s.id,
+  );
+  const workAktif = await workAktifPerSignal(idSignal);
+
   return (
     <div className="w-full">
       <PageHeader
@@ -75,6 +89,7 @@ export default async function CommandCenterPage({
         // hanya berpindah ke `/operational/work?buat=1&signal=<id>`
         // (OD-STEP7-04 = B). Command Center tetap tipis.
         bolehBuatWork={can(user, "create_signal_work")}
+        workAktif={workAktif}
       />
     </div>
   );

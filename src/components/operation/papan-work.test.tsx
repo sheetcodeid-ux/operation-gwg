@@ -1,11 +1,18 @@
-import { readFileSync } from "node:fs";
+import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it, vi } from "vitest";
 import { renderToStaticMarkup } from "react-dom/server";
 import { PapanWorkUI } from "./papan-work";
 import { DetailWorkUI, opsiUntuk } from "./detail-work";
-import { FormWorkBaru, kekuranganForm, muatanBuat, type IsiForm } from "./form-work-baru";
-import type { BarisWork, DaftarWork, DetailWork } from "@/lib/data/work-daftar";
+import {
+  FormWorkBaru,
+  kekuranganForm,
+  muatanBuat,
+  workAktifTerpilih,
+  PERINGATAN_WORK_AKTIF,
+  type IsiForm,
+} from "./form-work-baru";
+import type { BarisWork, DaftarWork, DetailWork, PetaWorkAktif, WorkAktifSignal } from "@/lib/data/work-daftar";
 import type { PilihanWork } from "@/lib/data/work-pilihan";
 
 /**
@@ -940,5 +947,192 @@ describe("GAP-02 · 8 · tidak ada otorisasi yang berubah", () => {
     for (const larangan of ["buatWorkAction", "ubahWorkAction", "gwg_", ".insert(", ".update("]) {
       expect(SUMBER_HALAMAN).not.toContain(larangan);
     }
+  });
+});
+
+/* ───────────────── Z-02 Step 8E · GAP-04 · Signal yang sudah dikerjakan ───────────────── */
+
+/**
+ * ┌─ N:N TETAP N:N ─────────────────────────────────────────────────────────┐
+ * │                                                                          │
+ * │ D3 mengunci Signal ↔ Work sebagai N:N, dan yang dibangun GAP-04 BUKAN    │
+ * │ pembatasan. Karena itu yang paling penting diuji di sini justru yang     │
+ * │ TIDAK terjadi: peringatannya tidak memblokir apa pun, tombolnya tidak    │
+ * │ mati, dan Work kedua tetap dapat dibuat.                                 │
+ * │                                                                          │
+ * │ Yang dihitung hanya Work yang MASIH BERJALAN (OD-STEP8E-02). Kaitan pada │
+ * │ Work yang sudah tutup disimpan selamanya sebagai rekam audit (I-16), dan │
+ * │ mencacahnya akan membuat angkanya hanya bertambah — Signal berumur       │
+ * │ panjang akan terlihat "punya banyak Work" padahal semuanya sudah selesai.│
+ * └──────────────────────────────────────────────────────────────────────────┘
+ */
+
+const workAktif = (o: Record<string, Partial<WorkAktifSignal>[]> = {}): PetaWorkAktif => {
+  const peta: PetaWorkAktif = {};
+  for (const [sig, daftar] of Object.entries(o)) {
+    peta[sig] = daftar.map((w, i) => ({
+      workId: w.workId ?? i + 1,
+      judul: w.judul ?? "Perbaiki biaya tenaga kerja",
+      status: w.status ?? "open",
+      ownerId: w.ownerId ?? "u_owner",
+      ownerNama: w.ownerNama ?? "Owner Satu",
+      tenggat: w.tenggat ?? "2026-09-29T06:00:00.000Z",
+    }));
+  }
+  return peta;
+};
+
+describe("GAP-04 · 1-6 · hanya Work yang masih berjalan yang dihitung", () => {
+  it("1 · Signal tanpa Work aktif → tidak ada peringatan", () => {
+    expect(workAktifTerpilih(["10"], {})).toEqual([]);
+    expect(workAktifTerpilih(["10"], workAktif({ "11": [{ workId: 5 }] }))).toEqual([]);
+    const html = renderToStaticMarkup(<FormWorkBaru pilihan={pilihan} initialSignalIds={[10]} workAktif={{}} />);
+    expect(html).not.toContain("sudah memiliki Work aktif");
+  });
+
+  it("2 · Signal dengan satu Work `open` → peringatan muncul", () => {
+    const peta = workAktif({ "10": [{ workId: 7, status: "open" }] });
+    expect(workAktifTerpilih(["10"], peta)).toHaveLength(1);
+    const html = renderToStaticMarkup(<FormWorkBaru pilihan={pilihan} initialSignalIds={[10]} workAktif={peta} />);
+    expect(html).toContain("Signal ini sudah memiliki Work aktif.");
+    expect(html).toContain("Periksa Work yang sudah ada sebelum membuat Work baru.");
+    expect(html).toContain("#7");
+  });
+
+  it("3 · Signal dengan satu Work `in_progress` → peringatan muncul", () => {
+    const peta = workAktif({ "10": [{ workId: 8, status: "in_progress" }] });
+    const html = renderToStaticMarkup(<FormWorkBaru pilihan={pilihan} initialSignalIds={[10]} workAktif={peta} />);
+    expect(html).toContain("Signal ini sudah memiliki Work aktif.");
+    expect(html).toContain("Dikerjakan");
+  });
+
+  it("4-5 · Work `completed` maupun `cancelled` TIDAK PERNAH sampai ke layar", () => {
+    // Penyaringan statusnya dilakukan BASIS DATA, bukan di sini: `workAktifPerSignal`
+    // menyaring `.in("status", STATUS_AKTIF)`, jadi Work terminal tidak pernah
+    // menjadi bagian peta sama sekali. Yang dipastikan di bawah janji itu.
+    const sumber = readFileSync(join(process.cwd(), "src/lib/data/work-daftar.ts"), "utf8");
+    expect(sumber).toContain('.in("status", [...STATUS_AKTIF])');
+    expect(sumber).toContain('.is("dilepas_pada", null)');
+    // Dan bila petanya memang kosong — seperti untuk Signal yang Work-nya sudah
+    // tutup semua — tidak ada satu kata peringatan pun yang tergambar.
+    const html = renderToStaticMarkup(<FormWorkBaru pilihan={pilihan} initialSignalIds={[10]} workAktif={{ "10": [] }} />);
+    expect(html).not.toContain("sudah memiliki Work aktif");
+  });
+
+  it("6 · Signal dengan Work terminal DAN Work aktif → peringatan tetap muncul", () => {
+    // Yang terminal sudah disaring di lapisan baca; yang sampai ke sini hanya
+    // yang berjalan — dan satu saja sudah cukup untuk memunculkan keterangannya.
+    const peta = workAktif({ "10": [{ workId: 9, status: "in_progress" }] });
+    expect(workAktifTerpilih(["10"], peta).map((w) => w.workId)).toEqual([9]);
+  });
+
+  it("satu Work yang menangani dua Signal terpilih tidak disebut dua kali", () => {
+    const satu = { workId: 4, status: "open" };
+    const peta = workAktif({ "10": [satu], "11": [satu] });
+    expect(workAktifTerpilih(["10", "11"], peta)).toHaveLength(1);
+  });
+
+  it("tanpa data sama sekali, helpernya tidak mengarang apa pun", () => {
+    expect(workAktifTerpilih(["10"], undefined)).toEqual([]);
+    expect(workAktifTerpilih([], workAktif({ "10": [{ workId: 1 }] }))).toEqual([]);
+  });
+
+  it("urutannya menurut nomor Work, bukan urutan Signal dipilih", () => {
+    const peta = workAktif({ "10": [{ workId: 9 }], "11": [{ workId: 2 }] });
+    expect(workAktifTerpilih(["10", "11"], peta).map((w) => w.workId)).toEqual([2, 9]);
+  });
+});
+
+describe("GAP-04 · 7-9 · peringatan tidak melarang apa pun", () => {
+  const lengkap = (peta: PetaWorkAktif) =>
+    renderToStaticMarkup(<FormWorkBaru pilihan={pilihan} initialSignalIds={[10]} workAktif={peta} />);
+
+  it("7 · tombol Buat Work TIDAK dimatikan oleh peringatan", () => {
+    const peta = workAktif({ "10": [{ workId: 7 }] });
+    const html = lengkap(peta);
+    expect(html).toContain("Signal ini sudah memiliki Work aktif.");
+    // Yang mematikan tombolnya hanya kekurangan isian — dan itu aturan lama.
+    // Kalimat peringatan tidak ikut menentukan apa pun.
+    const kurangDengan = kekuranganForm(isi());
+    expect(kurangDengan).toEqual([]);
+  });
+
+  it("8 · muatan yang dikirim tidak berubah sedikit pun oleh adanya Work lain", () => {
+    // Tidak ada medan baru, tidak ada penanda "duplikat", tidak ada apa pun yang
+    // memberi tahu server bahwa Signalnya sudah dikerjakan. Servernya memang
+    // tidak butuh tahu: D3 mengizinkannya.
+    expect(Object.keys(muatanBuat(isi())).sort()).toEqual([
+      "departemen",
+      "deskripsi",
+      "executorIds",
+      "judul",
+      "ownerId",
+      "signalIds",
+      "tenggatKategori",
+    ]);
+  });
+
+  it("9 · tidak satu kata pun menyatakan pembuatannya dilarang (D3 · N:N)", () => {
+    const terbaca = teks(lengkap(workAktif({ "10": [{ workId: 7 }] })));
+    for (const klaim of [
+      "tidak dapat dibuat",
+      "tidak bisa dibuat",
+      "dilarang",
+      "sudah ada work sehingga",
+      "hanya boleh satu",
+      "duplikat",
+    ]) {
+      expect(terbaca).not.toContain(klaim);
+    }
+    expect(terbaca).toContain("periksa work yang sudah ada sebelum membuat work baru");
+  });
+
+  it("kalimatnya persis seperti yang dikunci Owner (OD-STEP8E-04)", () => {
+    expect(PERINGATAN_WORK_AKTIF).toBe(
+      "Signal ini sudah memiliki Work aktif. Periksa Work yang sudah ada sebelum membuat Work baru.",
+    );
+  });
+});
+
+describe("GAP-04 · lapisan baca arah terbalik", () => {
+  const sumber = readFileSync(join(process.cwd(), "src/lib/data/work-daftar.ts"), "utf8");
+
+  it("membaca signal_work menurut signal_id, dan hanya kaitan yang masih aktif", () => {
+    expect(sumber).toContain('.in("signal_id", unik)');
+    expect(sumber).toContain('.is("dilepas_pada", null)');
+  });
+
+  it("memakai selectAll — 1000 baris PostgREST tidak boleh memotong jawabannya", () => {
+    expect(sumber).toContain('selectAll<{ signal_id: number; work_id: number }>("signal_work"');
+  });
+
+  it("tidak menulis apa pun", () => {
+    for (const pola of [".insert(", ".update(", ".upsert(", ".delete(", ".rpc("]) {
+      expect(sumber).not.toContain(pola);
+    }
+  });
+
+  it("tidak ada UNIQUE maupun penjaga baru yang menolak Work kedua", () => {
+    const migrasi = readdirSync(join(process.cwd(), "supabase/migrations")).filter((f) => f.endsWith(".sql"));
+    expect(migrasi.some((f) => f.startsWith("0118"))).toBe(false);
+    const z02 = readFileSync(join(process.cwd(), "supabase/migrations/0114_work_signal.sql"), "utf8");
+    expect(z02).toContain("primary key (signal_id, work_id)");
+    expect(z02).not.toMatch(/unique\s*\(\s*signal_id\s*\)/i);
+  });
+});
+
+describe("GAP-04 · 10-11 · permukaan lain tidak bergeser", () => {
+  it("10 · Signal pada Work detail TETAP teks mati (OD-STEP8C-01 = C-3)", () => {
+    const html = renderToStaticMarkup(<DetailWorkUI detail={detail()} aktor="u_mgr" kelola pilihan={pilihanDetail} />);
+    expect(html).not.toContain("<a ");
+    expect(html).not.toContain("href=");
+    expect(SUMBER_DETAIL).not.toContain("workAktif");
+    expect(SUMBER_DETAIL).not.toContain("Work aktif");
+  });
+
+  it("11 · daftar Work tidak ikut berubah oleh GAP-04", () => {
+    const html = renderToStaticMarkup(<PapanWorkUI papan={papan()} bolehBuat pilihan={pilihan} />);
+    expect(html).toContain("Buat Work");
+    expect(html).not.toContain("sudah memiliki Work aktif");
   });
 });

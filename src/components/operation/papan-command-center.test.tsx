@@ -177,3 +177,102 @@ describe("tombol Buat Work", () => {
     expect(sumber).toContain("abaikanSignalAction");
   });
 });
+
+/* ───────────────── Z-02 Step 8E · GAP-04 · lencana Work aktif ───────────────── */
+
+/**
+ * ┌─ LENCANA, BUKAN GERBANG ────────────────────────────────────────────────┐
+ * │                                                                          │
+ * │ D3 mengunci Signal ↔ Work sebagai N:N. Yang ditambahkan GAP-04 di layar  │
+ * │ ini hanya keterangan: apakah Signalnya sudah ditangani pekerjaan yang    │
+ * │ masih berjalan. Tombol "Buat Work" TIDAK boleh ikut mati karenanya, dan  │
+ * │ layar ini TIDAK boleh berubah menjadi halaman kelola Work.               │
+ * └──────────────────────────────────────────────────────────────────────────┘
+ */
+describe("GAP-04 · Command Center menyebut Work yang masih berjalan", () => {
+  it("tanpa data Work, tidak ada lencana yang dipaksa tampil", () => {
+    const html = renderToStaticMarkup(<PapanCommandCenterUI papan={papan()} bolehAbaikan bolehBuatWork />);
+    expect(html).not.toContain("Work aktif");
+  });
+
+  it("Signal yang punya Work berjalan mendapat lencana bercacah", () => {
+    const html = renderToStaticMarkup(
+      <PapanCommandCenterUI
+        papan={papan()}
+        bolehAbaikan
+        bolehBuatWork
+        workAktif={{
+          "1": [
+            { workId: 7, judul: "Perbaiki labor", status: "open", ownerId: "u_owner", ownerNama: "Owner Satu", tenggat: "2026-09-29T06:00:00.000Z" },
+            { workId: 8, judul: "Negosiasi kontrak", status: "in_progress", ownerId: "u_owner2", ownerNama: "Owner Dua", tenggat: "2026-09-30T06:00:00.000Z" },
+          ],
+        }}
+      />,
+    );
+    expect(html).toContain("2 Work aktif");
+    // Hanya Signal #1 yang punya; yang lain tidak ikut tertandai.
+    expect(html.match(/Work aktif/g) ?? []).toHaveLength(1);
+  });
+
+  it("lencananya TIDAK mematikan tombol Buat Work — N:N tetap berlaku", () => {
+    const p = papan();
+    const jumlah = p.korporat.length + p.kelompok.flatMap((k) => k.outlet.flatMap((o) => o.signal)).length;
+    const html = renderToStaticMarkup(
+      <PapanCommandCenterUI
+        papan={p}
+        bolehAbaikan
+        bolehBuatWork
+        workAktif={{
+          "1": [{ workId: 7, judul: "X", status: "open", ownerId: "u_owner", ownerNama: "Owner Satu", tenggat: "2026-09-29T06:00:00.000Z" }],
+        }}
+      />,
+    );
+    expect(html.match(/Buat Work/g) ?? []).toHaveLength(jumlah);
+    expect(html).toContain("1 Work aktif");
+  });
+
+  it("tidak satu kata pun menyatakan pembuatan Work kedua dilarang", () => {
+    const html = renderToStaticMarkup(
+      <PapanCommandCenterUI
+        papan={papan()}
+        bolehAbaikan
+        bolehBuatWork
+        workAktif={{
+          "1": [{ workId: 7, judul: "X", status: "open", ownerId: "u_owner", ownerNama: "Owner Satu", tenggat: "2026-09-29T06:00:00.000Z" }],
+        }}
+      />,
+    );
+    const terbaca = html.replace(/<[^>]*>/g, " ").replace(/\s+/g, " ").toLowerCase();
+    for (const klaim of ["dilarang", "tidak dapat dibuat", "tidak bisa dibuat", "hanya boleh satu", "duplikat"]) {
+      expect(terbaca).not.toContain(klaim);
+    }
+  });
+
+  it("layar ini tetap TIPIS — lencana saja, tanpa daftar Work, tautan, atau tombol baru", () => {
+    const sumber = readFileSync(join(process.cwd(), "src/components/operation/papan-command-center.tsx"), "utf8");
+    const kode = sumber.replace(/\/\*[\s\S]*?\*\//g, "").replace(/\{\/\*[\s\S]*?\*\/\}/g, "");
+    // Tidak ada navigasi baru ke Work, dan tidak ada judul Work yang dirender.
+    expect(kode).not.toContain("/operational/work/");
+    expect(kode).not.toContain("next/link");
+    expect(kode).not.toContain("w.judul");
+    // Yang diturunkan hanya CACAHNYA — bukan barisnya.
+    expect(kode).toContain("cacahWorkAktif={(workAktif?.[String(s.id)] ?? []).length}");
+  });
+
+  it("layar ini tetap tidak menarik data Work sendiri — ia hanya menerima prop", () => {
+    const sumber = readFileSync(join(process.cwd(), "src/components/operation/papan-command-center.tsx"), "utf8");
+    const kode = sumber.replace(/\/\*[\s\S]*?\*\//g, "").replace(/\{\/\*[\s\S]*?\*\/\}/g, "");
+    for (const terlarang of ["workAktifPerSignal", "selectAll", "server-only", "db()"]) {
+      expect(kode).not.toContain(terlarang);
+    }
+  });
+
+  it("halaman Command Center yang menariknya, sekali, untuk seluruh Signal yang tergambar", () => {
+    const halaman = readFileSync(join(process.cwd(), "src/app/(app)/operational/command-center/page.tsx"), "utf8");
+    expect(halaman).toContain("workAktifPerSignal(idSignal)");
+    expect(halaman).toContain("workAktif={workAktif}");
+    // Gerbang lama tidak bergeser satu pun.
+    expect(halaman).toContain("if (!canReachMenu(user, MENU_COMMAND_CENTER)) redirect(\"/dashboard\");");
+    expect(halaman).toContain('bolehBuatWork={can(user, "create_signal_work")}');
+  });
+});

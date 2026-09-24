@@ -9,6 +9,7 @@ import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { cn, formatNumber } from "@/lib/utils";
 import { abaikanSignalAction, akuiSignalAction } from "@/lib/actions/signals";
 import type { PapanCommandCenter, SignalTriase } from "@/lib/data/command-center";
+import type { PetaWorkAktif } from "@/lib/data/work-daftar";
 
 /**
  * COMMAND CENTER — layar triase, bukan dasbor.
@@ -100,6 +101,7 @@ function BarisSignal({
   berjalan,
   bolehAbaikan,
   bolehBuatWork,
+  cacahWorkAktif = 0,
   sibuk,
   onAkui,
   onAbaikan,
@@ -109,6 +111,8 @@ function BarisSignal({
   berjalan: boolean;
   bolehAbaikan: boolean;
   bolehBuatWork: boolean;
+  /** Berapa Work yang MASIH BERJALAN menangani Signal ini. Nol berarti belum ada. */
+  cacahWorkAktif?: number;
   sibuk: boolean;
   onAkui: (id: number) => void;
   onAbaikan: (s: SignalTriase) => void;
@@ -148,6 +152,29 @@ function BarisSignal({
       </span>
 
       <span className="flex min-w-[12rem] flex-wrap items-center gap-1.5">
+        {/*
+          GAP-04 · KETERANGAN, BUKAN GERBANG.
+
+          D3 mengunci Signal ↔ Work sebagai N:N, jadi lencana ini tidak pernah
+          mematikan tombol "Buat Work" di sebelahnya. Yang dijawabnya satu
+          pertanyaan yang selama ini tidak punya jawaban di layar mana pun:
+          apakah sudah ada yang mengerjakannya.
+
+          Yang sudah SELESAI tidak ikut dihitung (OD-STEP8E-02) — kaitannya
+          memang disimpan selamanya sebagai rekam audit (I-16), dan mencacahnya
+          akan membuat angka ini hanya bertambah dan tidak pernah menyusut.
+
+          Command Center tetap triase Signal, bukan halaman kelola Work: satu
+          lencana, tanpa daftar, tanpa tautan, tanpa tombol tambahan.
+        */}
+        {cacahWorkAktif > 0 && (
+          <span
+            title="Signal ini sudah ditangani Work yang masih berjalan. Satu Signal tetap boleh punya lebih dari satu Work."
+            className="cursor-help rounded-md border border-sky-500/40 bg-sky-500/10 px-1.5 py-0.5 text-[10px] font-semibold text-sky-700 dark:text-sky-400"
+          >
+            <ListChecks className="mr-0.5 inline size-3" /> {cacahWorkAktif} Work aktif
+          </span>
+        )}
         {s.diakuiOleh ? (
           <span
             title={`Dilihat ${s.diakuiNama ?? s.diakuiOleh} pada ${jam(s.diakuiPada ?? "")}`}
@@ -224,10 +251,13 @@ export function PapanCommandCenterUI({
   // Tanpa disebut, tombolnya tidak muncul. Bawaan yang membuka lebih banyak
   // daripada yang diminta adalah bawaan yang salah.
   bolehBuatWork = false,
+  workAktif,
 }: {
   papan: PapanCommandCenter;
   bolehAbaikan: boolean;
   bolehBuatWork?: boolean;
+  /** Work yang MASIH BERJALAN per Signal — keterangan, bukan gerbang. */
+  workAktif?: PetaWorkAktif;
 }) {
   const router = useRouter();
   const [sibuk, setSibuk] = React.useState(false);
@@ -338,6 +368,7 @@ export function PapanCommandCenterUI({
                   berjalan={s.periode === papan.bulanBerjalan}
                   bolehAbaikan={bolehAbaikan}
                   bolehBuatWork={bolehBuatWork}
+                  cacahWorkAktif={(workAktif?.[String(s.id)] ?? []).length}
                   sibuk={sibuk}
                   onAkui={akui}
                   onAbaikan={setTarget}
@@ -383,6 +414,7 @@ export function PapanCommandCenterUI({
                         berjalan={kp.berjalan}
                         bolehAbaikan={bolehAbaikan}
                         bolehBuatWork={bolehBuatWork}
+                        cacahWorkAktif={(workAktif?.[String(s.id)] ?? []).length}
                         sibuk={sibuk}
                         onAkui={akui}
                         onAbaikan={setTarget}

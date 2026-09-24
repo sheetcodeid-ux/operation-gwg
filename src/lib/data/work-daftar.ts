@@ -555,3 +555,113 @@ export function cacahAktif<T>(baris: T[], kunci: (r: T) => number, aktif: (r: T)
   }
   return peta;
 }
+
+/* ───────────────────── GAP-04 · arah terbalik: Signal → Work ───────────────────── */
+
+/**
+ * SATU SIGNAL BOLEH PUNYA BANYAK WORK, DAN ITU MEMANG KONTRAKNYA.
+ *
+ * ┌─ YANG DIBACA DI SINI BUKAN PELANGGARAN ──────────────────────────────────┐
+ * │                                                                          │
+ * │ D3 mengunci Signal ↔ Work sebagai N:N, dan `primary key (signal_id,      │
+ * │ work_id)` mengunci PASANGANNYA — bukan Signalnya. Satu Signal biaya      │
+ * │ tenaga kerja yang melewati ambang bisa sah melahirkan dua Work berbeda:  │
+ * │ satu menjadwal ulang shift, satu menegosiasi ulang kontrak.              │
+ * │                                                                          │
+ * │ Jadi yang dibaca di sini BUKAN untuk menolak apa pun. Ia untuk menjawab  │
+ * │ satu pertanyaan yang selama ini tidak punya jawaban di layar mana pun:   │
+ * │ "apakah sudah ada yang mengerjakan Signal ini?" Yang memutuskan tetap    │
+ * │ orangnya.                                                                │
+ * └──────────────────────────────────────────────────────────────────────────┘
+ *
+ * ┌─ HANYA YANG MASIH BERJALAN (OD-STEP8E-02) ───────────────────────────────┐
+ * │                                                                          │
+ * │ Kaitan pada Work yang sudah selesai TIDAK PERNAH dihapus — I-16 dan      │
+ * │ BLOCKER-1 menyimpannya sebagai rekam audit permanen. Karena itu cacah    │
+ * │ SELURUH Work per Signal hanya bertambah dan tidak pernah menyusut, dan   │
+ * │ Signal berumur panjang akan terlihat "punya banyak Work" padahal         │
+ * │ semuanya sudah tutup berbulan-bulan lalu. Yang berguna ditanyakan        │
+ * │ sebelum membuat Work baru hanyalah: apakah masih ada yang BERJALAN.      │
+ * └──────────────────────────────────────────────────────────────────────────┘
+ */
+export interface WorkAktifSignal {
+  workId: number;
+  judul: string;
+  status: string;
+  ownerId: string;
+  ownerNama: string;
+  tenggat: string;
+}
+
+/** Peta yang dikirim ke komponen klien — kunci `signal_id` sebagai teks. */
+export type PetaWorkAktif = Record<string, WorkAktifSignal[]>;
+
+/**
+ * Work yang MASIH BERJALAN untuk tiap Signal yang diminta.
+ *
+ * Dua pembacaan, bukan satu per Signal: kaitannya dulu, lalu Work-nya sekali.
+ * Signal tanpa Work berjalan tidak muncul sebagai kunci sama sekali — peta
+ * kosong dan "tidak ada Work" adalah jawaban yang sama, dan itu memang benar.
+ */
+export async function workAktifPerSignal(signalIds: number[]): Promise<PetaWorkAktif> {
+  const unik = [...new Set(signalIds.filter((n) => Number.isInteger(n) && n > 0))];
+  if (!dbEnabled || unik.length === 0) return {};
+
+  // Kaitan yang sudah DILEPAS tidak ikut: ia rekam audit, bukan pekerjaan
+  // berjalan. Work-nya boleh saja masih hidup, tetapi ia tidak lagi menangani
+  // Signal ini — dan itu persis yang dinyatakan pelepasannya (I-16).
+  const kaitan = await selectAll<{ signal_id: number; work_id: number }>("signal_work", (a, b) =>
+    db()
+      .from("signal_work")
+      .select("signal_id,work_id")
+      .in("signal_id", unik)
+      .is("dilepas_pada", null)
+      .order("signal_id")
+      .order("work_id")
+      .range(a, b),
+  ).catch(() => [] as { signal_id: number; work_id: number }[]);
+
+  const workIds = [...new Set(kaitan.map((k) => k.work_id))];
+  if (workIds.length === 0) return {};
+
+  // Penyaringan status dilakukan BASIS DATA, bukan sesudah barisnya ditarik:
+  // Work terminal tidak pernah ikut terbawa, sebanyak apa pun jumlahnya.
+  const works = await selectAll<{
+    id: number;
+    judul: string;
+    status: string;
+    owner_id: string;
+    tenggat: string;
+  }>("works", (a, b) =>
+    db()
+      .from("works")
+      .select("id,judul,status,owner_id,tenggat")
+      .in("id", workIds)
+      .in("status", [...STATUS_AKTIF])
+      .order("id")
+      .range(a, b),
+  ).catch(() => [] as { id: number; judul: string; status: string; owner_id: string; tenggat: string }[]);
+
+  const nama = petaNama();
+  const petaWork = new Map(
+    works.map((w) => [
+      w.id,
+      {
+        workId: w.id,
+        judul: w.judul,
+        status: w.status,
+        ownerId: w.owner_id,
+        ownerNama: nama.orang.get(w.owner_id) ?? w.owner_id,
+        tenggat: w.tenggat,
+      } satisfies WorkAktifSignal,
+    ]),
+  );
+
+  const hasil: PetaWorkAktif = {};
+  for (const k of kaitan) {
+    const w = petaWork.get(k.work_id);
+    if (!w) continue;
+    (hasil[String(k.signal_id)] ??= []).push(w);
+  }
+  return hasil;
+}

@@ -2,7 +2,7 @@ import { ListChecks } from "lucide-react";
 import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 import { requireSessionUser } from "@/lib/auth";
-import { daftarWork, saringStatus } from "@/lib/data/work-daftar";
+import { daftarWork, saringStatus, workAktifPerSignal } from "@/lib/data/work-daftar";
 import { pilihanWork } from "@/lib/data/work-pilihan";
 import { canReachMenu, MENU_WORK } from "@/lib/nav";
 import { can } from "@/lib/rbac";
@@ -70,6 +70,16 @@ export default async function WorkPage({
       .map(Number)
       .filter((n) => Number.isInteger(n) && n > 0);
 
+    // ── GAP-04 · Signal yang sudah dikerjakan orang lain ──
+    //
+    // Ditarik untuk SELURUH Signal yang boleh dipilih, bukan hanya yang
+    // dipreseleksi: orang bebas mengubah pilihannya di dalam form, dan
+    // keterangannya harus ikut tanpa perjalanan bolak-balik ke server.
+    //
+    // Ini TIDAK menolak apa pun. D3 mengunci N:N, jadi Work kedua tetap sah —
+    // yang berubah hanya: orang memutuskannya sambil melihat.
+    const workAktif = await workAktifPerSignal(pilihan.signal.map((s) => s.id));
+
     return (
       <div className="w-full">
         <PageHeader
@@ -77,7 +87,7 @@ export default async function WorkPage({
           title="Work Signal baru"
           description="Pekerjaan selalu berasal dari Signal — pilih Signalnya, lalu tentukan siapa menanggung dan siapa mengerjakan"
         />
-        <FormWorkBaru pilihan={pilihan} initialSignalIds={awal} />
+        <FormWorkBaru pilihan={pilihan} initialSignalIds={awal} workAktif={workAktif} />
       </div>
     );
   }

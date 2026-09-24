@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Combobox } from "@/components/ui/combobox";
 import { MultiCombobox } from "@/components/ui/multi-combobox";
 import { buatWorkAction } from "@/lib/actions/work-signal";
+import type { PetaWorkAktif, WorkAktifSignal } from "@/lib/data/work-daftar";
 import type { PilihanWork } from "@/lib/data/work-pilihan";
 
 /**
@@ -100,12 +101,70 @@ const KATEGORI = [
   { value: "low", label: "Low · 7 hari" },
 ];
 
+/**
+ * ┌─ PERINGATAN YANG TIDAK MELARANG APA PUN ─────────────────────────────────┐
+ * │                                                                          │
+ * │ D3 mengunci Signal ↔ Work sebagai N:N: satu Signal MEMANG boleh punya    │
+ * │ beberapa Work. Yang ditampilkan di bawah karena itu keterangan, bukan    │
+ * │ penghalang — tombolnya tidak dimatikan, tidak ada isian yang dikunci,    │
+ * │ dan tidak ada satu kata pun yang menyatakan pembuatannya dilarang.       │
+ * │                                                                          │
+ * │ Yang diperbaiki cuma satu hal: sebelumnya orang TIDAK PUNYA CARA         │
+ * │ mengetahui bahwa Signal yang dipegangnya sudah dikerjakan orang lain.    │
+ * │ Keputusannya tetap miliknya; yang berubah, kini ia memutuskannya sambil  │
+ * │ melihat.                                                                 │
+ * └──────────────────────────────────────────────────────────────────────────┘
+ */
+/**
+ * MURNI dan diekspor — Work berjalan untuk sekumpulan Signal yang sedang dipilih.
+ *
+ * Tinggal DI SINI, bukan di `work-daftar.ts`: berkas itu `server-only`, dan
+ * komponen ini berjalan di peramban. Yang diseberangkan cuma TIPE-nya, yang
+ * memang hilang saat dikompilasi.
+ */
+export function workAktifTerpilih(
+  signalIds: readonly string[],
+  peta: PetaWorkAktif | undefined,
+): WorkAktifSignal[] {
+  if (!peta) return [];
+  const terlihat = new Set<number>();
+  const hasil: WorkAktifSignal[] = [];
+  for (const id of signalIds) {
+    for (const w of peta[id] ?? []) {
+      // Satu Work bisa menangani beberapa Signal yang sedang dipilih sekaligus
+      // — ia tetap SATU pekerjaan, dan tidak boleh disebut dua kali.
+      if (terlihat.has(w.workId)) continue;
+      terlihat.add(w.workId);
+      hasil.push(w);
+    }
+  }
+  return hasil.sort((a, b) => a.workId - b.workId);
+}
+
+export const PERINGATAN_WORK_AKTIF =
+  "Signal ini sudah memiliki Work aktif. Periksa Work yang sudah ada sebelum membuat Work baru.";
+
+const LABEL_STATUS_WORK: Record<string, string> = { open: "Terbuka", in_progress: "Dikerjakan" };
+
+const waktuWib = (iso: string): string =>
+  new Date(iso).toLocaleString("id-ID", {
+    timeZone: "Asia/Jakarta",
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+
 export function FormWorkBaru({
   pilihan,
   initialSignalIds = [],
+  workAktif,
 }: {
   pilihan: PilihanWork;
   initialSignalIds?: number[];
+  /** Work yang MASIH BERJALAN per Signal — dari `workAktifPerSignal()` di halaman. */
+  workAktif?: PetaWorkAktif;
 }) {
   const router = useRouter();
   const [judul, setJudul] = React.useState("");
@@ -137,6 +196,10 @@ export function FormWorkBaru({
     [pilihan.signal],
   );
 
+  // Dihitung dari Signal yang SEDANG dipilih, bukan sekali saat halaman dibuka:
+  // orang boleh menambah dan membuang Signal, dan keterangannya harus ikut.
+  const berjalan = React.useMemo(() => workAktifTerpilih(signalIds, workAktif), [signalIds, workAktif]);
+
   const isi: IsiForm = { judul, deskripsi, owner, departemen, kategori, signalIds, executorIds };
   const kurang = React.useMemo(
     () => kekuranganForm({ judul, deskripsi, owner, departemen, kategori, signalIds, executorIds }),
@@ -162,6 +225,20 @@ export function FormWorkBaru({
   return (
     <div className="w-full max-w-3xl space-y-4">
       {pesan && <div className="rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-700">{pesan}</div>}
+
+      {berjalan.length > 0 && (
+        <div className="rounded-md border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
+          <p className="font-medium">{PERINGATAN_WORK_AKTIF}</p>
+          <ul className="mt-2 space-y-1">
+            {berjalan.map((w) => (
+              <li key={w.workId} className="text-xs">
+                <span className="font-medium">#{w.workId}</span> {w.judul} ·{" "}
+                {LABEL_STATUS_WORK[w.status] ?? w.status} · {w.ownerNama} · tenggat {waktuWib(w.tenggat)}
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
 
       <div className="rounded-lg border p-4 space-y-3">
         <label className="block text-sm">
