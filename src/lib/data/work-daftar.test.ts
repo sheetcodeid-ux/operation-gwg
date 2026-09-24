@@ -483,9 +483,27 @@ describe("kontrak sumber lapisan baca Work", () => {
     expect(reader).toContain("export interface SignalWork {");
   });
 
-  it("tidak ada migration baru yang lahir bersama gate ini", () => {
+  it("lapisan ini tidak menuntut perubahan skema sama sekali", () => {
+    /*
+     * ┌─ KENAPA BUKAN "TIDAK ADA MIGRATION DI ATAS 0116" ────────────────────┐
+     * │                                                                      │
+     * │ Bentuk itu sempat dipakai, dan ia rusak begitu `0117` lahir dari     │
+     * │ gate LAIN — padahal janji yang sebenarnya dijaga tidak pernah        │
+     * │ berubah: lapisan ini membaca skema yang sudah ada, dan tidak pernah  │
+     * │ menuntut kolom, tabel, index, trigger, maupun fungsi baru.           │
+     * │                                                                      │
+     * │ Yang diuji sekarang janji itu langsung. Ia tidak akan rusak lagi     │
+     * │ ketika `0118` menyusul, dan tetap menolak begitu ada DDL yang        │
+     * │ diselundupkan ke lapisan aplikasi.                                   │
+     * └──────────────────────────────────────────────────────────────────────┘
+     */
+    for (const src of semua) {
+      expect(src).not.toMatch(/create\s+(table|index|trigger|or\s+replace\s+function)/i);
+      expect(src).not.toMatch(/alter\s+table|drop\s+(table|column|trigger|function)/i);
+    }
+    // Dan memang tidak ada berkas migrasi yang ditulis dari sini.
     const berkas = readdirSync(join(akar, "supabase/migrations")).filter((f) => f.endsWith(".sql"));
-    expect(berkas.filter((f) => Number(f.slice(0, 4)) > 116)).toEqual([]);
+    expect(berkas.every((f) => /^\d{4}_[a-z0-9_]+\.sql$/.test(f))).toBe(true);
   });
 
   it("halaman yang memutuskan gerbang, pembaca yang menerima hasilnya", () => {
